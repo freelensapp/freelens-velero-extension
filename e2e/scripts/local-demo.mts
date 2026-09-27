@@ -625,6 +625,32 @@ function verifyPreloadedImages(): void {
   }
 }
 
+// On the internal shape kind ends with an error after the node is complete: it looks for the published port of
+// the API server, and there is none. What says that the node is complete is the node: its administrator reads
+// the add-ons that come last in its creation.
+function controlPlaneComplete(): boolean {
+  try {
+    docker([
+      "exec",
+      journal.nodeId,
+      "kubectl",
+      "--kubeconfig",
+      "/etc/kubernetes/admin.conf",
+      "--request-timeout=30s",
+      "get",
+      "daemonset/kube-proxy",
+      "daemonset/kindnet",
+      "--namespace",
+      "kube-system",
+      "-o",
+      "name",
+    ]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const INCOMPLETE_NODE =
   "The creation of the node did not complete: run pnpm e2e:cluster:down, then pnpm e2e:cluster:up again";
 
@@ -680,6 +706,7 @@ async function setupCluster(): Promise<void> {
     const configuration = kindConfiguration(hosts);
     writeFileSync(config, JSON.stringify(configuration), { mode: 0o600 });
     let bootstrapError: unknown;
+    let complete = false;
 
     try {
       command(
@@ -709,7 +736,8 @@ async function setupCluster(): Promise<void> {
 
       if (created.length === 1 && created[0].NetworkSettings.Networks[DEMO_NETWORK]?.NetworkID === journal.networkId) {
         journal.nodeId = created[0].Id;
-        if (!bootstrapError) journal.phase = "preflight";
+        complete = !bootstrapError || (journal.shape === "internal" && controlPlaneComplete());
+        if (complete) journal.phase = "preflight";
         docker(["update", "--restart=no", journal.nodeId]);
         if (existsSync(CONFIG)) {
           chmodSync(CONFIG, 0o600);
@@ -720,7 +748,7 @@ async function setupCluster(): Promise<void> {
     }
     if (bootstrapError && !journal.nodeId) throw bootstrapError;
     // A node whose control plane did not come up has no add-ons and no administrator: nothing is built on it.
-    if (bootstrapError) {
+    if (!complete) {
       const reason = (bootstrapError as { reason?: string[] }).reason ?? [];
 
       throw new Error([INCOMPLETE_NODE, ...reason.map((line) => `  ${line}`)].join("\n"));
