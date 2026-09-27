@@ -1728,7 +1728,7 @@ function verifyFixturePermissions(): void {
     const allowed = asReader(["get", "--raw", `/apis/velero.io/v1/namespaces/${names.static}/backups`]);
 
     requireCondition(
-      allowed.status === 0 && JSON.parse(allowed.stdout).items.length === 14,
+      allowed.status === 0 && JSON.parse(allowed.stdout).items.length === 15,
       "Namespace-limited fixture reader cannot list its backups",
     );
     for (const path of [
