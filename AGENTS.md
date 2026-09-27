@@ -270,7 +270,11 @@ Build output goes to `out/`.
 - The requests of the host leave from its main process: the driver of the suites
   does not see them. Count them on the API server, as the suites do.
 - The application reads the kubeconfig of the user unless its profile says
-  otherwise. Start it with `startIsolated()` of the helpers, never bare.
+  otherwise, and takes the theme of the system. Start it with `startIsolated()`
+  of the helpers, never bare.
+- What passes on a machine of a developer may not end on the hosted runner. Give
+  every step of a suite its own time, shorter than the one of its case, so that
+  the step that does not end is the one that is reported.
 - Do not hide a list of the host with `display: none`: it loses its scroll. The
   list behind a workspace is hidden with `visibility`.
 - `pnpm exec biome` does not exist here: `pnpm biome:fix` and `pnpm biome:check`.

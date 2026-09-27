@@ -198,8 +198,14 @@ extension asked, and how many times.
 The application reads the kubeconfig of the user when nothing tells it otherwise.
 The profile of the suites is written before the first start with no kubeconfig to
 sync: the catalog holds the test cluster alone, which the suites assert before
-they open it. The screenshots are of the frame of that cluster, never of the
-window around it, and show synthetic data.
+they open it, at every start. The screenshots are of the frame of that cluster,
+never of the window around it, and show synthetic data. The profile names the
+theme too: left to itself the application takes the one of the system, which is
+not the same on every machine.
+
+Every step of a start has its time and its name: the end of the application, its
+start, the way to the catalog, the row of the cluster, its frame, its sidebar. A
+step that does not end says which one it was, with a picture of the window.
 
 | Fixture of the views | Namespace | Purpose |
 | --- | --- | --- |
