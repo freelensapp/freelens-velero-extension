@@ -55,6 +55,23 @@ export async function captureWindowScreenshot(window: Page, name: string): Promi
 /** The name of the application, which is also the name of its directory inside the profile. */
 const APPLICATION_NAME = process.env.FREELENS_APP_NAME || "Freelens";
 
+/**
+ * Gives a step its time and its name: a step that does not end says which one
+ * it was, where the case around it would only say that its own time was up.
+ */
+export async function within<Result>(name: string, milliseconds: number, step: Promise<Result>): Promise<Result> {
+  let timer: NodeJS.Timeout | undefined;
+  const expired = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error(`${name} did not end in ${milliseconds / 1000} s`)), milliseconds);
+  });
+
+  try {
+    return await Promise.race([step, expired]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export interface StartedApplication {
   app: ElectronApplication;
   window: Page;
@@ -106,8 +123,27 @@ export async function startIsolated(profile?: string): Promise<StartedApplicatio
     env: { ...process.env, FREELENS_INTEGRATION_TESTING_DIR: directory, LOG_LEVEL: "debug" } as Record<string, string>,
     timeout: 100_000,
   });
+  // The application is asked to close and is given its time. One that does not leave is ended, and what
+  // it held of its profile is released, for the start after this one to find the profile free.
   const close = async () => {
-    await app.close().catch(() => undefined);
+    const child = app.process();
+    const gone = () => child.exitCode !== null || child.signalCode !== null;
+    const left = new Promise<void>((resolve) => {
+      if (gone()) resolve();
+      else child.once("exit", () => resolve());
+    });
+    const wait = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+
+    await Promise.race([app.close().catch(() => undefined), wait(30_000)]);
+    await Promise.race([left, wait(15_000)]);
+    if (!gone()) {
+      console.log("The application did not leave when asked: it is ended");
+      child.kill("SIGKILL");
+      await Promise.race([left, wait(15_000)]);
+      for (const lock of ["SingletonLock", "SingletonCookie", "SingletonSocket"]) {
+        await rm(path.join(directory, APPLICATION_NAME, lock), { force: true }).catch(() => undefined);
+      }
+    }
   };
   const cleanup = async () => {
     await close();
@@ -341,9 +377,21 @@ export async function navigateToExtensions(app: ElectronApplication): Promise<vo
 
 /** Opens the catalog through the application menu. */
 export async function navigateToCatalog(app: ElectronApplication): Promise<void> {
-  await app.evaluate(async ({ app }) => {
-    await app.applicationMenu?.getMenuItemById("view")?.submenu?.getMenuItemById("navigate-to-catalog")?.click();
-  });
+  await within(
+    "The way to the catalog",
+    60_000,
+    app.evaluate(async ({ app }) => {
+      await app.applicationMenu?.getMenuItemById("view")?.submenu?.getMenuItemById("navigate-to-catalog")?.click();
+    }),
+  );
+}
+
+/**
+ * Leaves the welcome page when the application starts on it. A start that
+ * finds a profile may be somewhere else already.
+ */
+export async function leaveWelcome(window: Page): Promise<void> {
+  await window.click("[data-testid=welcome-menu-container] li a", { timeout: 15_000 }).catch(() => undefined);
 }
 
 /** Opens the preferences page through the application menu. */

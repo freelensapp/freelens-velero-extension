@@ -27,11 +27,19 @@ describe("preferences of the views", () => {
   let frame: Frame;
   let before: cluster.ClusterSnapshot;
 
-  const restart = async () => {
-    await started?.close();
-    started = await velero.startIsolated(profile);
-    await utils.clickWelcomeButton(started.window).catch(() => undefined);
+  // Every start after the first finds the profile of the one before. Each step has its time and its
+  // name: the one that does not end is the one the case reports.
+  const restart = async (change?: () => Promise<void>) => {
+    const running = started;
+
+    started = undefined;
+    await velero.within("The end of the application", 90_000, running?.close() ?? Promise.resolve());
+    await change?.();
+    started = await velero.within("The start of the application", 180_000, velero.startIsolated(profile));
+    await velero.leaveWelcome(started.window);
     await velero.navigateToCatalog(started.app);
+    // The catalog of a start that finds a profile holds the test cluster and nothing else, as the first did.
+    await started.window.waitForSelector(`div.TableCell >> text='${cluster.E2E_KUBE_CONTEXT}'`, { timeout: 180_000 });
     expect(await velero.catalogClusterCount(started.window)).toBe(1);
     frame = await cluster.openClusterFromCatalog(started.window, kubeconfig);
     await cluster.openBackups(frame);
@@ -108,21 +116,18 @@ describe("preferences of the views", () => {
   it(
     "keeps a namespace that is not there any more selected, and does not take another in its place",
     async () => {
-      await started?.close();
-      const [stored] = await velero.storedPreferences(profile);
-      const file = path.join(profile, stored.file);
-      const content = stored.content as { selected: Record<string, string> };
-      const identifier = cluster.clusterEntityId(kubeconfig, cluster.E2E_KUBE_CONTEXT);
+      // Between two starts the file says that the namespace selected is one that is not in the cluster.
+      await restart(async () => {
+        const [stored] = await velero.storedPreferences(profile);
+        const content = stored.content as { selected: Record<string, string> };
+        const identifier = cluster.clusterEntityId(kubeconfig, cluster.E2E_KUBE_CONTEXT);
 
-      await writeFile(file, JSON.stringify({ ...content, selected: { ...content.selected, [identifier]: REMOVED } }), {
-        mode: 0o600,
+        await writeFile(
+          path.join(profile, stored.file),
+          JSON.stringify({ ...content, selected: { ...content.selected, [identifier]: REMOVED } }),
+          { mode: 0o600 },
+        );
       });
-      started = undefined;
-      started = await velero.startIsolated(profile);
-      await utils.clickWelcomeButton(started.window).catch(() => undefined);
-      await velero.navigateToCatalog(started.app);
-      frame = await cluster.openClusterFromCatalog(started.window, kubeconfig);
-      await cluster.openBackups(frame);
       await frame.waitForSelector("[data-testid=velero-notice-stale-selection]", { timeout: 60_000 });
       expect((await cluster.target(frame)).namespace).toBe(`${REMOVED} (not found)`);
       expect((await cluster.notices(frame))["stale-selection"]).toContain(REMOVED);

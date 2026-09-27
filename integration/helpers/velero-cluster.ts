@@ -14,7 +14,7 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import * as path from "node:path";
-import { EXTENSION_NAME } from "./velero-extension";
+import { captureWindowScreenshot, EXTENSION_NAME } from "./velero-extension";
 
 import type { Frame, Locator, Page } from "playwright";
 
@@ -34,7 +34,7 @@ export const E2E_SCALE_NAMESPACE = process.env.E2E_SCALE_NAMESPACE || "";
 export const SUGGESTED_NAMESPACES = [E2E_NAMESPACE, E2E_STATIC_NAMESPACE, E2E_VIEWS_NAMESPACE];
 
 /** Connecting a cluster involves starting a proxy, so it is not quick. */
-const CLUSTER_TIMEOUT = 5 * 60 * 1000;
+const CLUSTER_TIMEOUT = 3 * 60 * 1000;
 const ELEMENT_TIMEOUT = 60 * 1000;
 /** What Escape gets before `closeDetails` reaches for the close icon of the drawer. */
 const DRAWER_ESCAPE_TIMEOUT = 5 * 1000;
@@ -314,30 +314,44 @@ export function clusterEntityId(kubeconfigFilePath: string, contextName: string)
   return createHash("md5").update(`${kubeconfigFilePath}:${contextName}`).digest("hex");
 }
 
-/** Clicks the cluster in the catalog and waits for its frame to be usable. */
+/**
+ * Clicks the cluster in the catalog and waits for its frame to be usable. A
+ * step that does not end says which one it was, with a picture of the window:
+ * the catalog of the suites holds the test cluster and nothing else.
+ */
 export async function openClusterFromCatalog(
   window: Page,
   kubeconfigFilePath: string,
   contextName = E2E_KUBE_CONTEXT,
 ): Promise<Frame> {
   const rowSelector = `div.TableCell >> text='${contextName}'`;
+  const frameSelector = `#cluster-frame-${clusterEntityId(kubeconfigFilePath, contextName)}`;
+  const step = async <Result>(name: string, action: () => Promise<Result>): Promise<Result> => {
+    try {
+      return await action();
+    } catch (error) {
+      const screenshot = await captureWindowScreenshot(window, `open-cluster-${name.replace(/\s+/g, "-")}`);
+
+      throw new Error(
+        `The cluster was not opened: ${name}. ${(error as Error).message.split("\n")[0]}` +
+          (screenshot ? ` Screenshot: ${screenshot}` : ""),
+      );
+    }
+  };
 
   // The catalog only lists the cluster once the kubeconfig watcher has seen the
   // file, which happens shortly after it is written.
-  await window.waitForSelector(rowSelector, { timeout: CLUSTER_TIMEOUT });
-  await window.click(rowSelector);
-
-  const frameElement = await window.waitForSelector(
-    `#cluster-frame-${clusterEntityId(kubeconfigFilePath, contextName)}`,
-    { timeout: CLUSTER_TIMEOUT },
+  await step("its row in the catalog", () => window.waitForSelector(rowSelector, { timeout: CLUSTER_TIMEOUT }));
+  await step("the click on its row", () => window.click(rowSelector, { timeout: ELEMENT_TIMEOUT }));
+  const frameElement = await step("its frame", () =>
+    window.waitForSelector(frameSelector, { timeout: CLUSTER_TIMEOUT }),
   );
   const frame = await frameElement.contentFrame();
 
   if (!frame) {
     throw new Error(`No iframe found for cluster ${contextName}`);
   }
-
-  await frame.waitForSelector("[data-testid=cluster-sidebar]", { timeout: CLUSTER_TIMEOUT });
+  await step("its sidebar", () => frame.waitForSelector("[data-testid=cluster-sidebar]", { timeout: CLUSTER_TIMEOUT }));
 
   return frame;
 }
