@@ -233,6 +233,35 @@ has been implemented in T0.1.
 The extension's safety controls govern its own workflows; they are not a replacement
 for Kubernetes RBAC or a guarantee against operations outside the extension.
 
+## Upstream Drift Watch
+
+The [process](PROCESS.md#upstream-drift-watch) asks for this comparison at the start
+of every milestone. Public upstream sources only; nothing was run.
+
+### Start Of The First Milestone, 2026-09-27
+
+| Component | Latest release | Compared with |
+| --- | --- | --- |
+| Velero | `v1.18.3`, `cd3fd10b093dad32ee284e27fcba4e9073c9c94b`, released 2026-09-21 | `v1.18.2`, the reviewed one |
+| AWS object-store plugin | `v1.14.3`, `d70da1cca708440aedeaabaed2f2b91277a02547`, released 2026-09-21 | `v1.14.2`, the reviewed one |
+
+Between the two Velero releases, 86 commits and 300 files. Of the API and of the
+CRD schemas:
+
+| Change | Where | Effect on the extension |
+| --- | --- | --- |
+| New optional field `spec.resourcePolicy` of Restore, a reference to a ConfigMap of filter policies | `restore_types.go`, `velero.io_restores.yaml` | None on the first milestone. The Restore type and view of the second milestone read it |
+| New annotation `velero.io/global-backup-volume-policy-configmap`, on a Backup that a cluster-wide volume policy contributed to | `labels_annotations.go` | None: the Backup views show the annotations they know and keep the others as they are |
+| New annotation `restore.velero.io/must-include-additional-items`, set by plugins on restored items, removed before they are applied | `labels_annotations.go` | None: it is not on the objects the extension reads |
+
+The Backup schema, the 13 Backup phases and the 10 Restore phases are the same. No
+field was removed or deprecated, no kind was added. The pins of the test environment
+stay on the reviewed releases: moving them changes the compatibility reference of
+the [roadmap](ROADMAP.md) and is a decision of the lead maintainer.
+
+Newer than these there are release candidates only, `v1.18.4-rc.1` and
+`v1.14.4-rc.1`: not a baseline.
+
 ## Verification And Remaining Work
 
 Completed checks:

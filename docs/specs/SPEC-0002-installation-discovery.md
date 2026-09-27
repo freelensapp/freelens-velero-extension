@@ -1,13 +1,13 @@
 # SPEC-0002: Installation Discovery And Target Isolation
 
-- **Status:** Draft
+- **Status:** Approved
 - **Date:** 2026-09-18
 - **Milestone / tasks:** M1 / T1.1
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
 - **Reviewed main:** `60163e0827e72658bb6546165a727300170e628b`
 - **Freelens validation target:** v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`
 - **Dependencies:** [foundation](SPEC-0001-local-foundation.md), required checks verified before implementation
-- **Approval:** Pending
+- **Approval:** Approved by the lead maintainer on 2026-09-27, as drafted
 
 ## Goal
 
@@ -121,6 +121,7 @@ coverage rather than claim exhaustive detection.
 
 ## Evidence And Deviations
 
-Draft only. No implementation, application tests or runtime evidence. Foundation
-checks and explicit approval are prerequisites; drafting completion does not approve
-this feature or start T1.1.
+Approved on 2026-09-27; T1.1 starts with the first milestone. No implementation,
+application tests or runtime evidence yet. The upstream drift watch of the start of
+the milestone is in the [recon](../development/RECON-T0.1.md#upstream-drift-watch):
+the release after the reviewed one changes nothing this spec reads.
