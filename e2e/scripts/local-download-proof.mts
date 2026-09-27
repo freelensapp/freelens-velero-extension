@@ -4,11 +4,12 @@ import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import type { ArtifactTarget, DiagnosticKind } from "../../src/main/diagnostic-kubernetes.ts";
-import type { DiagnosticInput } from "../../src/main/diagnostic-service.ts";
 import { FIXTURE_LABEL, fixtureArtifactPaths, fixtureNames } from "./local-fixtures.mts";
 import { DEMO_CONTEXT, DEMO_NAMESPACE, OWNER_LABEL, requireCondition, SUBNETS, subnetsOverlap } from "./local-kind.mts";
 import { type KubeResource, STORAGE_ENDPOINT } from "./local-manifests.mts";
+
+import type { ArtifactTarget, DiagnosticKind } from "../../src/main/diagnostic-kubernetes.ts";
+import type { DiagnosticInput } from "../../src/main/diagnostic-service.ts";
 
 export const DIRECT_PROOF_IMAGE =
   "docker.io/library/node:24.15.0-bookworm-slim@sha256:4e6b70dd6cbfc88c8157ba19aa3d9f9cce6ba4703576d55459e45efcbc9c5f5d";

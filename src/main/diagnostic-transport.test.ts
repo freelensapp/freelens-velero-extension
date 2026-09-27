@@ -1,11 +1,11 @@
 import { once } from "node:events";
 import { createServer } from "node:http";
 import { createServer as createHttpsServer, type Server as HttpsServer } from "node:https";
-import type { TLSSocket } from "node:tls";
 import { gzipSync } from "node:zlib";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTlsFixture } from "../../test/tls-fixture";
 import { type ArtifactRoute, DOWNLOAD_LIMITS, downloadArtifact, validateArtifactRoute } from "./diagnostic-transport";
+import type { TLSSocket } from "node:tls";
 
 const server = createServer((request, response) => {
   if (request.url?.startsWith("/missing")) {
@@ -97,17 +97,14 @@ describe("bounded main artifact transport", () => {
     expect(() => validateArtifactRoute(url, route())).toThrow("destination-denied");
   });
 
-  it.each([
-    "169.254.169.254",
-    "0.0.0.0",
-    "224.0.0.1",
-    "::ffff:169.254.169.254",
-    "fe80::1",
-  ])("denies metadata and invalid destinations: %s", (address) => {
-    expect(() =>
-      validateArtifactRoute(`${route().origin}${route().pathname}`, { ...route(), address, allowPrivate: true }),
-    ).toThrow("destination-denied");
-  });
+  it.each(["169.254.169.254", "0.0.0.0", "224.0.0.1", "::ffff:169.254.169.254", "fe80::1"])(
+    "denies metadata and invalid destinations: %s",
+    (address) => {
+      expect(() =>
+        validateArtifactRoute(`${route().origin}${route().pathname}`, { ...route(), address, allowPrivate: true }),
+      ).toThrow("destination-denied");
+    },
+  );
 
   it("rejects silent HTTP/private/loopback fallback", () => {
     const url = `${route().origin}${route().pathname}`;
