@@ -2,12 +2,12 @@
 
 - **Status:** Draft
 - **Date:** 2026-09-18
-- **Milestone / tasks:** P1 / T1.2 and T1.3, each separately authorized
+- **Milestone / tasks:** M1 / T1.2 and T1.3
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
 - **Reviewed main:** `60163e0827e72658bb6546165a727300170e628b`
 - **Freelens validation target:** v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`
 - **Dependencies:** [foundation](SPEC-0001-local-foundation.md), [target discovery](SPEC-0002-installation-discovery.md)
-- **Approval:** Pending; the current task authorizes drafting only
+- **Approval:** Pending
 
 ## Goal
 
@@ -128,7 +128,7 @@ menu checks. Reuse test helpers and integration journey files from the foundatio
 
 ## Success Criteria
 
-All 14 checks pass before this spec is Verified locally. Every released phase has an
+All 14 checks pass before this spec is Verified. Every released phase has an
 asserted lifecycle/failure interpretation and the packaged UI agrees with it. No
 in-flight phase appears finished and no action in the read-only journey mutates the
 cluster. List performance satisfies the shared budget on the recorded local machine.
@@ -148,6 +148,5 @@ historical stage data or recovery guarantee can be inferred from these CRDs alon
 
 ## Evidence And Deviations
 
-Draft only; no implementation or executed acceptance tests. T1.2 and T1.3 remain
-separate stop/report steps even if this spec is approved as a whole. No deviations
-have been accepted.
+Draft only; no implementation or executed acceptance tests. T1.2 and T1.3 are
+separate pull requests. No deviations have been accepted.

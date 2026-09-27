@@ -6,7 +6,7 @@ Status: T0.3-T0.6 complete; the main request/download proof has local runtime ev
 SPEC-0001 remains Approved because actual-host activation is unverified. Feature UI,
 catalog/IPC integration and general authentication support are not implemented.
 
-Authority: [directives](../../AGENTS.md), [roadmap](PLAN.md), and
+Authority: [directives](../../AGENTS.md), [roadmap](ROADMAP.md), and
 [versioned evidence](RECON-T0.1.md). The evidence report pins Velero v1.18.2,
 AWS plugin v1.14.2, and Freelens v1.10.3. A reviewed version is not a compatibility
 claim for untested releases. Product behavior below requires spec approval.
@@ -84,7 +84,7 @@ Compatible transitive fixes are pinned through narrowly versioned workspace over
 These modify only this extension's development graph, not the installed Freelens
 application or another repository. SDK and host compatibility remain exactly 1.10.3.
 
-The user subsequently authorized parent-scoped upgrades to tar 7.5.21 and
+The lead maintainer subsequently approved parent-scoped upgrades to tar 7.5.21 and
 decode-uri-component 0.5.0. A one-line pnpm patch adapts query-string 7.1.3's CommonJS
 import to the new decoder's ESM default. Eight consumer tests resolve the actual
 launcher/SDK dependency paths and cover extraction, malformed input and URL parsing.
@@ -106,6 +106,18 @@ and 45 diagnostic contracts. Actual host installation remains unverified.
 The electron-vite warning about a missing standalone renderer
 configuration is expected: this extension intentionally builds its renderer through
 the preload target, whose generated entry is covered by the bundle tests.
+
+### Lessons Adopted From The Other Extensions
+
+- CRD enumeration can itself be forbidden. A failed CRD list is not evidence that
+  Velero is absent; support explicitly configured namespaces and truthful RBAC states.
+- Forwarding helpers with a permissive fallback and cleanup do not belong in a
+  multi-cluster recovery tool. Fail closed on target resolution and own every
+  socket, timeout, cancellation, and partial failure.
+- A promise timeout does not necessarily abort network I/O. Download deadlines must
+  terminate the request, decompression, polling, and any tunnel they own.
+- A signed URL points to object storage, not to a Velero HTTP service. No separate
+  Velero service endpoint or extraction of S3 credentials is needed for downloads.
 
 ## Target And State Model
 

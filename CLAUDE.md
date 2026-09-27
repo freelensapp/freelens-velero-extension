@@ -1,7 +1,6 @@
-# Project Instructions
+@AGENTS.md
 
-Read [AGENTS.md](AGENTS.md) before any work. It is the canonical source of project
-directives; do not duplicate them here.
+# Agent Guide
 
-Read [PLAN.md](docs/development/PLAN.md) for the currently authorized step and pause
-boundary, and [the spec index](docs/specs/README.md) for specification approvals.
+This project uses AGENTS.md as the canonical agent guide (imported above).
+Claude Code reads it via @AGENTS.md, while other agents read it directly.

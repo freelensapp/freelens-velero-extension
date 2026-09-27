@@ -2,9 +2,10 @@
 
 Date: 2026-09-25
 
-Status: SPEC-0001 approved for stepwise implementation; SPEC-0002 and SPEC-0003 remain Draft.
+Status: SPEC-0001 is Approved; SPEC-0002 and SPEC-0003 remain Draft.
 
-The [roadmap](../development/PLAN.md) owns task progress and step authorization.
+The [roadmap](../development/ROADMAP.md) owns scope and progress; the
+[process](../development/PROCESS.md) owns approvals and review gates.
 [AGENTS.md](../../AGENTS.md) owns binding directives, privacy and safety. Use the
 [template](TEMPLATE.md) before implementation and retain one independently testable
 slice per task even when a spec covers several closely related tasks.
@@ -34,7 +35,7 @@ specifications. Draft each at its next design gate, informed by the local proof.
 | Schedule adherence | T3.1 through T3.3 | Cron/timezone contract and observed backup history |
 | Write gate and individual actions | T4.1 through T4.6 | Create-only adapter, exact previews and per-action tests |
 | Secondary kinds and server information | T5.1 through T5.3 | Same evidence/permission contracts; request creation is a write |
-| Release readiness, docs and media | T6.1 through T6.5 | All agreed features verified locally; publication separately authorized |
+| Release readiness, docs and media | T6.1 through T6.5 | All agreed features Verified; release on the lead maintainer's go |
 
 ## Shared Design
 
@@ -47,25 +48,24 @@ specifications. Draft each at its next design gate, informed by the local proof.
 - [RECON-T0.1.md](../development/RECON-T0.1.md): source-confirmed contracts and version
   pins; not a runtime compatibility certificate.
 
-The design documents are proposals pending the relevant spec approvals. Safety,
-privacy and the user's stepwise authorization rules are already binding.
+The design documents are proposals pending the relevant spec approvals. Safety
+and privacy rules are already binding.
 
 ## Approval And Completion
 
-Lifecycle: Draft -> Approved -> Implemented -> Verified locally; Superseded retains
-a link to its replacement. A continuation to draft specifications does not approve
-those specifications or authorize their implementation.
+Lifecycle: Draft, Approved, Implemented, Verified; Superseded retains a link to its
+replacement. A Draft spec is not approval to implement.
 
 Record approval by role/date and exact scope, not individual names. Completing one
 task does not close the whole spec if its other tasks or tests remain open. A spec
-becomes Verified locally only when all acceptance checks pass with evidence and
-required manual judgment is recorded. No push or hosted CI is needed or authorized.
+becomes Verified only when its non-regression tests run green in CI on main, all
+acceptance checks pass with evidence and required manual judgment is recorded.
 
-SPEC-0001 approval was recorded on 2026-09-18. T0.3 through T0.6 were separately
-authorized and are complete; T0.5/T0.6 completed on 2026-09-25. Stop for P0 review
-and the FND-10 actual-host activation gate. The other drafts remain available for
-review; SPEC-0002/T1.1 implementation needs explicit approval. The Node transport
-proof does not close actual-host acceptance or authorize starting feature work.
+SPEC-0001 approval was recorded on 2026-09-18. T0.3 through T0.6 are complete;
+T0.5/T0.6 completed on 2026-09-25. The FND-10 actual-host activation check is
+open. The other drafts remain available for review; SPEC-0002/T1.1 implementation
+needs the approval of its spec. The Node transport proof does not close
+actual-host acceptance.
 
 ## Document Review
 

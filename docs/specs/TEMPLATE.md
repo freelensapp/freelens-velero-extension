@@ -2,7 +2,7 @@
 
 - **Status:** Draft
 - **Date:** YYYY-MM-DD
-- **Milestone / tasks:** Pn / Tn.n
+- **Milestone / tasks:** Mn / Tn.n
 - **Reviewed Velero:** exact release tag and commit
 - **Reviewed main:** exact comparison commit, or not relevant with a reason
 - **Freelens validation target:** exact version and commit
@@ -75,4 +75,4 @@ at most three such markers, each with a concrete question and affected requireme
 Initially: no implementation, tests or runtime evidence. Later record command,
 exit code, counts, versions, synthetic artifact reference, cleanup result and
 remaining gaps. Keep actual environment data outside project files and agent output.
-Document every deviation and its approval before claiming Verified locally.
+Document every deviation and its approval before claiming Verified.

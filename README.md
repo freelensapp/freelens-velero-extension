@@ -87,7 +87,7 @@ are not selected. See [the binding directive](AGENTS.md#official-artifacts-and-s
 
 - [Directives and safety](AGENTS.md)
 - [Roadmap to v1.0.0](docs/development/ROADMAP.md)
-- [Detailed plan and current authorization](docs/development/PLAN.md)
+- [Development process](docs/development/PROCESS.md)
 - [Architecture](docs/development/ARCHITECTURE.md)
 - [Operator experience](docs/development/DESIGN.md)
 - [Testing strategy](docs/development/TESTING.md)
