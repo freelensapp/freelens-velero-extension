@@ -55,6 +55,17 @@ They were dropped on 2026-09-27:
 
 The lockfile kept the versions it had where the ranges allow them.
 
+Without the overrides OSV-Scanner reports again, on 2026-09-27, 21 known
+vulnerabilities in two packages, none of them critical or high:
+
+| Package | Comes from | Bundled |
+| --- | --- | --- |
+| `dompurify` 3.1.7 | the editor the core of the host depends on, through the host SDK | No |
+| `decode-uri-component` 0.2.2 | `query-string` of the core of the host, through the host SDK | No |
+
+Both belong to the host and reach this graph through its SDK, which the build
+never bundles. Their fix is a release of the host, not an override here.
+
 ## T0.4 Container Image Findings
 
 Date: 2026-09-18. Historical: a scan of the images of the test environment, from a
