@@ -48,7 +48,6 @@ Kubernetes/WebSocket dependencies. Retain the scoped overrides and consumer patc
 Packing does not bump the version or authorize publishing. The package includes
 the main's bundled Kubernetes/WebSocket libraries, but no host SDK implementation,
 local test evidence, credentials or cluster configuration.
-The prepared CI workflow is manual and disabled by default; no hosted run was used.
 
 ## Local Environment
 
