@@ -2376,32 +2376,34 @@ async function startCluster(): Promise<void> {
     await delay(250);
   }
   isolateNetwork();
-  docker(
-    [
-      "exec",
-      journal.nodeId,
-      "curl",
-      "--silent",
-      "--show-error",
-      "--fail",
-      "--retry",
-      "30",
-      "--retry-delay",
-      "1",
-      "--retry-connrefused",
-      "--max-time",
-      "3",
-      "--cacert",
-      "/etc/kubernetes/pki/ca.crt",
-      "--cert",
-      "/etc/kubernetes/pki/apiserver-kubelet-client.crt",
-      "--key",
-      "/etc/kubernetes/pki/apiserver-kubelet-client.key",
-      "https://127.0.0.1:6443/livez",
-    ],
-    undefined,
-    120_000,
-  );
+  // The API server that has just started refuses for a while, then answers before its roles are loaded: both
+  // are reasons to ask again, until it says that it is alive.
+  for (let attempt = 0; ; attempt++) {
+    const alive = spawnSync(
+      "docker",
+      [
+        "exec",
+        journal.nodeId,
+        "curl",
+        "--silent",
+        "--fail",
+        "--max-time",
+        "3",
+        "--cacert",
+        "/etc/kubernetes/pki/ca.crt",
+        "--cert",
+        "/etc/kubernetes/pki/apiserver-kubelet-client.crt",
+        "--key",
+        "/etc/kubernetes/pki/apiserver-kubelet-client.key",
+        "https://127.0.0.1:6443/livez",
+      ],
+      { env: environment, cwd: environment.HOME, encoding: "utf8", timeout: 10_000 },
+    );
+
+    if (alive.status === 0) break;
+    requireCondition(attempt < 120, "The API server of the node did not come back");
+    await delay(1000);
+  }
   await setupCluster();
   console.log("PASS: resumed only the recorded initialized node and revalidated its local isolation.");
 }
