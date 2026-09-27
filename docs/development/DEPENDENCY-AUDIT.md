@@ -40,6 +40,10 @@ The packed production build is about 0.6 MB.
 - OSV-Scanner reads the lockfile on every pull request and on main. It reports and
   does not fail the run: a finding in the development graph is information to
   explain in context.
+- Renovate proposes the updates, of the versions the scripts give to `pnpm dlx`
+  too. Two workflows run every day and open a pull request when they have
+  something: one deduplicates the lockfile, one runs `pnpm audit fix`. The second
+  can propose an override: whoever merges it takes on keeping it current.
 
 ### History
 

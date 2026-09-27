@@ -120,6 +120,8 @@ a baseline capability.
 - Plain commit messages, no conventional-commit prefixes, no emoji, no em
   dash.
 - PRs against `main`, squash merge, CI green required.
+- An automated pull request whose title carries `[skip ci]` ran no check: run
+  Trunk Check on it before merging.
 - Packages are published only by the release workflow, never from a
   workstation. Tags are created only by the tag workflow.
 - External contributions follow the same spec-first loop; maintainers help

@@ -75,7 +75,9 @@ Generated entries are included explicitly in production analysis despite Git ign
 The hosted checks are the ones of the other extensions of the organization, on
 every pull request and on main: production build, type check, lint and Knip; Trunk;
 the unit tests, on the build with separate modules and on the production build;
-OSV-Scanner. They run on synthetic data only. Trunk Git hooks are disabled.
+OSV-Scanner. They run on synthetic data only. Renovate and the daily maintenance
+workflows of the organization (npm audit, npm dedupe, Biome migrate, Trunk upgrade)
+open their pull requests on branches named `automated/*`.
 
 ### Dependencies
 
