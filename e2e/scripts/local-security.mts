@@ -24,35 +24,3 @@ export function assertOfficialImages(images: Record<string, string>): void {
     );
   }
 }
-
-interface BinaryReport {
-  version?: string;
-  runs?: {
-    tool?: { driver?: { name?: string } };
-    results?: { ruleId?: string; level?: string }[];
-  }[];
-}
-
-export function binaryReportHasNoCalls(text: string): boolean {
-  const report = JSON.parse(text) as BinaryReport;
-
-  requireCondition(
-    report.version === "2.1.0" && Array.isArray(report.runs) && report.runs.length > 0,
-    "Invalid binary scan report",
-  );
-  for (const run of report.runs) {
-    requireCondition(
-      run.tool?.driver?.name === "govulncheck" && (run.results === undefined || Array.isArray(run.results)),
-      "Unexpected binary scanner output",
-    );
-    for (const result of run.results ?? []) {
-      requireCondition(
-        result.ruleId && (result.level === undefined || ["none", "note", "warning", "error"].includes(result.level)),
-        "Invalid binary finding",
-      );
-    }
-  }
-  return report.runs.every((run) =>
-    (run.results ?? []).every((finding) => finding.level === "note" || finding.level === "none"),
-  );
-}
