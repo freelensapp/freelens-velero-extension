@@ -3,8 +3,9 @@ import { createServer, type Socket } from "node:net";
 import { Writable } from "node:stream";
 import { WebSocketHandler } from "@kubernetes/client-node/dist/web-socket-handler.js";
 import WebSocket from "ws";
-import type { DiagnosticKubernetes } from "./diagnostic-kubernetes.ts";
 import { DiagnosticError } from "./diagnostic-transport.ts";
+
+import type { DiagnosticKubernetes } from "./diagnostic-kubernetes.ts";
 
 // Bytes of the pod that may wait for the local socket before the WebSocket is paused.
 const PENDING_BYTES = 256 * 1024;

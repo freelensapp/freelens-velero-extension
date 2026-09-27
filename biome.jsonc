@@ -1,28 +1,71 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.1/schema.json",
+  // Ignore mismatch for Biome version to make Renovate updates without error
+  // trunk-ignore(biome/deserialize)
+  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": {
+          "level": "on",
+          "options": {
+            "groups": [
+              {
+                "type": false
+              },
+              ":NODE:",
+              ":BLANK_LINE:",
+              "@freelensapp/**",
+              ":BLANK_LINE:",
+              ":PACKAGE:",
+              ":BLANK_LINE:",
+              ":PATH:"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "css": {
+    "formatter": {
+      "enabled": true
+    },
+    "linter": {
+      "enabled": true
+    }
+  },
   "files": {
-    "includes": ["**", "!**/node_modules", "!**/out", "!**/.trunk", "!**/pnpm-lock.yaml"]
+    "includes": ["**", "!**/.trunk", "!**/dist"]
   },
   "formatter": {
+    "attributePosition": "auto",
+    "bracketSpacing": true,
+    "enabled": true,
+    "formatWithErrors": false,
     "indentStyle": "space",
     "indentWidth": 2,
+    "lineEnding": "lf",
     "lineWidth": 120,
-    "lineEnding": "lf"
+    "useEditorconfig": true
+  },
+  "html": {
+    "formatter": {
+      "enabled": true
+    }
   },
   "javascript": {
     "formatter": {
+      "arrowParentheses": "always",
+      "attributePosition": "auto",
+      "bracketSameLine": false,
+      "bracketSpacing": true,
+      "jsxQuoteStyle": "double",
+      "quoteProperties": "asNeeded",
       "quoteStyle": "double",
       "semicolons": "always",
       "trailingCommas": "all"
     }
   },
-  "assist": {
-    "actions": {
-      "source": {
-        "organizeImports": "on"
-      }
-    }
-  },
+  // The recommended rules stay on: the other extensions select a few rules only.
   "linter": {
     "enabled": true,
     "rules": {
@@ -30,5 +73,10 @@
         "noExplicitAny": "error"
       }
     }
+  },
+  "vcs": {
+    "clientKind": "git",
+    "enabled": true,
+    "useIgnoreFile": true
   }
 }

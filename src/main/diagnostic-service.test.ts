@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import type { DiagnosticObject } from "./diagnostic-kubernetes";
 import { type DiagnosticInput, DiagnosticService } from "./diagnostic-service";
 import { DiagnosticError } from "./diagnostic-transport";
+
+import type { DiagnosticObject } from "./diagnostic-kubernetes";
 
 function fixture(urlTimeoutMs = 30) {
   let targetUid = "target-uid";

@@ -6,14 +6,13 @@ Status: Local scaffold, development tooling and isolated kind/Velero/S3 environm
 are implemented and checked. Local backup/restore, synthetic-state, permission and
 compiled-main signed-download proofs pass. No Velero resource views, diagnostic UI,
 operator actions or production IPC/catalog integration are implemented yet.
-Actual installation in Freelens remains unverified.
-Publication is disabled in the package manifest.
+Actual installation in Freelens has no automated test yet.
 
 ## Compatibility
 
-The compatibility reference and declared host version are **Freelens v1.10.3**,
-with extension SDK v1.10.3. Freelens v2 is not a target for this development phase.
-Do not widen the manifest's host version without a new compatibility decision.
+The extension is built and tested against **Freelens v1.10.3**, with extension SDK
+v1.10.3, and installs on the hosts compatible with it (`^1.10.3`). Freelens v2 is
+not a target for this development phase.
 
 ## Development
 
@@ -25,8 +24,8 @@ pnpm type:check
 pnpm lint:check
 pnpm test:unit
 pnpm knip:check
-pnpm trunk:check
-pnpm build
+pnpm trunk:check:all
+pnpm build:production
 pnpm clean:tgz
 pnpm pack
 ```
@@ -35,17 +34,17 @@ The unit command explicitly type-checks and builds first, then runs source and
 compiled-entry smoke tests. A focused source test can use
 `pnpm exec vitest run src/entrypoints.test.ts`. Run Knip after a build: production
 analysis inspects generated output. Trunk covers Markdown, YAML and workflow syntax.
+Biome, Knip and Trunk run through `pnpm dlx` at the versions the scripts name.
 
-The 118 tests cover host-global and dependency-consumer contracts, 48 setup/fixture
+The 110 tests cover host-global and build contracts, 48 setup/fixture
 checks and 48 diagnostic contracts, not installation into a real Freelens process.
 Normal and compact production builds pass. Completed checks and
 remaining foundation work are recorded in
-[SPEC-0001](docs/specs/SPEC-0001-local-foundation.md). The
-[dependency audit](docs/development/DEPENDENCY-AUDIT.md) records zero findings in
-the T0.3 graph on 2026-09-18; that dated result does not cover the added T0.6
-Kubernetes/WebSocket dependencies. Retain the scoped overrides and consumer patch.
+[SPEC-0001](docs/specs/SPEC-0001-local-foundation.md). What the package bundles
+is in [the dependencies](docs/development/DEPENDENCY-AUDIT.md).
 
-Packing does not bump the version or authorize publishing. The package includes
+`pnpm pack` does not bump the version; `pnpm pack:dev` bumps a prerelease so that
+Freelens takes the rebuild. The package includes
 the main's bundled Kubernetes/WebSocket libraries, but no host SDK implementation,
 local test evidence, credentials or cluster configuration.
 

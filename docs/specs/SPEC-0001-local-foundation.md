@@ -241,3 +241,10 @@ Evidence added on 2026-09-27, for FND-09 and FND-10:
   with an isolated profile: enabled, both entry points loaded by the host and
   loaded again after a restart, dispatcher untouched. FND-10 stays open until the
   integration test does it in CI.
+
+Deviation, approved by the lead maintainer on 2026-09-27, on REQ-002 and FND-02: the
+fifteen dependency overrides, the patch of `query-string` and their eight consumer
+tests are gone, and the manifest accepts the hosts compatible with Freelens v1.10.3
+(`^1.10.3`) and is no longer private. The reasons are in
+[the dependencies](../development/DEPENDENCY-AUDIT.md). `pnpm pack` still does not
+change the version.

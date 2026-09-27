@@ -17,7 +17,7 @@ The foundation is in place and no Velero view exists yet. Scope and progress
 toward v1.0.0 are in `docs/development/ROADMAP.md`.
 
 - **Language**: TypeScript 5.9.3
-- **Runtime**: Node.js >= 22.12.0, Freelens 1.10.3
+- **Runtime**: Node.js >= 22.12.0, Freelens >= 1.10.3
 - **Package manager**: pnpm 10.x (locked)
 - **License**: MIT
 
@@ -58,8 +58,9 @@ toward v1.0.0 are in `docs/development/ROADMAP.md`.
 - Deliver the complete agreed v1.0.0 as soon as possible, without compromising
   quality, scope, safety, usability, or required validation. Calendar estimates
   must not delay a ready release or justify omitted requirements.
-- The validation target is Freelens v1.10.3 with SDK v1.10.3. Another major
-  version of Freelens needs its own spec and its own verification.
+- The validation target is Freelens v1.10.3 with SDK v1.10.3, the version the
+  tests build against. `engines.freelens` is `^1.10.3`. Another major version of
+  Freelens needs its own spec and its own verification.
 - Optimize for an excellent operational UI: truthful status, fast diagnosis,
   efficient navigation, and safe actions, integrated with Freelens.
 - Do not mention individuals or include comparisons with other software in any
@@ -199,7 +200,8 @@ pnpm type:check
 # Linting & formatting
 pnpm biome:check          # TypeScript, JS, JSON (biome)
 pnpm biome:fix            # Auto-fix the formats above
-pnpm trunk:check          # Markdown, YAML and workflows
+pnpm trunk:check          # Markdown, YAML, TOML and workflows, on the changed files
+pnpm trunk:check:all      # The same on every file
 pnpm trunk:fix            # Auto-fix Markdown, YAML, etc.
 pnpm lint:check           # Alias for biome:check
 pnpm lint:fix             # Alias for biome:fix
@@ -215,10 +217,12 @@ pnpm build                # Type check, then electron-vite, separate modules
 pnpm build:production     # Production build, single file per entry point
 
 # Pack for testing
-pnpm build:production && pnpm clean:tgz && pnpm pack
+pnpm pack:dev             # Bump prerelease version, production build, and create .tgz for install in Freelens app
+pnpm build:production && pnpm clean:tgz && pnpm pack   # The same without the bump
 
 # Clean
 pnpm clean                # Clean out/
+pnpm clean:all            # Clean everything (node_modules, out, tgz)
 ```
 
 ## Architecture
@@ -317,10 +321,11 @@ bundle carries `@kubernetes/client-node` and `ws`.
 
 ## Code Style
 
-- **Biome** formats **TypeScript, JS, JSON**: double quotes, semicolons, trailing commas, 2-space indent, 120 char line width, use `pnpm biome:fix`
+- **Biome** formats **TypeScript, JS, JSON**: double quotes, semicolons, trailing commas, 2-space indent, 120 char line width, use `pnpm biome:fix`. Its recommended rules stay on
 - **Trunk** formats **Markdown, YAML** and checks the workflows, use `pnpm trunk:fix`
 - `any` is an error (`noExplicitAny`)
-- Import order is enforced by biome organizeImports
+- Import order (enforced by biome organizeImports): built-in modules, `@freelensapp/**`, packages, relative paths
+- Biome, Knip and Trunk run through `pnpm dlx` at the versions the scripts name: they are not dependencies
 - **No emoji** in Markdown files (`.md`), comments, or any source code
 
 ## Security

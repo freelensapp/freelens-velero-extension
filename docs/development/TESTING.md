@@ -20,8 +20,8 @@ and kubectl CLIs. No Docker context listing, Kubernetes request, install, servic
 start, or container creation was performed. T0.3 must select the toolchain required
 by the pinned SDK/build; these checks do not prove a full build environment.
 
-T0.3 uses Node v24.15.0, pnpm v10.34.4 and SDK v1.10.3. The manifest declares exactly
-Freelens v1.10.3, not v2. Electron/Playwright host launch, app installation, display
+T0.3 used Node v24.15.0, pnpm v10.34.4 and SDK v1.10.3. The manifest accepts the
+hosts compatible with Freelens v1.10.3, not v2. Electron/Playwright host launch, app installation, display
 support, fixture images and runtime authentication remain unverified and separately
 gated. No Kubernetes access occurred during scaffold checks.
 
@@ -144,19 +144,13 @@ The scaffold has [source lifecycle tests](../../src/entrypoints.test.ts),
 [compiled-entry contracts](../../test/build.test.ts), and
 [process-specific host stubs](../../test/freelens-extensions.ts). Vitest v4.1.11 fails
 when no tests are selected; it does not import the host implementation in Node.
-The canonical command builds first and covers 118 tests: 22 scaffold/consumer,
+The canonical command builds first and covers 110 tests: 14 scaffold,
 48 [environment checks](../../test/environment.test.ts) and 48 diagnostic contracts.
 The environment tests
 include child-process refusal checks with an empty executable path, proving that
 wrong targets and malformed journals stop without external tools. Co-locate future pure/main
 tests with their modules and reuse the integration directory convention for packaged
 journeys. No actual Electron installation result is implied by stubbed bundle tests.
-
-Eight tests exercise the actual Trunk tar dependency and the SDK's query-string
-consumer before/after the authorized overrides. They use synthetic temporary archives
-and URL strings, clean up their owned directories, and run in both normal and
-production build checks. The ESM import repair is a reproducible pnpm consumer patch,
-not a test alias that could conceal a runtime failure.
 
 Mock the host boundary for unit tests; use a transport interface for Kubernetes
 status codes and cancellation. Small local HTTP/TLS servers exercise streaming and
@@ -173,7 +167,8 @@ Established T0.3 commands, executed locally:
 
 - `pnpm type:check`, `pnpm lint:check`, `pnpm knip:check`, `pnpm test:unit`, and
   documentation checks using the established Trunk convention.
-- `pnpm build && pnpm clean:tgz && pnpm pack`, without an incidental version bump.
+- `pnpm build:production && pnpm clean:tgz && pnpm pack`, without a version bump;
+  `pnpm pack:dev` bumps a prerelease so that Freelens takes the rebuild.
 - `VITE_PRESERVE_MODULES=false pnpm test:unit` checks the production bundle form;
   `pnpm exec vitest run src/entrypoints.test.ts` is the focused source check.
 
@@ -185,9 +180,7 @@ status fixtures plus restricted identities and cleanup are implemented in
 [download proof](../../e2e/scripts/local-download-proof.mts) exercises compiled main;
 packaged-app launchers remain later work. Knip declares the existing
 system `kubectl` as an external binary, not an npm dependency.
-The [development audit](DEPENDENCY-AUDIT.md) records zero findings for the T0.3 graph,
-not the newly expanded T0.6 graph. That dated result and the consumer tests do not
-close actual-host acceptance. No new scanner or upstream remediation gate was added.
+What the package bundles is in [the dependencies](DEPENDENCY-AUDIT.md).
 
 Build after tools that remove generated output. Before manual review, provide the
 actual absolute tarball path and tested host version. Inspect the tarball's file

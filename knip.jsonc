@@ -1,18 +1,25 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
+
   "entry": [
     "out/{main,renderer}/index.js!",
     "src/main/index.ts",
     "src/renderer/index.ts",
     "src/**/*.test.ts",
-    "test/**/*.ts"
+    "test/**/*.ts",
+    "electron.vite.config.ts",
+    "vitest.config.ts"
   ],
   "project": ["*.ts", "build/**/*.ts", "src/**/*.ts", "test/**/*.ts", "e2e/scripts/**/*.mts", "out/**/*.js!"],
+
   "ignoreBinaries": ["kubectl"],
+
   "typescript": {
     "config": ["tsconfig.json"]
   },
-  "vite": {
-    "config": ["electron.vite.config.ts"]
-  }
+  // The configs are entries above. Left to its plugins, Knip takes the sources they
+  // name as production entries and asks for the host SDK among the dependencies.
+  "electron-vite": false,
+  "vite": false,
+  "vitest": false
 }

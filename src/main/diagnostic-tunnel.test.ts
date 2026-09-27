@@ -97,61 +97,62 @@ describe("owned Kubernetes pod tunnel", () => {
     }
   };
 
-  it.each([
-    "source",
-    "compiled",
-  ])("forwards through the %s implementation and releases sockets/listener", async (mode) => {
-    const open = mode === "compiled" ? compiled() : openPodTunnel;
+  it.each(["source", "compiled"])(
+    "forwards through the %s implementation and releases sockets/listener",
+    async (mode) => {
+      const open = mode === "compiled" ? compiled() : openPodTunnel;
 
-    requests = [];
-    const tunnel = await open(api(), target, new AbortController().signal);
-    const socket = connect(tunnel.port, tunnel.address);
+      requests = [];
+      const tunnel = await open(api(), target, new AbortController().signal);
+      const socket = connect(tunnel.port, tunnel.address);
 
-    try {
-      await once(socket, "connect");
-      const response = once(socket, "data");
-      socket.write("synthetic-port-forward");
-      expect((await response)[0].toString()).toBe("synthetic-port-forward");
-      expect(requests).toEqual([
-        { url: "/api/v1/namespaces/fixture/pods/storage/portforward?ports=8333", authorization: "Bearer synthetic" },
-      ]);
-    } finally {
-      socket.destroy();
-      await tunnel.close();
-    }
-    const refused = connect(tunnel.port, tunnel.address);
+      try {
+        await once(socket, "connect");
+        const response = once(socket, "data");
+        socket.write("synthetic-port-forward");
+        expect((await response)[0].toString()).toBe("synthetic-port-forward");
+        expect(requests).toEqual([
+          { url: "/api/v1/namespaces/fixture/pods/storage/portforward?ports=8333", authorization: "Bearer synthetic" },
+        ]);
+      } finally {
+        socket.destroy();
+        await tunnel.close();
+      }
+      const refused = connect(tunnel.port, tunnel.address);
 
-    await expect(once(refused, "connect")).rejects.toMatchObject({ code: "ECONNREFUSED" });
-  });
+      await expect(once(refused, "connect")).rejects.toMatchObject({ code: "ECONNREFUSED" });
+    },
+  );
 
-  it.each([
-    "source",
-    "compiled",
-  ])("delivers the whole stream through the %s implementation when the pod side closes first", async (mode) => {
-    const open = mode === "compiled" ? compiled() : openPodTunnel;
+  it.each(["source", "compiled"])(
+    "delivers the whole stream through the %s implementation when the pod side closes first",
+    async (mode) => {
+      const open = mode === "compiled" ? compiled() : openPodTunnel;
 
-    stream = randomBytes(8 * 1024 ** 2);
-    const tunnel = await open(api("stream"), { ...target, name: "stream" }, new AbortController().signal);
-    const socket = connect(tunnel.port, tunnel.address);
-    const received: Buffer[] = [];
-    const failures: unknown[] = [];
+      stream = randomBytes(8 * 1024 ** 2);
+      const tunnel = await open(api("stream"), { ...target, name: "stream" }, new AbortController().signal);
+      const socket = connect(tunnel.port, tunnel.address);
+      const received: Buffer[] = [];
+      const failures: unknown[] = [];
 
-    try {
-      socket.on("error", (error) => failures.push(error));
-      // A consumer slower than the pod: it stops after every chunk.
-      socket.on("data", (chunk: Buffer) => {
-        received.push(chunk);
-        socket.pause();
-        setTimeout(() => socket.resume(), 1);
-      });
-      await once(socket, "close");
-      expect(failures).toEqual([]);
-      expect(Buffer.concat(received).equals(stream)).toBe(true);
-    } finally {
-      socket.destroy();
-      await tunnel.close();
-    }
-  }, 60_000);
+      try {
+        socket.on("error", (error) => failures.push(error));
+        // A consumer slower than the pod: it stops after every chunk.
+        socket.on("data", (chunk: Buffer) => {
+          received.push(chunk);
+          socket.pause();
+          setTimeout(() => socket.resume(), 1);
+        });
+        await once(socket, "close");
+        expect(failures).toEqual([]);
+        expect(Buffer.concat(received).equals(stream)).toBe(true);
+      } finally {
+        socket.destroy();
+        await tunnel.close();
+      }
+    },
+    60_000,
+  );
 
   it("holds the pod side back while the consumer does not read", async () => {
     stream = randomBytes(48 * 1024 ** 2);

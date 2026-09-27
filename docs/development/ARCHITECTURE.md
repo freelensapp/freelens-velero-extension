@@ -45,10 +45,11 @@ Do not introduce a new application framework or a parallel state-management syst
 
 ### Scaffold Progress
 
-T0.3 establishes a private prerelease package with exact SDK and host compatibility
-v1.10.3, using the official example's pnpm/TypeScript/electron-vite conventions.
-Freelens v2 is explicitly outside the current compatibility target. Development
-dependencies are declared locally, not fetched through version-drifting lint commands.
+T0.3 establishes a prerelease package built against SDK v1.10.3, using the official
+example's pnpm/TypeScript/electron-vite conventions. The manifest accepts the hosts
+compatible with v1.10.3; Freelens v2 is explicitly outside the current compatibility
+target. Biome, Knip and Trunk run through `pnpm dlx` at the exact versions the
+scripts name, as in the other extensions.
 Activation remains inert in both main and renderer subclasses of the host SDK.
 T0.6 additionally exports the main diagnostic modules for compiled contract tests;
 no service, request, IPC handler or feature view is registered on activation.
@@ -76,25 +77,11 @@ every pull request and on main: production build, type check, lint and Knip; Tru
 the unit tests, on the build with separate modules and on the production build;
 OSV-Scanner. They run on synthetic data only. Trunk Git hooks are disabled.
 
-### Development Dependency Audit
+### Dependencies
 
-The first resolved-graph audit reported 62 advisory findings, including one critical
-finding, despite the SDK being excluded from the extension bundles. The direct
-dependency scan identified CVE-2026-84373 in Vitest; version 4.1.11 supplies its fix.
-Compatible transitive fixes are pinned through narrowly versioned workspace overrides.
-These modify only this extension's development graph, not the installed Freelens
-application or another repository. SDK and host compatibility remain exactly 1.10.3.
-
-The lead maintainer subsequently approved parent-scoped upgrades to tar 7.5.21 and
-decode-uri-component 0.5.0. A one-line pnpm patch adapts query-string 7.1.3's CommonJS
-import to the new decoder's ESM default. Eight consumer tests resolve the actual
-launcher/SDK dependency paths and cover extraction, malformed input and URL parsing.
-The interop was also checked on the declared Node 22.12.0 minimum. This patches only
-the development graph; it does not change or bundle the host implementation.
-
-The T0.3 resolved-graph audit reported zero findings, and its reinstallation retained
-the lockfile and consumer patch. That dated result does not cover the T0.6 graph.
-See [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md) for the explicit scope boundary.
+The graph carries no override and no patch. What is bundled, what only builds, and
+the history of the overrides of the first weeks are in
+[DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md).
 
 T0.6 adds exact official packages `@kubernetes/client-node` 2.0.0 and `ws` 8.21.3,
 plus `@types/ws` 8.18.1. The first two are main runtime libraries bundled from
@@ -107,7 +94,7 @@ before changing the client version. The main build replaces undici with
 extension never calls, and the real module installs a dispatcher for the whole
 process when it loads, which inside Freelens is the process of the host. Supported
 `WS_NO_*` build defines disable optional native accelerators without patching the
-library. The 118 normal/production tests cover 22 scaffold/consumer, 48
+library. The 110 normal/production tests cover 14 scaffold, 48
 environment/fixture and 48 diagnostic contracts. Actual host installation has no
 automated test yet.
 The electron-vite warning about a missing standalone renderer
