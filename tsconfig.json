@@ -1,0 +1,12 @@
+{
+  "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
+  "include": ["*.ts", "build/**/*.ts", "src/**/*.ts", "test/**/*.ts", "e2e/scripts/**/*.mts"],
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "composite": true,
+    "esModuleInterop": true,
+    "moduleResolution": "bundler",
+    "strict": true,
+    "types": ["node", "react", "vite/client", "electron-vite/node"]
+  }
+}

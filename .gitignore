@@ -1,0 +1,15 @@
+node_modules/
+out/
+coverage/
+*.tgz
+*.tsbuildinfo
+.trunk/out/
+.trunk/logs/
+.trunk/tools/
+.trunk/plugins/
+.trunk/notifications/
+.env
+.env.*
+*.pem
+*.key
+*.kubeconfig

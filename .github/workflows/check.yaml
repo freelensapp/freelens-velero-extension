@@ -1,0 +1,37 @@
+name: Check
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    if: ${{ vars.ENABLE_HOSTED_CHECKS == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      DO_NOT_TRACK: "1"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - name: Set up pnpm
+        run: corepack enable
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check source
+        run: pnpm lint:check
+      - name: Build and test production modules
+        run: VITE_PRESERVE_MODULES=false pnpm test:unit
+      - name: Check dependencies
+        run: pnpm knip:check
+      - name: Check documentation and workflows
+        run: pnpm trunk:check
+      - name: Pack without publishing
+        run: pnpm clean:tgz && pnpm pack
