@@ -235,10 +235,12 @@ pnpm clean:all            # Clean everything (node_modules, out, tgz)
 src/
   main/index.ts             # Extension entry point (main process, Node.js)
   main/diagnostic-*.ts      # Create-only Kubernetes adapter, DownloadRequest service, transport, pod tunnel
-  renderer/index.tsx        # Extension entry point (renderer process, Chromium)
+  renderer/index.tsx        # Extension entry point (renderer process, Chromium): pages, sidebar, details
   renderer/api/             # The kinds of Velero, and the reader: the only place that reaches the cluster
-  renderer/state/           # What the views of a cluster know of an installation
-  renderer/components/      # Target bar and states before a view
+  renderer/state/           # What the views of a cluster know of an installation, and the store of the list
+  renderer/components/      # Target bar, states before a view, status, styles
+  renderer/pages/           # The Backups and the workspace of a backup
+  renderer/details/         # What is added to the details the host shows of a kind
   common/                   # Pure helpers on plain data, and the store of the preferences
 build/host-globals.ts       # Maps what the host provides to the globals it provides it under
 integration/                # Playwright tests against a pinned Freelens build
@@ -258,6 +260,9 @@ Build output goes to `out/`.
   methods to the `Api` classes: write a function.
 - The host writes the store of an extension from its main process. A store that
   must be kept is opened in both processes, in `onActivate`.
+- An object built for a list of the host needs `metadata.selfLink`.
+- Do not hide a list of the host with `display: none`: it loses its scroll. The
+  list behind a workspace is hidden with `visibility`.
 - `pnpm exec biome` does not exist here: `pnpm biome:fix` and `pnpm biome:check`.
 
 ## Architecture And UI

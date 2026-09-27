@@ -1,8 +1,11 @@
 # Operator Experience
 
-Date: 2026-09-18
+Date: 2026-09-27
 
-Status: Proposed in T0.2; textual design, not a rendered or approved UI.
+Status: Proposed in T0.2. The target bar, the states before a view, the list of the
+Backups and the workspace of a backup are implemented as described here, with the
+first milestone; their specs record what was decided while implementing. The rest
+is textual design, not a rendered or approved UI.
 
 See [directives](../../AGENTS.md), [architecture](ARCHITECTURE.md), and
 [roadmap](ROADMAP.md). Optimize for correct operational decisions and efficient repeated
@@ -99,9 +102,11 @@ Proposed primary columns, with responsive hiding only for secondary fields:
 | VSL | Name, installation namespace, provider, reported phase or unknown, age |
 
 Use stable column IDs and native resize/sort behavior. Preserve the full value in
-tooltips/details when truncating. Prefer semantic missing values such as Unknown or
-Not reported over an unexplained dash. Relative times have absolute timezone-aware
-values in tooltips; duration updates stop only for terminal evidence.
+tooltips/details when truncating. In a narrow room the secondary columns give their
+room, in this order: installation namespace and age, storage and duration, started.
+Prefer semantic missing values such as Unknown or Not reported over an unexplained
+dash. Relative times have absolute timezone-aware values in tooltips; duration
+updates stop only for terminal evidence.
 
 Details lead with status/scope, then references and resource-specific fields.
 References resolve within the same installation and name/UID identity. A link is

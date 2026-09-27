@@ -18,10 +18,11 @@ is a from-scratch MIT implementation and it is not a Velero product.
 
 ### Status
 
-> **In development: there is nothing to install yet.** The foundation is in
+> **In development: there is no release to install yet.** The foundation is in
 > place, that is the toolchain, the test environment and the code of the main
-> process that fetches logs and results. No Velero view exists. The repository
-> is developed spec-first: one spec per feature under
+> process that fetches logs and results, and so are the first views: the
+> discovery of the Velero installations of a cluster and the Backups, read
+> only. The repository is developed spec-first: one spec per feature under
 > [docs/specs](docs/specs/). See the [roadmap](docs/development/ROADMAP.md).
 
 ## What v1.0.0 covers

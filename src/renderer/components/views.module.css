@@ -1,3 +1,11 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  color: var(--textColorPrimary);
+}
+
 .targetBar {
   display: flex;
   flex-wrap: wrap;
@@ -61,6 +69,28 @@
 
 .noticeInfo {
   border-left: 3px solid var(--colorInfo);
+}
+
+.content {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* The list behind a backup that is open keeps its room, and with it where it was scrolled: what is
+   taken out of the layout starts again from its top. */
+.behind {
+  visibility: hidden;
+}
+
+.over {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .state {
@@ -165,4 +195,265 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.status > :first-child {
+  flex: 0 0 auto;
+}
+
+.statusText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.signalFailure {
+  color: var(--colorError);
+}
+
+.signalWarnings {
+  color: var(--colorWarning);
+}
+
+.signalNone {
+  color: var(--colorOk);
+}
+
+.signalUnknown {
+  color: var(--textColorSecondary);
+}
+
+.workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 24px 32px;
+}
+
+.breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.back:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.title {
+  min-width: 0;
+  font-size: 20px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.band {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px 24px;
+  padding: 16px 0;
+  border-top: 1px solid var(--borderFaintColor);
+}
+
+.fact {
+  min-width: 0;
+}
+
+.factName {
+  margin-bottom: 4px;
+  color: var(--textColorSecondary);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.factValue {
+  overflow-wrap: anywhere;
+}
+
+.factNote {
+  margin-top: 2px;
+  color: var(--textColorSecondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.sectionTitle {
+  margin: 8px 0 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--borderFaintColor);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.stages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stage {
+  padding: 4px 10px;
+  border: 1px solid var(--borderFaintColor);
+  border-radius: 12px;
+  color: var(--textColorSecondary);
+  white-space: nowrap;
+}
+
+.stageCurrent {
+  border-color: var(--primary);
+  color: var(--textColorPrimary);
+  font-weight: 600;
+}
+
+.progressTrack {
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 3px;
+  background: var(--borderFaintColor);
+}
+
+.progressBar {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--primary);
+}
+
+.messages {
+  margin: 12px 0 0;
+  padding-left: 20px;
+  overflow-wrap: anywhere;
+}
+
+.messages li {
+  margin-bottom: 4px;
+}
+
+.references {
+  width: 100%;
+  margin-top: 12px;
+  border-collapse: collapse;
+}
+
+.references th,
+.references td {
+  padding: 6px 12px 6px 0;
+  border-bottom: 1px solid var(--borderFaintColor);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.references th {
+  color: var(--textColorSecondary);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.muted {
+  color: var(--textColorSecondary);
+}
+
+.list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  container-type: inline-size;
+}
+
+/* The room of a column follows what it shows: a name and a time need more of it than an age. */
+.list :global(.TableCell.name) {
+  flex-grow: 2.2;
+}
+
+.list :global(.TableCell.started) {
+  flex-grow: 1.8;
+}
+
+.list :global(.TableCell.phase) {
+  flex-grow: 1.4;
+}
+
+.list :global(.TableCell.installation),
+.list :global(.TableCell.failure),
+.list :global(.TableCell.progress),
+.list :global(.TableCell.duration),
+.list :global(.TableCell.storage) {
+  flex-grow: 1.2;
+}
+
+.list :global(.TableCell.age) {
+  flex-grow: 0.5;
+}
+
+/* In a narrow room the columns that say where and when give their room to the ones that say what: the
+   name, the phase, the failure and the progress stay. What is not shown is in the workspace of the backup. */
+@container (max-width: 1000px) {
+  .list :global(.TableCell.installation),
+  .list :global(.TableCell.age) {
+    display: none;
+  }
+}
+
+@container (max-width: 760px) {
+  .list :global(.TableCell.storage),
+  .list :global(.TableCell.duration) {
+    display: none;
+  }
+}
+
+@container (max-width: 640px) {
+  .list :global(.TableCell.started) {
+    display: none;
+  }
+}
+
+.rowLink {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.rowLink:hover {
+  color: var(--primary);
+}
+
+.rowLink:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
 }

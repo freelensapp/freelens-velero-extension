@@ -175,3 +175,44 @@ The upstream
 drift watch of the start of the milestone is in the
 [recon](../development/RECON-T0.1.md#upstream-drift-watch): the release after the
 reviewed one has the same Backup schema and the same phases of Backup and Restore.
+
+T1.3 is implemented: the [list](../../src/renderer/pages/backups-page.tsx) is the
+native list of the host, given what the extension read; the
+[workspace](../../src/renderer/pages/backup-workspace.tsx) is a view of its own; the
+[section](../../src/renderer/details/backup-details.tsx) in the details of the host
+reads a backup through the same [helpers](../../src/common/backup-view.ts). The
+status of the spec follows the suites of the views in a packaged Freelens.
+
+| Check | Part covered by T1.3 | Evidence |
+| --- | --- | --- |
+| BACK-01 | The registration | Unit: the kind, the version and the plural the entry point gives to the host |
+| BACK-02 | The static UI | Component: the mark of each of the 13 phases, and the failure in words beside it |
+| BACK-03 | The component | Component: a Completed backup that reports errors shows the contradiction; a counter that is missing is said not reported |
+| BACK-04 | The component | Component: no ratio and no bar where none can be given, and `NaN` nowhere |
+| BACK-06 | The columns; the packaged app comes with the suites | Unit: an order for each column, what is not reported after what is; what the search looks into |
+| BACK-07 | The component | Component: a row opens the workspace; the details of the host show the same phase, failure and progress; opening asks nothing of the cluster |
+| BACK-08 | The component | Component: a reference that resolves, the restores denied, the snapshot locations that did not answer, a backup that names no schedule |
+| BACK-09 | The component | Component: the list is given no selection, no menu and no command that adds or removes |
+| BACK-10 | All of it | Unit and component: a late answer, a backup created again with the same name, a read that fails, and no timer left when the view closes |
+| BACK-13 | The component | Component: empty, denied, failed, stale and partly readable, each with its own words |
+| BACK-14 | The adapter | The reader sends `GET` and nothing else, and opening a backup asks nothing |
+
+BACK-11 and BACK-12 are of the packaged application, and come with the suites.
+
+What was decided while implementing, inside the requirements:
+
+- **The columns that say where and when give their room in a narrow window.** The
+  installation and the age first, then the storage and the duration, then the
+  start: the name, the phase, the failure and the progress stay. What is not shown
+  is in the workspace. It is the responsive hiding of the secondary fields the
+  [design](../development/DESIGN.md#lists-and-details) allows.
+- **A terminal phase that carries a failure has its own mark**, not the one of
+  what went well: the phase and the failure stay on two axes, and the icon of the
+  first does not contradict the second.
+- **The counters of the status are said for what they are.** The workspace shows
+  how many errors and warnings the status reports, and that what they are is in
+  the log and in the results of the backup, which this slice does not ask Velero
+  for.
+- **The section in the details of the host leads to the workspace only for a
+  backup of the installation selected.** The workspace shows that installation: a
+  link to a backup of another namespace would open one of the same name, or none.
