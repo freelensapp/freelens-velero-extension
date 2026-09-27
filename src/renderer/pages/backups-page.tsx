@@ -179,15 +179,19 @@ export const BackupsPage = observer(({ installation = currentInstallation() }: {
     let frame = 0;
     let tries = 0;
     // The list of the host may draw its rows again when it is shown: the focus is given to the row that
-    // is there, and again if the row that had it was replaced.
+    // is there, and again if the row that had it was replaced and nothing has it. Once the operator
+    // moved it somewhere else it is theirs: the row does not take it back.
     const focus = () => {
       const rows = [...(list.current?.querySelectorAll<HTMLElement>("[data-backup-row]") ?? [])];
       const row = rows.find((candidate) => candidate.dataset.backupRow === name);
+      const active = document.activeElement;
+      const free = active === null || active === document.body || !document.body.contains(active);
 
+      if (tries > 0 && !free && active !== row) return;
       // The list is where it was scrolled: the focus does not move it.
-      row?.focus({ preventScroll: true });
+      if (active !== row) row?.focus({ preventScroll: true });
       tries += 1;
-      if (tries < 20 && (document.activeElement !== row || tries < 3)) frame = requestAnimationFrame(focus);
+      if (tries < 20) frame = requestAnimationFrame(focus);
     };
 
     opened.current = undefined;
