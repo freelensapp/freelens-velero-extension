@@ -169,8 +169,10 @@ Record role and date.
 
 ## Evidence And Deviations
 
-Implemented on 2026-09-27. The runs below are the evidence of the pull request; the
-status moves to Verified with the hosted run on main and the manual review.
+Implemented on 2026-09-27 and merged the same day; the hosted checks are green on
+main, the E2E tests among them. The status moves to Verified when the manual review
+of the Success Criteria is recorded here, with role and date. The runs below are the
+evidence of the pull request of the implementation.
 
 | Check | Evidence |
 | --- | --- |
@@ -185,7 +187,7 @@ status moves to Verified with the hosted run on main and the manual review.
 | ENV-09 | Unit: a Secret is recorded without its body, a generated secret is found as it is and encoded. Runs: every command ends with the search, on a log of more than 100 MB on macOS. Unit: the workflow has no upload |
 | ENV-10 | Unit: a variable outside the allowlist does not reach a child process |
 | ENV-11 | Hosted runs on Linux ARM64: green on the pull request of the implementation; red on a pull request that asked the reader of the fixtures for one backup more than it lists, at that check, with the environment taken down after it |
-| ENV-12 | The validator accepts the configuration; the dry run on the repository lists the seven pins, in their groups |
+| ENV-12 | The validator accepts the configuration; the dry run on the repository lists the seven pins, in their groups. After the merge Renovate opened the pull requests of the two groups, each with the note of the upstream drift watch, the one of the binaries with the note of the checksums |
 
 On macOS the runs also covered what the scenarios ask of an interrupted run: a run
 killed while the node was created, the lock it left, the node it left, and the
