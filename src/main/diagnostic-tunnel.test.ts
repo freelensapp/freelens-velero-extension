@@ -144,7 +144,9 @@ describe("owned Kubernetes pod tunnel", () => {
 
     try {
       const [, handshake] = await incoming;
-      const closed = once(handshake, "close");
+      // The peer may observe the cancellation as a reset before the close.
+      handshake.on("error", () => {});
+      const closed = new Promise<void>((resolve) => handshake.once("close", () => resolve()));
 
       controller.abort();
       await tunnel.close();

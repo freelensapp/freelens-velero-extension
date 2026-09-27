@@ -189,7 +189,8 @@ describe("explicit create-only Kubernetes adapter", () => {
     const pending = api.read("DownloadRequest", "fixture", "pending", controller.signal);
     const rejected = expect(pending).rejects.toMatchObject({ code: "cancelled" });
     const [request] = await arrived;
-    const closed = once(request.socket, "close");
+    // The peer may observe the cancellation as a reset before the close.
+    const closed = new Promise<void>((resolve) => request.socket.once("close", () => resolve()));
 
     controller.abort();
     await rejected;

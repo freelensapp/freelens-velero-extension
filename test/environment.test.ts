@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -704,7 +704,8 @@ describe("local setup entrypoint refusal", () => {
   });
 
   it("releases its lock when initialization rejects a malformed journal", () => {
-    const home = mkdtempSync(join(tmpdir(), "velero-cli-test-"));
+    // The temporary directory can sit behind a symlink, which the runner refuses for its state.
+    const home = mkdtempSync(join(realpathSync(tmpdir()), "velero-cli-test-"));
     const state = join(home, ".local", "state", DEMO_CLUSTER);
 
     try {
