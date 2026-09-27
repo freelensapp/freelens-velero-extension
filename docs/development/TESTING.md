@@ -3,12 +3,14 @@
 Date: 2026-09-25
 
 Status: T0.3-T0.6 scaffold, environment, fixture and compiled-main transport checks
-pass. Actual Freelens activation remains unverified and requires continuation.
+pass. Actual Freelens activation has no automated test yet.
 
 This is a desktop Electron extension with renderer UI, main-process Kubernetes
 operations and object-storage transport. The binding safety/privacy rules are in
 [AGENTS.md](../../AGENTS.md); domain evidence is in [RECON-T0.1.md](RECON-T0.1.md).
-The [roadmap](PLAN.md) is the single progress ledger, not this strategy document.
+The [roadmap](ROADMAP.md) is the single source of truth for progress, not this
+strategy document. The sections named after a task (T0.4, T0.5, T0.6) are dated
+evidence of the runs of the foundation phase, on one Linux machine.
 
 ## Prerequisite Evidence
 
@@ -34,7 +36,7 @@ disables AWS ambient credential/metadata lookup. No AWS/Azure account or online
 service access is authorized by this local setup; explicit target/operation approval
 would be required under the canonical directives.
 
-The user resumed T0.4 on 2026-09-24 with official [SeaweedFS 4.47](LOCAL-STORAGE.md).
+T0.4 resumed on 2026-09-24 with official [SeaweedFS 4.47](LOCAL-STORAGE.md).
 The dedicated kind cluster, Velero server/node-agent, storage and BSL are now ready.
 Runtime authentication, network isolation and temporary-resource cleanup pass.
 At that stage no backup or restore was run. T0.5, authorized on 2026-09-25, now
@@ -45,7 +47,9 @@ No extension download service, upstream rebuild or scanner was used.
 There is no legacy Velero extension test baseline. The official extension and host
 integration conventions are reference assets, not pre-existing Velero coverage.
 Reuse suitable installation/launch helpers in an isolated harness with new
-Velero-specific journeys. Never overwrite the shared Freelens checkout's tests.
+Velero-specific journeys. The tests are copied into the Freelens checkout of the
+harness under their own names; they never replace the tests of a checkout somebody
+else works in.
 
 ## Primary Validation Stack
 
@@ -192,7 +196,7 @@ dependencies. Packaging is not authorization to publish.
 
 ## T0.4 Attempt And Recovery Gate
 
-Completed locally on 2026-09-24 following the user's continuation. Official release
+Completed locally on 2026-09-24. Official release
 artifacts only: kind 0.33.0, Kubernetes node 1.34.11, Velero 1.18.2, AWS plugin
 1.14.2 and SeaweedFS 4.47. Node.js is 24.15.0 and kubectl remains 1.33.4.
 Exact image references are in [local-manifests.mts](../../e2e/scripts/local-manifests.mts).
@@ -460,8 +464,8 @@ The default kubeconfig and original official image contents remain unchanged.
 The [transport support decision](ARCHITECTURE.md#t06-transport-support-decision)
 retains both authorized direct access and explicit Pod forwarding. Automatic
 endpoint resolution and actual-host authentication still need qualification, not
-an implicit fallback. Overall T0.6 verdict: **PASS**. Stop for P0 review and the
-actual-host acceptance gate before feature implementation.
+an implicit fallback. Overall T0.6 verdict: **PASS**. The actual-host acceptance
+check stays open until the integration test covers it.
 
 ## Capability Failures
 
@@ -473,8 +477,8 @@ actual-host acceptance gate before feature implementation.
 | Required image/download unavailable | Already available local tiers | Record exact missing pin; do not silently change versions or weaken the gate |
 
 Do not discard a working tier because an independent prerequisite failed. A fallback
-is partial evidence, never a full release pass. Hosted CI and external writes are
-not fallback options. Authorized external reads, if ever separately requested, must
+is partial evidence, never a full release pass. External writes are never a
+fallback. Authorized external reads, if ever separately requested, must
 obey the private-data isolation rules and are not necessary for these milestones.
 
 ## Pre-Review And Completion
@@ -494,8 +498,7 @@ logs/screenshots local outside the package; publishable extracts require a priva
 review. A pre-review inspection result must graduate into regression tests where
 the behavior is automatable.
 
-Spec lifecycle: Draft -> Approved -> Implemented -> Verified locally. Approval of
-a design is not a successful test, and completion of this document is not application
-verification. Record role/date/verdict without personal names. Resolve blocking
-findings before reusing the affected patterns in the next milestone. The user gets
-a result/progress/remaining-work report and a pause after every numbered task.
+Spec lifecycle: Draft, Approved, Implemented, Verified (see [PROCESS.md](PROCESS.md)).
+Approval of a design is not a successful test, and completion of this document is
+not application verification. Record role/date/verdict without personal names.
+Resolve blocking findings before reusing the affected patterns in the next milestone.

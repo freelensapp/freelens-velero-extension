@@ -2,12 +2,12 @@
 
 - **Status:** Approved
 - **Date:** 2026-09-18
-- **Milestone / tasks:** P0 / T0.3, T0.4, T0.5, T0.6, each separately authorized
+- **Milestone / tasks:** Foundation / T0.3, T0.4, T0.5, T0.6
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
 - **Reviewed main:** `60163e0827e72658bb6546165a727300170e628b`
 - **Freelens validation target:** v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`
 - **Dependencies:** [versioned recon](../development/RECON-T0.1.md)
-- **Approval:** Foundation contract approved on 2026-09-18; T0.3/T0.4 complete; T0.5 and T0.6 separately authorized and completed on 2026-09-25; stop for P0 review
+- **Approval:** Foundation contract approved by the lead maintainer on 2026-09-18; T0.3/T0.4 complete; T0.5 and T0.6 completed on 2026-09-25
 - **Backend revision:** Official SeaweedFS 4.47 accepted; upstream repairs/custom images retired on 2026-09-18; T0.4 setup verified on 2026-09-24
 
 ## Goal
@@ -26,7 +26,7 @@ storage/schedule states. Secondary-kind UI remains in P5.
 Included: extension entry points and tooling, public-host compatibility, fixture
 ownership, scoped credentials, diagnostics proof and packaged activation. Excluded:
 feature pages, full diagnostic viewers, operator actions UI, adherence logic,
-publication and any real-environment access. See [PLAN.md](../development/PLAN.md).
+publication and any real-environment access. See the [roadmap](../development/ROADMAP.md).
 
 ## User Scenarios
 
@@ -47,9 +47,9 @@ publication and any real-environment access. See [PLAN.md](../development/PLAN.m
 
 | ID | Contract | Acceptance check |
 | --- | --- | --- |
-| REQ-001 | Scaffold only this extension with separate main/renderer entry points, host-provided runtimes, MIT project metadata and no example feature or remote publish action | FND-01 |
+| REQ-001 | Scaffold only this extension with separate main/renderer entry points, host-provided runtimes, MIT project metadata and no example feature | FND-01 |
 | REQ-002 | Establish the canonical type/lint/unit/build/pack gates with locked dependencies and an actual passing entry/contract smoke test; pack must not change version | FND-02 |
-| REQ-003 | All infrastructure runs on this machine; reject a missing, remote, ambiguous or wrong kind target before Kubernetes access, without changing user contexts | FND-03 |
+| REQ-003 | All test infrastructure is a disposable kind cluster created by the scripts; reject a missing, remote, ambiguous or wrong kind target before Kubernetes access, without changing user contexts | FND-03 |
 | REQ-004 | Track fixture ownership, refuse pre-existing collisions, and clean up only owned resources; never delete a cluster automatically or disturb persistent add-ons | FND-04 |
 | REQ-005 | Apply the pinned schemas unchanged and read back every declared Backup/Restore phase via ordinary objects, not a status subresource; isolate fixtures from active reconciliation | FND-05 |
 | REQ-006 | Produce a real local completed backup and restore with independently authored synthetic data and retrievable artifacts; label forced outcomes separately | FND-06 |
@@ -58,7 +58,7 @@ publication and any real-environment access. See [PLAN.md](../development/PLAN.m
 | REQ-009 | Prove bounded direct and forwarded local artifact fetches with URL/failure/timeout exits, missing artifact, TLS/CA-reference behavior, preserved signing and denied unsafe destinations | FND-09 |
 | REQ-010 | Install the actual tarball through an isolated pinned Freelens integration harness and verify activation/shutdown without editing the shared host repository | FND-10 |
 | REQ-011 | Keep all credentials/private captures outside repositories; package and publishable evidence contain only authored code, public facts and synthetic data, never signed URLs or secrets | FND-11 |
-| REQ-012 | Provide reproducible demo/pre-review procedures and per-task evidence with exit code, counts, versions, cleanup and gaps; stop after each separately authorized task | FND-12 |
+| REQ-012 | Provide reproducible demo/pre-review procedures and per-task evidence with exit code, counts, versions, cleanup and gaps | FND-12 |
 
 ## Design
 
@@ -123,7 +123,7 @@ controller/storage evidence; packaged-app helpers remain later work.
 
 ## Success Criteria
 
-All 12 acceptance checks pass before the foundation is Verified locally. Each
+All 12 acceptance checks pass before the foundation is Verified. Each
 numbered task reports only its subset of results; an installable package alone does
 not close the environment or transport checks. A wrong target must cause zero
 Kubernetes calls. Cleanup leaves unrelated sentinel resources intact. A successful
@@ -151,22 +151,22 @@ page or cluster request appears merely from activation. Record role/date/verdict
 ## Evidence And Deviations
 
 Approved against the public-source recon and development directives on 2026-09-18.
-The user authorized the final scoped dependency changes on 2026-09-18. T0.3 is
+The lead maintainer approved the final scoped dependency changes on 2026-09-18. T0.3 is
 complete: scaffold, [dependency remediation](../development/DEPENDENCY-AUDIT.md) and
 refreshed archive checks passed. SDK and host declaration are exactly 1.10.3; Node
-is 24.15.0 and pnpm is 10.34.4. The user resumed T0.4 on 2026-09-24 under the
+is 24.15.0 and pnpm is 10.34.4. T0.4 resumed on 2026-09-24 under the
 official-artifacts-only directive. T0.4 is complete: 46 setup/guard tests and live
 readiness, authentication, isolation and interrupted-check cleanup pass. The API
 uses the exact owned internal node IP with verified TLS; default kubeconfig is
 unchanged. No custom image, upstream repair or scanner was used in this iteration.
-The user then authorized T0.5 on 2026-09-25. That step is complete: real Backup and
+T0.5 followed on 2026-09-25. That step is complete: real Backup and
 Restore reached Completed with 13 ConfigMaps and 9 MiB of matching payload; multipart
 metadata and four gzip artifacts passed. Thirty synthetic objects retained their
 statuses outside the controllers' namespace, including all 13 Backup/10 Restore
 phases and primary storage/schedule cases. A namespace-only identity passed one
 read and was denied seven operations. Controller-mediated backup deletion and
 UID-bound namespace cleanup removed the test run.
-The user subsequently authorized T0.6 on the same day. That task is complete:
+T0.6 followed on the same day. That task is complete:
 the compiled main retrieved 16 real log/results artifacts over direct HTTPS and
 HTTP/HTTPS pod tunnels. Inline/referenced CA, real signature/Host negatives,
 generated ServerStatusRequest names/version and 409 preservation pass. Owned TLS,
@@ -216,6 +216,12 @@ production IPC/catalog binding and automatic DNS/Service resolution are not yet
 supported by this proof. No TLS bypass or fallback was added to hide those limits.
 
 T0.6 is complete, but FND-10 and actual-host privacy/lifecycle evidence remain open.
-PV/CSI recovery is not claimed. Stop for P0 review and the next explicit approval;
-this spec stays Approved, not Implemented or Verified locally, until its full
-acceptance and manual-review requirements are met.
+PV/CSI recovery is not claimed. This spec stays Approved, not Implemented or
+Verified, until its full acceptance and manual-review requirements are met.
+
+Deviation, approved by the lead maintainer on 2026-09-27: the wording of REQ-001,
+REQ-003 and REQ-012 follows the [process](../development/PROCESS.md) of the
+organization. The test infrastructure is a disposable kind cluster created by the
+scripts, on a developer machine or on a CI runner; the review gate is at the end of
+a milestone, not after each task; publication goes through the release workflow.
+The acceptance checks are unchanged.

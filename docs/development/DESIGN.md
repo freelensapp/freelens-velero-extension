@@ -5,7 +5,7 @@ Date: 2026-09-18
 Status: Proposed in T0.2; textual design, not a rendered or approved UI.
 
 See [directives](../../AGENTS.md), [architecture](ARCHITECTURE.md), and
-[roadmap](PLAN.md). Optimize for correct operational decisions and efficient repeated
+[roadmap](ROADMAP.md). Optimize for correct operational decisions and efficient repeated
 work. Native components are a preference where suitable, not a layout constraint.
 
 ## Primary Journeys

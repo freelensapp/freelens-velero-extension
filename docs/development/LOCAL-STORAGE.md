@@ -19,9 +19,9 @@ Freelens and SDK compatibility remain exactly v1.10.3. Velero v1.18.2 and AWS pl
 v1.14.2 remain the reviewed test pair; provider `aws` means use the S3 plugin, not
 permission to contact an AWS account.
 
-The user accepted the backend choice and resumed T0.4 on 2026-09-24. T0.4 is complete;
-T0.5 and T0.6 were separately authorized and completed on 2026-09-25. Stop for the
-next approval; the proof does not authorize feature implementation or external access.
+The lead maintainer accepted the backend choice and T0.4 resumed on 2026-09-24. T0.4
+is complete; T0.5 and T0.6 were completed on 2026-09-25. The proof does not authorize
+external access.
 The source-only review did not run images. The subsequent setup attempt retrieved
 the four pinned images and checked their CLI contracts without network access, but
 kind bootstrap initially failed. The later resumed setup installed the official
@@ -156,5 +156,5 @@ PV/CSI recovery, actual Electron integration and performance benchmarks remain u
 Local derivative images are not selected. This is a local development lab only.
 
 Publishable documentation records this proposal and its own technical constraints,
-not product comparisons or real-environment data. [PLAN.md](PLAN.md) remains the
-authoritative task ledger; [ROADMAP.md](ROADMAP.md) remains its derived summary.
+not product comparisons or real-environment data. [ROADMAP.md](ROADMAP.md) is the
+single source of truth for scope and progress.

@@ -4,7 +4,7 @@ Date: 2026-09-18
 
 Status: Source and schema review complete; runtime validation not performed.
 
-Scope: the first numbered task in [PLAN.md](PLAN.md), not scaffolding or feature
+Scope: the first task of the [roadmap](ROADMAP.md), not scaffolding or feature
 implementation. This report contains public upstream API facts only. No cluster was
 contacted, no environment data were collected, and no upstream code was executed.
 
@@ -24,10 +24,10 @@ The plugin's versioned compatibility table pairs v1.14.x with Velero v1.18.x.
 The [Velero release compatibility table](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/README.md)
 lists Kubernetes 1.18 onward as expected compatibility, with 1.33.7, 1.34.1, and
 1.35.0 tested upstream. That is not an extension test result. Choose and verify
-the actual kind node image, plugin image digests, and MinIO version in T0.4; do not
+the actual kind node image, plugin image digests, and S3 backend version in T0.4; do not
 upgrade or replace the existing persistent kind cluster as a side effect.
 
-## Corrections To The Handoff
+## Corrections To The Initial Assumptions
 
 | Topic | v1.18.2 evidence | Consequence |
 | --- | --- | --- |
@@ -126,8 +126,12 @@ Sources: [release API](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b
    Processed means a URL was signed, not that the artifact exists. Other auth,
    expired-link, TLS, and transport failures must remain distinguishable.
 
-The API supports 14 download target kinds. The v1.0.0 candidate allowlist is limited
-to BackupLog, RestoreLog, BackupResults, RestoreResults, BackupResourceList,
+The API supports 14 download target kinds: BackupLog, BackupContents,
+BackupVolumeSnapshots, BackupItemOperations, BackupResourceList, BackupResults,
+RestoreLog, RestoreResults, RestoreResourceList, RestoreItemOperations,
+CSIBackupVolumeSnapshots, CSIBackupVolumeSnapshotContents, BackupVolumeInfos and
+RestoreVolumeInfo. This inventory is not a feature allowlist. The v1.0.0 candidate
+allowlist is limited to BackupLog, RestoreLog, BackupResults, RestoreResults, BackupResourceList,
 RestoreResourceList, BackupVolumeInfos, and RestoreVolumeInfo. Payload rendering and
 actual artifact availability need kind fixtures; the other API targets are not
 implicitly enabled. BackupContents remains excluded.
@@ -157,8 +161,8 @@ The plugin pins AWS SDK Go v2 v1.41.12. Its
 includes Host, escaped path, and query in the canonical request. Replacing the
 signed authority with localhost changes the signed request. A tunnel must preserve
 the original HTTP Host, signed path/query, and TLS hostname/SNI while changing only
-the connection destination. This requirement is source-confirmed; a working
-forwarded MinIO download is NOT verified yet and belongs to T0.6.
+the connection destination. This requirement is source-confirmed; at the date of
+this report a working forwarded download was not verified yet and belonged to T0.6.
 
 The transport spec must also bound bytes and decompression, restrict destinations
 and redirects, cancel underlying I/O, redact errors, and clean up owned sockets.
@@ -242,11 +246,12 @@ Completed checks:
 - Local documentation checks and editor diagnostics. No application build, unit
   suite, packaged-app integration, cluster command, or runtime endpoint test was run.
 
-Still open by design:
+Still open at the date of this report (T0.2 to T0.6 were completed afterwards, with
+SeaweedFS as the S3 backend: see [TESTING.md](TESTING.md)):
 
 - T0.2: approved foundation specs, UX choices, create-only adapter design, exact
   validation/RBAC/error contracts, and the demo/test plan.
-- T0.4/T0.5: actual pinned kind/Velero/MinIO setup, controller isolation, accepted
+- T0.4/T0.5: actual pinned kind/Velero/S3 setup, controller isolation, accepted
   fixtures and status readback, cleanup ownership, and real local artifacts.
 - T0.6: direct and forwarded downloads, preserved Host/SNI, both CA modes, explicit
   failure/timeout/404 behavior, cancellation, byte limits and destination controls.
@@ -254,5 +259,4 @@ Still open by design:
   adherence, safe actions, performance, and release readiness.
 
 No product-scope change is needed to complete this source audit. No real target has
-been authorized or accessed. The next step is T0.2, after user continuation; this
-report does not approve any feature spec or start that step.
+been authorized or accessed. This report does not approve any feature spec.

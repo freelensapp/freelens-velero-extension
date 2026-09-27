@@ -1,82 +1,65 @@
-# Development Directives
+# AGENTS.md
 
-Date: 2026-09-25
+This file provides guidance to coding agents when working with code in this repository.
 
-## Authorization
+> **Tip**: If you find yourself correcting the agent during interactive work, suggest adding a new rule to this file so the lesson is captured for future sessions.
 
-- Status: Approved for stepwise execution of [the action plan](docs/development/PLAN.md)
-  on 2026-09-18. T0.1 through T0.6 are complete. The user resumed T0.4 on 2026-09-24;
-  the dedicated local kind environment, official Velero/plugin/SeaweedFS installation,
-  readiness, authentication, isolation and temporary-resource cleanup were verified.
-  The latest directive on 2026-09-18 supersedes earlier image-remediation approval:
-  use official upstream artifacts only and stop third-party bug/security repairs.
-  Existing locally rebuilt images are not approved for use and were not used or
-  deleted. The demo remains running with restart disabled. No cloud access is authorized.
-  SPEC-0001 remains Approved, not fully implemented; SPEC-0002 and SPEC-0003 remain
-  Draft. T0.5 completed on 2026-09-25: real ConfigMap backup/restore, multipart
-  evidence, isolated synthetic states, restricted RBAC and owned cleanup passed.
-  All fixture resources are removed; the demo infrastructure is retained.
-  On 2026-09-25 the user authorized T0.6 main-process request/download proof using
-  local fixtures. T0.6 passed: 118 tests and 16 real signed artifact downloads
-  through direct HTTPS and HTTP/HTTPS tunnels, with CA and cleanup checks.
-  The compiled main runs in Node for this proof, not in a real Freelens process.
-  Stop after T0.6 for P0 review; actual-host activation and SPEC-0002/T1.1 approval
-  remain outstanding. No feature or IPC/catalog integration is authorized yet.
-- A step is one numbered task unless the user explicitly authorizes a batch. At the
-  end of every step, stop and report results, verification and limitations, current
-  progress, remaining work, and the proposed next step. Ask for decisions or
-  preferences when needed, then wait for the user's continuation before proceeding.
-- Every end-of-step pause must include an extremely short project-wide summary:
-  Completed, Remaining to v1.0.0, and Next step / approval. Cover all remaining
-  phases, not only the next task; add verification limits or blockers briefly.
-  In Italian use "Restano per la v1.0.0" for future tasks, distinguishing them from
-  any unfinished acceptance check in the current step.
-- Do not treat roadmap approval as permission to execute all steps in one turn.
-  Feature specs and milestone reviews remain separate approval gates. T0.4 permits
-  local setup scripts/guards, a dedicated kind environment, Velero and a pinned local S3 backend,
-  readiness checks and infrastructure ownership/cleanup. T0.5 adds the completed
-  fixture and restricted-identity checks. T0.6 adds the bounded main request/download
-  proof; feature pages, production IPC/catalog routing and general authentication
-  support remain later steps. Its explicit certificate/token adapter does not yet
-  support kubeconfig exec/auth-provider plugins, proxies or insecure TLS.
-- Work locally. Do not push, publish packages, create remote repositories, open
-  issues or pull requests, or post announcements without separate authorization.
-- Do not create commits, branches, tags, or remotes unless explicitly requested.
-- Keep this extension independent of other work in the workspace. Existing
-  repositories are read-only references; do not overwrite their code, test harnesses,
-  lockfiles, branches, or configuration.
-- Record approval and subsequent scope changes in the plan. Never infer approval
-  from the existence of these documents.
+## Project Overview
+
+This repository contains the Freelens extension for Velero (velero.io), the
+backup and recovery tool for Kubernetes. It shows the Velero resources (Backup,
+Restore, Schedule, BackupStorageLocation, VolumeSnapshotLocation and the other
+kinds of `velero.io`) inside Freelens, with their logs and results, the
+adherence of the schedules and guarded recovery actions. It was scaffolded from
+freelens-example-extension and is developed spec by spec.
+
+The foundation is in place and no Velero view exists yet. Scope and progress
+toward v1.0.0 are in `docs/development/ROADMAP.md`.
+
+- **Language**: TypeScript 5.9.3
+- **Runtime**: Node.js >= 22.12.0, Freelens 1.10.3
+- **Package manager**: pnpm 10.x (locked)
+- **License**: MIT
+
+## Licensing and provenance constraints (critical)
+
+- This extension is MIT and written from scratch, on the structure of the
+  official example extension.
+- Do not import another project's implementation, branding, or prose wholesale.
+  Preserve required legal notices for any permitted reused material.
+- TypeScript types for the Velero kinds are written in this repository from the
+  CRD schemas of the pinned Velero version, never imported or copied.
+- The product name is "Freelens extension for Velero"; never present the
+  extension as a Velero product.
 
 ## Official Artifacts And Scope
 
-- Binding user directive, 2026-09-18: the task is the extension, not repairing or
-  maintaining third-party software. Use only official upstream repositories and
-  official release images/binaries, with verified versions and immutable pins.
+- The task is the extension, not repairing or maintaining third-party software.
+  Use only official upstream repositories and official release images and
+  binaries, with verified versions and immutable pins.
 - Do not patch, fork or recompile upstream projects to fix their bugs or security
   findings. Do not build or select locally modified third-party images. Configure
   official artifacts through their supported interfaces; keep fixes in the
   extension and its own integration/setup code.
-- Do not autonomously add vulnerability scanners such as Trivy, infrastructure
-  remediation campaigns, or a requirement for zero CVEs across the laboratory.
-  Upstream findings are information to explain in context, not permission to
-  expand scope or impose a new release/setup gate.
+- Do not add scanners or remediation work for third-party container images or for
+  the test infrastructure, and do not require zero CVEs across it. Upstream
+  findings are information to explain in context, not permission to expand scope
+  or impose a new release/setup gate. The organization's automation for this
+  repository's own npm graph (OSV-Scanner, the automated npm audit, Renovate) is
+  part of the normal process.
 - If an official dependency blocks the extension, report the concrete impact and
   an official supported option. Ask before changing agreed compatibility or scope;
   do not start fixing upstream code as a fallback.
-- Previous local rebuilds, scan reports and private toolchains are historical work,
-  not approved inputs. Do not use or silently delete them. Preserve the existing
-  cluster, privacy, host-version and per-task approval rules.
+- Locally rebuilt images, scan reports and private toolchains of the early
+  laboratory are not approved inputs: do not use them.
 
 ## Product And Editorial Rules
 
 - Deliver the complete agreed v1.0.0 as soon as possible, without compromising
   quality, scope, safety, usability, or required validation. Calendar estimates
   must not delay a ready release or justify omitted requirements.
-- Implement the extension from scratch under MIT, using the official example
-  extension's structure and the established extension development conventions.
-- Compatibility is pinned to Freelens v1.10.3 and SDK v1.10.3. Do not target Freelens
-  v2 or widen the host version without explicit user approval and verification.
+- The validation target is Freelens v1.10.3 with SDK v1.10.3. Another major
+  version of Freelens needs its own spec and its own verification.
 - Optimize for an excellent operational UI: truthful status, fast diagnosis,
   efficient navigation, and safe actions, integrated with Freelens.
 - Do not mention individuals or include comparisons with other software in any
@@ -85,71 +68,65 @@ Date: 2026-09-25
 - Describe supported capabilities factually. Do not make priority, superiority,
   adoption, or competitive claims. Technical dependency and API references are
   permitted; comparisons are not.
-- Do not copy the unfiltered handoff into the project. Preserve its technical
-  requirements and uncertainty labels without its personal or comparative context.
-- Do not import another project's implementation, branding, or prose wholesale.
-  Preserve required legal notices for any permitted reused material.
-- Keep project documentation and UI text in English, following the local extension
-  conventions. Use ASCII in authored documentation and no emoji.
+- Keep project documentation and UI text in English.
 
-## Delivery Method
+## Text rules
 
-- Follow the local Kafka and KubeSwift practices documented in the plan: numbered
-  specs, a recon digest, explicit approval, implementation, regression tests,
-  packaged-app integration, and a pre-review pass for every milestone.
-- The handoff is input, not an approved spec or independently verified evidence.
-  Record the exact Velero tag and upstream commit reviewed in each relevant spec;
+- No emoji in Markdown, comments, UI strings, commit messages or PR text.
+- No em dash anywhere: use commas, colons, parentheses or full stops.
+- No Conventional Commits prefixes in commit subjects or PR titles.
+
+## Development process (binding)
+
+This repository is developed spec-first. Before implementing anything, read:
+
+- `docs/development/PROCESS.md`: the spec-driven workflow (spec before code,
+  docs updated in the same PR, manual-testing escalation to the lead maintainer,
+  milestone review gate).
+- `docs/development/ROADMAP.md`: scope and progress toward v1.0.0. It is the
+  single source of truth for both.
+- `docs/development/ARCHITECTURE.md`: process ownership, target identity, the
+  create-only adapter, errors, transport and security contracts.
+- `docs/development/DESIGN.md`: operator journeys, native and purpose-built
+  presentation, status semantics, non-happy states; no UI work without reading it.
+- `docs/development/TESTING.md`: required test layers, fixture ownership and the
+  evidence gates.
+- `docs/development/RECON-T0.1.md`: the reviewed API facts of the pinned Velero
+  version. Proposed designs and unexecuted proof gates must not be presented as
+  verified behavior.
+- `docs/development/DEPENDENCY-AUDIT.md` and `docs/development/LOCAL-STORAGE.md`:
+  the bundled runtime libraries and the local S3 backend of the test environment.
+- `docs/specs/`: one spec per feature, from `TEMPLATE.md`; `README.md` is the
+  index and allocates the requirement IDs.
+
+Rules that hold on top of the process:
+
+- A Draft spec is not approval to implement. Approval is recorded in the spec
+  (date, role) and in the pull request that introduces it.
+- Record the exact Velero tag and upstream commit reviewed in each relevant spec;
   distinguish released behavior from changes present only on upstream main.
-- Keep one small, testable slice per task. Update its spec, test evidence, roadmap,
-  and architecture together. Do not silently reduce v1.0.0 scope.
-- Keep documentation synchronized throughout the work, not just at milestone end.
-  Every behavioral, architectural, tooling or scope change must update the relevant
-  architecture/design, specs, test procedure/evidence, README, plan and roadmap
-  summary in the same iteration before reporting completion. Record the reason for deviations and obtain
-  approval where required; distinguish implemented, proposed and unverified behavior.
-- Reduce delivery time through early risk validation, proven tooling, and short
-  feedback loops. Do not defer agreed features or weaken review gates to ship sooner.
-- Adapt remote workflows to local execution. A push or hosted CI result is not a
-  prerequisite for local completion and must never be fabricated. Distinguish
-  `Verified locally` from later hosted verification and publication.
-- Run focused tests after changes and the milestone gates before review. Exploratory
-  browser checks do not replace deterministic or packaged Electron tests.
-- Before requesting manual UI testing, build and pack the extension without an
-  incidental version bump: `pnpm build && pnpm clean:tgz && pnpm pack`. Report the
-  actual tarball's absolute path and the tested Freelens version to the user.
-- Stop at approval gates and escalate material scope, safety, compatibility, or
-  platform blockers instead of claiming unverified completion.
-
-## Required Context
-
-- [PLAN.md](docs/development/PLAN.md) is the single task-progress and authorization
-  ledger. [ROADMAP.md](docs/development/ROADMAP.md) is its concise, reader-facing
-  progress summary. Keep it updated from the plan, never as an independent source
-  of state, and verify both agree before every end-of-step report.
-- [Spec index](docs/specs/README.md) and [template](docs/specs/TEMPLATE.md) govern
-  requirement IDs and spec approval. Read the applicable approved spec before code.
-- [ARCHITECTURE.md](docs/development/ARCHITECTURE.md) covers process ownership,
-  target identity, the proposed create-only adapter and security contracts.
-- [DESIGN.md](docs/development/DESIGN.md) covers native/custom UI choices and operator
-  workflows; [TESTING.md](docs/development/TESTING.md) defines validation and evidence.
-- [RECON-T0.1.md](docs/development/RECON-T0.1.md) records reviewed API facts. Proposed
-  designs and unexecuted proof gates must not be presented as verified behavior.
-- [DEPENDENCY-AUDIT.md](docs/development/DEPENDENCY-AUDIT.md) records security fixes
-  and unresolved compatibility-sensitive changes. Update it after dependency changes.
-- [LOCAL-STORAGE.md](docs/development/LOCAL-STORAGE.md) records the selected local
-  S3 backend, pinned review evidence, isolation requirements and unexecuted proof gates.
+- Keep one small, testable slice per pull request. Do not silently reduce the
+  v1.0.0 scope.
+- A local run is evidence for a pull request, not a status. A CI result must
+  never be fabricated or assumed.
+- Exploratory browser checks do not replace deterministic or packaged Electron
+  tests.
+- Escalate material scope, safety, compatibility, or platform blockers instead of
+  claiming unverified completion.
 
 ## Cluster And Data Safety
 
-- Run development, application execution, and tests on this local machine, using
-  local kind for Kubernetes fixtures and every mutating operation. Do not use remote
-  execution environments or hosted CI as a validation fallback.
+- Every mutating Kubernetes operation of development and tests runs against a
+  disposable kind cluster created by this repository's scripts, on a developer
+  machine or on a CI runner. Hosted CI runs the same suites on synthetic data
+  only. Never use a shared, remote or real cluster as a test target.
 - External environment access is permitted only for strictly read-only operations
   against a target explicitly identified and authorized by the user, and only when
   the private-data rules below can be enforced. Never infer permission from
   connectivity or existing kubeconfig entries; treat every other cluster as production.
-- All writes remain local-kind-only, including temporary resources and cleanup.
-  Never choose the first cluster or silently use the active/default context.
+- All writes remain confined to the disposable kind cluster, including temporary
+  resources and cleanup. Never choose the first cluster or silently use the
+  active/default context.
 - AWS, Azure and any other online cloud account, subscription, tenant or service
   must not be accessed without prior explicit user authorization naming the target
   and permitted operation. This covers read-only queries, discovery, health probes,
@@ -158,8 +135,9 @@ Date: 2026-09-25
 - Existing cloud credentials, CLI sessions, environment variables, profiles and
   reachable endpoints are never implicit authorization. Do not run cloud CLI/SDK
   discovery or account checks as a fallback for a local setup failure. Authorized
-  external reads still obey the private-data rules; local-kind-only writes remain
-  the default constraint and require an explicit scope change to override.
+  external reads still obey the private-data rules; writes confined to the
+  disposable kind cluster remain the default constraint and require an explicit
+  scope change to override.
 - Local test plugins must use only generated test credentials and explicit local
   service endpoints. Strip inherited cloud credential settings and disable ambient
   credential/metadata lookup. Public source/package/image downloads needed for the
@@ -170,8 +148,9 @@ Date: 2026-09-25
 - Use an isolated, single-target kubeconfig and verify target identity before reads
   and writes. Do not change the user's active kubeconfig context. Any authorized
   external read session must remain separate from the local mutating test session.
-- Remove test-owned fixtures after tests. Never delete the persistent `kind` /
-  `kind-kind` cluster or unrelated add-ons. Cluster deletion needs explicit approval.
+- Remove test-owned fixtures after tests. Scripts delete only the disposable
+  cluster they created, identified by name and ownership journal. Never delete or
+  modify any other cluster or unrelated add-ons.
 - Product write mode starts disabled, is scoped to the selected cluster and Velero
   namespace, and is enforced in main. Every write requires confirmation naming
   context and namespace; diagnostic request creation must also be explicit.
@@ -190,9 +169,10 @@ Date: 2026-09-25
 
 ### Private Environment Data
 
-- Data read from real environments must remain on this machine. Keep any necessary
-  captures in a private local directory outside this extension and all repository
-  worktrees, with restrictive permissions. Ignoring a file in Git is not sufficient.
+- Data read from real environments must remain on the machine that read them. Keep
+  any necessary captures in a private local directory outside this extension and all
+  repository worktrees, with restrictive permissions. Ignoring a file in Git is not
+  sufficient.
 - Never put real environment data in source, fixtures, specs, documentation, logs,
   screenshots, videos, test reports, snapshots, package contents, or Git history.
   This includes identifiers, names, endpoints, object metadata, manifests, payloads,
@@ -207,6 +187,54 @@ Date: 2026-09-25
 - Apply these rules to scripts, browser automation, and delegated work. If the
   isolation cannot be guaranteed, do not run the external read. Check repository
   and package candidates for private artifacts before sharing or packaging.
+- The private state of the test environment (operation logs, generated
+  credentials, kubeconfig) is never uploaded as a CI artifact.
+
+## Common Commands
+
+```bash
+# Type checking
+pnpm type:check
+
+# Linting & formatting
+pnpm biome:check          # TypeScript, JS, JSON (biome)
+pnpm biome:fix            # Auto-fix the formats above
+pnpm trunk:check          # Markdown, YAML and workflows
+pnpm trunk:fix            # Auto-fix Markdown, YAML, etc.
+pnpm lint:check           # Alias for biome:check
+pnpm lint:fix             # Alias for biome:fix
+
+# Dependencies
+pnpm knip:check           # Run after a build with separate modules
+
+# Tests
+pnpm test:unit            # Builds first, then vitest
+
+# Build
+pnpm build                # Type check, then electron-vite, separate modules
+pnpm build:production     # Production build, single file per entry point
+
+# Pack for testing
+pnpm build:production && pnpm clean:tgz && pnpm pack
+
+# Clean
+pnpm clean                # Clean out/
+```
+
+## Architecture
+
+```text
+src/
+  main/index.ts             # Extension entry point (main process, Node.js)
+  main/diagnostic-*.ts      # Create-only Kubernetes adapter, DownloadRequest service, transport, pod tunnel
+  renderer/index.ts         # Extension entry point (renderer process, Chromium)
+build/host-globals.ts       # Maps the host SDK to the global provided by Freelens
+test/                       # Vitest stubs for the host, build and environment tests
+e2e/scripts/                # Disposable kind cluster with Velero and S3, fixtures, transport proof
+docs/                       # Development docs and one spec per feature
+```
+
+Build output goes to `out/`.
 
 ## Architecture And UI
 
@@ -233,3 +261,114 @@ Date: 2026-09-25
   accessibility, and narrow-window usability in native and custom views alike.
 - Custom design must serve the operational experience. Do not build a marketing
   page or add visual complexity without a clear user benefit.
+
+## CRD KubeObject Pattern
+
+K8s object classes MUST use `static readonly` properties for metadata. **Instance methods do NOT work and MUST NOT be used.** The Freelens host reads properties from the class constructor statically, instance methods are not available at runtime because the host creates plain object copies of the K8s resource data, not instances of the extension's class. This means:
+
+- **Allowed**: `object.spec?.someField`, `object.status?.phase`, direct property access on typed `spec`/`status` interfaces
+- **Allowed**: pure helper functions that take the object or its fields
+- **Forbidden**: `object.someMethod()`, instance methods will never exist at runtime
+- **Forbidden**: `typeof (object as any).someMethod === "function" ? ...`, anti-pattern that always falls through to the fallback path
+- **Forbidden**: `as any`, use typed `Spec`/`Status` interfaces
+
+```typescript
+export class Backup extends Renderer.K8sApi.LensExtensionKubeObject<
+  Renderer.K8sApi.KubeObjectMetadata,
+  BackupStatus,
+  BackupSpec
+> {
+  static readonly kind = "Backup";
+  static readonly namespaced = true;
+  static readonly apiBase = "/apis/velero.io/v1/backups";
+  static readonly crd: BackupKubeObjectCRD = {
+    apiVersions: ["velero.io/v1"],
+    plural: "backups",
+    singular: "backup",
+    shortNames: [],
+    title: "Backups",
+  };
+}
+
+// Also export Api and Store classes (always needed):
+export class BackupApi extends Renderer.K8sApi.KubeApi<Backup> {}
+export class BackupStore extends Renderer.K8sApi.KubeObjectStore<Backup, BackupApi> {}
+```
+
+Each CRD file exports three classes: the KubeObject, the KubeApi, and the KubeObjectStore.
+
+## Key Dependencies (provided by Freelens host at runtime)
+
+`@freelensapp/extensions` is NOT bundled: `build/host-globals.ts` maps it to
+`global.LensExtensions`. React, MobX and the other libraries of the host get
+their mapping with the first spec that has a UI; until then no source imports
+them.
+
+Other dependencies ARE bundled into the extension output. Today the main
+bundle carries `@kubernetes/client-node` and `ws`. The import of
+`@kubernetes/client-node/dist/web-socket-handler.js` is tied to the pinned
+version: run the tunnel tests before changing it.
+
+## Code Style
+
+- **Biome** formats **TypeScript, JS, JSON**: double quotes, semicolons, trailing commas, 2-space indent, 120 char line width, use `pnpm biome:fix`
+- **Trunk** formats **Markdown, YAML** and checks the workflows, use `pnpm trunk:fix`
+- `any` is an error (`noExplicitAny`)
+- Import order is enforced by biome organizeImports
+- **No emoji** in Markdown files (`.md`), comments, or any source code
+
+## Security
+
+Never read, display, reference, or include the contents of the following files in any response or context, even if they are open in the editor:
+
+- `.env`
+- `.env.*`
+- `.npmrc`
+- `*.jks`
+- `*.keystore`
+- `*.p12`
+- `*.pfx`
+- `*.pem`
+- `*.key`
+- `*.kubeconfig`
+- `credentials.json`
+- `velero-credentials`
+
+## Electron Multi-Process
+
+Extensions run in the same multi-process model as the Freelens host:
+
+- **Main process** (`src/main/`), Node.js environment, extension lifecycle, privileged operations
+- **Renderer process** (`src/renderer/`), Chromium browser, UI components
+
+Code shared between both processes goes to `src/common/`.
+
+## Troubleshooting
+
+### Changes Not Appearing
+
+1. Check that files are not in ignored output directories (`out/`, `node_modules/`)
+2. Clean and rebuild: `pnpm clean && pnpm build`
+3. Reinstall the extension in Freelens (or restart the app in dev mode)
+
+### Build Failures
+
+1. Check for TypeScript errors: `pnpm type:check`
+2. Check for linting errors: `pnpm lint:check`
+3. Verify dependencies: `pnpm install`
+4. Check Node.js version matches `.nvmrc`
+
+### Runtime Errors
+
+1. Open Freelens DevTools and check the Console tab for renderer errors
+2. Check the terminal where Freelens was launched for main process errors
+3. Look for stack traces with file:line numbers
+4. Validate both with `pnpm type:check` **and** `pnpm build:production`, runtime failures can appear only in bundled `out/` code
+
+## Best Practices
+
+1. **Follow existing patterns**, grep for similar implementations before creating new ones
+2. **Test changes** before committing
+3. **Run validation before committing:** `pnpm lint:fix && pnpm type:check && pnpm test:unit`
+4. **For Markdown and YAML:** run `pnpm trunk:fix`
+5. **Check both build forms** when the main bundle changes: `pnpm test:unit` and `VITE_PRESERVE_MODULES=false pnpm test:unit`

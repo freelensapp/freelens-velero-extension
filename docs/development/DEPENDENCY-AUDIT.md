@@ -63,7 +63,7 @@ not allowlisted. This does not change or patch the actual Freelens v1.10.3 runti
 
 ## Authorized Compatibility Changes
 
-The user authorized the two changes below on 2026-09-18, including consumer-specific
+The lead maintainer approved the two changes below on 2026-09-18, including consumer-specific
 compatibility tests and completing T0.3 before any environment step. This approval
 does not widen the Freelens/SDK pin or waive any audit finding. T0.4 remains gated.
 
@@ -74,7 +74,7 @@ does not widen the Freelens/SDK pin or waive any audit finding. T0.4 remains gat
 
 The latest published Trunk npm launcher at inspection time is still 1.3.4 and
 depends on tar 6. Merely updating within that range does not clear its findings.
-The decoder's pre-1.0 minor change can be breaking. Following the user's approval,
+The decoder's pre-1.0 minor change can be breaking. Following the lead maintainer's approval,
 two parent-specific overrides target only `@trunkio/launcher@1.3.4>tar` and
 `query-string@7.1.3>decode-uri-component`. No host/SDK upgrade or consumer change is
 implied. Resolution, consumer compatibility and a new audit must prove the result.
@@ -142,7 +142,7 @@ gate has been added. Keep the [official-artifacts directive](../../AGENTS.md#off
 
 Date: 2026-09-18. Status: historical workflow, superseded by explicit user directive.
 These findings concern local test infrastructure, not the extension's npm graph
-or the installed Freelens application. The user subsequently authorized local
+or the installed Freelens application. The lead maintainer subsequently approved local
 remediation, then explicitly stopped it and required official upstream artifacts
 only. Custom builds from the intervening work are unused and not deleted. The
 remediation commands are disabled; no new scan or upstream repair is authorized

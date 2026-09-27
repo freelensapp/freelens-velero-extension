@@ -2,12 +2,12 @@
 
 - **Status:** Draft
 - **Date:** 2026-09-18
-- **Milestone / tasks:** P1 / T1.1
+- **Milestone / tasks:** M1 / T1.1
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
 - **Reviewed main:** `60163e0827e72658bb6546165a727300170e628b`
 - **Freelens validation target:** v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`
 - **Dependencies:** [foundation](SPEC-0001-local-foundation.md), required checks verified before implementation
-- **Approval:** Pending; the current task authorizes drafting only
+- **Approval:** Pending
 
 ## Goal
 
