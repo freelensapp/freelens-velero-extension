@@ -225,3 +225,19 @@ organization. The test infrastructure is a disposable kind cluster created by th
 scripts, on a developer machine or on a CI runner; the review gate is at the end of
 a milestone, not after each task; publication goes through the release workflow.
 The acceptance checks are unchanged.
+
+Evidence added on 2026-09-27, for FND-09 and FND-10:
+
+- The forwarded fetch lost the end of a stream larger than the socket buffers when
+  the pod side closed first, and did not hold the pod side back for frames under
+  64 KiB. The transport reported it as an invalid artifact, never as content. The
+  T0.6 artifacts were small enough to pass. The relay now delivers what the pod
+  sent and bounds what waits for the local socket; three tunnel tests cover it,
+  on the source and on the compiled main, and fail on the previous relay.
+- Loading the main bundle installed the dispatcher of the bundled undici for the
+  whole process. A build test now loads the compiled main in a process of its own
+  and finds the dispatcher untouched.
+- The packed production build was installed by hand in a packaged Freelens v1.10.3
+  with an isolated profile: enabled, both entry points loaded by the host and
+  loaded again after a restart, dispatcher untouched. FND-10 stays open until the
+  integration test does it in CI.

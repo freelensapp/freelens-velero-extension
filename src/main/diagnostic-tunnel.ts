@@ -1,11 +1,13 @@
 import { once } from "node:events";
 import { createServer, type Socket } from "node:net";
 import { Writable } from "node:stream";
-import { PortForward } from "@kubernetes/client-node";
 import { WebSocketHandler } from "@kubernetes/client-node/dist/web-socket-handler.js";
 import WebSocket from "ws";
 import type { DiagnosticKubernetes } from "./diagnostic-kubernetes.ts";
 import { DiagnosticError } from "./diagnostic-transport.ts";
+
+// Bytes of the pod that may wait for the local socket before the WebSocket is paused.
+const PENDING_BYTES = 256 * 1024;
 
 export interface PodTarget {
   namespace: string;
@@ -49,18 +51,15 @@ export async function openPodTunnel(
     socket.pause();
     socket.on("error", () => socket.destroy());
     let websocket: WebSocket | undefined;
+    const fail = () => {
+      socket.destroy();
+      websocket?.terminate();
+    };
+    // One chunk at a time reaches the socket; the rest waits here, up to the bound above.
     const output = new Writable({
+      highWaterMark: PENDING_BYTES,
       write(chunk: Buffer, _encoding, callback) {
-        if (!socket.write(chunk, callback)) websocket?.pause();
-      },
-    });
-    const errors = new Writable({
-      write(chunk: Buffer, _encoding, callback) {
-        if (chunk.length) {
-          socket.destroy();
-          websocket?.terminate();
-        }
-        callback();
+        socket.write(chunk, callback);
       },
     });
     const handler = new WebSocketHandler(api.configuration, (uri, protocols, options) => {
@@ -77,32 +76,47 @@ export async function openPodTunnel(
       websocket.on("error", () => socket.destroy());
       websocket.once("close", () => {
         if (websocket) websockets.delete(websocket);
-        socket.destroy();
+        // The pod side is done: deliver what still waits, then close.
+        output.end();
       });
       return websocket;
     });
 
-    output.on("error", () => {
-      socket.destroy();
-      websocket?.terminate();
-    });
-    socket.on("drain", () => websocket?.resume());
+    output.once("finish", () => socket.end());
+    output.on("error", fail);
+    output.on("drain", () => websocket?.resume());
     socket.once("close", () => {
       sockets.delete(socket);
       output.destroy();
-      errors.destroy();
       websocket?.terminate();
     });
-    new PortForward(api.configuration, true, handler)
-      .portForward(pod.namespace, pod.name, [pod.port], output, errors, socket, 0)
-      .then(() => {
-        if (signal.aborted || socket.destroyed) websocket?.terminate();
-        else socket.resume();
+    // Channel 0 carries the data of the only port and channel 1 its errors; each opens with the port number.
+    const opening = [true, true];
+
+    handler
+      .connect(
+        `/api/v1/namespaces/${encodeURIComponent(pod.namespace)}/pods/${encodeURIComponent(pod.name)}/portforward?ports=${pod.port}`,
+        null,
+        (channel, content) => {
+          if (channel > 1) return false;
+          const data = opening[channel] ? content.subarray(2) : content;
+
+          opening[channel] = false;
+          if (channel === 1) {
+            if (data.length) fail();
+          } else if (data.length && !output.write(data)) websocket?.pause();
+          return true;
+        },
+      )
+      .then((connected) => {
+        if (signal.aborted || socket.destroyed) {
+          websocket?.terminate();
+          return;
+        }
+        WebSocketHandler.handleStandardInput(connected, socket, 0);
+        socket.resume();
       })
-      .catch(() => {
-        socket.destroy();
-        websocket?.terminate();
-      });
+      .catch(fail);
   });
   const close = () => {
     if (closing) return closing;

@@ -97,12 +97,18 @@ See [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md) for the explicit scope boundary.
 
 T0.6 adds exact official packages `@kubernetes/client-node` 2.0.0 and `ws` 8.21.3,
 plus `@types/ws` 8.18.1. The first two are main runtime libraries bundled from
-development declarations; the host SDK/React remain external. The distributed
-`dist/web-socket-handler.js` deep import is version-pinned and tested, not a host
-private API. Revalidate it before changing the client version. Supported `WS_NO_*`
-build defines disable optional native accelerators without patching the library.
-The 118 normal/production tests cover 21 scaffold/consumer, 52 environment/fixture
-and 45 diagnostic contracts. Actual host installation remains unverified.
+development declarations; the host SDK/React remain external. The client is
+imported by its distributed files, `dist/config.js` and `dist/web-socket-handler.js`,
+never from its root, which would bundle every generated API client. These deep
+imports are version-pinned and tested, not a host private API. Revalidate them
+before changing the client version. The main build replaces undici with
+[a stub](../../build/undici-stub.ts): the client imports it for API clients this
+extension never calls, and the real module installs a dispatcher for the whole
+process when it loads, which inside Freelens is the process of the host. Supported
+`WS_NO_*` build defines disable optional native accelerators without patching the
+library. The 122 normal/production tests cover 22 scaffold/consumer, 52
+environment/fixture and 48 diagnostic contracts. Actual host installation has no
+automated test yet.
 The electron-vite warning about a missing standalone renderer
 configuration is expected: this extension intentionally builds its renderer through
 the preload target, whose generated entry is covered by the bundle tests.
@@ -325,7 +331,10 @@ automatic service discovery or that every cluster endpoint is reachable.
   Ready check. A single-use loopback listener owns the Kubernetes WebSocket from
   handshake onward. Cancellation covers pod lookup, listener startup, handshake
   and data I/O; cleanup closes TCP, WebSocket and listener. It never chooses the
-  first Pod, creates a relay workload or rewrites BSL publicUrl.
+  first Pod, creates a relay workload or rewrites BSL publicUrl. When the pod side
+  closes first the relay still delivers what it sent, then closes the local socket.
+  It pauses the WebSocket while more than 256 KiB wait for the local socket, for
+  frames of any size.
 - Local proof: four log/results downloads in each of HTTP tunnel, HTTPS tunnel
   with inline CA, HTTPS tunnel with referenced CA, and direct HTTPS with referenced
   CA. Changed signature and HTTP Host are rejected by authenticated storage;

@@ -36,8 +36,8 @@ compiled-entry smoke tests. A focused source test can use
 `pnpm exec vitest run src/entrypoints.test.ts`. Run Knip after a build: production
 analysis inspects generated output. Trunk covers Markdown, YAML and workflow syntax.
 
-The 118 tests cover host-global and dependency-consumer contracts, 52 setup/fixture
-checks and 45 diagnostic contracts, not installation into a real Freelens process.
+The 122 tests cover host-global and dependency-consumer contracts, 52 setup/fixture
+checks and 48 diagnostic contracts, not installation into a real Freelens process.
 Normal and compact production builds pass. Completed checks and
 remaining foundation work are recorded in
 [SPEC-0001](docs/specs/SPEC-0001-local-foundation.md). The

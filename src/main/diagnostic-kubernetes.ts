@@ -2,7 +2,7 @@ import { createHash, X509Certificate } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { type RequestOptions, request } from "node:https";
 import { isAbsolute } from "node:path";
-import { KubeConfig } from "@kubernetes/client-node";
+import { KubeConfig } from "@kubernetes/client-node/dist/config.js";
 import { DiagnosticError } from "./diagnostic-transport.ts";
 
 export const ARTIFACT_TARGETS = [
