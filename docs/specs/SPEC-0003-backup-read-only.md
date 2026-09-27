@@ -194,7 +194,7 @@ reads a backup through the same [helpers](../../src/common/backup-view.ts).
 | BACK-08 | Unit. Packaged: references that resolve, a storage location and a schedule that are not there, the restores and the snapshot locations denied to the reader |
 | BACK-09 | Component: the list is given no selection, no menu and no command that adds or removes. Packaged: no checkbox, no menu, nothing on a right click, nothing on Delete and Backspace, and the objects unchanged |
 | BACK-10 | Unit and component: a late answer, a backup created again with the same name, a read that fails, and no timer left when the view closes |
-| BACK-11 | Pre-review: both themes, the two sizes and twice the zoom; a backup opened and closed with the keyboard, with the focus back on its row; a name of 63 characters |
+| BACK-11 | Pre-review: both themes, the two sizes and twice the zoom; a backup opened and closed with the keyboard, with the focus back on its row; a name of 63 characters. Component: the focus that was given back stays where the operator moves it after that |
 | BACK-12 | Packaged: see below |
 | BACK-13 | Component: empty, denied, failed, stale and partly readable, each with its own words. Packaged: denied and empty |
 | BACK-14 | The same evidence as DISC-07 of the [discovery](SPEC-0002-installation-discovery.md#evidence-and-deviations) |

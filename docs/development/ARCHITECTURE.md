@@ -115,11 +115,11 @@ before changing the client version. The main build replaces undici with
 extension never calls, and the real module installs a dispatcher for the whole
 process when it loads, which inside Freelens is the process of the host. Supported
 `WS_NO_*` build defines disable optional native accelerators without patching the
-library. The 445 tests of the unit run, on the separate modules and on the
+library. The 446 tests of the unit run, on the separate modules and on the
 production build, are 17 of the scaffold, 100 of the environment and its fixtures,
 48 of the diagnostic contracts, 118 of the operation states, 54 of the rules of the
 discovery, 49 of what the views show of a backup, 26 of the state of an
-installation and of its reader, and 33 of the components. The integration test
+installation and of its reader, and 34 of the components. The integration test
 covers the installation in the host, the suites of the views what the views do
 in it.
 The electron-vite warning about a missing standalone renderer

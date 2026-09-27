@@ -311,6 +311,19 @@ describe("workspace of a backup", () => {
     expect(document.activeElement?.getAttribute("data-backup-row")).toBe("nightly-1");
   });
 
+  it("gives the focus back to the row, and leaves it where the operator moved it after that", async () => {
+    mount(answers(), chosen(A));
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    fireEvent.click(screen.getByText("nightly-2"));
+    fireEvent.click(await screen.findByTestId("velero-back"));
+    await waitFor(() => expect(screen.queryByTestId("velero-backup-workspace")).toBeNull());
+    expect(document.activeElement?.getAttribute("data-backup-row")).toBe("nightly-2");
+    // The operator goes on at once: the row does not take back what it was given.
+    screen.getByTestId("velero-refresh").focus();
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(document.activeElement).toBe(screen.getByTestId("velero-refresh"));
+  });
+
   it("keeps the backup and marks what cannot be read of its references", async () => {
     mount(
       answers({
