@@ -1,13 +1,13 @@
 # SPEC-0004: Test Environment On Every Platform
 
-- **Status:** Draft
+- **Status:** Approved
 - **Date:** 2026-09-27
 - **Milestone / tasks:** Foundation
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
 - **Reviewed main:** not relevant: the environment installs the reviewed release only
 - **Freelens validation target:** v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`
 - **Dependencies:** [foundation](SPEC-0001-local-foundation.md)
-- **Approval:** Pending
+- **Approval:** Approved by the lead maintainer on 2026-09-27, with the published loopback accepted on the machines of the developers
 
 Governed by [AGENTS.md](../../AGENTS.md).
 
@@ -146,11 +146,12 @@ Record role and date.
 - The hosted checks keep the internal bridge, the stronger shape.
 - The capacity check asks for four processors and the memory the node is limited to,
   read from the daemon, not a fixed 8 GiB that a virtual machine of 8 GB misses.
-- NEEDS CLARIFICATION, REQ-040: is the published loopback acceptable on the machines
-  of the developers, given the window of its second row? The alternative is that the
-  environment runs on Linux only and on macOS through the hosted checks.
+- Decided by the lead maintainer on 2026-09-27, REQ-040: the published loopback is
+  acceptable on the machines of the developers, with the window of its second row.
+  The alternative was that the environment runs on Linux only and on macOS through
+  the hosted checks.
 
 ## Evidence And Deviations
 
-Draft only. No implementation, tests or runtime evidence. The ties of the Scope
-Baseline come from reading the scripts; none was reproduced by a run.
+No implementation, tests or runtime evidence yet. The ties of the Scope Baseline
+come from reading the scripts; none was reproduced by a run.
