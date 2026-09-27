@@ -102,8 +102,8 @@ extension never calls, and the real module installs a dispatcher for the whole
 process when it loads, which inside Freelens is the process of the host. Supported
 `WS_NO_*` build defines disable optional native accelerators without patching the
 library. The 110 normal/production tests cover 14 scaffold, 48
-environment/fixture and 48 diagnostic contracts. Actual host installation has no
-automated test yet.
+environment/fixture and 48 diagnostic contracts. The integration test covers the
+installation in the host.
 The electron-vite warning about a missing standalone renderer
 configuration is expected: this extension intentionally builds its renderer through
 the preload target, whose generated entry is covered by the bundle tests.

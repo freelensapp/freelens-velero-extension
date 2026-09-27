@@ -239,8 +239,9 @@ Evidence added on 2026-09-27, for FND-09 and FND-10:
   and finds the dispatcher untouched.
 - The packed production build was installed by hand in a packaged Freelens v1.10.3
   with an isolated profile: enabled, both entry points loaded by the host and
-  loaded again after a restart, dispatcher untouched. FND-10 stays open until the
-  integration test does it in CI.
+  loaded again after a restart, dispatcher untouched.
+- Since 2026-09-27 the integration test does the same in the hosted checks, on every
+  pull request and on main, against a Freelens v1.10.3 built for the purpose: FND-10.
 
 Deviation, approved by the lead maintainer on 2026-09-27, on REQ-002 and FND-02: the
 fifteen dependency overrides, the patch of `query-string` and their eight consumer
