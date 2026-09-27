@@ -92,6 +92,7 @@ import {
   childEnvironment,
   type DockerInfo,
   dockerSocket,
+  failureSummary,
   type ImageIndex,
   type ImagePlatform,
   imageArchitecture,
@@ -216,7 +217,9 @@ function command(executable: string, args: string[], input?: string, timeout = 1
       `${executable}: exit ${failure.status ?? "unknown"}\n${recordOutput ? `${withhold(failure.stdout ?? "")}\n${failure.stderr ?? ""}` : "diagnostic output withheld"}\n`,
       { mode: 0o600 },
     );
-    throw new Error(`${executable} failed; details retained in the private operations log`);
+    throw Object.assign(new Error(`${executable} failed; details retained in the private operations log`), {
+      reason: recordOutput ? failureSummary(`${failure.stdout ?? ""}\n${failure.stderr ?? ""}`) : [],
+    });
   }
 }
 
@@ -717,7 +720,11 @@ async function setupCluster(): Promise<void> {
     }
     if (bootstrapError && !journal.nodeId) throw bootstrapError;
     // A node whose control plane did not come up has no add-ons and no administrator: nothing is built on it.
-    if (bootstrapError) throw new Error(INCOMPLETE_NODE);
+    if (bootstrapError) {
+      const reason = (bootstrapError as { reason?: string[] }).reason ?? [];
+
+      throw new Error([INCOMPLETE_NODE, ...reason.map((line) => `  ${line}`)].join("\n"));
+    }
   }
   if (!journal.kubeconfigHash) {
     const [network] = JSON.parse(docker(["network", "inspect", DEMO_NETWORK])) as KindNetwork[];

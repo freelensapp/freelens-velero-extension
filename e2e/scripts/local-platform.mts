@@ -200,6 +200,20 @@ export function withhold(output: string): string {
   }
 }
 
+// What a failed command says of its reason, for the output of the run: the lines that name an error, without
+// the traces, and without anything long enough to be a key, a token or a certificate.
+export function failureSummary(output: string): string[] {
+  const lines = output
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => /^(error|fatal)\b|^\[error|\berror:|\bfailed\b|\bcannot\b|\bunable\b|timed out/i.test(line))
+    .filter((line) => !/^(github\.com|k8s\.io|sigs\.k8s\.io|runtime|main)[./]/.test(line) && !/^I\d{4} /.test(line))
+    .map((line) => line.replace(/[A-Za-z0-9+/=_-]{32,}/g, "withheld").slice(0, 300));
+  const different = [...new Set(lines)];
+
+  return different.length > 12 ? [...different.slice(0, 4), ...different.slice(-8)] : different;
+}
+
 // Every form a secret takes inside a base64 text, whose letters depend on where the secret starts.
 function encodedForms(secret: string): string[] {
   return [0, 1, 2].map((shift) => {

@@ -73,6 +73,7 @@ import {
   childEnvironment,
   dockerSocket,
   engineIndex,
+  failureSummary,
   imageArchitecture,
   imagePlatform,
   type NetworkShape,
@@ -703,6 +704,32 @@ describe("platform of the test environment", () => {
     expect(() =>
       assertLogWithholds(`kubectl get\n${Buffer.from("6".repeat(64)).toString("base64")}\n`, [secret]),
     ).not.toThrow();
+  });
+
+  it("says why a command failed without its traces and without anything that could be a secret", () => {
+    const key = "k".repeat(48);
+    const output = [
+      "Creating cluster ...",
+      'I0927 15:14:20.264560     198 round_trippers.go:632] "Response" verb="POST" status="" error: refused',
+      `ERROR: failed to create cluster: failed to init node with kubeadm: exit status 1 ${key}`,
+      "error: error execution phase wait-control-plane: could not bootstrap the admin user",
+      "error: error execution phase wait-control-plane: could not bootstrap the admin user",
+      "k8s.io/kubernetes/cmd/kubeadm/app.Run failed",
+      "\tgithub.com/spf13/cobra@v1.9.1/command.go:1148",
+      "[ERROR Port-6443]: Port 6443 is in use",
+      "the node became ready",
+    ].join("\n");
+
+    expect(failureSummary(output)).toEqual([
+      "ERROR: failed to create cluster: failed to init node with kubeadm: exit status 1 withheld",
+      "error: error execution phase wait-control-plane: could not bootstrap the admin user",
+      "[ERROR Port-6443]: Port 6443 is in use",
+    ]);
+    expect(failureSummary("")).toEqual([]);
+    expect(
+      failureSummary(Array.from({ length: 40 }, (_value, index) => `error: reason ${index}`).join("\n")),
+    ).toHaveLength(12);
+    expect(failureSummary(`error: ${"x".repeat(900)} y`)[0].length).toBeLessThanOrEqual(300);
   });
 
   it("records a Secret without its body and a kubeconfig without its credentials", () => {
