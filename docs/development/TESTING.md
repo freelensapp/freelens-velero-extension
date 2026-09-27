@@ -3,7 +3,7 @@
 Date: 2026-09-25
 
 Status: T0.3-T0.6 scaffold, environment, fixture and compiled-main transport checks
-pass. Actual Freelens activation has no automated test yet.
+pass. The [integration test](#integration-tests) covers the activation in Freelens.
 
 This is a desktop Electron extension with renderer UI, main-process Kubernetes
 operations and object-storage transport. The binding safety/privacy rules are in

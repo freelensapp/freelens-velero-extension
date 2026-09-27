@@ -38,15 +38,15 @@ Status values: `Planned`, `Draft` (the spec is written, not approved),
 | Disposable kind cluster with Velero and an authenticated S3 backend | T0.4 | [SPEC-0001](../specs/SPEC-0001-local-foundation.md) | Done |
 | Real backup and restore fixtures, static status fixtures, restricted identity | T0.5 | [SPEC-0001](../specs/SPEC-0001-local-foundation.md) | Done |
 | Main process request and download proof, direct and through a pod tunnel | T0.6 | [SPEC-0001](../specs/SPEC-0001-local-foundation.md) | Done |
-| Directives and process aligned with the other extensions of the organization; README of the project | | | In PR |
-| Hosted checks: type check, lint, Knip, Trunk, unit tests, OSV-Scanner | | | In PR |
-| Tunnel delivers the whole stream; the bundle leaves the dispatcher of the host alone | | [SPEC-0001](../specs/SPEC-0001-local-foundation.md) | In PR |
-| Scripts that rebuilt third-party images and installed their tools removed | | | In PR |
-| Package manifest and tools as the other extensions; no dependency override | | | In PR |
-| Renovate and the automated maintenance workflows | | | In PR |
-| Activation of the packed extension in a packaged Freelens, as an integration test | FND-10 | [SPEC-0001](../specs/SPEC-0001-local-foundation.md) | In PR |
+| Directives and process aligned with the other extensions of the organization; README of the project | | | Done |
+| Hosted checks: type check, lint, Knip, Trunk, unit tests, OSV-Scanner | | | Done |
+| Tunnel delivers the whole stream; the bundle leaves the dispatcher of the host alone | | [SPEC-0001](../specs/SPEC-0001-local-foundation.md) | Done |
+| Scripts that rebuilt third-party images and installed their tools removed | | | Done |
+| Package manifest and tools as the other extensions; no dependency override | | | Done |
+| Renovate and the automated maintenance workflows | | | Done |
+| Activation of the packed extension in a packaged Freelens, as an integration test | FND-10 | [SPEC-0001](../specs/SPEC-0001-local-foundation.md) | Done |
 | Test environment on Linux and macOS, x64 and ARM64, and in the hosted checks | | [SPEC-0004](../specs/SPEC-0004-test-environment-every-platform.md) | Approved |
-| Release workflows | | | In PR |
+| Release workflows | | | Done |
 
 The T0.4 to T0.6 evidence is in [TESTING.md](TESTING.md). It covers the
 scaffold, the readiness of the infrastructure, a workload of synthetic
@@ -54,10 +54,8 @@ ConfigMaps and the transport run in Node. It is not a claim about the full
 product, about the recovery of persistent volumes or about all the eight
 artifact formats.
 
-The activation of the packed production build was checked by hand on
-2026-09-27 in a packaged Freelens v1.10.3: enabled, both entry points loaded
-by the host, loaded again after a restart. It counts as done when the
-integration test does it in CI.
+The integration test installs the packed production build in a Freelens
+v1.10.3 built for the purpose, on every pull request and on main.
 
 ### M1 - Discovery and Backups (read-only)
 
