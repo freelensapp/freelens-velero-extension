@@ -1,13 +1,13 @@
 # SPEC-0003: Operation States And Read-Only Backups
 
-- **Status:** Draft
+- **Status:** Approved
 - **Date:** 2026-09-18
 - **Milestone / tasks:** M1 / T1.2 and T1.3
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
 - **Reviewed main:** `60163e0827e72658bb6546165a727300170e628b`
 - **Freelens validation target:** v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`
 - **Dependencies:** [foundation](SPEC-0001-local-foundation.md), [target discovery](SPEC-0002-installation-discovery.md)
-- **Approval:** Pending
+- **Approval:** Approved by the lead maintainer on 2026-09-27, as drafted
 
 ## Goal
 
@@ -148,5 +148,8 @@ historical stage data or recovery guarantee can be inferred from these CRDs alon
 
 ## Evidence And Deviations
 
-Draft only; no implementation or executed acceptance tests. T1.2 and T1.3 are
-separate pull requests. No deviations have been accepted.
+Approved on 2026-09-27; no implementation or executed acceptance tests yet. T1.2
+and T1.3 are separate pull requests. No deviations have been accepted. The upstream
+drift watch of the start of the milestone is in the
+[recon](../development/RECON-T0.1.md#upstream-drift-watch): the release after the
+reviewed one has the same Backup schema and the same phases of Backup and Restore.
