@@ -36,7 +36,7 @@ compiled-entry smoke tests. A focused source test can use
 `pnpm exec vitest run src/entrypoints.test.ts`. Run Knip after a build: production
 analysis inspects generated output. Trunk covers Markdown, YAML and workflow syntax.
 
-The 122 tests cover host-global and dependency-consumer contracts, 52 setup/fixture
+The 118 tests cover host-global and dependency-consumer contracts, 48 setup/fixture
 checks and 48 diagnostic contracts, not installation into a real Freelens process.
 Normal and compact production builds pass. Completed checks and
 remaining foundation work are recorded in
@@ -79,8 +79,8 @@ proxies or insecure TLS; production connection integration remains future work.
 
 Use only official upstream repositories and release artifacts. Third-party source
 repairs, custom image rebuilds and autonomous infrastructure scanning are outside
-scope. The previous rebuild/install commands are disabled and existing derivatives
-are not selected. See [the binding directive](AGENTS.md#official-artifacts-and-scope).
+scope. The scripts that rebuilt third-party images were removed and images derived
+from them are not selected. See [the binding directive](AGENTS.md#official-artifacts-and-scope).
 
 ## Project Documents
 

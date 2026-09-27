@@ -107,7 +107,7 @@ before changing the client version. The main build replaces undici with
 extension never calls, and the real module installs a dispatcher for the whole
 process when it loads, which inside Freelens is the process of the host. Supported
 `WS_NO_*` build defines disable optional native accelerators without patching the
-library. The 122 normal/production tests cover 22 scaffold/consumer, 52
+library. The 118 normal/production tests cover 22 scaffold/consumer, 48
 environment/fixture and 48 diagnostic contracts. Actual host installation has no
 automated test yet.
 The electron-vite warning about a missing standalone renderer

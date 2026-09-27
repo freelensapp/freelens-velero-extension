@@ -49,7 +49,7 @@ import {
   storageConfiguration,
   storageManifests,
 } from "../e2e/scripts/local-manifests.mts";
-import { assertOfficialImages, binaryReportHasNoCalls, IMAGE_NAMES } from "../e2e/scripts/local-security.mts";
+import { assertOfficialImages, IMAGE_NAMES } from "../e2e/scripts/local-security.mts";
 
 describe("foundation fixture boundaries", () => {
   const run = "a1b2c3d4";
@@ -619,27 +619,7 @@ describe("local storage setup contracts", () => {
   });
 });
 
-describe("binary vulnerability evidence", () => {
-  const report = (level?: string) =>
-    JSON.stringify({
-      version: "2.1.0",
-      runs: [{ tool: { driver: { name: "govulncheck" } }, results: [{ ruleId: "GO-synthetic", level }] }],
-    });
-
-  it("accepts module-only notes but not called or imported vulnerable code", () => {
-    expect(binaryReportHasNoCalls(report("note"))).toBe(true);
-    expect(binaryReportHasNoCalls(report("error"))).toBe(false);
-    expect(binaryReportHasNoCalls(report("warning"))).toBe(false);
-    expect(binaryReportHasNoCalls(report())).toBe(false);
-  });
-
-  it("rejects missing or malformed scanner evidence", () => {
-    expect(() => binaryReportHasNoCalls("{}")).toThrow();
-    expect(() => binaryReportHasNoCalls(JSON.stringify({ version: "2.1.0", runs: [] }))).toThrow();
-    expect(() => binaryReportHasNoCalls(report("invalid"))).toThrow();
-    expect(() => binaryReportHasNoCalls("not-json")).toThrow();
-  });
-
+describe("official image pins", () => {
   it("accepts official pinned artifacts and rejects every locally derived image", () => {
     expect(() => assertOfficialImages(IMAGES)).not.toThrow();
     for (const name of IMAGE_NAMES) {
@@ -658,23 +638,19 @@ describe("binary vulnerability evidence", () => {
 describe("local setup entrypoint refusal", () => {
   const runner = fileURLToPath(new URL("../e2e/scripts/local-demo.mts", import.meta.url));
 
-  it.each([
-    { script: "local-remediation.mts", action: "storage" },
-    { script: "local-images.mts", action: "install-scanner" },
-    { script: "local-images.mts", action: "install-build-tools" },
-  ])("disables retired operations before external commands: $script $action", ({ script, action }) => {
-    const home = mkdtempSync(join(tmpdir(), "velero-retired-test-"));
+  it("refuses an action the image helper does not have before external commands", () => {
+    const home = mkdtempSync(join(tmpdir(), "velero-images-test-"));
 
     try {
-      const entrypoint = fileURLToPath(new URL(`../e2e/scripts/${script}`, import.meta.url));
-      const result = spawnSync(process.execPath, [entrypoint, action], {
+      const entrypoint = fileURLToPath(new URL("../e2e/scripts/local-images.mts", import.meta.url));
+      const result = spawnSync(process.execPath, [entrypoint, "install-scanner"], {
         env: { HOME: home, PATH: "" },
         encoding: "utf8",
         timeout: 10_000,
       });
 
       expect(result.status).toBe(1);
-      expect(result.stderr).toContain("Retired by user directive");
+      expect(result.stderr).toContain("Usage:");
       expect(existsSync(join(home, ".local"))).toBe(false);
     } finally {
       rmSync(home, { recursive: true, force: true });

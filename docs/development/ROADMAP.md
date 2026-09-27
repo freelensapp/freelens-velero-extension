@@ -41,6 +41,7 @@ Status values: `Planned`, `Draft` (the spec is written, not approved),
 | Directives and process aligned with the other extensions of the organization | | | In PR |
 | Hosted checks: type check, lint, Knip, Trunk, unit tests, OSV-Scanner | | | In PR |
 | Tunnel delivers the whole stream; the bundle leaves the dispatcher of the host alone | | [SPEC-0001](../specs/SPEC-0001-local-foundation.md) | In PR |
+| Scripts that rebuilt third-party images and installed their tools removed | | | In PR |
 | Package manifest and tools as the other extensions; no dependency override | | | Planned |
 | Renovate and the automated maintenance workflows | | | Planned |
 | Activation of the packed extension in a packaged Freelens, as an integration test | FND-10 | [SPEC-0001](../specs/SPEC-0001-local-foundation.md) | Planned |

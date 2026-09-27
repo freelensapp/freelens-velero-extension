@@ -144,8 +144,8 @@ The scaffold has [source lifecycle tests](../../src/entrypoints.test.ts),
 [compiled-entry contracts](../../test/build.test.ts), and
 [process-specific host stubs](../../test/freelens-extensions.ts). Vitest v4.1.11 fails
 when no tests are selected; it does not import the host implementation in Node.
-The canonical command builds first and covers 122 tests: 22 scaffold/consumer,
-52 [environment checks](../../test/environment.test.ts) and 48 diagnostic contracts.
+The canonical command builds first and covers 118 tests: 22 scaffold/consumer,
+48 [environment checks](../../test/environment.test.ts) and 48 diagnostic contracts.
 The environment tests
 include child-process refusal checks with an empty executable path, proving that
 wrong targets and malformed journals stop without external tools. Co-locate future pure/main
@@ -222,7 +222,9 @@ node e2e/scripts/local-demo.mts verify --context kind-freelens-velero-dev
 
 The official kind binary is installed privately at the journal directory's
 `bin/kind`; its existing checksum-verified release is used without a global CLI
-upgrade. Images are pulled on the host, not by workloads. Kind imports official
+upgrade. No script of the repository installs it any more: the installer went with
+the scripts that rebuilt third-party images, and the test environment for every
+platform brings its own (see the [roadmap](ROADMAP.md)). Images are pulled on the host, not by workloads. Kind imports official
 version tags whose Docker/CRI image IDs must equal those of the exact digest pins;
 workloads use `imagePullPolicy: Never`. Missing or changed image content stops setup.
 
