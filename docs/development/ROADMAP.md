@@ -45,7 +45,7 @@ Status values: `Planned`, `Draft` (the spec is written, not approved),
 | Package manifest and tools as the other extensions; no dependency override | | | In PR |
 | Renovate and the automated maintenance workflows | | | In PR |
 | Activation of the packed extension in a packaged Freelens, as an integration test | FND-10 | [SPEC-0001](../specs/SPEC-0001-local-foundation.md) | In PR |
-| Test environment on Linux and macOS, x64 and ARM64; demo and pre-review commands | | | Planned |
+| Test environment on Linux and macOS, x64 and ARM64, and in the hosted checks | | [SPEC-0004](../specs/SPEC-0004-test-environment-every-platform.md) | Draft |
 | Release workflows | | | In PR |
 
 The T0.4 to T0.6 evidence is in [TESTING.md](TESTING.md). It covers the
@@ -66,6 +66,7 @@ integration test does it in CI.
 | Installation detection, namespace discovery and configuration, selection among several installations, sidebar, missing, forbidden and empty states | T1.1 | [SPEC-0002](../specs/SPEC-0002-installation-discovery.md) | Draft |
 | Phase model on two axes, progress, validation errors, durations, unknown values, relationship helpers | T1.2 | [SPEC-0003](../specs/SPEC-0003-backup-read-only.md) | Draft |
 | Backup list and operation workspace, with storage location, schedule, related restores and failure information; no generic delete | T1.3 | [SPEC-0003](../specs/SPEC-0003-backup-read-only.md) | Draft |
+| End to end suite against the views, pre-review pass and walkthrough of the demo | | | Planned |
 
 ### M2 - Restores, Schedules, locations, Overview (read-only)
 
