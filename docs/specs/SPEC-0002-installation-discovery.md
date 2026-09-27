@@ -1,6 +1,6 @@
 # SPEC-0002: Installation Discovery And Target Isolation
 
-- **Status:** Approved
+- **Status:** Implemented
 - **Date:** 2026-09-18
 - **Milestone / tasks:** M1 / T1.1
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
@@ -121,32 +121,32 @@ coverage rather than claim exhaustive detection.
 
 ## Evidence And Deviations
 
-Approved on 2026-09-27. The upstream drift watch of the start of the milestone is
-in the [recon](../development/RECON-T0.1.md#upstream-drift-watch): the release
-after the reviewed one changes nothing this spec reads.
+Approved on 2026-09-27 and implemented with the first milestone. The upstream drift
+watch of the start of the milestone is in the
+[recon](../development/RECON-T0.1.md#upstream-drift-watch): the release after the
+reviewed one changes nothing this spec reads.
 
-T1.1 is implemented in what every view starts with. The
-[rules](../../src/common/discovery.ts) are pure functions on the answers of the
+The [rules](../../src/common/discovery.ts) are pure functions on the answers of the
 cluster; the [state of an installation](../../src/renderer/state/installation.ts)
 asks and keeps; the [target bar](../../src/renderer/components/target-bar.tsx) and
-the [states before a view](../../src/renderer/components/entry-state.tsx) show. The
-page and the entries of the sidebar came with the first view, the Backups, so that
-nothing led to a page that was not there. The status of the spec follows the
-suites of the views in a packaged Freelens.
+the [states before a view](../../src/renderer/components/entry-state.tsx) show.
+The layers are the ones of [TESTING.md](../development/TESTING.md): unit and
+component tests in Vitest, the suites of the views in a packaged Freelens v1.10.3
+against the test environment.
 
-| Check | Part covered by T1.1 | Evidence |
-| --- | --- | --- |
-| DISC-01 | The component; the packaged app comes with the suites | Component: the activation asks nothing of the host but its store; a view that opens asks the two paths of the discovery, and the families of a namespace only after one is chosen |
-| DISC-02 | The unit | Unit: an answer of 404, the kinds that are missing, 401 and 403, an answer without a status. Component: the six states, each with its words |
-| DISC-03 | The component; the identity on the cluster comes with the suites | Component: with the lists of the cluster denied, the namespace that is named is read |
-| DISC-04 | The component | Component: two suggestions and no choice made for the operator; a namespace that is not found any more stays selected |
-| DISC-05 | The unit | Unit: a late answer of the target before, equal names in two namespaces, objects of another namespace in an answer. No request crosses the two processes in this slice: there is no sender to tell from another |
-| DISC-06 | The component | Component: a family that is denied is said so, and the ones that were read stay |
-| DISC-07 | The adapter | Adapter: the reader sends `GET` and nothing else |
-| DISC-08 | The registration; the packaged app comes with the suites | Unit: the sidebar has Velero and, under it, Backups, and every entry leads to a page that exists |
-| DISC-09 | All of it | Component, with the clock as a dependency: a read that fails after one that succeeded keeps what was read and says when it was read; a failure without a status is not an absence |
-| DISC-10 | The content; the restart comes with the suites | Unit: what is kept is two maps of namespaces by cluster, and what is read of a stored value is the names that are names |
-| DISC-11 | None: it is of the packaged app | |
+| Check | Evidence |
+| --- | --- |
+| DISC-01 | Packaged: the API server counts no list of the storage locations of the cluster until a view of Velero opens, one when it opens, one more for each read again, and no list of another kind in the whole cluster. Component: a view that opens asks the two paths of the discovery, and the families of a namespace only after one is chosen |
+| DISC-02 | Unit: an answer of 404, the kinds that are missing, 401 and 403, an answer without a status. Component: the six states, each with its words. Local RBAC: the reader is asked for a namespace, and is not told that Velero is absent |
+| DISC-03 | Packaged, with the identity that reads three kinds of one namespace: the lists of the cluster are denied to it, the namespace it names is read |
+| DISC-04 | Component: two suggestions and no choice made for the operator; a namespace that is not found any more stays selected. Packaged: three suggestions and none chosen; a selection of a namespace that is not in the cluster stays, with its notice, and shows no backup of another |
+| DISC-05 | Unit: a late answer of the target before, equal names in two namespaces, objects of another namespace in an answer. Packaged: a name that two installations share opens the backup of the one selected, told by its uid. No request crosses the two processes in this slice: there is no sender to tell from another |
+| DISC-06 | Component and packaged with the reader: the restores and the snapshot locations are denied, the backups are shown, and what is denied is said where it matters |
+| DISC-07 | Adapter: the reader sends `GET` and nothing else. Packaged: the version of every synthetic object and the identity of the ones of the real installation are what they were; no request to Velero exists; the API server counted no write of their kinds |
+| DISC-08 | Packaged: the sidebar has Velero and, under it, Backups, and nothing else; the backup that is open is in the address; the link of the details of the host leads to the workspace |
+| DISC-09 | Component, with the clock as a dependency: a read that fails after one that succeeded keeps the rows and says when they were read; a failure without a status is not an absence |
+| DISC-10 | Packaged: after a choice and a namespace that was named, the file of the store holds the two maps of namespaces by cluster and nothing else; the next start shows the namespace that was chosen |
+| DISC-11 | Pre-review: the choice, the list and the workspace in both themes at 1440x900, at 900x650 and at twice the zoom, with nothing over something else and nothing wider than its room; the choice made with the keyboard alone |
 
 What the implementation adds to the text of the spec, inside its requirements:
 
@@ -160,3 +160,5 @@ What the implementation adds to the text of the spec, inside its requirements:
   list that fails is shown as such, with what was read before and when.
 - There is no write state in this slice to reset when the target changes
   (REQ-017): it comes with the write gate.
+
+The manual review of the success criteria is not recorded yet.

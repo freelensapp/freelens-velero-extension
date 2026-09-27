@@ -88,8 +88,9 @@ from the Extensions page of an isolated profile and checks that:
   without the URL in its message, and refuses a URL of another origin;
 - the host wrote no error while all of this happened.
 
-No cluster takes part: there is no view yet. The test is copied into the Freelens
-checkout of the workflow under its own name.
+No cluster takes part in this test. The views are driven by their own
+[suites](#suites-of-the-views), against the test environment. The test is copied
+into the Freelens checkout of the workflow under its own name.
 
 ## End-To-End Tests
 
@@ -152,6 +153,76 @@ request, Velero and its plugin in another. The checksums of kind and kubectl are
 replaced by hand with the ones of the release, and the image of the helper moves
 by hand with `.nvmrc`. Each of these pull requests asks for the
 [upstream drift watch](PROCESS.md#upstream-drift-watch) before the merge.
+
+## Suites Of The Views
+
+The [suites](../../e2e/__tests__/) drive the views in a packaged Freelens v1.10.3,
+with the packed production build of the extension installed in an isolated
+profile, against the test environment with its fixtures left in place. They run
+inside the integration harness of Freelens, in a checkout of Freelens that was
+built: `freelens/` in the repository, or the directory `FREELENS_DIR` names.
+The build is the one of the
+[integration workflow](../../.github/workflows/integration-tests.yaml).
+
+| Command | What it does |
+| --- | --- |
+| `pnpm demo:up` | The environment with the fixtures left in place, once |
+| `pnpm demo:views` | The fixtures of the views, and the two kubeconfigs of the demo for who looks at it by hand: see [TRY-IT.md](TRY-IT.md) |
+| `pnpm e2e:views` | Builds and packs the extension, puts the fixtures of the views in place, runs the suites |
+| `E2E_TEST_PATTERN=velero-e2e-journey pnpm e2e:views` | The same for one suite |
+| `pnpm pre-review` | The pass before the review of a milestone |
+
+| Suite | What it proves |
+| --- | --- |
+| `velero-e2e-journey` | Nothing is asked before a view opens; the choice among the installations; the list of every phase; the workspace; the references that lead somewhere and the ones that do not; equal names in two installations; no way to select, edit or delete; the section in the details of the host |
+| `velero-e2e-preferences` | What is kept between two starts of the application, and nothing else; a namespace that is not there any more stays selected |
+| `velero-e2e-restricted` | The views for an identity that reads three kinds of one namespace: what is denied is said, and is neither absent nor empty |
+| `velero-e2e-scale` | A thousand backups: the rows that are mounted, the time of the interactions, the state of the list when a backup is opened and closed |
+| `pre-review` | Every view in both themes, at 1440x900, at 900x650 and at twice the zoom, checked for what lies over something else or does not fit; the journey with the keyboard alone |
+
+The suites read the application and the cluster, and write to neither. The helper
+that runs `kubectl` for them refuses every verb but `get`. Each suite compares
+what the API server holds of Velero before and after: the version of every
+synthetic object, the identity of the objects of the real installation, and the
+absence of any request to Velero.
+
+What is asked of the cluster is counted by the API server, not by the driver of
+the test: the requests of the host leave from its main process, where the driver
+does not see them. The suites read `apiserver_request_total` for the group of
+Velero. A list of backup storage locations in the whole cluster is what the
+discovery of the extension asks: the controllers of Velero ask for their own
+namespace, and what the control plane of the cluster asks of every kind is a
+watch, which the suites leave out. The count of that list says when the
+extension asked, and how many times.
+
+The application reads the kubeconfig of the user when nothing tells it otherwise.
+The profile of the suites is written before the first start with no kubeconfig to
+sync: the catalog holds the test cluster alone, which the suites assert before
+they open it. The screenshots are of the frame of that cluster, never of the
+window around it, and show synthetic data.
+
+| Fixture of the views | Namespace | Purpose |
+| --- | --- | --- |
+| References | `velero-views-<run>` | A backup with a schedule, a storage location, a snapshot location and two restores; backups that name a schedule and a location that are not there; a name of 63 characters; a backup that reports nothing; a name that the namespace of the phases has too |
+| Reader | `velero-views-<run>` | A service account that reads backups, schedules and storage locations of its namespace. Its token lasts two hours and its kubeconfig is in the private state for as long as the suites run |
+| Long list | `velero-scale-<run>` | A thousand backups in every phase, and no storage location: nothing suggests the namespace, the operator names it |
+
+They are put in place by `pnpm e2e:views`, once: a second run finds them. No
+controller of Velero watches these namespaces. They go with
+`pnpm e2e:cluster:down`, or with the cleanup of the fixtures.
+
+The time of an interaction is taken inside the page, from the event to the frame
+that shows what it changed. For a search two times are recorded: the one from the
+key, and the one from the moment the host gives the list what was typed, which
+comes 250 ms after the last key. The budget of 250 ms is for what the list takes
+to answer, the second; the first is in the report beside it, and is what the
+operator waits from the key.
+
+Their [workflow](../../.github/workflows/views-tests.yaml) runs the suites and
+the pre-review on the hosted runner for every pull request. It uploads the
+directory of their screenshots and reports, `e2e-artifacts/`, and nothing else:
+the private state of the environment is elsewhere, and a test of the workflow
+fails if a path of it is ever named there.
 
 ## Critical Journeys
 

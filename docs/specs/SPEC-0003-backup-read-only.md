@@ -1,6 +1,6 @@
 # SPEC-0003: Operation States And Read-Only Backups
 
-- **Status:** Approved
+- **Status:** Implemented
 - **Date:** 2026-09-18
 - **Milestone / tasks:** M1 / T1.2 and T1.3
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
@@ -180,32 +180,50 @@ T1.3 is implemented: the [list](../../src/renderer/pages/backups-page.tsx) is th
 native list of the host, given what the extension read; the
 [workspace](../../src/renderer/pages/backup-workspace.tsx) is a view of its own; the
 [section](../../src/renderer/details/backup-details.tsx) in the details of the host
-reads a backup through the same [helpers](../../src/common/backup-view.ts). The
-status of the spec follows the suites of the views in a packaged Freelens.
+reads a backup through the same [helpers](../../src/common/backup-view.ts).
 
-| Check | Part covered by T1.3 | Evidence |
-| --- | --- | --- |
-| BACK-01 | The registration | Unit: the kind, the version and the plural the entry point gives to the host |
-| BACK-02 | The static UI | Component: the mark of each of the 13 phases, and the failure in words beside it |
-| BACK-03 | The component | Component: a Completed backup that reports errors shows the contradiction; a counter that is missing is said not reported |
-| BACK-04 | The component | Component: no ratio and no bar where none can be given, and `NaN` nowhere |
-| BACK-06 | The columns; the packaged app comes with the suites | Unit: an order for each column, what is not reported after what is; what the search looks into |
-| BACK-07 | The component | Component: a row opens the workspace; the details of the host show the same phase, failure and progress; opening asks nothing of the cluster |
-| BACK-08 | The component | Component: a reference that resolves, the restores denied, the snapshot locations that did not answer, a backup that names no schedule |
-| BACK-09 | The component | Component: the list is given no selection, no menu and no command that adds or removes |
-| BACK-10 | All of it | Unit and component: a late answer, a backup created again with the same name, a read that fails, and no timer left when the view closes |
-| BACK-13 | The component | Component: empty, denied, failed, stale and partly readable, each with its own words |
-| BACK-14 | The adapter | The reader sends `GET` and nothing else, and opening a backup asks nothing |
+| Check | Evidence |
+| --- | --- |
+| BACK-01 | Unit, and the registration: the kind, the version and the plural the entry point gives to the host |
+| BACK-02 | Unit, table-driven. Component: the mark of each of the 13 phases, and the failure in words beside it. Packaged: one row for each phase on the cluster |
+| BACK-03 | Unit. Component: a Completed backup that reports errors shows the contradiction; a counter that is missing is said not reported |
+| BACK-04 | Unit. Component: no ratio and no bar where none can be given, and `NaN` nowhere |
+| BACK-05 | Unit, with the clock as an argument |
+| BACK-06 | Packaged, on the list of a thousand: after a search, an order, a column made wider and a scroll, a backup is opened and closed, and the list is where it was |
+| BACK-07 | Component and packaged: a row opens the workspace; the details of the host show the same phase, failure and progress; opening asks nothing of the cluster |
+| BACK-08 | Unit. Packaged: references that resolve, a storage location and a schedule that are not there, the restores and the snapshot locations denied to the reader |
+| BACK-09 | Component: the list is given no selection, no menu and no command that adds or removes. Packaged: no checkbox, no menu, nothing on a right click, nothing on Delete and Backspace, and the objects unchanged |
+| BACK-10 | Unit and component: a late answer, a backup created again with the same name, a read that fails, and no timer left when the view closes |
+| BACK-11 | Pre-review: both themes, the two sizes and twice the zoom; a backup opened and closed with the keyboard, with the focus back on its row; a name of 63 characters |
+| BACK-12 | Packaged: see below |
+| BACK-13 | Component: empty, denied, failed, stale and partly readable, each with its own words. Packaged: denied and empty |
+| BACK-14 | The same evidence as DISC-07 of the [discovery](SPEC-0002-installation-discovery.md#evidence-and-deviations) |
 
-BACK-11 and BACK-12 are of the packaged application, and come with the suites.
+The measure of BACK-12, on 2026-09-27, in Freelens v1.10.3 on macOS 26 with an
+Intel Core i7-9750H and 16 GiB, the test environment running on the same machine:
+
+| Measure | Value |
+| --- | --- |
+| Backups in the list | 1,000 |
+| Rows mounted at once, at most | 29 |
+| Interactions, after five to warm | 20: ten searches, five backups opened, five closed |
+| Response, 95th percentile | 109 ms, against a budget of 250 ms |
+| Response, median and slowest | 46 ms and 113 ms |
+| From the key or the click, 95th percentile | 346 ms |
 
 What was decided while implementing, inside the requirements:
 
+- **The budget of BACK-12 is measured on what the list takes to answer.** The search
+  of the host waits 250 ms after the last key before it gives the list what was
+  typed. The time from that moment to the frame that shows the result is the
+  response the budget is for; the time from the key is recorded beside it.
 - **The columns that say where and when give their room in a narrow window.** The
   installation and the age first, then the storage and the duration, then the
   start: the name, the phase, the failure and the progress stay. What is not shown
   is in the workspace. It is the responsive hiding of the secondary fields the
   [design](../development/DESIGN.md#lists-and-details) allows.
+- **The views read again every 15 seconds while one is open**, and do not watch:
+  a list that fails is shown as such, with what was read before and when.
 - **A terminal phase that carries a failure has its own mark**, not the one of
   what went well: the phase and the failure stay on two axes, and the icon of the
   first does not contradict the second.
@@ -216,3 +234,10 @@ What was decided while implementing, inside the requirements:
 - **The section in the details of the host leads to the workspace only for a
   backup of the installation selected.** The workspace shows that installation: a
   link to a backup of another namespace would open one of the same name, or none.
+- **The generic page of the host for custom resources is not a surface of the
+  extension.** Its toolbar has the edit and the delete the host gives to every
+  kind, and the extension cannot take them away. No view of the extension opens
+  that page or its details; the extension adds a section to those details, which
+  only reads.
+
+The manual review of the success criteria is not recorded yet.

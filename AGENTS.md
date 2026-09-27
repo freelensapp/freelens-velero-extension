@@ -92,6 +92,8 @@ This repository is developed spec-first. Before implementing anything, read:
   presentation, status semantics, non-happy states; no UI work without reading it.
 - `docs/development/TESTING.md`: required test layers, fixture ownership and the
   evidence gates.
+- `docs/development/TRY-IT.md`: the walkthrough of the views on the demo cluster,
+  which is the path of the review of a milestone.
 - `docs/development/RECON-T0.1.md`: the reviewed API facts of the pinned Velero
   version. Proposed designs and unexecuted proof gates must not be presented as
   verified behavior.
@@ -215,6 +217,9 @@ pnpm e2e:cluster:up       # Disposable kind cluster with Velero and S3 (needs Do
 pnpm e2e                  # Fixtures and transport proof against that cluster
 pnpm e2e:cluster:down     # Removes the cluster, its network and its state
 pnpm demo:up              # The cluster with the fixtures left in place
+pnpm demo:views           # What the views need beside them, and where the kubeconfigs of the demo are
+pnpm e2e:views            # The suites of the views in a packaged Freelens, against the fixtures
+pnpm pre-review           # Both themes, the sizes of the window, the zoom and the keyboard
 
 # Build
 pnpm build                # Type check, then electron-vite, separate modules
@@ -243,9 +248,10 @@ src/
   renderer/details/         # What is added to the details the host shows of a kind
   common/                   # Pure helpers on plain data, and the store of the preferences
 build/host-globals.ts       # Maps what the host provides to the globals it provides it under
-integration/                # Playwright tests against a pinned Freelens build
+integration/                # Playwright test of the installation, and the helpers of the suites of the views
 test/                       # Vitest stubs for the host and its components, build and environment tests
 e2e/scripts/                # Disposable kind cluster with Velero and S3, fixtures, transport proof
+e2e/__tests__/              # The suites of the views, run inside a Freelens that was built
 docs/                       # Development docs and one spec per feature
 ```
 
@@ -261,6 +267,10 @@ Build output goes to `out/`.
 - The host writes the store of an extension from its main process. A store that
   must be kept is opened in both processes, in `onActivate`.
 - An object built for a list of the host needs `metadata.selfLink`.
+- The requests of the host leave from its main process: the driver of the suites
+  does not see them. Count them on the API server, as the suites do.
+- The application reads the kubeconfig of the user unless its profile says
+  otherwise. Start it with `startIsolated()` of the helpers, never bare.
 - Do not hide a list of the host with `display: none`: it loses its scroll. The
   list behind a workspace is hidden with `visibility`.
 - `pnpm exec biome` does not exist here: `pnpm biome:fix` and `pnpm biome:check`.

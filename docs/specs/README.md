@@ -1,8 +1,8 @@
 # Specifications
 
-Date: 2026-09-25
+Date: 2026-09-27
 
-Status: SPEC-0001, SPEC-0002 and SPEC-0003 are Approved; SPEC-0004 is Implemented.
+Status: SPEC-0001 is Approved; SPEC-0002, SPEC-0003 and SPEC-0004 are Implemented.
 
 The [roadmap](../development/ROADMAP.md) owns scope and progress; the
 [process](../development/PROCESS.md) owns approvals and review gates.
@@ -14,10 +14,10 @@ slice per task even when a spec covers several closely related tasks.
 
 | Specification | Tasks | Requirement IDs | Status | Runtime evidence |
 | --- | --- | --- | --- | --- |
-| [SPEC-0001: Local foundation](SPEC-0001-local-foundation.md) | T0.3, T0.4, T0.5, T0.6 separately | REQ-001 through REQ-012 | Approved | 161 of the 441 tests; local setup, recovery, RBAC and compiled-main transport/cleanup pass; activation in Freelens as an integration test |
-| [SPEC-0002: Installation discovery](SPEC-0002-installation-discovery.md) | T1.1 | REQ-013 through REQ-023 | Approved | 96 tests of the rules, of the state and of the components; nothing in a packaged Freelens yet |
-| [SPEC-0003: States and read-only Backups](SPEC-0003-backup-read-only.md) | T1.2, T1.3 separately | REQ-024 through REQ-037 | Approved | 118 unit tests of the states, 66 of what the views show and of the components; nothing in a packaged Freelens yet |
-| [SPEC-0004: Test environment on every platform](SPEC-0004-test-environment-every-platform.md) | Foundation | REQ-038 through REQ-049 | Implemented | 96 environment tests; runs on macOS x64 and on the hosted runner, Linux ARM64 |
+| [SPEC-0001: Local foundation](SPEC-0001-local-foundation.md) | T0.3, T0.4, T0.5, T0.6 separately | REQ-001 through REQ-012 | Approved | 165 of the 445 tests; local setup, recovery, RBAC and compiled-main transport/cleanup pass; activation in Freelens as an integration test |
+| [SPEC-0002: Installation discovery](SPEC-0002-installation-discovery.md) | T1.1 | REQ-013 through REQ-023 | Implemented | 96 tests of the rules, of the state and of the components; the suites of the views in a packaged Freelens, with the reader of a part and across three starts |
+| [SPEC-0003: States and read-only Backups](SPEC-0003-backup-read-only.md) | T1.2, T1.3 separately | REQ-024 through REQ-037 | Implemented | 118 unit tests of the states, 66 of what the views show and of the components; the suites of the views in a packaged Freelens, with a list of a thousand backups; the pre-review |
+| [SPEC-0004: Test environment on every platform](SPEC-0004-test-environment-every-platform.md) | Foundation | REQ-038 through REQ-049 | Implemented | 100 environment tests; runs on macOS x64 and on the hosted runner, Linux ARM64 |
 
 Next unallocated requirement ID: REQ-050. IDs are unique across this project;
 references in test tables do not redefine a requirement. Do not allocate IDs to
@@ -68,7 +68,9 @@ integration test since 2026-09-27. The Node transport proof does not close
 actual-host acceptance.
 
 SPEC-0002 and SPEC-0003 approval was recorded on 2026-09-27, as drafted. They are
-the first milestone: T1.1, T1.2 and T1.3, each its own pull request.
+the first milestone: T1.1, T1.2 and T1.3, each its own pull request. They are
+Implemented since the suites of the views run in a packaged Freelens; they become
+Verified with the manual review of their success criteria, which is not recorded yet.
 
 SPEC-0004 approval was recorded on 2026-09-27, with its one open question decided:
 the published loopback is accepted on the machines of the developers.
@@ -86,7 +88,7 @@ This is document coverage, not test execution:
 | Safety and privacy | Local-only writes, exact targets, no implicit requests, synthetic evidence |
 | UI decisions | Native lists plus dedicated operation workspace, with non-happy and accessible states |
 | Source grounding | Every draft carries exact reviewed revisions and recon dependencies |
-| Honest status | SPEC-0001 is Approved with setup, fixture and compiled-main transport evidence; SPEC-0002 and SPEC-0003 are Approved without implementation; SPEC-0004 is Implemented |
+| Honest status | SPEC-0001 is Approved with setup, fixture and compiled-main transport evidence; SPEC-0002, SPEC-0003 and SPEC-0004 are Implemented, none of them Verified |
 
 No blocking product preference is required to review these drafts. Fixture isolation
 and main transport have scoped local evidence. Actual-host authentication, IPC

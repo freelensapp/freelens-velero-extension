@@ -38,3 +38,6 @@
 *.pem
 *.key
 *.kubeconfig
+
+# Screenshots and reports of the suites of the views
+/e2e-artifacts/

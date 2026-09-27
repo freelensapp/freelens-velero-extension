@@ -82,7 +82,7 @@ milestone starts:
    already verified everything automatable, so the human session covers
    only judgment calls, the report's "for human judgment" list, and what
    cannot be automated.
-1. Bring up the demo environment (procedure in TRY-IT.md once it exists).
+1. Bring up the demo environment (procedure in [TRY-IT.md](TRY-IT.md)).
 2. Walk through every view the milestone introduced, on both themes,
    asking of each one "is this the best possible view for the task?".
 3. Record findings as issues (one per finding, or one umbrella issue per
