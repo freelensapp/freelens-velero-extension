@@ -53,13 +53,22 @@
     // non-major updates only
     {
       "matchDepNames": [
+        // the declarations of the React the host provides
         "@types/react",
+        "@types/react-dom",
         "npm",
       ],
       "matchUpdateTypes": [
         "major"
       ],
       "enabled": false
+    },
+    // the last one for React 17, which is the React of the host: the next asks for react-dom/client
+    {
+      "matchDepNames": [
+        "@testing-library/react",
+      ],
+      "allowedVersions": "<13"
     },
     // patch updates only
     {

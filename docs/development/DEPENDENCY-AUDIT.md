@@ -50,7 +50,9 @@ The packed production build is about 0.6 MB.
   does not fail the run: a finding in the development graph is information to
   explain in context.
 - Renovate proposes the updates, of the versions the scripts give to `pnpm dlx`
-  too. Two workflows run every day and open a pull request when they have
+  too. It leaves alone what must match the host: React, MobX and their bindings,
+  the major version of the declarations of React, and the library the components
+  are tested with, which stays at the last version for React 17. Two workflows run every day and open a pull request when they have
   something: one deduplicates the lockfile, one runs `pnpm audit fix`. The second
   can propose an override: whoever merges it takes on keeping it current.
 
