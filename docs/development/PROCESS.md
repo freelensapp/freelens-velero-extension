@@ -124,6 +124,9 @@ a baseline capability.
   Trunk Check on it before merging.
 - Packages are published only by the release workflow, never from a
   workstation. Tags are created only by the tag workflow.
+- The version changes through the pull request of the version workflow only,
+  never by hand in another pull request. The tag workflow tags a release
+  version, `X.Y.Z`: main carries a prerelease version between the releases.
 - External contributions follow the same spec-first loop; maintainers help
   contributors write the spec when needed.
 

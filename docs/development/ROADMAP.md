@@ -46,7 +46,7 @@ Status values: `Planned`, `Draft` (the spec is written, not approved),
 | Renovate and the automated maintenance workflows | | | In PR |
 | Activation of the packed extension in a packaged Freelens, as an integration test | FND-10 | [SPEC-0001](../specs/SPEC-0001-local-foundation.md) | In PR |
 | Test environment on Linux and macOS, x64 and ARM64; demo and pre-review commands | | | Planned |
-| Release workflows | | | Planned |
+| Release workflows | | | In PR |
 
 The T0.4 to T0.6 evidence is in [TESTING.md](TESTING.md). It covers the
 scaffold, the readiness of the infrastructure, a workload of synthetic
