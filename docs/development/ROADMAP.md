@@ -64,7 +64,7 @@ v1.10.3 built for the purpose, on every pull request and on main.
 | Installation detection, namespace discovery and configuration, selection among several installations, sidebar, missing, forbidden and empty states | T1.1 | [SPEC-0002](../specs/SPEC-0002-installation-discovery.md) | Done |
 | Phase model on two axes, progress, validation errors, durations, unknown values, relationship helpers | T1.2 | [SPEC-0003](../specs/SPEC-0003-backup-read-only.md) | Done |
 | Backup list and operation workspace, with storage location, schedule, related restores and failure information; no generic delete | T1.3 | [SPEC-0003](../specs/SPEC-0003-backup-read-only.md) | Done |
-| End to end suite against the views, pre-review pass and [walkthrough of the demo](TRY-IT.md) | | | In PR |
+| End to end suite against the views, pre-review pass and [walkthrough of the demo](TRY-IT.md) | | | Done |
 
 ### M2 - Restores, Schedules, locations, Overview (read-only)
 
@@ -74,6 +74,10 @@ v1.10.3 built for the purpose, on every pull request and on main.
 | Schedule list and detail, with paused and skipped behavior and backup history | T1.5 | | Planned |
 | BackupStorageLocation and VolumeSnapshotLocation lists and details: default, access mode, availability, validation and sync times, errors | T1.6 | | Planned |
 | Overview (ad hoc): truthful aggregate health, navigation into the objects | T1.7 | | Planned |
+
+The first milestone is on main. Its two specs are Implemented: they become
+Verified with the manual review of their success criteria, which is the review
+of the milestone and is not recorded yet.
 
 Exit of M1 and M2: the five primary kinds usable in a packaged Freelens, every
 phase covered, missing data never shown as healthy, pre-review on both themes.
