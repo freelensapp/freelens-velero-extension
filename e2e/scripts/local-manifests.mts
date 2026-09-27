@@ -2,7 +2,7 @@ import { isAbsolute } from "node:path";
 import { DEMO_NAMESPACE, OWNER_LABEL, requireCondition, SUBNETS } from "./local-kind.mts";
 
 export const IMAGES = {
-  node: "docker.io/kindest/node:v1.34.11@sha256:44e222ee2132dab25ff87301682f89eb82c7880ea3a1bf543bfe9708fd08d67d",
+  node: "docker.io/kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5",
   velero: "docker.io/velero/velero:v1.18.2@sha256:37396519f399536e5f01427d723565ae69294ec3fb5625cf1c87c09eaa9de16b",
   plugin:
     "docker.io/velero/velero-plugin-for-aws:v1.14.2@sha256:0751144c1c8e52d52c48717fbd13ad5a3061e612ae4d7ad744a946cd5b139d1a",
