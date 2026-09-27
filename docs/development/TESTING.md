@@ -4,13 +4,17 @@ Date: 2026-09-25
 
 Status: T0.3-T0.6 scaffold, environment, fixture and compiled-main transport checks
 pass. The [integration test](#integration-tests) covers the activation in Freelens.
+The [end-to-end tests](#end-to-end-tests) bring the environment up on the hosted
+runner and on the machines of the contributors.
 
 This is a desktop Electron extension with renderer UI, main-process Kubernetes
 operations and object-storage transport. The binding safety/privacy rules are in
 [AGENTS.md](../../AGENTS.md); domain evidence is in [RECON-T0.1.md](RECON-T0.1.md).
 The [roadmap](ROADMAP.md) is the single source of truth for progress, not this
 strategy document. The sections named after a task (T0.4, T0.5, T0.6) are dated
-evidence of the runs of the foundation phase, on one Linux machine.
+evidence of the runs of the foundation phase, on one Linux machine. Where they
+name a command or a limit that [SPEC-0004](../specs/SPEC-0004-test-environment-every-platform.md)
+changed, the section of the end-to-end tests is the current one.
 
 ## Prerequisite Evidence
 
@@ -87,6 +91,68 @@ from the Extensions page of an isolated profile and checks that:
 No cluster takes part: there is no view yet. The test is copied into the Freelens
 checkout of the workflow under its own name.
 
+## End-To-End Tests
+
+The [scripts](../../e2e/scripts/) create a dedicated kind cluster,
+`freelens-velero-dev`, with Velero, its AWS plugin and SeaweedFS, every image an
+official release pinned by digest. The contract is
+[SPEC-0004](../specs/SPEC-0004-test-environment-every-platform.md).
+
+| Command | What it does |
+| --- | --- |
+| `pnpm e2e:cluster:up` | Installs the pinned kind and kubectl, pulls the images, creates the cluster, installs the storage and Velero, verifies the environment. Run again, it resumes the environment it owns |
+| `pnpm e2e` | Builds the extension, then runs the fixtures and the transport proof: real backups and restores of synthetic data, their artifacts fetched through the compiled main |
+| `pnpm e2e:cluster:down` | Deletes the node, the network and the state the journal owns, after the identity check. The installed binaries stay |
+| `pnpm demo:up` | Brings the environment up and leaves the fixtures in place, to look at them in Freelens |
+| `pnpm demo:down` | The same as `pnpm e2e:cluster:down` |
+
+What a machine needs: Docker with four processors and 6 GiB of memory or more,
+and Node.js of `.nvmrc`. kind and kubectl are downloaded from their official
+releases, checked against the checksums pinned in
+[local-platform.mts](../../e2e/scripts/local-platform.mts) and kept under the
+private state: the binaries of the host are neither used nor changed.
+
+| Platform | Host | Network shape |
+| --- | --- | --- |
+| Linux x64 and ARM64 | developer machine, hosted runner | internal bridge |
+| macOS x64 and ARM64 | developer machine with Docker Desktop | published loopback |
+
+The platform of the images comes from the Docker daemon. The registry is asked
+only for what the machine does not have: an image that is already here with its
+pinned digest is not pulled again, and the index of a pin is read once, from the
+engine when it holds it. The pins that were read are remembered beside the
+installed binaries and outlive the environment. On the internal bridge
+Docker gives the network no route outside and the host reaches the API server at
+the address of the node. Where the host cannot reach that address the bridge is
+not internal, the API server is published on `127.0.0.1` only, and the egress
+rules of the node, installed before the first workload, are what holds the node
+back. The identity check accepts these two shapes and nothing else. On both, the
+resolver of Docker is refused to the node and to its pods: no name outside the
+cluster is resolved.
+
+The private state is `~/.local/state/freelens-velero-dev`: the ownership journal,
+the generated credentials, the kubeconfig of the environment, the log of the
+operations. The default kubeconfig of the user is never written: its hash is
+compared before and after every run. The log withholds the body of every Secret
+and every token, and every command ends by searching it for the generated
+secrets, as they are and encoded. A run killed halfway leaves `run.lock` in the
+state: the next command names it, and after removing it `pnpm e2e:cluster:up`
+resumes from the phase of the journal. When the creation of the node itself was
+interrupted or failed, the command says so, with the reason of the failure:
+`pnpm e2e:cluster:down`, then `pnpm e2e:cluster:up`. The removal finishes what an earlier removal left halfway,
+and the verification removes what an earlier verification left of its temporary
+check, by the label of its owner and by its uid.
+
+The [workflow](../../.github/workflows/e2e-tests.yaml) runs the three commands on
+the hosted runner for every pull request. It uploads nothing of the private
+state.
+
+Renovate follows the pins. kind, its node image and kubectl move in one pull
+request, Velero and its plugin in another. The checksums of kind and kubectl are
+replaced by hand with the ones of the release, and the image of the helper moves
+by hand with `.nvmrc`. Each of these pull requests asks for the
+[upstream drift watch](PROCESS.md#upstream-drift-watch) before the merge.
+
 ## Critical Journeys
 
 1. Open Velero in a selected local test cluster; distinguish installed, absent,
@@ -112,8 +178,9 @@ and synthetic-status outcomes supplement, not replace, real-controller proof.
 - Verified T0.4 target: a dedicated local kind cluster for this extension, with an
   isolated one-target kubeconfig. The persistent `kind-kind` remains untouched.
   Capacity, current routes, identity and official image pins were checked before
-  installation. Revalidate on subsequent runs; cluster deletion requires explicit
-  approval even during teardown.
+  installation. Revalidate on subsequent runs. The cluster is deleted by
+  `pnpm e2e:cluster:down` only, which deletes what the journal owns and refuses
+  everything else.
 - Never change global Docker/Kubernetes contexts or use a remote daemon. Match the
   exact expected context and verify local kind ownership before every test session;
   an unknown or mismatched target stops the run before any Kubernetes request.
@@ -164,8 +231,8 @@ The scaffold has [source lifecycle tests](../../src/entrypoints.test.ts),
 [compiled-entry contracts](../../test/build.test.ts), and
 [process-specific host stubs](../../test/freelens-extensions.ts). Vitest v4.1.11 fails
 when no tests are selected; it does not import the host implementation in Node.
-The canonical command builds first and covers 110 tests: 14 scaffold,
-48 [environment checks](../../test/environment.test.ts) and 48 diagnostic contracts.
+The canonical command builds first and covers 158 tests: 14 scaffold,
+96 [environment checks](../../test/environment.test.ts) and 48 diagnostic contracts.
 The environment tests
 include child-process refusal checks with an empty executable path, proving that
 wrong targets and malformed journals stop without external tools. Co-locate future pure/main

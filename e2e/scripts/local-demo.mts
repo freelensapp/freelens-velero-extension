@@ -1,6 +1,5 @@
 import { execFile, execFileSync, spawnSync } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { once } from "node:events";
 import {
   appendFileSync,
   chmodSync,
@@ -9,25 +8,24 @@ import {
   lstatSync,
   mkdirSync,
   openSync,
+  readdirSync,
   readFileSync,
+  readSync,
   realpathSync,
   renameSync,
+  rmSync,
+  statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { createServer, request } from "node:http";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { gunzipSync } from "node:zlib";
 import { createTlsFixture } from "../../test/tls-fixture.ts";
-import {
-  compiledDiagnostics,
-  DIRECT_PROOF_IMAGE,
-  runDownloadProof,
-  tlsProofResources,
-} from "./local-download-proof.mts";
+import { compiledDiagnostics, runDownloadProof, tlsProofResources } from "./local-download-proof.mts";
 import {
   allowsFixtureArtifact,
   assertFixtureNamespaceContents,
@@ -43,21 +41,28 @@ import {
   verifyStaticFixtures,
 } from "./local-fixtures.mts";
 import {
+  assertEgressRules,
   assertFailedNodeRemoval,
   assertLocalKind,
   assertOwnedNetwork,
+  assertOwnedNode,
   assertOwnedResource,
   assertStoppedKind,
   DEMO_BRIDGE,
   DEMO_CLUSTER,
   DEMO_CONTEXT,
+  DEMO_GATEWAY,
   DEMO_NAMESPACE,
   DEMO_NETWORK,
   type DemoIdentity,
+  DOCKER_HOST,
+  egressChains,
+  egressState,
   type KindConfig,
   type KindNetwork,
   type KindNode,
   localEnvironment,
+  nodeAddress,
   OWNER_LABEL,
   requireCondition,
   SUBNETS,
@@ -67,6 +72,7 @@ import {
   BUCKET,
   type Credentials,
   DATA_DIRECTORY,
+  DIRECT_PROOF_IMAGE,
   IMAGES,
   KIND_HOSTS,
   type KubeResource,
@@ -76,15 +82,59 @@ import {
   STORAGE_ENDPOINT,
   storageManifests,
 } from "./local-manifests.mts";
+import {
+  assertBinary,
+  assertLogWithholds,
+  BINARIES,
+  type BinaryName,
+  binaryTarget,
+  binaryUrl,
+  childEnvironment,
+  type DockerInfo,
+  dockerSocket,
+  failureSummary,
+  type ImageIndex,
+  type ImagePlatform,
+  imageArchitecture,
+  imagePlatform,
+  type NetworkShape,
+  networkShape,
+  nodeMemory,
+  occupiedSubnets,
+  platformManifest,
+  withhold,
+} from "./local-platform.mts";
 import { assertOfficialImages } from "./local-security.mts";
 
 const STATE = join(homedir(), ".local", "state", DEMO_CLUSTER);
 const CONFIG = join(STATE, "kubeconfig");
+// For the processes that run inside the network of the node, where the published port does not exist.
+const NODE_CONFIG = join(STATE, "kubeconfig-node");
 const JOURNAL = join(STATE, "ownership.json");
 const LOG = join(STATE, "operations.log");
-const KIND = join(STATE, "bin", "kind");
+const BIN = join(STATE, "bin");
+const KIND = join(BIN, "kind");
+const KUBECTL = join(BIN, "kubectl");
+const DEFAULT_KUBECONFIG = join(homedir(), ".kube", "config");
+
+function localDocker(): string {
+  try {
+    return dockerSocket(["/var/run/docker.sock", join(homedir(), ".docker", "run", "docker.sock")], (path) => {
+      try {
+        return statSync(path).isSocket();
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    // Without a local socket the first command of the daemon fails, and nothing was created.
+    return DOCKER_HOST;
+  }
+}
+
+const dockerHost = localDocker();
 const environment = {
-  ...localEnvironment(process.env, CONFIG),
+  ...localEnvironment(process.env, CONFIG, dockerHost),
   HOME: join(STATE, "home"),
   DOCKER_CONFIG: join(STATE, "docker"),
   XDG_CONFIG_HOME: join(STATE, "home", ".config"),
@@ -105,7 +155,10 @@ interface Journal {
   nodeId: string;
   networkId: string;
   kubeconfigHash: string;
-  defaultKubeconfigHash: string;
+  shape?: NetworkShape;
+  nodeKubeconfigHash?: string;
+  // The configuration digest of each preloaded image, which is how the node names it.
+  images?: Record<string, string>;
   resources: ResourceIdentity[];
   phase: string;
   retiredNodeIds?: string[];
@@ -115,6 +168,8 @@ interface Journal {
 }
 
 let journal: Journal;
+// The kubeconfig of the user as this run found it: no command may leave it different.
+let defaultKubeconfig = "absent";
 const executeFile = promisify(execFile);
 
 function hash(file: string): string {
@@ -129,10 +184,16 @@ function save(): void {
 }
 
 function command(executable: string, args: string[], input?: string, timeout = 120_000, recordOutput = true): string {
+  const binary = executable === "kubectl" ? KUBECTL : executable;
+
+  requireCondition(
+    (binary !== KUBECTL && binary !== KIND) || existsSync(binary),
+    `The pinned kind and kubectl are not installed: run node e2e/scripts/local-demo.mts tools --context ${DEMO_CONTEXT}`,
+  );
   try {
     const argumentsWithCache =
       executable === "kubectl" ? ["--cache-dir", join(STATE, "cache", "kubectl"), ...args] : args;
-    const output = execFileSync(executable, argumentsWithCache, {
+    const output = execFileSync(binary, argumentsWithCache, {
       env: environment,
       cwd: environment.HOME,
       input,
@@ -142,19 +203,23 @@ function command(executable: string, args: string[], input?: string, timeout = 1
       maxBuffer: 32 * 1024 ** 2,
     });
 
-    appendFileSync(LOG, `${executable} ${args.slice(0, 2).join(" ")}\n${recordOutput ? output : "output withheld"}\n`, {
-      mode: 0o600,
-    });
+    appendFileSync(
+      LOG,
+      `${executable} ${args.slice(0, 2).join(" ")}\n${recordOutput ? withhold(output) : "output withheld"}\n`,
+      { mode: 0o600 },
+    );
     return output;
   } catch (error) {
     const failure = error as { status?: number; stdout?: string; stderr?: string };
 
     appendFileSync(
       LOG,
-      `${executable}: exit ${failure.status ?? "unknown"}\n${recordOutput ? `${failure.stdout ?? ""}\n${failure.stderr ?? ""}` : "diagnostic output withheld"}\n`,
+      `${executable}: exit ${failure.status ?? "unknown"}\n${recordOutput ? `${withhold(failure.stdout ?? "")}\n${failure.stderr ?? ""}` : "diagnostic output withheld"}\n`,
       { mode: 0o600 },
     );
-    throw new Error(`${executable} failed; details retained in the private operations log`);
+    throw Object.assign(new Error(`${executable} failed; details retained in the private operations log`), {
+      reason: recordOutput ? failureSummary(`${failure.stdout ?? ""}\n${failure.stderr ?? ""}`) : [],
+    });
   }
 }
 
@@ -178,14 +243,11 @@ function verifyTarget(): void {
   );
   const network = JSON.parse(docker(["network", "inspect", DEMO_NETWORK]))[0] as KindNetwork;
   const config = JSON.parse(
-    command("kubectl", ["--kubeconfig", CONFIG, "config", "view", "--raw", "-o", "json"]),
+    command("kubectl", ["--kubeconfig", CONFIG, "config", "view", "--raw", "-o", "json"], undefined, undefined, false),
   ) as KindConfig;
 
   assertLocalKind(journal as DemoIdentity, nodes(), network, config, hash(CONFIG));
-  requireCondition(
-    hash(join(homedir(), ".kube", "config")) === journal.defaultKubeconfigHash,
-    "The user's default kubeconfig changed; revalidation is required",
-  );
+  requireCondition(hash(DEFAULT_KUBECONFIG) === defaultKubeconfig, "The default kubeconfig changed during this run");
 }
 
 function kubectl(args: string[], input?: string, timeout?: number, recordOutput = true): string {
@@ -219,7 +281,16 @@ function initialize(): number {
   ])
     mkdirSync(directory, { recursive: true, mode: 0o700 });
   writeFileSync(join(environment.DOCKER_CONFIG, "config.json"), "{}\n", { mode: 0o600 });
-  const lock = openSync(join(STATE, "run.lock"), "wx", 0o600);
+  defaultKubeconfig = hash(DEFAULT_KUBECONFIG);
+  let lock: number;
+
+  try {
+    lock = openSync(join(STATE, "run.lock"), "wx", 0o600);
+  } catch {
+    throw new Error(
+      `Another run holds ${join(STATE, "run.lock")}, or one was interrupted: remove the lock after checking that none is running`,
+    );
+  }
 
   try {
     if (existsSync(JOURNAL)) {
@@ -239,7 +310,6 @@ function initialize(): number {
         nodeId: "",
         networkId: "",
         kubeconfigHash: "",
-        defaultKubeconfigHash: hash(join(homedir(), ".kube", "config")),
         resources: [],
         phase: "preflight",
       };
@@ -262,141 +332,123 @@ function initialize(): number {
   return lock;
 }
 
-function preflight(): void {
-  assertOfficialImages(IMAGES);
+function dockerInfo(): DockerInfo {
   requireCondition(
-    hash(join(homedir(), ".kube", "config")) === journal.defaultKubeconfigHash,
-    "The default kubeconfig changed; review the private baseline before setup",
+    dockerHost !== DOCKER_HOST || existsSync(DOCKER_HOST.slice("unix://".length)),
+    "No local Docker socket was found",
   );
+  return JSON.parse(docker(["info", "--format", "{{json .}}"])) as DockerInfo;
+}
+
+function assertPinnedImage(image: string, architecture: string): string {
+  const [inspected] = JSON.parse(docker(["image", "inspect", image])) as {
+    Id: string;
+    Os: string;
+    Architecture: string;
+    RepoDigests: string[];
+  }[];
+
+  requireCondition(
+    inspected.Os === "linux" &&
+      inspected.Architecture === architecture &&
+      inspected.RepoDigests.some((digest) => digest.endsWith(image.split("@")[1])),
+    "A pinned local image is missing or mismatched",
+  );
+  return inspected.Id;
+}
+
+function preflight(): DockerInfo {
+  assertOfficialImages(IMAGES);
   if (journal.networkId) {
     const [network] = JSON.parse(docker(["network", "inspect", DEMO_NETWORK])) as KindNetwork[];
 
     assertOwnedNetwork(journal, network);
   }
-  const info = JSON.parse(docker(["info", "--format", "{{json .}}"])) as {
-    OSType: string;
-    Architecture: string;
-    NCPU: number;
-    MemTotal: number;
-  };
+  const info = dockerInfo();
+  const architecture = imageArchitecture(imagePlatform(info));
 
+  nodeMemory(info);
   requireCondition(
-    info.OSType === "linux" && info.Architecture === "x86_64" && info.NCPU >= 4 && info.MemTotal >= 8 * 1024 ** 3,
-    "Insufficient local Docker capacity",
+    command(KIND, ["version"]).includes(`v${BINARIES.kind.version}`),
+    `Expected private kind v${BINARIES.kind.version}: run the tools action`,
   );
-  requireCondition(command(KIND, ["version"]).includes("v0.33.0"), "Expected private kind v0.33.0");
   const client = JSON.parse(command("kubectl", ["version", "--client", "-o", "json"])) as {
     clientVersion: { gitVersion: string };
   };
 
-  requireCondition(client.clientVersion.gitVersion === "v1.33.4", "Expected kubectl v1.33.4");
-  const routes = JSON.parse(command("ip", ["-j", "-4", "route", "show", "table", "all"])) as {
-    dst?: string;
-    dev?: string;
-  }[];
+  requireCondition(
+    client.clientVersion.gitVersion === `v${BINARIES.kubectl.version}`,
+    `Expected private kubectl v${BINARIES.kubectl.version}: run the tools action`,
+  );
+  const routes =
+    process.platform === "linux"
+      ? (JSON.parse(command("ip", ["-j", "-4", "route", "show", "table", "all"])) as { dst?: string; dev?: string }[])
+      : undefined;
+
+  if (!routes) console.log("NOTE: the routes of the host were not checked on this system; the Docker networks were.");
   const identifiers = docker(["network", "ls", "-q"]).trim().split("\n").filter(Boolean);
   const networks = identifiers.length
     ? (JSON.parse(docker(["network", "inspect", ...identifiers])) as KindNetwork[])
     : [];
-  const occupied = [
-    ...routes
-      .filter((route) => !journal.networkId || route.dev !== DEMO_BRIDGE)
-      .map((route) => route.dst)
-      .filter((value): value is string => !!value && value !== "default"),
-    ...networks
-      .filter((network) => network.Id !== journal.networkId)
-      .flatMap((network) =>
-        (network.IPAM.Config ?? []).map((config) => config.Subnet).filter((value) => value && !value.includes(":")),
-      ),
-  ];
+  const occupied = occupiedSubnets(networks, routes, { networkId: journal.networkId, bridge: DEMO_BRIDGE });
 
   requireCondition(
     !Object.values(SUBNETS).some((subnet) => occupied.some((other) => subnetsOverlap(subnet, other))),
     "The dedicated subnet overlaps existing local networking",
   );
-  for (const image of Object.values(IMAGES)) {
-    const [inspected] = JSON.parse(docker(["image", "inspect", image])) as {
-      Os: string;
-      Architecture: string;
-      RepoDigests: string[];
-    }[];
+  for (const image of [...Object.values(IMAGES), DIRECT_PROOF_IMAGE]) assertPinnedImage(image, architecture);
+  return info;
+}
 
-    requireCondition(
-      inspected.Os === "linux" &&
-        inspected.Architecture === "amd64" &&
-        inspected.RepoDigests.some((digest) => digest.endsWith(image.split("@")[1])),
-      "A pinned local image is missing or mismatched",
-    );
+async function installTools(): Promise<void> {
+  const target = binaryTarget(process.platform, process.arch);
+
+  mkdirSync(BIN, { recursive: true, mode: 0o700 });
+  for (const name of Object.keys(BINARIES) as BinaryName[]) {
+    const file = join(BIN, name);
+
+    if (existsSync(file)) {
+      try {
+        assertBinary(name, target, readFileSync(file));
+        console.log(`PASS: private ${name} v${BINARIES[name].version} is in place.`);
+        continue;
+      } catch {
+        unlinkSync(file);
+      }
+    }
+    const response = await fetch(binaryUrl(name, target), { redirect: "follow", signal: AbortSignal.timeout(300_000) });
+
+    requireCondition(response.ok, `The official release of ${name} did not answer`);
+    const content = new Uint8Array(await response.arrayBuffer());
+
+    assertBinary(name, target, content);
+    writeFileSync(`${file}.next`, content, { mode: 0o700 });
+    renameSync(`${file}.next`, file);
+    console.log(`PASS: private ${name} v${BINARIES[name].version} installed from its official release and checksum.`);
   }
 }
 
-function isolateNode(): void {
+// The part of the isolation that lives in the network namespace of the node, and is lost when the node stops.
+// It asks nothing of the API server, so it runs as soon as the node does.
+function isolateNetwork(): void {
   verifyTarget();
-  const [node] = JSON.parse(docker(["inspect", journal.nodeId])) as {
-    NetworkSettings: { Networks: Record<string, { IPAddress: string }> };
-  }[];
-  const address = node.NetworkSettings.Networks[DEMO_NETWORK].IPAddress;
+  const address = nodeAddress(nodes()[0]);
 
-  requireCondition(/^198\.18\.64\.\d+$/.test(address), "Unexpected owned node address");
   docker(["exec", journal.nodeId, "ip", "route", "replace", SUBNETS.services, "dev", "eth0"]);
-  for (const [parent, chain] of [
-    ["OUTPUT", "FV_DEMO_OUT"],
-    ["FORWARD", "FV_DEMO_FWD"],
-  ]) {
-    const rules = docker(["exec", journal.nodeId, "iptables", "-w", "-S"]);
+  for (const expected of egressChains(address)) {
+    const state = egressState(docker(["exec", journal.nodeId, "iptables", "-w", "-S"]), expected);
 
-    if (!rules.includes(`-N ${chain}\n`)) {
-      docker(["exec", journal.nodeId, "iptables", "-w", "-N", chain]);
-      docker([
-        "exec",
-        journal.nodeId,
-        "iptables",
-        "-w",
-        "-A",
-        chain,
-        "-m",
-        "conntrack",
-        "--ctstate",
-        "ESTABLISHED,RELATED",
-        "-j",
-        "RETURN",
-      ]);
-      for (const destination of ["127.0.0.0/8", `${address}/32`, SUBNETS.pods, SUBNETS.services])
-        docker(["exec", journal.nodeId, "iptables", "-w", "-A", chain, "-d", destination, "-j", "RETURN"]);
-      docker([
-        "exec",
-        journal.nodeId,
-        "iptables",
-        "-w",
-        "-A",
-        chain,
-        "-j",
-        "REJECT",
-        "--reject-with",
-        "icmp-net-unreachable",
-      ]);
+    // A chain left halfway by a run that was killed, or written by an earlier version, is written again.
+    if (state.rules !== "complete") {
+      docker(["exec", journal.nodeId, "iptables", "-w", state.rules === "absent" ? "-N" : "-F", expected.chain]);
+      for (const rule of expected.rules)
+        docker(["exec", journal.nodeId, "iptables", "-w", "-A", expected.chain, ...rule]);
     }
-    if (!rules.includes(`-A ${chain} -d ${SUBNETS.pods} -p tcp -m tcp --dport 18333 -j REJECT`)) {
-      docker([
-        "exec",
-        journal.nodeId,
-        "iptables",
-        "-w",
-        "-I",
-        chain,
-        "2",
-        "-d",
-        SUBNETS.pods,
-        "-p",
-        "tcp",
-        "--dport",
-        "18333",
-        "-j",
-        "REJECT",
-      ]);
+    // The first rule of its parent: what the node adds later for its services goes after it.
+    if (state.jump !== 1) {
+      docker(["exec", journal.nodeId, "iptables", "-w", "-I", expected.parent, "1", "-j", expected.chain]);
+      if (state.jump) docker(["exec", journal.nodeId, "iptables", "-w", "-D", expected.parent, String(state.jump + 1)]);
     }
-    if (!rules.includes(`-A ${parent} -j ${chain}\n`))
-      docker(["exec", journal.nodeId, "iptables", "-w", "-I", parent, "1", "-j", chain]);
   }
   for (const chain of ["OUTPUT", "FORWARD"]) {
     const rules = docker(["exec", journal.nodeId, "ip6tables", "-w", "-S", chain]);
@@ -408,6 +460,20 @@ function isolateNode(): void {
     ["exec", "-i", journal.nodeId, "tee", "/etc/resolv.conf"],
     `nameserver ${address}\noptions attempts:1 timeout:1\n`,
   );
+}
+
+async function isolateNode(): Promise<void> {
+  isolateNetwork();
+  // The node puts the rules of its services in front of what it finds: ours go back in front once it has done so.
+  for (let attempt = 0; ; attempt++) {
+    const listing = docker(["exec", journal.nodeId, "iptables", "-w", "-S"]);
+
+    if (["INPUT", "OUTPUT", "FORWARD"].every((parent) => new RegExp(`^-A ${parent} .*-j KUBE-`, "m").test(listing)))
+      break;
+    requireCondition(attempt < 180, "The node did not write the rules of its services");
+    await delay(1000);
+  }
+  isolateNetwork();
   const dns = JSON.parse(
     kubectl(["get", "configmap", "coredns", "--namespace", "kube-system", "-o", "json"]),
   ) as KubeResource & { data: { Corefile: string } };
@@ -432,38 +498,182 @@ function isolateNode(): void {
   save();
 }
 
+// The kubeconfig for the processes inside the network of the node: the API at the address of the node.
+function writeNodeKubeconfig(): void {
+  if (journal.shape !== "loopback") return;
+  const [node] = nodes();
+  const config = JSON.parse(
+    command("kubectl", ["--kubeconfig", CONFIG, "config", "view", "--raw", "-o", "json"], undefined, undefined, false),
+  ) as KindConfig;
+
+  config.clusters[0].cluster.server = `https://${nodeAddress(node)}:6443`;
+  const expected = JSON.stringify(config);
+
+  if (existsSync(NODE_CONFIG)) {
+    requireCondition(readFileSync(NODE_CONFIG, "utf8") === expected, "The kubeconfig of the node changed");
+  } else {
+    writeFileSync(NODE_CONFIG, expected, { mode: 0o600, flag: "wx" });
+  }
+  journal.nodeKubeconfigHash = hash(NODE_CONFIG);
+  save();
+}
+
+function nodeKubeconfig(): { file: string; hash: string } {
+  if (journal.shape !== "loopback") return { file: CONFIG, hash: journal.kubeconfigHash };
+  requireCondition(
+    journal.nodeKubeconfigHash && hash(NODE_CONFIG) === journal.nodeKubeconfigHash,
+    "The kubeconfig of the node is missing or changed",
+  );
+  return { file: NODE_CONFIG, hash: journal.nodeKubeconfigHash };
+}
+
+// A blob of an image archive, accepted only when its content has the digest it is stored under.
+function archiveBlob(archive: string, digest: string): Buffer {
+  requireCondition(/^sha256:[a-f0-9]{64}$/.test(digest), "Invalid image digest");
+  const content = execFileSync("tar", ["-xOf", archive, `blobs/sha256/${digest.slice("sha256:".length)}`], {
+    env: environment,
+    maxBuffer: 4 * 1024 ** 2,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  requireCondition(
+    `sha256:${createHash("sha256").update(content).digest("hex")}` === digest,
+    "An image archive blob does not match its digest",
+  );
+  return content;
+}
+
+// Docker names an image by its configuration or, with the containerd image store, by its pinned index.
+function pinnedConfiguration(reference: string, archive: string, architecture: string): string {
+  const pinned = reference.split("@")[1];
+  const identifier = assertPinnedImage(reference, architecture);
+
+  if (identifier !== pinned) return identifier;
+  const index = JSON.parse(archiveBlob(archive, pinned).toString("utf8")) as ImageIndex;
+  const manifest = JSON.parse(
+    archiveBlob(archive, platformManifest(reference, index, `linux/${architecture}` as ImagePlatform)).toString("utf8"),
+  ) as {
+    config: { digest: string };
+  };
+
+  requireCondition(/^sha256:[a-f0-9]{64}$/.test(manifest.config?.digest), "The pinned manifest has no configuration");
+  return manifest.config.digest;
+}
+
+// Not through kind: its import asks for every platform of an index, and only this one was pulled.
+function preloadImages(architecture: string): void {
+  const directory = join(STATE, "cache", "images");
+
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  journal.images ??= {};
+  for (const reference of [IMAGES.velero, IMAGES.plugin, IMAGES.storage]) {
+    const tag = preloadedImage(reference);
+    const archive = join(directory, `${createHash("sha256").update(reference).digest("hex")}.tar`);
+
+    try {
+      docker(["save", "--output", archive, tag], undefined, 600_000);
+      chmodSync(archive, 0o600);
+      const configuration = pinnedConfiguration(reference, archive, architecture);
+      const source = openSync(archive, "r");
+
+      try {
+        execFileSync(
+          "docker",
+          [
+            "exec",
+            "--interactive",
+            journal.nodeId,
+            "ctr",
+            "--namespace=k8s.io",
+            "images",
+            "import",
+            "--digests",
+            "--snapshotter=overlayfs",
+            "-",
+          ],
+          { env: environment, cwd: environment.HOME, stdio: [source, "pipe", "pipe"], timeout: 600_000 },
+        );
+      } catch {
+        throw new Error(`The import of ${tag} into the node failed`);
+      } finally {
+        closeSync(source);
+      }
+      journal.images[tag] = configuration;
+      save();
+    } finally {
+      rmSync(archive, { force: true });
+    }
+  }
+}
+
 function verifyPreloadedImages(): void {
   verifyTarget();
   assertOfficialImages(IMAGES);
+  const architecture = imageArchitecture(imagePlatform(dockerInfo()));
   const imported = JSON.parse(docker(["exec", journal.nodeId, "crictl", "images", "-o", "json"])) as {
     images: { id: string; repoTags?: string[] }[];
   };
 
   for (const reference of [IMAGES.velero, IMAGES.plugin, IMAGES.storage]) {
-    const [expected] = JSON.parse(docker(["image", "inspect", reference])) as { Id: string }[];
-    const image = imported.images.find((item) => item.repoTags?.includes(preloadedImage(reference)));
+    const tag = preloadedImage(reference);
+    // A journal written before the digests were recorded comes from a store that names images by configuration.
+    const expected = journal.images?.[tag] ?? assertPinnedImage(reference, architecture);
+    const image = imported.images.find((item) => item.repoTags?.includes(tag));
 
-    requireCondition(image?.id === expected.Id, "Preloaded content does not match the official digest-pinned image");
+    if (journal.images?.[tag]) assertPinnedImage(reference, architecture);
+    requireCondition(image?.id === expected, "Preloaded content does not match the official digest-pinned image");
   }
 }
 
-function setupCluster(): void {
-  preflight();
+// On the internal shape kind ends with an error after the node is complete: it looks for the published port of
+// the API server, and there is none. What says that the node is complete is the node: its administrator reads
+// the add-ons that come last in its creation.
+function controlPlaneComplete(): boolean {
+  try {
+    docker([
+      "exec",
+      journal.nodeId,
+      "kubectl",
+      "--kubeconfig",
+      "/etc/kubernetes/admin.conf",
+      "--request-timeout=30s",
+      "get",
+      "daemonset/kube-proxy",
+      "daemonset/kindnet",
+      "--namespace",
+      "kube-system",
+      "-o",
+      "name",
+    ]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const INCOMPLETE_NODE =
+  "The creation of the node did not complete: run pnpm e2e:cluster:down, then pnpm e2e:cluster:up again";
+
+async function setupCluster(): Promise<void> {
+  const info = preflight();
+
   if (!journal.networkId) {
     requireCondition(
       !docker(["network", "ls", "-q", "--filter", `name=^${DEMO_NETWORK}$`]).trim(),
       "Network name collision",
     );
+    journal.shape = networkShape(process.platform, info);
+    save();
     journal.networkId = docker([
       "network",
       "create",
-      "--internal",
+      ...(journal.shape === "internal" ? ["--internal"] : []),
       "--driver",
       "bridge",
       "--subnet",
       SUBNETS.docker,
       "--gateway",
-      "198.18.64.1",
+      DEMO_GATEWAY,
       "--opt",
       `com.docker.network.bridge.name=${DEMO_BRIDGE}`,
       "--label",
@@ -472,8 +682,23 @@ function setupCluster(): void {
     ]).trim();
     save();
   }
+  if (journal.phase === "creating-node") {
+    const [network] = JSON.parse(docker(["network", "inspect", DEMO_NETWORK])) as KindNetwork[];
+    const left = nodes();
+
+    // The node of a creation that failed, or of a run that was killed before it could record it: it is recorded,
+    // so that the removal can name it, and it is not used.
+    if (left.length) {
+      assertOwnedNode({ ...journal, nodeId: journal.nodeId || left[0].Id }, left, network);
+      journal.nodeId = left[0].Id;
+      save();
+      throw new Error(INCOMPLETE_NODE);
+    }
+  }
   if (!journal.nodeId) {
     requireCondition(!nodes().length, "Kind node name collision");
+    journal.phase = "creating-node";
+    save();
     const config = join(STATE, "kind.json");
     const hosts = join(STATE, "kind-hosts");
 
@@ -481,6 +706,7 @@ function setupCluster(): void {
     const configuration = kindConfiguration(hosts);
     writeFileSync(config, JSON.stringify(configuration), { mode: 0o600 });
     let bootstrapError: unknown;
+    let complete = false;
 
     try {
       command(
@@ -510,6 +736,8 @@ function setupCluster(): void {
 
       if (created.length === 1 && created[0].NetworkSettings.Networks[DEMO_NETWORK]?.NetworkID === journal.networkId) {
         journal.nodeId = created[0].Id;
+        complete = !bootstrapError || (journal.shape === "internal" && controlPlaneComplete());
+        if (complete) journal.phase = "preflight";
         docker(["update", "--restart=no", journal.nodeId]);
         if (existsSync(CONFIG)) {
           chmodSync(CONFIG, 0o600);
@@ -519,6 +747,12 @@ function setupCluster(): void {
       }
     }
     if (bootstrapError && !journal.nodeId) throw bootstrapError;
+    // A node whose control plane did not come up has no add-ons and no administrator: nothing is built on it.
+    if (!complete) {
+      const reason = (bootstrapError as { reason?: string[] }).reason ?? [];
+
+      throw new Error([INCOMPLETE_NODE, ...reason.map((line) => `  ${line}`)].join("\n"));
+    }
   }
   if (!journal.kubeconfigHash) {
     const [network] = JSON.parse(docker(["network", "inspect", DEMO_NETWORK])) as KindNetwork[];
@@ -532,7 +766,13 @@ function setupCluster(): void {
         current[0].NetworkSettings.Networks[DEMO_NETWORK]?.NetworkID === journal.networkId,
       "Cannot export credentials from an unverified bootstrap node",
     );
-    const generated = command(KIND, ["get", "kubeconfig", "--name", DEMO_CLUSTER, "--internal"]);
+    const generated = command(
+      KIND,
+      ["get", "kubeconfig", "--name", DEMO_CLUSTER, ...(journal.shape === "loopback" ? [] : ["--internal"])],
+      undefined,
+      undefined,
+      false,
+    );
 
     writeFileSync(CONFIG, generated, { mode: 0o600, flag: "wx" });
     journal.kubeconfigHash = hash(CONFIG);
@@ -543,11 +783,20 @@ function setupCluster(): void {
     const [network] = JSON.parse(docker(["network", "inspect", DEMO_NETWORK])) as KindNetwork[];
     const current = nodes();
     const config = JSON.parse(
-      command("kubectl", ["--kubeconfig", CONFIG, "config", "view", "--raw", "-o", "json"]),
+      command(
+        "kubectl",
+        ["--kubeconfig", CONFIG, "config", "view", "--raw", "-o", "json"],
+        undefined,
+        undefined,
+        false,
+      ),
     ) as KindConfig;
 
-    if (config.clusters?.[0]?.cluster.server === `https://${DEMO_CLUSTER}-control-plane:6443`) {
-      config.clusters[0].cluster.server = `https://${current[0]?.NetworkSettings.Networks[DEMO_NETWORK]?.IPAddress}:6443`;
+    // Stored as JSON on both shapes: the fixtures derive the kubeconfig of their reader from this file.
+    if (!readFileSync(CONFIG, "utf8").startsWith("{")) {
+      if (config.clusters?.[0]?.cluster.server === `https://${DEMO_CLUSTER}-control-plane:6443`) {
+        config.clusters[0].cluster.server = `https://${current[0]?.NetworkSettings.Networks[DEMO_NETWORK]?.IPAddress}:6443`;
+      }
       assertLocalKind(journal, current, network, config, journal.kubeconfigHash);
       writeFileSync(CONFIG, JSON.stringify(config), { mode: 0o600 });
       journal.kubeconfigHash = hash(CONFIG);
@@ -555,8 +804,12 @@ function setupCluster(): void {
     }
   }
   verifyTarget();
-  docker(["update", "--restart=no", "--cpus=4", "--memory=8g", "--memory-swap=8g", journal.nodeId]);
-  isolateNode();
+  const memory = `${nodeMemory(info)}m`;
+
+  docker(["update", "--restart=no", "--cpus=4", `--memory=${memory}`, `--memory-swap=${memory}`, journal.nodeId]);
+  // Before any workload: on the loopback shape these rules are all that holds the node back.
+  await isolateNode();
+  writeNodeKubeconfig();
   for (const reference of [IMAGES.velero, IMAGES.plugin, IMAGES.storage]) {
     const tag = preloadedImage(reference);
     const [expected] = JSON.parse(docker(["image", "inspect", reference])) as { Id: string }[];
@@ -573,18 +826,7 @@ function setupCluster(): void {
       docker(["tag", reference, tag]);
     }
   }
-  command(
-    KIND,
-    [
-      "load",
-      "docker-image",
-      "--name",
-      DEMO_CLUSTER,
-      ...[IMAGES.velero, IMAGES.plugin, IMAGES.storage].map(preloadedImage),
-    ],
-    undefined,
-    600_000,
-  );
+  preloadImages(imageArchitecture(imagePlatform(info)));
   verifyPreloadedImages();
   kubectl(["wait", "--for=condition=Ready", "node", "--all", "--timeout=120s"], undefined, 150_000);
   journal.phase = "cluster-ready";
@@ -618,7 +860,13 @@ function applyOwned(resource: KubeResource): void {
       item.name === identity.name &&
       item.namespace === identity.namespace,
   );
-  const raw = kubectl(["get", ...resourceArguments(identity), "--ignore-not-found", "-o", "json"]);
+  const logged = resource.kind !== "Secret";
+  const raw = kubectl(
+    ["get", ...resourceArguments(identity), "--ignore-not-found", "-o", "json"],
+    undefined,
+    undefined,
+    logged,
+  );
 
   requireCondition(resource.metadata.labels?.[OWNER_LABEL] === journal.owner, "Manifest ownership is missing");
   if (raw.trim()) {
@@ -635,8 +883,14 @@ function applyOwned(resource: KubeResource): void {
   const manifest = structuredClone(resource);
 
   if (raw.trim()) manifest.metadata.uid = (JSON.parse(raw) as KubeResource).metadata.uid;
-  const action = raw.trim() ? ["apply", "--server-side", "--field-manager=freelens-velero-demo"] : ["create"];
-  const created = JSON.parse(kubectl([...action, "-f", "-", "-o", "json"], JSON.stringify(manifest))) as KubeResource;
+  // The other manager of these fields is the create of this same setup: the identity was checked above
+  // and the uid is a precondition of the apply.
+  const action = raw.trim()
+    ? ["apply", "--server-side", "--force-conflicts", "--field-manager=freelens-velero-demo"]
+    : ["create"];
+  const created = JSON.parse(
+    kubectl([...action, "-f", "-", "-o", "json"], JSON.stringify(manifest), undefined, logged),
+  ) as KubeResource;
 
   assertOwnedResource(journal.owner, created, entry.uid);
   entry.uid = created.metadata.uid;
@@ -783,6 +1037,15 @@ function installStorage(): void {
   );
 }
 
+// The output of the installer holds the Secret it would create: the log gets it without its body.
+function installerOutput(credentialFile: string, args: string[]): string {
+  try {
+    return docker(args);
+  } finally {
+    rmSync(credentialFile, { force: true });
+  }
+}
+
 function installVelero(): void {
   verifyPreloadedImages();
   requireCondition(
@@ -806,7 +1069,7 @@ function installVelero(): void {
 
   requireCondition(typeof user === "number" && typeof group === "number", "Local Unix identity is required");
   const generated = JSON.parse(
-    docker([
+    installerOutput(credentialFile, [
       "run",
       "--rm",
       "--pull=never",
@@ -902,8 +1165,40 @@ function deleteCheck(entry: ResourceIdentity, owner: string): void {
   );
 }
 
+// What a run that was stopped left of this check. It was recorded before it was created, so it is found by its
+// name, and it goes only with the label of its owner and with its uid as the precondition.
+function cleanInterruptedChecks(): void {
+  const left = [
+    ...(journal.temporaryChecks ?? []),
+    ...journal.resources
+      .filter(
+        (entry) =>
+          entry.kind === "ConfigMap" &&
+          entry.namespace === DEMO_NAMESPACE &&
+          /^velero-check-[a-f0-9]{8}$/.test(entry.name),
+      )
+      .map((entry) => ({ ...entry, owner: journal.owner })),
+  ];
+
+  for (const entry of left) {
+    const raw = kubectl(["get", ...resourceArguments(entry), "--ignore-not-found", "-o", "json"]).trim();
+
+    if (raw) {
+      const found = JSON.parse(raw) as KubeResource;
+
+      assertOwnedResource(entry.owner, found, entry.uid);
+      deleteCheck({ ...entry, uid: found.metadata.uid }, entry.owner);
+    }
+  }
+  journal.resources = journal.resources.filter(
+    (entry) => !left.some((other) => other.name === entry.name && other.namespace === entry.namespace),
+  );
+  journal.temporaryChecks = [];
+  save();
+}
+
 function verifyOwnershipCleanup(): void {
-  requireCondition(!journal.temporaryChecks?.length, "An earlier temporary check needs owned cleanup before rerunning");
+  if (journal.temporaryChecks?.length) cleanInterruptedChecks();
   const suffix = randomUUID().slice(0, 8);
   const sentinelOwner = `sentinel-${suffix}`;
   const sentinel: KubeResource = {
@@ -1108,35 +1403,91 @@ async function verifyEnvironment(): Promise<void> {
   console.log(
     "PASS: workloads ready, S3 accessible, storage control ports isolated; no backup, restore or diagnostic request exists.",
   );
-  let requests = 0;
-  const server = createServer((_incoming, response) => {
-    requests += 1;
-    response.end("synthetic-local-listener");
-  });
+  const helper = `velero-egress-${randomBytes(4).toString("hex")}`;
+  const helperImage = assertPinnedImage(DIRECT_PROOF_IMAGE, imageArchitecture(imagePlatform(dockerInfo())));
+  const sandbox = [
+    "--rm",
+    "--pull=never",
+    "--label",
+    `${OWNER_LABEL}=${journal.owner}`,
+    "--network",
+    DEMO_NETWORK,
+    "--read-only",
+    "--cap-drop=ALL",
+    "--security-opt=no-new-privileges",
+    "--memory=128m",
+    "--cpus=1",
+    "--entrypoint=node",
+  ];
+  const served = () =>
+    docker(["logs", helper])
+      .split("\n")
+      .filter((line) => line === "request").length;
 
-  server.listen(0, "198.18.64.1");
-  await once(server, "listening");
+  requireCondition(!docker(["ps", "-aq", "--filter", `name=^${helper}$`]).trim(), "Egress helper name collision");
+  docker([
+    "run",
+    "--detach",
+    "--name",
+    helper,
+    ...sandbox,
+    DIRECT_PROOF_IMAGE,
+    "--eval",
+    'require("node:http").createServer((_request, response) => { console.log("request"); response.end("synthetic-local-listener"); }).listen(8080, "0.0.0.0");',
+  ]);
   try {
-    const address = server.address();
+    const [listener] = JSON.parse(docker(["inspect", helper])) as {
+      State: { Running: boolean };
+      NetworkSettings: { Networks: Record<string, { NetworkID: string; IPAddress: string }> };
+    }[];
+    const address = listener.NetworkSettings.Networks[DEMO_NETWORK]?.IPAddress;
 
-    requireCondition(address && typeof address !== "string", "Local listener address is unavailable");
-    const url = `http://198.18.64.1:${address.port}/`;
+    requireCondition(
+      listener.State.Running &&
+        listener.NetworkSettings.Networks[DEMO_NETWORK]?.NetworkID === journal.networkId &&
+        /^198\.18\.64\.\d+$/.test(address) &&
+        address !== nodeAddress(nodes()[0]),
+      "The egress helper is not on the owned network",
+    );
+    const url = `http://${address}:8080/`;
 
-    await new Promise<void>((resolveRequest, rejectRequest) => {
-      const outgoing = request(url, { agent: false, timeout: 3000 }, (response) => {
-        response.resume();
-        response.once("end", () =>
-          response.statusCode === 200
-            ? resolveRequest()
-            : rejectRequest(new Error("Local listener positive control failed")),
-        );
-      });
+    // The positive control: another container of the owned network reaches the listener.
+    docker(
+      [
+        "run",
+        ...sandbox,
+        DIRECT_PROOF_IMAGE,
+        "--eval",
+        // The listener may still be starting: a refused connection is tried again, an answer is final.
+        `(async () => { for (let attempt = 0; attempt < 40; attempt++) { try { const response = await fetch(${JSON.stringify(url)}, { signal: AbortSignal.timeout(5000) }); process.exit((await response.text()) === "synthetic-local-listener" ? 0 : 1); } catch { await new Promise((resolve) => setTimeout(resolve, 250)); } } process.exit(1); })();`,
+      ],
+      undefined,
+      60_000,
+    );
+    requireCondition(served() === 1, "The egress helper did not receive its positive control");
+    assertEgressRules(docker(["exec", journal.nodeId, "iptables", "-w", "-S"]), nodeAddress(nodes()[0]));
+    // A question for a name outside the cluster, asked where the node finds the resolver of Docker.
+    const question =
+      "\\x46\\x56\\x01\\x00\\x00\\x01\\x00\\x00\\x00\\x00\\x00\\x00\\x07example\\x03com\\x00\\x00\\x01\\x00\\x01";
 
-      outgoing.once("error", rejectRequest);
-      outgoing.once("timeout", () => outgoing.destroy(new Error("Local listener timed out")));
-      outgoing.end();
-    });
-    requireCondition(requests === 1, "Synthetic local listener did not receive its positive control");
+    for (const [name, prefix, chain] of [
+      ["node", [] as string[], "FV_DEMO_OUT"],
+      ["storage-pod", podNetwork, "FV_DEMO_IN"],
+    ] as const) {
+      verifyTarget();
+      const before = rejectedPackets(chain);
+      const answer = docker([
+        "exec",
+        journal.nodeId,
+        ...prefix,
+        "bash",
+        "-c",
+        // Refused where it leaves, the question fails to be sent; refused where it arrives, it gets no answer.
+        `exec 3<>/dev/udp/${DEMO_GATEWAY}/53; printf '${question}' >&3 2>/dev/null; timeout 2 head -c 1 <&3 2>/dev/null | wc -c`,
+      ]).trim();
+
+      requireCondition(answer === "0" && rejectedPackets(chain) > before, `The resolver of Docker answers the ${name}`);
+    }
     for (const [name, prefix, chain] of [
       ["node", [] as string[], "FV_DEMO_OUT"],
       ["storage-pod", podNetwork, "FV_DEMO_FWD"],
@@ -1169,15 +1520,25 @@ async function verifyEnvironment(): Promise<void> {
         refused = (error as { code?: number }).code === 7;
       }
       requireCondition(
-        refused && requests === 1 && rejectedPackets(chain) > before,
+        refused && served() === 1 && rejectedPackets(chain) > before,
         `Egress isolation failed for ${name}`,
       );
     }
   } finally {
-    server.closeAllConnections();
-    await new Promise<void>((resolveClose, rejectClose) =>
-      server.close((error) => (error ? rejectClose(error) : resolveClose())),
-    );
+    const remaining = docker(["ps", "-aq", "--filter", `name=^${helper}$`]).trim();
+
+    if (remaining) {
+      const [container] = JSON.parse(docker(["inspect", remaining])) as {
+        Config: { Labels: Record<string, string> };
+        Image: string;
+      }[];
+
+      requireCondition(
+        container.Config.Labels[OWNER_LABEL] === journal.owner && container.Image === helperImage,
+        "Unexpected egress helper ownership",
+      );
+      docker(["rm", "--force", remaining]);
+    }
   }
   verifyOwnershipCleanup();
   verifyTarget();
@@ -1204,7 +1565,7 @@ async function verifyEnvironment(): Promise<void> {
     { mode: 0o600 },
   );
   console.log(
-    "PASS: node and storage-pod egress rejected at the firewall; positive local control passed, listener removed, default kubeconfig unchanged.",
+    "PASS: node and storage-pod egress rejected at the firewall; positive control from the owned network passed, helper removed, default kubeconfig unchanged.",
   );
 }
 
@@ -1212,10 +1573,6 @@ function removeFailedNode(): void {
   const network = JSON.parse(docker(["network", "inspect", DEMO_NETWORK]))[0] as KindNetwork;
 
   assertFailedNodeRemoval(journal, nodes(), network, journal.resources.length, existsSync(CONFIG));
-  requireCondition(
-    hash(join(homedir(), ".kube", "config")) === journal.defaultKubeconfigHash,
-    "The default kubeconfig changed",
-  );
   const removedId = journal.nodeId;
 
   journal.phase = "removing-failed-node";
@@ -1336,7 +1693,12 @@ function verifyFixturePermissions(): void {
   for (const resource of resources) applyOwned(resource);
   const missingLocation = readFixture(runtime, resources[0]);
   const readerFile = join(STATE, `fixture-reader-${run}.json`);
-  const token = kubectl(["create", "token", "fixture-reader", "--namespace", names.static, "--duration=10m"]).trim();
+  const token = kubectl(
+    ["create", "token", "fixture-reader", "--namespace", names.static, "--duration=10m"],
+    undefined,
+    undefined,
+    false,
+  ).trim();
 
   requireCondition(token.length > 100, "Local reader credential was not generated");
   const config = JSON.parse(readFileSync(CONFIG, "utf8")) as KindConfig;
@@ -1346,7 +1708,7 @@ function verifyFixturePermissions(): void {
   const asReader = (args: string[], input?: string) => {
     verifyTarget();
     return spawnSync(
-      "kubectl",
+      KUBECTL,
       [
         "--cache-dir",
         join(STATE, "cache", "fixture-reader"),
@@ -1606,23 +1968,12 @@ function runDirectProof(input: {
   port: number;
 }): unknown {
   verifyPreloadedImages();
-  const [image] = JSON.parse(docker(["image", "inspect", DIRECT_PROOF_IMAGE])) as {
-    Id: string;
-    Os: string;
-    Architecture: string;
-    RepoDigests: string[];
-  }[];
-
-  requireCondition(
-    image.Os === "linux" &&
-      image.Architecture === "amd64" &&
-      image.RepoDigests.some((digest) => digest.endsWith(DIRECT_PROOF_IMAGE.split("@")[1])),
-    "Official direct-proof runtime identity mismatch",
-  );
+  const image = { Id: assertPinnedImage(DIRECT_PROOF_IMAGE, imageArchitecture(imagePlatform(dockerInfo()))) };
   const file = join(STATE, "direct-proof-input.json");
   const helper = `velero-direct-${randomBytes(4).toString("hex")}`;
+  const inside = nodeKubeconfig();
 
-  writeFileSync(file, JSON.stringify({ ...input, kubeconfigHash: journal.kubeconfigHash }), { mode: 0o600 });
+  writeFileSync(file, JSON.stringify({ ...input, kubeconfigHash: inside.hash }), { mode: 0o600 });
   requireCondition(
     !docker(["ps", "-aq", "--filter", `name=^${helper}$`]).trim(),
     "Direct-proof container name collision",
@@ -1654,7 +2005,7 @@ function runDirectProof(input: {
         "--mount",
         `type=bind,src=${file},dst=/proof-state/input.json,readonly`,
         "--mount",
-        `type=bind,src=${CONFIG},dst=/proof-state/kubeconfig,readonly`,
+        `type=bind,src=${inside.file},dst=/proof-state/kubeconfig,readonly`,
         "--workdir=/proof",
         "--entrypoint=node",
         DIRECT_PROOF_IMAGE,
@@ -2006,7 +2357,7 @@ async function runFixtureSuite(): Promise<void> {
   );
 }
 
-function startCluster(): void {
+async function startCluster(): Promise<void> {
   preflight();
   const [network] = JSON.parse(docker(["network", "inspect", DEMO_NETWORK])) as KindNetwork[];
   const current = nodes();
@@ -2018,34 +2369,42 @@ function startCluster(): void {
     docker(["update", "--restart=no", journal.nodeId]);
     docker(["start", journal.nodeId]);
   }
-  verifyTarget();
-  docker(
-    [
-      "exec",
-      journal.nodeId,
-      "curl",
-      "--silent",
-      "--show-error",
-      "--fail",
-      "--retry",
-      "30",
-      "--retry-delay",
-      "1",
-      "--retry-connrefused",
-      "--max-time",
-      "3",
-      "--cacert",
-      "/etc/kubernetes/pki/ca.crt",
-      "--cert",
-      "/etc/kubernetes/pki/apiserver-kubelet-client.crt",
-      "--key",
-      "/etc/kubernetes/pki/apiserver-kubelet-client.key",
-      "https://127.0.0.1:6443/livez",
-    ],
-    undefined,
-    120_000,
-  );
-  setupCluster();
+  // The rules went with the network namespace of the stopped node: they come back before its workloads do.
+  // The entrypoint of the node rewrites its own network settings first, then hands over to systemd.
+  for (let attempt = 0; docker(["exec", journal.nodeId, "cat", "/proc/1/comm"]).trim() !== "systemd"; attempt++) {
+    requireCondition(attempt < 120, "The node did not start");
+    await delay(250);
+  }
+  isolateNetwork();
+  // The API server that has just started refuses for a while, then answers before its roles are loaded: both
+  // are reasons to ask again, until it says that it is alive.
+  for (let attempt = 0; ; attempt++) {
+    const alive = spawnSync(
+      "docker",
+      [
+        "exec",
+        journal.nodeId,
+        "curl",
+        "--silent",
+        "--fail",
+        "--max-time",
+        "3",
+        "--cacert",
+        "/etc/kubernetes/pki/ca.crt",
+        "--cert",
+        "/etc/kubernetes/pki/apiserver-kubelet-client.crt",
+        "--key",
+        "/etc/kubernetes/pki/apiserver-kubelet-client.key",
+        "https://127.0.0.1:6443/livez",
+      ],
+      { env: environment, cwd: environment.HOME, encoding: "utf8", timeout: 10_000 },
+    );
+
+    if (alive.status === 0) break;
+    requireCondition(attempt < 120, "The API server of the node did not come back");
+    await delay(1000);
+  }
+  await setupCluster();
   console.log("PASS: resumed only the recorded initialized node and revalidated its local isolation.");
 }
 
@@ -2057,11 +2416,141 @@ function stopCluster(): void {
   console.log("PASS: stopped only the owned demo node; no cluster or data was deleted.");
 }
 
+async function bringUp(): Promise<void> {
+  await installTools();
+  execFileSync(process.execPath, [fileURLToPath(new URL("./local-images.mts", import.meta.url)), "pull"], {
+    env: childEnvironment(process.env, { HOME: homedir() }),
+    stdio: "inherit",
+    timeout: 1_800_000,
+  });
+  const [existing] = journal.nodeId ? nodes() : [];
+
+  if (existing && !existing.State.Running) await startCluster();
+  else await setupCluster();
+  installStorage();
+  prepareBucket();
+  installVelero();
+  if (journal.fixtureRun && journal.fixtureRun.phase !== "cleaned") {
+    console.log("NOTE: fixtures are in place, so the check of a fixture-free installation was left out.");
+    return;
+  }
+  await verifyEnvironment();
+}
+
+// What was generated for this environment stays in its files. The log is read in pieces, it grows with every run.
+function assertPrivateLog(): void {
+  if (!existsSync(LOG)) return;
+  const secrets: string[] = [];
+  const credentials = join(STATE, "credentials.json");
+
+  if (existsSync(credentials)) {
+    const generated = JSON.parse(readFileSync(credentials, "utf8")) as Record<string, Credentials>;
+
+    secrets.push(...Object.values(generated).map((identity) => identity.secretKey));
+  }
+  for (const file of [CONFIG, NODE_CONFIG]) {
+    const key = existsSync(file) && /client-key-data"?:\s*"?([A-Za-z0-9+/=]{64,})/.exec(readFileSync(file, "utf8"));
+
+    if (key) secrets.push(key[1]);
+  }
+  const piece = Buffer.alloc(8 * 1024 ** 2);
+  const overlap = 16 * 1024;
+  const log = openSync(LOG, "r");
+
+  try {
+    for (let position = 0; ; ) {
+      const read = readSync(log, piece, 0, piece.length, position);
+
+      assertLogWithholds(piece.toString("latin1", 0, read), secrets);
+      if (read < piece.length) break;
+      position += read - overlap;
+    }
+  } finally {
+    closeSync(log);
+  }
+}
+
+// Deletes what the journal owns and nothing else: the node, the helpers, the network and the private state.
+// Every step is recorded, so that a run that stopped halfway is finished by the next one.
+function takeDown(): void {
+  const named = docker(["network", "ls", "-q", "--no-trunc", "--filter", `name=^${DEMO_NETWORK}$`])
+    .trim()
+    .split("\n")
+    .filter(Boolean);
+  const current = nodes();
+
+  requireCondition(
+    current.every((node) => node.Id === journal.nodeId),
+    "A node exists that the journal does not own",
+  );
+  requireCondition(
+    named.every((identifier) => identifier === journal.networkId),
+    "A network exists that the journal does not own",
+  );
+  // The helpers of a run that was killed: they carry the label of the owner and the name of a helper.
+  const helpers = docker(["ps", "-aq", "--no-trunc", "--filter", `label=${OWNER_LABEL}=${journal.owner}`])
+    .trim()
+    .split("\n")
+    .filter(Boolean);
+
+  for (const container of helpers.length
+    ? (JSON.parse(docker(["inspect", ...helpers])) as {
+        Id: string;
+        Name: string;
+        Config: { Labels?: Record<string, string> };
+      }[])
+    : []) {
+    requireCondition(
+      container.Config.Labels?.[OWNER_LABEL] === journal.owner &&
+        /^\/velero-(egress|direct)-[a-f0-9]{8}$/.test(container.Name),
+      "A container carries the label of the owner and is not a helper",
+    );
+    docker(["rm", "--force", container.Id]);
+  }
+  if (journal.nodeId && current.length) {
+    const [network] = JSON.parse(docker(["network", "inspect", journal.networkId])) as KindNetwork[];
+
+    assertOwnedNode(journal, current, network);
+    docker(["rm", "--force", "--volumes", journal.nodeId], undefined, 180_000);
+    requireCondition(nodes().length === 0, "The owned node was not removed");
+  }
+  if (journal.nodeId) {
+    journal.retiredNodeIds = [...(journal.retiredNodeIds ?? []), journal.nodeId];
+    journal.nodeId = "";
+    journal.kubeconfigHash = "";
+    journal.phase = "removing";
+    save();
+  }
+  if (journal.networkId && named.length) {
+    const [network] = JSON.parse(docker(["network", "inspect", journal.networkId])) as (KindNetwork & {
+      Containers?: Record<string, unknown>;
+    })[];
+
+    assertOwnedNetwork(journal, network);
+    requireCondition(
+      !Object.keys(network.Containers ?? {}).length,
+      "A container that the journal does not own is on the owned network",
+    );
+    docker(["network", "rm", journal.networkId]);
+  }
+  if (journal.networkId) {
+    journal.networkId = "";
+    save();
+  }
+  requireCondition(hash(DEFAULT_KUBECONFIG) === defaultKubeconfig, "The default kubeconfig changed during this run");
+  for (const entry of readdirSync(STATE))
+    if (!["bin", "pins.json", "run.lock"].includes(entry)) rmSync(join(STATE, entry), { recursive: true, force: true });
+  console.log("PASS: removed the owned node, network and private state; the installed tools stay.");
+}
+
 async function main(): Promise<void> {
   const [action, flag, context, ...extra] = process.argv.slice(2);
 
   requireCondition(
     [
+      "up",
+      "down",
+      "tools",
       "cluster",
       "storage",
       "bucket",
@@ -2081,13 +2570,16 @@ async function main(): Promise<void> {
       flag === "--context" &&
       context === DEMO_CONTEXT &&
       !extra.length,
-    `Usage: node e2e/scripts/local-demo.mts <cluster|storage|bucket|velero|verify|transport-proof|fixtures|fixtures-static|fixtures-live|fixtures-artifacts|fixtures-permissions|fixtures-cleanup|start|stop|remove-failed-node> --context ${DEMO_CONTEXT}`,
+    `Usage: node e2e/scripts/local-demo.mts <up|down|tools|cluster|storage|bucket|velero|verify|transport-proof|fixtures|fixtures-static|fixtures-live|fixtures-artifacts|fixtures-permissions|fixtures-cleanup|start|stop|remove-failed-node> --context ${DEMO_CONTEXT}`,
   );
   let lock: number | undefined;
 
   try {
     lock = initialize();
-    if (action === "cluster") setupCluster();
+    if (action === "up") await bringUp();
+    else if (action === "down") takeDown();
+    else if (action === "tools") await installTools();
+    else if (action === "cluster") await setupCluster();
     else if (action === "storage") installStorage();
     else if (action === "bucket") prepareBucket();
     else if (action === "velero") installVelero();
@@ -2099,15 +2591,17 @@ async function main(): Promise<void> {
     else if (action === "fixtures-artifacts") verifyFixtureArtifacts();
     else if (action === "fixtures-permissions") verifyFixturePermissions();
     else if (action === "fixtures-cleanup") await cleanupFixtures();
-    else if (action === "start") startCluster();
+    else if (action === "start") await startCluster();
     else if (action === "remove-failed-node") removeFailedNode();
     else stopCluster();
+    assertPrivateLog();
   } finally {
     if (lock !== undefined) {
       closeSync(lock);
       unlinkSync(join(STATE, "run.lock"));
     }
   }
+  requireCondition(hash(DEFAULT_KUBECONFIG) === defaultKubeconfig, "The default kubeconfig changed during this run");
 }
 
 try {

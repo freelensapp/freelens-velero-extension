@@ -83,7 +83,9 @@ deployment deliberately instead of inheriting the image's quick-start defaults:
   Public image retrieval by the setup tools is distinct from application egress.
 
 These controls passed the T0.4 local runtime check, including a reachable synthetic
-off-cluster listener and verified firewall rejection from node and pod.
+off-cluster listener and verified firewall rejection from node and pod. Since
+[SPEC-0004](../specs/SPEC-0004-test-environment-every-platform.md) the listener is
+a helper container on the owned network, on every platform.
 The dedicated local kind cluster and unrelated persistent infrastructure remain
 subject to [AGENTS.md](../../AGENTS.md).
 

@@ -76,7 +76,9 @@ The hosted checks are the ones of the other extensions of the organization, on
 every pull request and on main: production build, type check, lint and Knip; Trunk;
 the unit tests, on the build with separate modules and on the production build;
 the integration tests, which install the packed production build in a Freelens
-v1.10.3 built for the purpose; OSV-Scanner. They run on synthetic data only. Renovate and the daily maintenance
+v1.10.3 built for the purpose; the end-to-end tests, which bring the test
+environment up on the runner, run the fixtures and the transport proof and take
+it down; OSV-Scanner. They run on synthetic data only. Renovate and the daily maintenance
 workflows of the organization (npm audit, npm dedupe, Biome migrate, Trunk upgrade)
 open their pull requests on branches named `automated/*`. A release is three
 workflows: the version workflow opens the pull request that sets the version, the
@@ -101,7 +103,7 @@ before changing the client version. The main build replaces undici with
 extension never calls, and the real module installs a dispatcher for the whole
 process when it loads, which inside Freelens is the process of the host. Supported
 `WS_NO_*` build defines disable optional native accelerators without patching the
-library. The 110 normal/production tests cover 14 scaffold, 48
+library. The 158 normal/production tests cover 14 scaffold, 96
 environment/fixture and 48 diagnostic contracts. The integration test covers the
 installation in the host.
 The electron-vite warning about a missing standalone renderer
@@ -360,10 +362,21 @@ operation verifies the node/network identity and kubeconfig hash. The internal
 Docker network has no published API port: official `kind get kubeconfig --internal`
 supplies the identity, then only its server hostname is replaced by the verified
 node IP. TLS remains verified; no global context or default kubeconfig is changed.
+Where the host cannot reach the address of the node, as with Docker Desktop, the
+network is not internal and the API server is published on `127.0.0.1` only: the
+egress rules of the node, installed before the first workload, hold the node back.
+The identity check accepts these two shapes and nothing else. The processes that
+run inside the network of the node use a second kubeconfig, with the address of
+the node. kind and kubectl are the pinned official releases, installed under the
+private state after a checksum check. See
+[SPEC-0004](../specs/SPEC-0004-test-environment-every-platform.md).
 
-The images are unmodified official releases. Since Docker archive import does not
-preserve the registry index reference, kind loads the official version tags after
-their digest check; Docker and CRI image IDs must match before deployment. Workloads
+The images are unmodified official releases, pulled for the platform of the Docker
+daemon from pins that are indexes with `linux/amd64` and `linux/arm64`. Since
+Docker archive import does not preserve the registry index reference, the scripts
+import the archive of the official version tags into the node after their digest
+check. The node must name each image by the configuration the pinned index gives
+for the platform, whichever image store Docker uses, before deployment. Workloads
 use `imagePullPolicy: Never`. Official Velero CLI output is generated without network
 access, then checked for the expected namespace, images and local S3 endpoint.
 The 13 CRD schemas remain unchanged. Cloud snapshots are disabled in this lab.
@@ -371,8 +384,13 @@ The 13 CRD schemas remain unchanged. Cloud snapshots are disabled in this lab.
 Master/filer/volume ports bind to pod loopback. Official SeaweedFS also listens on
 S3 gRPC port 18333; node OUTPUT/FORWARD rules block it outside the pod while S3
 8333 stays reachable. Node-local rules, a service-CIDR route and cluster-only DNS
-support local traffic without adding a default route. A reachable synthetic local
-listener proves node/pod egress rejection using firewall counters, not timeouts alone.
+support local traffic without adding a default route. The resolver of Docker, which
+answers for names outside the cluster, is refused to the node and to its pods. The
+rules are the first of their parent chains and are installed again when the node
+restarts, before its workloads run. A helper container on the
+owned network, from the pinned Node.js image, answers a request from the network;
+then node and pod are refused when they call it as an address outside the cluster,
+proven with the firewall counters, not timeouts alone.
 
 Resource creation refuses collisions; reapply binds UID, and temporary cleanup uses
 DELETE UID preconditions. The live interrupted-check scenario preserves a sentinel

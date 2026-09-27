@@ -4,6 +4,7 @@
 [![GitHub](https://img.shields.io/github/stars/freelensapp/freelens-velero-extension?style=flat&label=GitHub%20%E2%AD%90)](https://github.com/freelensapp/freelens-velero-extension)
 [![Unit tests](https://github.com/freelensapp/freelens-velero-extension/actions/workflows/unit-tests.yaml/badge.svg?branch=main)](https://github.com/freelensapp/freelens-velero-extension/actions/workflows/unit-tests.yaml)
 [![Integration tests](https://github.com/freelensapp/freelens-velero-extension/actions/workflows/integration-tests.yaml/badge.svg?branch=main)](https://github.com/freelensapp/freelens-velero-extension/actions/workflows/integration-tests.yaml)
+[![E2E tests](https://github.com/freelensapp/freelens-velero-extension/actions/workflows/e2e-tests.yaml/badge.svg?branch=main)](https://github.com/freelensapp/freelens-velero-extension/actions/workflows/e2e-tests.yaml)
 
 ## Overview
 
@@ -113,9 +114,20 @@ The scripts under [e2e/scripts](e2e/scripts/) create a dedicated kind cluster
 with Velero, its AWS plugin and SeaweedFS as the S3 backend, every image an
 official release pinned by digest. They run real backups and restores of
 synthetic data and fetch their logs and results through the code of the main
-process. Today they run on Linux x86_64 only. The commands and the evidence
-are in [TESTING.md](docs/development/TESTING.md), the choice of the backend in
-[LOCAL-STORAGE.md](docs/development/LOCAL-STORAGE.md).
+process. They run on Linux and on macOS with Docker Desktop, x64 and ARM64,
+and on the hosted runner for every pull request.
+
+```sh
+pnpm e2e:cluster:up     # the cluster with Velero and the storage
+pnpm e2e                # the fixtures and the transport proof
+pnpm e2e:cluster:down   # removes what the first command created
+```
+
+Docker needs four processors and 6 GiB of memory. kind and kubectl are installed
+by the first command under the private state of the environment, not on the
+machine. The commands and the evidence are in
+[TESTING.md](docs/development/TESTING.md#end-to-end-tests), the choice of the
+backend in [LOCAL-STORAGE.md](docs/development/LOCAL-STORAGE.md).
 
 No cloud account and no personal credential is needed. Every write of
 development and tests goes to that disposable cluster, never to another one.

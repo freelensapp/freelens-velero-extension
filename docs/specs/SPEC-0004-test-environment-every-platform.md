@@ -1,6 +1,6 @@
 # SPEC-0004: Test Environment On Every Platform
 
-- **Status:** Approved
+- **Status:** Implemented
 - **Date:** 2026-09-27
 - **Milestone / tasks:** Foundation
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
@@ -99,6 +99,7 @@ The two network shapes differ in what holds the node back:
 | The node cannot reach outside | by construction, Docker gives the network no route, and by the egress rules of the node | by the egress rules of the node only |
 | Between the creation of the node and the egress rules | nothing can leave | the node could reach outside |
 | The API server | at the address of the node, reachable from the host only | on `127.0.0.1` of the host, a port Docker chooses |
+| A name outside the cluster | not resolved: the resolver of Docker is refused to the node and to its pods | the same |
 
 On the published loopback the images are preloaded and the workloads never pull, as
 today. The window of the second row ends when the egress rules are installed, the
@@ -106,8 +107,23 @@ first step after the node exists, before the storage and Velero. It is made shor
 not removed. ENV-03 proves the order, ENV-05 the rules. The internal bridge stays the
 shape of the hosted checks.
 
+The rules live in the network namespace of the node and go with it when the node
+stops. When the node starts again they are installed as soon as it runs, before its
+workloads do, and once more in front of the rules the node writes for its services.
+A chain that does not hold the expected rules in their order is written again.
+
+The resolver of Docker answers for names outside the cluster, and the node reaches
+it through the gateway of the bridge as traffic that is delivered, not forwarded. A
+third chain refuses it on arrival, for the node and for its pods.
+
 The host listener of today is replaced on both shapes by the helper container of
 REQ-042, from the pinned Node.js image the transport proof already uses.
+
+The removal works by identifier: the node and the network the journal names, and
+the helpers that carry the label of the owner. It records each step, so a removal
+that stopped halfway is finished by the next one. What Docker no longer has counts
+as removed; what Docker has under the dedicated names and the journal does not own
+stops the command.
 
 ## Tests
 
@@ -153,5 +169,68 @@ Record role and date.
 
 ## Evidence And Deviations
 
-No implementation, tests or runtime evidence yet. The ties of the Scope Baseline
-come from reading the scripts; none was reproduced by a run.
+Implemented on 2026-09-27. The runs below are the evidence of the pull request; the
+status moves to Verified with the hosted run on main and the manual review.
+
+| Check | Evidence |
+| --- | --- |
+| ENV-01 | Unit: the platform follows the daemon, a pin without one of the two platforms is refused and named, from the registry and from the engine. Runs: the five pins accepted for `linux/amd64` on macOS x64 and for `linux/arm64` on the hosted runner |
+| ENV-02 | Unit: a download with another checksum is refused. Runs on macOS x64 and on the hosted runner: kind v0.33.0 and kubectl v1.33.4 installed from their releases; no script names a binary of the host |
+| ENV-03 | Run on macOS x64: the journal records the isolation before the images are imported and the storage is created; the API server is published on `127.0.0.1` and nowhere else. Run on the hosted runner: the internal shape, no published port |
+| ENV-04 | Unit: the two shapes accepted, nine refusals each with its reason, the node ownership of the removal |
+| ENV-05 | Runs on macOS x64 and on the hosted runner: the helper answers inside the network, node and pod are refused outside it and by the resolver of Docker, the counters increase, the helper is removed |
+| ENV-06 | Unit: an overlapping Docker network is found with and without the routes. Run on macOS x64: the output says the routes were not checked. Run on the hosted runner: the routes are checked |
+| ENV-07 | Run on macOS x64, beside another kind cluster: `up` twice gives the same node; `down` leaves no node, network or state; the containers, networks, volumes and the other cluster, its node and its pods, are the same before and after |
+| ENV-08 | Unit, through the entry point with a Docker that answers from files: a change between two runs does not stop the second, a change during a run stops it. Run on macOS x64: the same hash before and after the round |
+| ENV-09 | Unit: a Secret is recorded without its body, a generated secret is found as it is and encoded. Runs: every command ends with the search, on a log of more than 100 MB on macOS. Unit: the workflow has no upload |
+| ENV-10 | Unit: a variable outside the allowlist does not reach a child process |
+| ENV-11 | Hosted runs on Linux ARM64: green on the pull request of the implementation; red on a pull request that asked the reader of the fixtures for one backup more than it lists, at that check, with the environment taken down after it |
+| ENV-12 | The validator accepts the configuration; the dry run on the repository lists the seven pins, in their groups |
+
+On macOS the runs also covered what the scenarios ask of an interrupted run: a run
+killed while the node was created, the lock it left, the node it left, and the
+removal of both; a temporary check interrupted before and after it created its
+object, and one that names the object of another owner, which is refused and left;
+a node stopped and started three times, each time with its rules back before its
+workloads and first in their chains. Linux on a developer machine was not run: the
+Linux evidence is the one of the hosted runner, ARM64.
+
+Deviations, each called out in the pull request:
+
+- REQ-049: Renovate does not follow the image of the helper. Its Node.js is the one
+  of `.nvmrc`, which Renovate ignores in every repository of the organization, and
+  it moves with it by hand. Renovate moves the versions of kind and kubectl, not the
+  checksums pinned beside them: its pull request says so.
+- The images are not loaded by kind. With the containerd image store of Docker its
+  import asks for every platform of an index, and only one was pulled. The scripts
+  import the archive, and the node must name each image by the configuration the
+  pinned index gives for the platform, read from the archive with the digest of
+  every blob checked.
+- The processes that run inside the network of the node use a second kubeconfig,
+  with the address of the node. The kubeconfig of the environment is stored as JSON
+  on both shapes.
+- The third chain, the rules after a restart and the removal by identifier, in the
+  Design above, came from the review of the implementation and from its runs.
+- On the internal shape kind ends with an error after the node is complete: it looks
+  for the published port of the API server, and there is none. The node says whether
+  its creation completed: its administrator reads the add-ons that come last in it.
+  A creation that did not complete stops the command, which prints the lines of the
+  failed command that name an error, without traces and without anything long
+  enough to be a key, a token or a certificate.
+- The API server of a node that has just started answers 403 for a few seconds. The
+  check of the foundation asked once and took that for a failure, on a fast
+  machine. It asks until the API server says that it is alive.
+- The registry is asked only for what the machine does not have. Asked at every
+  run for images that were already here, it refused the machine after a few runs,
+  at the rate it grants to requests without an account. The index of a pin comes
+  from the engine when it holds it, and the pins that were read are remembered.
+- The verification of the foundation stopped for good when its temporary check was
+  interrupted before it created anything. It now removes what the earlier one left.
+- On an environment just created the transport proof of the foundation could not
+  apply the secure variant of the storage, whose fields belonged to the `create` of
+  the same setup. The apply takes them after the identity check, with the uid as
+  its precondition.
+- The log of the foundation recorded the body of the Secrets it read back, encoded.
+  Every recorded output now passes through a filter that withholds the body of a
+  Secret and the credentials of a kubeconfig, and the search that ends every command
+  looks for the generated secrets in their encoded forms too.
