@@ -71,9 +71,10 @@ The SDK's permissive type peer otherwise resolves to React 19 declarations. Pin
 React 17 declarations explicitly to match the selected host; this adds no renderer UI.
 Generated entries are included explicitly in production analysis despite Git ignores.
 
-The prepared hosted-check workflow has only a manual trigger and a disabled-by-default
-repository-variable gate. It is configuration for a future authorized publication,
-not a validation service used by local development. Trunk Git hooks are disabled.
+The hosted checks are the ones of the other extensions of the organization, on
+every pull request and on main: production build, type check, lint and Knip; Trunk;
+the unit tests, on the build with separate modules and on the production build;
+OSV-Scanner. They run on synthetic data only. Trunk Git hooks are disabled.
 
 ### Development Dependency Audit
 

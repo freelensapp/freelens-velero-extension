@@ -39,7 +39,7 @@ Status values: `Planned`, `Draft` (the spec is written, not approved),
 | Real backup and restore fixtures, static status fixtures, restricted identity | T0.5 | [SPEC-0001](../specs/SPEC-0001-local-foundation.md) | Done |
 | Main process request and download proof, direct and through a pod tunnel | T0.6 | [SPEC-0001](../specs/SPEC-0001-local-foundation.md) | Done |
 | Directives and process aligned with the other extensions of the organization | | | In PR |
-| Hosted checks: type check, lint, Knip, Trunk, unit tests, OSV-Scanner | | | Planned |
+| Hosted checks: type check, lint, Knip, Trunk, unit tests, OSV-Scanner | | | In PR |
 | Tunnel delivers the whole stream; the bundle leaves the dispatcher of the host alone | | [SPEC-0001](../specs/SPEC-0001-local-foundation.md) | In PR |
 | Package manifest and tools as the other extensions; no dependency override | | | Planned |
 | Renovate and the automated maintenance workflows | | | Planned |
