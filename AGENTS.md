@@ -13,7 +13,7 @@ kinds of `velero.io`) inside Freelens, with their logs and results, the
 adherence of the schedules and guarded recovery actions. It was scaffolded from
 freelens-example-extension and is developed spec by spec.
 
-The foundation is in place and no Velero view exists yet. Scope and progress
+The foundation is in place and the first milestone is under way. Scope and progress
 toward v1.0.0 are in `docs/development/ROADMAP.md`.
 
 - **Language**: TypeScript 5.9.3
@@ -236,6 +236,7 @@ src/
   main/index.ts             # Extension entry point (main process, Node.js)
   main/diagnostic-*.ts      # Create-only Kubernetes adapter, DownloadRequest service, transport, pod tunnel
   renderer/index.ts         # Extension entry point (renderer process, Chromium)
+  common/                   # Pure helpers on plain data: types, phases, evidence, progress, durations, references
 build/host-globals.ts       # Maps the host SDK to the global provided by Freelens
 integration/                # Playwright tests against a pinned Freelens build
 test/                       # Vitest stubs for the host, build and environment tests
