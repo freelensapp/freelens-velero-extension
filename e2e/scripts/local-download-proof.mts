@@ -25,18 +25,28 @@ export interface DownloadProofContext {
   record(kind: DiagnosticKind, identity: { name: string; uid: string }): void;
 }
 
+// The compiled main process, loaded where there is no host. It is given what it asks of the host when it
+// loads, as names and nothing under them: the proofs run its diagnostic code, which uses none of it, and
+// need no package installed.
 export function compiledDiagnostics(): typeof import("../../src/main/index.ts") {
-  const globals = globalThis as typeof globalThis & { LensExtensions?: unknown };
-  const previous = globals.LensExtensions;
+  const globals = globalThis as typeof globalThis & { LensExtensions?: unknown; Mobx?: unknown };
+  const previous = { sdk: globals.LensExtensions, state: globals.Mobx };
 
-  globals.LensExtensions = { Main: { LensExtension: class {} }, Common: {}, Renderer: {} };
+  globals.LensExtensions = {
+    Main: { LensExtension: class {} },
+    Common: { Store: { ExtensionStore: class {} } },
+    Renderer: {},
+  };
+  globals.Mobx = {};
   try {
     return createRequire(import.meta.url)(
       fileURLToPath(new URL("../../out/main/index.js", import.meta.url)),
     ) as typeof import("../../src/main/index.ts");
   } finally {
-    if (previous === undefined) delete globals.LensExtensions;
-    else globals.LensExtensions = previous;
+    if (previous.sdk === undefined) delete globals.LensExtensions;
+    else globals.LensExtensions = previous.sdk;
+    if (previous.state === undefined) delete globals.Mobx;
+    else globals.Mobx = previous.state;
   }
 }
 

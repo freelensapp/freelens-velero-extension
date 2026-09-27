@@ -83,6 +83,33 @@ describe.each([
   });
 });
 
+it("main bundle loads for the proofs of the test environment, which have no host and install nothing", () => {
+  // In a process of its own: what this one loaded of the bundle, and what it gave to it, do not count.
+  const probe = `
+    import("./e2e/scripts/local-download-proof.mts").then(({ compiledDiagnostics }) => {
+      const main = compiledDiagnostics();
+      process.stdout.write(JSON.stringify({
+        exported: ["DiagnosticKubernetes", "DiagnosticService", "downloadArtifact", "openPodTunnel"]
+          .filter((name) => typeof main[name] === "function"),
+        left: ["LensExtensions", "Mobx"].filter((name) => name in globalThis),
+      }));
+    });
+  `;
+  const result = spawnSync(process.execPath, ["--input-type=module", "-e", probe], {
+    encoding: "utf8",
+    timeout: 30_000,
+    env: { ...process.env, NODE_PATH: "", NODE_OPTIONS: "" },
+  });
+
+  expect(
+    result.stderr.replace(/^\(node:\d+\) \[MODULE_TYPELESS[\s\S]*?\n\(Use `node --trace-warnings[^\n]*\n/gm, ""),
+  ).toBe("");
+  expect(JSON.parse(result.stdout)).toEqual({
+    exported: ["DiagnosticKubernetes", "DiagnosticService", "downloadArtifact", "openPodTunnel"],
+    left: [],
+  });
+});
+
 it("main bundle leaves the dispatcher of the host process alone", () => {
   const probe = `
     globalThis.LensExtensions = {
