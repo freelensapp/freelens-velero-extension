@@ -1,11 +1,24 @@
 {
   "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
-  "include": ["*.ts", "build/**/*.ts", "src/**/*.ts", "test/**/*.ts", "e2e/scripts/**/*.mts"],
+  "include": [
+    "*.ts",
+    "build/**/*.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "test/**/*.ts",
+    "test/**/*.tsx",
+    "e2e/scripts/**/*.mts"
+  ],
   "compilerOptions": {
     "allowImportingTsExtensions": true,
     "composite": true,
     "esModuleInterop": true,
+    "jsx": "react-jsx",
     "moduleResolution": "bundler",
+    "paths": {
+      "@freelensapp/core/main": ["./node_modules/@freelensapp/core/static/build/library/src/main/library.d.ts"],
+      "@freelensapp/core/renderer": ["./node_modules/@freelensapp/core/static/build/library/src/renderer/library.d.ts"]
+    },
     "strict": true,
     "types": ["node", "react", "vite/client", "electron-vite/node"]
   }

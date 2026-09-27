@@ -28,7 +28,8 @@ Storage Locations and Volume Snapshot Locations. Add secondary resources in P5,
 not disabled placeholder pages. Keep the installation namespace distinct from the
 workload namespace filters inside a backup or restore.
 
-The target bar uses the host's cluster identity plus a namespace selector. A single
+The target bar uses the host's cluster identity plus a namespace selector, and a
+command that opens the form where a namespace is named or taken back. A single
 installation still shows its namespace. With multiple installations and no prior
 valid selection, require a choice rather than choosing the first. Remember per-cluster
 selection locally; a stale or inaccessible selection is visible and never silently

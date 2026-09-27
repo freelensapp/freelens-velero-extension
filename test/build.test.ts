@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { Common, forbiddenAccesses, type HostExtensionStub, Main, Renderer } from "./freelens-extensions";
+import { Common, forbiddenAccesses, type HostExtensionStub, hostCalls, Main, Renderer } from "./freelens-extensions";
 
 interface Manifest {
   private?: boolean;
@@ -21,10 +21,17 @@ const load = createRequire(import.meta.url);
 
 beforeAll(() => {
   vi.stubGlobal("LensExtensions", { Common, Main, Renderer });
+  // What the host provides beside its SDK. The bundles ask for them by these names and carry none of them.
+  vi.stubGlobal("React", load("react"));
+  vi.stubGlobal("ReactDom", load("react-dom"));
+  vi.stubGlobal("ReactJsxRuntime", load("react/jsx-runtime"));
+  vi.stubGlobal("Mobx", load("mobx"));
+  vi.stubGlobal("MobxReact", load("mobx-react"));
 });
 
 beforeEach(() => {
   forbiddenAccesses.length = 0;
+  hostCalls.length = 0;
 });
 
 afterAll(() => {
@@ -57,6 +64,7 @@ describe.each([
     extension.activate();
     extension.disable();
     expect(forbiddenAccesses).toEqual([]);
+    expect(hostCalls).toEqual(["ExtensionStore.loadExtension"]);
   });
 
   it("contains no host SDK implementation or test fixtures", () => {
@@ -69,13 +77,19 @@ describe.each([
     expect(content).toContain("global.LensExtensions");
     expect(content).not.toContain('require("@freelensapp/extensions")');
     expect(content).not.toMatch(/@freelensapp\/(?:core|extensions)|freelens-extensions\.ts|forbiddenAccesses|vitest/);
+    // The libraries of the host are asked of the host: none of them is in the bundle.
+    expect(content).not.toMatch(/react\.production\.min|react-dom\.production|__REACT_DEVTOOLS|mobx\.cjs/);
     expect(files.some((file) => /\.test\.|kubeconfig|\.pem$|\.key$/.test(file.name))).toBe(false);
   });
 });
 
 it("main bundle leaves the dispatcher of the host process alone", () => {
   const probe = `
-    globalThis.LensExtensions = { Common: {}, Main: { LensExtension: class {} } };
+    globalThis.LensExtensions = {
+      Common: { Store: { ExtensionStore: class {} } },
+      Main: { LensExtension: class {} },
+    };
+    globalThis.Mobx = require("mobx");
     const slots = ["undici.globalDispatcher.1", "undici.globalDispatcher.2"].map((key) => Symbol.for(key));
     const before = slots.map((slot) => globalThis[slot]);
     require(process.argv[1]);

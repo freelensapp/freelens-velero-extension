@@ -1,10 +1,11 @@
 # Architecture
 
-Date: 2026-09-25
+Date: 2026-09-27
 
-Status: T0.3-T0.6 complete; the main request/download proof has local runtime evidence.
-SPEC-0001 remains Approved because actual-host activation is unverified. Feature UI,
-catalog/IPC integration and general authentication support are not implemented.
+Status: the foundation is complete and the discovery of the installation is in
+place: its rules, its state and the components every view starts with. No view is
+registered yet. The diagnostics, the IPC between the processes and the actions are
+not implemented: their sections below are the design their specs start from.
 
 Authority: [directives](../../AGENTS.md), [roadmap](ROADMAP.md), and
 [versioned evidence](RECON-T0.1.md). The evidence report pins Velero v1.18.2,
@@ -50,12 +51,16 @@ example's pnpm/TypeScript/electron-vite conventions. The manifest accepts the ho
 compatible with v1.10.3; Freelens v2 is explicitly outside the current compatibility
 target. Biome, Knip and Trunk run through `pnpm dlx` at the exact versions the
 scripts name, as in the other extensions.
-Activation remains inert in both main and renderer subclasses of the host SDK.
+Activation asks nothing of a cluster, in either process. Both open the store of the
+preferences, and that is all they do.
 T0.6 additionally exports the main diagnostic modules for compiled contract tests;
 no service, request, IPC handler or feature view is registered on activation.
 The renderer is built through electron-vite's preload target to produce the CommonJS
-module the host expects. A small build adapter maps the SDK's three root namespaces
-directly to `global.LensExtensions`, without loading or bundling the SDK implementation.
+module the host expects. A [build adapter](../../build/host-globals.ts) maps what the
+host provides to the globals it provides it under, without loading or bundling any of
+it: the SDK in both processes, MobX in both, React, its DOM and its JSX runtime and
+the bindings of MobX for React in the renderer. A build test fails when one of them is
+found in the output.
 
 Source lifecycle tests use process-specific host stubs that reject Kubernetes,
 catalog and IPC access. Compiled-entry tests load the actual generated CommonJS
@@ -69,7 +74,12 @@ Knip development checks source dependencies; its strict production mode checks t
 compiled main/renderer entries. The host SDK is a development-only type/build input,
 not an extension runtime dependency to install or bundle.
 The SDK's permissive type peer otherwise resolves to React 19 declarations. Pin
-React 17 declarations explicitly to match the selected host; this adds no renderer UI.
+React 17 declarations explicitly to match the selected host, and the libraries the
+host provides at the versions it provides them: they are what the tests of the views
+run against, and none of them is installed with the extension.
+The declarations of the SDK come from `@freelensapp/core`, a development dependency
+the paths of `tsconfig.json` point to: without it the resolution of the bundler takes
+the JavaScript of the SDK and leaves its types out.
 Generated entries are included explicitly in production analysis despite Git ignores.
 
 The hosted checks are the ones of the other extensions of the organization, on
@@ -103,9 +113,11 @@ before changing the client version. The main build replaces undici with
 extension never calls, and the real module installs a dispatcher for the whole
 process when it loads, which inside Freelens is the process of the host. Supported
 `WS_NO_*` build defines disable optional native accelerators without patching the
-library. The 276 normal/production tests cover 14 scaffold, 96
-environment/fixture, 48 diagnostic contracts and 118 of the operation states. The integration test covers the
-installation in the host.
+library. The 374 tests of the unit run, on the separate modules and on the
+production build, are 16 of the scaffold, 96 of the environment and its fixtures,
+48 of the diagnostic contracts, 118 of the operation states, 54 of the rules of the
+discovery, 26 of the state of an installation and of its reader, and 16 of the
+components. The integration test covers the installation in the host.
 The electron-vite warning about a missing standalone renderer
 configuration is expected: this extension intentionally builds its renderer through
 the preload target, whose generated entry is covered by the bundle tests.
@@ -169,6 +181,44 @@ explicit target contract below and document the path; do not parse English error
 strings. Do not create SelfSubjectAccessReview, diagnostic requests, or other API
 objects merely to render read-only views. A not-yet-tested write permission is
 unknown, not granted; the actual API decision is authoritative.
+
+### The Reads Of The Views
+
+The views read through the connection of the host to the cluster they are shown
+for, and through nothing else. The [reader](../../src/renderer/api/reader.ts) asks
+the request object of a `KubeApi` of the host for the response itself, which carries
+the status of the answer: the states of the table above come from that number, never
+from the text of an error. It sends `GET` and no other verb, and it is the only place
+of the renderer that reaches the cluster.
+
+| Read | When | Path |
+| --- | --- | --- |
+| What the API serves | A view opens, or the operator reads again | `/apis/velero.io/v1` |
+| Where the installations may be | The same | The backup storage locations of the cluster |
+| The five families of the installation | A namespace is selected, every 15 seconds while a view is open, or the operator reads again | The lists of the selected namespace |
+
+Facts of the host the design rests on, each one found by asking the packaged
+application:
+
+- A subclass of `KubeApi` does not keep its methods: the constructor of the host
+  answers with an object of its own. The reader is a function, and it builds a
+  plain `KubeApi` to take the connection from.
+- The host writes the store of an extension from its main process, and passes the
+  changes between its windows. The [store of the preferences](../../src/common/preferences-store.ts)
+  is opened in both processes: opened in the renderer alone, what the operator
+  chose was never written.
+
+The [state of an installation](../../src/renderer/state/installation.ts) is one for
+each frame, which is the frame of one cluster, and is created when the first view
+opens. Every change of the selected namespace makes a new generation, empties what
+was read and leaves the answers of the generation before where they arrive: an
+answer is taken only if the generation it was asked for is still the current one,
+and only the objects of the namespace that was asked are kept of it.
+
+The watch of the host is not used for these views. A list every 15 seconds while a
+view is open costs five requests, shows a failed read as such, with what was read
+before and when, and stops when the last view closes. The watch comes with the
+spec that needs what it gives.
 
 ### Create-Only Adapter Decision
 

@@ -25,7 +25,10 @@ does not make a bundled library development-only.
   reasons are in [ARCHITECTURE.md](ARCHITECTURE.md#scaffold-progress).
 - The build defines `WS_NO_BUFFER_UTIL` and `WS_NO_UTF_8_VALIDATE`: they disable
   the optional native accelerators of `ws`; no library is patched.
-- The renderer bundles nothing.
+- The renderer bundles no library: its bundle is the code of the views. React,
+  its DOM, its JSX runtime, MobX and its bindings for React are asked of the host
+  by the globals it provides them under, and a build test fails when one of them
+  is found in the output.
 
 The packed production build is about 0.6 MB.
 
@@ -34,6 +37,12 @@ The packed production build is about 0.6 MB.
 - The host SDK, `@freelensapp/extensions`, is a type and build input. The build
   maps it to the global the host provides and never bundles its implementation,
   nor anything the SDK depends on.
+- `@freelensapp/core` is where the declarations of the SDK are: the paths of
+  `tsconfig.json` point to them. Nothing of it is imported by the source.
+- `react`, `react-dom`, `mobx` and `mobx-react` are pinned at the versions the
+  host provides, 17.0.2, 6.15.0 and 7.6.0: the build reads the names they export
+  and the tests of the views run against them. `@testing-library/react` 12.1.5,
+  the last one for React 17, and `jsdom` are for those tests alone.
 - Biome, Knip, Trunk and shx are not dependencies: the scripts run them through
   `pnpm dlx` at an exact version.
 - There is no dependency override and no patch.

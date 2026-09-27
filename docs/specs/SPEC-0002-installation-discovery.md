@@ -121,7 +121,42 @@ coverage rather than claim exhaustive detection.
 
 ## Evidence And Deviations
 
-Approved on 2026-09-27; T1.1 starts with the first milestone. No implementation,
-application tests or runtime evidence yet. The upstream drift watch of the start of
-the milestone is in the [recon](../development/RECON-T0.1.md#upstream-drift-watch):
-the release after the reviewed one changes nothing this spec reads.
+Approved on 2026-09-27. The upstream drift watch of the start of the milestone is
+in the [recon](../development/RECON-T0.1.md#upstream-drift-watch): the release
+after the reviewed one changes nothing this spec reads.
+
+T1.1 is implemented in what every view starts with. The
+[rules](../../src/common/discovery.ts) are pure functions on the answers of the
+cluster; the [state of an installation](../../src/renderer/state/installation.ts)
+asks and keeps; the [target bar](../../src/renderer/components/target-bar.tsx) and
+the [states before a view](../../src/renderer/components/entry-state.tsx) show. No
+page is registered and the sidebar has no entry: they come with the first view,
+the Backups, so that nothing leads to a page that is not there. The status of the
+spec follows the suites of the views in a packaged Freelens.
+
+| Check | Part covered by T1.1 | Evidence |
+| --- | --- | --- |
+| DISC-01 | The component; the packaged app comes with the suites | Component: the activation asks nothing of the host but its store; a view that opens asks the two paths of the discovery, and the families of a namespace only after one is chosen |
+| DISC-02 | The unit | Unit: an answer of 404, the kinds that are missing, 401 and 403, an answer without a status. Component: the six states, each with its words |
+| DISC-03 | The component; the identity on the cluster comes with the suites | Component: with the lists of the cluster denied, the namespace that is named is read |
+| DISC-04 | The component | Component: two suggestions and no choice made for the operator; a namespace that is not found any more stays selected |
+| DISC-05 | The unit | Unit: a late answer of the target before, equal names in two namespaces, objects of another namespace in an answer. No request crosses the two processes in this slice: there is no sender to tell from another |
+| DISC-06 | The component | Component: a family that is denied is said so, and the ones that were read stay |
+| DISC-07 | The adapter | Adapter: the reader sends `GET` and nothing else |
+| DISC-08 | None: no view is registered yet | |
+| DISC-09 | All of it | Component, with the clock as a dependency: a read that fails after one that succeeded keeps what was read and says when it was read; a failure without a status is not an absence |
+| DISC-10 | The content; the restart comes with the suites | Unit: what is kept is two maps of namespaces by cluster, and what is read of a stored value is the names that are names |
+| DISC-11 | None: it is of the packaged app | |
+
+What the implementation adds to the text of the spec, inside its requirements:
+
+- Where a view is shown, the form that names a namespace is behind a command of
+  the target bar, "Other namespace". It is how a namespace that nothing suggests
+  is read from a view that is already open, and where a namespace that was named
+  is taken back.
+- The discovery of the installations is the list of the backup storage locations
+  of the cluster, as the design says. It is asked again with every read again.
+- The views read again every 15 seconds while one is open, and do not watch: a
+  list that fails is shown as such, with what was read before and when.
+- There is no write state in this slice to reset when the target changes
+  (REQ-017): it comes with the write gate.

@@ -1,0 +1,168 @@
+.targetBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 24px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--borderFaintColor);
+  background: var(--layoutTabsBackground);
+}
+
+.target {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.targetLabel {
+  color: var(--textColorSecondary);
+  white-space: nowrap;
+}
+
+.targetValue {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.selector {
+  min-width: min(220px, 100%);
+  max-width: min(420px, 100%);
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+.readTime {
+  color: var(--textColorSecondary);
+  white-space: nowrap;
+}
+
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--borderFaintColor);
+  overflow-wrap: anywhere;
+}
+
+.noticeWarning {
+  border-left: 3px solid var(--colorWarning);
+}
+
+.noticeError {
+  border-left: 3px solid var(--colorError);
+}
+
+.noticeInfo {
+  border-left: 3px solid var(--colorInfo);
+}
+
+.state {
+  max-width: 720px;
+  margin: 32px auto;
+  padding: 0 24px;
+}
+
+.stateTitle {
+  margin-bottom: 12px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.stateText {
+  margin-bottom: 12px;
+  color: var(--textColorSecondary);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.choice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--borderColor);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--textColorPrimary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.choice:hover,
+.choice:focus-visible {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.choiceName {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.choiceOrigin {
+  color: var(--textColorSecondary);
+}
+
+.form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.formField {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.formError {
+  flex: 1 0 100%;
+  color: var(--colorError);
+}
+
+.namespaces {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--borderFaintColor);
+  background: var(--layoutTabsBackground);
+}
+
+.namespaces .form {
+  max-width: 720px;
+  margin-top: 0;
+}
+
+.named {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 24px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.named li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}

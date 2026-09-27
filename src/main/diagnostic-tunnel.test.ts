@@ -84,16 +84,24 @@ describe("owned Kubernetes pod tunnel", () => {
     }),
   });
   const compiled = () => {
-    const globals = globalThis as typeof globalThis & { LensExtensions?: unknown };
-    const previous = globals.LensExtensions;
+    const globals = globalThis as typeof globalThis & { LensExtensions?: unknown; Mobx?: unknown };
+    const previous = { sdk: globals.LensExtensions, state: globals.Mobx };
+    const load = createRequire(import.meta.url);
 
-    globals.LensExtensions = { Main: { LensExtension: class {} }, Common: {}, Renderer: {} };
+    // What the bundle asks of the host when it loads: its SDK and its state library.
+    globals.LensExtensions = {
+      Main: { LensExtension: class {} },
+      Common: { Store: { ExtensionStore: class {} } },
+      Renderer: {},
+    };
+    globals.Mobx = load("mobx");
     try {
-      return (createRequire(import.meta.url)("../../out/main/index.js") as { openPodTunnel: typeof openPodTunnel })
-        .openPodTunnel;
+      return (load("../../out/main/index.js") as { openPodTunnel: typeof openPodTunnel }).openPodTunnel;
     } finally {
-      if (previous === undefined) delete globals.LensExtensions;
-      else globals.LensExtensions = previous;
+      if (previous.sdk === undefined) delete globals.LensExtensions;
+      else globals.LensExtensions = previous.sdk;
+      if (previous.state === undefined) delete globals.Mobx;
+      else globals.Mobx = previous.state;
     }
   };
 
