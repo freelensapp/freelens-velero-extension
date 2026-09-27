@@ -47,6 +47,15 @@ Explain the native or custom presentation using [DESIGN.md](../development/DESIG
 Cover loading, empty, restricted, partial, stale, unknown and failure states; both
 themes, keyboard navigation, cancellation and changed-target behavior as applicable.
 
+Answer the two questions every spec answers:
+
+- **Standard or ad hoc view, and why.** For every task of the operator, whether the
+  view is a list plus drawer or a purpose-built one, and why the chosen one is the
+  best experience for that task.
+- **Safety.** What the feature writes to the cluster, a diagnostic request included,
+  and how the write mode and the confirmation apply. A feature that only reads says
+  so, and says how the tests prove it.
+
 ## Tests
 
 | Check | Layer | Requirements | Scenario and expected evidence |

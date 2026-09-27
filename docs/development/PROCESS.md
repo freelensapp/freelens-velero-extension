@@ -60,7 +60,7 @@ Some behavior cannot be verified automatically (for example: the recovery
 of persistent volumes on a production-like cluster, a large artifact over a
 slow link, the lived experience of a guided restore). In that case:
 
-1. The spec lists the manual test steps under "Manual verification".
+1. The spec lists the manual test steps under "Success Criteria".
 2. The agent or contributor asks the lead maintainer to run them, providing
    exact steps and expected outcomes.
 3. The result is recorded in the spec (date, result, role of the tester)
