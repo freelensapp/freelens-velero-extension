@@ -1,0 +1,407 @@
+import { describe, expect, it, vi } from "vitest";
+import { emptyPreferences, RESOURCES } from "../../common/discovery";
+import { Installation } from "./installation";
+
+import type { Answer, Family, Preferences } from "../../common/discovery";
+
+const DISCOVERY = "/apis/velero.io/v1";
+const LOCATIONS = "/apis/velero.io/v1/backupstoragelocations";
+
+function object(name: string, namespace: string, uid = `${namespace}-${name}`) {
+  return { metadata: { name, namespace, uid } };
+}
+
+function list(...items: unknown[]): Answer {
+  return { status: 200, body: { items } };
+}
+
+const served: Answer = {
+  status: 200,
+  body: { resources: Object.values(RESOURCES).map((name) => ({ name })) },
+};
+
+// A cluster that answers from a table, and keeps the list of what it was asked.
+function cluster(answers: Record<string, Answer | (() => Promise<Answer>)>) {
+  const asked: string[] = [];
+  const read = async (path: string): Promise<Answer> => {
+    asked.push(path);
+    const answer = answers[path] ?? { status: 404 };
+
+    return typeof answer === "function" ? answer() : answer;
+  };
+
+  return { asked, read, answers };
+}
+
+function storage(initial: Preferences = emptyPreferences()) {
+  const written: Preferences[] = [];
+
+  return {
+    written,
+    read: () => initial,
+    write: (preferences: Preferences) => {
+      written.push(preferences);
+    },
+  };
+}
+
+function path(family: Family, namespace: string): string {
+  return `/apis/velero.io/v1/namespaces/${namespace}/${RESOURCES[family]}`;
+}
+
+function installation(
+  answers: Record<string, Answer | (() => Promise<Answer>)>,
+  preferences: Preferences = emptyPreferences(),
+  clock = { now: 1000 },
+) {
+  const api = cluster(answers);
+  const kept = storage(preferences);
+  const state = new Installation({
+    cluster: { id: "cluster-a", name: "local-demo" },
+    read: api.read,
+    now: () => clock.now,
+    storage: kept,
+  });
+
+  return { state, api, kept, clock };
+}
+
+const two = {
+  [DISCOVERY]: served,
+  [LOCATIONS]: list(object("default", "velero-a"), object("default", "velero-b")),
+  [path("backups", "velero-a")]: list(object("nightly-1", "velero-a"), object("nightly-2", "velero-a")),
+  [path("backups", "velero-b")]: list(object("nightly-1", "velero-b")),
+  [path("restores", "velero-a")]: list(),
+  [path("restores", "velero-b")]: list(),
+  [path("schedules", "velero-a")]: list(object("nightly", "velero-a")),
+  [path("schedules", "velero-b")]: list(),
+  [path("storageLocations", "velero-a")]: list(object("default", "velero-a")),
+  [path("storageLocations", "velero-b")]: list(object("default", "velero-b")),
+  [path("snapshotLocations", "velero-a")]: list(),
+  [path("snapshotLocations", "velero-b")]: list(),
+};
+
+describe("discovery", () => {
+  it("asks nothing until a view is opened", async () => {
+    const { state, api } = installation(two);
+
+    expect(state.entry).toEqual({ state: "loading" });
+    expect(api.asked).toEqual([]);
+    await state.open();
+    expect(api.asked.slice(0, 2).sort()).toEqual([DISCOVERY, LOCATIONS]);
+  });
+
+  it("asks once for any number of views that open", async () => {
+    const { state, api } = installation(two);
+
+    await state.open();
+    const first = api.asked.length;
+
+    await state.open();
+    await state.open();
+    expect(api.asked).toHaveLength(first);
+  });
+
+  it("asks for a choice among two installations and reads neither", async () => {
+    const { state, api } = installation(two);
+
+    await state.open();
+    expect(state.entry).toMatchObject({ state: "choose" });
+    expect(state.namespace).toBeUndefined();
+    expect(api.asked.filter((asked) => asked.includes("/namespaces/"))).toEqual([]);
+    expect(state.read("backups")).toEqual({ status: "idle", items: [] });
+  });
+
+  it("reads the five families of the namespace that is chosen, and of no other", async () => {
+    const { state, api } = installation(two);
+
+    await state.open();
+    state.select("velero-a");
+    await vi.waitFor(() => expect(state.read("backups").status).toBe("ready"));
+    expect(state.entry).toEqual({ state: "ready", namespace: "velero-a", stale: false, missing: [] });
+    expect(api.asked.filter((asked) => asked.includes("/namespaces/")).sort()).toEqual(
+      (["backups", "restores", "schedules", "snapshotLocations", "storageLocations"] as Family[])
+        .map((family) => path(family, "velero-a"))
+        .sort(),
+    );
+    expect(state.read("backups").items.map((item) => item.metadata.name)).toEqual(["nightly-1", "nightly-2"]);
+  });
+
+  it("takes the only installation there is, and does not keep a choice the operator did not make", async () => {
+    const { state, kept } = installation({ ...two, [LOCATIONS]: list(object("default", "velero-a")) });
+
+    await state.open();
+    expect(state.selection).toEqual({ state: "selected", namespace: "velero-a", reason: "only" });
+    expect(state.read("backups").status).toBe("ready");
+    expect(kept.written).toEqual([]);
+  });
+
+  it("only reads: it has one verb, and the paths it asks are the ones of the discovery and of the families", async () => {
+    const { state, api } = installation(two);
+
+    await state.open();
+    state.select("velero-a");
+    await vi.waitFor(() => expect(state.read("backups").status).toBe("ready"));
+    await state.refresh();
+    state.configure("velero-c");
+    await vi.waitFor(() => expect(state.asked).toBeDefined());
+    for (const asked of api.asked) {
+      expect(asked).toMatch(
+        /^\/apis\/velero\.io\/v1(\/backupstoragelocations|\/namespaces\/velero-[abc]\/(backups|restores|schedules|backupstoragelocations|volumesnapshotlocations))?$/,
+      );
+    }
+    expect(api.asked.some((asked) => /downloadrequests|serverstatusrequests|accessreview/.test(asked))).toBe(false);
+  });
+});
+
+describe("restricted access", () => {
+  const restricted = {
+    [DISCOVERY]: { status: 403 },
+    [LOCATIONS]: { status: 403 },
+    [path("backups", "velero-restricted")]: list(object("nightly-1", "velero-restricted")),
+    [path("restores", "velero-restricted")]: { status: 403 },
+    [path("schedules", "velero-restricted")]: list(),
+    [path("storageLocations", "velero-restricted")]: list(object("default", "velero-restricted")),
+    [path("snapshotLocations", "velero-restricted")]: { status: 500 },
+  };
+
+  it("does not call Velero absent when the lists of the cluster are denied", async () => {
+    const { state } = installation(restricted);
+
+    await state.open();
+    expect(state.api).toEqual({ state: "restricted" });
+    expect(state.found).toEqual({ state: "restricted" });
+    expect(state.entry).toEqual({ state: "restricted", configurable: true });
+  });
+
+  it("reads the namespace the operator configures, without any permission on the cluster", async () => {
+    const { state, kept } = installation(restricted);
+
+    await state.open();
+    expect(state.configure("velero-restricted")).toBe(true);
+    await vi.waitFor(() => expect(state.asked).toBeDefined());
+    expect(state.entry).toMatchObject({ state: "ready", namespace: "velero-restricted" });
+    expect(state.read("backups").items.map((item) => item.metadata.name)).toEqual(["nightly-1"]);
+    expect(kept.written.at(-1)).toEqual({
+      selected: { "cluster-a": "velero-restricted" },
+      configured: { "cluster-a": ["velero-restricted"] },
+    });
+  });
+
+  it("keeps the families that were read when another is denied, and gives the denied one no count", async () => {
+    const { state } = installation(restricted);
+
+    await state.open();
+    state.configure("velero-restricted");
+    await vi.waitFor(() => expect(state.asked).toBeDefined());
+    expect(state.read("backups")).toMatchObject({ status: "ready", items: [{}] });
+    expect(state.read("storageLocations")).toMatchObject({ status: "ready", items: [{}] });
+    expect(state.read("restores")).toEqual({ status: "forbidden", items: [], lastSuccess: undefined });
+    expect(state.read("snapshotLocations")).toEqual({ status: "failed", items: [], lastSuccess: undefined });
+    expect(state.read("schedules")).toMatchObject({ status: "ready", items: [] });
+  });
+
+  it("refuses what is not the name of a namespace, before it is part of a request", async () => {
+    const { state, api, kept } = installation(restricted);
+
+    await state.open();
+    const before = api.asked.length;
+
+    for (const name of ["", "Velero", "../velero", "velero/backups", "velero?watch=true", "a".repeat(64)]) {
+      expect(state.configure(name)).toBe(false);
+    }
+    expect(api.asked).toHaveLength(before);
+    expect(kept.written).toEqual([]);
+    expect(state.entry).toEqual({ state: "restricted", configurable: true });
+  });
+});
+
+describe("families whose kind is not served", () => {
+  it("are named, and are not asked", async () => {
+    const { state, api } = installation({
+      ...two,
+      [DISCOVERY]: { status: 200, body: { resources: [{ name: "backups" }, { name: "backupstoragelocations" }] } },
+      [LOCATIONS]: list(object("default", "velero-a")),
+    });
+
+    await state.open();
+    expect(state.entry).toEqual({
+      state: "ready",
+      namespace: "velero-a",
+      stale: false,
+      missing: ["restores", "schedules", "snapshotLocations"],
+    });
+    expect(state.read("restores").status).toBe("not-served");
+    expect(state.read("backups").status).toBe("ready");
+    expect(api.asked.filter((asked) => asked.endsWith("/restores") || asked.endsWith("/schedules"))).toEqual([]);
+  });
+});
+
+describe("switch of the target", () => {
+  it("takes nothing of what was asked for the namespace that is not selected any more", async () => {
+    let answer: (value: Answer) => void = () => undefined;
+    const late = new Promise<Answer>((resolve) => {
+      answer = resolve;
+    });
+    const { state } = installation({ ...two, [path("backups", "velero-a")]: () => late });
+
+    await state.open();
+    state.select("velero-a");
+    state.select("velero-b");
+    await vi.waitFor(() => expect(state.read("backups").status).toBe("ready"));
+    expect(state.read("backups").items.map((item) => item.metadata.uid)).toEqual(["velero-b-nightly-1"]);
+    // The namespace selected before answers now, with a backup of the same name.
+    answer(list(object("nightly-1", "velero-a"), object("nightly-2", "velero-a")));
+    await late;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(state.namespace).toBe("velero-b");
+    expect(state.read("backups").items.map((item) => item.metadata.uid)).toEqual(["velero-b-nightly-1"]);
+  });
+
+  it("shows nothing of the namespace before while the one after is being read", async () => {
+    const { state } = installation(two);
+
+    await state.open();
+    state.select("velero-a");
+    await vi.waitFor(() => expect(state.read("backups").status).toBe("ready"));
+    state.select("velero-b");
+    // Before any answer: nothing of velero-a is left to show.
+    for (const family of ["backups", "schedules", "storageLocations"] as Family[]) {
+      expect(state.read(family).items).toEqual([]);
+      expect(state.read(family).lastSuccess).toBeUndefined();
+    }
+    expect(state.generation).toEqual({ cluster: "cluster-a", namespace: "velero-b", number: 2 });
+  });
+
+  it("leaves out of an answer the objects of another namespace", async () => {
+    const { state } = installation({
+      ...two,
+      [path("backups", "velero-a")]: list(object("nightly-1", "velero-a"), object("nightly-1", "velero-b")),
+    });
+
+    await state.open();
+    state.select("velero-a");
+    await vi.waitFor(() => expect(state.read("backups").status).toBe("ready"));
+    expect(state.read("backups").items.map((item) => item.metadata.uid)).toEqual(["velero-a-nightly-1"]);
+  });
+
+  it("does not select a namespace that cannot be chosen", async () => {
+    const { state, kept } = installation(two);
+
+    await state.open();
+    state.select("velero-z");
+    state.select("kube-system");
+    expect(state.entry).toMatchObject({ state: "choose" });
+    expect(kept.written).toEqual([]);
+  });
+});
+
+describe("a namespace that is not there any more", () => {
+  it("stays the one selected, and is not replaced by the one that is left", async () => {
+    const { state, kept } = installation(
+      { ...two, [LOCATIONS]: list(object("default", "velero-b")) },
+      { selected: { "cluster-a": "velero-a" }, configured: {} },
+    );
+
+    await state.open();
+    expect(state.selection).toEqual({ state: "stale", namespace: "velero-a" });
+    expect(state.entry).toMatchObject({ state: "ready", namespace: "velero-a", stale: true });
+    expect(kept.written).toEqual([]);
+  });
+
+  it("is of its cluster: the choice made in another cluster is not taken", async () => {
+    const { state } = installation(two, { selected: { "cluster-b": "velero-b" }, configured: {} });
+
+    await state.open();
+    expect(state.entry).toMatchObject({ state: "choose" });
+  });
+});
+
+describe("refresh", () => {
+  it("keeps what was read, and when, if the next read does not succeed", async () => {
+    const clock = { now: 1000 };
+    const answers: Record<string, Answer> = { ...two, [LOCATIONS]: list(object("default", "velero-a")) };
+    const { state } = installation(answers, emptyPreferences(), clock);
+
+    await state.open();
+    expect(state.read("backups")).toMatchObject({ status: "ready", lastSuccess: 1000 });
+    clock.now = 5000;
+    answers[path("backups", "velero-a")] = { status: 500, body: { message: "the server could not find it" } };
+    answers[path("schedules", "velero-a")] = {};
+    await state.refresh();
+    expect(state.read("backups")).toMatchObject({ status: "failed", lastSuccess: 1000 });
+    expect(state.read("backups").items.map((item) => item.metadata.name)).toEqual(["nightly-1", "nightly-2"]);
+    expect(state.read("schedules")).toMatchObject({ status: "failed", lastSuccess: 1000, items: [{}] });
+    expect(state.read("storageLocations")).toMatchObject({ status: "ready", lastSuccess: 5000 });
+    expect(state.asked).toBe(5000);
+  });
+
+  it("does not turn a failed discovery into an absence", async () => {
+    const answers: Record<string, Answer> = { ...two, [LOCATIONS]: list(object("default", "velero-a")) };
+    const { state } = installation(answers);
+
+    await state.open();
+    answers[DISCOVERY] = { status: 503, body: "404 page not found" };
+    await state.refresh();
+    expect(state.api).toEqual({ state: "failed" });
+    expect(state.entry).toMatchObject({ state: "ready", namespace: "velero-a" });
+  });
+});
+
+describe("what is kept between two sessions", () => {
+  it("is the namespaces the operator chose and configured", async () => {
+    const { state, kept } = installation(two);
+
+    await state.open();
+    state.select("velero-b");
+    state.configure("velero-c");
+    await vi.waitFor(() => expect(state.asked).toBeDefined());
+    expect(kept.written.at(-1)).toEqual({
+      selected: { "cluster-a": "velero-c" },
+      configured: { "cluster-a": ["velero-c"] },
+    });
+    expect(JSON.stringify(kept.written)).not.toMatch(/nightly|uid|resourceVersion|token|kubeconfig|write/i);
+  });
+
+  it("forgets a namespace that was configured, and with it the selection of that namespace", async () => {
+    const { state, kept } = installation(two, {
+      selected: { "cluster-a": "velero-c", "cluster-b": "velero-c" },
+      configured: { "cluster-a": ["velero-c"], "cluster-b": ["velero-c"] },
+    });
+
+    await state.open();
+    expect(state.namespace).toBe("velero-c");
+    state.forget("velero-c");
+    expect(kept.written.at(-1)).toEqual({
+      selected: { "cluster-b": "velero-c" },
+      configured: { "cluster-b": ["velero-c"] },
+    });
+    expect(state.entry).toMatchObject({ state: "choose" });
+  });
+});
+
+describe("a view that is open", () => {
+  it("asks again while it is open, and stops when the last one closes", async () => {
+    vi.useFakeTimers();
+    try {
+      const { state, api } = installation({ ...two, [LOCATIONS]: list(object("default", "velero-a")) });
+
+      await state.open();
+      const opened = api.asked.length;
+      const first = state.watch(1000);
+      const second = state.watch(1000);
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(api.asked.length).toBe(opened + 5);
+      first();
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(api.asked.length).toBe(opened + 10);
+      second();
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(api.asked.length).toBe(opened + 10);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

@@ -235,16 +235,30 @@ pnpm clean:all            # Clean everything (node_modules, out, tgz)
 src/
   main/index.ts             # Extension entry point (main process, Node.js)
   main/diagnostic-*.ts      # Create-only Kubernetes adapter, DownloadRequest service, transport, pod tunnel
-  renderer/index.ts         # Extension entry point (renderer process, Chromium)
-  common/                   # Pure helpers on plain data: types, phases, evidence, progress, durations, references
-build/host-globals.ts       # Maps the host SDK to the global provided by Freelens
+  renderer/index.tsx        # Extension entry point (renderer process, Chromium)
+  renderer/api/             # The kinds of Velero, and the reader: the only place that reaches the cluster
+  renderer/state/           # What the views of a cluster know of an installation
+  renderer/components/      # Target bar and states before a view
+  common/                   # Pure helpers on plain data, and the store of the preferences
+build/host-globals.ts       # Maps what the host provides to the globals it provides it under
 integration/                # Playwright tests against a pinned Freelens build
-test/                       # Vitest stubs for the host, build and environment tests
+test/                       # Vitest stubs for the host and its components, build and environment tests
 e2e/scripts/                # Disposable kind cluster with Velero and S3, fixtures, transport proof
 docs/                       # Development docs and one spec per feature
 ```
 
 Build output goes to `out/`.
+
+## Host Facts That Cost A Run To Find
+
+- The views reach the cluster through `src/renderer/api/reader.ts` and through
+  nothing else. It sends `GET`. A state of a view comes from the status of an
+  answer, never from the text of an error.
+- A subclass of `KubeApi` does not keep its methods at run time. Do not add
+  methods to the `Api` classes: write a function.
+- The host writes the store of an extension from its main process. A store that
+  must be kept is opened in both processes, in `onActivate`.
+- `pnpm exec biome` does not exist here: `pnpm biome:fix` and `pnpm biome:check`.
 
 ## Architecture And UI
 
@@ -310,9 +324,11 @@ Each CRD file exports three classes: the KubeObject, the KubeApi, and the KubeOb
 ## Key Dependencies (provided by Freelens host at runtime)
 
 `@freelensapp/extensions` is NOT bundled: `build/host-globals.ts` maps it to
-`global.LensExtensions`. React, MobX and the other libraries of the host get
-their mapping with the first spec that has a UI; until then no source imports
-them.
+`global.LensExtensions`. MobX is mapped to `global.Mobx` in both processes;
+React, its DOM, its JSX runtime and the bindings of MobX for React are mapped in
+the renderer. They are development dependencies pinned at the versions of the
+host, and a build test fails when one of them is found in the output. A library
+of the host that no source imports yet gets its mapping when one does.
 
 Other dependencies ARE bundled into the extension output. Today the main
 bundle carries `@kubernetes/client-node` and `ws`.
