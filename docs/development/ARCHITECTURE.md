@@ -78,7 +78,11 @@ the unit tests, on the build with separate modules and on the production build;
 the integration tests, which install the packed production build in a Freelens
 v1.10.3 built for the purpose; OSV-Scanner. They run on synthetic data only. Renovate and the daily maintenance
 workflows of the organization (npm audit, npm dedupe, Biome migrate, Trunk upgrade)
-open their pull requests on branches named `automated/*`.
+open their pull requests on branches named `automated/*`. A release is three
+workflows: the version workflow opens the pull request that sets the version, the
+tag workflow tags main when that pull request is merged, the release workflow
+builds the production bundle from the tag, publishes it to npm and attaches the
+tarball, its checksums and its software bill of materials to the GitHub release.
 
 ### Dependencies
 
