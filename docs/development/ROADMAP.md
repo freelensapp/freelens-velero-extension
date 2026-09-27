@@ -44,7 +44,7 @@ Status values: `Planned`, `Draft` (the spec is written, not approved),
 | Scripts that rebuilt third-party images and installed their tools removed | | | In PR |
 | Package manifest and tools as the other extensions; no dependency override | | | In PR |
 | Renovate and the automated maintenance workflows | | | In PR |
-| Activation of the packed extension in a packaged Freelens, as an integration test | FND-10 | [SPEC-0001](../specs/SPEC-0001-local-foundation.md) | Planned |
+| Activation of the packed extension in a packaged Freelens, as an integration test | FND-10 | [SPEC-0001](../specs/SPEC-0001-local-foundation.md) | In PR |
 | Test environment on Linux and macOS, x64 and ARM64; demo and pre-review commands | | | Planned |
 | Release workflows | | | Planned |
 

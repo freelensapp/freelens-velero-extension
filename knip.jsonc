@@ -12,7 +12,8 @@
   ],
   "project": ["*.ts", "build/**/*.ts", "src/**/*.ts", "test/**/*.ts", "e2e/scripts/**/*.mts", "out/**/*.js!"],
 
-  "ignoreBinaries": ["kubectl"],
+  // electron-rebuild belongs to the Freelens checkout of the integration workflow
+  "ignoreBinaries": ["kubectl", "electron-rebuild"],
 
   "typescript": {
     "config": ["tsconfig.json"]
