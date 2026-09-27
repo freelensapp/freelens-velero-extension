@@ -129,10 +129,10 @@ T1.1 is implemented in what every view starts with. The
 [rules](../../src/common/discovery.ts) are pure functions on the answers of the
 cluster; the [state of an installation](../../src/renderer/state/installation.ts)
 asks and keeps; the [target bar](../../src/renderer/components/target-bar.tsx) and
-the [states before a view](../../src/renderer/components/entry-state.tsx) show. No
-page is registered and the sidebar has no entry: they come with the first view,
-the Backups, so that nothing leads to a page that is not there. The status of the
-spec follows the suites of the views in a packaged Freelens.
+the [states before a view](../../src/renderer/components/entry-state.tsx) show. The
+page and the entries of the sidebar came with the first view, the Backups, so that
+nothing led to a page that was not there. The status of the spec follows the
+suites of the views in a packaged Freelens.
 
 | Check | Part covered by T1.1 | Evidence |
 | --- | --- | --- |
@@ -143,7 +143,7 @@ spec follows the suites of the views in a packaged Freelens.
 | DISC-05 | The unit | Unit: a late answer of the target before, equal names in two namespaces, objects of another namespace in an answer. No request crosses the two processes in this slice: there is no sender to tell from another |
 | DISC-06 | The component | Component: a family that is denied is said so, and the ones that were read stay |
 | DISC-07 | The adapter | Adapter: the reader sends `GET` and nothing else |
-| DISC-08 | None: no view is registered yet | |
+| DISC-08 | The registration; the packaged app comes with the suites | Unit: the sidebar has Velero and, under it, Backups, and every entry leads to a page that exists |
 | DISC-09 | All of it | Component, with the clock as a dependency: a read that fails after one that succeeded keeps what was read and says when it was read; a failure without a status is not an absence |
 | DISC-10 | The content; the restart comes with the suites | Unit: what is kept is two maps of namespaces by cluster, and what is read of a stored value is the names that are names |
 | DISC-11 | None: it is of the packaged app | |

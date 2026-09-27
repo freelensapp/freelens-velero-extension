@@ -14,9 +14,9 @@ slice per task even when a spec covers several closely related tasks.
 
 | Specification | Tasks | Requirement IDs | Status | Runtime evidence |
 | --- | --- | --- | --- | --- |
-| [SPEC-0001: Local foundation](SPEC-0001-local-foundation.md) | T0.3, T0.4, T0.5, T0.6 separately | REQ-001 through REQ-012 | Approved | 161 of the 375 tests; local setup, recovery, RBAC and compiled-main transport/cleanup pass; activation in Freelens as an integration test |
+| [SPEC-0001: Local foundation](SPEC-0001-local-foundation.md) | T0.3, T0.4, T0.5, T0.6 separately | REQ-001 through REQ-012 | Approved | 161 of the 441 tests; local setup, recovery, RBAC and compiled-main transport/cleanup pass; activation in Freelens as an integration test |
 | [SPEC-0002: Installation discovery](SPEC-0002-installation-discovery.md) | T1.1 | REQ-013 through REQ-023 | Approved | 96 tests of the rules, of the state and of the components; nothing in a packaged Freelens yet |
-| [SPEC-0003: States and read-only Backups](SPEC-0003-backup-read-only.md) | T1.2, T1.3 separately | REQ-024 through REQ-037 | Approved | 118 unit tests of the states, T1.2; no view yet |
+| [SPEC-0003: States and read-only Backups](SPEC-0003-backup-read-only.md) | T1.2, T1.3 separately | REQ-024 through REQ-037 | Approved | 118 unit tests of the states, 66 of what the views show and of the components; nothing in a packaged Freelens yet |
 | [SPEC-0004: Test environment on every platform](SPEC-0004-test-environment-every-platform.md) | Foundation | REQ-038 through REQ-049 | Implemented | 96 environment tests; runs on macOS x64 and on the hosted runner, Linux ARM64 |
 
 Next unallocated requirement ID: REQ-050. IDs are unique across this project;

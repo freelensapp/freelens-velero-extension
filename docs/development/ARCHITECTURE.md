@@ -2,10 +2,10 @@
 
 Date: 2026-09-27
 
-Status: the foundation is complete and the discovery of the installation is in
-place: its rules, its state and the components every view starts with. No view is
-registered yet. The diagnostics, the IPC between the processes and the actions are
-not implemented: their sections below are the design their specs start from.
+Status: the foundation is complete and the first views are in place: the discovery of
+the installation and the Backups, read only. The diagnostics, the IPC between the
+processes and the actions are not implemented: their sections below are the design
+their specs start from.
 
 Authority: [directives](../../AGENTS.md), [roadmap](ROADMAP.md), and
 [versioned evidence](RECON-T0.1.md). The evidence report pins Velero v1.18.2,
@@ -52,9 +52,10 @@ compatible with v1.10.3; Freelens v2 is explicitly outside the current compatibi
 target. Biome, Knip and Trunk run through `pnpm dlx` at the exact versions the
 scripts name, as in the other extensions.
 Activation asks nothing of a cluster, in either process. Both open the store of the
-preferences, and that is all they do.
+preferences; the renderer registers the page of the Backups, its two entries of the
+sidebar and the section it adds to the details the host shows of a Backup.
 T0.6 additionally exports the main diagnostic modules for compiled contract tests;
-no service, request, IPC handler or feature view is registered on activation.
+no service, request or IPC handler is registered on activation.
 The renderer is built through electron-vite's preload target to produce the CommonJS
 module the host expects. A [build adapter](../../build/host-globals.ts) maps what the
 host provides to the globals it provides it under, without loading or bundling any of
@@ -113,11 +114,12 @@ before changing the client version. The main build replaces undici with
 extension never calls, and the real module installs a dispatcher for the whole
 process when it loads, which inside Freelens is the process of the host. Supported
 `WS_NO_*` build defines disable optional native accelerators without patching the
-library. The 375 tests of the unit run, on the separate modules and on the
+library. The 441 tests of the unit run, on the separate modules and on the
 production build, are 17 of the scaffold, 96 of the environment and its fixtures,
 48 of the diagnostic contracts, 118 of the operation states, 54 of the rules of the
-discovery, 26 of the state of an installation and of its reader, and 16 of the
-components. The integration test covers the installation in the host.
+discovery, 49 of what the views show of a backup, 26 of the state of an
+installation and of its reader, and 33 of the components. The integration test
+covers the installation in the host.
 The electron-vite warning about a missing standalone renderer
 configuration is expected: this extension intentionally builds its renderer through
 the preload target, whose generated entry is covered by the bundle tests.
@@ -203,6 +205,9 @@ application:
 - A subclass of `KubeApi` does not keep its methods: the constructor of the host
   answers with an object of its own. The reader is a function, and it builds a
   plain `KubeApi` to take the connection from.
+- An object of the API has no `selfLink` any more, and the host asks for one to
+  build an object of a list. The [store of the list](../../src/renderer/state/list-store.ts)
+  adds it to the copy it gives to the host.
 - The host writes the store of an extension from its main process, and passes the
   changes between its windows. The [store of the preferences](../../src/common/preferences-store.ts)
   is opened in both processes: opened in the renderer alone, what the operator
@@ -213,7 +218,9 @@ each frame, which is the frame of one cluster, and is created when the first vie
 opens. Every change of the selected namespace makes a new generation, empties what
 was read and leaves the answers of the generation before where they arrive: an
 answer is taken only if the generation it was asked for is still the current one,
-and only the objects of the namespace that was asked are kept of it.
+and only the objects of the namespace that was asked are kept of it. The lists of
+the host are given a store that selects nothing and removes nothing, with
+`subscribeStores` off: the extension reads, the host draws.
 
 The watch of the host is not used for these views. A list every 15 seconds while a
 view is open costs five requests, shows a failed read as such, with what was read

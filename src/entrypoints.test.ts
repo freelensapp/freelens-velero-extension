@@ -45,15 +45,31 @@ describe.each([
   });
 });
 
-describe.each([
-  ["main", VeleroMain],
-  ["renderer", VeleroRenderer],
-] as const)("what the extension registers in the %s process", (_name, Extension) => {
-  it("is nothing: no page, no entry of the sidebar, no section of the details", () => {
-    const extension = Reflect.construct(Extension, []) as HostExtensionStub;
+describe("what the extension registers", () => {
+  it("is nothing in the main process", () => {
+    const extension = Reflect.construct(VeleroMain, []) as HostExtensionStub;
 
     expect(extension.clusterPages).toEqual([]);
     expect(extension.clusterPageMenus).toEqual([]);
     expect(extension.kubeObjectDetailItems).toEqual([]);
+  });
+
+  it("is the views that exist in the renderer, and no entry that leads to one that does not", () => {
+    const extension = Reflect.construct(VeleroRenderer, []) as HostExtensionStub;
+    const pages = (extension.clusterPages as { id: string }[]).map((page) => page.id);
+    const menus = extension.clusterPageMenus as { id: string; parentId?: string; target: { pageId: string } }[];
+
+    expect(pages).toEqual(["backups"]);
+    expect(menus.map((menu) => [menu.id, menu.parentId, menu.target.pageId])).toEqual([
+      ["velero", undefined, "backups"],
+      ["velero-backups", "velero", "backups"],
+    ]);
+    for (const menu of menus) expect(pages).toContain(menu.target.pageId);
+    expect(
+      (extension.kubeObjectDetailItems as { kind: string; apiVersions: string[] }[]).map((item) => [
+        item.kind,
+        item.apiVersions,
+      ]),
+    ).toEqual([["Backup", ["velero.io/v1"]]]);
   });
 });
