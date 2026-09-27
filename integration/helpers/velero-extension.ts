@@ -84,13 +84,14 @@ export interface StartedApplication {
 }
 
 /**
- * Starts Freelens as the helper of the host does, with one difference: before
- * the launch the profile gets preferences that sync no kubeconfig. Left to its
- * default, Freelens loads the kubeconfig of the user into its catalog, and the
- * clusters of the user have no place in a run of this suite, nor in one of its
- * screenshots.
+ * Starts Freelens as the helper of the host does, with two differences: before
+ * the launch the profile gets preferences that sync no kubeconfig, and that name
+ * a theme. Left to its default, Freelens loads the kubeconfig of the user into
+ * its catalog, and the clusters of the user have no place in a run of this
+ * suite, nor in one of its screenshots; and it takes the theme of the system,
+ * which is dark on a machine and light on another.
  */
-export async function startIsolated(profile?: string): Promise<StartedApplication> {
+export async function startIsolated(profile?: string, theme: ColorTheme = "Dark"): Promise<StartedApplication> {
   const executable = utils.appPaths[process.platform];
 
   if (!executable) {
@@ -112,7 +113,7 @@ export async function startIsolated(profile?: string): Promise<StartedApplicatio
     await mkdir(path.join(directory, APPLICATION_NAME), { recursive: true });
     await writeFile(
       path.join(directory, APPLICATION_NAME, "lens-user-store.json"),
-      JSON.stringify({ preferences: { syncKubeconfigEntries: [] } }),
+      JSON.stringify({ preferences: { syncKubeconfigEntries: [], colorTheme: theme } }),
       { mode: 0o600 },
     );
   }
