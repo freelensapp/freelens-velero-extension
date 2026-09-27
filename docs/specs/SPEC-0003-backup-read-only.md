@@ -148,8 +148,30 @@ historical stage data or recovery guarantee can be inferred from these CRDs alon
 
 ## Evidence And Deviations
 
-Approved on 2026-09-27; no implementation or executed acceptance tests yet. T1.2
-and T1.3 are separate pull requests. No deviations have been accepted. The upstream
+Approved on 2026-09-27. T1.2 and T1.3 are separate pull requests; the status of
+the spec follows the second. No deviations have been accepted.
+
+T1.2 is implemented: the [states](../../src/common/phases.ts), the
+[evidence](../../src/common/evidence.ts), the [progress](../../src/common/progress.ts),
+the [durations](../../src/common/duration.ts), the
+[references](../../src/common/references.ts) and what is
+[known of a family](../../src/common/read-state.ts) are pure functions on plain
+data, with types written from the CRD schemas of the reviewed release. Their inputs
+are frozen in the tests: no helper changes the object it reads.
+
+| Check | Part covered by T1.2 | Evidence |
+| --- | --- | --- |
+| BACK-01 | The helpers on plain copies; the registration of the kind comes with T1.3 | Unit |
+| BACK-02 | All of it but the static UI | Unit, table-driven: the 13 and the 10 phases, each phase of the other kind, empty and unknown values; the phases are the ones the fixtures force on the cluster |
+| BACK-03 | All of it but the component | Unit |
+| BACK-04 | All of it but the component | Unit: sixteen reports that give no percentage, none of them as `NaN` |
+| BACK-05 | All of it | Unit, with the clock as an argument |
+| BACK-08 | The resolution; the denied list on the cluster and the packaged app come with T1.3 | Unit: equal names in two installations, absent, denied, not served, failed, not read, and what an earlier read had found |
+
+Seven changes made to the code on purpose, one for each rule above that a view could
+get wrong, each made a test fail.
+
+The upstream
 drift watch of the start of the milestone is in the
 [recon](../development/RECON-T0.1.md#upstream-drift-watch): the release after the
 reviewed one has the same Backup schema and the same phases of Backup and Restore.

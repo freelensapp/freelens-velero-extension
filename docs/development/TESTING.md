@@ -231,8 +231,10 @@ The scaffold has [source lifecycle tests](../../src/entrypoints.test.ts),
 [compiled-entry contracts](../../test/build.test.ts), and
 [process-specific host stubs](../../test/freelens-extensions.ts). Vitest v4.1.11 fails
 when no tests are selected; it does not import the host implementation in Node.
-The canonical command builds first and covers 158 tests: 14 scaffold,
-96 [environment checks](../../test/environment.test.ts) and 48 diagnostic contracts.
+The canonical command builds first and covers 276 tests: 14 scaffold,
+96 [environment checks](../../test/environment.test.ts), 48 diagnostic contracts and
+118 of the [operation states](../../src/common/operation.test.ts) and of their
+[references](../../src/common/references.test.ts).
 The environment tests
 include child-process refusal checks with an empty executable path, proving that
 wrong targets and malformed journals stop without external tools. Co-locate future pure/main
