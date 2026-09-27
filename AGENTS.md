@@ -233,6 +233,7 @@ src/
   main/diagnostic-*.ts      # Create-only Kubernetes adapter, DownloadRequest service, transport, pod tunnel
   renderer/index.ts         # Extension entry point (renderer process, Chromium)
 build/host-globals.ts       # Maps the host SDK to the global provided by Freelens
+integration/                # Playwright tests against a pinned Freelens build
 test/                       # Vitest stubs for the host, build and environment tests
 e2e/scripts/                # Disposable kind cluster with Velero and S3, fixtures, transport proof
 docs/                       # Development docs and one spec per feature

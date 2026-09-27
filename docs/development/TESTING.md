@@ -67,6 +67,26 @@ Unit/component and main-contract tests are reachable through the canonical
 The host packaged integration runner remains a separate documented runtime gate;
 Vitest alone is not a packaged-app result.
 
+## Integration Tests
+
+The [integration test](../../integration/__tests__/extensions.tests.ts) runs inside
+the integration harness of Freelens, in the
+[workflow](../../.github/workflows/integration-tests.yaml) that builds Freelens
+v1.10.3 and packs the production build of the extension. It installs the tarball
+from the Extensions page of an isolated profile and checks that:
+
+- the extension is listed and enabled;
+- the host loaded the main and the renderer entry points, and both extend the
+  classes of the host;
+- the dispatcher of the host process is as it was before the installation;
+- the bundled transport downloads and decodes an artifact inside the main process,
+  keeps the signed query and the Host header, turns a 404 into a missing artifact
+  without the URL in its message, and refuses a URL of another origin;
+- the host wrote no error while all of this happened.
+
+No cluster takes part: there is no view yet. The test is copied into the Freelens
+checkout of the workflow under its own name.
+
 ## Critical Journeys
 
 1. Open Velero in a selected local test cluster; distinguish installed, absent,
