@@ -89,7 +89,8 @@ the unit tests, on the build with separate modules and on the production build;
 the integration tests, which install the packed production build in a Freelens
 v1.10.3 built for the purpose; the end-to-end tests, which bring the test
 environment up on the runner, run the fixtures and the transport proof and take
-it down; OSV-Scanner. They run on synthetic data only. Renovate and the daily maintenance
+it down; the tests of the views, which run their suites in that Freelens against
+the fixtures of that environment; OSV-Scanner. They run on synthetic data only. Renovate and the daily maintenance
 workflows of the organization (npm audit, npm dedupe, Biome migrate, Trunk upgrade)
 open their pull requests on branches named `automated/*`. A release is three
 workflows: the version workflow opens the pull request that sets the version, the
@@ -114,12 +115,13 @@ before changing the client version. The main build replaces undici with
 extension never calls, and the real module installs a dispatcher for the whole
 process when it loads, which inside Freelens is the process of the host. Supported
 `WS_NO_*` build defines disable optional native accelerators without patching the
-library. The 441 tests of the unit run, on the separate modules and on the
-production build, are 17 of the scaffold, 96 of the environment and its fixtures,
+library. The 445 tests of the unit run, on the separate modules and on the
+production build, are 17 of the scaffold, 100 of the environment and its fixtures,
 48 of the diagnostic contracts, 118 of the operation states, 54 of the rules of the
 discovery, 49 of what the views show of a backup, 26 of the state of an
 installation and of its reader, and 33 of the components. The integration test
-covers the installation in the host.
+covers the installation in the host, the suites of the views what the views do
+in it.
 The electron-vite warning about a missing standalone renderer
 configuration is expected: this extension intentionally builds its renderer through
 the preload target, whose generated entry is covered by the bundle tests.
@@ -184,7 +186,7 @@ strings. Do not create SelfSubjectAccessReview, diagnostic requests, or other AP
 objects merely to render read-only views. A not-yet-tested write permission is
 unknown, not granted; the actual API decision is authoritative.
 
-### The Reads Of The Views
+### The Reads Of The First Views
 
 The views read through the connection of the host to the cluster they are shown
 for, and through nothing else. The [reader](../../src/renderer/api/reader.ts) asks
@@ -212,14 +214,16 @@ application:
   changes between its windows. The [store of the preferences](../../src/common/preferences-store.ts)
   is opened in both processes: opened in the renderer alone, what the operator
   chose was never written.
+- The search of the lists of the host waits 250 ms after the last key before it
+  gives the list what was typed.
 
 The [state of an installation](../../src/renderer/state/installation.ts) is one for
 each frame, which is the frame of one cluster, and is created when the first view
 opens. Every change of the selected namespace makes a new generation, empties what
 was read and leaves the answers of the generation before where they arrive: an
 answer is taken only if the generation it was asked for is still the current one,
-and only the objects of the namespace that was asked are kept of it. The lists of
-the host are given a store that selects nothing and removes nothing, with
+and only the objects of the namespace that was asked are kept of it. The host lists
+are given a store that selects nothing and removes nothing, with
 `subscribeStores` off: the extension reads, the host draws.
 
 The watch of the host is not used for these views. A list every 15 seconds while a

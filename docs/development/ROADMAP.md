@@ -63,8 +63,8 @@ v1.10.3 built for the purpose, on every pull request and on main.
 | --- | --- | --- | --- |
 | Installation detection, namespace discovery and configuration, selection among several installations, sidebar, missing, forbidden and empty states | T1.1 | [SPEC-0002](../specs/SPEC-0002-installation-discovery.md) | Done |
 | Phase model on two axes, progress, validation errors, durations, unknown values, relationship helpers | T1.2 | [SPEC-0003](../specs/SPEC-0003-backup-read-only.md) | Done |
-| Backup list and operation workspace, with storage location, schedule, related restores and failure information; no generic delete | T1.3 | [SPEC-0003](../specs/SPEC-0003-backup-read-only.md) | In PR |
-| End to end suite against the views, pre-review pass and walkthrough of the demo | | | Planned |
+| Backup list and operation workspace, with storage location, schedule, related restores and failure information; no generic delete | T1.3 | [SPEC-0003](../specs/SPEC-0003-backup-read-only.md) | Done |
+| End to end suite against the views, pre-review pass and [walkthrough of the demo](TRY-IT.md) | | | In PR |
 
 ### M2 - Restores, Schedules, locations, Overview (read-only)
 

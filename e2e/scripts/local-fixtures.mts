@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { isDeepStrictEqual } from "node:util";
-import { DEMO_NAMESPACE, OWNER_LABEL, requireCondition } from "./local-kind.mts";
+import { DEMO_NAMESPACE, type KindConfig, OWNER_LABEL, requireCondition } from "./local-kind.mts";
 import { BUCKET, type KubeResource, STORAGE_ENDPOINT } from "./local-manifests.mts";
 
 export const FIXTURE_LABEL = "freelensapp.io/velero-fixture-run";
@@ -34,15 +34,27 @@ export const RESTORE_PHASES = [
   "Failed",
 ] as const;
 
+// The identity the views are read with when access is restricted, and how many backups the long list has.
+export const VIEW_READER = "views-reader";
+export const SCALE_BACKUPS = 1000;
+
 export function fixtureNames(run: string) {
   requireCondition(/^[a-f0-9]{8}$/.test(run), "A generated local fixture run ID is required");
   return {
     source: `velero-source-${run}`,
     restored: `velero-restored-${run}`,
     static: `velero-static-${run}`,
+    views: `velero-views-${run}`,
+    scale: `velero-scale-${run}`,
     backup: `fixture-backup-${run}`,
     restore: `fixture-restore-${run}`,
   };
+}
+
+export function fixtureNamespaces(run: string): string[] {
+  const names = fixtureNames(run);
+
+  return [names.source, names.restored, names.static, names.views, names.scale];
 }
 
 export function fixtureArtifactPaths(run: string) {
@@ -71,12 +83,7 @@ export function assertFixtureNamespaceContents(
   namespace: string,
   resources: KubeResource[],
 ): void {
-  const names = fixtureNames(run);
-
-  requireCondition(
-    [names.source, names.restored, names.static].includes(namespace),
-    "Refusing cleanup outside this fixture run",
-  );
+  requireCondition(fixtureNamespaces(run).includes(namespace), "Refusing cleanup outside this fixture run");
   for (const resource of resources) {
     requireCondition(resource.metadata.namespace === namespace, "Cleanup inventory contains another namespace");
     const systemDefault =
@@ -167,23 +174,175 @@ export function restrictedFixtures(owner: string, run: string): KubeResource[] {
   ];
 }
 
-export function staticFixtures(owner: string, run: string): KubeResource[] {
-  requireCondition(owner, "Fixture ownership is required");
-  const names = fixtureNames(run);
-  const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
-  const metadata = (name: string) => ({ name, namespace: names.static, labels });
-  const completed = new Set(["Completed", "PartiallyFailed", "Failed", "FailedValidation"]);
-  const status = (phase: string, progressField: string) => ({
+const FINISHED = new Set(["Completed", "PartiallyFailed", "Failed", "FailedValidation"]);
+
+// The status of a synthetic operation in a phase: what the controller would have written, and did not.
+function syntheticStatus(phase: string, progressField: string, started = Date.parse("2026-09-01T10:00:00Z")) {
+  const time = (offset: number) => new Date(started + offset).toISOString().replace(".000Z", "Z");
+
+  return {
     phase,
-    ...(phase === "New" ? {} : { startTimestamp: "2026-09-01T10:00:00Z" }),
-    ...(completed.has(phase) ? { completionTimestamp: "2026-09-01T10:01:00Z" } : {}),
+    ...(phase === "New" ? {} : { startTimestamp: time(0) }),
+    ...(FINISHED.has(phase) ? { completionTimestamp: time(60_000) } : {}),
     progress: { totalItems: 10, [progressField]: phase === "Completed" || phase.startsWith("Finalizing") ? 10 : 4 },
     errors: phase.includes("Failed") ? 1 : 0,
     warnings: phase === "PartiallyFailed" ? 1 : 0,
     ...(phase === "FailedValidation"
       ? { validationErrors: ["Synthetic validation error; no operation was executed"] }
       : {}),
+  };
+}
+
+// A name as long as Velero accepts one: it is the value of a label, which has 63 characters at most.
+export const LONG_BACKUP_NAME = "backup-with-a-name-as-long-as-the-value-of-a-label-is-allowed-1";
+
+// What the views need beside the phases: an installation with references that lead somewhere and references
+// that do not, a name that fills its column, an object that reports nothing, and an identity that reads a
+// part of it. Its namespace is outside the reach of the controllers, like the one of the phases.
+export function viewFixtures(owner: string, run: string): KubeResource[] {
+  requireCondition(owner, "Fixture ownership is required");
+  const names = fixtureNames(run);
+  const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
+  const metadata = (name: string, more: Record<string, string> = {}) => ({
+    name,
+    namespace: names.views,
+    labels: { ...labels, ...more },
   });
+  const spec = {
+    includedNamespaces: [names.source],
+    includeClusterResources: false,
+    storageLocation: "views-available",
+    volumeSnapshotLocations: ["views-snapshots"],
+    snapshotVolumes: false,
+    ttl: "720h0m0s",
+  };
+  const backup = (
+    name: string,
+    phase: string | undefined,
+    more: { labels?: Record<string, string>; spec?: Record<string, unknown>; status?: Record<string, unknown> } = {},
+  ): KubeResource => ({
+    apiVersion: "velero.io/v1",
+    kind: "Backup",
+    metadata: metadata(name, more.labels),
+    spec: { ...spec, ...more.spec },
+    ...(phase ? { status: { ...syntheticStatus(phase, "itemsBackedUp"), ...more.status } } : {}),
+  });
+
+  return [
+    { apiVersion: "v1", kind: "Namespace", metadata: { name: names.views, labels } },
+    {
+      apiVersion: "velero.io/v1",
+      kind: "BackupStorageLocation",
+      metadata: metadata("views-available"),
+      spec: {
+        provider: "aws",
+        objectStorage: { bucket: BUCKET },
+        config: { region: "us-east-1", s3ForcePathStyle: "true", s3Url: STORAGE_ENDPOINT },
+        accessMode: "ReadWrite",
+      },
+      status: { phase: "Available" },
+    },
+    {
+      apiVersion: "velero.io/v1",
+      kind: "VolumeSnapshotLocation",
+      metadata: metadata("views-snapshots"),
+      spec: { provider: "aws", config: { region: "us-east-1" } },
+      status: { phase: "Available" },
+    },
+    {
+      apiVersion: "velero.io/v1",
+      kind: "Schedule",
+      metadata: metadata("views-daily"),
+      spec: { schedule: "0 3 * * *", paused: false, template: spec },
+      status: { phase: "Enabled" },
+    },
+    backup("views-daily-20260901030000", "Completed", {
+      labels: { "velero.io/schedule-name": "views-daily" },
+      status: { warnings: 2 },
+    }),
+    backup("backup-missing-schedule", "Completed", { labels: { "velero.io/schedule-name": "views-removed" } }),
+    backup("backup-missing-location", "FailedValidation", {
+      spec: { storageLocation: "views-removed", volumeSnapshotLocations: ["views-removed"] },
+    }),
+    backup(LONG_BACKUP_NAME, "InProgress"),
+    // The name of a backup of the namespace of the phases, for another backup: a name is of its installation.
+    backup("backup-inprogress", "InProgress", { status: { progress: { totalItems: 10, itemsBackedUp: 7 } } }),
+    backup("backup-unreported", undefined),
+    ...["Completed", "PartiallyFailed"].map((phase) => ({
+      apiVersion: "velero.io/v1",
+      kind: "Restore",
+      metadata: metadata(`restore-of-daily-${phase.toLowerCase()}`),
+      spec: {
+        backupName: "views-daily-20260901030000",
+        includedNamespaces: [names.source],
+        namespaceMapping: { [names.source]: names.restored },
+        includeClusterResources: false,
+        restorePVs: false,
+        existingResourcePolicy: "none",
+      },
+      status: syntheticStatus(phase, "itemsRestored"),
+    })),
+    {
+      apiVersion: "v1",
+      kind: "ServiceAccount",
+      metadata: metadata(VIEW_READER),
+      automountServiceAccountToken: false,
+    },
+    {
+      apiVersion: "rbac.authorization.k8s.io/v1",
+      kind: "Role",
+      metadata: metadata(VIEW_READER),
+      // The restores and the snapshot locations are left out: what the views show of a family that is denied.
+      rules: [
+        {
+          apiGroups: ["velero.io"],
+          resources: ["backups", "schedules", "backupstoragelocations"],
+          verbs: ["get", "list", "watch"],
+        },
+      ],
+    },
+    {
+      apiVersion: "rbac.authorization.k8s.io/v1",
+      kind: "RoleBinding",
+      metadata: metadata(VIEW_READER),
+      roleRef: { apiGroup: "rbac.authorization.k8s.io", kind: "Role", name: VIEW_READER },
+      subjects: [{ kind: "ServiceAccount", name: VIEW_READER, namespace: names.views }],
+    },
+  ];
+}
+
+// The long list: a namespace with no storage location, which no discovery suggests, and a thousand backups
+// in every phase. They are created in one request of the client and deleted with their namespace.
+export function scaleFixtures(owner: string, run: string): { namespace: KubeResource; backups: KubeResource[] } {
+  requireCondition(owner, "Fixture ownership is required");
+  const names = fixtureNames(run);
+  const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
+  const first = Date.parse("2026-08-01T00:00:00Z");
+
+  return {
+    namespace: { apiVersion: "v1", kind: "Namespace", metadata: { name: names.scale, labels } },
+    backups: Array.from({ length: SCALE_BACKUPS }, (_, index) => ({
+      apiVersion: "velero.io/v1",
+      kind: "Backup",
+      metadata: { name: `backup-${String(index + 1).padStart(4, "0")}`, namespace: names.scale, labels },
+      spec: {
+        includedNamespaces: [names.source],
+        includeClusterResources: false,
+        storageLocation: `scale-location-${(index % 3) + 1}`,
+        snapshotVolumes: false,
+        ttl: "720h0m0s",
+      },
+      status: syntheticStatus(BACKUP_PHASES[index % BACKUP_PHASES.length], "itemsBackedUp", first + index * 3_600_000),
+    })),
+  };
+}
+
+export function staticFixtures(owner: string, run: string): KubeResource[] {
+  requireCondition(owner, "Fixture ownership is required");
+  const names = fixtureNames(run);
+  const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
+  const metadata = (name: string) => ({ name, namespace: names.static, labels });
+  const status = syntheticStatus;
   const backupSpec = {
     includedNamespaces: [names.source],
     includeClusterResources: false,
@@ -266,7 +425,7 @@ export function staticFixtures(owner: string, run: string): KubeResource[] {
 
 export interface FixtureRuntime {
   owner: string;
-  kubectl(args: string[], input?: string, timeout?: number): string;
+  kubectl(args: string[], input?: string, timeout?: number, recordOutput?: boolean): string;
   apply(resource: KubeResource): void;
 }
 
@@ -335,7 +494,12 @@ export function createStaticFixtures(runtime: FixtureRuntime, run: string): Kube
       "Controller namespace scope is not explicit",
     );
   }
-  const manifests = staticFixtures(runtime.owner, run);
+  return createWithStatus(runtime, staticFixtures(runtime.owner, run));
+}
+
+// An object is created without its status and gets it with a change that names its uid and its version:
+// what is read back is what was asked, or the fixture is refused.
+function createWithStatus(runtime: FixtureRuntime, manifests: KubeResource[]): KubeResource[] {
   const snapshots: KubeResource[] = [];
 
   for (const manifest of manifests) {
@@ -343,7 +507,7 @@ export function createStaticFixtures(runtime: FixtureRuntime, run: string): Kube
 
     delete initial.status;
     runtime.apply(initial);
-    if (manifest.status) {
+    if (manifest.status && !isDeepStrictEqual(readFixture(runtime, initial).status, manifest.status)) {
       const created = readFixture(runtime, initial);
 
       runtime.kubectl([
@@ -371,6 +535,62 @@ export function createStaticFixtures(runtime: FixtureRuntime, run: string): Kube
     }
   }
   return snapshots;
+}
+
+// The kubeconfig of the identity that reads a part of the views: the one of the environment with the
+// credential replaced, and the namespace that identity can read as the one of its context.
+export function readerKubeconfig(config: KindConfig, token: string, namespace: string): KindConfig {
+  requireCondition(
+    config.users.length === 1 && config.contexts.length === 1 && config.clusters.length === 1,
+    "The kubeconfig of the environment has one target",
+  );
+  requireCondition(token.length > 100, "Local reader credential was not generated");
+  const reader = structuredClone(config);
+
+  reader.users[0].user = { token };
+  reader.contexts[0].context = { ...reader.contexts[0].context, namespace };
+  return reader;
+}
+
+// The fixtures of the views, put in place once: a second call finds them and changes nothing.
+export function createViewFixtures(runtime: FixtureRuntime, run: string): { views: number; scale: number } {
+  const names = fixtureNames(run);
+  const views = createWithStatus(runtime, viewFixtures(runtime.owner, run));
+  const scale = scaleFixtures(runtime.owner, run);
+  const listed = () =>
+    (
+      JSON.parse(
+        runtime.kubectl(
+          ["get", "backups.velero.io", "--namespace", names.scale, "-o", "json"],
+          undefined,
+          undefined,
+          false,
+        ),
+      ) as { items: (KubeResource & { status?: { phase?: string } })[] }
+    ).items;
+
+  runtime.apply(scale.namespace);
+  if (!listed().length) {
+    runtime.kubectl(
+      ["create", "-f", "-", "-o", "name"],
+      JSON.stringify({ apiVersion: "v1", kind: "List", items: scale.backups }),
+      600_000,
+      false,
+    );
+  }
+  const found = listed();
+
+  requireCondition(
+    found.length === scale.backups.length &&
+      found.every(
+        (item) =>
+          item.metadata.labels?.[OWNER_LABEL] === runtime.owner &&
+          item.metadata.labels?.[FIXTURE_LABEL] === run &&
+          item.status?.phase,
+      ),
+    "The backups of the long list are not the ones of this run",
+  );
+  return { views: views.length, scale: found.length };
 }
 
 export function verifyStaticFixtures(runtime: FixtureRuntime, snapshots: KubeResource[]): void {

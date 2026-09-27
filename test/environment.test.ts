@@ -23,11 +23,18 @@ import {
   fixtureArtifactPaths,
   fixtureDeletionRequest,
   fixtureNames,
+  fixtureNamespaces,
+  LONG_BACKUP_NAME,
   liveBackup,
   liveRestore,
   RESTORE_PHASES,
+  readerKubeconfig,
   restrictedFixtures,
+  SCALE_BACKUPS,
+  scaleFixtures,
   staticFixtures,
+  VIEW_READER,
+  viewFixtures,
 } from "../e2e/scripts/local-fixtures.mts";
 import {
   assertEgressRules,
@@ -168,6 +175,114 @@ describe("foundation fixture boundaries", () => {
     expect(resources.some((resource) => resource.kind === "ClusterRoleBinding")).toBe(false);
     expect(resources[0].spec).toMatchObject({ storageLocation: "fixture-missing-location" });
     expect(resources[0].metadata.labels?.[FIXTURE_MODE]).toBe("synthetic");
+  });
+
+  it("gives the views their references, a long name, a silent object and a reader of a part", () => {
+    const names = fixtureNames(run);
+    const resources = viewFixtures("synthetic-owner", run);
+    const named = (name: string) => resources.find((resource) => resource.metadata.name === name);
+    const role = resources.find((resource) => resource.kind === "Role");
+
+    expect(resources[0]).toMatchObject({ kind: "Namespace", metadata: { name: names.views } });
+    expect(
+      resources.slice(1).every((resource) => resource.metadata.namespace === names.views && !("data" in resource)),
+    ).toBe(true);
+    expect(
+      resources.every(
+        (resource) =>
+          resource.metadata.labels?.[OWNER_LABEL] === "synthetic-owner" &&
+          resource.metadata.labels?.[FIXTURE_LABEL] === run &&
+          resource.metadata.labels?.[FIXTURE_MODE] === "synthetic",
+      ),
+    ).toBe(true);
+    // A reference that leads somewhere, and the ones that lead nowhere.
+    expect(named("views-daily-20260901030000")).toMatchObject({
+      metadata: { labels: { "velero.io/schedule-name": "views-daily" } },
+      spec: { storageLocation: "views-available", volumeSnapshotLocations: ["views-snapshots"] },
+      status: { phase: "Completed", warnings: 2, errors: 0 },
+    });
+    for (const target of ["views-daily", "views-available", "views-snapshots"]) expect(named(target)).toBeDefined();
+    expect(named("backup-missing-schedule")?.metadata.labels?.["velero.io/schedule-name"]).toBe("views-removed");
+    expect(named("backup-missing-location")?.spec).toMatchObject({ storageLocation: "views-removed" });
+    expect(named("views-removed")).toBeUndefined();
+    expect(
+      resources
+        .filter((resource) => resource.kind === "Restore")
+        .map((resource) => (resource.spec as { backupName: string }).backupName),
+    ).toEqual(["views-daily-20260901030000", "views-daily-20260901030000"]);
+    expect(LONG_BACKUP_NAME).toHaveLength(63);
+    expect(named(LONG_BACKUP_NAME)).toBeDefined();
+    expect(named("backup-unreported")).not.toHaveProperty("status");
+    // A name that another installation has too, for an object that is not the same.
+    expect(staticFixtures("synthetic-owner", run).map((resource) => resource.metadata.name)).toContain(
+      "backup-inprogress",
+    );
+    expect(named("backup-inprogress")).toMatchObject({
+      spec: { storageLocation: "views-available" },
+      status: { progress: { itemsBackedUp: 7 } },
+    });
+    // The reader reads three families in its namespace and nothing else: no restore, no snapshot location,
+    // no secret, no write, nothing of the cluster.
+    expect(role?.rules).toEqual([
+      {
+        apiGroups: ["velero.io"],
+        resources: ["backups", "schedules", "backupstoragelocations"],
+        verbs: ["get", "list", "watch"],
+      },
+    ]);
+    expect(resources.some((resource) => /^Cluster/.test(resource.kind) || resource.kind === "Secret")).toBe(false);
+    expect(named(VIEW_READER)).toMatchObject({ automountServiceAccountToken: false });
+    expect(() => viewFixtures("", run)).toThrow();
+  });
+
+  it("fills the long list with a thousand backups in every phase, none of them of an installation", () => {
+    const names = fixtureNames(run);
+    const { namespace, backups } = scaleFixtures("synthetic-owner", run);
+
+    expect(namespace.metadata.name).toBe(names.scale);
+    expect(backups).toHaveLength(SCALE_BACKUPS);
+    expect(new Set(backups.map((backup) => backup.metadata.name)).size).toBe(1000);
+    expect(new Set(backups.map((backup) => (backup.status as { phase: string }).phase))).toEqual(
+      new Set(BACKUP_PHASES),
+    );
+    expect(new Set(backups.map((backup) => (backup.status as { startTimestamp?: string }).startTimestamp)).size).toBe(
+      // One start for each backup that has one: the ones that are New have none.
+      backups.filter((backup) => (backup.status as { phase: string }).phase !== "New").length + 1,
+    );
+    expect(
+      backups.every(
+        (backup) =>
+          backup.kind === "Backup" &&
+          backup.metadata.namespace === names.scale &&
+          backup.metadata.labels?.[OWNER_LABEL] === "synthetic-owner" &&
+          backup.metadata.labels?.[FIXTURE_LABEL] === run,
+      ),
+    ).toBe(true);
+    expect(fixtureNamespaces(run)).toEqual([names.source, names.restored, names.static, names.views, names.scale]);
+  });
+
+  it("gives the reader the kubeconfig of the environment with its own credential and its namespace", () => {
+    const config = {
+      "current-context": "kind-synthetic",
+      contexts: [{ name: "kind-synthetic", context: { cluster: "kind-synthetic", user: "kind-synthetic" } }],
+      clusters: [{ name: "kind-synthetic", cluster: { server: "https://127.0.0.1:6443" } }],
+      users: [{ name: "kind-synthetic", user: { "client-key-data": "synthetic", "client-certificate-data": "x" } }],
+    };
+    const token = "t".repeat(120);
+    const reader = readerKubeconfig(config, token, "velero-views-a1a2a3a4");
+
+    expect(reader.users).toEqual([{ name: "kind-synthetic", user: { token } }]);
+    expect(reader.contexts[0].context).toEqual({
+      cluster: "kind-synthetic",
+      user: "kind-synthetic",
+      namespace: "velero-views-a1a2a3a4",
+    });
+    expect(reader.clusters).toEqual(config.clusters);
+    // The kubeconfig of the environment is left as it was.
+    expect(config.users[0].user).toHaveProperty("client-key-data");
+    expect(config.contexts[0].context).not.toHaveProperty("namespace");
+    expect(() => readerKubeconfig(config, "short", "velero-views-a1a2a3a4")).toThrow();
+    expect(() => readerKubeconfig({ ...config, users: [...config.users, ...config.users] }, token, "x")).toThrow();
   });
 
   it("refuses namespace cleanup with unrelated resources and binds backup deletion to its UID", () => {
@@ -847,6 +962,26 @@ describe("platform of the test environment", () => {
     expect(workflow).not.toMatch(/upload-artifact|actions\/cache\/save|\.local\/state/);
     expect(workflow).toMatch(/if: always\(\)\n\s+run: pnpm --color=always e2e:cluster:down/);
     expect(workflow).toContain("runs-on: ubuntu-24.04-arm");
+  });
+
+  it("uploads from the run of the views their screenshots and reports, and nothing of the state", () => {
+    // What the workflow does, without what it says of itself in its comments.
+    const workflow = readFileSync(new URL("../.github/workflows/views-tests.yaml", import.meta.url), "utf8")
+      .split("\n")
+      .filter((line) => !line.trimStart().startsWith("#"))
+      .join("\n");
+    const uploads = [...workflow.matchAll(/uses: actions\/upload-artifact@[^\n]+\n\s+with:\n((?:\s{10,}[^\n]+\n)+)/g)];
+    const saved = [...workflow.matchAll(/uses: actions\/cache\/save@[^\n]+\n\s+with:\n\s+path: ([^\n]+)/g)];
+
+    expect(uploads).toHaveLength(1);
+    expect(uploads[0][1]).toMatch(/\n?\s+path: e2e-artifacts\/\n/);
+    expect(uploads[0][1].match(/path:/g)).toHaveLength(1);
+    // The only thing kept from a run is the application that was built, which holds nothing of a run.
+    expect(saved.map((match) => match[1])).toEqual(["freelens/freelens/dist"]);
+    expect(workflow).not.toMatch(/\.local\/state|kubeconfig|credentials|operations\.log/);
+    expect(workflow).toMatch(/if: always\(\)\n\s+run: node e2e\/scripts\/local-demo\.mts down --context/);
+    expect(workflow).toContain("runs-on: ubuntu-24.04-arm");
+    expect(workflow).toMatch(/^permissions:\n {2}contents: read$/m);
   });
 
   it("keeps the internal network wherever the host reaches the address of the node", () => {

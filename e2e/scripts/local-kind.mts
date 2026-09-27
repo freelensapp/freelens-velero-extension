@@ -126,7 +126,7 @@ export interface KindNetwork {
 
 export interface KindConfig {
   "current-context": string;
-  contexts: { name: string; context: { cluster: string; user: string } }[];
+  contexts: { name: string; context: { cluster: string; user: string; namespace?: string } }[];
   clusters: {
     name: string;
     cluster: { server: string; "insecure-skip-tls-verify"?: boolean; "certificate-authority-data"?: string };

@@ -84,6 +84,8 @@ The repository is developed spec-first, with the specs in the repository:
   status semantics.
 - [TESTING.md](docs/development/TESTING.md): the test layers and the evidence
   of the foundation.
+- [TRY-IT.md](docs/development/TRY-IT.md): the views on the demo cluster, step
+  by step.
 - [DEPENDENCY-AUDIT.md](docs/development/DEPENDENCY-AUDIT.md): what the
   package bundles.
 - [docs/specs](docs/specs/): one spec per feature, with the
@@ -129,6 +131,19 @@ by the first command under the private state of the environment, not on the
 machine. The commands and the evidence are in
 [TESTING.md](docs/development/TESTING.md#end-to-end-tests), the choice of the
 backend in [LOCAL-STORAGE.md](docs/development/LOCAL-STORAGE.md).
+
+The views are driven in a packaged Freelens against the same environment, with
+its fixtures left in place:
+
+```sh
+pnpm demo:up            # the environment with the fixtures left in place
+pnpm e2e:views          # the suites of the views, in a Freelens that was built
+pnpm pre-review         # both themes, the sizes of the window, the keyboard
+```
+
+They need a checkout of Freelens v1.10.3 that was built, in `freelens/` or where
+`FREELENS_DIR` says: see
+[TESTING.md](docs/development/TESTING.md#suites-of-the-views).
 
 No cloud account and no personal credential is needed. Every write of
 development and tests goes to that disposable cluster, never to another one.

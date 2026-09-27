@@ -4,6 +4,7 @@ import {
   appendFileSync,
   chmodSync,
   closeSync,
+  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -30,14 +31,18 @@ import {
   allowsFixtureArtifact,
   assertFixtureNamespaceContents,
   createStaticFixtures,
+  createViewFixtures,
   FIXTURE_LABEL,
   fixtureArtifactPaths,
   fixtureDeletionRequest,
   fixtureNames,
+  fixtureNamespaces,
   liveBackup,
+  readerKubeconfig,
   readFixture,
   restrictedFixtures,
   runLiveFixtures,
+  VIEW_READER,
   verifyStaticFixtures,
 } from "./local-fixtures.mts";
 import {
@@ -1591,6 +1596,11 @@ function removeFailedNode(): void {
 
 function prepareFixtures(): void {
   verifyPreloadedImages();
+  // A run that was cleaned left nothing on the cluster: the one after it starts as the first did.
+  if (journal.fixtureRun?.phase === "cleaned") {
+    delete journal.fixtureRun;
+    save();
+  }
   if (!journal.fixtureRun) {
     journal.fixtureRun = { id: randomBytes(4).toString("hex"), started: new Date().toISOString(), phase: "preparing" };
     save();
@@ -1919,10 +1929,13 @@ async function cleanupFixtures(): Promise<void> {
     .split("\n")
     .filter(Boolean);
 
-  for (const namespace of [names.source, names.restored, names.static]) {
+  let removed = 0;
+
+  for (const namespace of fixtureNamespaces(run)) {
     const entry = identity("Namespace", namespace);
 
     if (!entry) continue;
+    removed += 1;
     const current = existing(entry);
 
     if (current) {
@@ -1950,13 +1963,13 @@ async function cleanupFixtures(): Promise<void> {
       run,
       controllerDeletion: true,
       expectedArtifactsAbsent: 5,
-      namespacesRemoved: 3,
+      namespacesRemoved: removed,
       unrelatedResourcesPreserved: true,
     }),
     { mode: 0o600 },
   );
   console.log(
-    "PASS: real backup, associated restore and stored artifacts removed by the controller; three owned fixture namespaces removed with UID checks. Demo infrastructure retained.",
+    `PASS: real backup, associated restore and stored artifacts removed by the controller; ${removed} owned fixture namespaces removed with UID checks. Demo infrastructure retained.`,
   );
 }
 
@@ -2543,6 +2556,136 @@ function takeDown(): void {
   console.log("PASS: removed the owned node, network and private state; the installed tools stay.");
 }
 
+// The suites of the views run inside a checkout of Freelens, by its integration harness, against this
+// environment and its fixtures. They read the cluster and the application: they write to neither.
+// The fixtures the views need beside the ones of the phases, put in place once.
+function placeViewFixtures(): ReturnType<typeof fixtureNames> {
+  verifyTarget();
+  requireCondition(
+    journal.fixtureRun?.phase === "live-verified",
+    "The fixtures of the demo are not in place: run pnpm demo:up",
+  );
+  const names = fixtureNames(journal.fixtureRun.id);
+  const placed = createViewFixtures({ owner: journal.owner, kubectl, apply: applyOwned }, journal.fixtureRun.id);
+
+  console.log(
+    `PASS: ${placed.views} objects of the views in ${names.views} and ${placed.scale} backups of the long list in ${names.scale} are in place, outside the reach of the controllers.`,
+  );
+  return names;
+}
+
+// The kubeconfig of the identity that reads a part of one namespace, with a credential that lasts as long
+// as it is asked. It is written in the private state and nowhere else.
+function writeReaderKubeconfig(file: string, namespace: string, duration: string): void {
+  const token = kubectl(
+    ["create", "token", VIEW_READER, "--namespace", namespace, `--duration=${duration}`],
+    undefined,
+    undefined,
+    false,
+  ).trim();
+
+  writeFileSync(
+    file,
+    JSON.stringify(readerKubeconfig(JSON.parse(readFileSync(CONFIG, "utf8")) as KindConfig, token, namespace)),
+    { mode: 0o600 },
+  );
+}
+
+// For who looks at the views by hand: where the kubeconfig of the environment is, and the one of the reader.
+function prepareDemo(): void {
+  const names = placeViewFixtures();
+  const reader = join(STATE, "views-reader.json");
+
+  writeReaderKubeconfig(reader, names.views, "8h");
+  console.log(
+    [
+      "The demo is ready to be looked at in Freelens. Both kubeconfigs name this cluster alone:",
+      `  all the namespaces:     ${CONFIG}`,
+      `  the reader of a part:   ${reader} (its credential lasts eight hours)`,
+      `The namespaces of Velero: ${DEMO_NAMESPACE}, ${names.static}, ${names.views}; to be named: ${names.scale}.`,
+    ].join("\n"),
+  );
+}
+
+function runViews(): void {
+  const pattern = process.env.E2E_TEST_PATTERN ?? "velero-e2e";
+  const checkout = join(resolve(process.env.FREELENS_DIR ?? join(process.cwd(), "freelens")), "freelens");
+  const tarballs = readdirSync(process.cwd()).filter((name) => /^freelensapp-velero-extension-.+\.tgz$/.test(name));
+
+  requireCondition(/^[a-z0-9-]+$/.test(pattern), "The pattern of the suite is a name, not a path");
+  requireCondition(
+    existsSync(join(checkout, "integration", "__tests__")) && existsSync(join(checkout, "dist")),
+    `No built Freelens in ${checkout}: see docs/development/TESTING.md`,
+  );
+  requireCondition(tarballs.length === 1, "One packed extension is expected in the repository: run pnpm pack");
+  for (const [from, to] of [
+    [join("e2e", "__tests__"), join("integration", "__tests__")],
+    [join("integration", "helpers"), join("integration", "helpers")],
+  ]) {
+    const files = readdirSync(join(process.cwd(), from)).filter((name) => name.endsWith(".ts"));
+
+    // What an earlier run left of a suite that has another name now would run with the ones of this run.
+    for (const left of readdirSync(join(checkout, to))) {
+      if (/^(velero-|pre-review)/.test(left) && !files.includes(left)) rmSync(join(checkout, to, left));
+    }
+    for (const file of files) copyFileSync(join(process.cwd(), from, file), join(checkout, to, file));
+  }
+  const artifacts = join(process.cwd(), "e2e-artifacts", pattern);
+  const headless = process.platform === "linux" && !process.env.DISPLAY;
+  const names = placeViewFixtures();
+
+  rmSync(artifacts, { recursive: true, force: true });
+  mkdirSync(artifacts, { recursive: true });
+  // The identity that reads a part of the views lasts as long as the suite: its kubeconfig is in the private
+  // state, and goes when the suite ends.
+  const run = journal.fixtureRun?.id ?? "";
+  const readerFile = join(STATE, `views-reader-${run}.json`);
+  let status: number | null;
+
+  writeReaderKubeconfig(readerFile, names.views, "2h");
+  try {
+    // The application is started by the harness with the environment of the harness: what the suite needs of
+    // this environment is named here, and the home is the one of the caller, where its toolchain is.
+    status = spawnSync(
+      headless ? "xvfb-run" : "corepack",
+      // Without a display the application gets one that has room for its largest window.
+      [
+        ...(headless ? ["-a", "--server-args=-screen 0 1920x1200x24", "corepack"] : []),
+        "pnpm",
+        "test:integration",
+        pattern,
+      ],
+      {
+        cwd: checkout,
+        env: childEnvironment(process.env, {
+          HOME: homedir(),
+          ...(process.env.DISPLAY ? { DISPLAY: process.env.DISPLAY } : {}),
+          DO_NOT_TRACK: "1",
+          EXTENSION_PATH: join(process.cwd(), tarballs[0]),
+          E2E_KUBECONFIG: CONFIG,
+          E2E_READER_KUBECONFIG: readerFile,
+          E2E_KUBECTL: KUBECTL,
+          E2E_CLUSTER_NAME: DEMO_CLUSTER,
+          E2E_KUBE_CONTEXT: DEMO_CONTEXT,
+          E2E_NAMESPACE: DEMO_NAMESPACE,
+          E2E_STATIC_NAMESPACE: names.static,
+          E2E_VIEWS_NAMESPACE: names.views,
+          E2E_SCALE_NAMESPACE: names.scale,
+          E2E_FIXTURE_RUN: run,
+          E2E_ARTIFACTS_DIR: artifacts,
+        }),
+        stdio: "inherit",
+        timeout: 3_600_000,
+      },
+    ).status;
+  } finally {
+    unlinkSync(readerFile);
+  }
+  verifyTarget();
+  requireCondition(status === 0, `The suite ${pattern} did not pass`);
+  console.log(`PASS: the suite ${pattern} ran in Freelens against the fixtures; its artifacts are in ${artifacts}.`);
+}
+
 async function main(): Promise<void> {
   const [action, flag, context, ...extra] = process.argv.slice(2);
 
@@ -2566,11 +2709,13 @@ async function main(): Promise<void> {
       "start",
       "stop",
       "remove-failed-node",
+      "views",
+      "demo",
     ].includes(action) &&
       flag === "--context" &&
       context === DEMO_CONTEXT &&
       !extra.length,
-    `Usage: node e2e/scripts/local-demo.mts <up|down|tools|cluster|storage|bucket|velero|verify|transport-proof|fixtures|fixtures-static|fixtures-live|fixtures-artifacts|fixtures-permissions|fixtures-cleanup|start|stop|remove-failed-node> --context ${DEMO_CONTEXT}`,
+    `Usage: node e2e/scripts/local-demo.mts <up|down|tools|cluster|storage|bucket|velero|verify|transport-proof|fixtures|fixtures-static|fixtures-live|fixtures-artifacts|fixtures-permissions|fixtures-cleanup|start|stop|remove-failed-node|views|demo> --context ${DEMO_CONTEXT}`,
   );
   let lock: number | undefined;
 
@@ -2593,6 +2738,8 @@ async function main(): Promise<void> {
     else if (action === "fixtures-cleanup") await cleanupFixtures();
     else if (action === "start") await startCluster();
     else if (action === "remove-failed-node") removeFailedNode();
+    else if (action === "views") runViews();
+    else if (action === "demo") prepareDemo();
     else stopCluster();
     assertPrivateLog();
   } finally {
