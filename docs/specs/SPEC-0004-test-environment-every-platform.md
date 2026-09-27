@@ -174,24 +174,26 @@ status moves to Verified with the hosted run on main and the manual review.
 
 | Check | Evidence |
 | --- | --- |
-| ENV-01 | Unit: the platform follows the daemon, a pin without one of the two platforms is refused and named, from the registry and from the engine. Run on macOS x64: the five pins accepted for `linux/amd64` |
-| ENV-02 | Unit: a download with another checksum is refused. Run on macOS x64: kind v0.33.0 and kubectl v1.33.4 installed from their releases; no script names a binary of the host |
-| ENV-03 | Run on macOS x64: the journal records the isolation before the images are imported and the storage is created; the API server is published on `127.0.0.1` and nowhere else |
+| ENV-01 | Unit: the platform follows the daemon, a pin without one of the two platforms is refused and named, from the registry and from the engine. Runs: the five pins accepted for `linux/amd64` on macOS x64 and for `linux/arm64` on the hosted runner |
+| ENV-02 | Unit: a download with another checksum is refused. Runs on macOS x64 and on the hosted runner: kind v0.33.0 and kubectl v1.33.4 installed from their releases; no script names a binary of the host |
+| ENV-03 | Run on macOS x64: the journal records the isolation before the images are imported and the storage is created; the API server is published on `127.0.0.1` and nowhere else. Run on the hosted runner: the internal shape, no published port |
 | ENV-04 | Unit: the two shapes accepted, nine refusals each with its reason, the node ownership of the removal |
-| ENV-05 | Run on macOS x64: the helper answers inside the network, node and pod are refused outside it and by the resolver of Docker, the counters increase, the helper is removed |
-| ENV-06 | Unit: an overlapping Docker network is found with and without the routes. Run on macOS x64: the output says the routes were not checked |
-| ENV-07 | Run on macOS x64, beside another kind cluster: `up` twice gives the same node; `down` leaves no node, network or state; the containers, networks, volumes and the other cluster are the same before and after |
-| ENV-08 | Unit, through the entry point with a Docker that answers from files: a change between two runs does not stop the second, a change during a run stops it |
-| ENV-09 | Unit: a Secret is recorded without its body, a generated secret is found as it is and encoded. Run: every command ends with the search, on a log of more than 100 MB. Unit: the workflow has no upload |
+| ENV-05 | Runs on macOS x64 and on the hosted runner: the helper answers inside the network, node and pod are refused outside it and by the resolver of Docker, the counters increase, the helper is removed |
+| ENV-06 | Unit: an overlapping Docker network is found with and without the routes. Run on macOS x64: the output says the routes were not checked. Run on the hosted runner: the routes are checked |
+| ENV-07 | Run on macOS x64, beside another kind cluster: `up` twice gives the same node; `down` leaves no node, network or state; the containers, networks, volumes and the other cluster, its node and its pods, are the same before and after |
+| ENV-08 | Unit, through the entry point with a Docker that answers from files: a change between two runs does not stop the second, a change during a run stops it. Run on macOS x64: the same hash before and after the round |
+| ENV-09 | Unit: a Secret is recorded without its body, a generated secret is found as it is and encoded. Runs: every command ends with the search, on a log of more than 100 MB on macOS. Unit: the workflow has no upload |
 | ENV-10 | Unit: a variable outside the allowlist does not reach a child process |
-| ENV-11 | The checks of the pull request |
+| ENV-11 | Hosted runs on Linux ARM64: green on the pull request of the implementation; red on a pull request that asked the reader of the fixtures for one backup more than it lists, at that check, with the environment taken down after it |
 | ENV-12 | The validator accepts the configuration; the dry run on the repository lists the seven pins, in their groups |
 
 On macOS the runs also covered what the scenarios ask of an interrupted run: a run
 killed while the node was created, the lock it left, the node it left, and the
-removal of both; a node stopped and started, with its rules back before its
-workloads. Linux x64 and ARM64 on a developer machine were not run: the hosted
-runner is Linux ARM64.
+removal of both; a temporary check interrupted before and after it created its
+object, and one that names the object of another owner, which is refused and left;
+a node stopped and started three times, each time with its rules back before its
+workloads and first in their chains. Linux on a developer machine was not run: the
+Linux evidence is the one of the hosted runner, ARM64.
 
 Deviations, each called out in the pull request:
 
@@ -209,6 +211,15 @@ Deviations, each called out in the pull request:
   on both shapes.
 - The third chain, the rules after a restart and the removal by identifier, in the
   Design above, came from the review of the implementation and from its runs.
+- On the internal shape kind ends with an error after the node is complete: it looks
+  for the published port of the API server, and there is none. The node says whether
+  its creation completed: its administrator reads the add-ons that come last in it.
+  A creation that did not complete stops the command, which prints the lines of the
+  failed command that name an error, without traces and without anything long
+  enough to be a key, a token or a certificate.
+- The API server of a node that has just started answers 403 for a few seconds. The
+  check of the foundation asked once and took that for a failure, on a fast
+  machine. It asks until the API server says that it is alive.
 - The registry is asked only for what the machine does not have. Asked at every
   run for images that were already here, it refused the machine after a few runs,
   at the rate it grants to requests without an account. The index of a pin comes

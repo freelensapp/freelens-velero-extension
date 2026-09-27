@@ -138,8 +138,8 @@ and every token, and every command ends by searching it for the generated
 secrets, as they are and encoded. A run killed halfway leaves `run.lock` in the
 state: the next command names it, and after removing it `pnpm e2e:cluster:up`
 resumes from the phase of the journal. When the creation of the node itself was
-interrupted or failed, the command says so: `pnpm e2e:cluster:down`, then
-`pnpm e2e:cluster:up`. The removal finishes what an earlier removal left halfway,
+interrupted or failed, the command says so, with the reason of the failure:
+`pnpm e2e:cluster:down`, then `pnpm e2e:cluster:up`. The removal finishes what an earlier removal left halfway,
 and the verification removes what an earlier verification left of its temporary
 check, by the label of its owner and by its uid.
 
@@ -231,8 +231,8 @@ The scaffold has [source lifecycle tests](../../src/entrypoints.test.ts),
 [compiled-entry contracts](../../test/build.test.ts), and
 [process-specific host stubs](../../test/freelens-extensions.ts). Vitest v4.1.11 fails
 when no tests are selected; it does not import the host implementation in Node.
-The canonical command builds first and covers 157 tests: 14 scaffold,
-95 [environment checks](../../test/environment.test.ts) and 48 diagnostic contracts.
+The canonical command builds first and covers 158 tests: 14 scaffold,
+96 [environment checks](../../test/environment.test.ts) and 48 diagnostic contracts.
 The environment tests
 include child-process refusal checks with an empty executable path, proving that
 wrong targets and malformed journals stop without external tools. Co-locate future pure/main
