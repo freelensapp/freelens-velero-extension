@@ -89,6 +89,60 @@
       "prBodyNotes": [
         "The extension imports this package by its files, `dist/config.js` and `dist/web-socket-handler.js`, and replaces undici with a stub in the main build. Before merging, check that both files still exist and that the adapter, tunnel and build tests pass on the production build."
       ]
+    },
+    // pins of the test environment
+    {
+      "matchFileNames": [
+        "e2e/scripts/**"
+      ],
+      "prBodyNotes": [
+        "This is a pin of the test environment. Before merging, run the upstream drift watch of `docs/development/PROCESS.md` for the version it moves to, and wait for the E2E tests: they bring the environment up with the new pin on the hosted runner."
+      ]
+    },
+    // the versions of Velero and of its plugin are the ones the specs were reviewed against
+    {
+      "matchFileNames": [
+        "e2e/scripts/**"
+      ],
+      "matchDepNames": [
+        "velero/velero",
+        "velero/velero-plugin-for-aws"
+      ],
+      "groupName": "velero",
+      "prBodyNotes": [
+        "The types and the specs of the extension were written from the CRD schemas of the pinned Velero. A new version needs its schemas compared and the reviewed tag and commit recorded in `docs/development/RECON-T0.1.md` and in the affected specs."
+      ]
+    },
+    // the helper runs the compiled main: its Node.js is the one of .nvmrc and moves with it, by hand
+    {
+      "matchFileNames": [
+        "e2e/scripts/**"
+      ],
+      "matchDepNames": [
+        "library/node"
+      ],
+      "enabled": false
+    },
+    // kind, its node image and kubectl move together: kubectl stays within one minor version of the node
+    {
+      "matchFileNames": [
+        "e2e/scripts/**"
+      ],
+      "matchDepNames": [
+        "kindest/node",
+        "kubernetes-sigs/kind",
+        "kubernetes/kubernetes"
+      ],
+      "groupName": "kind"
+    },
+    // Renovate moves the version, not the checksums pinned beside it
+    {
+      "matchFileNames": [
+        "e2e/scripts/local-platform.mts"
+      ],
+      "prBodyNotes": [
+        "The checksums of the four targets are pinned beside the version and this pull request does not change them: replace them with the ones the release publishes. The environment is not installed until they match."
+      ]
     }
   ],
   "customManagers": [
@@ -118,6 +172,45 @@
       ],
       "datasourceTemplate": "npm",
       "versioningTemplate": "npm"
+    },
+    // images of the test environment, pinned by tag and digest
+    {
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^e2e/scripts/local-manifests\\.mts$/"
+      ],
+      "matchStrings": [
+        "\"docker\\.io/(?<depName>[a-z0-9./-]+):(?<currentValue>[A-Za-z0-9._-]+)@(?<currentDigest>sha256:[a-f0-9]{64})\""
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    },
+    // binaries of the test environment, pinned by version and checksum
+    {
+      "customType": "regex",
+      "extractVersionTemplate": "^v(?<version>.*)$",
+      "managerFilePatterns": [
+        "/^e2e/scripts/local-platform\\.mts$/"
+      ],
+      "matchStrings": [
+        "kind: \\{\\s*version: \"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "kubernetes-sigs/kind",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "extractVersionTemplate": "^v(?<version>.*)$",
+      "managerFilePatterns": [
+        "/^e2e/scripts/local-platform\\.mts$/"
+      ],
+      "matchStrings": [
+        "kubectl: \\{\\s*version: \"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "kubernetes/kubernetes",
+      "versioningTemplate": "semver"
     },
     // renovate hints after comment
     {

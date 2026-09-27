@@ -211,6 +211,10 @@ pnpm knip:check           # Run after a build with separate modules
 
 # Tests
 pnpm test:unit            # Builds first, then vitest
+pnpm e2e:cluster:up       # Disposable kind cluster with Velero and S3 (needs Docker)
+pnpm e2e                  # Fixtures and transport proof against that cluster
+pnpm e2e:cluster:down     # Removes the cluster, its network and its state
+pnpm demo:up              # The cluster with the fixtures left in place
 
 # Build
 pnpm build                # Type check, then electron-vite, separate modules

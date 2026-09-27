@@ -1,4 +1,5 @@
 import { BlockList, isIPv4 } from "node:net";
+import { childEnvironment, type NetworkShape } from "./local-platform.mts";
 
 export const DEMO_CLUSTER = "freelens-velero-dev";
 export const DEMO_CONTEXT = `kind-${DEMO_CLUSTER}`;
@@ -13,11 +14,96 @@ export const SUBNETS = {
   services: "198.19.64.0/24",
 } as const;
 
+// Where the node finds the resolver of Docker, which answers for names outside the cluster.
+export const DEMO_GATEWAY = "198.18.64.1";
+const DOCKER_RESOLVER = "127.0.0.11/32";
+
+export interface EgressChain {
+  parent: "INPUT" | "OUTPUT" | "FORWARD";
+  chain: string;
+  // Each rule as the arguments that add it, which joined are also how the node lists it.
+  rules: string[][];
+}
+
+// What holds the node back: only the node itself, its pods and its services are destinations.
+export function egressChains(address: string): EgressChain[] {
+  requireCondition(isIPv4(address) && address.startsWith("198.18.64."), "Invalid owned node address");
+  const resolver = ["-d", DOCKER_RESOLVER, "-j", "REJECT", "--reject-with", "icmp-port-unreachable"];
+  const leaving = [
+    ["-m", "conntrack", "--ctstate", "RELATED,ESTABLISHED", "-j", "RETURN"],
+    [
+      "-d",
+      SUBNETS.pods,
+      "-p",
+      "tcp",
+      "-m",
+      "tcp",
+      "--dport",
+      "18333",
+      "-j",
+      "REJECT",
+      "--reject-with",
+      "icmp-port-unreachable",
+    ],
+    resolver,
+    ...["127.0.0.0/8", `${address}/32`, SUBNETS.pods, SUBNETS.services].map((destination) => [
+      "-d",
+      destination,
+      "-j",
+      "RETURN",
+    ]),
+    ["-j", "REJECT", "--reject-with", "icmp-net-unreachable"],
+  ];
+
+  return [
+    { parent: "OUTPUT", chain: "FV_DEMO_OUT", rules: leaving },
+    { parent: "FORWARD", chain: "FV_DEMO_FWD", rules: leaving },
+    // The pods reach the resolver through the gateway, and that traffic is delivered, not forwarded.
+    { parent: "INPUT", chain: "FV_DEMO_IN", rules: [resolver] },
+  ];
+}
+
+export interface EgressState {
+  rules: "absent" | "different" | "complete";
+  // The position of the jump among the rules of the parent, from 1; 0 when there is none.
+  jump: number;
+}
+
+// Read from the listing of the node: a chain is complete only when it holds the expected rules, in their order.
+export function egressState(listing: string, expected: EgressChain): EgressState {
+  const lines = listing.split("\n").map((line) => line.trim());
+  const rules = lines.filter((line) => line.startsWith(`-A ${expected.chain} `));
+  const wanted = expected.rules.map((rule) => `-A ${expected.chain} ${rule.join(" ")}`);
+  const jumps = lines.filter((line) => line.startsWith(`-A ${expected.parent} `));
+  const found = jumps.filter((line) => line === `-A ${expected.parent} -j ${expected.chain}`);
+
+  requireCondition(found.length <= 1, `The jump to ${expected.chain} is repeated`);
+  return {
+    rules: !lines.includes(`-N ${expected.chain}`)
+      ? "absent"
+      : rules.length === wanted.length && rules.every((rule, index) => rule === wanted[index])
+        ? "complete"
+        : "different",
+    jump: jumps.indexOf(`-A ${expected.parent} -j ${expected.chain}`) + 1,
+  };
+}
+
+export function assertEgressRules(listing: string, address: string): void {
+  for (const expected of egressChains(address)) {
+    const state = egressState(listing, expected);
+
+    requireCondition(state.rules === "complete", `The rules of ${expected.chain} are not the expected ones`);
+    requireCondition(state.jump === 1, `${expected.chain} is not the first rule of ${expected.parent}`);
+  }
+}
+
 export interface DemoIdentity {
   owner: string;
   nodeId: string;
   networkId: string;
   kubeconfigHash: string;
+  // Absent in the journals written before the second shape existed.
+  shape?: NetworkShape;
 }
 
 export interface KindNode {
@@ -54,40 +140,20 @@ export function requireCondition(condition: unknown, message: string): asserts c
   }
 }
 
-export function localEnvironment(base: NodeJS.ProcessEnv, kubeconfig: string): NodeJS.ProcessEnv {
-  const environment = { ...base };
-
-  for (const key of [
-    "DOCKER_CONTEXT",
-    "DOCKER_TLS_VERIFY",
-    "DOCKER_CERT_PATH",
-    "KUBERNETES_MASTER",
-    "KUBERNETES_SERVICE_HOST",
-    "KUBERNETES_SERVICE_PORT",
-    "NODE_OPTIONS",
-  ]) {
-    delete environment[key];
-  }
-
-  for (const key of Object.keys(environment)) {
-    if (
-      /^(AWS_|AZURE_|ARM_|GOOGLE_|GCLOUD_|GCP_|CLOUDSDK_|WEED_|VELERO_|DOCKER_|KIND_|TRIVY_)/i.test(key) ||
-      /^(https?|all|no)_proxy$/i.test(key)
-    ) {
-      delete environment[key];
-    }
-  }
-
-  return {
-    ...environment,
-    DOCKER_HOST,
+export function localEnvironment(
+  base: NodeJS.ProcessEnv,
+  kubeconfig: string,
+  dockerHost = DOCKER_HOST,
+): Record<string, string> {
+  return childEnvironment(base, {
+    DOCKER_HOST: dockerHost,
     KIND_EXPERIMENTAL_PROVIDER: "docker",
     KIND_EXPERIMENTAL_DOCKER_NETWORK: DEMO_NETWORK,
     KUBECONFIG: kubeconfig,
     AWS_EC2_METADATA_DISABLED: "true",
     AWS_CONFIG_FILE: "/dev/null",
     AWS_SHARED_CREDENTIALS_FILE: "/dev/null",
-  };
+  });
 }
 
 export function assertFailedNodeRemoval(
@@ -114,10 +180,7 @@ export function assertFailedNodeRemoval(
       node.Config.Labels["io.x-k8s.kind.role"] === "control-plane",
     "Wrong failed-node identity",
   );
-  requireCondition(
-    network.Id === identity.networkId && network.Labels?.[OWNER_LABEL] === identity.owner && network.Internal,
-    "Wrong failed-node network owner",
-  );
+  assertOwnedNetwork(identity, network);
   requireCondition(
     Object.keys(node.NetworkSettings?.Networks ?? {}).length === 1 &&
       node.NetworkSettings.Networks[DEMO_NETWORK]?.NetworkID === identity.networkId,
@@ -125,16 +188,49 @@ export function assertFailedNodeRemoval(
   );
 }
 
-export function assertOwnedNetwork(identity: Pick<DemoIdentity, "owner" | "networkId">, network: KindNetwork): void {
+export function assertOwnedNetwork(
+  identity: Pick<DemoIdentity, "owner" | "networkId" | "shape">,
+  network: KindNetwork,
+): void {
   requireCondition(identity.owner && identity.networkId, "Incomplete network ownership");
   requireCondition(
     network.Id === identity.networkId && network.Labels?.[OWNER_LABEL] === identity.owner,
     "Wrong network owner",
   );
-  requireCondition(network.Internal && network.Driver === "bridge", "An internal Docker bridge is required");
+  requireCondition(network.Driver === "bridge", "A Docker bridge is required");
+  requireCondition(
+    network.Internal === ((identity.shape ?? "internal") === "internal"),
+    "The Docker bridge does not have the shape the journal records",
+  );
   requireCondition(
     network.IPAM?.Config?.length === 1 && network.IPAM.Config[0].Subnet === SUBNETS.docker,
     "Unexpected Docker subnet",
+  );
+}
+
+// What a removal needs: the node the journal names, on the network the journal owns, whatever its state.
+export function assertOwnedNode(
+  identity: Pick<DemoIdentity, "owner" | "nodeId" | "networkId" | "shape">,
+  nodes: KindNode[],
+  network: KindNetwork,
+): void {
+  requireCondition(identity.owner && identity.nodeId && identity.networkId, "Incomplete node ownership");
+  requireCondition(
+    nodes.length === 1 && nodes[0].Id === identity.nodeId,
+    "A node exists that the journal does not own",
+  );
+  const node = nodes[0];
+
+  requireCondition(
+    node.Config?.Labels?.["io.x-k8s.kind.cluster"] === DEMO_CLUSTER &&
+      node.Config.Labels["io.x-k8s.kind.role"] === "control-plane",
+    "Wrong node identity",
+  );
+  assertOwnedNetwork(identity, network);
+  requireCondition(
+    Object.keys(node.NetworkSettings?.Networks ?? {}).length === 1 &&
+      node.NetworkSettings.Networks[DEMO_NETWORK]?.NetworkID === identity.networkId,
+    "The node is not on the owned network alone",
   );
 }
 
@@ -230,30 +326,34 @@ export function assertLocalKind(
     Object.keys(user.user).every((key) => ["client-certificate-data", "client-key-data"].includes(key)),
     "Unexpected credential settings",
   );
-  const ports = node.NetworkSettings?.Ports?.["6443/tcp"];
+  const published = Object.entries(node.NetworkSettings?.Ports ?? {}).flatMap(([port, bindings]) =>
+    (bindings ?? []).map((binding) => ({ port, ...binding })),
+  );
 
-  if (ports?.length) {
+  if ((identity.shape ?? "internal") === "loopback") {
     requireCondition(
-      ports.length === 1 && ports[0].HostIp === "127.0.0.1",
-      "Published API server must bind only to loopback",
+      published.length === 1 && published[0].port === "6443/tcp" && published[0].HostIp === "127.0.0.1",
+      "Only the API server may be published, and only on loopback",
     );
-    requireCondition(/^\d+$/.test(ports[0].HostPort), "Invalid API port");
+    requireCondition(/^\d+$/.test(published[0].HostPort), "Invalid API port");
     requireCondition(
-      cluster.cluster.server === `https://127.0.0.1:${ports[0].HostPort}`,
+      cluster.cluster.server === `https://127.0.0.1:${published[0].HostPort}`,
       "Kubeconfig does not address the owned node",
     );
   } else {
-    const address = node.NetworkSettings.Networks[DEMO_NETWORK].IPAddress;
-
+    requireCondition(published.length === 0, "The internal shape publishes no port");
     requireCondition(
-      address && isIPv4(address) && address.startsWith("198.18.64."),
-      "Invalid owned internal API address",
-    );
-    requireCondition(
-      cluster.cluster.server === `https://${address}:6443`,
+      cluster.cluster.server === `https://${nodeAddress(node)}:6443`,
       "Kubeconfig does not address the owned internal node",
     );
   }
+}
+
+export function nodeAddress(node: KindNode): string {
+  const address = node.NetworkSettings?.Networks?.[DEMO_NETWORK]?.IPAddress;
+
+  requireCondition(address && isIPv4(address) && address.startsWith("198.18.64."), "Invalid owned node address");
+  return address;
 }
 
 function parseSubnet(cidr: string): { address: string; prefix: number } {

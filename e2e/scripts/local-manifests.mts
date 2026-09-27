@@ -8,6 +8,9 @@ export const IMAGES = {
     "docker.io/velero/velero-plugin-for-aws:v1.14.2@sha256:0751144c1c8e52d52c48717fbd13ad5a3061e612ae4d7ad744a946cd5b139d1a",
   storage: "docker.io/chrislusf/seaweedfs:4.47@sha256:ce9e796f1fe6f06968f4c04bdaf8f678dad9c8acdfef3d244133d71bfa6bf882",
 } as const;
+// The runtime of the helpers that run beside the cluster: the direct transport proof and the egress check.
+export const DIRECT_PROOF_IMAGE =
+  "docker.io/library/node:24.15.0-bookworm-slim@sha256:4e6b70dd6cbfc88c8157ba19aa3d9f9cce6ba4703576d55459e45efcbc9c5f5d";
 export const BUCKET = "velero-demo";
 export const STORAGE_ENDPOINT = `http://seaweedfs.${DEMO_NAMESPACE}.svc.cluster.local:8333`;
 export const DATA_DIRECTORY = "/var/local/freelens-velero-dev/seaweedfs";

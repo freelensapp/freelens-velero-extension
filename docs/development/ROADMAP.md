@@ -45,7 +45,7 @@ Status values: `Planned`, `Draft` (the spec is written, not approved),
 | Package manifest and tools as the other extensions; no dependency override | | | Done |
 | Renovate and the automated maintenance workflows | | | Done |
 | Activation of the packed extension in a packaged Freelens, as an integration test | FND-10 | [SPEC-0001](../specs/SPEC-0001-local-foundation.md) | Done |
-| Test environment on Linux and macOS, x64 and ARM64, and in the hosted checks | | [SPEC-0004](../specs/SPEC-0004-test-environment-every-platform.md) | Approved |
+| Test environment on Linux and macOS, x64 and ARM64, and in the hosted checks | | [SPEC-0004](../specs/SPEC-0004-test-environment-every-platform.md) | In PR |
 | Release workflows | | | Done |
 
 The T0.4 to T0.6 evidence is in [TESTING.md](TESTING.md). It covers the

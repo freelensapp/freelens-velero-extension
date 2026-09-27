@@ -11,8 +11,7 @@ import { type KubeResource, STORAGE_ENDPOINT } from "./local-manifests.mts";
 import type { ArtifactTarget, DiagnosticKind } from "../../src/main/diagnostic-kubernetes.ts";
 import type { DiagnosticInput } from "../../src/main/diagnostic-service.ts";
 
-export const DIRECT_PROOF_IMAGE =
-  "docker.io/library/node:24.15.0-bookworm-slim@sha256:4e6b70dd6cbfc88c8157ba19aa3d9f9cce6ba4703576d55459e45efcbc9c5f5d";
+export { DIRECT_PROOF_IMAGE } from "./local-manifests.mts";
 
 export interface DownloadProofContext {
   owner: string;
