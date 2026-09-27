@@ -1,0 +1,11 @@
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Progress: resolved 186, reused 160, downloaded 0, added 0
+Progress: resolved 381, reused 330, downloaded 0, added 0
+ WARN  6 deprecated subdependencies found: @mui/base@5.0.0-beta.13, crypto-js@4.2.0, glob@7.2.3, inflight@1.0.6, react-beautiful-dnd@13.1.1, rimraf@3.0.2
+Already up to date
+Progress: resolved 600, reused 545, downloaded 5, added 0, done
+ WARN  Issues with peer dependencies found
+.
+└─┬ electron-vite 5.0.0
+  └── ✕ unmet peer vite@"^5.0.0 || ^6.0.0 || ^7.0.0": found 8.1.2
+
