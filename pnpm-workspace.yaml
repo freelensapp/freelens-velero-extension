@@ -1,0 +1,24 @@
+onlyBuiltDependencies:
+  - esbuild
+
+shellEmulator: true
+
+patchedDependencies:
+  query-string@7.1.3: patches/query-string@7.1.3.patch
+
+overrides:
+  '@trunkio/launcher@1.3.4>tar': 7.5.21
+  'query-string@7.1.3>decode-uri-component': 0.5.0
+  'dompurify@>=3 <3.4.13': 3.4.13
+  'tar@>=7 <7.5.21': 7.5.21
+  'fast-uri@>=3 <3.1.6': 3.1.6
+  'brace-expansion@>=1 <1.1.18': 1.1.18
+  'postcss@>=8 <8.5.23': 8.5.23
+  'undici@>=7 <7.29.0': 7.29.0
+  'ip-address@>=10 <10.3.1': 10.3.1
+  'electron@>=41 <41.10.3': 41.10.3
+  'nanoid@>=3 <3.3.18': 3.3.18
+  'js-yaml@>=5 <5.2.2': 5.2.2
+  'browserslist@>=4 <4.28.7': 4.28.7
+  'joi@>=18 <18.2.5': 18.2.5
+  'baseline-browser-mapping@>=2 <2.11.0': 2.11.0
