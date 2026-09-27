@@ -9,6 +9,7 @@ export default defineConfig({
     passWithNoTests: false,
     alias: {
       "@freelensapp/extensions": fileURLToPath(new URL("./test/freelens-extensions.ts", import.meta.url)),
+      undici: fileURLToPath(new URL("./build/undici-stub.ts", import.meta.url)),
     },
   },
 });

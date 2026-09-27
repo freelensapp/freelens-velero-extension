@@ -131,6 +131,11 @@ The package loads outside the development workspace without installing these
 dependencies or loading the host SDK. Supported build-time `WS_NO_BUFFER_UTIL` and
 `WS_NO_UTF_8_VALIDATE` disable optional native accelerators; no library is patched.
 
+Since 2026-09-27 the client is imported by its files, not from its root, and undici
+is replaced by a stub in the main build. The reasons are in
+[ARCHITECTURE.md](ARCHITECTURE.md#scaffold-progress). The packed production build
+went from 1,757,254 to 576,365 bytes.
+
 The local direct-route proof additionally uses the unmodified official
 `docker.io/library/node:24.15.0-bookworm-slim@sha256:4e6b70dd6cbfc88c8157ba19aa3d9f9cce6ba4703576d55459e45efcbc9c5f5d`.
 It is a temporary test runner, not package content or a replacement for the host.

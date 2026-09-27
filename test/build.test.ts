@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -72,6 +73,29 @@ describe.each([
     expect(content).not.toMatch(/@freelensapp\/(?:core|extensions)|freelens-extensions\.ts|forbiddenAccesses|vitest/);
     expect(files.some((file) => /\.test\.|kubeconfig|\.pem$|\.key$/.test(file.name))).toBe(false);
   });
+});
+
+it("main bundle leaves the dispatcher of the host process alone", () => {
+  const probe = `
+    globalThis.LensExtensions = { Common: {}, Main: { LensExtension: class {} } };
+    const slots = ["undici.globalDispatcher.1", "undici.globalDispatcher.2"].map((key) => Symbol.for(key));
+    const before = slots.map((slot) => globalThis[slot]);
+    require(process.argv[1]);
+    process.stdout.write(JSON.stringify(slots.map((slot, index) => globalThis[slot] === before[index])));
+  `;
+  const result = spawnSync(process.execPath, ["-e", probe, resolve(manifest.main)], {
+    encoding: "utf8",
+    timeout: 30_000,
+  });
+  const directory = resolve(manifest.main, "..");
+  const content = readdirSync(directory, { recursive: true, withFileTypes: true })
+    .filter((file) => file.isFile() && file.name.endsWith(".js"))
+    .map((file) => readFileSync(resolve(file.parentPath, file.name), "utf8"))
+    .join("\n");
+
+  expect(result.stderr).toBe("");
+  expect(JSON.parse(result.stdout)).toEqual([true, true]);
+  expect(content).not.toContain("undici.globalDispatcher");
 });
 
 interface ArchiveTools {

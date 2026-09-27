@@ -14,6 +14,11 @@ const preserveModules = (process.env.VITE_PRESERVE_MODULES ?? "true") === "true"
 export default defineConfig({
   main: {
     plugins: [hostGlobals()],
+    resolve: {
+      alias: {
+        undici: resolve(__dirname, "build/undici-stub.ts"),
+      },
+    },
     define: {
       "process.env.WS_NO_BUFFER_UTIL": '"1"',
       "process.env.WS_NO_UTF_8_VALIDATE": '"1"',

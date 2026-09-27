@@ -305,9 +305,15 @@ their mapping with the first spec that has a UI; until then no source imports
 them.
 
 Other dependencies ARE bundled into the extension output. Today the main
-bundle carries `@kubernetes/client-node` and `ws`. The import of
-`@kubernetes/client-node/dist/web-socket-handler.js` is tied to the pinned
-version: run the tunnel tests before changing it.
+bundle carries `@kubernetes/client-node` and `ws`.
+
+- Import the Kubernetes client by its files (`dist/config.js`,
+  `dist/web-socket-handler.js`), never from its root: the root bundles every
+  generated API client. These imports are tied to the pinned version: run the
+  adapter and tunnel tests before changing it.
+- undici never enters the main bundle: `build/undici-stub.ts` stands in for it.
+  The real module installs a dispatcher for the whole process when it loads,
+  which inside Freelens is the process of the host. A build test guards this.
 
 ## Code Style
 
