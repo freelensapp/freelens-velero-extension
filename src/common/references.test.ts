@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { emptyRead, failed, failedStatus, hasItems, isStale, loading, succeeded } from "./read-state";
-import { backupReferences, resolveReference, sameObject } from "./references";
+import { backupReferences, resolveReference, restoreReferences, sameObject } from "./references";
 import { LABELS } from "./types";
 
 import type { FamilyRead } from "./read-state";
-import type { InstallationReads } from "./references";
+import type { InstallationReads, RestoreReads } from "./references";
 import type {
   BackupResource,
   BackupStorageLocationResource,
@@ -75,11 +75,56 @@ describe("what is known of a family of resources", () => {
     const denied = failed(asking, "forbidden");
 
     expect(first).toEqual({ status: "ready", items: [first.items[0]], lastSuccess: now });
-    expect(asking).toEqual({ status: "loading", items: first.items, lastSuccess: now });
     expect(denied).toEqual({ status: "forbidden", items: first.items, lastSuccess: now });
     expect(isStale(first)).toBe(false);
+    expect(isStale(asking)).toBe(false);
     expect(isStale(denied)).toBe(true);
     expect(hasItems(denied)).toBe(true);
+  });
+
+  it("keeps what the last read said of a family while the family is asked again", () => {
+    const first = succeeded([object("one", "velero-demo", "uid-one")], now);
+    const denied = failed(first, "forbidden");
+    const never = failed(emptyRead<unknown>(), "forbidden");
+
+    // What was read is not of an earlier read until a read fails.
+    expect(loading(first)).toEqual({ status: "ready", items: first.items, lastSuccess: now, reading: true });
+    // What was denied, not served or failed stays so until a read says otherwise.
+    expect(loading(denied)).toEqual({ status: "forbidden", items: first.items, lastSuccess: now, reading: true });
+    expect(loading(never)).toEqual({ status: "forbidden", items: [], lastSuccess: undefined, reading: true });
+    expect(loading(failed(first, "failed")).status).toBe("failed");
+    expect(loading(failed(first, "not-served")).status).toBe("not-served");
+    expect(isStale(loading(denied))).toBe(true);
+    expect(hasItems(loading(never))).toBe(false);
+    // Only a family that was never answered is loading, and it stays so while it is asked again.
+    expect(loading(emptyRead())).toEqual({ status: "loading", items: [], lastSuccess: undefined });
+    expect(loading(loading(emptyRead()))).toEqual({ status: "loading", items: [], lastSuccess: undefined });
+    // The read that ends says what it found, and that nothing is being asked.
+    expect(succeeded([], now + 1)).toEqual({ status: "ready", items: [], lastSuccess: now + 1 });
+    expect("reading" in failed(loading(first), "failed")).toBe(false);
+    expect(loading(loading(first))).toEqual(loading(first));
+  });
+
+  it("resolves a reference the same way while its family is asked again", () => {
+    const ready = succeeded([object("default", "velero-demo", "uid-default")], now);
+    const denied = failed(emptyRead<ReturnType<typeof object>>(), "forbidden");
+
+    for (const name of ["default", "gone"]) {
+      expect(resolveReference("BackupStorageLocation", name, "velero-demo", loading(ready))).toEqual(
+        resolveReference("BackupStorageLocation", name, "velero-demo", ready),
+      );
+      expect(resolveReference("BackupStorageLocation", name, "velero-demo", loading(denied))).toEqual(
+        resolveReference("BackupStorageLocation", name, "velero-demo", denied),
+      );
+    }
+    expect(resolveReference("BackupStorageLocation", "default", "velero-demo", loading(ready))).toMatchObject({
+      state: "resolved",
+      stale: false,
+      reason: "",
+    });
+    expect(resolveReference("BackupStorageLocation", "default", "velero-demo", loading(denied)).state).toBe(
+      "inaccessible",
+    );
   });
 
   it("has no number of items for a family that was never read", () => {
@@ -246,5 +291,116 @@ describe("references of a backup", () => {
     expect(sameObject(first, object("nightly-1", "velero-demo", "second"))).toBe(false);
     // Without the two identifiers nothing says that they are the same.
     expect(sameObject(first, { metadata: { name: "nightly-1", namespace: "velero-demo" } })).toBe(false);
+  });
+});
+
+describe("references of a restore", () => {
+  const sources = (overrides: Partial<RestoreReads> = {}): RestoreReads =>
+    frozen({
+      backups: succeeded<BackupResource>(
+        [
+          backup,
+          object("nightly-1", "velero-other", "backup-other", { storageLocation: "elsewhere" }),
+          { metadata: { name: "by-label", namespace: "velero-demo", labels: { [LABELS.storageLocation]: "default" } } },
+          object("no-location", "velero-demo", "backup-bare"),
+        ],
+        now,
+      ),
+      schedules: succeeded<ScheduleResource>([object("nightly", "velero-demo", "schedule-demo")], now),
+      storageLocations: succeeded<BackupStorageLocationResource>(
+        [object("default", "velero-demo", "location-demo"), object("elsewhere", "velero-other", "location-other")],
+        now,
+      ),
+      ...overrides,
+    });
+  const restore = (spec?: RestoreResource["spec"], namespace = "velero-demo"): RestoreResource =>
+    frozen({ metadata: { name: "restore-1", namespace, uid: "restore-demo" }, ...(spec ? { spec } : {}) });
+
+  it("resolves the backup, the schedule and the storage location of the backup by their names", () => {
+    const found = restoreReferences(restore({ backupName: "nightly-1", scheduleName: "nightly" }), sources());
+
+    expect(found.backup).toMatchObject({ kind: "Backup", state: "resolved", uid: "backup-demo", stale: false });
+    expect(found.schedule).toMatchObject({ kind: "Schedule", state: "resolved", uid: "schedule-demo" });
+    expect(found.storageLocation).toMatchObject({
+      kind: "BackupStorageLocation",
+      name: "default",
+      state: "resolved",
+      uid: "location-demo",
+    });
+  });
+
+  it("stays inside the namespace of the restore when another installation has the same names", () => {
+    const found = restoreReferences(restore({ backupName: "nightly-1" }, "velero-other"), sources());
+
+    expect(found.backup).toMatchObject({ state: "resolved", uid: "backup-other", namespace: "velero-other" });
+    expect(found.storageLocation).toMatchObject({ name: "elsewhere", state: "resolved", uid: "location-other" });
+  });
+
+  it("names no source for a restore that names none, and makes none up from the schedule", () => {
+    expect(restoreReferences(restore(), sources())).toEqual({});
+    expect(restoreReferences(restore({ backupName: "", scheduleName: "" }), sources())).toEqual({});
+    const asked = restoreReferences(restore({ scheduleName: "nightly" }), sources());
+
+    expect(asked.schedule?.state).toBe("resolved");
+    expect(asked.backup).toBeUndefined();
+    expect(asked.storageLocation).toBeUndefined();
+  });
+
+  it("calls absent a backup that a list that was read does not hold, and knows no storage through it", () => {
+    const found = restoreReferences(restore({ backupName: "expired", scheduleName: "removed" }), sources());
+
+    expect(found.backup).toMatchObject({ state: "absent", reason: "No backup of this name in velero-demo" });
+    expect(found.schedule).toMatchObject({ state: "absent" });
+    expect(found.storageLocation).toBeUndefined();
+  });
+
+  it.each([
+    ["forbidden", "inaccessible", "access is denied"],
+    ["not-served", "unknown", "does not serve"],
+    ["failed", "unknown", "could not be read"],
+  ] as const)("does not call absent a backup whose list was %s", (status, state, reason) => {
+    const found = restoreReferences(
+      restore({ backupName: "nightly-1", scheduleName: "nightly" }),
+      sources({ backups: failed(emptyRead<BackupResource>(), status) }),
+    );
+
+    expect(found.backup).toMatchObject({ state });
+    expect(found.backup?.reason).toContain(reason);
+    // The schedule has its own list, which was read.
+    expect(found.schedule?.state).toBe("resolved");
+    expect(found.storageLocation).toBeUndefined();
+  });
+
+  it("keeps a backup that an earlier read found, and says that it is of an earlier read", () => {
+    const earlier = sources().backups;
+    const found = restoreReferences(
+      restore({ backupName: "nightly-1" }),
+      sources({ backups: failed(earlier, "failed") }),
+    );
+
+    expect(found.backup).toMatchObject({ state: "resolved", stale: true });
+    expect(found.storageLocation).toMatchObject({ state: "resolved", stale: false });
+  });
+
+  it("reads the storage location from the label of the backup when its spec names none, or knows none", () => {
+    expect(restoreReferences(restore({ backupName: "by-label" }), sources()).storageLocation).toMatchObject({
+      name: "default",
+      state: "resolved",
+    });
+    expect(restoreReferences(restore({ backupName: "no-location" }), sources()).storageLocation).toBeUndefined();
+  });
+
+  it("tells a storage location that is denied from one that is not there", () => {
+    const denied = restoreReferences(
+      restore({ backupName: "nightly-1" }),
+      sources({ storageLocations: failed(emptyRead<BackupStorageLocationResource>(), "forbidden") }),
+    );
+    const removed = restoreReferences(
+      restore({ backupName: "nightly-1" }),
+      sources({ storageLocations: succeeded<BackupStorageLocationResource>([], now) }),
+    );
+
+    expect(denied.storageLocation?.state).toBe("inaccessible");
+    expect(removed.storageLocation?.state).toBe("absent");
   });
 });

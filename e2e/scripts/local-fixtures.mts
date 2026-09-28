@@ -34,9 +34,12 @@ export const RESTORE_PHASES = [
   "Failed",
 ] as const;
 
-// The identity the views are read with when access is restricted, and how many backups the long list has.
+// The identities the views are read with when access is restricted, and how long the long lists are. The
+// first reader reads the backups and not the restores; the second one the restores and not the backups.
 export const VIEW_READER = "views-reader";
+export const VIEW_READER_OF_RESTORES = "views-reader-of-restores";
 export const SCALE_BACKUPS = 1000;
+export const SCALE_RESTORES = 1000;
 
 export function fixtureNames(run: string) {
   requireCondition(/^[a-f0-9]{8}$/.test(run), "A generated local fixture run ID is required");
@@ -174,27 +177,100 @@ export function restrictedFixtures(owner: string, run: string): KubeResource[] {
   ];
 }
 
-const FINISHED = new Set(["Completed", "PartiallyFailed", "Failed", "FailedValidation"]);
+// The phases an operation has with the time it ended: the ones the release ends it in, and the one of a
+// backup that ended and is being deleted.
+const ENDED = new Set(["Completed", "PartiallyFailed", "Failed", "Deleting"]);
+// The phases of an operation that did not start. The release writes the start time when the validation
+// passes and the operation begins: one that waits, or that failed its validation, has no start time, no
+// end time, no progress and no counters.
+export const NOT_STARTED = new Set(["New", "Queued", "ReadyToStart", "FailedValidation"]);
+// The phases of an operation that is at work, or that was when the release failed it: not every item is
+// done, and nothing was counted.
+export const NOT_COUNTED = new Set(["InProgress", "Failed"]);
+
+// The phases the release gives to an operation that waits for the operations its plugins started on its
+// items: it has one such operation at least.
+const WAITING = new Set(["WaitingForPluginOperations", "WaitingForPluginOperationsPartiallyFailed"]);
 
 // The status of a synthetic operation in a phase: what the controller would have written, and did not.
-function syntheticStatus(phase: string, progressField: string, started = Date.parse("2026-09-01T10:00:00Z")) {
+// The release writes no counter of zero, counts the errors and the warnings when the work ends, and leaves
+// the work with every item done. The failed operation is one it stopped at work, with its reason. The
+// hooks are counted at the end of the work of a backup, and when a restore is finalized: their status is
+// in the object from then on, empty when none was run.
+export function syntheticStatus(
+  phase: string,
+  progressField: "itemsBackedUp" | "itemsRestored",
+  started = Date.parse("2026-09-01T10:00:00Z"),
+): Record<string, unknown> {
   const time = (offset: number) => new Date(started + offset).toISOString().replace(".000Z", "Z");
+  const backup = progressField === "itemsBackedUp";
+  const hooked = backup ? !NOT_COUNTED.has(phase) : phase === "Completed" || phase === "PartiallyFailed";
+
+  if (NOT_STARTED.has(phase)) {
+    return {
+      phase,
+      ...(phase === "FailedValidation"
+        ? { validationErrors: ["Synthetic validation error; no operation was executed"] }
+        : {}),
+    };
+  }
+  const errors = phase.includes("PartiallyFailed") ? 1 : 0;
+  const warnings = phase === "PartiallyFailed" ? 1 : 0;
 
   return {
     phase,
-    ...(phase === "New" ? {} : { startTimestamp: time(0) }),
-    ...(FINISHED.has(phase) ? { completionTimestamp: time(60_000) } : {}),
-    progress: { totalItems: 10, [progressField]: phase === "Completed" || phase.startsWith("Finalizing") ? 10 : 4 },
-    errors: phase.includes("Failed") ? 1 : 0,
-    warnings: phase === "PartiallyFailed" ? 1 : 0,
-    ...(phase === "FailedValidation"
-      ? { validationErrors: ["Synthetic validation error; no operation was executed"] }
-      : {}),
+    startTimestamp: time(0),
+    progress: { totalItems: 10, [progressField]: NOT_COUNTED.has(phase) ? 4 : 10 },
+    ...(errors ? { errors } : {}),
+    ...(warnings ? { warnings } : {}),
+    ...(WAITING.has(phase) ? { [backup ? "backupItemOperationsAttempted" : "restoreItemOperationsAttempted"]: 1 } : {}),
+    ...(hooked ? { hookStatus: {} } : {}),
+    ...(phase === "Failed" ? { failureReason: "Synthetic failure reason; no operation was executed" } : {}),
+    ...(ENDED.has(phase) ? { completionTimestamp: time(60_000) } : {}),
+  };
+}
+
+// What Velero adds to the excluded resources of every restore it takes.
+const EXCLUDED_BY_VELERO = [
+  "nodes",
+  "events",
+  "events.events.k8s.io",
+  "backups.velero.io",
+  "restores.velero.io",
+  "resticrepositories.velero.io",
+  "csinodes.storage.k8s.io",
+  "volumeattachments.storage.k8s.io",
+  "backuprepositories.velero.io",
+];
+
+// The spec of a restore as the release keeps it. It completes a restore when it takes it, whether it then
+// refuses it or not: the resources it never restores go after the ones that were excluded, and the timeout
+// of the item operations is filled. A restore in the phase New was not taken, and is as it was submitted.
+// The schedule of the backup is written beside the backup once the backup was found and can be used: a
+// restore that failed its validation carries it or not by what it was refused for, and the synthetic ones
+// do not.
+export function restoreSpec(
+  phase: string,
+  submitted: Record<string, unknown>,
+  schedule?: string,
+): Record<string, unknown> {
+  if (phase === "New") return submitted;
+  const excluded = Array.isArray(submitted.excludedResources) ? (submitted.excludedResources as string[]) : [];
+
+  return {
+    ...submitted,
+    ...(schedule && phase !== "FailedValidation" ? { scheduleName: schedule } : {}),
+    excludedResources: [...excluded, ...EXCLUDED_BY_VELERO.filter((name) => !excluded.includes(name))],
+    itemOperationTimeout: "4h0m0s",
   };
 }
 
 // A name as long as Velero accepts one: it is the value of a label, which has 63 characters at most.
 export const LONG_BACKUP_NAME = "backup-with-a-name-as-long-as-the-value-of-a-label-is-allowed-1";
+// A restore with a name as long as the longest name of a backup.
+export const LONG_RESTORE_NAME = "restore-with-a-name-as-long-as-the-name-of-a-restore-can-be-one";
+// Namespaces with names as long as a namespace can have one, for a mapping that fills its table.
+export const LONG_NAMESPACE = "namespace-with-a-name-as-long-as-the-name-of-a-namespace-can-b";
 
 // What the views need beside the phases: an installation with references that lead somewhere and references
 // that do not, a name that fills its column, an object that reports nothing, and an identity that reads a
@@ -268,52 +344,125 @@ export function viewFixtures(owner: string, run: string): KubeResource[] {
     // The name of a backup of the namespace of the phases, for another backup: a name is of its installation.
     backup("backup-inprogress", "InProgress", { status: { progress: { totalItems: 10, itemsBackedUp: 7 } } }),
     backup("backup-unreported", undefined),
+    // The restore that failed in part ran two hooks, of which one failed: it was finalized, which is when
+    // the release counts them.
     ...["Completed", "PartiallyFailed"].map((phase) => ({
       apiVersion: "velero.io/v1",
       kind: "Restore",
       metadata: metadata(`restore-of-daily-${phase.toLowerCase()}`),
-      spec: {
-        backupName: "views-daily-20260901030000",
-        includedNamespaces: [names.source],
-        namespaceMapping: { [names.source]: names.restored },
-        includeClusterResources: false,
-        restorePVs: false,
-        existingResourcePolicy: "none",
+      spec: restoreSpec(
+        phase,
+        {
+          backupName: "views-daily-20260901030000",
+          includedNamespaces: [names.source],
+          namespaceMapping: { [names.source]: names.restored },
+          includeClusterResources: false,
+          restorePVs: false,
+          existingResourcePolicy: "none",
+        },
+        "views-daily",
+      ),
+      status: {
+        ...syntheticStatus(phase, "itemsRestored"),
+        ...(phase === "PartiallyFailed" ? { hookStatus: { hooksAttempted: 2, hooksFailed: 1 } } : {}),
       },
-      status: syntheticStatus(phase, "itemsRestored"),
     })),
+    // A restore as Velero keeps it: into two namespaces, with the schedule of its backup written beside the
+    // backup, the resources Velero excludes and the timeout it fills. It waits for an operation of a plugin.
     {
-      apiVersion: "v1",
-      kind: "ServiceAccount",
-      metadata: metadata(VIEW_READER),
-      automountServiceAccountToken: false,
+      apiVersion: "velero.io/v1",
+      kind: "Restore",
+      metadata: metadata("restore-mapped"),
+      spec: restoreSpec(
+        "WaitingForPluginOperationsPartiallyFailed",
+        {
+          backupName: "views-daily-20260901030000",
+          includedNamespaces: [names.source, `${names.source}-second`],
+          excludedResources: ["secrets"],
+          namespaceMapping: {
+            [names.source]: names.restored,
+            [`${names.source}-second`]: `${names.restored}-second`,
+          },
+          includeClusterResources: false,
+          restorePVs: false,
+          existingResourcePolicy: "update",
+        },
+        "views-daily",
+      ),
+      status: syntheticStatus("WaitingForPluginOperationsPartiallyFailed", "itemsRestored"),
     },
+    // A restore asked from a schedule that has no backup: it failed its validation, and names no backup.
+    {
+      apiVersion: "velero.io/v1",
+      kind: "Restore",
+      metadata: metadata("restore-of-schedule"),
+      spec: restoreSpec("FailedValidation", { scheduleName: "views-removed" }),
+      status: {
+        phase: "FailedValidation",
+        validationErrors: ["No backups found for schedule", "No completed backups found for schedule"],
+      },
+    },
+    // A restore of a backup that is not there any more.
+    {
+      apiVersion: "velero.io/v1",
+      kind: "Restore",
+      metadata: metadata("restore-of-removed"),
+      spec: restoreSpec("Completed", { backupName: "views-removed" }),
+      status: syntheticStatus("Completed", "itemsRestored"),
+    },
+    // A restore with names as long as they can be: its own, the one of its backup, and the ones of the
+    // namespaces it maps.
+    {
+      apiVersion: "velero.io/v1",
+      kind: "Restore",
+      metadata: metadata(LONG_RESTORE_NAME),
+      spec: restoreSpec("InProgress", {
+        backupName: LONG_BACKUP_NAME,
+        includedNamespaces: [`${LONG_NAMESPACE}1`],
+        namespaceMapping: { [`${LONG_NAMESPACE}1`]: `${LONG_NAMESPACE}2` },
+      }),
+      status: syntheticStatus("InProgress", "itemsRestored"),
+    },
+    ...reader(VIEW_READER, names.views, labels, ["backups", "schedules", "backupstoragelocations"]),
+    ...reader(VIEW_READER_OF_RESTORES, names.views, labels, [
+      "restores",
+      "schedules",
+      "backupstoragelocations",
+      "volumesnapshotlocations",
+    ]),
+  ];
+}
+
+// An identity that reads some kinds of Velero in one namespace, and nothing else: what it is denied is what
+// the views show of a family that cannot be read.
+function reader(name: string, namespace: string, labels: Record<string, string>, resources: string[]): KubeResource[] {
+  const metadata = { name, namespace, labels };
+
+  return [
+    { apiVersion: "v1", kind: "ServiceAccount", metadata, automountServiceAccountToken: false },
     {
       apiVersion: "rbac.authorization.k8s.io/v1",
       kind: "Role",
-      metadata: metadata(VIEW_READER),
-      // The restores and the snapshot locations are left out: what the views show of a family that is denied.
-      rules: [
-        {
-          apiGroups: ["velero.io"],
-          resources: ["backups", "schedules", "backupstoragelocations"],
-          verbs: ["get", "list", "watch"],
-        },
-      ],
+      metadata,
+      rules: [{ apiGroups: ["velero.io"], resources, verbs: ["get", "list", "watch"] }],
     },
     {
       apiVersion: "rbac.authorization.k8s.io/v1",
       kind: "RoleBinding",
-      metadata: metadata(VIEW_READER),
-      roleRef: { apiGroup: "rbac.authorization.k8s.io", kind: "Role", name: VIEW_READER },
-      subjects: [{ kind: "ServiceAccount", name: VIEW_READER, namespace: names.views }],
+      metadata,
+      roleRef: { apiGroup: "rbac.authorization.k8s.io", kind: "Role", name },
+      subjects: [{ kind: "ServiceAccount", name, namespace }],
     },
   ];
 }
 
-// The long list: a namespace with no storage location, which no discovery suggests, and a thousand backups
-// in every phase. They are created in one request of the client and deleted with their namespace.
-export function scaleFixtures(owner: string, run: string): { namespace: KubeResource; backups: KubeResource[] } {
+// The long lists: a namespace with no storage location, which no discovery suggests, a thousand backups and
+// a thousand restores in every phase. Each list is created in one request of the client, and they are
+// deleted with their namespace.
+export function scaleFixtures(
+  owner: string,
+  run: string,
+): { namespace: KubeResource; backups: KubeResource[]; restores: KubeResource[] } {
   requireCondition(owner, "Fixture ownership is required");
   const names = fixtureNames(run);
   const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
@@ -333,6 +482,24 @@ export function scaleFixtures(owner: string, run: string): { namespace: KubeReso
         ttl: "720h0m0s",
       },
       status: syntheticStatus(BACKUP_PHASES[index % BACKUP_PHASES.length], "itemsBackedUp", first + index * 3_600_000),
+    })),
+    restores: Array.from({ length: SCALE_RESTORES }, (_, index) => ({
+      apiVersion: "velero.io/v1",
+      kind: "Restore",
+      metadata: { name: `restore-${String(index + 1).padStart(4, "0")}`, namespace: names.scale, labels },
+      spec: restoreSpec(RESTORE_PHASES[index % RESTORE_PHASES.length], {
+        backupName: `backup-${String((index % SCALE_BACKUPS) + 1).padStart(4, "0")}`,
+        includedNamespaces: [names.source],
+        namespaceMapping: { [names.source]: names.restored },
+        includeClusterResources: false,
+        restorePVs: false,
+        existingResourcePolicy: "none",
+      }),
+      status: syntheticStatus(
+        RESTORE_PHASES[index % RESTORE_PHASES.length],
+        "itemsRestored",
+        first + index * 3_600_000 + 1_800_000,
+      ),
     })),
   };
 }
@@ -369,14 +536,14 @@ export function staticFixtures(owner: string, run: string): KubeResource[] {
       apiVersion: "velero.io/v1",
       kind: "Restore",
       metadata: metadata(`restore-${phase.toLowerCase()}`),
-      spec: {
+      spec: restoreSpec(phase, {
         backupName: "backup-completed",
         includedNamespaces: [names.source],
         namespaceMapping: { [names.source]: names.restored },
         includeClusterResources: false,
         restorePVs: false,
         existingResourcePolicy: "none",
-      },
+      }),
       status: status(phase, "itemsRestored"),
     })),
     {
@@ -553,44 +720,55 @@ export function readerKubeconfig(config: KindConfig, token: string, namespace: s
 }
 
 // The fixtures of the views, put in place once: a second call finds them and changes nothing.
-export function createViewFixtures(runtime: FixtureRuntime, run: string): { views: number; scale: number } {
+export function createViewFixtures(
+  runtime: FixtureRuntime,
+  run: string,
+): { views: number; scale: number; restores: number } {
   const names = fixtureNames(run);
   const views = createWithStatus(runtime, viewFixtures(runtime.owner, run));
   const scale = scaleFixtures(runtime.owner, run);
-  const listed = () =>
-    (
-      JSON.parse(
-        runtime.kubectl(
-          ["get", "backups.velero.io", "--namespace", names.scale, "-o", "json"],
-          undefined,
-          undefined,
-          false,
+  const place = (kind: string, items: KubeResource[]): number => {
+    const listed = () =>
+      (
+        JSON.parse(
+          runtime.kubectl(
+            ["get", `${kind}.velero.io`, "--namespace", names.scale, "-o", "json"],
+            undefined,
+            undefined,
+            false,
+          ),
+        ) as { items: (KubeResource & { status?: { phase?: string } })[] }
+      ).items;
+
+    if (!listed().length) {
+      runtime.kubectl(
+        ["create", "-f", "-", "-o", "name"],
+        JSON.stringify({ apiVersion: "v1", kind: "List", items }),
+        600_000,
+        false,
+      );
+    }
+    const found = listed();
+
+    requireCondition(
+      found.length === items.length &&
+        found.every(
+          (item) =>
+            item.metadata.labels?.[OWNER_LABEL] === runtime.owner &&
+            item.metadata.labels?.[FIXTURE_LABEL] === run &&
+            item.status?.phase,
         ),
-      ) as { items: (KubeResource & { status?: { phase?: string } })[] }
-    ).items;
+      `The ${kind} of the long list are not the ones of this run`,
+    );
+    return found.length;
+  };
 
   runtime.apply(scale.namespace);
-  if (!listed().length) {
-    runtime.kubectl(
-      ["create", "-f", "-", "-o", "name"],
-      JSON.stringify({ apiVersion: "v1", kind: "List", items: scale.backups }),
-      600_000,
-      false,
-    );
-  }
-  const found = listed();
-
-  requireCondition(
-    found.length === scale.backups.length &&
-      found.every(
-        (item) =>
-          item.metadata.labels?.[OWNER_LABEL] === runtime.owner &&
-          item.metadata.labels?.[FIXTURE_LABEL] === run &&
-          item.status?.phase,
-      ),
-    "The backups of the long list are not the ones of this run",
-  );
-  return { views: views.length, scale: found.length };
+  return {
+    views: views.length,
+    scale: place("backups", scale.backups),
+    restores: place("restores", scale.restores),
+  };
 }
 
 export function verifyStaticFixtures(runtime: FixtureRuntime, snapshots: KubeResource[]): void {

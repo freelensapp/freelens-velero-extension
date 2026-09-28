@@ -1,5 +1,5 @@
 import { Renderer } from "@freelensapp/extensions";
-import { lifecycleText, phaseText, signalText } from "../../common/backup-view";
+import { lifecycleText, phaseText, signalMark, signalText, timeText } from "../../common/operation-text";
 import styles from "./views.module.css";
 
 import type { OperationEvidence } from "../../common/evidence";
@@ -22,12 +22,20 @@ export function phaseIcon(state: OperationState): string {
   return state.lifecycle === "terminal" && state.failure !== "none" ? FAILED_ICON : LIFECYCLE_ICONS[state.lifecycle];
 }
 
-const SIGNAL_ICONS = { failure: "error_outline", warnings: "warning_amber", none: "check", unknown: "help_outline" };
+const SIGNAL_ICONS = {
+  failure: "error_outline",
+  warnings: "warning_amber",
+  none: "check",
+  unknown: "help_outline",
+  "not-counted": "remove",
+};
 const SIGNAL_STYLES = {
   failure: styles.signalFailure,
   warnings: styles.signalWarnings,
   none: styles.signalNone,
   unknown: styles.signalUnknown,
+  // What is not counted has the look of what is not known, never the one of what went well.
+  "not-counted": styles.signalUnknown,
 };
 
 // Where the operation is. The icon says whether it is still going, the words say the phase: the two are
@@ -46,19 +54,19 @@ export function Phase({ state }: { state: OperationState }) {
 // What the operation says of a failure, in words beside the icon.
 export function Signal({ evidence, title }: { evidence: OperationEvidence; title?: string }) {
   const text = signalText(evidence);
+  const mark = signalMark(evidence);
 
   return (
     <span
-      className={`${styles.status} ${SIGNAL_STYLES[evidence.signal]}`}
+      className={`${styles.status} ${SIGNAL_STYLES[mark]}`}
       title={title ?? text}
       data-signal={evidence.signal}
+      data-mark={mark}
     >
-      <Icon material={SIGNAL_ICONS[evidence.signal]} small aria-hidden />
+      <Icon material={SIGNAL_ICONS[mark]} small aria-hidden />
       <span className={styles.statusText}>{text}</span>
     </span>
   );
 }
 
-export function time(value: number | undefined): string {
-  return value === undefined ? "Not reported" : new Date(value).toLocaleString();
-}
+export const time = timeText;

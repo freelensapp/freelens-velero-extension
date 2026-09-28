@@ -149,6 +149,41 @@ export function backupReferences(backup: BackupResource, reads: InstallationRead
   };
 }
 
+export interface RestoreReads {
+  backups: FamilyRead<BackupResource>;
+  schedules: FamilyRead<ScheduleResource>;
+  storageLocations: FamilyRead<BackupStorageLocationResource>;
+}
+
+export interface RestoreReferences {
+  // Absent when the object names none.
+  backup?: Reference;
+  schedule?: Reference;
+  // The storage location of the backup: known through the backup, and only when the backup is found.
+  storageLocation?: Reference;
+}
+
+// What a restore refers to, by the names the object carries, inside its own namespace.
+export function restoreReferences(restore: RestoreResource, reads: RestoreReads): RestoreReferences {
+  const namespace = restore.metadata.namespace ?? "";
+  const backup = named(restore.spec?.backupName);
+  const schedule = named(restore.spec?.scheduleName);
+  const source = backup
+    ? reads.backups.items.find((item) => item.metadata.name === backup && item.metadata.namespace === namespace)
+    : undefined;
+  const location = source
+    ? (named(source.spec?.storageLocation) ?? named(source.metadata.labels?.[LABELS.storageLocation]))
+    : undefined;
+
+  return {
+    ...(backup ? { backup: resolveReference("Backup", backup, namespace, reads.backups) } : {}),
+    ...(schedule ? { schedule: resolveReference("Schedule", schedule, namespace, reads.schedules) } : {}),
+    ...(location
+      ? { storageLocation: resolveReference("BackupStorageLocation", location, namespace, reads.storageLocations) }
+      : {}),
+  };
+}
+
 // The same object, not one of the same name: a backup deleted and created again is another backup.
 export function sameObject(one: { metadata: ObjectMetadata }, other: { metadata: ObjectMetadata }): boolean {
   if (one.metadata.uid && other.metadata.uid) return one.metadata.uid === other.metadata.uid;

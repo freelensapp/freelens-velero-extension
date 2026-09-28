@@ -12,7 +12,7 @@
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFile, mkdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, stat, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { captureWindowScreenshot, EXTENSION_NAME } from "./velero-extension";
 
@@ -36,6 +36,7 @@ export const SUGGESTED_NAMESPACES = [E2E_NAMESPACE, E2E_STATIC_NAMESPACE, E2E_VI
 /** Connecting a cluster involves starting a proxy, so it is not quick. */
 const CLUSTER_TIMEOUT = 3 * 60 * 1000;
 const ELEMENT_TIMEOUT = 60 * 1000;
+const KUBECTL_TIMEOUT = 2 * 60 * 1000;
 /** What Escape gets before `closeDetails` reaches for the close icon of the drawer. */
 const DRAWER_ESCAPE_TIMEOUT = 5 * 1000;
 
@@ -130,6 +131,27 @@ export function readerKubeconfigPath(): string {
   return required("E2E_READER_KUBECONFIG");
 }
 
+/** The kubeconfig of the identity that reads the restores and what they refer to, and not the backups. */
+export function secondReaderKubeconfigPath(): string {
+  return required("E2E_SECOND_READER_KUBECONFIG");
+}
+
+/** A list of the views, and the kind of what a row of it opens. */
+export interface ListOf {
+  /** How the list and its page are found: `velero-<id>` and `velero-<id>-page`. */
+  id: string;
+  /** How a row and a view are found: `data-<kind>-row` and `velero-<kind>-workspace`. */
+  kind: string;
+  /** The entry of the sidebar that opens the page. */
+  menu: string;
+}
+
+/** The restore of the fixtures with a name as long as a name can be. */
+export const LONG_RESTORE_NAME = "restore-with-a-name-as-long-as-the-name-of-a-restore-can-be-one";
+
+export const BACKUPS: ListOf = { id: "backups", kind: "backup", menu: "velero-backups" };
+export const RESTORES: ListOf = { id: "restores", kind: "restore", menu: "velero-restores" };
+
 /**
  * Runs the pinned `kubectl` of the test environment against the test cluster,
  * reading only, and returns its exit status and output. The kubeconfig is the
@@ -144,7 +166,9 @@ export function kubectlE2E(...args: string[]): { status: number; stdout: string;
   const { status, stdout, stderr } = spawnSync(
     required("E2E_KUBECTL"),
     ["--kubeconfig", kubeconfigPath(), "--context", E2E_KUBE_CONTEXT, ...args],
-    { encoding: "utf8", maxBuffer: 64 * 1024 ** 2 },
+    // A read of the cluster that does not end is a failure of the case that asked for it, not a suite
+    // that waits for as long as its runner lets it.
+    { encoding: "utf8", maxBuffer: 64 * 1024 ** 2, timeout: KUBECTL_TIMEOUT },
   );
 
   return { status: status ?? 1, stdout: (stdout ?? "").trim(), stderr: (stderr ?? "").trim() };
@@ -164,7 +188,9 @@ export function fixturesReady(): boolean {
     [E2E_STATIC_NAMESPACE, "backupstoragelocations.velero.io", "fixture-unavailable"],
     [E2E_VIEWS_NAMESPACE, "backups.velero.io", "views-daily-20260901030000"],
     [E2E_VIEWS_NAMESPACE, "backups.velero.io", "backup-missing-location"],
+    [E2E_VIEWS_NAMESPACE, "restores.velero.io", "restore-mapped"],
     [E2E_SCALE_NAMESPACE, "backups.velero.io", "backup-1000"],
+    [E2E_SCALE_NAMESPACE, "restores.velero.io", "restore-1000"],
   ];
 
   return probes.every(
@@ -267,18 +293,130 @@ export function clusterReads(counts: Record<string, number>): Record<string, num
   );
 }
 
-/** The requests that change something, or ask Velero for something, among the ones counted. */
-export function writes(counts: Record<string, number>, kinds?: string[]): Record<string, number> {
+/**
+ * The lists and the reads by name of the five families, in a namespace, of one
+ * object or of the whole cluster, among the ones counted, and their watches in
+ * a namespace or of one object. It is what a view would ask to read again what
+ * it shows. The watches of the whole cluster are left out: the control plane
+ * opens its own again every few minutes.
+ */
+export function familyReads(counts: Record<string, number>): Record<string, number> {
   return Object.fromEntries(
     Object.entries(counts).filter(([key]) => {
-      const [verb, kind] = key.split(" ");
+      const [verb, kind, scope] = key.split(" ");
 
-      return !["GET", "LIST", "WATCH"].includes(verb) && (!kinds || kinds.includes(kind));
+      return KINDS.includes(kind) && (verb === "LIST" || verb === "GET" || (verb === "WATCH" && scope !== "cluster"));
     }),
   );
 }
 
-export const REQUEST_KINDS = REQUESTS;
+/**
+ * The requests that change something, or ask Velero for something, among the
+ * ones counted: every request of every kind of `velero.io` that is not a read.
+ * One is left out, which the installation under test makes by itself: its
+ * controller writes into the status of its storage location every time it
+ * validates it.
+ */
+export function writes(counts: Record<string, number>): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(counts).filter(([key]) => {
+      const [verb, kind] = key.split(" ");
+
+      return !["GET", "LIST", "WATCH"].includes(verb) && !(verb === "PATCH" && kind === "backupstoragelocations");
+    }),
+  );
+}
+
+/** What was counted between two readings of the counters: the requests that are more, with how many more. */
+export function counted(before: Record<string, number>, after: Record<string, number>): Record<string, number> {
+  return Object.fromEntries(
+    Object.keys({ ...before, ...after })
+      .map((key) => [key, (after[key] ?? 0) - (before[key] ?? 0)] as const)
+      .filter(([, more]) => more !== 0),
+  );
+}
+
+/**
+ * What the target bar says of the reads of the installation: when it was last
+ * read, in words and as the moment it was, and whether it is being read.
+ */
+export async function readState(frame: Frame): Promise<{ text: string; read: string; reading: boolean }> {
+  const bar = frame.locator("[data-testid=velero-read-time]");
+
+  return {
+    text: (await bar.innerText()).trim(),
+    read: (await bar.getAttribute("data-read")) ?? "",
+    reading: (await bar.getAttribute("data-reading")) === "true",
+  };
+}
+
+/**
+ * Waits for a read of the installation to end after the one that was last
+ * seen: the views read again every fifteen seconds, and what is done right
+ * after a read ended is done before the next one begins. What asks for a read
+ * takes `seen` before it asks, so that a read that ends at once is not missed.
+ */
+export async function afterRead(frame: Frame, seen?: string): Promise<void> {
+  const before = seen ?? (await readState(frame)).read;
+
+  await frame.waitForFunction(
+    (last) => {
+      const bar = document.querySelector("[data-testid=velero-read-time]");
+      const read = bar?.getAttribute("data-read") ?? "";
+
+      return bar?.getAttribute("data-reading") === "false" && read !== "" && read !== last;
+    },
+    before,
+    { timeout: ELEMENT_TIMEOUT, polling: 100 },
+  );
+}
+
+/** How long after a step what the step asked is given to reach the API server and be counted. */
+const SETTLE = 1500;
+/** The views read again every fifteen seconds: what is measured between two reads ends before the second. */
+const BETWEEN_READS = 12_000;
+
+/**
+ * What the API server counted of the families while a step was taken, in the
+ * time between two reads of the installation. Others read the cluster too: the
+ * controllers of the installation, in their own namespace. A step that asks
+ * nothing is one that was taken once with nothing counted; the step is taken
+ * again, after `again` has undone it, when something was. A step that asks
+ * the cluster is counted every time it is taken.
+ *
+ * The time is the one of the application: the moment its last read ended, and
+ * the moment the counters were read after the step and after what the step
+ * may have asked had the time to be counted. The same read must be the last
+ * one when the counters are read: a read that began in between is said.
+ */
+export async function readsDuring(
+  frame: Frame,
+  step: () => Promise<void>,
+  again: () => Promise<void>,
+  tries = 3,
+): Promise<Record<string, number>> {
+  let asked: Record<string, number> = {};
+
+  for (let attempt = 1; attempt <= tries; attempt += 1) {
+    await afterRead(frame);
+    const read = (await readState(frame)).read;
+    const before = apiRequests();
+
+    await step();
+    await frame.waitForTimeout(SETTLE);
+    const state = await readState(frame);
+    const taken = await frame.evaluate(() => Date.now());
+    const after = apiRequests();
+    const late = state.reading || state.read !== read || taken - Number(read) > BETWEEN_READS;
+
+    asked = counted(familyReads(before), familyReads(after));
+    if (!late && Object.keys(asked).length === 0) return {};
+    if (late) asked = { ...asked, "a read of the installation began before the counters were read": 1 };
+    if (attempt < tries) await again();
+  }
+
+  return asked;
+}
 
 /**
  * Copies a kubeconfig of the test environment into the sandboxed Freelens user
@@ -403,30 +541,34 @@ export async function veleroSidebarEntries(frame: Frame): Promise<Record<string,
 }
 
 /**
- * Opens the Backups of Velero from the sidebar and waits for the page, in
- * whatever state it is: a list, or what is shown before one.
+ * Opens a page of Velero from the sidebar and waits for it, in whatever state
+ * it is: a list, or what is shown before one.
  */
-export async function openBackups(frame: Frame): Promise<void> {
+export async function openPage(frame: Frame, of: ListOf): Promise<void> {
   const group = sidebarItemTestId("velero");
 
   if ((await frame.$(`[data-parent-id-test="${group}"]`)) === null) {
     await clickSidebarItem(frame, sidebarLinkTestId("velero"));
     await frame.waitForSelector(`[data-parent-id-test="${group}"]`, { timeout: ELEMENT_TIMEOUT });
   }
-  await clickSidebarItem(frame, sidebarLinkTestId("velero-backups"));
+  await clickSidebarItem(frame, sidebarLinkTestId(of.menu));
 
   try {
-    await frame.waitForSelector("[data-testid=velero-backups-page]", { timeout: ELEMENT_TIMEOUT });
+    await frame.waitForSelector(`[data-testid=velero-${of.id}-page]`, { timeout: ELEMENT_TIMEOUT });
   } catch {
-    const screenshot = await captureScreenshot(frame, "page-velero-backups");
+    const screenshot = await captureScreenshot(frame, `page-velero-${of.id}`);
     const testIds = await sidebarTestIds(frame);
 
     throw new Error(
-      "The page of the backups never rendered. " +
+      `The page of the ${of.id} never rendered. ` +
         `Sidebar test ids present: ${testIds.length > 0 ? testIds.join(", ") : "(none)"}.` +
         (screenshot ? ` Screenshot: ${screenshot}` : ""),
     );
   }
+}
+
+export async function openBackups(frame: Frame): Promise<void> {
+  await openPage(frame, BACKUPS);
 }
 
 /** Goes to an address of the application, as a link of the application would. */
@@ -438,17 +580,23 @@ export async function navigate(frame: Frame, address: string): Promise<void> {
 }
 
 /** The state the page is in, by the test id of what it shows. */
-export async function entryState(frame: Frame): Promise<string> {
-  const shown = frame.locator("[data-testid^=velero-state-], [data-testid=velero-backups]").first();
+export async function entryState(frame: Frame, of: ListOf = BACKUPS): Promise<string> {
+  const shown = frame.locator(`[data-testid^=velero-state-], [data-testid=velero-${of.id}]`).first();
 
   await shown.waitFor({ state: "attached", timeout: ELEMENT_TIMEOUT });
 
   return (await shown.getAttribute("data-testid")) ?? "";
 }
 
-/** Waits for the list of the backups to show at least one row. */
+/** Waits for a list to show at least one row. */
+export async function waitForList(frame: Frame, of: ListOf): Promise<void> {
+  await frame.waitForSelector(`[data-testid=velero-${of.id}] .TableRow:not(.TableHead)`, {
+    timeout: ELEMENT_TIMEOUT,
+  });
+}
+
 export async function waitForBackups(frame: Frame): Promise<void> {
-  await frame.waitForSelector("[data-testid=velero-backups] .TableRow:not(.TableHead)", { timeout: ELEMENT_TIMEOUT });
+  await waitForList(frame, BACKUPS);
 }
 
 /** The namespace the target bar says is read, and the cluster it says it is of. */
@@ -492,8 +640,11 @@ export async function configureInstallation(frame: Frame, namespace: string): Pr
   await frame.click("[data-testid=velero-configure-submit]");
 }
 
-function tableRow(frame: Frame, name: string): Locator {
-  return frame.locator("[data-testid=velero-backups] .TableRow", { hasText: name }).first();
+function tableRow(frame: Frame, name: string, of: ListOf): Locator {
+  // The row whose name is this one: a name that is part of another does not answer for it.
+  return frame.locator(`[data-testid=velero-${of.id}] .TableRow`, {
+    has: frame.locator(`[data-${of.kind}-row="${name}"]`),
+  });
 }
 
 /** The cells of a row, as one line, so that adjacent columns can be matched. */
@@ -502,11 +653,16 @@ async function rowText(row: Locator): Promise<string> {
 }
 
 /**
- * Asserts that the list has a row for `name` and that the row shows every one
- * of the given values.
+ * Asserts that the list of the backups has a row for `name` and that the row
+ * shows every one of the given values.
  */
 export async function expectRow(frame: Frame, name: string, ...cells: string[]): Promise<void> {
-  const row = tableRow(frame, name);
+  await expectRowOf(BACKUPS, frame, name, ...cells);
+}
+
+/** The same for the list of any kind. */
+export async function expectRowOf(of: ListOf, frame: Frame, name: string, ...cells: string[]): Promise<void> {
+  const row = tableRow(frame, name, of);
 
   try {
     await row.waitFor({ state: "visible", timeout: ELEMENT_TIMEOUT });
@@ -529,14 +685,160 @@ export async function expectRow(frame: Frame, name: string, ...cells: string[]):
   }
 }
 
-/** The names of the backups the list has mounted, in the order it shows them. */
-export async function mountedBackups(frame: Frame): Promise<string[]> {
-  return frame.$$eval("[data-testid=velero-backups] [data-backup-row]", (elements) =>
-    elements.map((element) => element.getAttribute("data-backup-row") ?? ""),
+/**
+ * What each cell of a row shows, by the name of its column, without the names
+ * of the icons: a value is of its column, and not of the one beside it.
+ */
+export async function cellsOf(of: ListOf, frame: Frame, name: string): Promise<Record<string, string>> {
+  const row = tableRow(frame, name, of);
+
+  await row.waitFor({ state: "visible", timeout: ELEMENT_TIMEOUT });
+
+  return row.evaluate((element) => {
+    const cells: Record<string, string> = {};
+
+    for (const cell of element.querySelectorAll(".TableCell")) {
+      const copy = cell.cloneNode(true) as HTMLElement;
+      const column = String(cell.className)
+        .replace(/TableCell|sorting|nowrap/g, "")
+        .trim();
+
+      for (const icon of copy.querySelectorAll(".Icon")) icon.remove();
+      cells[column] = (copy.textContent ?? "").replace(/\s+/g, " ").trim();
+    }
+
+    return cells;
+  });
+}
+
+/** Waits for the cells of a row to show what is expected of each, and answers them. */
+export async function expectCells(
+  of: ListOf,
+  frame: Frame,
+  name: string,
+  expected: Record<string, string | RegExp>,
+): Promise<Record<string, string>> {
+  const deadline = Date.now() + ELEMENT_TIMEOUT;
+  const wrong = (cells: Record<string, string>) =>
+    Object.entries(expected).filter(([column, value]) =>
+      typeof value === "string" ? cells[column] !== value : !value.test(cells[column] ?? ""),
+    );
+  let cells = await cellsOf(of, frame, name);
+
+  while (wrong(cells).length > 0 && Date.now() < deadline) {
+    await frame.waitForTimeout(250);
+    cells = await cellsOf(of, frame, name);
+  }
+  if (wrong(cells).length > 0) {
+    throw new Error(
+      `Row "${name}" should show ${wrong(cells)
+        .map(([column, value]) => `${column}: ${String(value)}`)
+        .join(", ")}; it shows ${JSON.stringify(cells)}`,
+    );
+  }
+
+  return cells;
+}
+
+/**
+ * The columns the list shows, by their names, and the ones whose words do not
+ * fit their cell in a row that is mounted: a value that is cut is read in the
+ * tip of its cell, and not at a glance.
+ */
+export async function columnsOf(of: ListOf, frame: Frame): Promise<{ shown: string[]; cut: string[] }> {
+  return frame.evaluate((selector) => {
+    const column = (cell: Element) =>
+      String(cell.className)
+        .replace(/TableCell|sorting|nowrap/g, "")
+        .trim();
+    const visible = (cell: Element) => getComputedStyle(cell).display !== "none";
+    const cut = new Set<string>();
+
+    for (const cell of document.querySelectorAll<HTMLElement>(`${selector} .TableRow:not(.TableHead) .TableCell`)) {
+      if (!visible(cell)) continue;
+      const words = [cell, ...cell.querySelectorAll<HTMLElement>("*")].filter(
+        (element) => getComputedStyle(element).textOverflow === "ellipsis",
+      );
+
+      if (words.some((element) => element.scrollWidth > element.clientWidth + 1)) cut.add(column(cell));
+    }
+
+    return {
+      // The last cell of the head is of the host: what chooses the columns that are shown.
+      shown: [...document.querySelectorAll(`${selector} .TableHead .TableCell`)]
+        .filter(visible)
+        .map(column)
+        .filter((name) => name !== "menu"),
+      cut: [...cut].sort(),
+    };
+  }, list(of));
+}
+
+/**
+ * The texts that do not fit the cell of their column, among the ones given for
+ * each column, measured in the font of the cell. What a machine shows depends
+ * on its language: a date is written longer in another one, and what fits
+ * here may be cut there.
+ */
+export async function tooWide(of: ListOf, frame: Frame, texts: Record<string, string[]>): Promise<string[]> {
+  return frame.evaluate(
+    ({ selector, texts }) => {
+      const found: string[] = [];
+
+      for (const [column, candidates] of Object.entries(texts)) {
+        const cell = document.querySelector<HTMLElement>(`${selector} .TableRow:not(.TableHead) .TableCell.${column}`);
+
+        if (!cell) {
+          found.push(`${column}: no cell`);
+          continue;
+        }
+        const style = getComputedStyle(cell);
+        const room = cell.clientWidth - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight);
+        // What is beside the words in the cell, which is the mark of a failure, takes its part of the room.
+        const mark = cell.querySelector<HTMLElement>(".Icon");
+        const taken = mark ? mark.getBoundingClientRect().width + 6 : 0;
+        const probe = document.createElement("span");
+
+        probe.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;";
+        cell.appendChild(probe);
+        for (const text of candidates) {
+          probe.textContent = text;
+          const width = probe.getBoundingClientRect().width;
+
+          if (width > room - taken)
+            found.push(`${column}: "${text}" is ${Math.ceil(width)} in ${Math.floor(room - taken)}`);
+        }
+        probe.remove();
+      }
+
+      return found;
+    },
+    { selector: list(of), texts },
   );
 }
 
-const LIST = "[data-testid=velero-backups]";
+/** What the columns of an operation hold whole in a list with the room for them, in any language. */
+export const WORDS_OF_AN_OPERATION = {
+  failure: ["No failure reported", "2 validation errors", "12 warnings"],
+  progress: ["1000 / 1000 (100%)", "Not reported"],
+  started: ["12/31/2026, 12:59:59 PM", "31.12.2026, 23:59:59", "31/12/2026, 23:59:59"],
+  duration: ["26d 23h so far", "End not reported"],
+};
+
+/** The names of the objects a list has mounted, in the order it shows them. */
+export async function mounted(frame: Frame, of: ListOf): Promise<string[]> {
+  return frame.$$eval(
+    `[data-testid=velero-${of.id}] [data-${of.kind}-row]`,
+    (elements, kind) => elements.map((element) => element.getAttribute(`data-${kind}-row`) ?? ""),
+    of.kind,
+  );
+}
+
+export async function mountedBackups(frame: Frame): Promise<string[]> {
+  return mounted(frame, BACKUPS);
+}
+
+const list = (of: ListOf) => `[data-testid=velero-${of.id}]`;
 
 /** Writes what a check measured beside the screenshots of the suite. */
 export async function writeReport(name: string, report: unknown): Promise<void> {
@@ -545,7 +847,10 @@ export async function writeReport(name: string, report: unknown): Promise<void> 
 }
 
 /** What the list says it shows: what is searched, how it is sorted, where it is scrolled, how wide it is. */
-export async function listState(frame: Frame): Promise<{
+export async function listState(
+  frame: Frame,
+  of: ListOf = BACKUPS,
+): Promise<{
   search: string;
   sorted: string;
   items: string;
@@ -553,46 +858,117 @@ export async function listState(frame: Frame): Promise<{
   first: string;
   columns: Record<string, number>;
 }> {
-  return frame.evaluate((list) => {
-    const root = document.querySelector(list);
-    const sorted = root?.querySelector(".TableHead .TableCell .sortIcon.enabled");
-    const columns: Record<string, number> = {};
+  return frame.evaluate(
+    ({ list, kind }) => {
+      const root = document.querySelector(list);
+      const sorted = root?.querySelector(".TableHead .TableCell .sortIcon.enabled");
+      const columns: Record<string, number> = {};
 
-    for (const cell of root?.querySelectorAll<HTMLElement>(".TableHead .TableCell") ?? []) {
-      columns[cell.className.replace(/TableCell|sorting|nowrap/g, "").trim()] = cell.getBoundingClientRect().width;
-    }
+      for (const cell of root?.querySelectorAll<HTMLElement>(".TableHead .TableCell") ?? []) {
+        columns[cell.className.replace(/TableCell|sorting|nowrap/g, "").trim()] = cell.getBoundingClientRect().width;
+      }
 
-    return {
-      search: root?.querySelector<HTMLInputElement>(".SearchInput input")?.value ?? "",
-      sorted: sorted
-        ? `${sorted
-            .closest(".TableCell")
-            ?.className.replace(/TableCell|sorting|nowrap/g, "")
-            .trim()} ${sorted.textContent?.trim()}`
-        : "",
-      items: (root?.querySelector(".info-panel")?.textContent ?? "").replace(/\s+/g, " ").trim(),
-      scroll: root?.querySelector(".VirtualList .list")?.scrollTop ?? 0,
-      first: root?.querySelector("[data-backup-row]")?.getAttribute("data-backup-row") ?? "",
-      columns,
-    };
-  }, LIST);
+      return {
+        search: root?.querySelector<HTMLInputElement>(".SearchInput input")?.value ?? "",
+        sorted: sorted
+          ? `${sorted
+              .closest(".TableCell")
+              ?.className.replace(/TableCell|sorting|nowrap/g, "")
+              .trim()} ${sorted.textContent?.trim()}`
+          : "",
+        items: (root?.querySelector(".info-panel")?.textContent ?? "").replace(/\s+/g, " ").trim(),
+        scroll: root?.querySelector(".VirtualList .list")?.scrollTop ?? 0,
+        first: root?.querySelector(`[data-${kind}-row]`)?.getAttribute(`data-${kind}-row`) ?? "",
+        columns,
+      };
+    },
+    { list: list(of), kind: of.kind },
+  );
 }
 
-/** Types in the search of the list, and waits for the list to follow. */
-export async function search(frame: Frame, text: string): Promise<void> {
-  await frame.fill(`${LIST} .SearchInput input`, text);
-  await frame.waitForTimeout(500);
+export type ListState = Awaited<ReturnType<typeof listState>>;
+
+/**
+ * The state of the list once it is the one that is expected, or the last one
+ * it had when the time was over. A list that is shown again draws its rows
+ * after it is given its scroll: on a machine that is busy the rows of the
+ * frame before are still there for a moment.
+ */
+export async function listStateLike(
+  frame: Frame,
+  expected: ListState,
+  of: ListOf = BACKUPS,
+  timeout = 15_000,
+): Promise<ListState> {
+  const deadline = Date.now() + timeout;
+  let state = await listState(frame, of);
+
+  while (
+    Date.now() < deadline &&
+    (state.first !== expected.first ||
+      state.search !== expected.search ||
+      state.sorted !== expected.sorted ||
+      state.items !== expected.items ||
+      Math.abs(state.scroll - expected.scroll) > 2)
+  ) {
+    await frame.waitForTimeout(100);
+    state = await listState(frame, of);
+  }
+
+  return state;
 }
 
-/** Scrolls the list to a position, in pixels from its top. */
-export async function scrollList(frame: Frame, position: number): Promise<void> {
-  await frame.evaluate(
+/**
+ * Types in the search of the list, and waits for the list to follow: the host
+ * gives the list what was typed when the keys stopped, which is when the text
+ * is in the address, and the list then shows the same rows twice in a row.
+ */
+export async function search(frame: Frame, text: string, of: ListOf = BACKUPS): Promise<string[]> {
+  await frame.fill(`${list(of)} .SearchInput input`, text);
+  await frame.waitForFunction(
+    (searched) => (new URLSearchParams(window.location.search).get("search") ?? "") === searched,
+    text,
+    { timeout: ELEMENT_TIMEOUT, polling: 50 },
+  );
+  const deadline = Date.now() + ELEMENT_TIMEOUT;
+  let before = await mounted(frame, of);
+
+  for (;;) {
+    await frame.waitForTimeout(150);
+    const rows = await mounted(frame, of);
+
+    if (rows.join("\n") === before.join("\n")) return rows;
+    if (Date.now() > deadline) throw new Error(`The list did not settle after the search of "${text}"`);
+    before = rows;
+  }
+}
+
+/** Scrolls the list to a position, in pixels from its top, and waits for the list to be there. */
+export async function scrollList(frame: Frame, position: number, of: ListOf = BACKUPS): Promise<void> {
+  const found = await frame.evaluate(
     ({ list, top }) => {
       const scrolled = document.querySelector(`${list} .VirtualList .list`);
 
       if (scrolled) scrolled.scrollTop = top;
+      return scrolled !== null;
     },
-    { list: LIST, top: position },
+    { list: list(of), top: position },
+  );
+
+  if (!found) throw new Error(`The list of the ${of.id} has nothing to scroll`);
+  await frame.waitForFunction(
+    ({ list, top }) => {
+      const scrolled = document.querySelector(`${list} .VirtualList .list`);
+
+      // A list shorter than the position stops where it ends.
+      return (
+        scrolled !== null &&
+        (Math.abs(scrolled.scrollTop - top) <= 2 ||
+          scrolled.scrollTop >= scrolled.scrollHeight - scrolled.clientHeight - 2)
+      );
+    },
+    { list: list(of), top: position },
+    { timeout: ELEMENT_TIMEOUT, polling: 50 },
   );
   await frame.waitForTimeout(300);
 }
@@ -602,8 +978,9 @@ export async function resizeColumn(
   frame: Frame,
   column: string,
   pixels: number,
+  of: ListOf = BACKUPS,
 ): Promise<{ before: number; after: number }> {
-  const cell = frame.locator(`${LIST} .TableHead .TableCell.${column}`);
+  const cell = frame.locator(`${list(of)} .TableHead .TableCell.${column}`);
   const handle = cell.locator(".resize-handle");
   const before = (await cell.boundingBox())?.width ?? 0;
   const box = await handle.boundingBox();
@@ -634,18 +1011,19 @@ export interface Measure {
 async function measure(
   frame: Frame,
   interaction: { kind: "search"; text: string } | { kind: "open"; name: string } | { kind: "close" },
+  of: ListOf,
 ): Promise<Measure> {
   return frame.evaluate(
-    ({ list, action }) =>
+    ({ list, kind, action }) =>
       new Promise<{ total: number; response: number }>((resolve, reject) => {
         const root = document.querySelector(list);
         const shown = () =>
           [
             root?.querySelector(".info-panel")?.textContent ?? "",
-            ...[...(root?.querySelectorAll("[data-backup-row]") ?? [])]
+            ...[...(root?.querySelectorAll(`[data-${kind}-row]`) ?? [])]
               .slice(0, 40)
-              .map((row) => row.getAttribute("data-backup-row")),
-            document.querySelector("[data-testid=velero-backup-workspace]")?.getAttribute("data-backup-uid") ?? "",
+              .map((row) => row.getAttribute(`data-${kind}-row`)),
+            document.querySelector(`[data-testid=velero-${kind}-workspace]`)?.getAttribute(`data-${kind}-uid`) ?? "",
             root?.closest("[aria-hidden]") ? "behind" : "shown",
           ].join("|");
         const searched = () => new URLSearchParams(window.location.search).get("search") ?? "";
@@ -654,9 +1032,17 @@ async function measure(
         // When the list was last seen without what it has to show: the latest moment it can have got it.
         let given = start;
         let waiting = action.kind === "search";
+        let over = false;
+        // The time that is given is counted by a timer: a window that draws no frame, because it is
+        // hidden or behind another, draws none to count it by.
+        const deadline = setTimeout(() => {
+          over = true;
+          reject(new Error(`Nothing changed after ${JSON.stringify(action)}`));
+        }, 10_000);
         const wait = () => {
           const now = performance.now();
 
+          if (over) return;
           if (waiting && searched() !== action.text && shown() === before) {
             given = now;
           } else {
@@ -666,13 +1052,16 @@ async function measure(
             requestAnimationFrame(() => {
               const end = performance.now();
 
+              clearTimeout(deadline);
               resolve({ total: end - start, response: end - given });
             });
-          } else if (now - start > 10_000) {
-            reject(new Error(`Nothing changed after ${JSON.stringify(action)}`));
           } else {
             requestAnimationFrame(wait);
           }
+        };
+        const refuse = (reason: string) => {
+          clearTimeout(deadline);
+          reject(new Error(reason));
         };
 
         if (action.kind === "search") {
@@ -680,84 +1069,152 @@ async function measure(
           const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
 
           if (!input || !set) {
-            reject(new Error("The list has no search"));
+            refuse("The list has no search");
             return;
           }
+          // A search of what is searched already changes nothing: it has no time, and is not a sample.
           if (input.value === action.text) {
-            resolve({ total: 0, response: 0 });
+            refuse(`The list is searched by "${action.text}" already: nothing to measure`);
             return;
           }
           set.call(input, action.text);
           input.dispatchEvent(new Event("input", { bubbles: true }));
         } else if (action.kind === "open") {
-          const row = [...(root?.querySelectorAll<HTMLElement>("[data-backup-row]") ?? [])].find(
-            (element) => element.dataset.backupRow === action.name,
+          const row = [...(root?.querySelectorAll<HTMLElement>(`[data-${kind}-row]`) ?? [])].find(
+            (element) => element.getAttribute(`data-${kind}-row`) === action.name,
           );
 
           if (!row) {
-            reject(new Error(`No row of ${action.name} is mounted`));
+            refuse(`No row of ${action.name} is mounted`);
             return;
           }
           row.click();
         } else {
-          document.querySelector<HTMLElement>("[data-testid=velero-back]")?.click();
+          const back = document.querySelector<HTMLElement>("[data-testid=velero-back]");
+
+          if (!back) {
+            refuse("No view is open: there is no way back to take");
+            return;
+          }
+          back.click();
         }
         requestAnimationFrame(wait);
       }),
-    { list: LIST, action: interaction },
+    { list: list(of), kind: of.kind, action: interaction },
   );
 }
 
-export async function measureSearch(frame: Frame, text: string): Promise<Measure> {
-  return measure(frame, { kind: "search", text });
+export async function measureSearch(frame: Frame, text: string, of: ListOf = BACKUPS): Promise<Measure> {
+  return measure(frame, { kind: "search", text }, of);
 }
 
-export async function measureOpen(frame: Frame, name: string): Promise<Measure> {
-  return measure(frame, { kind: "open", name });
+export async function measureOpen(frame: Frame, name: string, of: ListOf = BACKUPS): Promise<Measure> {
+  return measure(frame, { kind: "open", name }, of);
 }
 
-export async function measureClose(frame: Frame): Promise<Measure> {
-  return measure(frame, { kind: "close" });
+export async function measureClose(frame: Frame, of: ListOf = BACKUPS): Promise<Measure> {
+  return measure(frame, { kind: "close" }, of);
 }
 
-/** The backups whose rows are all inside what the list shows: a click on one does not scroll the list. */
+/** The objects whose rows are all inside what the list shows: a click on one does not scroll the list. */
+export async function visibleRowsOf(frame: Frame, of: ListOf): Promise<string[]> {
+  return frame.evaluate(
+    ({ list, kind }) => {
+      const shown = document.querySelector(`${list} .VirtualList .list`)?.getBoundingClientRect();
+
+      if (!shown) return [];
+      return [...document.querySelectorAll<HTMLElement>(`${list} [data-${kind}-row]`)]
+        .filter((row) => {
+          const box = (row.closest(".TableRow") ?? row).getBoundingClientRect();
+
+          return box.top >= shown.top && box.bottom <= shown.bottom;
+        })
+        .map((row) => row.getAttribute(`data-${kind}-row`) ?? "");
+    },
+    { list: list(of), kind: of.kind },
+  );
+}
+
 export async function visibleBackups(frame: Frame): Promise<string[]> {
-  return frame.evaluate((list) => {
-    const shown = document.querySelector(`${list} .VirtualList .list`)?.getBoundingClientRect();
-
-    if (!shown) return [];
-    return [...document.querySelectorAll<HTMLElement>(`${list} [data-backup-row]`)]
-      .filter((row) => {
-        const box = (row.closest(".TableRow") ?? row).getBoundingClientRect();
-
-        return box.top >= shown.top && box.bottom <= shown.bottom;
-      })
-      .map((row) => row.dataset.backupRow ?? "");
-  }, LIST);
+  return visibleRowsOf(frame, BACKUPS);
 }
 
-/** Opens the workspace of a backup from its row, and waits for it. */
-export async function openWorkspace(frame: Frame, name: string): Promise<void> {
-  await frame.click(`[data-testid=velero-backups] [data-backup-row="${name}"]`);
-  await frame.waitForSelector(`[data-testid=velero-backup-workspace] >> text="${name}"`, { timeout: ELEMENT_TIMEOUT });
+/** Opens the view of an object from its row, and waits for it. */
+export async function openWorkspace(frame: Frame, name: string, of: ListOf = BACKUPS): Promise<void> {
+  await frame.click(`${list(of)} [data-${of.kind}-row="${name}"]`);
+  await frame.waitForSelector(`[data-testid=velero-${of.kind}-name] >> text="${name}"`, { timeout: ELEMENT_TIMEOUT });
 }
 
-/** Leaves the workspace if one is open: what a case before this one may have left. */
+const ANY_VIEW = "[data-testid^=velero-][data-testid$=-workspace]";
+
+/** The kind and the name of the view that is shown, or nothing when the list is. */
+export async function shownView(frame: Frame): Promise<{ kind: string; name: string; back: string } | undefined> {
+  const view = frame.locator(ANY_VIEW);
+
+  if ((await view.count()) === 0) return undefined;
+  const kind = ((await view.first().getAttribute("data-testid")) ?? "").replace(/^velero-|-workspace$/g, "");
+
+  return {
+    kind,
+    name: (await frame.locator(`[data-testid=velero-${kind}-name]`).innerText()).trim(),
+    back: (await frame.locator("[data-testid=velero-back]").innerText()).replace(/\s+/g, " ").trim(),
+  };
+}
+
+/** Follows a way to another view, and waits for that view. */
+export async function followTo(frame: Frame, kind: string, name: string): Promise<void> {
+  await frame.click(`${ANY_VIEW} [data-testid="velero-open-${kind}-${name}"]`);
+  await frame.waitForSelector(`[data-testid=velero-${kind}-name] >> text="${name}"`, { timeout: ELEMENT_TIMEOUT });
+}
+
+/** Leaves every view that is open: what a case before this one may have left. */
 export async function showList(frame: Frame): Promise<void> {
-  if ((await frame.locator("[data-testid=velero-backup-workspace]").count()) > 0) await closeWorkspace(frame);
+  for (let views = 0; views < 10 && (await frame.locator(ANY_VIEW).count()) > 0; views += 1) {
+    await frame.click("[data-testid=velero-back]");
+    await frame.waitForTimeout(200);
+  }
 }
 
-/** Leaves the workspace by its way back, and waits for the list. */
+/** Takes the way back of the view that is shown, and waits for what is under it. */
 export async function closeWorkspace(frame: Frame): Promise<void> {
+  const before = await shownView(frame);
+
   await frame.click("[data-testid=velero-back]");
-  await frame.waitForSelector("[data-testid=velero-backup-workspace]", { state: "detached", timeout: ELEMENT_TIMEOUT });
+  await frame.waitForFunction(
+    ({ selector, shown }) => {
+      const view = document.querySelector(selector);
+      const kind = (view?.getAttribute("data-testid") ?? "").replace(/^velero-|-workspace$/g, "");
+      const name = document.querySelector(`[data-testid=velero-${kind}-name]`)?.textContent?.trim() ?? "";
+
+      return !view || `${kind}/${name}` !== shown;
+    },
+    { selector: ANY_VIEW, shown: `${before?.kind}/${before?.name}` },
+    { timeout: ELEMENT_TIMEOUT },
+  );
 }
 
-/** What the workspace says of a reference, with the state it gives to it. */
-export async function reference(frame: Frame, testId: string): Promise<{ state: string; text: string }> {
+/**
+ * What the workspace says of a reference, with the state it gives to it. With
+ * a state that is expected, the reference is waited for until it has it: what
+ * it refers to may be read after the view is shown.
+ */
+export async function reference(
+  frame: Frame,
+  testId: string,
+  expected?: string,
+): Promise<{ state: string; text: string }> {
   const element = frame.locator(`[data-testid="${testId}"]`).first();
 
   await element.waitFor({ state: "visible", timeout: ELEMENT_TIMEOUT });
+  if (expected !== undefined) {
+    await frame
+      .waitForFunction(
+        ({ id, state }) => document.querySelector(`[data-testid="${id}"]`)?.getAttribute("data-reference") === state,
+        { id: testId, state: expected },
+        { timeout: ELEMENT_TIMEOUT, polling: 100 },
+      )
+      .catch(() => undefined);
+  }
 
   return {
     state: (await element.getAttribute("data-reference")) ?? "",
@@ -765,8 +1222,7 @@ export async function reference(frame: Frame, testId: string): Promise<{ state: 
   };
 }
 
-/** The notices of what is missing of the installation that is shown. */
-export async function notices(frame: Frame): Promise<Record<string, string>> {
+async function shownNotices(frame: Frame): Promise<Record<string, string>> {
   const found = await frame.$$eval("[data-testid^=velero-notice-]", (elements) =>
     elements.map((element) => [
       (element.getAttribute("data-testid") ?? "").replace("velero-notice-", ""),
@@ -778,16 +1234,45 @@ export async function notices(frame: Frame): Promise<Record<string, string>> {
 }
 
 /**
+ * The notices of what is missing of the installation that is shown, once
+ * nothing is being read: before that, a family that will be denied has no
+ * notice yet. With the families that are expected to have a notice, the
+ * notices are waited for until they are of those families; the ones that are
+ * there when the time is over are answered.
+ */
+export async function notices(frame: Frame, expected?: string[]): Promise<Record<string, string>> {
+  const deadline = Date.now() + ELEMENT_TIMEOUT;
+  const wanted = expected ? [...expected].sort().join(",") : undefined;
+
+  for (;;) {
+    const state = await readState(frame);
+    const found = await shownNotices(frame);
+
+    if (!state.reading && (wanted === undefined || Object.keys(found).sort().join(",") === wanted)) return found;
+    if (Date.now() > deadline) return found;
+    await frame.waitForTimeout(200);
+  }
+}
+
+/** Asks the views to read again, and waits for the read to end. */
+export async function readAgain(frame: Frame): Promise<void> {
+  const seen = (await readState(frame)).read;
+
+  await frame.click("[data-testid=velero-refresh]");
+  await afterRead(frame, seen);
+}
+
+/**
  * What is wrong with the layout of the page of the backups: what is wider than
  * its room, what lies over something else, what of the target cannot be read.
  * An empty answer is a layout with none of these.
  */
-export async function layoutProblems(frame: Frame): Promise<string[]> {
-  return frame.evaluate(() => {
+export async function layoutProblems(frame: Frame, of: ListOf = BACKUPS): Promise<string[]> {
+  return frame.evaluate(({ id }) => {
     const problems: string[] = [];
-    const page = document.querySelector<HTMLElement>("[data-testid=velero-backups-page]");
+    const page = document.querySelector<HTMLElement>(`[data-testid=velero-${id}-page]`);
 
-    if (!page) return ["The page of the backups is not there"];
+    if (!page) return [`The page of the ${id} is not there`];
     const shown = (element: Element) => {
       const box = element.getBoundingClientRect();
       const style = getComputedStyle(element);
@@ -814,22 +1299,33 @@ export async function layoutProblems(frame: Frame): Promise<string[]> {
     const inside = page.getBoundingClientRect();
 
     if (inside.right > window.innerWidth + 1) problems.push("The page is wider than the window");
+    // What holds the page, up to the frame: the page is given a room by the host, and what is wider than
+    // it is scrolled sideways by the host, under a bar the operator has to find.
+    for (let holder = page.parentElement; holder; holder = holder.parentElement) {
+      const scrolls = ["auto", "scroll"].includes(getComputedStyle(holder).overflowX);
+
+      if (scrolls && holder.scrollWidth > holder.clientWidth + 1) {
+        problems.push(
+          `The page is wider than the room the host gives it: ${holder.scrollWidth} in ${holder.clientWidth} of ${name(holder)}`,
+        );
+      }
+    }
+    if (document.querySelectorAll(".TabLayout .TabLayout").length > 0) {
+      problems.push("The layout of the host is inside itself: the page has its margins twice");
+    }
     for (const element of page.querySelectorAll<HTMLElement>(
-      "[data-testid=velero-target], [data-testid=velero-backup-workspace], [class*=state], [data-testid=velero-coverage]",
+      "[data-testid=velero-target], [data-testid$=-workspace], [class*=state], [data-testid=velero-coverage]",
     )) {
       if (shown(element) && element.scrollWidth > element.clientWidth + 1) {
         problems.push(`${name(element)} is wider than its room: ${element.scrollWidth} in ${element.clientWidth}`);
       }
     }
     overlaps("[data-testid=velero-target] > *");
-    overlaps("[data-testid=velero-backup-status] > *");
-    overlaps("[data-testid=velero-backup-scope] > *");
-    overlaps("[data-testid=velero-backup-stages] > *");
-    overlaps("[data-testid=velero-backups] .TableHead .TableCell");
-    for (const row of [...page.querySelectorAll("[data-testid=velero-backups] .TableRow:not(.TableHead)")].slice(
-      0,
-      5,
-    )) {
+    overlaps("[data-testid$=-workspace] [data-testid$=-status] > *");
+    overlaps("[data-testid$=-workspace] [data-testid$=-scope] > *");
+    overlaps("[data-testid$=-workspace] [data-testid$=-stages] > *");
+    overlaps(`[data-testid=velero-${id}] .TableHead .TableCell`);
+    for (const row of [...page.querySelectorAll(`[data-testid=velero-${id}] .TableRow:not(.TableHead)`)].slice(0, 20)) {
       const cells = [...row.querySelectorAll(".TableCell")].filter(shown);
 
       for (let index = 1; index < cells.length; index += 1) {
@@ -853,21 +1349,122 @@ export async function layoutProblems(frame: Frame): Promise<string[]> {
     }
 
     return problems;
-  });
+  }, of);
 }
 
-/** The test id, or the name of the backup, of what has the focus of the keyboard. */
+/** The test id, or the name of the row, of what has the focus of the keyboard. */
 export async function focused(frame: Frame): Promise<string> {
   return frame.evaluate(() => {
     const element = document.activeElement;
+    const row = [...(element?.attributes ?? [])].find((attribute) => /^data-[a-z-]+-row$/.test(attribute.name));
 
     return (
       element?.getAttribute("data-testid") ??
-      element?.getAttribute("data-backup-row") ??
+      row?.value ??
       element?.getAttribute("aria-label") ??
       element?.tagName.toLowerCase() ??
       ""
     );
+  });
+}
+
+/**
+ * Waits for the focus of the keyboard to be on what is expected, and answers
+ * where it is when the time is over. The views give the focus in the frames
+ * after the one that shows them.
+ */
+export async function focusOn(frame: Frame, expected: string, timeout = 10_000): Promise<string> {
+  const deadline = Date.now() + timeout;
+  let focus = await focused(frame);
+
+  while (focus !== expected && Date.now() < deadline) {
+    await frame.waitForTimeout(50);
+    focus = await focused(frame);
+  }
+
+  return focus;
+}
+
+/** The views the address names, in the order it names them. */
+export async function addressViews(frame: Frame): Promise<string[]> {
+  return frame.evaluate(() => new URLSearchParams(window.location.search).getAll("view"));
+}
+
+/** What was set for the window and the theme, as the application and the frame of the cluster have it. */
+export async function applied(frame: Frame): Promise<{ theme: string; width: number; height: number }> {
+  const size = await frame.page().evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
+
+  return {
+    theme: await frame.evaluate(() => (document.body.classList.contains("theme-light") ? "light" : "dark")),
+    ...size,
+  };
+}
+
+/** Waits for the window and the theme to be what was set, and answers what they are when the time is over. */
+export async function appliedLike(
+  frame: Frame,
+  expected: { theme: string; width: number; height: number },
+  timeout = 20_000,
+): Promise<{ theme: string; width: number; height: number }> {
+  const deadline = Date.now() + timeout;
+  const like = (state: { theme: string; width: number; height: number }) =>
+    state.theme === expected.theme &&
+    Math.abs(state.width - expected.width) <= 2 &&
+    Math.abs(state.height - expected.height) <= 2;
+  let state = await applied(frame);
+
+  while (!like(state) && Date.now() < deadline) {
+    await frame.waitForTimeout(200);
+    state = await applied(frame);
+  }
+
+  return like(state) ? expected : state;
+}
+
+/** Takes a screenshot that has to be there: the path of a picture that was written, with something in it. */
+export async function requiredScreenshot(frame: Frame, name: string, zoom = 1): Promise<string> {
+  const file = await captureScreenshot(frame, name, zoom);
+
+  if (!file) throw new Error(`The screenshot ${name} was not taken`);
+  if ((await stat(file)).size === 0) throw new Error(`The screenshot ${name} is empty`);
+
+  return file;
+}
+
+/**
+ * Counts the changes of the address of the frame from now on: the entries that
+ * are added to its history and the ones that are replaced. The history of a
+ * frame stops growing at fifty entries, and says nothing of what is replaced.
+ */
+export async function countAddressChanges(frame: Frame): Promise<void> {
+  await frame.evaluate(() => {
+    const page = window as unknown as { veleroAddressChanges?: { pushed: number; replaced: number } };
+
+    if (page.veleroAddressChanges) return;
+    const changes = { pushed: 0, replaced: 0 };
+    const push = window.history.pushState.bind(window.history);
+    const replace = window.history.replaceState.bind(window.history);
+
+    page.veleroAddressChanges = changes;
+    window.history.pushState = (...parameters: Parameters<History["pushState"]>) => {
+      changes.pushed += 1;
+      push(...parameters);
+    };
+    window.history.replaceState = (...parameters: Parameters<History["replaceState"]>) => {
+      changes.replaced += 1;
+      replace(...parameters);
+    };
+  });
+}
+
+/** How many times the address of the frame changed since the changes are counted. */
+export async function addressChanges(frame: Frame): Promise<number> {
+  return frame.evaluate(() => {
+    const changes = (window as unknown as { veleroAddressChanges?: { pushed: number; replaced: number } })
+      .veleroAddressChanges;
+
+    if (!changes) throw new Error("The changes of the address are not counted: countAddressChanges comes first");
+    return changes.pushed + changes.replaced;
   });
 }
 

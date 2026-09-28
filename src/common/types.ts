@@ -88,6 +88,8 @@ export interface RestoreSpec {
   excludedNamespaces?: string[] | null;
   excludedResources?: string[] | null;
   existingResourcePolicy?: string | null;
+  // What each hook does is not read: how many there are, and how they are called.
+  hooks?: { resources?: { name?: string }[] | null };
   includeClusterResources?: boolean | null;
   includedNamespaces?: string[] | null;
   includedResources?: string[] | null;
@@ -97,8 +99,12 @@ export interface RestoreSpec {
   orLabelSelectors?: LabelSelector[] | null;
   preserveNodePorts?: boolean | null;
   resourceModifier?: TypedLocalObjectReference | null;
+  // Of the release after the reviewed one: read when the object carries it, never asked for.
+  resourcePolicy?: TypedLocalObjectReference | null;
   restorePVs?: boolean | null;
+  restoreStatus?: { excludedResources?: string[] | null; includedResources?: string[] | null } | null;
   scheduleName?: string;
+  uploaderConfig?: { parallelFilesDownload?: number; writeSparseFiles?: boolean | null } | null;
 }
 
 export interface RestoreStatus {

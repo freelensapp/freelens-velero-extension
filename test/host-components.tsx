@@ -76,17 +76,35 @@ interface Item {
   getName(): string;
 }
 
+interface Header {
+  title?: ReactNode;
+  info?: ReactNode;
+  filters?: ReactNode;
+  searchProps?: object;
+}
+
 // The list of the host, as far as the extension decides it: the rows it gives, the columns, what a row opens.
 function KubeObjectListLayout(props: Passed) {
   const items = (props.getItems as () => Item[])();
   const header = props.renderTableHeader as { title: string; id: string; className: string }[];
   const contents = props.renderTableContents as (item: Item) => ReactNode[];
 
+  // The header as the host makes it: its own count of the items, then what the list makes of it.
+  const customize = (props.customizeHeader ?? ((placeholders: Header) => placeholders)) as (
+    placeholders: Header,
+  ) => Header;
+  const { title, info, filters } = customize({
+    title: <h5>{props.renderHeaderTitle as ReactNode}</h5>,
+    info: items.length === 1 ? "1 item" : `${items.length} items`,
+    searchProps: {},
+  });
+
   listProps.set(props.tableId as string, props);
   return (
     <div className={props.className} data-testid={props["data-testid"]}>
-      <h5>{props.renderHeaderTitle as ReactNode}</h5>
-      <div className="info-panel">{items.length === 1 ? "1 item" : `${items.length} items`}</div>
+      {title}
+      {info && <div className="info-panel">{info}</div>}
+      {filters}
       <div className="TableHead">
         {header.map((column) => (
           <div key={column.id} className={`TableCell ${column.className}`}>

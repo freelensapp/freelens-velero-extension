@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { forbiddenAccesses, type HostExtensionStub, hostCalls, Main, Renderer } from "../test/freelens-extensions";
 import VeleroMain from "./main";
 import VeleroRenderer from "./renderer";
+import { PAGES } from "./renderer/navigation";
 
 const importAccesses = [...forbiddenAccesses];
 const importCalls = [...hostCalls];
@@ -59,17 +60,28 @@ describe("what the extension registers", () => {
     const pages = (extension.clusterPages as { id: string }[]).map((page) => page.id);
     const menus = extension.clusterPageMenus as { id: string; parentId?: string; target: { pageId: string } }[];
 
-    expect(pages).toEqual(["backups"]);
+    expect(pages).toEqual(["backups", "restores"]);
     expect(menus.map((menu) => [menu.id, menu.parentId, menu.target.pageId])).toEqual([
-      ["velero", undefined, "backups"],
       ["velero-backups", "velero", "backups"],
+      ["velero-restores", "velero", "restores"],
+      ["velero", undefined, "backups"],
     ]);
+    // The host takes the first entry that leads to a page to know whether the page is of a group, and
+    // gives it the tabs of the group when it is: for every page that entry is one of the group.
+    for (const page of pages) {
+      expect([page, menus.find((menu) => menu.target.pageId === page)?.parentId]).toEqual([page, "velero"]);
+    }
+    // Every kind that has a view has the page of its list, which is where a link from outside opens it.
+    expect(Object.values(PAGES).sort()).toEqual([...pages].sort());
     for (const menu of menus) expect(pages).toContain(menu.target.pageId);
     expect(
       (extension.kubeObjectDetailItems as { kind: string; apiVersions: string[] }[]).map((item) => [
         item.kind,
         item.apiVersions,
       ]),
-    ).toEqual([["Backup", ["velero.io/v1"]]]);
+    ).toEqual([
+      ["Backup", ["velero.io/v1"]],
+      ["Restore", ["velero.io/v1"]],
+    ]);
   });
 });

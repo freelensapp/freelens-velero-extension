@@ -13,10 +13,10 @@ kinds of `velero.io`) inside Freelens, with their logs and results, the
 adherence of the schedules and guarded recovery actions. It was scaffolded from
 freelens-example-extension and is developed spec by spec.
 
-The foundation is in place and the first milestone is under way. Scope and progress
-toward v1.0.0 are in `docs/development/ROADMAP.md`.
+The foundation and the first milestone are in place, and the second milestone is
+under way. Scope and progress toward v1.0.0 are in `docs/development/ROADMAP.md`.
 
-- **Language**: TypeScript 5.9.3
+- **Language**: TypeScript 7.0.2
 - **Runtime**: Node.js >= 22.12.0, Freelens >= 1.10.3
 - **Package manager**: pnpm 10.x (locked)
 - **License**: MIT
@@ -242,10 +242,11 @@ src/
   main/diagnostic-*.ts      # Create-only Kubernetes adapter, DownloadRequest service, transport, pod tunnel
   renderer/index.tsx        # Extension entry point (renderer process, Chromium): pages, sidebar, details
   renderer/api/             # The kinds of Velero, and the reader: the only place that reaches the cluster
-  renderer/state/           # What the views of a cluster know of an installation, and the store of the list
-  renderer/components/      # Target bar, states before a view, status, styles
-  renderer/pages/           # The Backups and the workspace of a backup
+  renderer/state/           # What the views of a cluster know of an installation, and the store of a list
+  renderer/components/      # Target bar, states before a view, the page of a list, the frame of a view, status, styles
+  renderer/pages/           # The list of each kind, and the view of one object of it
   renderer/details/         # What is added to the details the host shows of a kind
+  renderer/navigation.ts    # The pages, the entries of the sidebar, and the views the address names
   common/                   # Pure helpers on plain data, and the store of the preferences
 build/host-globals.ts       # Maps what the host provides to the globals it provides it under
 integration/                # Playwright test of the installation, and the helpers of the suites of the views
@@ -277,6 +278,25 @@ Build output goes to `out/`.
   the step that does not end is the one that is reported.
 - Do not hide a list of the host with `display: none`: it loses its scroll. The
   list behind a workspace is hidden with `visibility`.
+- A view opened from another one is shown over the same list, on the same page:
+  the views that are open are one parameter of the address, changed once for each
+  change of what is shown. Open one with `openView`, never by setting a parameter
+  for each kind.
+- The reviewed release writes no start time into an operation that did not start
+  or that failed its validation, and it completes the object of an operation it
+  takes. What a view orders by, and what it calls submitted, is checked against
+  the source of the release, in `docs/development/RECON-T0.1.md`.
+- The reviewed release writes no counter of zero, and counts when the work of an
+  operation ends. A fixture with `errors: 0` is an object no installation shows:
+  a view that passes on it may fail on every real one. Read the object the
+  controller of the test environment wrote before trusting a synthetic one.
+- A family that is asked again keeps the status of its last read, with
+  `reading` beside it. Do not show a state from `loading` alone: it is the state
+  of a family that was never answered.
+- The host gives a page the tabs of its group, in a layout of its own, when the
+  first entry of `clusterPageMenus` that leads to the page has a parent: the
+  entries of the lists come before the entry of the group. A page does not render
+  `TabLayout`: inside the one of the host it would have its margins twice.
 - `pnpm exec biome` does not exist here: `pnpm biome:fix` and `pnpm biome:check`.
 
 ## Architecture And UI
@@ -511,7 +531,7 @@ claude/issue-<number>-<short-slug>
 
 - `<number>` is the GitHub issue number
 - `<short-slug>` is a kebab-case summary of the issue title, kept short
-  (3–6 words maximum, omit articles and filler words)
+  (3 to 6 words maximum, omit articles and filler words)
 
 Do **not** use auto-generated timestamp suffixes (e.g.
 `claude/issue-1957-20260612-2108`), these are not human-readable and make

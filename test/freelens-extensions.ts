@@ -127,14 +127,22 @@ class ExtensionStoreStub {
   }
 }
 
-// A parameter of the address of a page: a view that reads it follows it, as it does in the host.
-function param() {
-  const value = observable.box("");
+// A parameter of the address of a page: a view that reads it follows it, as it does in the host. How many
+// times the address was changed is counted: one change of what is shown is one change of the address.
+export const addressChanges = { count: 0 };
+
+function param(init: { defaultValue?: unknown } = {}) {
+  const none = init.defaultValue ?? "";
+  const value = observable.box<unknown>(none, { deep: false });
+  const change = (next: unknown) => {
+    addressChanges.count += 1;
+    runInAction(() => value.set(next));
+  };
 
   return {
     get: () => value.get(),
-    set: (next: string) => runInAction(() => value.set(next)),
-    clear: () => runInAction(() => value.set("")),
+    set: (next: unknown) => change(next),
+    clear: () => change(none),
   };
 }
 

@@ -1,6 +1,5 @@
 import { Renderer } from "@freelensapp/extensions";
 import { observer } from "mobx-react";
-import { backupView } from "../../common/backup-view";
 import {
   countsNote,
   countsText,
@@ -10,32 +9,35 @@ import {
   progressText,
   signalText,
 } from "../../common/operation-text";
+import { restoreView, sourceNote } from "../../common/restore-view";
 import { time } from "../components/status";
 import { currentInstallation } from "../state/context";
 import { WorkspaceLink } from "./workspace-link";
 
-import type { BackupResource } from "../../common/types";
-import type { Backup } from "../api/kinds";
+import type { RestoreResource } from "../../common/types";
+import type { Restore } from "../api/kinds";
 import type { Installation } from "../state/installation";
 
 const {
   Component: { DrawerItem, DrawerTitle },
 } = Renderer;
 
-export interface BackupDetailsProps extends Renderer.Component.KubeObjectDetailsProps<Backup> {
+export interface RestoreDetailsProps extends Renderer.Component.KubeObjectDetailsProps<Restore> {
   extension: Renderer.LensExtension;
   installation?: Installation;
 }
 
-// What the details of the host show of a Backup, where the host opens them: the same reading of the status
-// the views of the extension give, in short, and the way to the workspace. It asks nothing of the cluster.
-export const BackupDetails = observer(({ object, extension, installation }: BackupDetailsProps) => {
+// What the details of the host show of a Restore, where the host opens them: the same reading of the
+// object the views of the extension give, in short, and the way to the workspace. It asks nothing of the
+// cluster.
+export const RestoreDetails = observer(({ object, extension, installation }: RestoreDetailsProps) => {
   if (!object) return null;
-  const view = backupView(object as unknown as BackupResource, Date.now());
+  const view = restoreView(object as unknown as RestoreResource, Date.now());
+  const note = sourceNote(view);
   const counters = countsNote(view.evidence, view.state);
 
   return (
-    <div data-testid="velero-backup-details">
+    <div data-testid="velero-restore-details">
       <DrawerTitle>Velero</DrawerTitle>
       <DrawerItem name="Phase">
         {phaseText(view.state)} ({lifecycleText(view.state)})
@@ -48,8 +50,9 @@ export const BackupDetails = observer(({ object, extension, installation }: Back
       <DrawerItem name="Item progress">{progressText(view.progress)}</DrawerItem>
       <DrawerItem name="Started">{time(view.started)}</DrawerItem>
       <DrawerItem name="Duration">{durationText(view.duration)}</DrawerItem>
-      <DrawerItem name="Storage location">{view.storage ?? "Not reported"}</DrawerItem>
+      <DrawerItem name="Backup">{view.backup ?? "Not reported"}</DrawerItem>
       <DrawerItem name="Schedule">{view.schedule ?? "None"}</DrawerItem>
+      {note ? <DrawerItem name="Source">{note}</DrawerItem> : null}
       <DrawerItem name="Installation">{view.namespace}</DrawerItem>
       {view.evidence.validationErrors.length ? (
         <DrawerItem name="Validation errors">{view.evidence.validationErrors.join("; ")}</DrawerItem>
@@ -57,7 +60,7 @@ export const BackupDetails = observer(({ object, extension, installation }: Back
       <WorkspaceLink
         extension={extension}
         installation={installation ?? currentInstallation()}
-        target={{ kind: "backup", name: view.name }}
+        target={{ kind: "restore", name: view.name }}
         namespace={view.namespace}
       />
     </div>

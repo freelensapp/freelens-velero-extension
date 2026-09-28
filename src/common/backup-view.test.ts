@@ -1,16 +1,17 @@
 import { describe, expect, it } from "vitest";
+import { backupView, SORTING, searchFields } from "./backup-view";
 import {
-  backupView,
+  countsNote,
   countsSentence,
   countsText,
   durationText,
   lifecycleText,
   phaseText,
   progressText,
-  SORTING,
-  searchFields,
+  signalMark,
   signalText,
-} from "./backup-view";
+  timeText,
+} from "./operation-text";
 import { BACKUP_PHASES } from "./phases";
 
 import type { BackupResource } from "./types";
@@ -40,9 +41,17 @@ describe("what the views show of a backup", () => {
     expect(countsSentence(backupView(backup({ phase: "Failed", errors: 1, warnings: 1 }), now).evidence)).toBe(
       "1 error and 1 warning",
     );
+    // The release writes the two counters together, and no zero: the warnings of a backup that failed
+    // with its errors counted are none.
     expect(countsSentence(backupView(backup({ phase: "Failed", errors: 3 }), now).evidence)).toBe(
-      "3 errors and no number of warnings",
+      "3 errors and 0 warnings",
     );
+    expect(countsSentence(backupView(backup({ phase: "Failed" }), now).evidence)).toBe(
+      "no number of errors and no number of warnings",
+    );
+    expect(
+      countsSentence(backupView(backup({ phase: "Failed", errors: 3, warnings: "many" as never }), now).evidence),
+    ).toBe("3 errors and no number of warnings");
   });
 
   it("reads a backup that is finalizing with all its items as in flight, with its failure", () => {
@@ -105,14 +114,71 @@ describe("what the views show of a backup", () => {
     expect(phaseText(view.state)).toBe("Not reported");
     expect(countsText(view.evidence)).toBe("Not reported / Not reported");
     expect(progressText(view.progress)).toBe("Not reported");
-    expect(durationText(view.duration)).toBe("Not started");
+    // Without a phase nothing says that the backup did not start.
+    expect(durationText(view.duration)).toBe("Start not reported");
     expect(view.storage).toBeUndefined();
     expect(view.schedule).toBeUndefined();
     expect(JSON.stringify(view)).not.toMatch(/NaN|Infinity/);
   });
 
-  it("tells a completed backup without a count of errors from one that counted none", () => {
-    expect(signalText(backupView(backup({ phase: "Completed" }), now).evidence)).toBe("No failure reported");
+  // The release writes no counter of zero: a backup that completed without an error carries none.
+  it("reads the completed backup the release leaves without counters as one without errors", () => {
+    const view = backupView(backup({ phase: "Completed" }), now);
+
+    expect(signalText(view.evidence)).toBe("No errors");
+    expect(countsText(view.evidence)).toBe("0 / 0");
+    expect(countsNote(view.evidence, view.state)).toContain("Velero writes no counter when it counts none");
+    expect(signalText(backupView(backup({ phase: "Completed", warnings: 2 }), now).evidence)).toBe("2 warnings");
+  });
+
+  it("says why the counters are not there of a backup that did not count", () => {
+    const note = (status: BackupResource["status"]) => {
+      const view = backupView(backup(status), now);
+
+      return [signalText(view.evidence), countsText(view.evidence), countsNote(view.evidence, view.state)];
+    };
+
+    expect(note({ phase: "New" })).toEqual([
+      "No failure reported",
+      "Not reported / Not reported",
+      "Nothing was counted: the operation did not start.",
+    ]);
+    expect(note({ phase: "InProgress" })).toEqual([
+      "No failure reported",
+      "Not reported / Not reported",
+      "Velero counts when the work of the operation ends.",
+    ]);
+    expect(note({ phase: "Failed", failureReason: "a synthetic reason" })).toEqual([
+      "Failure",
+      "Not reported / Not reported",
+      "Velero can fail an operation before it counts: a counter that is not in the object is not a count of none.",
+    ]);
+    expect(note({ phase: "Archived" })).toEqual(["Unknown", "Not reported / Not reported", undefined]);
+    // Counters that are written need no word.
+    expect(note({ phase: "PartiallyFailed", errors: 2, warnings: 1 })).toEqual(["2 errors", "2 / 1", undefined]);
+    expect(note({ phase: "PartiallyFailed", errors: 2 })[2]).toContain("Velero writes no counter");
+  });
+
+  it("marks as gone well only an operation that counted its errors and found none", () => {
+    const mark = (status: BackupResource["status"]) => signalMark(backupView(backup(status), now).evidence);
+
+    expect(mark({ phase: "Completed", errors: 0, warnings: 0 })).toBe("none");
+    expect(mark({ phase: "InProgress", errors: 0 })).toBe("none");
+    // An operation that did not start counted nothing: that no failure is reported is not that it went well.
+    expect(mark({ phase: "New" })).toBe("not-counted");
+    expect(mark({ phase: "Queued" })).toBe("not-counted");
+    // Nor did one that is still at work: the release counts when the work ends.
+    expect(mark({ phase: "InProgress" })).toBe("not-counted");
+    // After it counted, the release writes no counter of zero: no counter is no error.
+    expect(mark({ phase: "Completed" })).toBe("none");
+    expect(mark({ phase: "Finalizing" })).toBe("none");
+    expect(mark({ phase: "WaitingForPluginOperations" })).toBe("none");
+    expect(mark({ phase: "Completed", warnings: 3 })).toBe("warnings");
+    expect(mark({ phase: "Completed", errors: 0, warnings: 3 })).toBe("warnings");
+    expect(mark({ phase: "Failed" })).toBe("failure");
+    expect(mark({ phase: "FailedValidation", validationErrors: ["refused"] })).toBe("failure");
+    expect(mark(undefined)).toBe("unknown");
+    expect(mark({ phase: "Deleting" })).toBe("unknown");
     expect(signalText(backupView(backup({ phase: "Completed", errors: 0, warnings: 0 }), now).evidence)).toBe(
       "No errors",
     );
@@ -124,11 +190,17 @@ describe("what the views show of a backup", () => {
 
   it.each([
     [{ itemsBackedUp: 4, totalItems: 10 }, "4 / 10 (40%)"],
-    [{ totalItems: 10 }, "Not reported / 10"],
+    // The release writes the total first, and no count of zero.
+    [{ totalItems: 10 }, "0 / 10 (0%)"],
     [{ itemsBackedUp: 0, totalItems: 0 }, "No items counted"],
+    [{}, "No items counted"],
     [{ itemsBackedUp: 11, totalItems: 10 }, "Reported 11 / 10"],
+    [{ itemsBackedUp: 4 }, "Reported 4 / 0"],
     [{ itemsBackedUp: -1, totalItems: 10 }, "Reported -1 / 10"],
+    [{ itemsBackedUp: "4" }, "Reported 4 / nothing"],
+    [{ itemsBackedUp: 4, totalItems: {} }, "Reported 4 / {}"],
     [null, "Not reported"],
+    [undefined, "Not reported"],
   ])("writes the progress %j as %s", (progress, text) => {
     expect(progressText(backupView(backup({ phase: "InProgress", progress: progress as never }), now).progress)).toBe(
       text,
@@ -149,6 +221,39 @@ describe("what the views show of a backup", () => {
     [{ phase: "InProgress", startTimestamp: "soon" }, "Start not readable"],
   ])("writes the duration of %j as %s", (status, text) => {
     expect(durationText(backupView(backup(status), now).duration)).toBe(text);
+  });
+
+  it("writes a time as the host writes its own, in the language and the zone of the operator", () => {
+    for (const time of ["2026-09-01T10:00:00Z", "2026-01-31T23:59:59Z", "2026-06-15T00:00:00.500Z"]) {
+      expect(timeText(Date.parse(time))).toBe(new Date(time).toLocaleString());
+    }
+    expect(timeText(undefined)).toBe("Not reported");
+    expect(timeText(0)).toBe(new Date(0).toLocaleString());
+  });
+
+  it("is searched by what every column shows but the age, which the host writes", () => {
+    const view = backupView(
+      backup({
+        phase: "InProgress",
+        startTimestamp: "2026-09-01T10:00:00Z",
+        progress: { itemsBackedUp: 4, totalItems: 10 },
+      }),
+      now,
+    );
+
+    for (const text of [
+      view.name,
+      view.namespace,
+      phaseText(view.state),
+      signalText(view.evidence),
+      progressText(view.progress),
+      timeText(view.started),
+      durationText(view.duration),
+      view.storage ?? "",
+    ]) {
+      expect(text).not.toBe("");
+      expect(searchFields(view)).toContain(text);
+    }
   });
 
   it("does not change the backup it reads", () => {
