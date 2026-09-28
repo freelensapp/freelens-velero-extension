@@ -1,6 +1,6 @@
 # SPEC-0004: Test Environment On Every Platform
 
-- **Status:** Implemented
+- **Status:** Verified
 - **Date:** 2026-09-27
 - **Milestone / tasks:** Foundation
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
@@ -170,9 +170,14 @@ Record role and date.
 ## Evidence And Deviations
 
 Implemented on 2026-09-27 and merged the same day; the hosted checks are green on
-main, the E2E tests among them. The status moves to Verified when the manual review
-of the Success Criteria is recorded here, with role and date. The runs below are the
-evidence of the pull request of the implementation.
+main, the E2E tests among them. The runs below are the evidence of the pull request
+of the implementation.
+
+Review of the success criteria, 2026-09-28. What the manual review asks, the
+environment brought up and down on macOS beside another kind cluster, is the run of
+ENV-07 and ENV-08 below, made by the agent on the machine of the lead maintainer.
+The lead maintainer accepted that run in place of a session by hand. Verdict:
+approved.
 
 | Check | Evidence |
 | --- | --- |

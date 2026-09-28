@@ -1,6 +1,6 @@
 # SPEC-0003: Operation States And Read-Only Backups
 
-- **Status:** Implemented
+- **Status:** Verified
 - **Date:** 2026-09-18
 - **Milestone / tasks:** M1 / T1.2 and T1.3
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
@@ -240,4 +240,8 @@ What was decided while implementing, inside the requirements:
   that page or its details; the extension adds a section to those details, which
   only reads.
 
-The manual review of the success criteria is not recorded yet.
+Review of the milestone, 2026-09-28. The steps of the manual review were run in
+the packaged application by the pre-review pass, with the keyboard alone where the
+criteria ask for it; the lead maintainer judged its report and its screenshots, in
+both themes, and approved. Verdict: approved, with what was decided while
+implementing accepted as it is. No finding was recorded.

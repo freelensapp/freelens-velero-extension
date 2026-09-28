@@ -1,6 +1,6 @@
 # Operator Experience
 
-Date: 2026-09-27
+Date: 2026-09-28
 
 Status: Proposed in T0.2. The target bar, the states before a view, the list of the
 Backups and the workspace of a backup are implemented as described here, with the
@@ -42,14 +42,16 @@ replaced. Changing it clears write confirmation and isolates all subsequent data
 | --- | --- | --- |
 | Backup/Restore lists | Native sortable, searchable, virtualized tables | Fast scanning and familiar selection/navigation |
 | Backup/Restore operation | Dedicated full-width workspace with summary and diagnostic tabs | Enough room for scope, progress, structured failures and logs |
-| Schedule/BSL/VSL | Native table and concise detail drawer | Primarily structured field inspection and related objects |
+| Schedule/BSL/VSL | Native table and a read-only workspace of the extension, shorter than the one of an operation | The details of the host carry the edit and the delete of the host; one way in and one way back for every kind |
 | Overview | Unframed summary bands and compact recent-operation history | Show attention items, coverage and ongoing work without a decorative dashboard |
 | Recovery form | Guided source -> scope -> policy -> review flow | Keep consequential choices explicit and reviewable |
 
 The Backups row opens its dedicated operation route. Provide a clear back link and
-preserve search, sort, filters and scroll. Related resources can open host drawers;
-the host's generic CRD route also receives a compact read-only Velero detail section.
-Both surfaces use the same domain helpers and agree on safety and status.
+preserve search, sort, filters and scroll. Related resources open the workspace of
+their kind, and a view opened from another returns to it; the host's generic CRD
+route also receives a compact read-only Velero detail section. Both surfaces use the
+same domain helpers and agree on safety and status. The presentation of the kinds of
+the second milestone is the one of their specs, approved on 2026-09-28.
 
 Initial operation workspace sketch, containing operational labels only:
 

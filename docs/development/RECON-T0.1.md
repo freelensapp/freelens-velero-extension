@@ -262,6 +262,43 @@ the [roadmap](ROADMAP.md) and is a decision of the lead maintainer.
 Newer than these there are release candidates only, `v1.18.4-rc.1` and
 `v1.14.4-rc.1`: not a baseline.
 
+### Start Of The Second Milestone, 2026-09-28
+
+The latest releases are the ones of the start of the first milestone, `v1.18.3` and
+`v1.14.3`, and newer than them there are the same release candidates. The schemas
+of the kinds of the second milestone, compared between the reviewed release and
+`v1.18.3`:
+
+| Kind | Change | Effect on the extension |
+| --- | --- | --- |
+| Restore | The optional `spec.resourcePolicy` of the table above | The view of a restore shows it when the object carries it: [SPEC-0005](../specs/SPEC-0005-restore-read-only.md) |
+| Schedule | None | None |
+| BackupStorageLocation | None | None |
+| VolumeSnapshotLocation | None | None |
+
+What the specs of the milestone say of the behavior of Velero was read in the
+source of the reviewed release. Nothing was run.
+
+| Fact | Source |
+| --- | --- |
+| A restore asked from a schedule gets the name of the newest completed backup of the schedule written into `spec.backupName`; a restore asked from a backup gets the schedule of that backup written into `spec.scheduleName`. A restore that names both or neither fails its validation | [Restore controller](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/restore_controller.go#L338-L405) |
+| When it takes a restore Velero adds nine resources of its own to `spec.excludedResources` and fills `spec.itemOperationTimeout` when it is not set: the object is not only what was submitted | [The resources](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/restore_controller.go#L65-L94), [the addition](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/restore_controller.go#L306-L313), [the timeout](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/restore_controller.go#L248-L251) |
+| `status.startTimestamp` is written when the validation passes and not otherwise: a backup or a restore in FailedValidation has no start time and no completion time, and one that has not started has no start time | [Restore controller](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/restore_controller.go#L241-L282), [backup controller](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/backup_controller.go#L293-L298) |
+| A schedule that is paused is left out of every event the controller reads, so its status is the one written before the pause, and one created paused has none | [Schedule controller](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/schedule_controller.go#L73-L90), [the predicate](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/util/kube/predicate.go#L51-L66) |
+| The controller writes Enabled or FailedValidation into a schedule it reads, never New | [Schedule controller](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/schedule_controller.go#L121-L132) |
+| When the object names no `spec.skipImmediately` the controller writes the setting of the server into it. When the value is true the controller sets it back to false and `status.lastSkipped` takes the time of that reading | [Schedule controller](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/schedule_controller.go#L113-L154) |
+| No backup of a schedule is submitted while one of its backups has no phase, is New or is InProgress, or while its backups cannot be listed. The other phases in flight do not hold it back | [Schedule controller](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/schedule_controller.go#L161-L238) |
+| A backup that names no storage location goes to the one marked default, or to the one the server names in its settings when none is marked | [Backup controller](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/backup_controller.go#L428-L445) |
+| A backup is refused for the access mode of its storage location only when the mode is ReadOnly, and is refused as well when the location is not available | [Backup controller](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/backup_controller.go#L466-L476) |
+| A restore is refused when the storage location of its backup is not available | [Restore controller](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/restore_controller.go#L397-L400) |
+| A storage location is available when its phase is Available, and in no other case: one that reports no phase is not | [The check](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/util/velero/velero.go#L130-L132) |
+| The phase, the message and the last validation time of a backup storage location are written by its controller at every validation | [Storage location controller](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/backup_storage_location_controller.go#L222-L238) |
+| A storage location is validated at the frequency it names, or at the one of the server when it names none or one below zero; a frequency of zero turns the periodic validation off, after the first. The frequency of the server is one minute unless its settings say otherwise | [The rule](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/internal/storage/storagelocation.go#L48-L75), [the setting](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/cmd/server/config/config.go#L27) |
+| Several storage locations marked default are brought back to one by the controller, the one created last. With none marked the controller logs a warning | [Storage location controller](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/backup_storage_location_controller.go#L299-L301), [the same](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/backup_storage_location_controller.go#L327-L375) |
+| The last synced time of a storage location is written by the controller that syncs the backups | [Sync controller](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/backup_sync_controller.go#L250) |
+| Nothing writes or reads the status of a volume snapshot location: a search of `pkg` and `internal` finds its type and no use of it. The backup controller checks that a location a backup names exists, and never its phase | [The type](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/apis/velero/v1/volume_snapshot_location_type.go#L73-L89), [the controllers](https://github.com/velero-io/velero/tree/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller) |
+| For the AWS plugin the key of the configuration that turns off the verification of TLS is `insecureSkipTLSVerify` | [Plugin document](https://github.com/velero-io/velero-plugin-for-aws/blob/5463822fd77bc1c2a1151ee76c830ad979ff2781/backupstoragelocation.md) |
+
 ## Verification And Remaining Work
 
 Completed checks:
