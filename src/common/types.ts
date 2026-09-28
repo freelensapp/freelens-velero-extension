@@ -41,6 +41,11 @@ export interface BackupSpec {
   csiSnapshotTimeout?: string;
   datamover?: string;
   defaultVolumesToFsBackup?: boolean | null;
+  // What each hook does is not read: how many there are, and how they are called.
+  hooks?: { resources?: { name?: string }[] | null } | null;
+  orderedResources?: Record<string, string> | null;
+  uploaderConfig?: { parallelFilesUpload?: number } | null;
+  volumeGroupSnapshotLabelKey?: string;
   excludedClusterScopedResources?: string[] | null;
   excludedNamespaceScopedResources?: string[] | null;
   excludedNamespaces?: string[] | null;

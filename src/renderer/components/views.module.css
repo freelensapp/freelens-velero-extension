@@ -456,6 +456,21 @@
   }
 }
 
+/* The head of a list is its title, the number of its items and its search, which the host gives a width
+   it does not go under. In a room they do not fit side by side the search goes under the other two, with
+   the width of the room: the page is not scrolled sideways for a title that is two letters longer. */
+@container (max-width: 520px) {
+  .list :global(.header) {
+    flex-wrap: wrap;
+  }
+
+  .list :global(.header .Input.SearchInput) {
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
 /* In a narrow room the columns that say where and when give their room to the ones that say what: the
    name, the phase, the failure and the progress stay. What is not shown is in the workspace of the object.
    The installation is the first to go: it is the same in every row, and the target bar says it. */
@@ -537,4 +552,141 @@
   .list :global(.TableCell.source) {
     display: none;
   }
+}
+
+.list :global(.TableCell.schedule) {
+  flex-grow: 1.5;
+}
+
+/* The newest backup of a schedule is a name and how it ended: the column has the room of two. */
+.list :global(.TableCell.newest) {
+  flex-grow: 3;
+}
+
+.list :global(.TableCell.paused) {
+  flex-grow: 0.9;
+}
+
+@container (max-width: 760px) {
+  .list :global(.TableCell.newest) {
+    display: none;
+  }
+}
+
+/* The newest backup of a schedule in its row: its name, which is cut when it is long, and its mark. */
+.newest {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+/* How the backup ended is read whole: it is the name that is cut when the room is not enough. */
+.newest > :first-child {
+  flex: 0 1 auto;
+  min-width: 3em;
+}
+
+.newest > :last-child:not(:first-child) {
+  flex: 0 0 auto;
+}
+
+.warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--colorWarning);
+  overflow-wrap: anywhere;
+}
+
+/* The line of time of a history. The marks are on it by their time: their room is the one between the two
+   ends, which are inside the line by half a mark so that the first and the last are drawn whole. */
+.strip {
+  margin: 16px 0 8px;
+}
+
+.stripLine {
+  position: relative;
+  height: 36px;
+  margin: 0 14px;
+  border-bottom: 2px solid var(--borderColor);
+}
+
+.stripMark {
+  position: absolute;
+  bottom: -2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 4px;
+  border: 1px solid var(--borderColor);
+  border-radius: 13px;
+  background: var(--contentColor);
+  color: var(--textColorPrimary);
+  font: inherit;
+  transform: translateX(-50%);
+  cursor: pointer;
+}
+
+.stripMark:hover,
+.stripMark:focus-visible {
+  border-color: var(--primary);
+  outline: none;
+  z-index: 1;
+}
+
+.stripMark:focus-visible {
+  box-shadow: 0 0 0 2px var(--primary);
+}
+
+.stripFailing {
+  border-color: var(--colorError);
+  color: var(--colorError);
+}
+
+/* More than one backup: a mark with its number, and a border that is doubled. */
+.stripGroup {
+  border-style: double;
+  border-width: 3px;
+}
+
+.stripActive {
+  background: var(--layoutTabsBackground);
+}
+
+.stripCount {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.stripEnds {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  color: var(--textColorSecondary);
+  font-size: 12px;
+}
+
+/* A table that has more columns than the room has width is scrolled inside its own room. */
+.scrolled {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.references .status {
+  white-space: normal;
+}
+
+/* Its words are not broken inside, and a state is on one line: the table is scrolled where it does not fit. */
+.scrolled .references td {
+  overflow-wrap: normal;
+}
+
+.scrolled .references .status {
+  white-space: nowrap;
 }

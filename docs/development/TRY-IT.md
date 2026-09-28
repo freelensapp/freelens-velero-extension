@@ -45,7 +45,7 @@ wrote. Take the environment down first, with `pnpm demo:down`.
 | --- | --- |
 | `velero-demo` | The installation: Velero, its storage location, the real backup and its restore |
 | `velero-static-<run>` | A backup and a restore for every phase, three schedules, storage locations that are available and not |
-| `velero-views-<run>` | A backup with every reference in place, backups that name what is not there, a name of 63 characters, a backup that reports nothing; a restore into two namespaces, one that failed its validation, one of a backup that is not there |
+| `velero-views-<run>` | A backup with every reference in place, backups that name what is not there, a name of 63 characters, a backup that reports nothing; a restore into two namespaces, one that failed its validation, one of a backup that is not there; a schedule with the history of a week, and the schedules Velero has not read |
 | `velero-scale-<run>` | A thousand backups, a thousand restores and no storage location |
 
 `<run>` is the identifier of the fixtures, eight characters the second command
@@ -98,16 +98,32 @@ Then the Restores, under Velero in the sidebar:
 | Make the window wider than 1,600 pixels | The list shows the installation beside the name: in a narrower one the column gives its room to the ones that say what happened |
 | Name `velero-scale-<run>` | A thousand restores: search by the name of a backup, sort, scroll, open one and come back |
 
+Then the Schedules:
+
+| Step | What to look at |
+| --- | --- |
+| Select `velero-static-<run>` | Three schedules. Paused and validation are two columns: `schedule-paused` is paused and Enabled, `schedule-invalid` is paused and refused. Open the second: its expression as it is written, and why Velero refused it |
+| Select `velero-views-<run>` | Ten schedules. The last submission and the newest backup are side by side: `views-history` submitted a backup when the fixtures were put in place, and that backup failed its validation |
+| Open `views-history` | Its history. The line of time goes from the oldest backup that exists to now: a mark for each backup, one for the two that are an hour apart, and nothing where no backup is. In an environment that is some weeks old the days are close on the line, and a mark holds more than one. The newest never started: it is at the time it was created, which is the last submission of the schedule, and says so |
+| Click the mark with a 2 | The two backups of the mark are shown alone in the list. Show all brings the others back |
+| Click another mark, or a name of the list | The workspace of the backup, over the list of the schedules. Its schedule is the way back |
+| The template | What every backup is asked, as the schedule carries it, and where it goes |
+| Open `views-to-archive` and `views-to-removed` | The backups go to a location that is read-only, and to one that is not there: the view says that the release refuses them |
+| Open `views-to-default` | The template names no location: the view says which one is marked default |
+| Open `views-zoned` | The time zone the expression names. The others are read in the time zone of the server, which the view does not read: no view says when a schedule runs next |
+| Open `schedule-unread`, `schedule-unread-paused`, `schedule-skipping` | What Velero has not read, and what it will do when it reads it. A schedule Velero read says whether the run that is due is skipped, which Velero wrote into it |
+
 With the keyboard alone: Tab reaches the choices, the search and the names of the
-rows, Enter opens, Tab reaches the ways to the other views, Escape comes back and
-the focus is on the row that was open.
+rows, Enter opens, Tab reaches the ways to the other views and the marks of a line
+of time, Escape comes back and the focus is on the row that was open.
 
 For the restricted access, add `views-reader.json` in the same way. It has the
 same name as the first in the catalog: it is the one whose Velero asks for a
 namespace instead of offering three. Name `velero-views-<run>`: the backups are
 read, and the workspace of one says which of its references cannot be. With
 `views-reader-of-restores.json` it is the other way round: the restores are read,
-and the source of one is said denied, which is not said absent.
+and the source of one is said denied, which is not said absent; the schedules are
+read, and the history of one is said not known, which is not said empty.
 
 ## 4. The pass that precedes a review
 

@@ -20,6 +20,7 @@ const {
 const VIEW_OF: Partial<Record<ReferenceKind, ViewKind>> = {
   Backup: "backup",
   Restore: "restore",
+  Schedule: "schedule",
 };
 
 export function Fact({ name, note, children }: { name: string; note?: string; children: ReactNode }) {

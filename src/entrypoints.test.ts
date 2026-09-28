@@ -60,10 +60,11 @@ describe("what the extension registers", () => {
     const pages = (extension.clusterPages as { id: string }[]).map((page) => page.id);
     const menus = extension.clusterPageMenus as { id: string; parentId?: string; target: { pageId: string } }[];
 
-    expect(pages).toEqual(["backups", "restores"]);
+    expect(pages).toEqual(["backups", "restores", "schedules"]);
     expect(menus.map((menu) => [menu.id, menu.parentId, menu.target.pageId])).toEqual([
       ["velero-backups", "velero", "backups"],
       ["velero-restores", "velero", "restores"],
+      ["velero-schedules", "velero", "schedules"],
       ["velero", undefined, "backups"],
     ]);
     // The host takes the first entry that leads to a page to know whether the page is of a group, and
@@ -82,6 +83,7 @@ describe("what the extension registers", () => {
     ).toEqual([
       ["Backup", ["velero.io/v1"]],
       ["Restore", ["velero.io/v1"]],
+      ["Schedule", ["velero.io/v1"]],
     ]);
   });
 });

@@ -163,7 +163,7 @@ function flag(value: unknown): string | undefined {
 
 // A selector as it is written for the command line: the labels as pairs, the expressions as the key, the
 // operator and the values the object carries.
-function selectorText(selector: LabelSelector | null | undefined): string | undefined {
+export function selectorText(selector: LabelSelector | null | undefined): string | undefined {
   const pairs = Object.entries(selector?.matchLabels ?? {}).map(([key, value]) => `${key}=${value}`);
   const expressions = (Array.isArray(selector?.matchExpressions) ? selector.matchExpressions : []).map((expression) => {
     const values = names(expression?.values);

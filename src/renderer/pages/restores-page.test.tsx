@@ -705,8 +705,8 @@ describe("workspace of a restore", () => {
     fireEvent.click(screen.getByText("restore-waiting"));
     await screen.findByTestId("velero-restore-workspace");
     expect(within(reference("Backup-nightly-1")).getByRole("button").textContent).toBe("nightly-1");
-    // The schedules and the storage locations have no view of their own yet: a name, and no way.
-    expect(within(reference("Schedule-nightly")).queryByRole("button")).toBeNull();
+    expect(within(reference("Schedule-nightly")).getByRole("button").textContent).toBe("nightly");
+    // The storage locations have no view of their own yet: a name, and no way.
     expect(within(reference("BackupStorageLocation-default")).queryByRole("button")).toBeNull();
     act(() => openView({ kind: "restore", name: "restore-completed" }));
     await waitFor(() => expect(screen.getByTestId("velero-restore-name").textContent).toBe("restore-completed"));
@@ -984,6 +984,7 @@ describe("way between a backup and its restores", () => {
     expect(controls.map((control) => control.getAttribute("data-testid"))).toEqual([
       "velero-back",
       "velero-open-backup-nightly-1",
+      "velero-open-schedule-nightly",
     ]);
     expect(workspace.textContent).not.toMatch(/\b(delete|edit|remove|retry|run again)\b/i);
   });

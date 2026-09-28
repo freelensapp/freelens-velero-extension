@@ -197,6 +197,12 @@ const WAITING = new Set(["WaitingForPluginOperations", "WaitingForPluginOperatio
 // the work with every item done. The failed operation is one it stopped at work, with its reason. The
 // hooks are counted at the end of the work of a backup, and when a restore is finalized: their status is
 // in the object from then on, empty when none was run.
+// How long the backup the controller runs is kept: the retention the release gives when none is asked.
+export const LIVE_RETENTION = "720h0m0s";
+
+// The newest backup of the schedule with a history, which the schedule has its last submission from.
+export const NEWEST_OF_THE_HISTORY = "views-history-0";
+
 export function syntheticStatus(
   phase: string,
   progressField: "itemsBackedUp" | "itemsRestored",
@@ -275,9 +281,22 @@ export const LONG_NAMESPACE = "namespace-with-a-name-as-long-as-the-name-of-a-na
 // What the views need beside the phases: an installation with references that lead somewhere and references
 // that do not, a name that fills its column, an object that reports nothing, and an identity that reads a
 // part of it. Its namespace is outside the reach of the controllers, like the one of the phases.
-export function viewFixtures(owner: string, run: string): KubeResource[] {
+// The history of a schedule is placed in time from when the fixtures were started: what a view shows of the
+// last days holds something whenever the suites run.
+// `submitted` is when the newest backup of the schedule with a history was created, which is known once it
+// is there: the release writes the time of a submission into the schedule when it creates the backup.
+export function viewFixtures(
+  owner: string,
+  run: string,
+  started = Date.parse("2026-09-01T00:00:00Z"),
+  submitted = started,
+): KubeResource[] {
   requireCondition(owner, "Fixture ownership is required");
+  requireCondition(Number.isFinite(started), "The time the fixtures were started is required");
+  requireCondition(Number.isFinite(submitted), "The time of the last submission is required");
   const names = fixtureNames(run);
+  const HOUR = 3_600_000;
+  const day = (before: number, hours = 0) => Math.floor(started / HOUR) * HOUR - before * 24 * HOUR + hours * HOUR;
   const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
   const metadata = (name: string, more: Record<string, string> = {}) => ({
     name,
@@ -315,6 +334,20 @@ export function viewFixtures(owner: string, run: string): KubeResource[] {
         objectStorage: { bucket: BUCKET },
         config: { region: "us-east-1", s3ForcePathStyle: "true", s3Url: STORAGE_ENDPOINT },
         accessMode: "ReadWrite",
+        default: true,
+      },
+      status: { phase: "Available" },
+    },
+    // A location that is there and takes no backup: what a template that names it is told.
+    {
+      apiVersion: "velero.io/v1",
+      kind: "BackupStorageLocation",
+      metadata: metadata("views-archive"),
+      spec: {
+        provider: "aws",
+        objectStorage: { bucket: BUCKET, prefix: "archive" },
+        config: { region: "us-east-1", s3ForcePathStyle: "true", s3Url: STORAGE_ENDPOINT },
+        accessMode: "ReadOnly",
       },
       status: { phase: "Available" },
     },
@@ -329,13 +362,124 @@ export function viewFixtures(owner: string, run: string): KubeResource[] {
       apiVersion: "velero.io/v1",
       kind: "Schedule",
       metadata: metadata("views-daily"),
-      spec: { schedule: "0 3 * * *", paused: false, template: spec },
+      spec: { schedule: "0 3 * * *", paused: false, skipImmediately: false, template: spec },
       status: { phase: "Enabled" },
     },
     backup("views-daily-20260901030000", "Completed", {
       labels: { "velero.io/schedule-name": "views-daily" },
       status: { warnings: 2 },
     }),
+    // A schedule with a history: a backup a day, two of them an hour from each other, how each one ended,
+    // and the newest one that failed its validation, which has no start time. Its last submission is the
+    // time that backup was created.
+    {
+      apiVersion: "velero.io/v1",
+      kind: "Schedule",
+      metadata: metadata("views-history"),
+      spec: {
+        schedule: "0 1 * * *",
+        paused: false,
+        skipImmediately: false,
+        template: spec,
+        useOwnerReferencesInBackup: false,
+      },
+      status: {
+        phase: "Enabled",
+        lastBackup: new Date(Math.floor(submitted / 1000) * 1000).toISOString().replace(".000Z", "Z"),
+      },
+    },
+    ...(
+      [
+        ["views-history-6", "Completed", day(6)],
+        ["views-history-5", "Completed", day(5)],
+        ["views-history-4", "PartiallyFailed", day(4)],
+        ["views-history-3", "Completed", day(3)],
+        ["views-history-3-again", "Failed", day(3, 1)],
+        ["views-history-2", "Completed", day(2)],
+        ["views-history-1", "Completed", day(1)],
+        ["views-history-0", "FailedValidation", 0],
+      ] as const
+    ).map(([name, phase, start]) => ({
+      apiVersion: "velero.io/v1",
+      kind: "Backup",
+      metadata: metadata(name, { "velero.io/schedule-name": "views-history" }),
+      spec,
+      status: syntheticStatus(phase, "itemsBackedUp", start),
+    })),
+    // What Velero has not read: a schedule that reports nothing and one that was created paused. The
+    // release writes `skipImmediately` into every schedule it reads, and these have none. The phase New is
+    // of the API: the release writes Enabled or FailedValidation, and a view is given New all the same.
+    // The last one was read, then paused and asked to skip the run that is due when it is resumed.
+    {
+      apiVersion: "velero.io/v1",
+      kind: "Schedule",
+      metadata: metadata("schedule-new"),
+      spec: { schedule: "0 0 1 1 *", paused: false, template: spec },
+      status: { phase: "New" },
+    },
+    {
+      apiVersion: "velero.io/v1",
+      kind: "Schedule",
+      metadata: metadata("schedule-unread"),
+      spec: { schedule: "0 0 1 1 *", paused: false, template: spec },
+    },
+    {
+      apiVersion: "velero.io/v1",
+      kind: "Schedule",
+      metadata: metadata("schedule-unread-paused"),
+      spec: { schedule: "0 0 1 1 *", paused: true, template: spec },
+    },
+    {
+      apiVersion: "velero.io/v1",
+      kind: "Schedule",
+      metadata: metadata("schedule-skipping"),
+      spec: { schedule: "0 0 1 1 *", paused: true, skipImmediately: true, template: spec },
+      status: { phase: "Enabled", lastBackup: "2026-08-01T00:00:00Z", lastSkipped: "2026-08-15T09:30:00Z" },
+    },
+    // An expression that names its time zone, and schedules whose backups go where no backup is taken.
+    {
+      apiVersion: "velero.io/v1",
+      kind: "Schedule",
+      metadata: metadata("views-zoned"),
+      spec: { schedule: "CRON_TZ=Europe/Rome 30 2 * * *", paused: false, skipImmediately: false, template: spec },
+      status: { phase: "Enabled" },
+    },
+    {
+      apiVersion: "velero.io/v1",
+      kind: "Schedule",
+      metadata: metadata("views-to-removed"),
+      spec: {
+        schedule: "0 5 * * *",
+        paused: false,
+        skipImmediately: false,
+        template: { ...spec, storageLocation: "views-removed" },
+      },
+      status: { phase: "Enabled" },
+    },
+    {
+      apiVersion: "velero.io/v1",
+      kind: "Schedule",
+      metadata: metadata("views-to-archive"),
+      spec: {
+        schedule: "0 6 * * *",
+        paused: false,
+        skipImmediately: false,
+        template: { ...spec, storageLocation: "views-archive" },
+      },
+      status: { phase: "Enabled" },
+    },
+    {
+      apiVersion: "velero.io/v1",
+      kind: "Schedule",
+      metadata: metadata("views-to-default"),
+      spec: {
+        schedule: "0 7 * * *",
+        paused: false,
+        skipImmediately: false,
+        template: { includedNamespaces: [names.source], includeClusterResources: false, ttl: "720h0m0s" },
+      },
+      status: { phase: "Enabled" },
+    },
     backup("backup-missing-schedule", "Completed", { labels: { "velero.io/schedule-name": "views-removed" } }),
     backup("backup-missing-location", "FailedValidation", {
       spec: { storageLocation: "views-removed", volumeSnapshotLocations: ["views-removed"] },
@@ -550,21 +694,22 @@ export function staticFixtures(owner: string, run: string): KubeResource[] {
       apiVersion: "velero.io/v1",
       kind: "Schedule",
       metadata: metadata("schedule-enabled"),
-      spec: { schedule: "0 0 1 1 *", paused: false, template: backupSpec },
+      // A schedule with a phase was read, and the release writes `skipImmediately` into what it reads.
+      spec: { schedule: "0 0 1 1 *", paused: false, skipImmediately: false, template: backupSpec },
       status: { phase: "Enabled" },
     },
     {
       apiVersion: "velero.io/v1",
       kind: "Schedule",
       metadata: metadata("schedule-paused"),
-      spec: { schedule: "0 0 1 1 *", paused: true, template: backupSpec },
+      spec: { schedule: "0 0 1 1 *", paused: true, skipImmediately: false, template: backupSpec },
       status: { phase: "Enabled" },
     },
     {
       apiVersion: "velero.io/v1",
       kind: "Schedule",
       metadata: metadata("schedule-invalid"),
-      spec: { schedule: "invalid-synthetic-cron", paused: true, template: backupSpec },
+      spec: { schedule: "invalid-synthetic-cron", paused: true, skipImmediately: false, template: backupSpec },
       status: { phase: "FailedValidation", validationErrors: ["Synthetic invalid schedule"] },
     },
     {
@@ -723,9 +868,23 @@ export function readerKubeconfig(config: KindConfig, token: string, namespace: s
 export function createViewFixtures(
   runtime: FixtureRuntime,
   run: string,
+  started: number,
 ): { views: number; scale: number; restores: number } {
   const names = fixtureNames(run);
-  const views = createWithStatus(runtime, viewFixtures(runtime.owner, run));
+  // The newest backup of the schedule with a history goes first, after the namespaces: the time it was
+  // created is the last submission of its schedule. A second call finds the backup, and asks for the
+  // same schedule.
+  const first = viewFixtures(runtime.owner, run, started).filter(
+    (resource) =>
+      resource.kind === "Namespace" || (resource.kind === "Backup" && resource.metadata.name === NEWEST_OF_THE_HISTORY),
+  );
+  const newest = createWithStatus(runtime, first);
+
+  requireCondition(newest.length === 1, "The newest backup of the history is one");
+  const submitted = Date.parse(String((newest[0].metadata as { creationTimestamp?: string }).creationTimestamp));
+
+  requireCondition(Number.isFinite(submitted), "The newest backup of the history has the time it was created");
+  const views = createWithStatus(runtime, viewFixtures(runtime.owner, run, started, submitted));
   const scale = scaleFixtures(runtime.owner, run);
   const place = (kind: string, items: KubeResource[]): number => {
     const listed = () =>
@@ -804,7 +963,9 @@ export function liveBackup(owner: string, run: string): KubeResource {
       storageLocation: "default",
       snapshotVolumes: false,
       defaultVolumesToFsBackup: false,
-      ttl: "1h0m0s",
+      // The release deletes a backup when it expires, and its restores with it: the backup the views are
+      // looked at with lasts as long as the environment is kept, which is days.
+      ttl: LIVE_RETENTION,
     },
   };
 }

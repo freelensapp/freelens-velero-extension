@@ -27,7 +27,9 @@ const RESTORES = cluster.RESTORES;
 const RESTORED = "restore-mapped";
 const LONG_RESTORE = cluster.LONG_RESTORE_NAME;
 // The views that are checked, each in both themes at every size.
-const VIEWS = 12;
+const VIEWS = 16;
+const SCHEDULES = cluster.SCHEDULES;
+const SCHEDULED = "views-history";
 
 describe("pre-review of the views", () => {
   let started: velero.StartedApplication;
@@ -296,6 +298,100 @@ describe("pre-review of the views", () => {
       expect(found("restore-workspace")).toEqual({});
       expect(found("restore-workspace-into")).toEqual({});
       expect(found("restore-workspace-scope")).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows the list of the schedules in both themes, at every size",
+    async () => {
+      await cluster.showList(frame);
+      await cluster.openPage(frame, SCHEDULES);
+      await cluster.waitForList(frame, SCHEDULES);
+      await everyLayout("schedules", undefined, SCHEDULES);
+      expect(found("schedules")).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "reads the history of a schedule with the keyboard alone: its line of time, mark by mark, and its list",
+    async () => {
+      await cluster.showList(frame);
+      await frame.locator("[data-testid=velero-refresh]").focus();
+      await cluster.tabTo(frame, (focus) => focus === SCHEDULED, 80);
+      await started.window.keyboard.press("Enter");
+      await frame.waitForSelector(`[data-testid=velero-schedule-name] >> text="${SCHEDULED}"`, { timeout: 60_000 });
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      // After the way back and the newest backup, the marks of the line, from the oldest, one press each.
+      const reached: string[] = [];
+      const line = await cluster.history(frame);
+
+      // Each day of the history has its mark: what is expected below is of an environment that is not old.
+      expect(cluster.dayOnTheLine(line.width)).toBeGreaterThan(2 * cluster.MARK_WIDTH);
+      for (let presses = 0; presses < 12 && reached.length < 7; presses += 1) {
+        await started.window.keyboard.press("Tab");
+        const mark = await frame.evaluate(() => document.activeElement?.getAttribute("data-strip-mark") ?? "");
+
+        if (mark) {
+          reached.push(mark);
+          // What a mark is, is said to who does not see it.
+          expect(await frame.evaluate(() => document.activeElement?.getAttribute("aria-label") ?? "")).toContain(
+            mark.split(",")[0],
+          );
+        }
+      }
+      expect(reached).toEqual((await cluster.history(frame)).marks);
+      expect(reached).toHaveLength(7);
+      // The mark that holds two backups shows them alone in the list, and the next press goes on along the line.
+      await frame.locator('[data-strip-mark="views-history-3-again,views-history-3"]').focus();
+      await started.window.keyboard.press("Enter");
+      expect((await cluster.history(frame)).rows).toEqual(["views-history-3-again", "views-history-3"]);
+      await started.window.keyboard.press("Enter");
+      expect((await cluster.history(frame)).rows).toHaveLength(8);
+      // A mark of one backup opens it, and Escape comes back to the schedule.
+      await frame.locator('[data-strip-mark="views-history-6"]').focus();
+      await started.window.keyboard.press("Enter");
+      await frame.waitForSelector('[data-testid=velero-backup-name] >> text="views-history-6"', { timeout: 60_000 });
+      await started.window.keyboard.press("Escape");
+      await frame.waitForSelector(`[data-testid=velero-schedule-name] >> text="${SCHEDULED}"`, { timeout: 60_000 });
+      await started.window.keyboard.press("Escape");
+      await frame.waitForSelector("[data-testid=velero-schedule-workspace]", { state: "detached", timeout: 60_000 });
+      expect(await cluster.focusOn(frame, SCHEDULED)).toBe(SCHEDULED);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows the workspace of a schedule, its history and its template in both themes, at every size",
+    async () => {
+      await cluster.showList(frame);
+      await cluster.openWorkspace(frame, SCHEDULED, SCHEDULES);
+      await everyLayout("schedule-workspace", undefined, SCHEDULES);
+      await everyLayout(
+        "schedule-workspace-history",
+        async () => {
+          await frame.locator("[data-testid=velero-history-strip]").scrollIntoViewIfNeeded();
+          // At every width each backup is on the line, in a mark of its own or with the ones close to it.
+          const shown = await cluster.history(frame);
+
+          expect(cluster.backupsOnTheLine(shown.marks)).toEqual([...shown.rows].reverse());
+          // No mark is drawn over another, at whatever width.
+          expect(shown.over).toEqual([]);
+        },
+        SCHEDULES,
+      );
+      await everyLayout(
+        "schedule-workspace-template",
+        async () => {
+          await frame.locator("[data-testid=velero-schedule-template]").scrollIntoViewIfNeeded();
+        },
+        SCHEDULES,
+      );
+      await cluster.closeWorkspace(frame);
+      expect(found("schedule-workspace")).toEqual({});
+      expect(found("schedule-workspace-history")).toEqual({});
+      expect(found("schedule-workspace-template")).toEqual({});
     },
     TIMEOUT,
   );

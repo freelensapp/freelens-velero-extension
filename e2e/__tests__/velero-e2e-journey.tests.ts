@@ -125,6 +125,7 @@ describe("views of the first milestone", () => {
         velero: "Velero",
         "velero-backups": "Backups",
         "velero-restores": "Restores",
+        "velero-schedules": "Schedules",
       });
       await frame.waitForSelector("[data-testid=velero-state-choose]", { timeout: 60_000 });
       expect((await cluster.target(frame)).cluster).toBe(cluster.E2E_KUBE_CONTEXT);
@@ -185,9 +186,13 @@ describe("views of the first milestone", () => {
       // The same in the languages that write a date longer than the one of this machine.
       expect(await cluster.tooWide(cluster.BACKUPS, frame, cluster.WORDS_OF_AN_OPERATION)).toEqual([]);
       // The host gives the pages of a group the tabs of the group: the first page has them as the others.
+      // They are the entries of the group in the sidebar, in their order.
+      const { velero: _group, ...lists } = await cluster.veleroSidebarEntries(frame);
+
       expect(
         (await frame.locator(".TabLayout .Tabs .Tab").allInnerTexts()).map((tab) => tab.replace(/\s+/g, " ").trim()),
-      ).toEqual(["Backups", "Restores"]);
+      ).toEqual(Object.values(lists));
+      expect(Object.values(lists).slice(0, 2)).toEqual(["Backups", "Restores"]);
       expect(await frame.locator(".TabLayout .TabLayout").count()).toBe(0);
       // A phase that finished in a failure does not carry the mark of what went well.
       expect(await frame.locator('[data-testid=velero-backups] [data-phase="Failed"] .Icon').first().innerText()).toBe(
@@ -359,13 +364,14 @@ describe("views of the first milestone", () => {
       expect(restores.state).toBe("listed");
       expect(restores.text).toContain("restore-of-daily-completed (Completed)");
       expect(restores.text).toContain("restore-of-daily-partiallyfailed (Partially failed)");
-      // Each restore is a way to its view: the schedule and the locations have none of their own yet.
+      // The schedule and each restore are ways to their views: the locations have none of their own yet.
       expect(
         (await frame.locator("[data-testid=velero-backup-workspace] button").allInnerTexts()).map((text) =>
           text.replace(/\s+/g, " ").trim(),
         ),
       ).toEqual([
         "arrow_back Backups",
+        "views-daily",
         "restore-mapped",
         "restore-of-daily-completed",
         "restore-of-daily-partiallyfailed",
