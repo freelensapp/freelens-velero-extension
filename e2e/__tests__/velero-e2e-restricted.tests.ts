@@ -202,6 +202,64 @@ describe("views with restricted access", () => {
   );
 
   it(
+    "shows a location with the Secrets it names to an identity that reads no Secret, and denies nothing of it",
+    async () => {
+      const locations = cluster.STORAGE_LOCATIONS;
+      const identity = `system:serviceaccount:${cluster.E2E_VIEWS_NAMESPACE}:views-reader`;
+      const secrets = cluster.kubectlE2E(
+        "get",
+        "secrets",
+        "--namespace",
+        cluster.E2E_VIEWS_NAMESPACE,
+        "--as",
+        identity,
+        "-o",
+        "name",
+      );
+
+      // The identity the application reads the cluster with may not read a Secret, and may read a location.
+      expect(secrets.status).not.toBe(0);
+      expect(secrets.stderr).toMatch(/forbidden/i);
+      expect(
+        cluster.kubectlE2E(
+          "get",
+          "backupstoragelocations.velero.io",
+          "--namespace",
+          cluster.E2E_VIEWS_NAMESPACE,
+          "--as",
+          identity,
+          "-o",
+          "name",
+        ).status,
+      ).toBe(0);
+      await cluster.openPage(frame, locations);
+      await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+      await cluster.waitForList(frame, locations);
+      await cluster.openWorkspace(frame, "views-with-credential", locations);
+      const credentials = (
+        await frame.locator("[data-testid=velero-storage-location-credentials]").innerText()
+      ).replace(/\s+/g, " ");
+
+      expect(credentials).toMatch(/CREDENTIAL Secret views-credential, key cloud/i);
+      expect(credentials).toMatch(/CERTIFICATE Secret views-storage-ca, key ca\.crt/i);
+      // The view shows the location and what uses it, which this identity reads: nothing of it is denied,
+      // and what is denied of the restores and of the snapshot locations is not said over it.
+      expect(await frame.locator("[data-testid=velero-location-backups]").getAttribute("data-users")).toBe("listed");
+      expect(await frame.locator("[data-testid=velero-location-schedules]").getAttribute("data-users")).toBe("listed");
+      expect(await cluster.notices(frame, [])).toEqual({});
+      await cluster.captureScreenshot(frame, "dark-restricted-location-credentials");
+      await cluster.closeWorkspace(frame);
+      // The snapshot locations are denied to it: their list says so, and is not an empty one.
+      await cluster.openPage(frame, cluster.SNAPSHOT_LOCATIONS);
+      await frame.waitForSelector("[data-testid=velero-snapshot-locations-unavailable]", { timeout: 60_000 });
+      expect(await frame.locator("[data-testid=velero-snapshot-locations-unavailable]").innerText()).toContain(
+        "Access to the volume snapshot locations of this namespace is denied",
+      );
+    },
+    TIMEOUT,
+  );
+
+  it(
     "leaves the objects of Velero as they were",
     async () => {
       const after = cluster.clusterSnapshot();

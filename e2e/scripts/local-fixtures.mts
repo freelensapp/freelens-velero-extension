@@ -48,6 +48,7 @@ export function fixtureNames(run: string) {
     restored: `velero-restored-${run}`,
     static: `velero-static-${run}`,
     views: `velero-views-${run}`,
+    defaults: `velero-defaults-${run}`,
     scale: `velero-scale-${run}`,
     backup: `fixture-backup-${run}`,
     restore: `fixture-restore-${run}`,
@@ -57,7 +58,7 @@ export function fixtureNames(run: string) {
 export function fixtureNamespaces(run: string): string[] {
   const names = fixtureNames(run);
 
-  return [names.source, names.restored, names.static, names.views, names.scale];
+  return [names.source, names.restored, names.static, names.views, names.defaults, names.scale];
 }
 
 export function fixtureArtifactPaths(run: string) {
@@ -197,6 +198,19 @@ const WAITING = new Set(["WaitingForPluginOperations", "WaitingForPluginOperatio
 // the work with every item done. The failed operation is one it stopped at work, with its reason. The
 // hooks are counted at the end of the work of a backup, and when a restore is finalized: their status is
 // in the object from then on, empty when none was run.
+// A location whose name and whose bucket are as long as they can be, 63 characters each, with a prefix of
+// many parts.
+export const LONG_LOCATION_NAME = "location-with-a-name-as-long-as-the-name-of-an-object-can-be-63";
+export const LONG_BUCKET_NAME = "bucket-with-a-name-as-long-as-the-name-of-a-bucket-can-be-in-s3";
+export const LONG_PREFIX = "clusters/production/europe/south/first/velero/backups/of/every/namespace/kept/for/a/year";
+
+// What a synthetic location that cannot be used says, in more than one line.
+export const UNAVAILABLE_MESSAGE = [
+  "Synthetic storage failure; no endpoint was contacted.",
+  "The bucket of the location was looked for and was not found,",
+  "and the second attempt ended as the first.",
+].join("\n");
+
 // How long the backup the controller runs is kept: the retention the release gives when none is asked.
 export const LIVE_RETENTION = "720h0m0s";
 
@@ -297,6 +311,7 @@ export function viewFixtures(
   const names = fixtureNames(run);
   const HOUR = 3_600_000;
   const day = (before: number, hours = 0) => Math.floor(started / HOUR) * HOUR - before * 24 * HOUR + hours * HOUR;
+  const at = (time: number) => new Date(time).toISOString().replace(".000Z", "Z");
   const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
   const metadata = (name: string, more: Record<string, string> = {}) => ({
     name,
@@ -325,6 +340,8 @@ export function viewFixtures(
 
   return [
     { apiVersion: "v1", kind: "Namespace", metadata: { name: names.views, labels } },
+    // No controller validates a synthetic location: what it reports is of a validation that is days old,
+    // however young the environment is. This one names its frequency, and is late by it.
     {
       apiVersion: "velero.io/v1",
       kind: "BackupStorageLocation",
@@ -335,10 +352,13 @@ export function viewFixtures(
         config: { region: "us-east-1", s3ForcePathStyle: "true", s3Url: STORAGE_ENDPOINT },
         accessMode: "ReadWrite",
         default: true,
+        validationFrequency: "1m0s",
+        backupSyncPeriod: "1m0s",
       },
-      status: { phase: "Available" },
+      status: { phase: "Available", lastValidationTime: at(day(1)), lastSyncedTime: at(day(1)) },
     },
-    // A location that is there and takes no backup: what a template that names it is told.
+    // A location that is there and takes no backup: what a template that names it is told. It names no
+    // frequency: the one of the server is not known, and its validation is late by the hour.
     {
       apiVersion: "velero.io/v1",
       kind: "BackupStorageLocation",
@@ -349,7 +369,68 @@ export function viewFixtures(
         config: { region: "us-east-1", s3ForcePathStyle: "true", s3Url: STORAGE_ENDPOINT },
         accessMode: "ReadOnly",
       },
-      status: { phase: "Available" },
+      status: { phase: "Available", lastValidationTime: at(day(3)) },
+    },
+    {
+      apiVersion: "velero.io/v1",
+      kind: "BackupStorageLocation",
+      metadata: metadata(LONG_LOCATION_NAME),
+      spec: {
+        provider: "aws",
+        objectStorage: { bucket: LONG_BUCKET_NAME, prefix: LONG_PREFIX },
+        config: { region: "us-east-1" },
+        accessMode: "ReadWrite",
+      },
+      status: { phase: "Available", lastValidationTime: at(day(4)) },
+    },
+    // A location Velero has not read: it has no status.
+    {
+      apiVersion: "velero.io/v1",
+      kind: "BackupStorageLocation",
+      metadata: metadata("views-unreported"),
+      spec: { provider: "aws", objectStorage: { bucket: BUCKET, prefix: "unreported" } },
+    },
+    // What Velero says of a location it cannot use, in the lines it says it in. Nothing was contacted.
+    {
+      apiVersion: "velero.io/v1",
+      kind: "BackupStorageLocation",
+      metadata: metadata("views-unavailable"),
+      spec: {
+        provider: "aws",
+        objectStorage: { bucket: BUCKET, prefix: "unavailable" },
+        config: { region: "us-east-1" },
+        accessMode: "ReadWrite",
+      },
+      status: {
+        phase: "Unavailable",
+        message: UNAVAILABLE_MESSAGE,
+        lastValidationTime: at(day(2)),
+      },
+    },
+    // The Secrets a location names are not among the fixtures: the views show the names, and read none.
+    // The periodic validation and the sync are turned off, and the address carries what a URL can hide.
+    {
+      apiVersion: "velero.io/v1",
+      kind: "BackupStorageLocation",
+      metadata: metadata("views-with-credential"),
+      spec: {
+        provider: "aws",
+        objectStorage: {
+          bucket: BUCKET,
+          prefix: "with-credential",
+          caCertRef: { name: "views-storage-ca", key: "ca.crt" },
+        },
+        config: {
+          region: "us-east-1",
+          insecureSkipTLSVerify: "true",
+          s3Url: `${STORAGE_ENDPOINT}/?synthetic=left-out`,
+        },
+        credential: { name: "views-credential", key: "cloud" },
+        accessMode: "ReadWrite",
+        validationFrequency: "0s",
+        backupSyncPeriod: "0s",
+      },
+      status: { phase: "Available", lastValidationTime: at(day(30)) },
     },
     {
       apiVersion: "velero.io/v1",
@@ -358,6 +439,35 @@ export function viewFixtures(
       spec: { provider: "aws", config: { region: "us-east-1" } },
       status: { phase: "Available" },
     },
+    // A snapshot location as the release leaves one: no status. It names the Secret of its credential.
+    {
+      apiVersion: "velero.io/v1",
+      kind: "VolumeSnapshotLocation",
+      metadata: metadata("views-snapshots-unreported"),
+      spec: {
+        provider: "csi",
+        config: { region: "us-east-1" },
+        credential: { name: "views-credential", key: "cloud" },
+      },
+    },
+    // An installation with two locations marked default, which the release brings back to one when it
+    // reads them: no controller reads these. The one it would keep is the one created last, which is the
+    // second of the two. Created in the same second, which one it keeps is not settled: a suite reads when
+    // each was created, and expects what the view says of that.
+    { apiVersion: "v1", kind: "Namespace", metadata: { name: names.defaults, labels } },
+    ...(["defaults-older", "defaults-newer"] as const).map((name) => ({
+      apiVersion: "velero.io/v1",
+      kind: "BackupStorageLocation",
+      metadata: { name, namespace: names.defaults, labels },
+      spec: {
+        provider: "aws",
+        objectStorage: { bucket: BUCKET, prefix: name },
+        config: { region: "us-east-1" },
+        accessMode: name === "defaults-older" ? "ReadOnly" : "ReadWrite",
+        default: true,
+      },
+      status: { phase: "Available", lastValidationTime: at(day(1)) },
+    })),
     {
       apiVersion: "velero.io/v1",
       kind: "Schedule",
@@ -715,6 +825,8 @@ export function staticFixtures(owner: string, run: string): KubeResource[] {
     {
       apiVersion: "velero.io/v1",
       kind: "BackupStorageLocation",
+      // The release writes a phase and the time of the validation together. These two have a phase and
+      // no time: they are what a view shows of a status that carries one without the other.
       metadata: metadata("fixture-readonly"),
       spec: { ...locationSpec, accessMode: "ReadOnly" },
       status: { phase: "Available" },

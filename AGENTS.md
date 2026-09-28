@@ -293,6 +293,10 @@ Build output goes to `out/`.
   operation ends. A fixture with `errors: 0` is an object no installation shows:
   a view that passes on it may fail on every real one. Read the object the
   controller of the test environment wrote before trusting a synthetic one.
+- No controller validates a synthetic storage location. Give it a validation
+  that is days old, and take the fresh one from the location the controller of
+  the test environment validates: what a suite expects must not depend on how
+  old the environment is.
 - A family that is asked again keeps the status of its last read, with
   `reading` beside it. Do not show a state from `loading` alone: it is the state
   of a family that was never answered.

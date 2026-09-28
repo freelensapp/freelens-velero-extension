@@ -77,6 +77,8 @@ describe("views of the schedules", () => {
         "velero-backups",
         "velero-restores",
         "velero-schedules",
+        "velero-storage-locations",
+        "velero-snapshot-locations",
       ]);
       await frame.waitForSelector("[data-testid=velero-state-choose]", { timeout: 60_000 });
       await frame.click(`[data-testid="velero-choice-${cluster.E2E_STATIC_NAMESPACE}"]`);
@@ -107,6 +109,8 @@ describe("views of the schedules", () => {
         "Backups",
         "Restores",
         "Schedules",
+        "Backup Storage Locations",
+        "Volume Snapshot Locations",
       ]);
       expect(await frame.locator(".TabLayout .TabLayout").count()).toBe(0);
       expect(await cluster.notices(frame, [])).toEqual({});

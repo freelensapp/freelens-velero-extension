@@ -20,6 +20,8 @@ const {
 const VIEW_OF: Partial<Record<ReferenceKind, ViewKind>> = {
   Backup: "backup",
   Restore: "restore",
+  BackupStorageLocation: "storage-location",
+  VolumeSnapshotLocation: "snapshot-location",
   Schedule: "schedule",
 };
 

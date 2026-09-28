@@ -3,9 +3,10 @@
 Date: 2026-09-28
 
 Status: the foundation is complete and the first views are in place: the discovery of
-the installation, the Backups, the Restores and the Schedules, read only. The diagnostics, the IPC between the
-processes and the actions are not implemented: their sections below are the design
-their specs start from.
+the installation, the Backups, the Restores, the Schedules and the storage and
+snapshot locations, read only. The diagnostics, the IPC between the processes and
+the actions are not implemented: their sections below are the design their specs
+start from.
 
 Authority: [directives](../../AGENTS.md), [roadmap](ROADMAP.md), and
 [versioned evidence](RECON-T0.1.md). The evidence report pins Velero v1.18.2,
@@ -52,9 +53,10 @@ compatible with v1.10.3; Freelens v2 is explicitly outside the current compatibi
 target. Biome, Knip and Trunk run through `pnpm dlx` at the exact versions the
 scripts name, as in the other extensions.
 Activation asks nothing of a cluster, in either process. Both open the store of the
-preferences; the renderer registers the pages of the Backups, of the Restores and
-of the Schedules, their entries of the sidebar and the sections it adds to the
-details the host shows of each of the three kinds.
+preferences; the renderer registers the pages of the Backups, of the Restores, of
+the Schedules, of the Backup Storage Locations and of the Volume Snapshot
+Locations, their entries of the sidebar and the sections it adds to the details
+the host shows of each of the five kinds.
 T0.6 additionally exports the main diagnostic modules for compiled contract tests;
 no service, request or IPC handler is registered on activation.
 The renderer is built through electron-vite's preload target to produce the CommonJS
@@ -116,12 +118,13 @@ before changing the client version. The main build replaces undici with
 extension never calls, and the real module installs a dispatcher for the whole
 process when it loads, which inside Freelens is the process of the host. Supported
 `WS_NO_*` build defines disable optional native accelerators without patching the
-library. The 734 tests of the unit run, on the separate modules and on the
-production build, are 17 of the scaffold, 109 of the environment and its fixtures,
+library. The 932 tests of the unit run, on the separate modules and on the
+production build, are 17 of the scaffold, 110 of the environment and its fixtures,
 48 of the diagnostic contracts, 151 of the operation states and of their stages,
 54 of the rules of the discovery, 206 of what the views show of a backup, of a
 restore and of a schedule, of what they refer to and of the views in the address,
-29 of the state of an installation and of its reader, and 120 of the components. The integration test
+141 of what they show of a location, of its durations and of what uses it, 30 of
+the state of an installation and of its reader, and 175 of the components. The integration test
 covers the installation in the host, the suites of the views what the views do
 in it.
 The electron-vite warning about a missing standalone renderer
@@ -337,6 +340,41 @@ the cluster is ahead of the one that draws it. The width is measured where the
 line is drawn, when it is drawn. Nothing is computed from the cron expression, and nothing is drawn between
 two backups: what a schedule should have done is the adherence of a later
 milestone, which needs the time zone of the server and what the controller skips.
+
+### The Locations And What Uses Them
+
+What the views show of a [location](../../src/common/location-view.ts) is one
+reading of the object. Availability, access mode and default are three facts, each
+read from its own field: the phase, the access mode of the spec and the mark of
+the spec. Nothing but a reported Available is available: a location that reports
+nothing, and one that reports what this version does not know, have the mark of
+what is not known. The phase of a volume snapshot location has that mark whatever
+it says: the reviewed release neither writes nor checks it.
+
+What a storage location reports is as old as its last validation, and a server
+that stopped leaves every availability as it was. The views say how old the
+validation is and, past a bound, that the availability may be out of date: three
+times the frequency the location names, or one hour when it names none or turned
+the validation off. The two bounds are two constants, and the clock is an
+argument. The [durations](../../src/common/go-duration.ts) are read from the form
+the API writes them in; one that cannot be read is shown as written.
+
+Where a location points is shown as the object carries it. A value that reads as
+a URL is shown without its user information and its query, and the view says
+that it left them out, and so is an address that the message of Velero quotes. A
+Secret is a name and the name of a key: the views read none, and the reader asks
+the host for no path that is not written as one of the kinds of Velero.
+
+[What uses a location](../../src/common/location-users.ts) is the backups that
+name it and the schedules whose template names it, in its namespace, from the
+reads of the installation. The location of a backup is the one the view of the
+backup leads to: the one of its spec, or the one of the label the release writes.
+The location marked default has beside them the schedules that name none. What
+was not read is not known, which is not none.
+
+A view says what is missing of the families it reads, which its kind
+[names](../../src/common/views.ts): the view of a location shows nothing of the
+restores, and what is denied of them is not said over it.
 
 ### Create-Only Adapter Decision
 

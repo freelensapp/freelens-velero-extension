@@ -27,11 +27,13 @@ export const E2E_NAMESPACE = process.env.E2E_NAMESPACE || "velero-demo";
 export const E2E_STATIC_NAMESPACE = process.env.E2E_STATIC_NAMESPACE || "";
 /** Where the references that lead somewhere and the ones that do not are, with the reader of a part. */
 export const E2E_VIEWS_NAMESPACE = process.env.E2E_VIEWS_NAMESPACE || "";
+/** Where two storage locations are marked default, and nothing else is. */
+export const E2E_DEFAULTS_NAMESPACE = process.env.E2E_DEFAULTS_NAMESPACE || "";
 /** Where the long list is: a thousand backups and no storage location. */
 export const E2E_SCALE_NAMESPACE = process.env.E2E_SCALE_NAMESPACE || "";
 
 /** The namespaces a discovery finds: the ones that hold a backup storage location. */
-export const SUGGESTED_NAMESPACES = [E2E_NAMESPACE, E2E_STATIC_NAMESPACE, E2E_VIEWS_NAMESPACE];
+export const SUGGESTED_NAMESPACES = [E2E_NAMESPACE, E2E_STATIC_NAMESPACE, E2E_VIEWS_NAMESPACE, E2E_DEFAULTS_NAMESPACE];
 
 /** Connecting a cluster involves starting a proxy, so it is not quick. */
 const CLUSTER_TIMEOUT = 3 * 60 * 1000;
@@ -149,11 +151,22 @@ export interface ListOf {
 /** The restore of the fixtures with a name as long as a name can be. */
 // How far from each other two marks of a line of time are drawn at least.
 export const MARK_WIDTH = 28;
+export const LONG_LOCATION_NAME = "location-with-a-name-as-long-as-the-name-of-an-object-can-be-63";
 export const LONG_RESTORE_NAME = "restore-with-a-name-as-long-as-the-name-of-a-restore-can-be-one";
 
 export const BACKUPS: ListOf = { id: "backups", kind: "backup", menu: "velero-backups" };
 export const RESTORES: ListOf = { id: "restores", kind: "restore", menu: "velero-restores" };
 export const SCHEDULES: ListOf = { id: "schedules", kind: "schedule", menu: "velero-schedules" };
+export const STORAGE_LOCATIONS: ListOf = {
+  id: "storage-locations",
+  kind: "storage-location",
+  menu: "velero-storage-locations",
+};
+export const SNAPSHOT_LOCATIONS: ListOf = {
+  id: "snapshot-locations",
+  kind: "snapshot-location",
+  menu: "velero-snapshot-locations",
+};
 
 /**
  * Runs the pinned `kubectl` of the test environment against the test cluster,
@@ -195,6 +208,8 @@ export function fixturesReady(): boolean {
     [E2E_VIEWS_NAMESPACE, "schedules.velero.io", "views-history"],
     [E2E_VIEWS_NAMESPACE, "backups.velero.io", "views-history-0"],
     [E2E_VIEWS_NAMESPACE, "schedules.velero.io", "schedule-unread"],
+    [E2E_VIEWS_NAMESPACE, "backupstoragelocations.velero.io", "views-with-credential"],
+    [E2E_DEFAULTS_NAMESPACE, "backupstoragelocations.velero.io", "defaults-newer"],
     [E2E_SCALE_NAMESPACE, "backups.velero.io", "backup-1000"],
     [E2E_SCALE_NAMESPACE, "restores.velero.io", "restore-1000"],
   ];
@@ -239,7 +254,7 @@ export function clusterSnapshot(): ClusterSnapshot {
     return (JSON.parse(stdout) as { items: { metadata: { name: string; uid: string; resourceVersion: string } }[] })
       .items;
   };
-  const synthetic = [E2E_STATIC_NAMESPACE, E2E_VIEWS_NAMESPACE, E2E_SCALE_NAMESPACE];
+  const synthetic = [E2E_STATIC_NAMESPACE, E2E_VIEWS_NAMESPACE, E2E_DEFAULTS_NAMESPACE, E2E_SCALE_NAMESPACE];
   const versions: Record<string, string> = {};
   const installed: string[] = [];
   let requests = 0;

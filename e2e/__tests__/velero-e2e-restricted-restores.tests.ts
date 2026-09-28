@@ -165,6 +165,48 @@ describe("restores with restricted access", () => {
   );
 
   it(
+    "says that the backups that name a location are not known, which is not that none names it",
+    async () => {
+      const locations = cluster.STORAGE_LOCATIONS;
+
+      await cluster.openPage(frame, locations);
+      await cluster.waitForList(frame, locations);
+      await cluster.expectCells(locations, frame, "views-available", {
+        phase: "Available",
+        marked: "Marked default",
+      });
+      // The list needs the locations and has them: the backups that are denied are not its notice.
+      expect(await cluster.notices(frame, [])).toEqual({});
+      await cluster.openWorkspace(frame, "views-available", locations);
+      const backups = frame.locator("[data-testid=velero-location-backups]");
+      const shown = (await backups.innerText()).replace(/\s+/g, " ").trim();
+
+      expect(await backups.getAttribute("data-users")).toBe("inaccessible");
+      expect(shown).toContain("access is denied");
+      expect(shown).toContain("Which backups name this location is not known, which is not that none does");
+      expect(shown).not.toMatch(/No backup that exists/);
+      // The schedules are read: the ones whose template names the location, or none, are told.
+      expect(await frame.locator("[data-testid=velero-location-schedules]").getAttribute("data-users")).toBe("listed");
+      expect(
+        (await frame.locator("[data-testid=velero-location-schedules] button").allInnerTexts()).length,
+      ).toBeGreaterThan(0);
+      expect(Object.keys(await cluster.notices(frame, ["backups"]))).toEqual(["backups"]);
+      expect(await cluster.layoutProblems(frame, locations)).toEqual([]);
+      await frame.locator("[data-testid=velero-location-users]").scrollIntoViewIfNeeded();
+      await cluster.captureScreenshot(frame, "dark-restricted-location-users");
+      await cluster.closeWorkspace(frame);
+      // The snapshot locations are read by this identity, which the first reader is denied.
+      await cluster.openPage(frame, cluster.SNAPSHOT_LOCATIONS);
+      await cluster.waitForList(frame, cluster.SNAPSHOT_LOCATIONS);
+      expect((await cluster.mounted(frame, cluster.SNAPSHOT_LOCATIONS)).sort()).toEqual([
+        "views-snapshots",
+        "views-snapshots-unreported",
+      ]);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "leaves the objects of Velero as they were",
     async () => {
       const after = cluster.clusterSnapshot();

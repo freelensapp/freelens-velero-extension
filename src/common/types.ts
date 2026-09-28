@@ -142,12 +142,27 @@ export interface ScheduleStatus {
   validationErrors?: string[];
 }
 
+// The reference to one key of a Secret of the namespace of the object. The views show it by its names:
+// no Secret is read.
+export interface SecretKeyReference {
+  name?: string;
+  key?: string;
+  optional?: boolean;
+}
+
 export interface BackupStorageLocationSpec {
   accessMode?: string;
   backupSyncPeriod?: string | null;
-  config?: Record<string, string>;
+  config?: Record<string, string> | null;
+  credential?: SecretKeyReference | null;
   default?: boolean;
-  objectStorage?: { bucket?: string; prefix?: string };
+  objectStorage?: {
+    bucket?: string;
+    prefix?: string;
+    // Deprecated in the reviewed release: a certificate written in the object, as the API encodes bytes.
+    caCert?: string;
+    caCertRef?: SecretKeyReference | null;
+  } | null;
   provider?: string;
   validationFrequency?: string | null;
 }
@@ -157,10 +172,13 @@ export interface BackupStorageLocationStatus {
   lastValidationTime?: string | null;
   message?: string;
   phase?: string;
+  // Deprecated and unused in the reviewed release: never read for the access mode.
+  accessMode?: string;
 }
 
 export interface VolumeSnapshotLocationSpec {
-  config?: Record<string, string>;
+  config?: Record<string, string> | null;
+  credential?: SecretKeyReference | null;
   provider?: string;
 }
 
