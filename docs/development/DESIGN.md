@@ -4,8 +4,9 @@ Date: 2026-09-28
 
 Status: Proposed in T0.2. The target bar, the states before a view, the list of the
 Backups and the workspace of a backup are implemented as described here, with the
-first milestone; their specs record what was decided while implementing. The rest
-is textual design, not a rendered or approved UI.
+first milestone, and so are the Restores and the way between the views, with the
+second; their specs record what was decided while implementing. The rest is textual
+design, not a rendered or approved UI.
 
 See [directives](../../AGENTS.md), [architecture](ARCHITECTURE.md), and
 [roadmap](ROADMAP.md). Optimize for correct operational decisions and efficient repeated
@@ -105,10 +106,23 @@ Proposed primary columns, with responsive hiding only for secondary fields:
 
 Use stable column IDs and native resize/sort behavior. Preserve the full value in
 tooltips/details when truncating. In a narrow room the secondary columns give their
-room, in this order: installation namespace and age, storage and duration, started.
+room, in this order: the installation namespace in a list narrower than 1,200
+pixels, the age under 1,000, the storage, the source and the duration under 760,
+the start under 640. The installation is the first to go because it is the same in
+every row and the target bar says it. In a list of 1,000 pixels or more what an
+operation says of a failure, its progress, its start and its duration have the
+room of their words, in whatever way the language of the operator writes a date:
+a window of 1440 by 900 shows them whole, and the name, the source, the phase and
+the storage share what is left.
 Prefer semantic missing values such as Unknown or Not reported over an unexplained
 dash. Relative times have absolute timezone-aware values in tooltips; duration
 updates stop only for terminal evidence.
+
+That nothing went wrong is marked of an operation Velero counted, and of no
+other. The reviewed release writes no counter of zero: an operation that ended
+without an error carries none, and its zero is said to be a counter that is not
+in the object. One that did not start, one that is at work and one that failed
+before it was counted report no count, each with its reason beside the counters.
 
 Details lead with status/scope, then references and resource-specific fields.
 References resolve within the same installation and name/UID identity. A link is

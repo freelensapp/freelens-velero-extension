@@ -1,6 +1,6 @@
 # SPEC-0005: Read-Only Restores
 
-- **Status:** Approved
+- **Status:** Implemented
 - **Date:** 2026-09-28
 - **Milestone / tasks:** M2 / T1.4
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`; compared with v1.18.3, `cd3fd10b093dad32ee284e27fcba4e9073c9c94b`
@@ -98,7 +98,7 @@ The workspace, from the top:
 | Current stage | New, In progress, Plugin operations, Finalizing, Finished, with the current one marked; item progress under it | `status.phase`, `status.progress` |
 | Errors and evidence | Validation errors, failure reason, contradictions, what is not reported; hooks and item operations when they are reported | `status` |
 | Source | Backup and schedule as the object names them, each with what is known of its target; the storage location of the backup | `spec.backupName`, `spec.scheduleName`, the reads of the installation |
-| Into | The namespace mappings, one line for each source and its destination. When none is set: not set, every namespace is restored into the namespace of the same name | `spec.namespaceMapping` |
+| Into | The namespace mappings, one line for each source and its destination. When none is set: not set, what is restored of a namespace goes into the namespace of the same name | `spec.namespaceMapping` |
 | Scope | The fields of REQ-053, with the note on the two that Velero fills | `spec` |
 
 Required read fields: metadata identity, timestamps and labels; every field of
@@ -173,8 +173,126 @@ Record role, date and verdict.
 
 ## Evidence And Deviations
 
-Approved on 2026-09-28. No implementation, tests or runtime evidence yet. The upstream drift watch of the
+Approved on 2026-09-28 and implemented the same day. The upstream drift watch of the
 start of the milestone is in the
 [recon](../development/RECON-T0.1.md#upstream-drift-watch), with the facts of the
 reviewed release this spec rests on: between that release and the one after it the
 Restore gains `spec.resourcePolicy`, which REQ-063 covers; its phases are the same.
+
+What is [shown of a restore](../../src/common/restore-view.ts) and what it
+[refers to](../../src/common/references.ts) are pure functions on plain data; the
+[list](../../src/renderer/pages/restores-page.tsx) is the native list of the host,
+given what the extension read; the
+[workspace](../../src/renderer/pages/restore-workspace.tsx) is a view of its own;
+the [section](../../src/renderer/details/restore-details.tsx) in the details of the
+host reads a restore through the same helpers. The layers are the ones of
+[TESTING.md](../development/TESTING.md): unit and component tests in Vitest, the
+suites of the views in a packaged Freelens v1.10.3 against the test environment.
+
+| Check | Evidence |
+| --- | --- |
+| REST-01 | Unit: every column has its order and its part in the search. Packaged, on the restores of the views: a search by the name, by the progress, by the duration and by what did not start; an order by source, read from the rows; a column made wider; a restore opened and closed leaves them as they were. On the list of a thousand: the search, an order by the start read from the rows and the scroll, kept through the view of a restore and the one of its backup. The source of a restore that names both is the backup, then the schedule |
+| REST-02 | Component and packaged: a row opens the workspace; the details of the host show the same phase, failure, counters, progress and source. Component: opening asks nothing of the reader. Packaged: the API server counts no read of the five families while a restore is opened between two reads of the installation, and counts them when a read is asked |
+| REST-03 | Unit and component: a backup alone, a schedule alone, both, neither, and names that are not names. With both, the view says that the object does not tell which one was submitted; with both and a failed validation, that what was refused is in the validation errors |
+| REST-04 | Unit, component and packaged: two mappings, a mapping without a destination, a policy, fields that are not set, a selector with its expressions, a filter of the status that names nothing; every value as the object carries it, `undefined` and `NaN` nowhere, the note beside the two fields Velero fills, and what the release does with a field that is not set as the [recon](../development/RECON-T0.1.md#start-of-the-second-milestone-2026-09-28) records it |
+| REST-05 | Unit, table-driven: the 10 phases, the phases of a backup, an empty and an unknown one; a Completed restore that reports errors; the counters the release does not write. Packaged: one row for each phase on the cluster, each value in the cell of its column; a restore in FailedValidation with its times not reported; the restore the controller of the test environment ran, read as the release left it |
+| REST-06 | Unit: for the backup and the schedule, a target that is there, one that is not, one denied, one of a list that failed, one of an earlier read, and the same while the list is asked again. Component: the three reasons a storage location is not known. Packaged: a way to the backup that is there, a name with its reason for the one that is not; with the second reader, the backup denied and not absent, before and after a read that is asked |
+| REST-07 | Component and packaged: from a backup to its restore and back, from a restore to its backup and back, over the list the first view was opened from, with the pointer and with the keyboard. Packaged: the changes of the address are counted in the frame for six steps, the way back and Escape among them, and each step is one |
+| REST-08 | Component: the list is given no selection, no menu and no command that adds or removes; the view has the way back and the ways to the other views, and no other control. Packaged: no checkbox, no menu; a right click, Delete and Backspace are followed by a wait in which no menu and no dialog appears, while the same click on the list the host shows of the same objects opens its menu; the objects unchanged |
+| REST-09 | Component: a late answer of the installation selected before, a restore created again with the same name, which is said in words, a read that fails, the views closed when another installation is selected, and no timer left when the view closes |
+| REST-10 | Pre-review: the list and the workspace, with what it restores into and its scope, and the workspace of a restore whose name, source and mapped namespaces have 63 characters, in both themes, at the two sizes and at twice the zoom, each checked once the theme and the size are the ones that were set and left as a picture that was written; a restore opened, followed to its backup and closed with the keyboard alone, and closed with Escape after a click on a text |
+| REST-11 | Packaged: see below |
+| REST-12 | Component: empty, not read yet, read again, denied, failed, stale and not served, each with its words, and no count of a list that was not read. Packaged: the restores denied to the first reader, on their list, while a read is asked and after it; the backups denied to the second reader, on their list and as the source of a restore. Partly read is a restore whose source cannot be: it is shown, with what is not known of it |
+| REST-13 | Unit: the reader sends `GET` and nothing else. Packaged, as DISC-07 of the [discovery](SPEC-0002-installation-discovery.md#evidence-and-deviations), taken with the Restores open: the version of every synthetic object, the identity of the ones of the real installation, no request to Velero, and no request that is not a read counted by the API server for any kind of `velero.io`, but the one its own controller writes into its storage location. The access reviews are not counted apart: the host asks them for its own lists, with the same identity |
+| REST-14 | Unit: an object with `spec.resourcePolicy` shows it beside the resource modifier; one without shows nothing in its place. Component and packaged: an object without the field has no line for it |
+
+Sixty-one changes made to the code on purpose, one for each rule a view or a
+fixture could get wrong, each made a unit or a component test fail. Five more
+were made in the packaged application, where the suites of the views and the
+pre-review failed on each: a column too narrow for its words, one too narrow for
+a date of another language, a view that reads the installation when it opens,
+two changes of the address for one step, and the layout of the host inside
+itself. The pull request of the task names them.
+
+The measure of REST-11, on 2026-09-28, in Freelens v1.10.3 on macOS 26 with an
+Intel Core i7-9750H and 16 GiB, the test environment running on the same machine:
+
+| Measure | Value |
+| --- | --- |
+| Restores in the list | 1,000, as the list counts them |
+| Rows mounted at once, at most | 28 |
+| Interactions, after five to warm | 20: ten searches, five restores opened, five closed |
+| Response, 95th percentile | 91 ms, against a budget of 250 ms |
+| Response, median and slowest | 35 ms and 103 ms |
+| From the key or the click, 95th percentile | 334 ms |
+
+The list of the Backups, measured again in the same run on the list and the page
+written for every kind: 1,000 backups, 28 rows mounted at most, a response of
+103 ms at the 95th percentile.
+
+What was decided while implementing, inside the requirements:
+
+- **The views that are open are in the address, in the order they were opened.**
+  The way back takes the last one away. A view opened from another one is shown
+  over the same list, on the same page: the list is not drawn again, and it is
+  where it was when the last view is closed. The rules are in the
+  [architecture](../development/ARCHITECTURE.md#the-lists-and-the-views-of-one-object).
+- **The list and the page are written once**, for every kind of the milestone, and
+  the Backups use them: their checks of the first milestone ran again, in the
+  suites of the views.
+- **The status of a synthetic operation is what the release writes.** The ones
+  that did not start had a start time, a progress and counters; the ones that
+  started had counters of zero, and items to do after the work had ended: no
+  installation shows any of these, and the fixtures of the first milestone were
+  corrected. The spec of a synthetic restore the release took carries what the
+  release adds to it. The rest of a synthetic object is what a test needs of it.
+- **A restore that completed has a note**: completed is what Velero reports, and
+  whether what was restored works is not in the object.
+- **What the release does with a field that is not set is beside the field**, as
+  what the release does: the value stays not set.
+- **That nothing went wrong is marked only for an operation the release
+  counted.** One that did not start, one that is at work and one that failed
+  without a counter say that no failure is reported, or the failure, with the mark
+  of what is not known and the reason beside the counters. It holds for the
+  Backups too.
+- **In the view of one object a phase is read whole.** It is cut in a list, where
+  a row has one line.
+- **The views that are open are of the installation they were opened in.** When
+  another one is selected they close, with one change of the address: the way
+  back would name what the other does not have.
+- **A restore created again under the name that is open is said in words**, for as
+  long as the view is open, and one that is being deleted is said so.
+- **What is read again keeps what the last read said of it** until the read ends:
+  the target bar says that the installation is being read.
+- **In a list narrower than 1,200 pixels the installation gives its room** to the
+  columns that say what happened: it is the same in every row, and the target bar
+  says it. In a list of 1,000 pixels or more the failure, the progress, the start
+  and the duration hold their words whole, in whatever way the language of the
+  operator writes a date: the suites measure the longest of them in the cell of
+  its column, and not only what the machine they run on shows. The name, the
+  source, the phase and the storage share what is left. It holds for the Backups
+  too.
+- **An address of the first milestone**, which named the backup alone, opens the
+  list: no release carried it.
+- **Every page of the group has the tabs of the group.** The host gives them to a
+  page when the first entry of the sidebar that leads to the page is an entry of
+  the group: with the Restores the Backups would have been the only page without
+  them, and the page of the Restores had the layout of the host inside itself,
+  with its margins twice and a bar to scroll it sideways at twice the zoom. The
+  pre-review did not see it, and does now.
+
+One deviation, recorded with the one of the
+[states](SPEC-0003-backup-read-only.md#evidence-and-deviations) it comes from, and
+waiting for the approval of the lead maintainer at the review of the milestone.
+REQ-054 reads the counts of the errors and of the warnings, of the hooks and of
+the item operations through the helpers of the states, which said that a counter
+that is missing is not zero. The reviewed release writes no counter of zero: on an
+installation no restore that ended without an error carries one, and every one of
+them would be said to report no count. A counter that is missing from an object
+whose phase the release gives after it counted is read as the count of none it
+stands for, and is told from a zero that is written; the view says whose zero it
+is. Counters the release writes together are read together: with one of them in
+the object, the others were counted. The hooks of a restore are counted when the
+restore is finalized, whatever its phase says: they are read by their status
+being in the object. Everywhere else a counter that is missing stays not
+reported.

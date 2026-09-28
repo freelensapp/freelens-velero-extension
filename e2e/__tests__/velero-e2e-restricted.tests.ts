@@ -67,7 +67,7 @@ describe("views with restricted access", () => {
       expect((await cluster.target(frame)).namespace).toBe(`${cluster.E2E_VIEWS_NAMESPACE} (configured)`);
       await cluster.expectRow(frame, SCHEDULED, "Completed", "2 warnings");
       // The list needs the backups and has them: what is denied is of no use to it, and is not its notice.
-      expect(await cluster.notices(frame)).toEqual({});
+      expect(await cluster.notices(frame, [])).toEqual({});
       await cluster.captureScreenshot(frame, "dark-restricted-backups");
     },
     TIMEOUT,
@@ -77,18 +77,24 @@ describe("views with restricted access", () => {
     "keeps the backup and says which of its references cannot be read",
     async () => {
       await cluster.openWorkspace(frame, SCHEDULED);
-      const shown = await cluster.notices(frame);
+      const shown = await cluster.notices(frame, ["restores", "snapshotLocations"]);
 
       expect(Object.keys(shown).sort()).toEqual(["restores", "snapshotLocations"]);
       expect(shown.restores).toContain("access is denied");
       expect(shown.snapshotLocations).toContain("access is denied");
       expect(await frame.locator("[data-testid=velero-backup-status]").innerText()).toContain("Completed");
-      expect((await cluster.reference(frame, "velero-reference-Schedule-views-daily")).state).toBe("resolved");
-      expect((await cluster.reference(frame, "velero-reference-BackupStorageLocation-views-available")).state).toBe(
+      expect((await cluster.reference(frame, "velero-reference-Schedule-views-daily", "resolved")).state).toBe(
         "resolved",
       );
-      const snapshots = await cluster.reference(frame, "velero-reference-VolumeSnapshotLocation-views-snapshots");
-      const restores = await cluster.reference(frame, "velero-related-restores");
+      expect(
+        (await cluster.reference(frame, "velero-reference-BackupStorageLocation-views-available", "resolved")).state,
+      ).toBe("resolved");
+      const snapshots = await cluster.reference(
+        frame,
+        "velero-reference-VolumeSnapshotLocation-views-snapshots",
+        "inaccessible",
+      );
+      const restores = await cluster.reference(frame, "velero-related-restores", "inaccessible");
 
       expect(snapshots.state).toBe("inaccessible");
       expect(snapshots.text).toContain("access is denied");
@@ -105,6 +111,72 @@ describe("views with restricted access", () => {
   );
 
   it(
+    "says that the restores are denied, and not that there are none, also while they are asked again",
+    async () => {
+      await cluster.openPage(frame, cluster.RESTORES);
+      await frame.waitForSelector("[data-testid=velero-restores-unavailable]", { timeout: 60_000 });
+      const shown = async () => ({
+        state: (await frame.locator("[data-testid=velero-restores-unavailable]").innerText()).replace(/\s+/g, " "),
+        list: await frame.locator("[data-testid=velero-restores]").count(),
+        notices: await cluster.notices(frame, ["restores"]),
+        page: await frame.locator("[data-testid=velero-restores-page]").innerText(),
+      });
+      const first = await shown();
+
+      expect(first.state).toContain("Access to the restores of this namespace is denied");
+      expect(first.state).toContain("How many there are is not known");
+      expect(first.list).toBe(0);
+      expect(first.notices.restores).toContain("access is denied");
+      expect(first.page).not.toMatch(/\b\d+ items?\b/);
+      expect(await cluster.layoutProblems(frame, cluster.RESTORES)).toEqual([]);
+      await cluster.captureScreenshot(frame, "dark-restricted-restores-denied");
+      // What is denied is denied for as long as a read says so: a read that is asked does not make an
+      // empty list of it, neither while it is asked nor when it ends. What the page shows is taken at
+      // every change of it, from before the read is asked: the read is among what was taken.
+      const seen = (await cluster.readState(frame)).read;
+
+      await frame.evaluate(() => {
+        const page = window as unknown as {
+          veleroSamples?: { reading: boolean; unavailable: boolean; list: boolean }[];
+          veleroSampler?: MutationObserver;
+        };
+        const samples: { reading: boolean; unavailable: boolean; list: boolean }[] = [];
+        const sample = () =>
+          samples.push({
+            reading: document.querySelector("[data-testid=velero-read-time]")?.getAttribute("data-reading") === "true",
+            unavailable: document.querySelector("[data-testid=velero-restores-unavailable]") !== null,
+            list: document.querySelector("[data-testid=velero-restores]") !== null,
+          });
+
+        page.veleroSamples = samples;
+        page.veleroSampler = new MutationObserver(sample);
+        page.veleroSampler.observe(document.body, { attributes: true, childList: true, subtree: true });
+        sample();
+      });
+      await frame.click("[data-testid=velero-refresh]");
+      await cluster.afterRead(frame, seen);
+      const during = await frame.evaluate(() => {
+        const page = window as unknown as {
+          veleroSamples?: { reading: boolean; unavailable: boolean; list: boolean }[];
+          veleroSampler?: MutationObserver;
+        };
+
+        page.veleroSampler?.disconnect();
+        return page.veleroSamples ?? [];
+      });
+
+      // The read was seen while it was asked, and what was shown during it is what was shown before.
+      expect(during.some((sample) => sample.reading)).toBe(true);
+      expect(during.filter((sample) => !sample.unavailable || sample.list)).toEqual([]);
+      expect((await cluster.readState(frame)).read).not.toBe(seen);
+      expect(await shown()).toEqual({ ...first, page: expect.any(String) });
+      await cluster.openBackups(frame);
+      await cluster.waitForBackups(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "says that the backups of a namespace are denied, and not that there are none",
     async () => {
       // The namespace of the phases is one this identity cannot read.
@@ -115,7 +187,7 @@ describe("views with restricted access", () => {
       expect(state).toContain("Access to the backups of this namespace is denied");
       expect(state).toContain("How many there are is not known");
       expect(await cluster.mountedBackups(frame)).toEqual([]);
-      expect((await cluster.notices(frame)).backups).toContain("access is denied");
+      expect((await cluster.notices(frame, ["backups"])).backups).toContain("access is denied");
       expect(await cluster.layoutProblems(frame)).toEqual([]);
       await cluster.captureScreenshot(frame, "dark-restricted-denied");
       // A namespace that was named by mistake is taken back, and the one read before is chosen again.

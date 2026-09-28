@@ -1,42 +1,42 @@
 import { Renderer } from "@freelensapp/extensions";
-import { backupView, SORTING, searchFields } from "../../common/backup-view";
 import { countsText, durationText, progressText, signalText } from "../../common/operation-text";
-import { Backup } from "../api/kinds";
+import { RESTORE_SORTING, restoreSearchFields, restoreView, sourceText } from "../../common/restore-view";
+import { Restore } from "../api/kinds";
 import { FamilyPage } from "../components/family-page";
 import { Phase, Signal, time } from "../components/status";
 import { currentInstallation } from "../state/context";
 import { OpenView } from "./open-view";
 
-import type { BackupView } from "../../common/backup-view";
-import type { BackupResource } from "../../common/types";
+import type { RestoreView } from "../../common/restore-view";
+import type { RestoreResource } from "../../common/types";
 import type { ListDefinition } from "../components/family-page";
 import type { Installation } from "../state/installation";
 
 const {
-  Component: { KubeObjectAge, WithTooltip },
+  Component: { WithTooltip },
 } = Renderer;
 
-export const BACKUPS: ListDefinition<BackupView> = {
-  kind: "backup",
-  id: "backups",
-  object: Backup,
-  tableId: "veleroBackupsTable",
+export const RESTORES: ListDefinition<RestoreView> = {
+  kind: "restore",
+  id: "restores",
+  object: Restore,
+  tableId: "veleroRestoresTable",
   columns: [
     { title: "Name", id: "name", sortBy: "name", className: "name" },
     { title: "Installation", id: "namespace", sortBy: "namespace", className: "installation" },
+    { title: "Source", id: "source", sortBy: "source", className: "source" },
     { title: "Phase", id: "phase", sortBy: "phase", className: "phase" },
     { title: "Failure", id: "errors", sortBy: "errors", className: "failure" },
     { title: "Item progress", id: "progress", sortBy: "progress", className: "progress" },
     { title: "Started", id: "started", sortBy: "started", className: "started" },
     { title: "Duration", id: "duration", sortBy: "duration", className: "duration" },
-    { title: "Storage", id: "storage", sortBy: "storage", className: "storage" },
-    { title: "Age", id: "age", sortBy: "age", className: "age" },
   ],
-  view: (resource, now) => backupView(resource as BackupResource, now),
-  sorting: SORTING,
-  search: searchFields,
-  cells: (row, item) => [
+  view: (resource, now) => restoreView(resource as RestoreResource, now),
+  sorting: RESTORE_SORTING,
+  search: restoreSearchFields,
+  cells: (row) => [
     <WithTooltip key="namespace">{row.namespace}</WithTooltip>,
+    <WithTooltip key="source">{sourceText(row)}</WithTooltip>,
     <Phase key="phase" state={row.state} />,
     <Signal
       key="failure"
@@ -49,12 +49,10 @@ export const BACKUPS: ListDefinition<BackupView> = {
       {time(row.started)}
     </WithTooltip>,
     <WithTooltip key="duration">{durationText(row.duration)}</WithTooltip>,
-    <WithTooltip key="storage">{row.storage ?? "Not reported"}</WithTooltip>,
-    <KubeObjectAge key="age" object={item} />,
   ],
 };
 
-// The Backups of the selected installation: the list and, over it, the view of what is open.
-export function BackupsPage({ installation = currentInstallation() }: { installation?: Installation }) {
-  return <FamilyPage definition={BACKUPS} installation={installation} view={OpenView} />;
+// The Restores of the selected installation: the list and, over it, the view of what is open.
+export function RestoresPage({ installation = currentInstallation() }: { installation?: Installation }) {
+  return <FamilyPage definition={RESTORES} installation={installation} view={OpenView} />;
 }

@@ -1,6 +1,6 @@
 # Testing Strategy
 
-Date: 2026-09-25
+Date: 2026-09-28
 
 Status: T0.3-T0.6 scaffold, environment, fixture and compiled-main transport checks
 pass. The [integration test](#integration-tests) covers the activation in Freelens.
@@ -167,7 +167,7 @@ The build is the one of the
 | Command | What it does |
 | --- | --- |
 | `pnpm demo:up` | The environment with the fixtures left in place, once |
-| `pnpm demo:views` | The fixtures of the views, and the two kubeconfigs of the demo for who looks at it by hand: see [TRY-IT.md](TRY-IT.md) |
+| `pnpm demo:views` | The fixtures of the views, and the kubeconfigs of the two readers of the demo for who looks at it by hand: see [TRY-IT.md](TRY-IT.md) |
 | `pnpm e2e:views` | Builds and packs the extension, puts the fixtures of the views in place, runs the suites |
 | `E2E_TEST_PATTERN=velero-e2e-journey pnpm e2e:views` | The same for one suite |
 | `pnpm pre-review` | The pass before the review of a milestone |
@@ -176,9 +176,11 @@ The build is the one of the
 | --- | --- |
 | `velero-e2e-journey` | Nothing is asked before a view opens; the choice among the installations; the list of every phase; the workspace; the references that lead somewhere and the ones that do not; equal names in two installations; no way to select, edit or delete; the section in the details of the host |
 | `velero-e2e-preferences` | What is kept between two starts of the application, and nothing else; a namespace that is not there any more stays selected |
+| `velero-e2e-restores` | The list of every phase of a restore; a restore as Velero keeps it, with where it restores into and the scope it carries; one that failed its validation, with no time and no backup made up; a source that is not there; the way between a restore and its backup in both directions, over the list the first view was opened from; no way to select, edit or delete; the section in the details of the host |
 | `velero-e2e-restricted` | The views for an identity that reads three kinds of one namespace: what is denied is said, and is neither absent nor empty |
-| `velero-e2e-scale` | A thousand backups: the rows that are mounted, the time of the interactions, the state of the list when a backup is opened and closed |
-| `pre-review` | Every view in both themes, at 1440x900, at 900x650 and at twice the zoom, checked for what lies over something else or does not fit; the journey with the keyboard alone |
+| `velero-e2e-restricted-restores` | The restores for an identity that reads them and not the backups: the source of a restore is said denied, and is neither absent nor a way |
+| `velero-e2e-scale` | A thousand backups and a thousand restores: the rows that are mounted, the time of the interactions, the state of each list when an object is opened and closed |
+| `pre-review` | Every view in both themes, at 1440x900, at 900x650 and at twice the zoom, checked for what lies over something else or does not fit; the journeys with the keyboard alone |
 
 The suites read the application and the cluster, and write to neither. The helper
 that runs `kubectl` for them refuses every verb but `get`. Each suite compares
@@ -213,13 +215,38 @@ step that does not end says which one it was, with a picture of the window.
 
 | Fixture of the views | Namespace | Purpose |
 | --- | --- | --- |
-| References | `velero-views-<run>` | A backup with a schedule, a storage location, a snapshot location and two restores; backups that name a schedule and a location that are not there; a name of 63 characters; a backup that reports nothing; a name that the namespace of the phases has too |
+| References | `velero-views-<run>` | A backup with a schedule, a storage location, a snapshot location and its restores; backups that name a schedule and a location that are not there; a name of 63 characters; a backup that reports nothing; a name that the namespace of the phases has too |
+| Restores | `velero-views-<run>` | A restore as Velero keeps one it took: into two namespaces, in flight with a failure, with the schedule of its backup written beside the backup, the resources Velero excludes and the timeout it fills; one asked from a schedule that has no backup, which failed its validation; one of a backup that is not there any more |
 | Reader | `velero-views-<run>` | A service account that reads backups, schedules and storage locations of its namespace. Its token lasts two hours and its kubeconfig is in the private state for as long as the suites run |
-| Long list | `velero-scale-<run>` | A thousand backups in every phase, and no storage location: nothing suggests the namespace, the operator names it |
+| Second reader | `velero-views-<run>` | A service account that reads restores, schedules, storage locations and snapshot locations of its namespace, and not the backups |
+| Long lists | `velero-scale-<run>` | A thousand backups and a thousand restores in every phase, each restore of one of the backups, and no storage location: nothing suggests the namespace, the operator names it |
 
 They are put in place by `pnpm e2e:views`, once: a second run finds them. No
 controller of Velero watches these namespaces. They go with
 `pnpm e2e:cluster:down`, or with the cleanup of the fixtures.
+
+The status of a synthetic operation is what the reviewed release would have
+written into it in its phase, and nothing else. One that did not start, which is
+one that is New, Queued or ReadyToStart or that failed its validation, has no
+start time, no end time, no progress and no counters: the release writes the
+start time when the validation passes. One that started has no counter of zero,
+which the release does not write, and no counter at all while it is at work; once
+the work ended all its items are done. The one that failed is one the release
+stopped at work: a reason, and no counter. The spec of a synthetic restore the
+release took carries the resources the release excludes and the timeout it
+fills; one in the phase New is as it was submitted. A fixture that gave an
+operation what no installation shows would make the views pass on it: the
+[facts](RECON-T0.1.md#start-of-the-second-milestone-2026-09-28) are the ones
+read in the source, and the restore the controller of the environment ran is
+read by the suites as well.
+
+What the suites ask of the cluster they read on the API server, which counts
+every request by its verb, its kind and its scope. A view that asks nothing is
+opened in the time between two reads of the installation, with the counters read
+before and after; the same counters count the reads of a read that is asked.
+What must not happen, a menu or a dialog, is waited for and expected not to have
+happened, and the same gesture is made where it does happen. A state that comes
+with a read is waited for; a value of a row is read in the cell of its column.
 
 The time of an interaction is taken inside the page, from the event to the frame
 that shows what it changed. For a search two times are recorded: the one from the
@@ -310,12 +337,13 @@ resources only. No real environment is required for the release gate.
 
 The scaffold has [source lifecycle tests](../../src/entrypoints.test.ts),
 [compiled-entry contracts](../../test/build.test.ts), and
-[process-specific host stubs](../../test/freelens-extensions.ts). Vitest v4.1.11 fails
+[process-specific host stubs](../../test/freelens-extensions.ts). Vitest v5.0.2 fails
 when no tests are selected; it does not import the host implementation in Node.
-The canonical command builds first and covers 276 tests: 14 scaffold,
-96 [environment checks](../../test/environment.test.ts), 48 diagnostic contracts and
-118 of the [operation states](../../src/common/operation.test.ts) and of their
-[references](../../src/common/references.test.ts).
+The canonical command builds first and covers the tests the
+[architecture](ARCHITECTURE.md#dependencies) counts by what they
+are of, among them the [environment checks](../../test/environment.test.ts), the
+diagnostic contracts, the [operation states](../../src/common/operation.test.ts)
+and their [references](../../src/common/references.test.ts).
 The environment tests
 include child-process refusal checks with an empty executable path, proving that
 wrong targets and malformed journals stop without external tools. Co-locate future pure/main

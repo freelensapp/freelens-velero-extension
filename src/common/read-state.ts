@@ -14,11 +14,14 @@ export type ReadStatus =
   | "failed";
 
 export interface FamilyRead<Item> {
+  // What the last read that ended said. It is `loading` only while the first one is asked.
   status: ReadStatus;
   // The items of the last read that succeeded. With any status but `ready` they are what was known then.
   items: Item[];
   // When that read succeeded, in milliseconds.
   lastSuccess?: number;
+  // The family is being asked again. What is known of it is what the read before said, until this one ends.
+  reading?: boolean;
 }
 
 export function emptyRead<Item>(): FamilyRead<Item> {
@@ -55,6 +58,11 @@ export function failed<Item>(
   return { status, items: previous.items, lastSuccess: previous.lastSuccess };
 }
 
+// A family that is asked again keeps what the read before said of it: a list that was denied is not an
+// empty one for the time of a read, and what was read is not of an earlier read until a read fails.
 export function loading<Item>(previous: FamilyRead<Item>): FamilyRead<Item> {
-  return { status: "loading", items: previous.items, lastSuccess: previous.lastSuccess };
+  if (previous.status === "idle" || previous.status === "loading") {
+    return { status: "loading", items: previous.items, lastSuccess: previous.lastSuccess };
+  }
+  return { status: previous.status, items: previous.items, lastSuccess: previous.lastSuccess, reading: true };
 }

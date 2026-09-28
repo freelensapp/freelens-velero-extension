@@ -216,6 +216,17 @@
   text-overflow: ellipsis;
 }
 
+/* In the view of one object a status has the room to be read whole: it is cut in a list, not here. */
+.fact .status {
+  align-items: flex-start;
+  white-space: normal;
+}
+
+.fact .statusText {
+  overflow: visible;
+  overflow-wrap: anywhere;
+}
+
 .signalFailure {
   color: var(--colorError);
 }
@@ -390,33 +401,71 @@
 
 /* The room of a column follows what it shows: a name and a time need more of it than an age. */
 .list :global(.TableCell.name) {
-  flex-grow: 2.2;
+  flex-grow: 2;
 }
 
 .list :global(.TableCell.started) {
-  flex-grow: 1.8;
+  flex-grow: 1.6;
 }
 
 .list :global(.TableCell.phase) {
   flex-grow: 1.4;
 }
 
-.list :global(.TableCell.installation),
-.list :global(.TableCell.failure),
+/* What an operation says of a failure is read first, and is said in words: it has the room of its words. */
+.list :global(.TableCell.failure) {
+  flex-grow: 1.7;
+}
+
 .list :global(.TableCell.progress),
-.list :global(.TableCell.duration),
+.list :global(.TableCell.duration) {
+  flex-grow: 1.15;
+}
+
 .list :global(.TableCell.storage) {
   flex-grow: 1.2;
+}
+
+.list :global(.TableCell.installation) {
+  flex-grow: 1;
 }
 
 .list :global(.TableCell.age) {
   flex-grow: 0.5;
 }
 
+/* In a list with the room for them, the columns that say what happened hold their words whole, in whatever
+   way the language of the operator writes a date and its time: a failure in words beside its mark, the
+   progress of a thousand items, a date with its day, its seconds and the half of the day, a duration of
+   days. The name, the source, the phase and the storage share what is left, and say the rest in their tips. */
+@container (min-width: 1000px) {
+  .list :global(.TableCell.failure) {
+    min-width: calc(15.5ch + 46px);
+  }
+
+  .list :global(.TableCell.progress) {
+    min-width: calc(16ch + 16px);
+  }
+
+  .list :global(.TableCell.started) {
+    min-width: calc(20.5ch + 16px);
+  }
+
+  .list :global(.TableCell.duration) {
+    min-width: calc(13.5ch + 16px);
+  }
+}
+
 /* In a narrow room the columns that say where and when give their room to the ones that say what: the
-   name, the phase, the failure and the progress stay. What is not shown is in the workspace of the backup. */
+   name, the phase, the failure and the progress stay. What is not shown is in the workspace of the object.
+   The installation is the first to go: it is the same in every row, and the target bar says it. */
+@container (max-width: 1200px) {
+  .list :global(.TableCell.installation) {
+    display: none;
+  }
+}
+
 @container (max-width: 1000px) {
-  .list :global(.TableCell.installation),
   .list :global(.TableCell.age) {
     display: none;
   }
@@ -456,4 +505,36 @@
 .rowLink:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: -2px;
+}
+
+/* The way to another view, where a name is one: it reads as a link and is reached as a button. */
+.link {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  font: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.list :global(.TableCell.source) {
+  flex-grow: 1.6;
+}
+
+@container (max-width: 760px) {
+  .list :global(.TableCell.source) {
+    display: none;
+  }
 }

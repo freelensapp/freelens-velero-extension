@@ -25,15 +25,22 @@ import {
   fixtureNames,
   fixtureNamespaces,
   LONG_BACKUP_NAME,
+  LONG_RESTORE_NAME,
   liveBackup,
   liveRestore,
+  NOT_COUNTED,
+  NOT_STARTED,
   RESTORE_PHASES,
   readerKubeconfig,
+  restoreSpec,
   restrictedFixtures,
   SCALE_BACKUPS,
+  SCALE_RESTORES,
   scaleFixtures,
   staticFixtures,
+  syntheticStatus,
   VIEW_READER,
+  VIEW_READER_OF_RESTORES,
   viewFixtures,
 } from "../e2e/scripts/local-fixtures.mts";
 import {
@@ -126,6 +133,172 @@ describe("foundation fixture boundaries", () => {
     );
   });
 
+  it("gives an operation that did not start what the release writes into it, and nothing else", () => {
+    const operations = staticFixtures("synthetic-owner", run).filter(
+      (resource) => resource.kind === "Backup" || resource.kind === "Restore",
+    );
+    const status = (resource: (typeof operations)[number]) => resource.status as Record<string, unknown>;
+
+    expect([...NOT_STARTED].sort()).toEqual(["FailedValidation", "New", "Queued", "ReadyToStart"]);
+    for (const operation of operations) {
+      const began = !NOT_STARTED.has(status(operation).phase as string);
+
+      for (const field of ["startTimestamp", "progress"]) {
+        expect([operation.metadata.name, field, field in status(operation)]).toEqual([
+          operation.metadata.name,
+          field,
+          began,
+        ]);
+      }
+      if (!began) {
+        expect(Object.keys(status(operation)).sort()).toEqual(
+          status(operation).phase === "FailedValidation" ? ["phase", "validationErrors"] : ["phase"],
+        );
+      }
+    }
+    // The release writes the validation errors of an operation that failed its validation, and no time:
+    // it never started, and it did not end.
+    for (const name of ["backup-failedvalidation", "restore-failedvalidation"]) {
+      expect(status(operations.find((resource) => resource.metadata.name === name) as never)).toEqual({
+        phase: "FailedValidation",
+        validationErrors: ["Synthetic validation error; no operation was executed"],
+      });
+    }
+    expect(
+      operations
+        .filter((operation) => "completionTimestamp" in status(operation))
+        .map((operation) => status(operation).phase)
+        .sort(),
+    ).toEqual(["Completed", "Completed", "Deleting", "Failed", "Failed", "PartiallyFailed", "PartiallyFailed"]);
+  });
+
+  // The release writes no counter of zero, it counts when the work ends, and it leaves the work with
+  // every item done: an object with a counter of zero, or with items to do after the work, is one that no
+  // installation shows.
+  it("gives an operation that began the counters and the items the release writes, and no zero", () => {
+    const every = [
+      ...staticFixtures("synthetic-owner", run),
+      ...viewFixtures("synthetic-owner", run),
+      ...scaleFixtures("synthetic-owner", run).backups,
+      ...scaleFixtures("synthetic-owner", run).restores,
+    ].filter((resource) => resource.kind === "Backup" || resource.kind === "Restore");
+    const zeros = (value: unknown): string[] =>
+      value && typeof value === "object"
+        ? Object.entries(value).flatMap(([key, inner]) =>
+            inner === 0 ? [key] : zeros(inner).map((name) => `${key}.${name}`),
+          )
+        : [];
+
+    expect(every.length).toBeGreaterThan(2000);
+    expect([...NOT_COUNTED].sort()).toEqual(["Failed", "InProgress"]);
+    for (const operation of every) {
+      const status = (operation.status ?? {}) as {
+        phase?: string;
+        progress?: { totalItems?: number; itemsBackedUp?: number; itemsRestored?: number };
+        errors?: number;
+        warnings?: number;
+        failureReason?: string;
+      };
+      const name = `${operation.kind} ${operation.metadata.name}`;
+      const phase = status.phase ?? "";
+      const done = operation.kind === "Backup" ? status.progress?.itemsBackedUp : status.progress?.itemsRestored;
+
+      expect([name, zeros(operation.status)]).toEqual([name, []]);
+      if (!phase || NOT_STARTED.has(phase)) continue;
+      if (NOT_COUNTED.has(phase)) {
+        expect([name, "errors" in status, "warnings" in status]).toEqual([name, false, false]);
+        expect([name, (done ?? 0) < (status.progress?.totalItems ?? 0)]).toEqual([name, true]);
+      } else {
+        expect([name, done]).toEqual([name, status.progress?.totalItems]);
+        expect([name, status.errors]).toEqual([name, phase.includes("PartiallyFailed") ? 1 : undefined]);
+      }
+      expect([name, typeof status.failureReason]).toEqual([name, phase === "Failed" ? "string" : "undefined"]);
+    }
+    // As the restore the controller of the environment ran is left: no counter, and the status of the
+    // hooks with nothing in it.
+    expect(syntheticStatus("Completed", "itemsRestored")).toEqual({
+      phase: "Completed",
+      startTimestamp: "2026-09-01T10:00:00Z",
+      completionTimestamp: "2026-09-01T10:01:00Z",
+      progress: { totalItems: 10, itemsRestored: 10 },
+      hookStatus: {},
+    });
+    // The hooks of a backup are counted at the end of its work, the ones of a restore when it is finalized.
+    const hooked = (kind: "itemsBackedUp" | "itemsRestored") =>
+      [...BACKUP_PHASES].filter((phase) => "hookStatus" in syntheticStatus(phase, kind)).sort();
+
+    expect(hooked("itemsRestored")).toEqual(["Completed", "PartiallyFailed"]);
+    expect(hooked("itemsBackedUp")).toEqual([
+      "Completed",
+      "Deleting",
+      "Finalizing",
+      "FinalizingPartiallyFailed",
+      "PartiallyFailed",
+      "WaitingForPluginOperations",
+      "WaitingForPluginOperationsPartiallyFailed",
+    ]);
+    // An operation waits for its plugins when one of their operations did not end.
+    expect(syntheticStatus("WaitingForPluginOperations", "itemsBackedUp").backupItemOperationsAttempted).toBe(1);
+    expect(syntheticStatus("WaitingForPluginOperations", "itemsRestored").restoreItemOperationsAttempted).toBe(1);
+    expect(syntheticStatus("Finalizing", "itemsRestored")).not.toHaveProperty("restoreItemOperationsAttempted");
+  });
+
+  it("gives a restore the release took what the release writes into it, and leaves one it did not take", () => {
+    const restores = [
+      ...staticFixtures("synthetic-owner", run),
+      ...viewFixtures("synthetic-owner", run),
+      ...scaleFixtures("synthetic-owner", run).restores,
+    ].filter((resource) => resource.kind === "Restore");
+
+    for (const restore of restores) {
+      const spec = restore.spec as { excludedResources?: string[]; itemOperationTimeout?: string };
+      const taken = (restore.status as { phase: string }).phase !== "New";
+      const name = restore.metadata.name;
+
+      expect([name, "itemOperationTimeout" in spec]).toEqual([name, taken]);
+      expect([name, spec.excludedResources?.includes("restores.velero.io") ?? false]).toEqual([name, taken]);
+      expect([name, new Set(spec.excludedResources).size]).toEqual([name, spec.excludedResources?.length ?? 0]);
+    }
+    // What was excluded when the restore was submitted stays first, and the release adds its own after it.
+    expect(restoreSpec("InProgress", { excludedResources: ["secrets", "nodes"] }).excludedResources).toEqual([
+      "secrets",
+      "nodes",
+      "events",
+      "events.events.k8s.io",
+      "backups.velero.io",
+      "restores.velero.io",
+      "resticrepositories.velero.io",
+      "csinodes.storage.k8s.io",
+      "volumeattachments.storage.k8s.io",
+      "backuprepositories.velero.io",
+    ]);
+    expect(restoreSpec("New", { backupName: "one" }, "daily")).toEqual({ backupName: "one" });
+    // The schedule of the backup is written once the backup was found and can be used: the synthetic
+    // restores that failed their validation are of the ones that were refused before.
+    expect(restoreSpec("FailedValidation", { backupName: "one" }, "daily")).not.toHaveProperty("scheduleName");
+    expect(restoreSpec("Completed", { backupName: "one" }, "daily")).toMatchObject({ scheduleName: "daily" });
+  });
+
+  it("has a restore with names as long as they can be, of a backup that is there", () => {
+    const views = viewFixtures("synthetic-owner", run);
+    const long = views.find((resource) => resource.metadata.name === LONG_RESTORE_NAME);
+    const spec = long?.spec as { backupName: string; namespaceMapping: Record<string, string> };
+
+    expect(LONG_RESTORE_NAME).toHaveLength(63);
+    expect(LONG_BACKUP_NAME).toHaveLength(63);
+    expect(long?.kind).toBe("Restore");
+    expect(spec.backupName).toBe(LONG_BACKUP_NAME);
+    expect(views.some((resource) => resource.kind === "Backup" && resource.metadata.name === LONG_BACKUP_NAME)).toBe(
+      true,
+    );
+    for (const [from, into] of Object.entries(spec.namespaceMapping)) {
+      expect(from).toHaveLength(63);
+      expect(into).toHaveLength(63);
+      expect(from).toMatch(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/);
+      expect(into).toMatch(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/);
+    }
+  });
+
   it("keeps live operations narrowly scoped and separate from forced status", () => {
     const names = fixtureNames(run);
     const backup = liveBackup("synthetic-owner", run);
@@ -199,8 +372,9 @@ describe("foundation fixture boundaries", () => {
     expect(named("views-daily-20260901030000")).toMatchObject({
       metadata: { labels: { "velero.io/schedule-name": "views-daily" } },
       spec: { storageLocation: "views-available", volumeSnapshotLocations: ["views-snapshots"] },
-      status: { phase: "Completed", warnings: 2, errors: 0 },
+      status: { phase: "Completed", warnings: 2 },
     });
+    expect(named("views-daily-20260901030000")?.status).not.toHaveProperty("errors");
     for (const target of ["views-daily", "views-available", "views-snapshots"]) expect(named(target)).toBeDefined();
     expect(named("backup-missing-schedule")?.metadata.labels?.["velero.io/schedule-name"]).toBe("views-removed");
     expect(named("backup-missing-location")?.spec).toMatchObject({ storageLocation: "views-removed" });
@@ -208,8 +382,58 @@ describe("foundation fixture boundaries", () => {
     expect(
       resources
         .filter((resource) => resource.kind === "Restore")
-        .map((resource) => (resource.spec as { backupName: string }).backupName),
-    ).toEqual(["views-daily-20260901030000", "views-daily-20260901030000"]);
+        .map((resource) => {
+          const { backupName, scheduleName } = resource.spec as { backupName?: string; scheduleName?: string };
+
+          return [resource.metadata.name, backupName, scheduleName];
+        }),
+    ).toEqual([
+      // As Velero keeps a restore it took: the schedule of the backup written beside the backup.
+      ["restore-of-daily-completed", "views-daily-20260901030000", "views-daily"],
+      ["restore-of-daily-partiallyfailed", "views-daily-20260901030000", "views-daily"],
+      ["restore-mapped", "views-daily-20260901030000", "views-daily"],
+      // Asked from a schedule that has no backup, and of a backup that is not there any more.
+      ["restore-of-schedule", undefined, "views-removed"],
+      ["restore-of-removed", "views-removed", undefined],
+      // Of a backup that was started by hand, which has no schedule.
+      [LONG_RESTORE_NAME, LONG_BACKUP_NAME, undefined],
+    ]);
+    expect(named("restore-mapped")).toMatchObject({
+      spec: {
+        namespaceMapping: { [names.source]: names.restored, [`${names.source}-second`]: `${names.restored}-second` },
+        existingResourcePolicy: "update",
+        itemOperationTimeout: "4h0m0s",
+      },
+    });
+    // It waits for an operation of a plugin, which did not end: no counter of zero, and no count of the
+    // hooks, which the release makes when it finalizes a restore.
+    expect(named("restore-mapped")?.status).toEqual({
+      phase: "WaitingForPluginOperationsPartiallyFailed",
+      startTimestamp: "2026-09-01T10:00:00Z",
+      errors: 1,
+      progress: { totalItems: 10, itemsRestored: 10 },
+      restoreItemOperationsAttempted: 1,
+    });
+    expect(named("restore-of-daily-partiallyfailed")?.status).toMatchObject({
+      phase: "PartiallyFailed",
+      hookStatus: { hooksAttempted: 2, hooksFailed: 1 },
+    });
+    expect((named("restore-mapped")?.spec as { excludedResources?: string[] } | undefined)?.excludedResources).toEqual([
+      "secrets",
+      "nodes",
+      "events",
+      "events.events.k8s.io",
+      "backups.velero.io",
+      "restores.velero.io",
+      "resticrepositories.velero.io",
+      "csinodes.storage.k8s.io",
+      "volumeattachments.storage.k8s.io",
+      "backuprepositories.velero.io",
+    ]);
+    expect(named("restore-of-schedule")?.status).toEqual({
+      phase: "FailedValidation",
+      validationErrors: ["No backups found for schedule", "No completed backups found for schedule"],
+    });
     expect(LONG_BACKUP_NAME).toHaveLength(63);
     expect(named(LONG_BACKUP_NAME)).toBeDefined();
     expect(named("backup-unreported")).not.toHaveProperty("status");
@@ -223,6 +447,7 @@ describe("foundation fixture boundaries", () => {
     });
     // The reader reads three families in its namespace and nothing else: no restore, no snapshot location,
     // no secret, no write, nothing of the cluster.
+    expect(role?.metadata.name).toBe(VIEW_READER);
     expect(role?.rules).toEqual([
       {
         apiGroups: ["velero.io"],
@@ -230,9 +455,62 @@ describe("foundation fixture boundaries", () => {
         verbs: ["get", "list", "watch"],
       },
     ]);
+    // The second reader reads the restores and what they refer to, and not the backups.
+    const roles = resources.filter((resource) => resource.kind === "Role");
+    const bindings = resources.filter((resource) => resource.kind === "RoleBinding");
+
+    expect(roles.map((found) => found.metadata.name)).toEqual([VIEW_READER, VIEW_READER_OF_RESTORES]);
+    expect(roles[1].rules).toEqual([
+      {
+        apiGroups: ["velero.io"],
+        resources: ["restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"],
+        verbs: ["get", "list", "watch"],
+      },
+    ]);
+    expect(bindings.map((binding) => [binding.roleRef, binding.subjects])).toEqual(
+      [VIEW_READER, VIEW_READER_OF_RESTORES].map((name) => [
+        { apiGroup: "rbac.authorization.k8s.io", kind: "Role", name },
+        [{ kind: "ServiceAccount", name, namespace: names.views }],
+      ]),
+    );
     expect(resources.some((resource) => /^Cluster/.test(resource.kind) || resource.kind === "Secret")).toBe(false);
-    expect(named(VIEW_READER)).toMatchObject({ automountServiceAccountToken: false });
+    for (const identity of [VIEW_READER, VIEW_READER_OF_RESTORES]) {
+      expect(
+        resources.find((resource) => resource.kind === "ServiceAccount" && resource.metadata.name === identity),
+      ).toMatchObject({ automountServiceAccountToken: false });
+    }
     expect(() => viewFixtures("", run)).toThrow();
+  });
+
+  it("fills the other long list with a thousand restores in every phase, each of a backup of the first", () => {
+    const names = fixtureNames(run);
+    const { backups, restores } = scaleFixtures("synthetic-owner", run);
+    const phase = (restore: (typeof restores)[number]) => (restore.status as { phase: string }).phase;
+
+    expect(restores).toHaveLength(SCALE_RESTORES);
+    expect(new Set(restores.map((restore) => restore.metadata.name)).size).toBe(1000);
+    expect(new Set(restores.map(phase))).toEqual(new Set(RESTORE_PHASES));
+    expect(
+      restores.every(
+        (restore) =>
+          restore.kind === "Restore" &&
+          restore.metadata.namespace === names.scale &&
+          restore.metadata.labels?.[OWNER_LABEL] === "synthetic-owner" &&
+          restore.metadata.labels?.[FIXTURE_LABEL] === run &&
+          backups.some((backup) => backup.metadata.name === (restore.spec as { backupName: string }).backupName),
+      ),
+    ).toBe(true);
+    expect(
+      restores
+        .filter((restore) => "startTimestamp" in (restore.status as object))
+        .map(phase)
+        .sort(),
+    ).toEqual(
+      restores
+        .map(phase)
+        .filter((name) => !NOT_STARTED.has(name))
+        .sort(),
+    );
   });
 
   it("fills the long list with a thousand backups in every phase, none of them of an installation", () => {
@@ -246,8 +524,8 @@ describe("foundation fixture boundaries", () => {
       new Set(BACKUP_PHASES),
     );
     expect(new Set(backups.map((backup) => (backup.status as { startTimestamp?: string }).startTimestamp)).size).toBe(
-      // One start for each backup that has one: the ones that are New have none.
-      backups.filter((backup) => (backup.status as { phase: string }).phase !== "New").length + 1,
+      // One start for each backup that has one: the ones that did not start have none.
+      backups.filter((backup) => !NOT_STARTED.has((backup.status as { phase: string }).phase)).length + 1,
     );
     expect(
       backups.every(

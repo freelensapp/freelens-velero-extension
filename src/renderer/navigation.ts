@@ -1,4 +1,7 @@
 import { Renderer } from "@freelensapp/extensions";
+import { closed, decodeViews, encodeView, openedFrom } from "../common/views";
+
+import type { ViewKind, ViewTarget } from "../common/views";
 
 // The identifiers of the pages and of the entries of the sidebar, and the addresses of the pages. The suite
 // of the views finds the entries by these names.
@@ -6,24 +9,53 @@ import { Renderer } from "@freelensapp/extensions";
 export const ROOT_MENU_ID = "velero";
 export const BACKUPS_PAGE_ID = "backups";
 export const BACKUPS_MENU_ID = "velero-backups";
+export const RESTORES_PAGE_ID = "restores";
+export const RESTORES_MENU_ID = "velero-restores";
 
-// The backup that is open in the workspace travels in the address, by its name: the namespace is the one of
-// the installation that is selected, and is not part of an address that could name another.
-export const BACKUP_PARAM = "backup";
+// The page where the list of each kind is, which is where a link from outside the views opens one of it.
+export const PAGES: Record<ViewKind, string> = {
+  backup: BACKUPS_PAGE_ID,
+  restore: RESTORES_PAGE_ID,
+};
 
-type PageParam = ReturnType<typeof Renderer.Navigation.createPageParam<string>>;
+// The views that are open travel in the address, by their kind and their name, in the order they were
+// opened: the namespace is the one of the installation that is selected, and is not part of an address
+// that could name another.
+export const VIEW_PARAM = "view";
 
-const params = new Map<string, PageParam>();
+type ViewsParam = ReturnType<typeof Renderer.Navigation.createPageParam<string[]>>;
 
-// A parameter of the address of a page, created when it is first read: the host is ready by then.
-export function pageParam(name: string): PageParam {
-  let param = params.get(name);
+let views: ViewsParam | undefined;
 
-  if (!param) {
-    param = Renderer.Navigation.createPageParam<string>({ name, defaultValue: "" });
-    params.set(name, param);
-  }
-  return param;
+// The parameter of the address is created when it is first read: the host is ready by then.
+function viewsParam(): ViewsParam {
+  if (!views) views = Renderer.Navigation.createPageParam<string[]>({ name: VIEW_PARAM, defaultValue: [] });
+  return views;
+}
+
+// The views that are open, from the first that was opened to the one that is shown.
+export function openViews(): ViewTarget[] {
+  return decodeViews(viewsParam().get());
+}
+
+function show(path: ViewTarget[]): void {
+  // One change of the address for one change of what is shown.
+  if (path.length) viewsParam().set(path.map(encodeView));
+  else viewsParam().clear();
+}
+
+// Opens a view from the one that is shown, or from the list.
+export function openView(target: ViewTarget): void {
+  show(openedFrom(openViews(), target));
+}
+
+// Takes the way back: to the view this one was opened from, or to the list.
+export function closeView(): void {
+  show(closed(openViews()));
+}
+
+export function closeViews(): void {
+  show([]);
 }
 
 // The host mounts the pages of an extension under its name, without the at sign and with the slash doubled.
@@ -32,4 +64,9 @@ export function pageUrl(extensionName: string, pageId: string, query: Record<str
   const search = new URLSearchParams(query).toString();
 
   return search ? `${base}?${search}` : base;
+}
+
+// The address that opens one view over the list of its kind.
+export function viewUrl(extensionName: string, target: ViewTarget): string {
+  return pageUrl(extensionName, PAGES[target.kind], { [VIEW_PARAM]: encodeView(target) });
 }

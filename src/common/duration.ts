@@ -1,6 +1,15 @@
 import type { OperationState } from "./phases";
 
-export type DurationGap = "no-start" | "no-end" | "invalid-start" | "invalid-end" | "future-start" | "reversed";
+export type DurationGap =
+  // The work of the operation did not begin: it has no start time to report.
+  | "not-started"
+  // The phase does not say that the work did not begin, and the object reports no start.
+  | "no-start"
+  | "no-end"
+  | "invalid-start"
+  | "invalid-end"
+  | "future-start"
+  | "reversed";
 
 export type OperationDuration =
   // Still counting: the value is the one at `now`.
@@ -32,7 +41,8 @@ export function operationDuration(
   const end = timestamp(status?.completionTimestamp);
 
   if (start === undefined) {
-    return { state: "unavailable", reason: missing(status?.startTimestamp) ? "no-start" : "invalid-start" };
+    if (!missing(status?.startTimestamp)) return { state: "unavailable", reason: "invalid-start" };
+    return { state: "unavailable", reason: state.execution === "not-started" ? "not-started" : "no-start" };
   }
   if (!missing(status?.completionTimestamp) && end === undefined)
     return { state: "unavailable", reason: "invalid-end" };

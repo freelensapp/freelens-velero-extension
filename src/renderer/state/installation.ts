@@ -26,13 +26,29 @@ import type {
   Suggestions,
 } from "../../common/discovery";
 import type { FamilyRead } from "../../common/read-state";
-import type { VeleroResource } from "../../common/types";
+import type {
+  BackupResource,
+  BackupStorageLocationResource,
+  RestoreResource,
+  ScheduleResource,
+  VeleroResource,
+  VolumeSnapshotLocationResource,
+} from "../../common/types";
 
 // What asks the cluster: one verb, and the status of the answer beside its body.
 export type Reader = (path: string, signal?: AbortSignal) => Promise<Answer>;
 
 export type Resource = VeleroResource<unknown, unknown>;
 export type Reads = Record<Family, FamilyRead<Resource>>;
+
+// What the objects of each family are read as.
+export interface FamilyItems {
+  backups: BackupResource;
+  restores: RestoreResource;
+  schedules: ScheduleResource;
+  storageLocations: BackupStorageLocationResource;
+  snapshotLocations: VolumeSnapshotLocationResource;
+}
 
 export interface ClusterIdentity {
   id: string;
@@ -61,6 +77,9 @@ export class Installation {
   reads: Reads = emptyReads();
   // When the families of the selected namespace were last asked, whatever they answered.
   asked?: number;
+  // The reads that were asked and did not end: what the cluster serves, where the installations are, and
+  // the families.
+  asking = 0;
   private readonly dependencies: InstallationDependencies;
   private watchers = 0;
   private timer?: ReturnType<typeof setInterval>;
@@ -76,10 +95,12 @@ export class Installation {
       generation: observable.ref,
       reads: observable.ref,
       asked: observable,
+      asking: observable,
       choices: computed,
       selection: computed,
       entry: computed,
       namespace: computed,
+      reading: computed,
       select: action,
       configure: action,
       forget: action,
@@ -111,8 +132,16 @@ export class Installation {
     return this.entry.state === "ready" ? this.entry.namespace : undefined;
   }
 
-  read(family: Family): FamilyRead<Resource> {
-    const read = this.reads[family];
+  // The installation is being read, for the first time or again, from the moment a read is asked to the
+  // one its last answer is taken.
+  get reading(): boolean {
+    return this.asking > 0;
+  }
+
+  // What was read of a family is plain data of the API, given the type of its family here and nowhere
+  // else: every field of it is optional, and the helpers read each one as what it may not be.
+  read<Name extends Family>(family: Name): FamilyRead<FamilyItems[Name]> {
+    const read = this.reads[family] as FamilyRead<FamilyItems[Name]>;
 
     return { ...read, status: familyStatus(this.api, family, read.status) };
   }
@@ -123,21 +152,38 @@ export class Installation {
   }
 
   async refresh(): Promise<void> {
-    runInAction(() => {
-      if (this.api.state === "unknown") this.api = { state: "asking" };
-      if (this.found.state === "unknown") this.found = { state: "asking" };
-    });
-    const [discovery, locations] = await Promise.all([
-      this.dependencies.read(PATHS.discovery),
-      this.dependencies.read(PATHS.locations),
-    ]);
+    return this.during(async () => {
+      runInAction(() => {
+        if (this.api.state === "unknown") this.api = { state: "asking" };
+        if (this.found.state === "unknown") this.found = { state: "asking" };
+      });
+      const [discovery, locations] = await Promise.all([
+        this.dependencies.read(PATHS.discovery),
+        this.dependencies.read(PATHS.locations),
+      ]);
 
-    runInAction(() => {
-      this.api = apiAvailability(discovery);
-      this.found = suggestions(locations);
-      this.target();
+      runInAction(() => {
+        this.api = apiAvailability(discovery);
+        this.found = suggestions(locations);
+        this.target();
+      });
+      await this.readFamilies();
     });
-    await this.readFamilies();
+  }
+
+  // A read is counted from the moment it is asked to the one its last answer is taken, whatever it
+  // answers.
+  private async during(read: () => Promise<void>): Promise<void> {
+    runInAction(() => {
+      this.asking += 1;
+    });
+    try {
+      await read();
+    } finally {
+      runInAction(() => {
+        this.asking -= 1;
+      });
+    }
   }
 
   // The operator chose a namespace among the ones that can be chosen. The choice is kept.
@@ -211,8 +257,10 @@ export class Installation {
   }
 
   private async readFamilies(): Promise<void> {
-    const asked = this.generation;
+    return this.during(() => this.readFamiliesOf(this.generation));
+  }
 
+  private async readFamiliesOf(asked: Generation): Promise<void> {
     if (!asked.namespace) return;
     const families = FAMILIES.filter((family) => familyStatus(this.api, family, "idle") !== "not-served");
 

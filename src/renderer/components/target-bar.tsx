@@ -87,8 +87,14 @@ export const TargetBar = observer(({ installation }: { installation: Installatio
           ) : null}
         </div>
         <div className={styles.spacer} />
-        <span className={styles.readTime} data-testid="velero-read-time">
+        <span
+          className={styles.readTime}
+          data-testid="velero-read-time"
+          data-reading={installation.reading ? "true" : "false"}
+          data-read={installation.asked ?? ""}
+        >
           {readTime(installation.asked)}
+          {installation.reading ? (installation.asked === undefined ? ", reading" : ", reading again") : ""}
         </span>
         <Button
           plain

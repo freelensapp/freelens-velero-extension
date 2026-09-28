@@ -1,9 +1,9 @@
 # Architecture
 
-Date: 2026-09-27
+Date: 2026-09-28
 
 Status: the foundation is complete and the first views are in place: the discovery of
-the installation and the Backups, read only. The diagnostics, the IPC between the
+the installation, the Backups and the Restores, read only. The diagnostics, the IPC between the
 processes and the actions are not implemented: their sections below are the design
 their specs start from.
 
@@ -52,8 +52,9 @@ compatible with v1.10.3; Freelens v2 is explicitly outside the current compatibi
 target. Biome, Knip and Trunk run through `pnpm dlx` at the exact versions the
 scripts name, as in the other extensions.
 Activation asks nothing of a cluster, in either process. Both open the store of the
-preferences; the renderer registers the page of the Backups, its two entries of the
-sidebar and the section it adds to the details the host shows of a Backup.
+preferences; the renderer registers the pages of the Backups and of the Restores,
+their entries of the sidebar and the sections it adds to the details the host shows
+of a Backup and of a Restore.
 T0.6 additionally exports the main diagnostic modules for compiled contract tests;
 no service, request or IPC handler is registered on activation.
 The renderer is built through electron-vite's preload target to produce the CommonJS
@@ -115,11 +116,12 @@ before changing the client version. The main build replaces undici with
 extension never calls, and the real module installs a dispatcher for the whole
 process when it loads, which inside Freelens is the process of the host. Supported
 `WS_NO_*` build defines disable optional native accelerators without patching the
-library. The 446 tests of the unit run, on the separate modules and on the
-production build, are 17 of the scaffold, 100 of the environment and its fixtures,
-48 of the diagnostic contracts, 118 of the operation states, 54 of the rules of the
-discovery, 49 of what the views show of a backup, 26 of the state of an
-installation and of its reader, and 34 of the components. The integration test
+library. The 612 tests of the unit run, on the separate modules and on the
+production build, are 17 of the scaffold, 105 of the environment and its fixtures,
+48 of the diagnostic contracts, 151 of the operation states and of their stages,
+54 of the rules of the discovery, 131 of what the views show of a backup and of a
+restore, of what they refer to and of the views in the address, 29 of the state of
+an installation and of its reader, and 77 of the components. The integration test
 covers the installation in the host, the suites of the views what the views do
 in it.
 The electron-vite warning about a missing standalone renderer
@@ -230,6 +232,79 @@ The watch of the host is not used for these views. A list every 15 seconds while
 view is open costs five requests, shows a failed read as such, with what was read
 before and when, and stops when the last view closes. The watch comes with the
 spec that needs what it gives.
+
+What is [known of a family](../../src/common/read-state.ts) is what the last read
+that ended said of it. A family that is asked again keeps that, and is marked as
+being read: a list that was denied is not an empty one for the time of a read, a
+reference does not lose its target, and what was read is not of an earlier read
+until a read fails. Only a family that was never answered is loading. The
+installation gives what it read of a family with the type of the objects of that
+family, in one place: the views do not give it one of their own.
+
+### The Counters The Release Does Not Write
+
+The reviewed release writes no counter of zero, and counts the errors and the
+warnings of an operation when its work ends. The [phase](../../src/common/phases.ts)
+of an operation says, beside where the operation is and what it says of a
+failure, where its work is and whether the release gives that phase only after
+it counted. A counter that is missing from an object of such a phase is read by
+the [evidence](../../src/common/evidence.ts) as a count of none, and kept apart
+from a zero that is written; in every other phase it is not reported, and the
+[words](../../src/common/operation-text.ts) of the views say why. A failed
+operation is not among the counted ones: the release can fail one before it
+counts. The facts are in the
+[recon](RECON-T0.1.md#start-of-the-second-milestone-2026-09-28), and the reading
+is a [deviation](../specs/SPEC-0003-backup-read-only.md#evidence-and-deviations)
+from the design of the states that waits for its approval.
+
+### The Lists And The Views Of One Object
+
+Every kind has the same two things: a list, which is the native list of the host,
+and the view of one object, which is of the extension. They are written once. A
+[page](../../src/renderer/components/family-page.tsx) is given the
+[definition](../../src/renderer/pages/restores-page.tsx) of its list, which is its
+columns, its order, what its search looks into and what a row shows; the
+[store](../../src/renderer/state/list-store.ts) the host asks the rows of answers
+from what the installation read of the family. A
+[frame](../../src/renderer/components/workspace.tsx) gives every view its name, its
+way back and Escape. The layout around a page is the one of the host, which gives
+every page of the group the tabs of the group: the entries of the lists are
+registered before the entry of the group, which is how the host knows a page of a
+group, and no page has a layout of the host of its own.
+
+The views that are open are in the address of the page, as the values of one
+parameter, `view`, each one the kind and the name of an object: `backup/nightly`,
+then `restore/restore-of-nightly`. The last one is shown. What the address names
+is decided by [pure functions](../../src/common/views.ts); the
+[navigation](../../src/renderer/navigation.ts) gives the address what they
+decided, once:
+
+| Rule | Reason |
+| --- | --- |
+| The namespace is not in the address | It is the one of the installation selected: an address cannot name an object of another |
+| A view opened from another one is added after it, and the way back takes it away | The way back leads where the operator came from, and says where in words |
+| A view that is already on the way is gone back to, not added again | From a backup to its restore and to the backup again is not a way of three |
+| The way keeps its last eight views | An address has an end |
+| What is not the name of a view opens none | The address is text that anyone can write |
+| One change of the address for one change of what is shown | The list behind would be drawn for a state no one asked for |
+
+A view opened from another one is shown on the same page, over the same list: the
+page does not change when a backup leads to its restore. The list stays mounted
+behind the views, hidden and not removed, so that every way back ends on the list
+as it was left, with its search, its order, its widths and its scroll, and with the
+focus on the row the first view was opened from. A link from the details of the
+host opens the page of the kind with the view in its address. The views that are
+open are of the installation they were opened in: they close when another one is
+selected.
+
+A reference to an object is a way to its view only when the object was found and
+its kind has a view: a reference to a kind that has none yet is a name with what
+is known of its target. The kinds that have a view are the ones of the
+[list](../../src/common/views.ts) the address is checked against. What each of
+them needs of the renderer is beside what uses it: its
+[page](../../src/renderer/navigation.ts), its
+[component](../../src/renderer/pages/open-view.tsx) and the
+[references](../../src/renderer/components/workspace.tsx) that lead to it.
 
 ### Create-Only Adapter Decision
 

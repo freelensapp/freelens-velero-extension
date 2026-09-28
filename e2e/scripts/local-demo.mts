@@ -43,6 +43,7 @@ import {
   restrictedFixtures,
   runLiveFixtures,
   VIEW_READER,
+  VIEW_READER_OF_RESTORES,
   verifyStaticFixtures,
 } from "./local-fixtures.mts";
 import {
@@ -2569,16 +2570,16 @@ function placeViewFixtures(): ReturnType<typeof fixtureNames> {
   const placed = createViewFixtures({ owner: journal.owner, kubectl, apply: applyOwned }, journal.fixtureRun.id);
 
   console.log(
-    `PASS: ${placed.views} objects of the views in ${names.views} and ${placed.scale} backups of the long list in ${names.scale} are in place, outside the reach of the controllers.`,
+    `PASS: ${placed.views} objects of the views in ${names.views}, and ${placed.scale} backups and ${placed.restores} restores of the long lists in ${names.scale}, are in place, outside the reach of the controllers.`,
   );
   return names;
 }
 
 // The kubeconfig of the identity that reads a part of one namespace, with a credential that lasts as long
 // as it is asked. It is written in the private state and nowhere else.
-function writeReaderKubeconfig(file: string, namespace: string, duration: string): void {
+function writeReaderKubeconfig(file: string, namespace: string, duration: string, identity = VIEW_READER): void {
   const token = kubectl(
-    ["create", "token", VIEW_READER, "--namespace", namespace, `--duration=${duration}`],
+    ["create", "token", identity, "--namespace", namespace, `--duration=${duration}`],
     undefined,
     undefined,
     false,
@@ -2595,13 +2596,16 @@ function writeReaderKubeconfig(file: string, namespace: string, duration: string
 function prepareDemo(): void {
   const names = placeViewFixtures();
   const reader = join(STATE, "views-reader.json");
+  const second = join(STATE, "views-reader-of-restores.json");
 
   writeReaderKubeconfig(reader, names.views, "8h");
+  writeReaderKubeconfig(second, names.views, "8h", VIEW_READER_OF_RESTORES);
   console.log(
     [
-      "The demo is ready to be looked at in Freelens. Both kubeconfigs name this cluster alone:",
+      "The demo is ready to be looked at in Freelens. The kubeconfigs name this cluster alone:",
       `  all the namespaces:     ${CONFIG}`,
-      `  the reader of a part:   ${reader} (its credential lasts eight hours)`,
+      `  the reader of a part:   ${reader} (backups, schedules, storage locations; its credential lasts eight hours)`,
+      `  the second reader:      ${second} (restores, schedules, locations and no backup; eight hours)`,
       `The namespaces of Velero: ${DEMO_NAMESPACE}, ${names.static}, ${names.views}; to be named: ${names.scale}.`,
     ].join("\n"),
   );
@@ -2640,10 +2644,14 @@ function runViews(): void {
   // state, and goes when the suite ends.
   const run = journal.fixtureRun?.id ?? "";
   const readerFile = join(STATE, `views-reader-${run}.json`);
+  const secondFile = join(STATE, `views-reader-of-restores-${run}.json`);
   let status: number | null;
 
-  writeReaderKubeconfig(readerFile, names.views, "2h");
+  // What is written is removed whatever happens after it, the second file when the first was written
+  // and the second was not.
   try {
+    writeReaderKubeconfig(readerFile, names.views, "2h");
+    writeReaderKubeconfig(secondFile, names.views, "2h", VIEW_READER_OF_RESTORES);
     // The application is started by the harness with the environment of the harness: what the suite needs of
     // this environment is named here, and the home is the one of the caller, where its toolchain is.
     status = spawnSync(
@@ -2664,6 +2672,7 @@ function runViews(): void {
           EXTENSION_PATH: join(process.cwd(), tarballs[0]),
           E2E_KUBECONFIG: CONFIG,
           E2E_READER_KUBECONFIG: readerFile,
+          E2E_SECOND_READER_KUBECONFIG: secondFile,
           E2E_KUBECTL: KUBECTL,
           E2E_CLUSTER_NAME: DEMO_CLUSTER,
           E2E_KUBE_CONTEXT: DEMO_CONTEXT,
@@ -2679,7 +2688,7 @@ function runViews(): void {
       },
     ).status;
   } finally {
-    unlinkSync(readerFile);
+    for (const file of [readerFile, secondFile]) rmSync(file, { force: true });
   }
   verifyTarget();
   requireCondition(status === 0, `The suite ${pattern} did not pass`);

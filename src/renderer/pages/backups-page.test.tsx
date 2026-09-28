@@ -7,7 +7,7 @@ import { emptyPreferences, RESOURCES } from "../../common/discovery";
 import { BACKUP_PHASES } from "../../common/phases";
 import { Backup } from "../api/kinds";
 import { BackupDetails } from "../details/backup-details";
-import { BACKUP_PARAM, pageParam } from "../navigation";
+import { closeViews, openView } from "../navigation";
 import { Installation } from "../state/installation";
 import { BackupsPage } from "./backups-page";
 
@@ -53,8 +53,8 @@ const finalizing = backup(
     phase: "FinalizingPartiallyFailed",
     startTimestamp: "2026-09-01T10:00:00Z",
     progress: { totalItems: 10, itemsBackedUp: 10 },
+    // The release writes no counter of zero: no warning is no counter of the warnings.
     errors: 1,
-    warnings: 0,
   },
   { spec: { volumeSnapshotLocations: ["snapshots"] } },
 );
@@ -63,8 +63,6 @@ const completed = backup("nightly-2", A, {
   startTimestamp: "2026-09-01T10:00:00Z",
   completionTimestamp: "2026-09-01T10:01:00Z",
   progress: { totalItems: 10, itemsBackedUp: 10 },
-  errors: 0,
-  warnings: 0,
 });
 const served: Answer = { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } };
 
@@ -73,7 +71,7 @@ function answers(more: Answers = {}): Answers {
     [DISCOVERY]: served,
     [LOCATIONS]: list({ metadata: { name: "default", namespace: A } }, { metadata: { name: "default", namespace: B } }),
     [path("backups", A)]: list(finalizing, completed),
-    [path("backups", B)]: list(backup("nightly-1", B, { phase: "Completed", errors: 0, warnings: 0 })),
+    [path("backups", B)]: list(backup("nightly-1", B, { phase: "Completed" })),
     ...Object.fromEntries(
       [A, B].flatMap((namespace) => [
         [path("restores", namespace), list()],
@@ -112,7 +110,7 @@ const rows = () =>
 const notice = (family: string) => screen.queryByTestId(`velero-notice-${family}`)?.textContent ?? "";
 
 afterEach(() => {
-  act(() => pageParam(BACKUP_PARAM).clear());
+  act(() => closeViews());
   cleanup();
   listProps.clear();
   vi.useRealTimers();
@@ -370,15 +368,19 @@ describe("workspace of a backup", () => {
     const messages = (await screen.findByTestId("velero-backup-messages")).textContent ?? "";
 
     expect(messages).toContain("The phase is Completed and the object reports errors");
-    expect(messages).toContain("The number of warnings is not reported");
+    // The warnings the release did not write are none, and nothing is missing of them.
+    expect(messages).not.toContain("warnings");
+    expect(screen.getByTestId("velero-backup-counts").textContent).toBe("2 / 0");
     expect(screen.getByTestId("velero-backup-status").textContent).toContain("2 errors");
     expect(screen.getByTestId("velero-backup-progress").textContent).toBe("No items counted");
     expect(screen.queryByRole("progressbar")).toBeNull();
-    act(() => pageParam(BACKUP_PARAM).set("silent"));
+    act(() => closeViews());
+    act(() => openView({ kind: "backup", name: "silent" }));
     await waitFor(() => expect(screen.getByTestId("velero-backup-name").textContent).toBe("silent"));
     expect(screen.getByTestId("velero-backup-status").textContent).toContain("Not reported");
     expect(screen.getByTestId("velero-backup-status").textContent).toContain("Unknown");
-    act(() => pageParam(BACKUP_PARAM).set("exceeded"));
+    act(() => closeViews());
+    act(() => openView({ kind: "backup", name: "exceeded" }));
     await waitFor(() => expect(screen.getByTestId("velero-backup-name").textContent).toBe("exceeded"));
     expect(screen.getByTestId("velero-backup-progress").textContent).toBe("Reported 9 / 4");
     expect(document.body.textContent).not.toContain("NaN");
@@ -396,24 +398,57 @@ describe("workspace of a backup", () => {
     await act(() => installation.refresh());
     expect(screen.getByTestId("velero-backup-workspace").getAttribute("data-backup-uid")).toBe("created-again");
     expect(screen.getByTestId("velero-backup-status").textContent).toContain("New");
-    // The same name in the other installation is another backup, and what was read of the first is gone.
-    fireEvent.change(screen.getByLabelText("Velero namespace"), { target: { value: B } });
-    await waitFor(() =>
-      expect(screen.getByTestId("velero-backup-workspace").getAttribute("data-backup-uid")).toBe(`${B}-nightly-1`),
+    expect(screen.getByTestId("velero-backup-replaced").textContent).toContain(
+      "This is another backup of the same name",
     );
+    // The views of an installation close when another one is selected: the backup of the same name there
+    // is another one, and what was read of the first is gone.
+    fireEvent.change(screen.getByLabelText("Velero namespace"), { target: { value: B } });
+    await waitFor(() => expect(rows()).toEqual(["nightly-1"]));
+    expect(screen.queryByTestId("velero-backup-workspace")).toBeNull();
+    fireEvent.click(screen.getByText("nightly-1"));
+    expect((await screen.findByTestId("velero-backup-workspace")).getAttribute("data-backup-uid")).toBe(
+      `${B}-nightly-1`,
+    );
+    expect(screen.queryByTestId("velero-backup-replaced")).toBeNull();
     expect(screen.getByTestId("velero-backup-status").textContent).toContain(B);
     expect(screen.getByTestId("velero-backup-status").textContent).not.toContain(A);
+  });
+
+  it("says of the deletion of a backup what its phase says, and nothing of what Velero holds", async () => {
+    const going = backup("going", A, { phase: "Deleting" });
+
+    mount(
+      answers({
+        [path("backups", A)]: list({
+          ...going,
+          metadata: { ...going.metadata, deletionTimestamp: "2026-09-01T11:00:00Z" },
+        }),
+      }),
+      chosen(A),
+    );
+    await waitFor(() => expect(rows()).toHaveLength(1));
+    fireEvent.click(screen.getByText("going"));
+    const workspace = await screen.findByTestId("velero-backup-workspace");
+
+    // A backup is deleted through a request to Velero, and nothing of Velero holds its object.
+    expect(within(workspace).getByTestId("velero-backup-status").textContent).toContain("Deleting");
+    expect(screen.queryByTestId("velero-backup-deleting")).toBeNull();
+    // The view is a region with the name of the object for its name.
+    expect(workspace.tagName).toBe("SECTION");
+    expect(document.getElementById(workspace.getAttribute("aria-labelledby") ?? "")?.textContent).toBe("going");
   });
 
   it("says that a backup is not there, or that it is not known, and not the one for the other", async () => {
     const { installation, table } = mount(answers(), chosen(A));
 
     await waitFor(() => expect(rows()).toHaveLength(2));
-    act(() => pageParam(BACKUP_PARAM).set("removed"));
+    act(() => openView({ kind: "backup", name: "removed" }));
     expect((await screen.findByTestId("velero-backup-missing")).textContent).toContain("No backup of this name");
     table[path("backups", B)] = { status: 403 };
     fireEvent.change(screen.getByLabelText("Velero namespace"), { target: { value: B } });
     await waitFor(() => expect(installation.read("backups").status).toBe("forbidden"));
+    act(() => openView({ kind: "backup", name: "removed" }));
     expect(screen.queryByTestId("velero-backup-missing")).toBeNull();
     expect(screen.getByTestId("velero-backup-unknown").textContent).toBe(
       `Access to the backups of ${B} is denied, so this one cannot be shown. It is not known to be absent.`,
@@ -453,7 +488,7 @@ describe("details of the host", () => {
     expect(item("Item progress")).toBe("10 / 10 (100%)");
     expect(item("Installation")).toBe(A);
     expect(screen.getByTestId("velero-backup-details-link").getAttribute("href")).toBe(
-      "/extension/freelensapp--velero-extension/backups?backup=nightly-1",
+      "/extension/freelensapp--velero-extension/backups?view=backup%2Fnightly-1",
     );
   });
 

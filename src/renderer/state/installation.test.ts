@@ -380,6 +380,85 @@ describe("what is kept between two sessions", () => {
   });
 });
 
+describe("an installation that is being read", () => {
+  // Answers that wait for a word: what is asked is held until it is let go.
+  function held() {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    return {
+      release,
+      answer: (value: Answer) => async () => {
+        await gate;
+        return value;
+      },
+    };
+  }
+
+  it("says so from the moment a read is asked, while it looks for the installations as well", async () => {
+    const discovery = held();
+    const families = held();
+    const one = { ...two, [LOCATIONS]: list(object("default", "velero-a")) };
+    const { state, api } = installation(one);
+
+    await state.open();
+    expect(state.reading).toBe(false);
+    expect(state.read("backups")).toMatchObject({ status: "ready" });
+    api.answers[DISCOVERY] = discovery.answer(served);
+    api.answers[path("backups", "velero-a")] = families.answer(list(object("nightly-1", "velero-a")));
+    const read = state.refresh();
+
+    // The families are not asked yet: the read that was asked is the one of what the cluster serves.
+    expect(state.reading).toBe(true);
+    expect(state.read("backups").reading).toBeUndefined();
+    discovery.release();
+    await vi.waitFor(() => expect(state.read("backups").reading).toBe(true));
+    expect(state.reading).toBe(true);
+    // What was read is what the last read said, until this one ends.
+    expect(state.read("backups")).toMatchObject({ status: "ready" });
+    expect(state.read("backups").items).toHaveLength(2);
+    families.release();
+    await read;
+    expect(state.reading).toBe(false);
+    expect(state.asking).toBe(0);
+    expect(state.read("backups").items).toHaveLength(1);
+  });
+
+  it("says so while the families of a namespace that was selected are read", async () => {
+    const families = held();
+    const { state, api } = installation(two, { selected: { "cluster-a": "velero-a" }, configured: {} });
+
+    await state.open();
+    expect(state.reading).toBe(false);
+    api.answers[path("backups", "velero-b")] = families.answer(list(object("nightly-1", "velero-b")));
+    state.select("velero-b");
+    expect(state.reading).toBe(true);
+    // Nothing was read of this namespace yet: its families are loading, which is not being read again.
+    expect(state.read("backups")).toMatchObject({ status: "loading", items: [] });
+    families.release();
+    await vi.waitFor(() => expect(state.reading).toBe(false));
+    expect(state.read("backups")).toMatchObject({ status: "ready" });
+    expect(state.read("backups").items).toHaveLength(1);
+  });
+
+  it("stops saying so when a read ends, whatever it answered", async () => {
+    const { state, api } = installation({ ...two, [LOCATIONS]: list(object("default", "velero-a")) });
+
+    await state.open();
+    api.answers[DISCOVERY] = { status: 500 };
+    api.answers[path("restores", "velero-a")] = { status: 403 };
+    await state.refresh();
+    expect(state.reading).toBe(false);
+    expect(state.asking).toBe(0);
+    // Two reads asked one over the other end one after the other, and nothing is being read after both.
+    await Promise.all([state.refresh(), state.refresh()]);
+    expect(state.reading).toBe(false);
+    expect(state.asking).toBe(0);
+  });
+});
+
 describe("a view that is open", () => {
   it("asks again while it is open, and stops when the last one closes", async () => {
     vi.useFakeTimers();

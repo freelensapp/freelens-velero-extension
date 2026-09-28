@@ -87,7 +87,9 @@ defaults. No write fields exist in this slice.
 Restore uses the same rules for its actual phase set; it does not acquire Backup-only
 Queued, ReadyToStart or Deleting values. Validation-error arrays and nonzero error
 counts remain visible even if inconsistent with the phase. Missing counters are not
-zero. Do not mutate stored objects to normalize their presentation.
+zero, but where the release leaves out the counter of what it counted as none: see
+the [deviation](#evidence-and-deviations) of 2026-09-28. Do not mutate stored
+objects to normalize their presentation.
 
 Progress percentage is available only for finite nonnegative counts with a positive
 total and completed count no greater than total. Otherwise retain the reported counts
@@ -149,7 +151,34 @@ historical stage data or recovery guarantee can be inferred from these CRDs alon
 ## Evidence And Deviations
 
 Approved on 2026-09-27. T1.2 and T1.3 are separate pull requests; the status of
-the spec follows the second. No deviations have been accepted.
+the spec follows the second. No deviation was accepted in the first milestone.
+
+One deviation was made on 2026-09-28, with the Restores of the second milestone,
+and waits for the approval of the lead maintainer at the review of that
+milestone. The design says that a counter that is missing is not zero, and the
+fixtures of the first milestone wrote a zero into every counter. The reviewed
+release writes none: `errors`, `warnings`, the items done, the hooks and the item
+operations are left out of the object when they count none, as the
+[recon](../development/RECON-T0.1.md#start-of-the-second-milestone-2026-09-28)
+records, and as the backup and the restore of the test environment show. Read by
+the rule as it was written, every backup that ended without an error on an
+installation reports no count, and none has the mark of what went well.
+
+| What the object carries | How it is read |
+| --- | --- |
+| No counter, in a phase the release gives after it counted: WaitingForPluginOperations, Finalizing, their partially failed forms, Completed, PartiallyFailed | A count of none, told from a zero that is written; the view says that the zero is a counter that is not in the object |
+| No counter, in New, Queued, ReadyToStart or FailedValidation | Not reported: the operation did not start, and nothing was counted |
+| No counter, in InProgress | Not reported: the release counts when the work ends |
+| No counter, in Failed | Not reported: the release can fail an operation before it counts |
+| No counter, in Deleting, in a phase that is not known or without a phase | Not reported |
+| A counter that is not a count | Not reported, with what the object carries in its place |
+| One of the two counters, as a count | The other was counted: a count of none |
+| No items done, in a progress that is there | None done, of the total the progress carries |
+| No progress | Not reported |
+
+REQ-026 and REQ-027 stand as they are written: the counts that are reported, the
+gaps and the raw values stay apart, and what is missing or invalid gives no
+percentage. What changes is what counts as missing.
 
 T1.2 is implemented: the [states](../../src/common/phases.ts), the
 [evidence](../../src/common/evidence.ts), the [progress](../../src/common/progress.ts),
@@ -186,7 +215,7 @@ reads a backup through the same [helpers](../../src/common/backup-view.ts).
 | --- | --- |
 | BACK-01 | Unit, and the registration: the kind, the version and the plural the entry point gives to the host |
 | BACK-02 | Unit, table-driven. Component: the mark of each of the 13 phases, and the failure in words beside it. Packaged: one row for each phase on the cluster |
-| BACK-03 | Unit. Component: a Completed backup that reports errors shows the contradiction; a counter that is missing is said not reported |
+| BACK-03 | Unit. Component: a Completed backup that reports errors shows the contradiction; a counter that is missing is said not reported, or is the count of none of the deviation above |
 | BACK-04 | Unit. Component: no ratio and no bar where none can be given, and `NaN` nowhere |
 | BACK-05 | Unit, with the clock as an argument |
 | BACK-06 | Packaged, on the list of a thousand: after a search, an order, a column made wider and a scroll, a backup is opened and closed, and the list is where it was |
