@@ -1,8 +1,9 @@
 # Specifications
 
-Date: 2026-09-27
+Date: 2026-09-28
 
-Status: SPEC-0001 is Approved; SPEC-0002, SPEC-0003 and SPEC-0004 are Implemented.
+Status: SPEC-0001 is Approved; SPEC-0002, SPEC-0003 and SPEC-0004 are Implemented;
+SPEC-0005 to SPEC-0008, the second milestone, are Draft.
 
 The [roadmap](../development/ROADMAP.md) owns scope and progress; the
 [process](../development/PROCESS.md) owns approvals and review gates.
@@ -18,8 +19,12 @@ slice per task even when a spec covers several closely related tasks.
 | [SPEC-0002: Installation discovery](SPEC-0002-installation-discovery.md) | T1.1 | REQ-013 through REQ-023 | Implemented | 96 tests of the rules, of the state and of the components; the suites of the views in a packaged Freelens, with the reader of a part and across three starts |
 | [SPEC-0003: States and read-only Backups](SPEC-0003-backup-read-only.md) | T1.2, T1.3 separately | REQ-024 through REQ-037 | Implemented | 118 unit tests of the states, 67 of what the views show and of the components; the suites of the views in a packaged Freelens, with a list of a thousand backups; the pre-review |
 | [SPEC-0004: Test environment on every platform](SPEC-0004-test-environment-every-platform.md) | Foundation | REQ-038 through REQ-049 | Implemented | 100 environment tests; runs on macOS x64 and on the hosted runner, Linux ARM64 |
+| [SPEC-0005: Read-only Restores](SPEC-0005-restore-read-only.md) | T1.4 | REQ-050 through REQ-063 | Draft | None yet |
+| [SPEC-0006: Read-only Schedules](SPEC-0006-schedule-read-only.md) | T1.5 | REQ-064 through REQ-077 | Draft | None yet |
+| [SPEC-0007: Read-only storage and snapshot locations](SPEC-0007-locations-read-only.md) | T1.6 | REQ-078 through REQ-092 | Draft | None yet |
+| [SPEC-0008: Overview of an installation](SPEC-0008-overview.md) | T1.7 | REQ-093 through REQ-107 | Draft | None yet |
 
-Next unallocated requirement ID: REQ-050. IDs are unique across this project;
+Next unallocated requirement ID: REQ-108. IDs are unique across this project;
 references in test tables do not redefine a requirement. Do not allocate IDs to
 unwritten future specs or reuse an ID for a different requirement after approval.
 
@@ -30,8 +35,6 @@ specifications. Draft each at its next design gate, informed by the local proof.
 
 | Scope | Roadmap owner | Dependency |
 | --- | --- | --- |
-| Restore, Schedule, BSL and VSL read-only views | T1.4, T1.5, T1.6 | Shared states, target discovery and each kind's fields/tests |
-| Operational overview | T1.7 | Truthful primary-resource read coverage |
 | Diagnostic service and viewers | T2.1 through T2.4 | Foundation transport proof; explicit request creation policy |
 | Schedule adherence | T3.1 through T3.3 | Cron/timezone contract and observed backup history |
 | Write gate and individual actions | T4.1 through T4.6 | Create-only adapter, exact previews and per-action tests |
@@ -75,6 +78,10 @@ Verified with the manual review of their success criteria, which is not recorded
 SPEC-0004 approval was recorded on 2026-09-27, with its one open question decided:
 the published loopback is accepted on the machines of the developers.
 
+SPEC-0005, SPEC-0006, SPEC-0007 and SPEC-0008 were drafted on 2026-09-28 for the
+second milestone: T1.4 to T1.7, each its own pull request, in that order. They are
+not approved: nothing of them is implemented before they are.
+
 ## Document Review
 
 This is document coverage, not test execution:
@@ -83,7 +90,7 @@ This is document coverage, not test execution:
 | --- | --- |
 | Scope and exclusions | Each spec names its roadmap tasks and deferred owners |
 | User outcomes | Prioritized Given/When/Then journeys and observable success criteria |
-| Requirement identity | 37 unique sequential IDs across the three drafts |
+| Requirement identity | 37 unique sequential IDs across the three drafts; the four drafts of the second milestone add 58, REQ-050 to REQ-107, each with one check |
 | Test traceability | Every requirement has a named acceptance check and test layer |
 | Safety and privacy | Local-only writes, exact targets, no implicit requests, synthetic evidence |
 | UI decisions | Native lists plus dedicated operation workspace, with non-happy and accessible states |

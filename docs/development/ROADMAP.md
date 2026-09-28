@@ -70,10 +70,10 @@ v1.10.3 built for the purpose, on every pull request and on main.
 
 | Feature | Task | Spec | Status |
 | --- | --- | --- | --- |
-| Restore list and detail, with source backup or schedule and recovery progress | T1.4 | | Planned |
-| Schedule list and detail, with paused and skipped behavior and backup history | T1.5 | | Planned |
-| BackupStorageLocation and VolumeSnapshotLocation lists and details: default, access mode, availability, validation and sync times, errors | T1.6 | | Planned |
-| Overview (ad hoc): truthful aggregate health, navigation into the objects | T1.7 | | Planned |
+| Restore list and detail, with source backup or schedule and recovery progress | T1.4 | [SPEC-0005](../specs/SPEC-0005-restore-read-only.md) | Draft |
+| Schedule list and detail, with paused and skipped behavior and backup history | T1.5 | [SPEC-0006](../specs/SPEC-0006-schedule-read-only.md) | Draft |
+| BackupStorageLocation and VolumeSnapshotLocation lists and details: default, access mode, availability, validation and sync times, errors | T1.6 | [SPEC-0007](../specs/SPEC-0007-locations-read-only.md) | Draft |
+| Overview (ad hoc): truthful aggregate health, navigation into the objects | T1.7 | [SPEC-0008](../specs/SPEC-0008-overview.md) | Draft |
 
 The first milestone is on main. Its two specs are Implemented: they become
 Verified with the manual review of their success criteria, which is the review
