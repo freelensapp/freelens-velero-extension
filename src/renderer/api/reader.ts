@@ -24,7 +24,14 @@ function connect(): Connection | undefined {
   return connection;
 }
 
+// What the views read is of the kinds of Velero, and of nothing else: the discovery of the group, a kind
+// in the whole cluster, a kind in one namespace. A Secret a location names is a name, and no path leads
+// to it: what is not written as one of the three is not asked, in whatever way it is written.
+const OF_VELERO = /^\/apis\/velero\.io\/v1(\/namespaces\/[a-z0-9]([-a-z0-9]*[a-z0-9])?)?(\/[a-z]+)?$/;
+
 export const readCluster: Reader = async (path, signal) => {
+  // A path that is not of the kinds of Velero is not asked: nothing is known of it.
+  if (!OF_VELERO.test(path)) return {};
   const request = connect();
 
   // Without the connection nothing is known, and nothing is guessed.

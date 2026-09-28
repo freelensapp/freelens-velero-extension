@@ -1,7 +1,6 @@
 import { Renderer } from "@freelensapp/extensions";
 import { observer } from "mobx-react";
 import React from "react";
-import { FAMILIES } from "../../common/discovery";
 import { hasItems } from "../../common/read-state";
 import { VIEWS } from "../../common/views";
 import { closeView, closeViews, openView, openViews } from "../navigation";
@@ -48,6 +47,8 @@ export interface ListDefinition<View extends { name: string }> {
   cells(view: View, item: HostObject): ReactNode[];
   // The other families a row is made from: the list says when what it shows of them is of an earlier read.
   uses?: Family[];
+  // What is to be said of the list as a whole, which no row says: over the list, in words.
+  notes?(installation: Installation): string[];
 }
 
 export interface OpenViewProps {
@@ -86,6 +87,7 @@ function FamilyListView<View extends { name: string }>({ definition, installatio
     Object.entries(definition.sorting).map(([column, order]) => [column, (item: HostObject) => order(view(item))]),
   );
   const read = installation.read(family);
+  const notes = hasItems(read) ? (definition.notes?.(installation) ?? []) : [];
 
   // A list that was never read has no rows to show and no count: what it is instead is said by the notice.
   if (
@@ -121,6 +123,17 @@ function FamilyListView<View extends { name: string }>({ definition, installatio
           </span>
         </div>
       ) : null}
+      {notes.map((note) => (
+        <div
+          key={note}
+          role="note"
+          className={`${styles.notice} ${styles.noticeInfo}`}
+          data-testid={`velero-${id}-note`}
+        >
+          <Icon material="info_outline" small aria-hidden />
+          <span>{note}</span>
+        </div>
+      ))}
       <KubeObjectListLayout
         tableId={tableId}
         className={styles.list}
@@ -247,7 +260,7 @@ function FamilyPageView<View extends { name: string }>({ definition, installatio
         <TargetBar installation={installation} />
         <Coverage
           installation={installation}
-          families={open ? [...FAMILIES] : [VIEWS[definition.kind].family]}
+          families={open ? [...VIEWS[open.kind].reads] : [VIEWS[definition.kind].family]}
           earlier={open ? [] : definition.uses}
         />
         {ready ? (

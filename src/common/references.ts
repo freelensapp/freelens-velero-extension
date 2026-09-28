@@ -1,4 +1,4 @@
-import { timestamp } from "./duration";
+import { defaults } from "./location-view";
 import { LABELS } from "./types";
 
 import type { FamilyRead } from "./read-state";
@@ -118,10 +118,16 @@ function named(value: unknown): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined;
 }
 
+// The storage location of a backup: the one its spec names, or the one of the label the release writes on
+// it. Whoever asks where a backup is, asks here.
+export function backupLocation(backup: Pick<BackupResource, "metadata" | "spec">): string | undefined {
+  return named(backup.spec?.storageLocation) ?? named(backup.metadata.labels?.[LABELS.storageLocation]);
+}
+
 export function backupReferences(backup: BackupResource, reads: InstallationReads): BackupReferences {
   const namespace = backup.metadata.namespace ?? "";
   const schedule = named(backup.metadata.labels?.[LABELS.schedule]);
-  const location = named(backup.spec?.storageLocation) ?? named(backup.metadata.labels?.[LABELS.storageLocation]);
+  const location = backupLocation(backup);
   const snapshots = Array.isArray(backup.spec?.volumeSnapshotLocations)
     ? backup.spec.volumeSnapshotLocations.filter((name): name is string => named(name) !== undefined)
     : [];
@@ -172,9 +178,7 @@ export function restoreReferences(restore: RestoreResource, reads: RestoreReads)
   const source = backup
     ? reads.backups.items.find((item) => item.metadata.name === backup && item.metadata.namespace === namespace)
     : undefined;
-  const location = source
-    ? (named(source.spec?.storageLocation) ?? named(source.metadata.labels?.[LABELS.storageLocation]))
-    : undefined;
+  const location = source ? backupLocation(source) : undefined;
 
   return {
     ...(backup ? { backup: resolveReference("Backup", backup, namespace, reads.backups) } : {}),
@@ -196,7 +200,7 @@ export type DefaultLocation =
   | { state: "marked"; name: string }
   // More than one is marked. The release sends a backup to the first of them it finds, and keeps marked
   // the one created last: which one takes a backup is not settled until it has.
-  | { state: "many-marked"; names: string[]; kept: string }
+  | { state: "many-marked"; names: string[]; kept?: string; tied?: string[] }
   | { state: "none-marked" }
   // The storage locations were not read.
   | { state: "unknown"; reason: string };
@@ -214,18 +218,13 @@ function defaultLocation(namespace: string, read: FamilyRead<BackupStorageLocati
   if (read.status !== "ready" && read.lastSuccess === undefined) {
     return { state: "unknown", reason: unavailable("BackupStorageLocation", read).reason };
   }
-  const marked = read.items
-    .filter((item) => item.metadata.namespace === namespace && item.spec?.default === true)
-    .sort((one, other) => one.metadata.name.localeCompare(other.metadata.name));
+  const marked = defaults(read.items, namespace);
 
-  if (!marked.length) return { state: "none-marked" };
-  if (marked.length === 1) return { state: "marked", name: marked[0].metadata.name };
-  // The one created last, and the first by name of the ones created at the same time, as the release
-  // compares them. One whose time of creation cannot be read is older than every other.
-  const created = (item: BackupStorageLocationResource) => timestamp(item.metadata.creationTimestamp) ?? 0;
-  const kept = marked.reduce((newest, item) => (created(item) > created(newest) ? item : newest));
+  if (marked.state === "none") return { state: "none-marked" };
+  if (marked.state === "one") return { state: "marked", name: marked.names[0] };
+  const { names, kept, tied } = marked;
 
-  return { state: "many-marked", names: marked.map((item) => item.metadata.name), kept: kept.metadata.name };
+  return { state: "many-marked", names, ...(kept ? { kept } : {}), ...(tied ? { tied } : {}) };
 }
 
 // What the reviewed release refuses a backup for, of the storage location it is sent to.

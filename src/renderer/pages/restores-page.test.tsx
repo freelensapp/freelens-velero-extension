@@ -706,8 +706,8 @@ describe("workspace of a restore", () => {
     await screen.findByTestId("velero-restore-workspace");
     expect(within(reference("Backup-nightly-1")).getByRole("button").textContent).toBe("nightly-1");
     expect(within(reference("Schedule-nightly")).getByRole("button").textContent).toBe("nightly");
-    // The storage locations have no view of their own yet: a name, and no way.
-    expect(within(reference("BackupStorageLocation-default")).queryByRole("button")).toBeNull();
+    // The storage location of the backup is there: a way to its view.
+    expect(within(reference("BackupStorageLocation-default")).getByRole("button").textContent).toBe("default");
     act(() => openView({ kind: "restore", name: "restore-completed" }));
     await waitFor(() => expect(screen.getByTestId("velero-restore-name").textContent).toBe("restore-completed"));
     const expired = reference("Backup-expired");
@@ -985,6 +985,7 @@ describe("way between a backup and its restores", () => {
       "velero-back",
       "velero-open-backup-nightly-1",
       "velero-open-schedule-nightly",
+      "velero-open-storage-location-default",
     ]);
     expect(workspace.textContent).not.toMatch(/\b(delete|edit|remove|retry|run again)\b/i);
   });

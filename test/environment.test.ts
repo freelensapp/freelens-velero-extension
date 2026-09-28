@@ -27,6 +27,9 @@ import {
   fixtureNamespaces,
   LIVE_RETENTION,
   LONG_BACKUP_NAME,
+  LONG_BUCKET_NAME,
+  LONG_LOCATION_NAME,
+  LONG_PREFIX,
   LONG_RESTORE_NAME,
   liveBackup,
   liveRestore,
@@ -42,6 +45,7 @@ import {
   scaleFixtures,
   staticFixtures,
   syntheticStatus,
+  UNAVAILABLE_MESSAGE,
   VIEW_READER,
   VIEW_READER_OF_RESTORES,
   viewFixtures,
@@ -364,8 +368,22 @@ describe("foundation fixture boundaries", () => {
     const role = resources.find((resource) => resource.kind === "Role");
 
     expect(resources[0]).toMatchObject({ kind: "Namespace", metadata: { name: names.views } });
+    // Two namespaces, each before what is put into it, and nothing outside them. No Secret is among the
+    // fixtures: no object carries data.
     expect(
-      resources.slice(1).every((resource) => resource.metadata.namespace === names.views && !("data" in resource)),
+      resources.filter((resource) => resource.kind === "Namespace").map((resource) => resource.metadata.name),
+    ).toEqual([names.views, names.defaults]);
+    expect(
+      resources
+        .filter((resource) => resource.kind !== "Namespace")
+        .every(
+          (resource) =>
+            [names.views, names.defaults].includes(resource.metadata.namespace ?? "") &&
+            resources.findIndex((other) => other.metadata.name === resource.metadata.namespace) <
+              resources.indexOf(resource) &&
+            resource.kind !== "Secret" &&
+            !("data" in resource),
+        ),
     ).toBe(true);
     expect(
       resources.every(
@@ -679,9 +697,101 @@ describe("foundation fixture boundaries", () => {
     // One location of the installation is marked default, and it is the one that takes the backups.
     expect(
       resources
-        .filter((resource) => (resource.spec as { default?: boolean } | undefined)?.default === true)
+        .filter(
+          (resource) =>
+            resource.metadata.namespace === fixtureNames(run).views &&
+            (resource.spec as { default?: boolean } | undefined)?.default === true,
+        )
         .map((resource) => resource.metadata.name),
     ).toEqual(["views-available"]);
+  });
+
+  it("gives the views the locations of every state, none of them validated by a controller", () => {
+    const names = fixtureNames(run);
+    const started = Date.parse("2026-09-28T07:31:17.123Z");
+    const resources = viewFixtures("synthetic-owner", run, started);
+    const locations = Object.fromEntries(
+      resources
+        .filter((resource) => resource.kind === "BackupStorageLocation")
+        .map((resource) => [resource.metadata.name, resource]),
+    );
+    const status = (name: string) => locations[name].status as Record<string, string> | undefined;
+    const spec = (name: string) => locations[name].spec as Record<string, unknown>;
+
+    expect(Object.keys(locations)).toEqual([
+      "views-available",
+      "views-archive",
+      LONG_LOCATION_NAME,
+      "views-unreported",
+      "views-unavailable",
+      "views-with-credential",
+      "defaults-older",
+      "defaults-newer",
+    ]);
+    // What a synthetic location reports is of a validation that is days old, however young the environment
+    // is: later than three times its frequency, and than the hour of one that names none.
+    expect(status("views-available")).toEqual({
+      phase: "Available",
+      lastValidationTime: "2026-09-27T07:00:00Z",
+      lastSyncedTime: "2026-09-27T07:00:00Z",
+    });
+    expect(spec("views-available")).toMatchObject({ validationFrequency: "1m0s", backupSyncPeriod: "1m0s" });
+    expect(status("views-archive")).toEqual({ phase: "Available", lastValidationTime: "2026-09-25T07:00:00Z" });
+    expect(spec("views-archive")).not.toHaveProperty("validationFrequency");
+    expect(locations["views-unreported"]).not.toHaveProperty("status");
+    expect(status("views-unavailable")).toEqual({
+      phase: "Unavailable",
+      message: UNAVAILABLE_MESSAGE,
+      lastValidationTime: "2026-09-26T07:00:00Z",
+    });
+    expect(UNAVAILABLE_MESSAGE.split("\n").length).toBeGreaterThanOrEqual(3);
+    // The Secrets a location names are names: the fixtures hold none, and the address of the storage
+    // carries a query, which a view leaves out.
+    expect(spec("views-with-credential")).toMatchObject({
+      credential: { name: "views-credential", key: "cloud" },
+      objectStorage: { caCertRef: { name: "views-storage-ca", key: "ca.crt" } },
+      validationFrequency: "0s",
+      backupSyncPeriod: "0s",
+    });
+    expect((spec("views-with-credential").config as Record<string, string>).s3Url).toMatch(/\?synthetic=left-out$/);
+    expect((spec("views-with-credential").config as Record<string, string>).s3Url).not.toContain("@");
+    expect(resources.some((resource) => resource.kind === "Secret")).toBe(false);
+    // Two locations marked default in a namespace of their own, the one that is read only first. The one
+    // the release would keep is the one created last, which is the first by name too.
+    const defaults = resources.filter((resource) => resource.metadata.namespace === names.defaults);
+
+    expect(defaults.map((resource) => [resource.kind, resource.metadata.name])).toEqual([
+      ["BackupStorageLocation", "defaults-older"],
+      ["BackupStorageLocation", "defaults-newer"],
+    ]);
+    expect(defaults.map((resource) => resource.spec)).toMatchObject([
+      { default: true, accessMode: "ReadOnly" },
+      { default: true, accessMode: "ReadWrite" },
+    ]);
+    // The name, the bucket and the prefix that are as long as they can be.
+    expect([LONG_LOCATION_NAME.length, LONG_BUCKET_NAME.length]).toEqual([63, 63]);
+    expect(LONG_LOCATION_NAME).toMatch(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/);
+    expect(spec(LONG_LOCATION_NAME).objectStorage).toEqual({ bucket: LONG_BUCKET_NAME, prefix: LONG_PREFIX });
+    expect(LONG_PREFIX.split("/").length).toBeGreaterThan(10);
+    // Every synthetic location with a validation has one that is days old.
+    for (const location of Object.values(locations)) {
+      const validated = (location.status as { lastValidationTime?: string } | undefined)?.lastValidationTime;
+
+      if (validated !== undefined) expect(started - Date.parse(validated)).toBeGreaterThanOrEqual(86_400_000);
+    }
+    // The snapshot locations: one with a phase nothing of the release wrote, one as the release leaves it.
+    expect(
+      resources
+        .filter((resource) => resource.kind === "VolumeSnapshotLocation")
+        .map((resource) => [
+          resource.metadata.name,
+          resource.status,
+          (resource.spec as { credential?: object }).credential,
+        ]),
+    ).toEqual([
+      ["views-snapshots", { phase: "Available" }, undefined],
+      ["views-snapshots-unreported", undefined, { name: "views-credential", key: "cloud" }],
+    ]);
   });
 
   it("gives the views the schedules Velero has not read, and what it writes into the ones it read", () => {
@@ -804,7 +914,14 @@ describe("foundation fixture boundaries", () => {
           backup.metadata.labels?.[FIXTURE_LABEL] === run,
       ),
     ).toBe(true);
-    expect(fixtureNamespaces(run)).toEqual([names.source, names.restored, names.static, names.views, names.scale]);
+    expect(fixtureNamespaces(run)).toEqual([
+      names.source,
+      names.restored,
+      names.static,
+      names.views,
+      names.defaults,
+      names.scale,
+    ]);
   });
 
   it("gives the reader the kubeconfig of the environment with its own credential and its namespace", () => {

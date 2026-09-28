@@ -2,6 +2,7 @@ import { Renderer } from "@freelensapp/extensions";
 import { observer } from "mobx-react";
 import React from "react";
 import { backupScope } from "../../common/backup-scope";
+import { manyDefaultsText } from "../../common/location-view";
 import { durationText, signalText } from "../../common/operation-text";
 import { operationTimeText } from "../../common/operation-time";
 import { isStale } from "../../common/read-state";
@@ -111,18 +112,44 @@ function HistoryList({ history, shown }: { history: Extract<History, { state: "l
   );
 }
 
-// Where the backups go when the template names no location. With more than one location marked default
-// the view does not say which one takes a backup: the release has not settled it.
-function defaultText(fallback: TemplateReferences["fallback"], location: string | undefined): string {
+// Where the backups go when the template names no location, with the way to each location that is named.
+// With more than one location marked default the view does not say which one takes a backup: the release
+// has not settled it.
+function DefaultLocation({ fallback, location }: { fallback: TemplateReferences["fallback"]; location?: string }) {
+  const way = (name: string) => <ViewLink target={{ kind: "storage-location", name }} />;
+
   switch (fallback?.state) {
     case "marked":
-      return `Not set: Velero uses the location marked default, ${fallback.name}${location ? ` (${location})` : ""}.`;
+      return (
+        <>
+          Not set: Velero uses the location marked default, {way(fallback.name)}
+          {location ? ` (${location})` : ""}.
+        </>
+      );
     case "many-marked":
-      return `Not set, and ${fallback.names.length} locations of this installation are marked default: ${fallback.names.join(", ")}. The release sends a backup to the first of them it finds, and keeps marked the one created last, which is ${fallback.kept}.`;
+      return (
+        <>
+          Not set, and {fallback.names.length} locations of this installation are marked default:{" "}
+          {fallback.names.map((name, index) => (
+            <span key={name}>
+              {index ? ", " : ""}
+              {way(name)}
+            </span>
+          ))}
+          . {manyDefaultsText({ state: "many", names: fallback.names, kept: fallback.kept, tied: fallback.tied })}
+        </>
+      );
     case "none-marked":
-      return "Not set, and no location of this installation is marked default: Velero uses the one the server names in its settings, which this view does not read.";
+      return (
+        <>
+          Not set, and no location of this installation is marked default: Velero uses the one the server names in its
+          settings, which this view does not read.
+        </>
+      );
     default:
-      return `Not set. Where the backups go is not known: ${fallback?.reason ?? "the storage locations were not read"}.`;
+      return (
+        <>Not set. Where the backups go is not known: {fallback?.reason ?? "the storage locations were not read"}.</>
+      );
   }
 }
 
@@ -141,7 +168,7 @@ function Template({ references, location }: { references: TemplateReferences; lo
               </Target>
             ) : (
               <span data-testid="velero-schedule-default-location" data-default={fallback?.state}>
-                {defaultText(fallback, location)}
+                <DefaultLocation fallback={fallback} location={location} />
               </span>
             )}
             {references.warning ? (

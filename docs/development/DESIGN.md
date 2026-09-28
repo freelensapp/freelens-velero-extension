@@ -108,7 +108,9 @@ Use stable column IDs and native resize/sort behavior. Preserve the full value i
 tooltips/details when truncating. In a narrow room the secondary columns give their
 room, in this order: the installation namespace in a list narrower than 1,200
 pixels, the age under 1,000, the storage, the source and the duration under 760,
-the start under 640. The installation is the first to go because it is the same in
+the start under 640. Of the locations, the provider and the last sync go under
+760 and the last validation under 640: availability, access mode and default
+stay. The installation is the first to go because it is the same in
 every row and the target bar says it. In a list of 1,000 pixels or more what an
 operation says of a failure, its progress, its start and its duration have the
 room of their words, in whatever way the language of the operator writes a date:
@@ -116,6 +118,12 @@ a window of 1440 by 900 shows them whole, and the name, the source, the phase an
 the storage share what is left. The head of a list is its title, the number of its
 items and its search: in a room narrower than 520 pixels the search goes under the
 other two, and the page is not scrolled sideways.
+The last validation and the last sync of a location are shown by how long ago
+they were, with that a validation is late beside its age, and when they were is
+in the tip and in the view of the location. What is said of a list as a whole is
+over the list, in words: that no storage location is marked default, that more
+than one is, that the phase of a snapshot location is not one the release stands
+behind.
 Prefer semantic missing values such as Unknown or Not reported over an unexplained
 dash. Relative times have absolute timezone-aware values in tooltips; duration
 updates stop only for terminal evidence.

@@ -235,6 +235,16 @@
   color: var(--colorWarning);
 }
 
+/* What is said to who does not see a mark, and takes no room from who does. */
+.spoken {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .signalNone {
   color: var(--colorOk);
 }
@@ -404,7 +414,8 @@
   flex-grow: 2;
 }
 
-.list :global(.TableCell.started) {
+.list :global(.TableCell.started),
+.list :global(.TableCell.validated) {
   flex-grow: 1.6;
 }
 
@@ -454,6 +465,20 @@
   .list :global(.TableCell.duration) {
     min-width: calc(13.5ch + 16px);
   }
+
+  /* How long ago a location was validated, with the mark of a validation that is late. */
+  .list :global(.TableCell.validated) {
+    min-width: calc(12ch + 40px);
+  }
+}
+
+/* The access mode and the default of a location are two of its three facts: where the room is not the
+   narrowest, their words and the ones of their heads are read whole. */
+@container (min-width: 600px) {
+  .list :global(.TableCell.access),
+  .list :global(.TableCell.marked) {
+    min-width: calc(14ch + 16px);
+  }
 }
 
 /* The head of a list is its title, the number of its items and its search, which the host gives a width
@@ -488,13 +513,16 @@
 
 @container (max-width: 760px) {
   .list :global(.TableCell.storage),
-  .list :global(.TableCell.duration) {
+  .list :global(.TableCell.duration),
+  .list :global(.TableCell.provider),
+  .list :global(.TableCell.synced) {
     display: none;
   }
 }
 
 @container (max-width: 640px) {
-  .list :global(.TableCell.started) {
+  .list :global(.TableCell.started),
+  .list :global(.TableCell.validated) {
     display: none;
   }
 }

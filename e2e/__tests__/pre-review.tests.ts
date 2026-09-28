@@ -27,9 +27,11 @@ const RESTORES = cluster.RESTORES;
 const RESTORED = "restore-mapped";
 const LONG_RESTORE = cluster.LONG_RESTORE_NAME;
 // The views that are checked, each in both themes at every size.
-const VIEWS = 16;
+const VIEWS = 23;
 const SCHEDULES = cluster.SCHEDULES;
 const SCHEDULED = "views-history";
+const STORAGE = cluster.STORAGE_LOCATIONS;
+const SNAPSHOT = cluster.SNAPSHOT_LOCATIONS;
 
 describe("pre-review of the views", () => {
   let started: velero.StartedApplication;
@@ -392,6 +394,145 @@ describe("pre-review of the views", () => {
       expect(found("schedule-workspace")).toEqual({});
       expect(found("schedule-workspace-history")).toEqual({});
       expect(found("schedule-workspace-template")).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows the lists of the locations in both themes, at every size",
+    async () => {
+      await cluster.showList(frame);
+      await cluster.openPage(frame, STORAGE);
+      await cluster.waitForList(frame, STORAGE);
+      await everyLayout("storage-locations", undefined, STORAGE);
+      expect(found("storage-locations")).toEqual({});
+      await cluster.openPage(frame, SNAPSHOT);
+      await cluster.waitForList(frame, SNAPSHOT);
+      await everyLayout("snapshot-locations", undefined, SNAPSHOT);
+      expect(found("snapshot-locations")).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "opens a location and what uses it with the keyboard alone, and comes back to its row",
+    async () => {
+      await velero.setColorTheme(started.app, started.window, "Dark");
+      await velero.setWindowSize(started.app, 1440, 900);
+      await velero.setZoom(started.app, 1);
+      await cluster.showList(frame);
+      await cluster.openPage(frame, STORAGE);
+      await cluster.waitForList(frame, STORAGE);
+      await frame.locator("[data-testid=velero-refresh]").focus();
+      await cluster.tabTo(frame, (focus) => focus === "views-available", 80);
+      await started.window.keyboard.press("Enter");
+      await frame.waitForSelector('[data-testid=velero-storage-location-name] >> text="views-available"', {
+        timeout: 60_000,
+      });
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      // After the way back, what uses the location: the newest backup that names it, then the schedules.
+      const reached = await cluster.tabTo(frame, (focus) => focus.startsWith("velero-open-backup-"), 5);
+
+      expect(reached).toBeLessThanOrEqual(5);
+      const backup = (await cluster.focused(frame)).replace("velero-open-backup-", "");
+
+      await started.window.keyboard.press("Enter");
+      await frame.waitForSelector(`[data-testid=velero-backup-name] >> text="${backup}"`, { timeout: 60_000 });
+      await started.window.keyboard.press("Escape");
+      await frame.waitForSelector('[data-testid=velero-storage-location-name] >> text="views-available"', {
+        timeout: 60_000,
+      });
+      await cluster.tabTo(frame, (focus) => focus.startsWith("velero-open-schedule-"), 8);
+      const schedule = (await cluster.focused(frame)).replace("velero-open-schedule-", "");
+
+      await started.window.keyboard.press("Enter");
+      await frame.waitForSelector(`[data-testid=velero-schedule-name] >> text="${schedule}"`, { timeout: 60_000 });
+      await started.window.keyboard.press("Escape");
+      await frame.waitForSelector('[data-testid=velero-storage-location-name] >> text="views-available"', {
+        timeout: 60_000,
+      });
+      await started.window.keyboard.press("Escape");
+      await frame.waitForSelector("[data-testid=velero-storage-location-workspace]", {
+        state: "detached",
+        timeout: 60_000,
+      });
+      expect(await cluster.focusOn(frame, "views-available")).toBe("views-available");
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows the workspace of a location, a message of many lines and what uses it in both themes, at every size",
+    async () => {
+      await cluster.showList(frame);
+      await cluster.openPage(frame, STORAGE);
+      await cluster.waitForList(frame, STORAGE);
+      await cluster.openWorkspace(frame, "views-unavailable", STORAGE);
+      // What Velero says of the location, in the lines it says it in, is read whole at every size.
+      await everyLayout(
+        "storage-location-workspace",
+        async () => {
+          const status = (await frame.locator("[data-testid=velero-storage-location-status]").innerText()).replace(
+            /\s+/g,
+            " ",
+          );
+
+          expect(status).toContain("and the second attempt ended as the first.");
+        },
+        STORAGE,
+      );
+      await cluster.closeWorkspace(frame);
+      // A name, a bucket and a prefix as long as they can be are read whole, at every size.
+      await cluster.openWorkspace(frame, cluster.LONG_LOCATION_NAME, STORAGE);
+      await everyLayout(
+        "long-location-workspace",
+        async () => {
+          const storage = (await frame.locator("[data-testid=velero-storage-location-storage]").innerText()).replace(
+            /\s+/g,
+            " ",
+          );
+
+          expect(await frame.locator("[data-testid=velero-storage-location-name]").innerText()).toBe(
+            cluster.LONG_LOCATION_NAME,
+          );
+          expect(storage).toContain("bucket-with-a-name-as-long-as-the-name-of-a-bucket-can-be-in-s3");
+          expect(storage).toContain("kept/for/a/year");
+        },
+        STORAGE,
+      );
+      await cluster.closeWorkspace(frame);
+      await cluster.openWorkspace(frame, "views-with-credential", STORAGE);
+      await everyLayout(
+        "storage-location-workspace-storage",
+        async () => {
+          await frame.locator("[data-testid=velero-storage-location-credentials]").scrollIntoViewIfNeeded();
+        },
+        STORAGE,
+      );
+      await cluster.closeWorkspace(frame);
+      await cluster.openWorkspace(frame, "views-available", STORAGE);
+      await everyLayout(
+        "storage-location-workspace-users",
+        async () => {
+          await frame.locator("[data-testid=velero-location-users]").scrollIntoViewIfNeeded();
+        },
+        STORAGE,
+      );
+      await cluster.closeWorkspace(frame);
+      await cluster.openPage(frame, SNAPSHOT);
+      await cluster.waitForList(frame, SNAPSHOT);
+      await cluster.openWorkspace(frame, "views-snapshots", SNAPSHOT);
+      await everyLayout("snapshot-location-workspace", undefined, SNAPSHOT);
+      await cluster.closeWorkspace(frame);
+      for (const view of [
+        "storage-location-workspace",
+        "long-location-workspace",
+        "storage-location-workspace-storage",
+        "storage-location-workspace-users",
+        "snapshot-location-workspace",
+      ]) {
+        expect([view, found(view)]).toEqual([view, {}]);
+      }
     },
     TIMEOUT,
   );

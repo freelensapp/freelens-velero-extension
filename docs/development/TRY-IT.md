@@ -45,7 +45,8 @@ wrote. Take the environment down first, with `pnpm demo:down`.
 | --- | --- |
 | `velero-demo` | The installation: Velero, its storage location, the real backup and its restore |
 | `velero-static-<run>` | A backup and a restore for every phase, three schedules, storage locations that are available and not |
-| `velero-views-<run>` | A backup with every reference in place, backups that name what is not there, a name of 63 characters, a backup that reports nothing; a restore into two namespaces, one that failed its validation, one of a backup that is not there; a schedule with the history of a week, and the schedules Velero has not read |
+| `velero-views-<run>` | A backup with every reference in place, backups that name what is not there, a name of 63 characters, a backup that reports nothing; a restore into two namespaces, one that failed its validation, one of a backup that is not there; a schedule with the history of a week, and the schedules Velero has not read; storage locations that are late, unavailable, silent, and one that names its Secrets |
+| `velero-defaults-<run>` | Two storage locations marked default, and nothing else |
 | `velero-scale-<run>` | A thousand backups, a thousand restores and no storage location |
 
 `<run>` is the identifier of the fixtures, eight characters the second command
@@ -113,13 +114,28 @@ Then the Schedules:
 | Open `views-zoned` | The time zone the expression names. The others are read in the time zone of the server, which the view does not read: no view says when a schedule runs next |
 | Open `schedule-unread`, `schedule-unread-paused`, `schedule-skipping` | What Velero has not read, and what it will do when it reads it. A schedule Velero read says whether the run that is due is skipped, which Velero wrote into it |
 
+Then the locations, from Backup Storage Locations in the sidebar:
+
+| Step | What to look at |
+| --- | --- |
+| Select `velero-demo` | The location of the installation, which Velero validates every minute: available, validated seconds ago. It names no access mode, and the view says what the release does then |
+| Select `velero-views-<run>` | Six locations. Availability, access mode and default are three columns. No controller validates these: each validation is days old, and has the mark of one that is late; the tip of the cell says when it was and what it means. `views-unreported` reports nothing, and has the mark of what is not known. One has a name as long as a name can be |
+| Open `views-archive` | Available and read-only, side by side: it does not take new backups. It names no frequency: the one of the server is not read, and the validation is late by the hour |
+| Open `views-unavailable` | What Velero says of the location, in the lines it says it in, and what the release refuses of a location it does not report available |
+| Open `views-with-credential` | Where it points: the address without its query, which the view says it left out, and the verification of TLS that is turned off. The Secrets by their names: none is read. The validation and the sync are turned off |
+| Open `views-available`, then Used by | The backups that name it, by how they ended, with the newest, the schedules whose template names it, and the ones that name no location, whose backups go to the one marked default. Each leads to its view, and the location is the way back |
+| Select `velero-static-<run>` | No location is marked default, and the list says so. Open `fixture-unavailable`: every backup and every schedule of the namespace depends on it |
+| Select `velero-defaults-<run>` | Two locations marked default: the list names both, says which one the release would keep, and picks none |
+| Volume Snapshot Locations, `velero-views-<run>` | The phase as it is written, with the mark of what is not known: the list says that the release neither writes nor checks it |
+| From a backup, a restore or a schedule | The locations they name lead to the view of the location, over the list the first view was opened from |
+
 With the keyboard alone: Tab reaches the choices, the search and the names of the
 rows, Enter opens, Tab reaches the ways to the other views and the marks of a line
 of time, Escape comes back and the focus is on the row that was open.
 
 For the restricted access, add `views-reader.json` in the same way. It has the
 same name as the first in the catalog: it is the one whose Velero asks for a
-namespace instead of offering three. Name `velero-views-<run>`: the backups are
+namespace instead of offering four. Name `velero-views-<run>`: the backups are
 read, and the workspace of one says which of its references cannot be. With
 `views-reader-of-restores.json` it is the other way round: the restores are read,
 and the source of one is said denied, which is not said absent; the schedules are

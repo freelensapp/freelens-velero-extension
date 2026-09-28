@@ -866,9 +866,15 @@ describe("template and restores of a schedule", () => {
 
     expect(fallback.getAttribute("data-default")).toBe("many-marked");
     expect(fallback.textContent).toBe(
-      "Not set, and 2 locations of this installation are marked default: first, second. The release sends a backup to the first of them it finds, and keeps marked the one created last, which is second.",
+      "Not set, and 2 locations of this installation are marked default: first, second. The reviewed release sends a backup that names no location to the first of them it finds, and keeps marked the one created last, which is second.",
     );
     expect(fallback.textContent).not.toContain("Velero uses the location marked default");
+    // Each one that is named is a way to its view.
+    expect(
+      within(fallback)
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("data-testid")),
+    ).toEqual(["velero-open-storage-location-first", "velero-open-storage-location-second"]);
     expect(within(workspace).getByTestId("velero-schedule-location-warning").textContent).toContain(
       "second: The release refuses a backup sent to this location: it is read-only.",
     );

@@ -126,6 +126,8 @@ describe("views of the first milestone", () => {
         "velero-backups": "Backups",
         "velero-restores": "Restores",
         "velero-schedules": "Schedules",
+        "velero-storage-locations": "Backup Storage Locations",
+        "velero-snapshot-locations": "Volume Snapshot Locations",
       });
       await frame.waitForSelector("[data-testid=velero-state-choose]", { timeout: 60_000 });
       expect((await cluster.target(frame)).cluster).toBe(cluster.E2E_KUBE_CONTEXT);
@@ -252,12 +254,13 @@ describe("views of the first milestone", () => {
       expect(await frame.locator("[data-testid=velero-backup-counts-note]").innerText()).toContain(
         "The status reports 1 error and 0 warnings",
       );
-      // A workspace that only reads: nothing in it asks Velero for a log, and nothing edits or deletes.
+      // A workspace that only reads: the way back and the way to the location of the backup. Nothing in
+      // it asks Velero for a log, and nothing edits or deletes.
       expect(
         (await frame.locator("[data-testid=velero-backup-workspace] button").allInnerTexts()).map((text) =>
           text.replace(/\s+/g, " ").trim(),
         ),
-      ).toEqual(["arrow_back Backups"]);
+      ).toEqual(["arrow_back Backups", "fixture-unavailable"]);
       expect(await cluster.layoutProblems(frame)).toEqual([]);
       await cluster.captureScreenshot(frame, "dark-backup-workspace");
       await cluster.closeWorkspace(frame);
@@ -364,7 +367,7 @@ describe("views of the first milestone", () => {
       expect(restores.state).toBe("listed");
       expect(restores.text).toContain("restore-of-daily-completed (Completed)");
       expect(restores.text).toContain("restore-of-daily-partiallyfailed (Partially failed)");
-      // The schedule and each restore are ways to their views: the locations have none of their own yet.
+      // The schedule, the locations and each restore are ways to their views.
       expect(
         (await frame.locator("[data-testid=velero-backup-workspace] button").allInnerTexts()).map((text) =>
           text.replace(/\s+/g, " ").trim(),
@@ -372,6 +375,8 @@ describe("views of the first milestone", () => {
       ).toEqual([
         "arrow_back Backups",
         "views-daily",
+        "views-available",
+        "views-snapshots",
         "restore-mapped",
         "restore-of-daily-completed",
         "restore-of-daily-partiallyfailed",

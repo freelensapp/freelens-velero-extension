@@ -1,6 +1,6 @@
 # SPEC-0007: Read-Only Storage And Snapshot Locations
 
-- **Status:** Approved
+- **Status:** Implemented
 - **Date:** 2026-09-28
 - **Milestone / tasks:** M2 / T1.6
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`; compared with v1.18.3, `cd3fd10b093dad32ee284e27fcba4e9073c9c94b`
@@ -183,7 +183,96 @@ does not read as a fault or as a success. Record role, date and verdict.
 
 ## Evidence And Deviations
 
-Approved on 2026-09-28. No implementation, tests or runtime evidence yet. The two schemas are the same in
-the reviewed release and in the one after it: see the
+Approved on 2026-09-28. The two schemas are the same in the reviewed release and
+in the one after it: see the
 [recon](../development/RECON-T0.1.md#upstream-drift-watch), which holds the facts
 of the reviewed release this spec rests on.
+
+What is [shown of a location](../../src/common/location-view.ts), the
+[durations](../../src/common/go-duration.ts) the API writes and
+[what uses a location](../../src/common/location-users.ts) are pure functions on
+plain data; the lists of the
+[storage locations](../../src/renderer/pages/storage-locations-page.tsx) and of
+the [snapshot locations](../../src/renderer/pages/snapshot-locations-page.tsx)
+are the native list of the host, given what the extension read; the workspaces
+of a [storage location](../../src/renderer/pages/storage-location-workspace.tsx)
+and of a [snapshot location](../../src/renderer/pages/snapshot-location-workspace.tsx)
+are of the extension, with [parts](../../src/renderer/components/location-parts.tsx)
+they share; the sections in the details of the host read a location through the
+same helpers. The page, the frame of a view and the store of a list are the ones
+written for every kind with the [Restores](SPEC-0005-restore-read-only.md).
+
+| Check | Evidence |
+| --- | --- |
+| LOC-01 | Component: every column has its order and its part in the search, with the message of Velero. Packaged: the columns, a search by the access mode, by a name and by what is late, an order by the access mode read from the rows, a column made wider; a location opened and closed leaves them as they were |
+| LOC-02 | Component: the columns of the snapshot locations, an order for each, the rows put in order by three of them, and the search. Packaged: the columns and a search by the provider |
+| LOC-03 | Component and packaged: a row of each list opens its workspace; the details of the host show the same availability, access mode, default, last validation and last sync, and lead to the workspace for the installation selected. Packaged: the API server counts no read of the five families while a location is opened between two reads of the installation |
+| LOC-04 | Unit: Available, Unavailable with and without a message, no status, a phase that is not known, each with its words and its mark. Component: a location that reports nothing and one that reports what is not known have the mark of what is not known. Packaged: the same for the one that reports nothing, the schema of the cluster admitting no other phase; the message of Velero is the tip of the mark. Component and packaged: a snapshot location that reports Available has the mark of what is not known, and the list says why |
+| LOC-05 | Unit, with the clock given: a frequency with a fresh and an old validation, a frequency of seconds, a frequency of zero, none, one that cannot be read or is below zero, a phase with no validation time, a validation the clock of the desktop is behind of. Component: a validation later than three times the frequency, later than one hour, one that is not late, never validated, a frequency that is turned off, not set and not read, each with its words in the view; the mark and the words of a late validation in the list. Packaged: the location the controller of the environment validates every minute is not late, and the synthetic ones, which no controller validates, are |
+| LOC-06 | Unit and component: ReadWrite, ReadOnly, not set and a mode that is not known; the mode of the status, which disagrees with the one of the spec, is not shown as the mode. Packaged: the location of the installation names no mode, which the suite reads on the cluster before it expects the view to say so |
+| LOC-07 | Unit, component and packaged: one location marked default, none, and two in a namespace of their own: what the list says of each, which of the two the release keeps, and no choice made for the operator |
+| LOC-08 | Unit and component: a configuration of many keys and none; the key of the verification with every value the release reads as true and with the ones it does not, for the backend of AWS by each of its names and for another one; a URL with its user information and its query, a password that holds a slash, a question mark or a hash, an address without its scheme, an address the message of Velero quotes; a sync period of zero and one below zero; no last sync. Packaged: the query of an address left out and said left out, the verification turned off said in words |
+| LOC-09 | Unit: every path the views have is under `/apis/velero.io/`, and the reader asks the host for none that is not written as one of theirs: the paths of the Secrets, the ones that leave the group by dots, written as they are or as an address encodes them, a query, a name of an object; a certificate written in the object shown by its size. Component: every address a view asked is of the kinds of Velero. Packaged: the identity that reads a part, which the API server refuses the Secrets to, shows the two Secrets by their names with nothing of the view denied; the Secrets that are named are not in the cluster |
+| LOC-10 | Unit: the backups and the schedules that name a location, a backup that carries its location in its label alone, the ones of another installation, none, what was not read, not served and denied; the schedules that name no location, beside a location marked default. Component and packaged: the counts with the newest backup, which leads to its view; none; the backups denied to the second reader, which are not none; what the release refuses beside a location that is unavailable, and beside one that reports nothing |
+| LOC-11 | Component and packaged: from a backup to its storage location and to its snapshot location, from a restore to the location of its backup, from a schedule to the location of its template and to the one marked default when its template names none, and each way back; a location that is not there is a name with no way. Packaged: the changes of the address are counted, and each step is one |
+| LOC-12 | Component: the lists are given no selection, no menu and no command; a view has the way back and the ways to the other views, and no other control. Packaged: no checkbox, no menu; a right click, Delete and Backspace are followed by a wait in which no menu and no dialog appears, on both lists, while the list the host shows of the same objects has the boxes and the menu that are looked for; the objects unchanged |
+| LOC-13 | Component: the locations of each kind that were read kept when the next read fails, in the list and in the view, with when they were read; what uses a location kept and said of an earlier read; a late answer of the installation selected before; a location created again, said in words; no timer left when the view closes |
+| LOC-14 | Pre-review: the two lists, the workspace of a storage location with a message of many lines, the one of a location whose name and bucket have 63 characters and whose prefix has many parts, its storage with its credentials, what uses it, and the workspace of a snapshot location, in both themes, at the two sizes and at twice the zoom; a location opened, followed to a backup and to a schedule and closed with the keyboard alone. Packaged: no column of the list has its words cut but the name that is as long as a name can be, which is whole in its tip |
+| LOC-15 | Unit: the reader sends `GET` and nothing else. Component: for each of the two lists empty, not served, denied, not answered and stale, each with its words, and nothing said of a list before it is read; for the views absent, denied and stale; for each part of what uses a location listed, none, denied, failed and of an earlier read. Packaged: the second reader, to which the backups are denied, and the first, to which the snapshot locations are; the evidence of DISC-07 of the [discovery](SPEC-0002-installation-discovery.md#evidence-and-deviations) taken with the locations open |
+
+Eighty-three changes made to the code on purpose, one for each rule above that a
+view could get wrong, each made a unit or a component test fail. The pull request
+of the task names them.
+
+What was decided while implementing, inside the requirements:
+
+- **The list shows how long ago a location was validated and synced**, and when
+  it was is in the tip of the cell and in the view. An age is what is read at a
+  glance. A validation that is late has its mark, which is a shape, its words for
+  who does not see the mark, and the whole sentence in the tip.
+- **What uses the location marked default** has one line more: the schedules
+  whose template names no location, which send their backups there. With more
+  than one marked it says that they go to the first the release finds.
+- **An address is shown without what it may hide wherever it is written**: in a
+  value of the configuration and in what Velero says of a location it could not
+  reach. Where a password holds what ends an authority, everything before the
+  last at sign goes.
+- **What is said of a list as a whole is over the list**: that no location is
+  marked default, that more than one is, and that the phase of a snapshot
+  location is not one the release stands behind.
+- **The fixtures of the locations are among the ones of the views**, which are put
+  in place on an environment that is already up, and not among the static ones.
+  No controller reads either. The two locations marked default are in a
+  namespace of their own, which the discovery finds as an installation.
+- **No controller validates a synthetic location.** What one reports is of a
+  validation that is days old, whatever the age of the environment: the fresh
+  validation of the packaged suites is the one of the location the controller of
+  the environment validates.
+- **The reader asks no path that is not of the kinds of Velero.** The views give
+  it none: it refuses one all the same, whoever gives it, and a test gives it
+  the paths of the Secrets.
+- **A view says what is missing of the families it reads.** The view of a
+  location shows the location, the backups and the schedules: what is denied of
+  the restores is not said over it.
+- **With more than one location marked default**, the list names the one the
+  release would keep, which is the one created last, and says that it is not
+  settled which one it keeps of two created in the same second. The view of a
+  [schedule](SPEC-0006-schedule-read-only.md) reads the same rule, and said of
+  such two that the release keeps the first by name: it is corrected with this
+  slice.
+- **The synthetic locations of the namespace of the phases have a phase and no
+  validation time**, which the release writes together: they are what a view shows
+  of a status that carries one without the other, and the view says never
+  validated, as REQ-082 asks.
+
+An independent review of the change, read only, found three things of weight and
+fifteen smaller ones. They are corrected here, and the facts they rest on are in
+the [recon](../development/RECON-T0.1.md#start-of-the-second-milestone-2026-09-28).
+
+Two deviations from the requirements, which wait for the approval of the lead
+maintainer at the review of the milestone:
+
+| Requirement | What it says | What the views do, and why |
+| --- | --- | --- |
+| REQ-085 | For the provider `aws`, the key `insecureSkipTLSVerify` with the value `true` is marked as the verification of TLS turned off; for the other providers the keys have no such mark | The key is marked with every value the release reads as true, which are six, and for the backend of AWS by each of its names. With another backend the mark says what the release turns off, which is the verification for what it moves with restic: the release reads the key there whatever the provider. A configuration that turns a verification off and has no mark is what the requirement wanted to avoid |
+| REQ-082 | With a frequency above zero, the availability may be out of date when the last validation is older than three times the frequency | The bound is three times the frequency and one minute at least. The release looks every ten seconds for what is due and the views read every fifteen: with a frequency of seconds a location validated in time would be said late between two reads. The note says that the age is counted by the clock of the machine that shows it |

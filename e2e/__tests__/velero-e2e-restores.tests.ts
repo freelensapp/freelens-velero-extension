@@ -317,11 +317,13 @@ describe("views of the restores", () => {
       expect(await workspace.locator("[data-testid=velero-restore-source-note]").innerText()).toContain(
         "the object does not say which of the two was submitted",
       );
-      // A view that only reads: the way back, and the ways to the views of the backup and of the schedule.
+      // A view that only reads: the way back, and the ways to the views of the backup, of the schedule and
+      // of the location the backup is in.
       expect((await workspace.locator("button").allInnerTexts()).map(text)).toEqual([
         "arrow_back Restores",
         SCHEDULED,
         "views-daily",
+        "views-available",
       ]);
       expect(await workspace.locator("a, input, select, textarea").count()).toBe(0);
       expect(await cluster.notices(frame, [])).toEqual({});

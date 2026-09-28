@@ -2,9 +2,11 @@
 // open. The address holds them in the order they were opened: the last one is shown, and the way back leads
 // to the one before it, or to the list when there is none.
 
+import { FAMILIES } from "./discovery";
+
 import type { Family } from "./discovery";
 
-export const VIEW_KINDS = ["backup", "restore", "schedule"] as const;
+export const VIEW_KINDS = ["backup", "restore", "schedule", "storage-location", "snapshot-location"] as const;
 export type ViewKind = (typeof VIEW_KINDS)[number];
 
 export interface ViewTarget {
@@ -12,11 +14,25 @@ export interface ViewTarget {
   name: string;
 }
 
-// What is read of the installation to show a view of each kind, and how the kind is called.
-export const VIEWS: Record<ViewKind, { family: Family; title: string; noun: string }> = {
-  backup: { family: "backups", title: "Backups", noun: "backup" },
-  restore: { family: "restores", title: "Restores", noun: "restore" },
-  schedule: { family: "schedules", title: "Schedules", noun: "schedule" },
+// What is read of the installation to show a view of each kind, and how the kind is called. A view shows
+// something of the families it reads: what is missing of the others is not said over it.
+export const VIEWS: Record<ViewKind, { family: Family; reads: readonly Family[]; title: string; noun: string }> = {
+  backup: { family: "backups", reads: FAMILIES, title: "Backups", noun: "backup" },
+  restore: { family: "restores", reads: FAMILIES, title: "Restores", noun: "restore" },
+  schedule: { family: "schedules", reads: FAMILIES, title: "Schedules", noun: "schedule" },
+  // A location is shown with what uses it, which is the backups and the schedules that name it.
+  "storage-location": {
+    family: "storageLocations",
+    reads: ["backups", "schedules", "storageLocations"],
+    title: "Backup Storage Locations",
+    noun: "backup storage location",
+  },
+  "snapshot-location": {
+    family: "snapshotLocations",
+    reads: ["backups", "schedules", "snapshotLocations"],
+    title: "Volume Snapshot Locations",
+    noun: "volume snapshot location",
+  },
 };
 
 // How many views the address keeps: a path longer than this loses where it started from.

@@ -785,8 +785,9 @@ describe("template of a schedule", () => {
     });
     const found = templateReferences(asking({}), marked);
 
-    // Of the ones created at the same time the release keeps the first it compared, which is the first by name.
-    expect(found.fallback).toEqual({ state: "many-marked", names: ["a", "b", "c"], kept: "b" });
+    // Of the ones created in the same second the release keeps the first of the list it is answered with,
+    // which the view does not know: it names the ones it is among, and picks none.
+    expect(found.fallback).toEqual({ state: "many-marked", names: ["a", "b", "c"], tied: ["b", "c"] });
     // Each one that does not take a backup is named with its reason: a backup may go to any of them.
     expect(found.warning).toBe(
       "b: The release refuses a backup sent to this location: it is read-only. c: The release refuses a backup sent to this location: Velero reports it Unavailable.",
