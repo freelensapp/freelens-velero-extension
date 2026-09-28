@@ -1,5 +1,6 @@
 import { BackupWorkspace } from "./backup-workspace";
 import { RestoreWorkspace } from "./restore-workspace";
+import { ScheduleWorkspace } from "./schedule-workspace";
 
 import type { OpenViewProps } from "../components/family-page";
 
@@ -9,6 +10,8 @@ export function OpenView({ target, ...props }: OpenViewProps) {
   switch (target.kind) {
     case "restore":
       return <RestoreWorkspace name={target.name} {...props} />;
+    case "schedule":
+      return <ScheduleWorkspace name={target.name} {...props} />;
     default:
       return <BackupWorkspace name={target.name} {...props} />;
   }

@@ -4,7 +4,7 @@
 
 import type { Family } from "./discovery";
 
-export const VIEW_KINDS = ["backup", "restore"] as const;
+export const VIEW_KINDS = ["backup", "restore", "schedule"] as const;
 export type ViewKind = (typeof VIEW_KINDS)[number];
 
 export interface ViewTarget {
@@ -16,6 +16,7 @@ export interface ViewTarget {
 export const VIEWS: Record<ViewKind, { family: Family; title: string; noun: string }> = {
   backup: { family: "backups", title: "Backups", noun: "backup" },
   restore: { family: "restores", title: "Restores", noun: "restore" },
+  schedule: { family: "schedules", title: "Schedules", noun: "schedule" },
 };
 
 // How many views the address keeps: a path longer than this loses where it started from.

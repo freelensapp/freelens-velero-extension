@@ -3,7 +3,7 @@
 Date: 2026-09-28
 
 Status: the foundation is complete and the first views are in place: the discovery of
-the installation, the Backups and the Restores, read only. The diagnostics, the IPC between the
+the installation, the Backups, the Restores and the Schedules, read only. The diagnostics, the IPC between the
 processes and the actions are not implemented: their sections below are the design
 their specs start from.
 
@@ -52,9 +52,9 @@ compatible with v1.10.3; Freelens v2 is explicitly outside the current compatibi
 target. Biome, Knip and Trunk run through `pnpm dlx` at the exact versions the
 scripts name, as in the other extensions.
 Activation asks nothing of a cluster, in either process. Both open the store of the
-preferences; the renderer registers the pages of the Backups and of the Restores,
-their entries of the sidebar and the sections it adds to the details the host shows
-of a Backup and of a Restore.
+preferences; the renderer registers the pages of the Backups, of the Restores and
+of the Schedules, their entries of the sidebar and the sections it adds to the
+details the host shows of each of the three kinds.
 T0.6 additionally exports the main diagnostic modules for compiled contract tests;
 no service, request or IPC handler is registered on activation.
 The renderer is built through electron-vite's preload target to produce the CommonJS
@@ -116,12 +116,12 @@ before changing the client version. The main build replaces undici with
 extension never calls, and the real module installs a dispatcher for the whole
 process when it loads, which inside Freelens is the process of the host. Supported
 `WS_NO_*` build defines disable optional native accelerators without patching the
-library. The 612 tests of the unit run, on the separate modules and on the
-production build, are 17 of the scaffold, 105 of the environment and its fixtures,
+library. The 734 tests of the unit run, on the separate modules and on the
+production build, are 17 of the scaffold, 109 of the environment and its fixtures,
 48 of the diagnostic contracts, 151 of the operation states and of their stages,
-54 of the rules of the discovery, 131 of what the views show of a backup and of a
-restore, of what they refer to and of the views in the address, 29 of the state of
-an installation and of its reader, and 77 of the components. The integration test
+54 of the rules of the discovery, 206 of what the views show of a backup, of a
+restore and of a schedule, of what they refer to and of the views in the address,
+29 of the state of an installation and of its reader, and 120 of the components. The integration test
 covers the installation in the host, the suites of the views what the views do
 in it.
 The electron-vite warning about a missing standalone renderer
@@ -305,6 +305,38 @@ them needs of the renderer is beside what uses it: its
 [page](../../src/renderer/navigation.ts), its
 [component](../../src/renderer/pages/open-view.tsx) and the
 [references](../../src/renderer/components/workspace.tsx) that lead to it.
+
+### The Time Of An Operation And The History Of A Schedule
+
+The [time of an operation](../../src/common/operation-time.ts) is its start time
+when the object reports one and its creation time when it does not. The reviewed
+release writes the start time when the validation of an operation passes: a backup
+that failed its validation has none, and neither has one that waits. What orders
+the operations, and what places them on a line of time, goes by the time of the
+operation and says which of the two it is. Ordered by their start alone, the
+backups of a schedule that all fail their validation would come after every backup
+that started: the newest backup of the schedule would be an old one that
+completed, and the failure would not be seen. That an operation did not start is
+said by its phase: one with no start time in a phase of the work has a start that
+is not reported.
+
+The [history](../../src/common/schedule-history.ts) of a schedule is the backups
+of its namespace that carry its name in the label Velero writes on them, from the
+newest. It is what the cluster holds now: a backup that expired or was deleted is
+not in it. Its counts are of those backups. A history whose backups were not read
+is not known, which is not an empty one. The backups of a read are put in order by
+their schedule once for the read: a list asks for the history of each of its rows
+every time it is drawn.
+
+The line of time is computed by a pure function from the history, the clock and
+the width it is drawn in: each backup at its time between the oldest and now, and
+one mark for the backups that would be drawn over each other, which says how many
+they are and whether one of them failed. Two marks are as far from each other as
+a mark is wide, at least. The line ends at the newest backup when the clock of
+the cluster is ahead of the one that draws it. The width is measured where the
+line is drawn, when it is drawn. Nothing is computed from the cron expression, and nothing is drawn between
+two backups: what a schedule should have done is the adherence of a later
+milestone, which needs the time zone of the server and what the controller skips.
 
 ### Create-Only Adapter Decision
 

@@ -2567,7 +2567,12 @@ function placeViewFixtures(): ReturnType<typeof fixtureNames> {
     "The fixtures of the demo are not in place: run pnpm demo:up",
   );
   const names = fixtureNames(journal.fixtureRun.id);
-  const placed = createViewFixtures({ owner: journal.owner, kubectl, apply: applyOwned }, journal.fixtureRun.id);
+  // The times of the fixtures are taken from when the run was started: a second call asks for the same objects.
+  const placed = createViewFixtures(
+    { owner: journal.owner, kubectl, apply: applyOwned },
+    journal.fixtureRun.id,
+    Date.parse(journal.fixtureRun.started),
+  );
 
   console.log(
     `PASS: ${placed.views} objects of the views in ${names.views}, and ${placed.scale} backups and ${placed.restores} restores of the long lists in ${names.scale}, are in place, outside the reach of the controllers.`,

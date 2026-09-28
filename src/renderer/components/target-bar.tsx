@@ -143,7 +143,15 @@ export const TargetBar = observer(({ installation }: { installation: Installatio
 
 // What is missing of the installation that is shown: a namespace that is not found any more, a kind the
 // cluster does not serve, a family that cannot be read or whose data are of an earlier read.
-export const Coverage = observer(({ installation, families }: { installation: Installation; families: Family[] }) => {
+export interface CoverageProps {
+  installation: Installation;
+  families: Family[];
+  // The families a list takes a column from. What a row says of them says when they are not known; what
+  // no row says is that what it shows of them is of an earlier read.
+  earlier?: Family[];
+}
+
+export const Coverage = observer(({ installation, families, earlier = [] }: CoverageProps) => {
   const entry = installation.entry;
 
   if (entry.state !== "ready") return null;
@@ -156,11 +164,12 @@ export const Coverage = observer(({ installation, families }: { installation: In
       text: `No storage location is in ${entry.namespace} any more and the namespace is not configured. It stays selected: choose another one to change it.`,
     });
   }
-  for (const family of families) {
+  for (const family of [...families, ...earlier.filter((family) => !families.includes(family))]) {
     const read = installation.read(family);
     const reason = REASONS[read.status];
 
     if (!reason) continue;
+    if (!families.includes(family) && !isStale(read)) continue;
     notices.push({
       key: family,
       level: read.status === "failed" ? "error" : "warning",

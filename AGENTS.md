@@ -285,7 +285,10 @@ Build output goes to `out/`.
 - The reviewed release writes no start time into an operation that did not start
   or that failed its validation, and it completes the object of an operation it
   takes. What a view orders by, and what it calls submitted, is checked against
-  the source of the release, in `docs/development/RECON-T0.1.md`.
+  the source of the release, in `docs/development/RECON-T0.1.md`. What is called
+  the newest operation, and what is placed on a line of time, goes by
+  `operationTime`, never by the start alone. A column that shows the start is
+  ordered by the start.
 - The reviewed release writes no counter of zero, and counts when the work of an
   operation ends. A fixture with `errors: 0` is an object no installation shows:
   a view that passes on it may fail on every real one. Read the object the
@@ -297,6 +300,9 @@ Build output goes to `out/`.
   first entry of `clusterPageMenus` that leads to the page has a parent: the
   entries of the lists come before the entry of the group. A page does not render
   `TabLayout`: inside the one of the host it would have its margins twice.
+- A fixture that a view of the milestone needs goes with the fixtures of the views,
+  which `pnpm e2e:views` puts in place on an environment that is already up. The
+  ones of the phases are put in place once, when the environment is created.
 - `pnpm exec biome` does not exist here: `pnpm biome:fix` and `pnpm biome:check`.
 
 ## Architecture And UI

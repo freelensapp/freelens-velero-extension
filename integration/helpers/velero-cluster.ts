@@ -147,10 +147,13 @@ export interface ListOf {
 }
 
 /** The restore of the fixtures with a name as long as a name can be. */
+// How far from each other two marks of a line of time are drawn at least.
+export const MARK_WIDTH = 28;
 export const LONG_RESTORE_NAME = "restore-with-a-name-as-long-as-the-name-of-a-restore-can-be-one";
 
 export const BACKUPS: ListOf = { id: "backups", kind: "backup", menu: "velero-backups" };
 export const RESTORES: ListOf = { id: "restores", kind: "restore", menu: "velero-restores" };
+export const SCHEDULES: ListOf = { id: "schedules", kind: "schedule", menu: "velero-schedules" };
 
 /**
  * Runs the pinned `kubectl` of the test environment against the test cluster,
@@ -189,6 +192,9 @@ export function fixturesReady(): boolean {
     [E2E_VIEWS_NAMESPACE, "backups.velero.io", "views-daily-20260901030000"],
     [E2E_VIEWS_NAMESPACE, "backups.velero.io", "backup-missing-location"],
     [E2E_VIEWS_NAMESPACE, "restores.velero.io", "restore-mapped"],
+    [E2E_VIEWS_NAMESPACE, "schedules.velero.io", "views-history"],
+    [E2E_VIEWS_NAMESPACE, "backups.velero.io", "views-history-0"],
+    [E2E_VIEWS_NAMESPACE, "schedules.velero.io", "schedule-unread"],
     [E2E_SCALE_NAMESPACE, "backups.velero.io", "backup-1000"],
     [E2E_SCALE_NAMESPACE, "restores.velero.io", "restore-1000"],
   ];
@@ -1222,6 +1228,82 @@ export async function reference(
   };
 }
 
+/** The backups a history lists, from the first it shows, and the marks of its line of time, from the oldest. */
+export async function history(
+  frame: Frame,
+): Promise<{ rows: string[]; marks: string[]; over: string[]; width: number }> {
+  const drawn = await frame.$$eval("[data-strip-mark]", (elements) =>
+    elements.map((element) => {
+      const { left, right } = element.getBoundingClientRect();
+
+      return {
+        name: element.getAttribute("data-strip-mark") ?? "",
+        left,
+        right,
+        line: element.parentElement?.getBoundingClientRect().width ?? 0,
+      };
+    }),
+  );
+
+  return {
+    rows: await frame.$$eval("[data-history-row]", (elements) =>
+      elements.map((element) => element.getAttribute("data-history-row") ?? ""),
+    ),
+    marks: drawn.map((mark) => mark.name),
+    // The marks that are drawn over the one before them, by more than the rounding of a pixel.
+    over: drawn.filter((mark, index) => index > 0 && mark.left < drawn[index - 1].right - 1).map((mark) => mark.name),
+    width: drawn[0]?.line ?? 0,
+  };
+}
+
+/** The backups the marks of a line hold, from the oldest: the ones of a mark are written from the newest. */
+export function backupsOnTheLine(marks: string[]): string[] {
+  return marks.flatMap((mark) => mark.split(",").reverse());
+}
+
+/** The mark of a line that holds a backup. */
+export function markOf(marks: string[], backup: string): string {
+  const found = marks.find((mark) => mark.split(",").includes(backup));
+
+  if (!found) throw new Error(`No mark of the line holds ${backup}`);
+
+  return found;
+}
+
+/**
+ * How wide a day is on the line of time of the schedule with a history, in
+ * pixels. The line goes from the oldest backup to now, and the fixtures are
+ * put in place once: in an environment that is some weeks old the days are
+ * closer than a mark is wide, and a mark holds more than one. What a suite
+ * expects of the days, it expects of an environment where each has its mark:
+ * in an older one it stops here, and says what to do.
+ */
+export function dayOnTheLine(width: number, oldest = "views-history-6"): number {
+  const read = kubectlE2E(
+    "get",
+    "backups.velero.io",
+    oldest,
+    "--namespace",
+    E2E_VIEWS_NAMESPACE,
+    "-o",
+    "jsonpath={.status.startTimestamp}",
+  );
+  const from = Date.parse(read.stdout.trim());
+
+  if (read.status !== 0 || !Number.isFinite(from)) throw new Error(`The start of ${oldest} could not be read`);
+  const day = (width * 86_400_000) / (Date.now() - from);
+
+  if (day < 2 * MARK_WIDTH) {
+    throw new Error(
+      `The environment is too old for what this suite expects of the line of time: a day is ${Math.round(day)} pixels ` +
+        `of a line of ${Math.round(width)}, and a mark is ${MARK_WIDTH}. Create the environment again with ` +
+        "`pnpm demo:down` and `pnpm demo:up`.",
+    );
+  }
+
+  return day;
+}
+
 async function shownNotices(frame: Frame): Promise<Record<string, string>> {
   const found = await frame.$$eval("[data-testid^=velero-notice-]", (elements) =>
     elements.map((element) => [
@@ -1324,6 +1406,7 @@ export async function layoutProblems(frame: Frame, of: ListOf = BACKUPS): Promis
     overlaps("[data-testid$=-workspace] [data-testid$=-status] > *");
     overlaps("[data-testid$=-workspace] [data-testid$=-scope] > *");
     overlaps("[data-testid$=-workspace] [data-testid$=-stages] > *");
+    overlaps("[data-testid=velero-history-strip] [data-strip-mark]");
     overlaps(`[data-testid=velero-${id}] .TableHead .TableCell`);
     for (const row of [...page.querySelectorAll(`[data-testid=velero-${id}] .TableRow:not(.TableHead)`)].slice(0, 20)) {
       const cells = [...row.querySelectorAll(".TableCell")].filter(shown);

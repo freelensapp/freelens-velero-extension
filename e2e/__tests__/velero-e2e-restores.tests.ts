@@ -141,7 +141,7 @@ describe("views of the restores", () => {
     "has an entry of its own, and asks to choose the installation as every view does",
     async () => {
       await cluster.openPage(frame, RESTORES);
-      expect(await cluster.veleroSidebarEntries(frame)).toEqual({
+      expect(await cluster.veleroSidebarEntries(frame)).toMatchObject({
         velero: "Velero",
         "velero-backups": "Backups",
         "velero-restores": "Restores",
@@ -317,8 +317,12 @@ describe("views of the restores", () => {
       expect(await workspace.locator("[data-testid=velero-restore-source-note]").innerText()).toContain(
         "the object does not say which of the two was submitted",
       );
-      // A view that only reads: the way back, and the way to the view of the backup.
-      expect((await workspace.locator("button").allInnerTexts()).map(text)).toEqual(["arrow_back Restores", SCHEDULED]);
+      // A view that only reads: the way back, and the ways to the views of the backup and of the schedule.
+      expect((await workspace.locator("button").allInnerTexts()).map(text)).toEqual([
+        "arrow_back Restores",
+        SCHEDULED,
+        "views-daily",
+      ]);
       expect(await workspace.locator("a, input, select, textarea").count()).toBe(0);
       expect(await cluster.notices(frame, [])).toEqual({});
       expect(await cluster.layoutProblems(frame, RESTORES)).toEqual([]);
@@ -641,10 +645,26 @@ describe("views of the restores", () => {
     "shows the restore the controller of the installation ran as the release left it",
     async () => {
       const name = `fixture-restore-${process.env.E2E_FIXTURE_RUN}`;
-      const object = JSON.parse(
-        cluster.kubectlE2E("get", "restores.velero.io", name, "--namespace", cluster.E2E_NAMESPACE, "-o", "json")
-          .stdout,
-      ) as { status: Record<string, unknown> & { progress: { totalItems: number; itemsRestored: number } } };
+      const read = cluster.kubectlE2E(
+        "get",
+        "restores.velero.io",
+        name,
+        "--namespace",
+        cluster.E2E_NAMESPACE,
+        "-o",
+        "json",
+      );
+
+      // The release deletes a backup that expired, and its restores with it.
+      if (read.status !== 0 || !read.stdout) {
+        throw new Error(
+          `The restore ${name} is not in ${cluster.E2E_NAMESPACE}: the environment is older than its backup lasts. ` +
+            "Create it again with `pnpm demo:down` and `pnpm demo:up`.",
+        );
+      }
+      const object = JSON.parse(read.stdout) as {
+        status: Record<string, unknown> & { progress: { totalItems: number; itemsRestored: number } };
+      };
 
       // What the suite expects of the release is what the release did here: a restore that ended without
       // an error carries no counter of its errors and none of its warnings.

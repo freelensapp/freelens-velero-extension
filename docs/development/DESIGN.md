@@ -4,9 +4,9 @@ Date: 2026-09-28
 
 Status: Proposed in T0.2. The target bar, the states before a view, the list of the
 Backups and the workspace of a backup are implemented as described here, with the
-first milestone, and so are the Restores and the way between the views, with the
-second; their specs record what was decided while implementing. The rest is textual
-design, not a rendered or approved UI.
+first milestone, and so are the Restores, the Schedules with their history and the
+way between the views, with the second; their specs record what was decided while
+implementing. The rest is textual design, not a rendered or approved UI.
 
 See [directives](../../AGENTS.md), [architecture](ARCHITECTURE.md), and
 [roadmap](ROADMAP.md). Optimize for correct operational decisions and efficient repeated
@@ -113,7 +113,9 @@ every row and the target bar says it. In a list of 1,000 pixels or more what an
 operation says of a failure, its progress, its start and its duration have the
 room of their words, in whatever way the language of the operator writes a date:
 a window of 1440 by 900 shows them whole, and the name, the source, the phase and
-the storage share what is left.
+the storage share what is left. The head of a list is its title, the number of its
+items and its search: in a room narrower than 520 pixels the search goes under the
+other two, and the page is not scrolled sideways.
 Prefer semantic missing values such as Unknown or Not reported over an unexplained
 dash. Relative times have absolute timezone-aware values in tooltips; duration
 updates stop only for terminal evidence.

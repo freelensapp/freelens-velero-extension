@@ -1,3 +1,4 @@
+import { timestamp } from "./duration";
 import { LABELS } from "./types";
 
 import type { FamilyRead } from "./read-state";
@@ -181,6 +182,130 @@ export function restoreReferences(restore: RestoreResource, reads: RestoreReads)
     ...(location
       ? { storageLocation: resolveReference("BackupStorageLocation", location, namespace, reads.storageLocations) }
       : {}),
+  };
+}
+
+export interface TemplateReads {
+  storageLocations: FamilyRead<BackupStorageLocationResource>;
+  snapshotLocations: FamilyRead<VolumeSnapshotLocationResource>;
+}
+
+// Where the backups of a schedule go when its template names no storage location: the release takes the
+// location marked default, or the one the server names in its settings when none is marked.
+export type DefaultLocation =
+  | { state: "marked"; name: string }
+  // More than one is marked. The release sends a backup to the first of them it finds, and keeps marked
+  // the one created last: which one takes a backup is not settled until it has.
+  | { state: "many-marked"; names: string[]; kept: string }
+  | { state: "none-marked" }
+  // The storage locations were not read.
+  | { state: "unknown"; reason: string };
+
+export interface TemplateReferences {
+  // Absent when the template names none: `fallback` says where the backups go.
+  storageLocation?: Reference;
+  fallback?: DefaultLocation;
+  // What is to be said of the storage location the backups go to, when it does not take them.
+  warning?: string;
+  volumeSnapshotLocations: Reference[];
+}
+
+function defaultLocation(namespace: string, read: FamilyRead<BackupStorageLocationResource>): DefaultLocation {
+  if (read.status !== "ready" && read.lastSuccess === undefined) {
+    return { state: "unknown", reason: unavailable("BackupStorageLocation", read).reason };
+  }
+  const marked = read.items
+    .filter((item) => item.metadata.namespace === namespace && item.spec?.default === true)
+    .sort((one, other) => one.metadata.name.localeCompare(other.metadata.name));
+
+  if (!marked.length) return { state: "none-marked" };
+  if (marked.length === 1) return { state: "marked", name: marked[0].metadata.name };
+  // The one created last, and the first by name of the ones created at the same time, as the release
+  // compares them. One whose time of creation cannot be read is older than every other.
+  const created = (item: BackupStorageLocationResource) => timestamp(item.metadata.creationTimestamp) ?? 0;
+  const kept = marked.reduce((newest, item) => (created(item) > created(newest) ? item : newest));
+
+  return { state: "many-marked", names: marked.map((item) => item.metadata.name), kept: kept.metadata.name };
+}
+
+// What the reviewed release refuses a backup for, of the storage location it is sent to.
+export function locationWarning(location: BackupStorageLocationResource | undefined): string | undefined {
+  if (!location) return undefined;
+  const refusals = [
+    location.spec?.accessMode === "ReadOnly" ? "it is read-only" : "",
+    location.status?.phase === "Available"
+      ? ""
+      : location.status?.phase
+        ? `Velero reports it ${location.status.phase}`
+        : "Velero reports no availability of it",
+  ].filter(Boolean);
+
+  return refusals.length
+    ? `The release refuses a backup sent to this location: ${refusals.join(", and ")}.`
+    : undefined;
+}
+
+// What the template of a schedule refers to, inside the namespace of the schedule.
+export function templateReferences(schedule: ScheduleResource, reads: TemplateReads): TemplateReferences {
+  const namespace = schedule.metadata.namespace ?? "";
+  const template = schedule.spec?.template;
+  const location = named(template?.storageLocation);
+  const snapshots = Array.isArray(template?.volumeSnapshotLocations)
+    ? template.volumeSnapshotLocations.filter((name): name is string => named(name) !== undefined)
+    : [];
+  const fallback = location ? undefined : defaultLocation(namespace, reads.storageLocations);
+  const find = (name: string | undefined) =>
+    name
+      ? reads.storageLocations.items.find(
+          (item) => item.metadata.name === name && item.metadata.namespace === namespace,
+        )
+      : undefined;
+  const reference = location
+    ? resolveReference("BackupStorageLocation", location, namespace, reads.storageLocations)
+    : undefined;
+  // With more than one location marked default a backup may go to any of them: each one that does not
+  // take it is named.
+  const refusing =
+    fallback?.state === "many-marked"
+      ? fallback.names
+          .map((name) => [name, locationWarning(find(name))] as const)
+          .filter(([, reason]) => reason !== undefined)
+          .map(([name, reason]) => `${name}: ${reason}`)
+      : [];
+  const warning =
+    reference?.state === "absent"
+      ? "The release refuses a backup sent to a location that is not there."
+      : fallback?.state === "many-marked"
+        ? refusing.join(" ") || undefined
+        : locationWarning(find(location ?? (fallback?.state === "marked" ? fallback.name : undefined)));
+
+  return {
+    ...(reference ? { storageLocation: reference } : {}),
+    ...(fallback ? { fallback } : {}),
+    ...(warning ? { warning } : {}),
+    volumeSnapshotLocations: snapshots.map((name) =>
+      resolveReference("VolumeSnapshotLocation", name, namespace, reads.snapshotLocations),
+    ),
+  };
+}
+
+// The restores that name a schedule. Velero writes the name of the schedule also into a restore asked from
+// one of its backups: a restore that names the schedule was not necessarily asked from it.
+export function scheduleRestores(
+  schedule: { metadata: { name: string; namespace?: string } },
+  restores: FamilyRead<RestoreResource>,
+): RelatedRestores {
+  if (restores.status !== "ready" && restores.lastSuccess === undefined) {
+    return unavailable("Restore", restores) as Exclude<RelatedRestores, { state: "listed" }>;
+  }
+  return {
+    state: "listed",
+    stale: restores.status !== "ready",
+    items: restores.items.filter(
+      (restore) =>
+        restore.metadata.namespace === (schedule.metadata.namespace ?? "") &&
+        restore.spec?.scheduleName === schedule.metadata.name,
+    ),
   };
 }
 

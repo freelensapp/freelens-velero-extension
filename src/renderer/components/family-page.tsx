@@ -13,6 +13,7 @@ import styles from "./views.module.css";
 
 import type { ReactNode } from "react";
 
+import type { Family } from "../../common/discovery";
 import type { ViewKind, ViewTarget } from "../../common/views";
 import type { Installation, Resource } from "../state/installation";
 import type { VeleroKind } from "../state/list-store";
@@ -39,11 +40,14 @@ export interface ListDefinition<View extends { name: string }> {
   object: VeleroKind<HostObject>;
   tableId: string;
   columns: Column[];
-  view(resource: Resource, now: number): View;
+  // What a row shows of an object, with what was read of the installation for what the object refers to.
+  view(resource: Resource, now: number, installation: Installation): View;
   sorting: Record<string, (view: View) => string | number>;
   search(view: View): string[];
   // The cells after the name, one for each column after the first.
   cells(view: View, item: HostObject): ReactNode[];
+  // The other families a row is made from: the list says when what it shows of them is of an earlier read.
+  uses?: Family[];
 }
 
 export interface OpenViewProps {
@@ -77,7 +81,7 @@ function FamilyListView<View extends { name: string }>({ definition, installatio
   const { kind, id, object, tableId, columns } = definition;
   const { family, title, noun } = VIEWS[kind];
   const store = React.useMemo(() => new FamilyListStore(installation, family, object), [installation, family, object]);
-  const view = (item: HostObject): View => definition.view(item as unknown as Resource, now);
+  const view = (item: HostObject): View => definition.view(item as unknown as Resource, now, installation);
   const sortingCallbacks = Object.fromEntries(
     Object.entries(definition.sorting).map(([column, order]) => [column, (item: HostObject) => order(view(item))]),
   );
@@ -241,7 +245,11 @@ function FamilyPageView<View extends { name: string }>({ definition, installatio
       <Styles />
       <div className={styles.page} data-testid={`velero-${definition.id}-page`}>
         <TargetBar installation={installation} />
-        <Coverage installation={installation} families={open ? [...FAMILIES] : [VIEWS[definition.kind].family]} />
+        <Coverage
+          installation={installation}
+          families={open ? [...FAMILIES] : [VIEWS[definition.kind].family]}
+          earlier={open ? [] : definition.uses}
+        />
         {ready ? (
           <div className={styles.content}>
             <div

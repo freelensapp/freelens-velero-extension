@@ -3,10 +3,10 @@
  * Licensed under MIT License. See LICENSE in root directory for more information.
  */
 
-// The Restores for who may read them and not the backups: an identity of the
-// test environment that reads the restores, the schedules and the locations of
-// one namespace. The source of a restore is a backup it cannot read: it is
-// said denied, and is neither absent nor a link.
+// The views for who may read the restores and not the backups: an identity of
+// the test environment that reads the restores, the schedules and the locations
+// of one namespace. The source of a restore and the history of a schedule are
+// backups it cannot read: they are said denied, and are neither absent nor empty.
 
 import { expect } from "@jest/globals";
 import * as utils from "../helpers/utils";
@@ -94,6 +94,8 @@ describe("restores with restricted access", () => {
       expect(first.location).toBe("Known through the backup, which is not among what was read");
       expect(first.schedule.state).toBe("resolved");
       expect(first.stale).toBe(0);
+      // The schedule has a view of its own: a reference that resolves is a way to it.
+      expect(await frame.locator('[data-testid="velero-reference-Schedule-views-daily"] button').count()).toBe(1);
       expect(await cluster.layoutProblems(frame, RESTORES)).toEqual([]);
       // A read that is asked with the restore open finds the same, and what is denied stays denied: it is
       // not of an earlier read, and it is not missing.
@@ -105,6 +107,43 @@ describe("restores with restricted access", () => {
       await cluster.readAgain(frame);
       expect(await cluster.mounted(frame, RESTORES)).toHaveLength(6);
       expect(await cluster.notices(frame, [])).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "says that the history of a schedule is not known, and not that the schedule has no backup",
+    async () => {
+      await cluster.openPage(frame, cluster.SCHEDULES);
+      await cluster.waitForList(frame, cluster.SCHEDULES);
+      await cluster.expectCells(cluster.SCHEDULES, frame, "views-history", {
+        schedule: "0 1 * * *",
+        newest: "Not known",
+        phase: "Enabled",
+      });
+      expect(await frame.locator("[data-testid=velero-schedules]").innerText()).not.toContain("None that exists");
+      // The list says of each schedule that its newest backup is not known: the notice of what is denied
+      // is of the view of one schedule, which shows its history.
+      expect(await cluster.notices(frame, [])).toEqual({});
+      await cluster.openWorkspace(frame, "views-history", cluster.SCHEDULES);
+      const history = frame.locator("[data-testid=velero-schedule-history]");
+
+      expect(await history.getAttribute("data-history")).toBe("inaccessible");
+      expect(await history.innerText()).toContain("access is denied");
+      expect(await history.innerText()).toContain("is not known, which is not that it has none");
+      // No row and no line: nothing is drawn of a history that is not known.
+      expect(await cluster.history(frame)).toEqual({ rows: [], marks: [], over: [], width: 0 });
+      expect(await frame.locator("[data-testid=velero-history-counts]").count()).toBe(0);
+      expect((await cluster.notices(frame, ["backups"])).backups).toContain("access is denied");
+      // What the schedule is asked, and where its backups go, is read: the locations are not denied.
+      expect(
+        (await cluster.reference(frame, "velero-reference-BackupStorageLocation-views-available", "resolved")).state,
+      ).toBe("resolved");
+      expect((await cluster.reference(frame, "velero-related-restores", "listed")).state).toBe("listed");
+      expect(await cluster.layoutProblems(frame, cluster.SCHEDULES)).toEqual([]);
+      await history.scrollIntoViewIfNeeded();
+      await cluster.captureScreenshot(frame, "dark-restricted-schedule-history");
+      await cluster.closeWorkspace(frame);
     },
     TIMEOUT,
   );

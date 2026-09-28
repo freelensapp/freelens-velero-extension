@@ -178,7 +178,8 @@ The build is the one of the
 | `velero-e2e-preferences` | What is kept between two starts of the application, and nothing else; a namespace that is not there any more stays selected |
 | `velero-e2e-restores` | The list of every phase of a restore; a restore as Velero keeps it, with where it restores into and the scope it carries; one that failed its validation, with no time and no backup made up; a source that is not there; the way between a restore and its backup in both directions, over the list the first view was opened from; no way to select, edit or delete; the section in the details of the host |
 | `velero-e2e-restricted` | The views for an identity that reads three kinds of one namespace: what is denied is said, and is neither absent nor empty |
-| `velero-e2e-restricted-restores` | The restores for an identity that reads them and not the backups: the source of a restore is said denied, and is neither absent nor a way |
+| `velero-e2e-restricted-restores` | The views for an identity that reads the restores and the schedules and not the backups: the source of a restore and the history of a schedule are said denied, and are neither absent nor empty |
+| `velero-e2e-schedules` | The schedules Velero took, refused and has not read, with paused and validation as two facts; the last submission beside the newest backup; the history of a schedule, from the newest, on its line of time and in its list, with the backup that never started at the time it was created; the template and where its backups go; the way between a schedule and its backups in both directions; no way to edit, pause or run; the section in the details of the host |
 | `velero-e2e-scale` | A thousand backups and a thousand restores: the rows that are mounted, the time of the interactions, the state of each list when an object is opened and closed |
 | `pre-review` | Every view in both themes, at 1440x900, at 900x650 and at twice the zoom, checked for what lies over something else or does not fit; the journeys with the keyboard alone |
 
@@ -218,18 +219,36 @@ step that does not end says which one it was, with a picture of the window.
 | References | `velero-views-<run>` | A backup with a schedule, a storage location, a snapshot location and its restores; backups that name a schedule and a location that are not there; a name of 63 characters; a backup that reports nothing; a name that the namespace of the phases has too |
 | Restores | `velero-views-<run>` | A restore as Velero keeps one it took: into two namespaces, in flight with a failure, with the schedule of its backup written beside the backup, the resources Velero excludes and the timeout it fills; one asked from a schedule that has no backup, which failed its validation; one of a backup that is not there any more |
 | Reader | `velero-views-<run>` | A service account that reads backups, schedules and storage locations of its namespace. Its token lasts two hours and its kubeconfig is in the private state for as long as the suites run |
+| Schedules | `velero-views-<run>` | One with a history: a backup a day for six days, two of them an hour from each other, and the newest that failed its validation and never started; one that names its time zone; three whose backups go to a location that is not there, to one that is read-only, and to the one marked default; two that Velero has not read, one of them created paused; one in the phase New, which the API has and the release does not write; one that was read, then paused and asked to skip. The ones Velero read carry `skipImmediately`, which it writes into every schedule it reads, and the last submission of the one with a history is the time its newest backup was created |
 | Second reader | `velero-views-<run>` | A service account that reads restores, schedules, storage locations and snapshot locations of its namespace, and not the backups |
 | Long lists | `velero-scale-<run>` | A thousand backups and a thousand restores in every phase, each restore of one of the backups, and no storage location: nothing suggests the namespace, the operator names it |
 
-They are put in place by `pnpm e2e:views`, once: a second run finds them. No
+They are put in place by `pnpm e2e:views`, once: a second run finds them. The
+times of the history of a schedule are counted back from when the fixtures were
+started, which the environment keeps: a second run asks for the same objects. No
 controller of Velero watches these namespaces. They go with
 `pnpm e2e:cluster:down`, or with the cleanup of the fixtures.
+
+The backup the controller of the environment runs is kept for thirty days, the
+retention the release gives when none is asked: the release deletes a backup that
+expired, and its restores with it, and the views of the installation would have
+nothing to show an hour after the environment came up.
+
+The line of time of that history goes from its oldest backup to now, so what is
+drawn depends on how old the environment is. What holds at every age is checked
+at every age: each backup is on the line, from the oldest, and no mark is drawn
+over another. What is expected of the days, each with its mark, is expected while
+a day is wider than two marks on the line: in an environment older than that the
+suites stop and say to create it again, which a hosted run always does.
 
 The status of a synthetic operation is what the reviewed release would have
 written into it in its phase, and nothing else. One that did not start, which is
 one that is New, Queued or ReadyToStart or that failed its validation, has no
 start time, no end time, no progress and no counters: the release writes the
-start time when the validation passes. One that started has no counter of zero,
+start time when the validation passes. The release writes as well the version of
+its format and its expiration into a backup it takes, before it validates it: the
+synthetic backups do not carry them, and a view shows their expiration as not
+reported. One that started has no counter of zero,
 which the release does not write, and no counter at all while it is at work; once
 the work ended all its items are done. The one that failed is one the release
 stopped at work: a reason, and no counter. The spec of a synthetic restore the

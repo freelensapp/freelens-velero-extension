@@ -11,11 +11,14 @@ export const BACKUPS_PAGE_ID = "backups";
 export const BACKUPS_MENU_ID = "velero-backups";
 export const RESTORES_PAGE_ID = "restores";
 export const RESTORES_MENU_ID = "velero-restores";
+export const SCHEDULES_PAGE_ID = "schedules";
+export const SCHEDULES_MENU_ID = "velero-schedules";
 
 // The page where the list of each kind is, which is where a link from outside the views opens one of it.
 export const PAGES: Record<ViewKind, string> = {
   backup: BACKUPS_PAGE_ID,
   restore: RESTORES_PAGE_ID,
+  schedule: SCHEDULES_PAGE_ID,
 };
 
 // The views that are open travel in the address, by their kind and their name, in the order they were

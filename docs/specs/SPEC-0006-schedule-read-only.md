@@ -1,6 +1,6 @@
 # SPEC-0006: Read-Only Schedules
 
-- **Status:** Approved
+- **Status:** Implemented
 - **Date:** 2026-09-28
 - **Milestone / tasks:** M2 / T1.5
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`; compared with v1.18.3, `cd3fd10b093dad32ee284e27fcba4e9073c9c94b`
@@ -179,7 +179,101 @@ schedule ran when it should. Record role, date and verdict.
 
 ## Evidence And Deviations
 
-Approved on 2026-09-28. No implementation, tests or runtime evidence yet. The Schedule schema is the same
-in the reviewed release and in the one after it: see the
+Approved on 2026-09-28. The Schedule schema is the same in the reviewed release
+and in the one after it: see the
 [recon](../development/RECON-T0.1.md#upstream-drift-watch), which holds the facts
 of the reviewed release this spec rests on.
+
+What is [shown of a schedule](../../src/common/schedule-view.ts), its
+[history](../../src/common/schedule-history.ts) with its line of time, the
+[time of an operation](../../src/common/operation-time.ts), the
+[scope of a backup](../../src/common/backup-scope.ts) and what a schedule
+[refers to](../../src/common/references.ts) are pure functions on plain data; the
+[list](../../src/renderer/pages/schedules-page.tsx) is the native list of the
+host, given what the extension read; the
+[workspace](../../src/renderer/pages/schedule-workspace.tsx) and the
+[line of time](../../src/renderer/components/history-strip.tsx) are of the
+extension; the [section](../../src/renderer/details/schedule-details.tsx) in the
+details of the host reads a schedule through the same helpers. The page, the
+frame of a view and the store of a list are the ones written for every kind with
+the [Restores](SPEC-0005-restore-read-only.md).
+
+| Check | Evidence |
+| --- | --- |
+| SCHED-01 | Component: every column has its order and its part in the search, the age apart, which the host writes. Packaged: a search, an order by the expression read from the rows, a column made wider; a schedule opened and closed leaves them as they were |
+| SCHED-02 | Component and packaged: a row opens the workspace; the details of the host show the same validation, paused, expression and time zone, and lead to the workspace for the installation selected. Packaged: the API server counts no read of the five families while a schedule is opened between two reads of the installation |
+| SCHED-03 | Unit: five fields, descriptors, the two prefixes of a time zone, what only looks like a prefix, the name of a time zone as the release takes it, one that is empty and the one of the server named as such, an empty and an invalid expression, shown as written. Unit and component: no time in a view that no object reports, and never the time zone of the desktop. Packaged: the expression Velero refused, and the one that names its time zone |
+| SCHED-04 | Unit: the three phases, no phase, a phase that is not known; paused from the spec alone; what skipping does, and the last skipped time. Component and packaged: paused and validation as two cells and two facts; the schedules Velero has not read, paused and not; what Velero wrote of the skip into a schedule it read |
+| SCHED-05 | Unit and component: a last submission beside a newest backup that failed its validation, beside one in progress, beside none that exists. Packaged: the two as two cells of the list, and a last submission that is the time the newest backup was created |
+| SCHED-06 | Unit: the backups of two schedules and of none, of two namespaces, equal times, a newest backup with no start time, a backup whose time is after the clock; did not start said by the phase, and not by a start that is missing; no word for the distance between two backups. Component and packaged: the history from the newest, the newest at the time it was created and said so, the line of time with one mark for two backups that are close, and no mark drawn over another |
+| SCHED-07 | Unit: a backup of each of the thirteen phases counted once, by where its phase says it is, with one that reports none; no counts for a history that was denied, not served or that failed. Component and packaged: the counts as the view says them |
+| SCHED-08 | Unit: a template with fields unset; the filters and the settings a template carries beside the ones shown always, and a field this version has no words for; a location that is absent, read-only, unavailable, that reports nothing, and both reasons of one; no location named, with a default marked, with none and with more than one; the locations not read; the owner references. Component: more than one location marked default, each named. Packaged: a location that is not there, one read-only, the one marked default |
+| SCHED-09 | Unit and component: the restores that name the schedule, asked from it or from a backup of it; none; the restores denied, which are not none; the way from the schedule to one of them and back. Packaged: no restore for a schedule that none names, the three restores that name another, and the way from the schedule to one of them and back |
+| SCHED-10 | Component and packaged: from a backup to its schedule and back, from a mark and from a row of the history to the backup and back, over the list the first view was opened from. Packaged: the changes of the address are counted for four steps, and each step is one |
+| SCHED-11 | Component: the list is given no selection, no menu and no command; the view has the way back, the ways to the other views and the marks of the line, and no other control. Packaged: no checkbox, no menu; a right click, Delete and Backspace are followed by a wait in which no menu and no dialog appears, while the list the host shows of the same objects has the boxes, the menu and the dialog that are looked for; no word that offers to pause, to resume or to run; the objects unchanged |
+| SCHED-12 | Component: the schedules read and the backups that fail, with the history that was read and when, and with the list that says that the newest backup of each schedule is of an earlier read; the schedules that fail with the backups read; a late answer of the installation selected before; a schedule created again, said in words; what is shown while the installation is read again; no timer left when the view closes |
+| SCHED-13 | Pre-review: the list, the workspace, its history and its template in both themes, at the two sizes and at twice the zoom, each checked once the theme and the size are the ones that were set; the line of time read mark by mark with the keyboard alone, each mark with its words for who does not see it; at every size each backup on the line, and no mark drawn over another |
+| SCHED-14 | Unit: the reader sends `GET` and nothing else. Component: empty, not served, denied, not answered, stale and read again, each with its words, for the list and for the history; the restores denied. Packaged: the second reader, to which the backups are denied, reads the schedules and is told that the history of one is not known; the evidence of DISC-07 of the [discovery](SPEC-0002-installation-discovery.md#evidence-and-deviations) taken with the Schedules open, with the counts of REST-13 of the [Restores](SPEC-0005-restore-read-only.md#evidence-and-deviations) |
+
+Forty-eight changes made to the code on purpose, one for each rule above that a
+view could get wrong, each made a unit or a component test fail, and three made
+to the placing of the fixtures made a test of the environment fail. The pull
+request of the task names them.
+
+What was decided while implementing, inside the requirements:
+
+- **The history is shown twenty backups at a time**, from the newest, and the
+  others when they are asked for. The line of time holds them all.
+- **The marks of the line are controls**: one of a single backup opens the backup,
+  one of more than one shows its backups alone in the list under the line. Each
+  says in words what it is, how many backups it holds and whether one of them
+  failed.
+- **The list says of each schedule that its newest backup is not known** when the
+  backups cannot be read, and the notice of what is denied is of the view of one
+  schedule, which shows its history.
+- **The fixtures of the schedules are among the ones of the views**, which are put
+  in place on an environment that is already up. The times of the history are
+  counted back from when the fixtures were started.
+- **The head of a list gives its search a line of its own in a narrow room.** The
+  host gives the search a width it does not go under: with a title two letters
+  longer than the ones before it, the page was scrolled sideways at twice the
+  zoom. It holds for every list.
+- **That a backup did not start is said by its phase.** A backup with no start
+  time in a phase of the work is one whose start is not reported, and is not said
+  not started.
+- **With more than one storage location marked default the view names each.** The
+  release sends a backup to the first one it finds and keeps marked the one created
+  last: the view says both, picks none, and warns of each one that refuses a
+  backup.
+- **The template shows every field it carries.** The fields an operator sets most
+  have their line always, set or not. The other filters, the hooks, the order of
+  the resources, the policy, the timeouts and the labels have theirs when the
+  template carries them, and a field this version has no words for is shown by
+  its name, as it is written.
+- **The line of time ends now, or at the newest backup** when the clock of the
+  cluster is ahead of the one of the desktop: the backup stays on the line.
+- **A list says when a column is of an earlier read.** The newest backup of a
+  schedule is read from the backups: when they stop answering, the list of the
+  schedules says that what it shows of them was read before.
+- **The list of a history keeps its words whole.** In a narrow room a state is
+  on one line and no word is broken inside: the list is scrolled in its own room,
+  and the view around it is not.
+- **What is drawn on the line depends on the age of the environment.** The suites
+  check at every age what holds at every age, and stop with what to do where the
+  days of the history are closer than two marks.
+
+An independent review of the change, read only, found four things the views said
+that the release does not do, and ten smaller ones. They are corrected here, and
+the facts they rest on are in the
+[recon](../development/RECON-T0.1.md#start-of-the-second-milestone-2026-09-28).
+
+One deviation from the requirements, which waits for the approval of the lead
+maintainer at the review of the milestone:
+
+| Requirement | What it says | What the view does, and why |
+| --- | --- | --- |
+| REQ-067 | With `skipImmediately` true, say that Velero skips the run that is due and records the time in last skipped | The view says that Velero writes the time of its next reading as the last skipped, sets the field back to false and counts the next run from that time. The release does so whether a run is due or not: the words of the requirement promise a run that may not be there |
+
+The reading of the counters of a backup of the history is the one of the
+[states](SPEC-0003-backup-read-only.md#evidence-and-deviations), with the deviation
+recorded there.
