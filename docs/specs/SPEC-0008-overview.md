@@ -1,16 +1,15 @@
 # SPEC-0008: Overview Of An Installation
 
-- **Status:** Draft
+- **Status:** Approved
 - **Date:** 2026-09-28
 - **Milestone / tasks:** M2 / T1.7
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`; compared with v1.18.3, `cd3fd10b093dad32ee284e27fcba4e9073c9c94b`
 - **Reviewed main:** `60163e0827e72658bb6546165a727300170e628b`
 - **Freelens validation target:** v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`
 - **Dependencies:** [target discovery](SPEC-0002-installation-discovery.md), [states and Backups](SPEC-0003-backup-read-only.md), [Restores](SPEC-0005-restore-read-only.md), [Schedules](SPEC-0006-schedule-read-only.md), [locations](SPEC-0007-locations-read-only.md)
-- **Approval:** Pending
+- **Approval:** Approved by the lead maintainer on 2026-09-28, as drafted
 
-Governed by [AGENTS.md](../../AGENTS.md). A completed draft is not approval to
-implement.
+Governed by [AGENTS.md](../../AGENTS.md).
 
 ## Goal
 
@@ -176,8 +175,8 @@ on the installation. Record role, date and verdict.
 - **The aggregate health of the roadmap is what needs attention beside what was
   read**, not a value of the whole. One mark for an installation would show as
   well one whose restores cannot be read, or whose only failure is the one that
-  matters. The row of the roadmap keeps its words until the lead maintainer
-  approves this reading, and takes the ones of this spec then.
+  matters. The lead maintainer approved this reading with the spec, and the row
+  of the roadmap has its words.
 - **The rules are the ones of the table.** A rule that needs an expectation, such
   as a backup that did not run, waits for the adherence of the fourth milestone.
 - **A failure of a schedule that a later backup followed is history, not
@@ -188,10 +187,10 @@ on the installation. Record role, date and verdict.
   pause is a problem is a judgment of the operator. Its validation errors stay an
   item, with the words of rule A5.
 - **The window starts at seven days** and is one preference of the extension, not
-  one for each cluster. The lead maintainer may change where it starts at approval.
+  one for each cluster. The lead maintainer confirmed it at approval.
 
 ## Evidence And Deviations
 
-No implementation, tests or runtime evidence yet. Nothing this page reads changes
+Approved on 2026-09-28. No implementation, tests or runtime evidence yet. Nothing this page reads changes
 between the reviewed release and the one after it, but the field of the Restore
 the [Restores](SPEC-0005-restore-read-only.md) cover.

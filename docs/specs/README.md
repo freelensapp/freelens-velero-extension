@@ -2,8 +2,8 @@
 
 Date: 2026-09-28
 
-Status: SPEC-0001 is Approved; SPEC-0002, SPEC-0003 and SPEC-0004 are Implemented;
-SPEC-0005 to SPEC-0008, the second milestone, are Draft.
+Status: SPEC-0001 is Approved; SPEC-0002, SPEC-0003 and SPEC-0004 are Verified;
+SPEC-0005 to SPEC-0008, the second milestone, are Approved.
 
 The [roadmap](../development/ROADMAP.md) owns scope and progress; the
 [process](../development/PROCESS.md) owns approvals and review gates.
@@ -16,13 +16,13 @@ slice per task even when a spec covers several closely related tasks.
 | Specification | Tasks | Requirement IDs | Status | Runtime evidence |
 | --- | --- | --- | --- | --- |
 | [SPEC-0001: Local foundation](SPEC-0001-local-foundation.md) | T0.3, T0.4, T0.5, T0.6 separately | REQ-001 through REQ-012 | Approved | 165 of the 446 tests; local setup, recovery, RBAC and compiled-main transport/cleanup pass; activation in Freelens as an integration test |
-| [SPEC-0002: Installation discovery](SPEC-0002-installation-discovery.md) | T1.1 | REQ-013 through REQ-023 | Implemented | 96 tests of the rules, of the state and of the components; the suites of the views in a packaged Freelens, with the reader of a part and across three starts |
-| [SPEC-0003: States and read-only Backups](SPEC-0003-backup-read-only.md) | T1.2, T1.3 separately | REQ-024 through REQ-037 | Implemented | 118 unit tests of the states, 67 of what the views show and of the components; the suites of the views in a packaged Freelens, with a list of a thousand backups; the pre-review |
-| [SPEC-0004: Test environment on every platform](SPEC-0004-test-environment-every-platform.md) | Foundation | REQ-038 through REQ-049 | Implemented | 100 environment tests; runs on macOS x64 and on the hosted runner, Linux ARM64 |
-| [SPEC-0005: Read-only Restores](SPEC-0005-restore-read-only.md) | T1.4 | REQ-050 through REQ-063 | Draft | None yet |
-| [SPEC-0006: Read-only Schedules](SPEC-0006-schedule-read-only.md) | T1.5 | REQ-064 through REQ-077 | Draft | None yet |
-| [SPEC-0007: Read-only storage and snapshot locations](SPEC-0007-locations-read-only.md) | T1.6 | REQ-078 through REQ-092 | Draft | None yet |
-| [SPEC-0008: Overview of an installation](SPEC-0008-overview.md) | T1.7 | REQ-093 through REQ-107 | Draft | None yet |
+| [SPEC-0002: Installation discovery](SPEC-0002-installation-discovery.md) | T1.1 | REQ-013 through REQ-023 | Verified | 96 tests of the rules, of the state and of the components; the suites of the views in a packaged Freelens, with the reader of a part and across three starts |
+| [SPEC-0003: States and read-only Backups](SPEC-0003-backup-read-only.md) | T1.2, T1.3 separately | REQ-024 through REQ-037 | Verified | 118 unit tests of the states, 67 of what the views show and of the components; the suites of the views in a packaged Freelens, with a list of a thousand backups; the pre-review |
+| [SPEC-0004: Test environment on every platform](SPEC-0004-test-environment-every-platform.md) | Foundation | REQ-038 through REQ-049 | Verified | 100 environment tests; runs on macOS x64 and on the hosted runner, Linux ARM64 |
+| [SPEC-0005: Read-only Restores](SPEC-0005-restore-read-only.md) | T1.4 | REQ-050 through REQ-063 | Approved | None yet |
+| [SPEC-0006: Read-only Schedules](SPEC-0006-schedule-read-only.md) | T1.5 | REQ-064 through REQ-077 | Approved | None yet |
+| [SPEC-0007: Read-only storage and snapshot locations](SPEC-0007-locations-read-only.md) | T1.6 | REQ-078 through REQ-092 | Approved | None yet |
+| [SPEC-0008: Overview of an installation](SPEC-0008-overview.md) | T1.7 | REQ-093 through REQ-107 | Approved | None yet |
 
 Next unallocated requirement ID: REQ-108. IDs are unique across this project;
 references in test tables do not redefine a requirement. Do not allocate IDs to
@@ -72,15 +72,17 @@ actual-host acceptance.
 
 SPEC-0002 and SPEC-0003 approval was recorded on 2026-09-27, as drafted. They are
 the first milestone: T1.1, T1.2 and T1.3, each its own pull request. They are
-Implemented since the suites of the views run in a packaged Freelens; they become
-Verified with the manual review of their success criteria, which is not recorded yet.
+Verified since 2026-09-28, when the lead maintainer approved the review of the
+milestone on the report and the screenshots of the pre-review pass.
 
 SPEC-0004 approval was recorded on 2026-09-27, with its one open question decided:
-the published loopback is accepted on the machines of the developers.
+the published loopback is accepted on the machines of the developers. It is Verified
+since 2026-09-28: the lead maintainer accepted the run on macOS beside another kind
+cluster in place of a session by hand.
 
-SPEC-0005, SPEC-0006, SPEC-0007 and SPEC-0008 were drafted on 2026-09-28 for the
-second milestone: T1.4 to T1.7, each its own pull request, in that order. They are
-not approved: nothing of them is implemented before they are.
+SPEC-0005, SPEC-0006, SPEC-0007 and SPEC-0008 approval was recorded on 2026-09-28,
+as drafted. They are the second milestone: T1.4 to T1.7, each its own pull request,
+in that order.
 
 ## Document Review
 
@@ -95,7 +97,7 @@ This is document coverage, not test execution:
 | Safety and privacy | Local-only writes, exact targets, no implicit requests, synthetic evidence |
 | UI decisions | Native lists plus dedicated operation workspace, with non-happy and accessible states |
 | Source grounding | Every draft carries exact reviewed revisions and recon dependencies |
-| Honest status | SPEC-0001 is Approved with setup, fixture and compiled-main transport evidence; SPEC-0002, SPEC-0003 and SPEC-0004 are Implemented, none of them Verified |
+| Honest status | SPEC-0001 is Approved with setup, fixture and compiled-main transport evidence; SPEC-0002, SPEC-0003 and SPEC-0004 are Verified; SPEC-0005 to SPEC-0008 are Approved and not implemented |
 
 No blocking product preference is required to review these drafts. Fixture isolation
 and main transport have scoped local evidence. Actual-host authentication, IPC

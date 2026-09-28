@@ -1,16 +1,15 @@
 # SPEC-0007: Read-Only Storage And Snapshot Locations
 
-- **Status:** Draft
+- **Status:** Approved
 - **Date:** 2026-09-28
 - **Milestone / tasks:** M2 / T1.6
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`; compared with v1.18.3, `cd3fd10b093dad32ee284e27fcba4e9073c9c94b`
 - **Reviewed main:** `60163e0827e72658bb6546165a727300170e628b`
 - **Freelens validation target:** v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`
 - **Dependencies:** [target discovery](SPEC-0002-installation-discovery.md), [states and Backups](SPEC-0003-backup-read-only.md)
-- **Approval:** Pending
+- **Approval:** Approved by the lead maintainer on 2026-09-28, as drafted
 
-Governed by [AGENTS.md](../../AGENTS.md). A completed draft is not approval to
-implement.
+Governed by [AGENTS.md](../../AGENTS.md).
 
 ## Goal
 
@@ -171,8 +170,8 @@ does not read as a fault or as a success. Record role, date and verdict.
 
 - **Three times the frequency, and one hour** when the object names no frequency
   or turns the validation off, are the distances after which an availability is
-  said possibly out of date. They are choices of this spec for the lead maintainer
-  to confirm or change: the release gives no threshold. The frequency of the
+  said possibly out of date. They are choices of this spec, which the lead
+  maintainer confirmed at approval: the release gives no threshold. The frequency of the
   server is one minute unless its settings say otherwise. They are two constants,
   in one place.
 - The configuration of a location is not meant to hold secrets, and the release
@@ -184,7 +183,7 @@ does not read as a fault or as a success. Record role, date and verdict.
 
 ## Evidence And Deviations
 
-No implementation, tests or runtime evidence yet. The two schemas are the same in
+Approved on 2026-09-28. No implementation, tests or runtime evidence yet. The two schemas are the same in
 the reviewed release and in the one after it: see the
 [recon](../development/RECON-T0.1.md#upstream-drift-watch), which holds the facts
 of the reviewed release this spec rests on.

@@ -51,7 +51,7 @@ preserve search, sort, filters and scroll. Related resources open the workspace 
 their kind, and a view opened from another returns to it; the host's generic CRD
 route also receives a compact read-only Velero detail section. Both surfaces use the
 same domain helpers and agree on safety and status. The presentation of the kinds of
-the second milestone is the one of their specs, which are drafts until approved.
+the second milestone is the one of their specs, approved on 2026-09-28.
 
 Initial operation workspace sketch, containing operational labels only:
 

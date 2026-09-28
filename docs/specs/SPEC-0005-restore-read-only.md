@@ -1,16 +1,15 @@
 # SPEC-0005: Read-Only Restores
 
-- **Status:** Draft
+- **Status:** Approved
 - **Date:** 2026-09-28
 - **Milestone / tasks:** M2 / T1.4
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`; compared with v1.18.3, `cd3fd10b093dad32ee284e27fcba4e9073c9c94b`
 - **Reviewed main:** `60163e0827e72658bb6546165a727300170e628b`
 - **Freelens validation target:** v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`
 - **Dependencies:** [target discovery](SPEC-0002-installation-discovery.md), [states and Backups](SPEC-0003-backup-read-only.md)
-- **Approval:** Pending
+- **Approval:** Approved by the lead maintainer on 2026-09-28, as drafted
 
-Governed by [AGENTS.md](../../AGENTS.md). A completed draft is not approval to
-implement.
+Governed by [AGENTS.md](../../AGENTS.md).
 
 ## Goal
 
@@ -174,7 +173,7 @@ Record role, date and verdict.
 
 ## Evidence And Deviations
 
-No implementation, tests or runtime evidence yet. The upstream drift watch of the
+Approved on 2026-09-28. No implementation, tests or runtime evidence yet. The upstream drift watch of the
 start of the milestone is in the
 [recon](../development/RECON-T0.1.md#upstream-drift-watch), with the facts of the
 reviewed release this spec rests on: between that release and the one after it the
