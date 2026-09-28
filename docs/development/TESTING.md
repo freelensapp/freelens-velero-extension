@@ -203,6 +203,10 @@ never of the window around it, and show synthetic data. The profile names the
 theme too: left to itself the application takes the one of the system, which is
 not the same on every machine.
 
+When a suite closes the application it ends what the application started and
+left behind, the proxy of every cluster it opened among it: a machine that runs
+the suites many times is left as it was.
+
 Every step of a start has its time and its name: the end of the application, its
 start, the way to the catalog, the row of the cluster, its frame, its sidebar. A
 step that does not end says which one it was, with a picture of the window.

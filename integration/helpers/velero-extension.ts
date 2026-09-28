@@ -13,6 +13,7 @@
 // suites build on. That is why relative imports of `../helpers/*` resolve when
 // the tests run but not inside this repository.
 
+import { execFileSync } from "node:child_process";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -72,6 +73,40 @@ export async function within<Result>(name: string, milliseconds: number, step: P
   }
 }
 
+// The processes a process started, and the ones those started.
+function descendants(process: number): number[] {
+  const found: number[] = [];
+  const visit = (parent: number) => {
+    let children: number[] = [];
+
+    try {
+      children = execFileSync("pgrep", ["-P", String(parent)], { encoding: "utf8" })
+        .split("\n")
+        .map(Number)
+        .filter(Boolean);
+    } catch {
+      // No process of that parent.
+    }
+    for (const child of children) {
+      found.push(child);
+      visit(child);
+    }
+  };
+
+  visit(process);
+
+  return found;
+}
+
+// What is running under an identifier, or nothing when nothing is.
+function command(identifier: number): string {
+  try {
+    return execFileSync("ps", ["-p", String(identifier), "-o", "command="], { encoding: "utf8" }).trim();
+  } catch {
+    return "";
+  }
+}
+
 export interface StartedApplication {
   app: ElectronApplication;
   window: Page;
@@ -128,6 +163,8 @@ export async function startIsolated(profile?: string, theme: ColorTheme = "Dark"
   // it held of its profile is released, for the start after this one to find the profile free.
   const close = async () => {
     const child = app.process();
+    // The application starts a proxy for every cluster it opens, and may leave it behind when it goes.
+    const started = child.pid ? descendants(child.pid).map((identifier) => [identifier, command(identifier)]) : [];
     const gone = () => child.exitCode !== null || child.signalCode !== null;
     const left = new Promise<void>((resolve) => {
       if (gone()) resolve();
@@ -143,6 +180,17 @@ export async function startIsolated(profile?: string, theme: ColorTheme = "Dark"
       await Promise.race([left, wait(15_000)]);
       for (const lock of ["SingletonLock", "SingletonCookie", "SingletonSocket"]) {
         await rm(path.join(directory, APPLICATION_NAME, lock), { force: true }).catch(() => undefined);
+      }
+    }
+    // What the application started and left: ended if it is still what it was, which an identifier
+    // that was given to another process in the meantime is not.
+    for (const [identifier, was] of started as [number, string][]) {
+      if (was && command(identifier) === was) {
+        try {
+          process.kill(identifier, "SIGTERM");
+        } catch {
+          // It left in the meantime.
+        }
       }
     }
   };
