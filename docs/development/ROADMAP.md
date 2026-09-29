@@ -73,12 +73,18 @@ v1.10.3 built for the purpose, on every pull request and on main.
 | Restore list and detail, with source backup or schedule and recovery progress | T1.4 | [SPEC-0005](../specs/SPEC-0005-restore-read-only.md) | Done |
 | Schedule list and detail, with paused and skipped behavior and backup history | T1.5 | [SPEC-0006](../specs/SPEC-0006-schedule-read-only.md) | Done |
 | BackupStorageLocation and VolumeSnapshotLocation lists and details: default, access mode, availability, validation and sync times, errors | T1.6 | [SPEC-0007](../specs/SPEC-0007-locations-read-only.md) | Done |
-| Overview (ad hoc): what needs attention and what was read, with no single value for the installation; navigation into the objects | T1.7 | [SPEC-0008](../specs/SPEC-0008-overview.md) | In PR |
+| Overview (ad hoc): what needs attention and what was read, with no single value for the installation; navigation into the objects | T1.7 | [SPEC-0008](../specs/SPEC-0008-overview.md) | Done |
 
 The first milestone is on main and its two specs are Verified: the lead maintainer
 approved the review of the milestone on 2026-09-28. The Overview was read at the
 approval of its spec as what needs attention beside what was read, with no single
 value for an installation: the row above has those words since then.
+
+The second milestone is on main. Its four specs are Implemented: they become
+Verified with the manual review of their success criteria, which is the review
+of the milestone and is not recorded yet. The deviations from their
+requirements wait for their approval at that review: each is recorded in the
+evidence of its spec.
 
 Exit of M1 and M2: the five primary kinds usable in a packaged Freelens, every
 phase covered, missing data never shown as healthy, pre-review on both themes.
