@@ -221,7 +221,7 @@ the pages of the lists have.
 | OVER-11 | Component: the focus is on what a view was opened from at every return and not at the first alone, where the object is named in three places, from a mark, with the keyboard; a view that opens from the address gives it to where the object is named. Packaged: the five cells to their lists; an item to its object and to the other object its reason names; the newest completed backup, an operation in flight, one of the list, a line of a schedule and one of a storage location, a mark of the line, each to its view over the Overview, which is the way back; from a view to another one and back in two steps; the focus on what the view was opened from, at the first view and after ten. Component: the focus on the mark that was chosen when what it holds is not shown alone any more, and on the window when the mark is not there. Every way of the page names an object that the suite finds on the cluster, of a kind that has a view, and the page has no button that is not a way, a window, a mark or what shows more of a list |
 | OVER-12 | Packaged performance: the measure below. Packaged: with what was asked of the bands shown, the page scrolled and the installation read again, by the command and by itself, the page is where it was and shows the same items |
 | OVER-13 | Component: for each of the four families the bands made from it denied or failed, not served, and not read yet, while the others are read; an installation with nothing in it; what was read of a band, and of a row of the line of time, kept when its family stops answering, with the day and the time it was read |
-| OVER-14 | Pre-review: the page, its recent operations, its schedules and its storage, and the page of an installation with nothing to report, in both themes, at 1440x900, at 900x650 and at twice the zoom; the bands of a row side by side at 1440 and one under the other at the two others; every mark of the line with a shape or a number, and its words, and the shape of a failure beside the ones that carry one and no other; a window chosen and the line of time read with the keyboard alone, a mark opened and the focus back on it |
+| OVER-14 | Pre-review: the page, its recent operations, its schedules and its storage, and the page of an installation with nothing to report, in both themes, at 1440x900, at 900x650 and at twice the zoom; the bands of a row side by side at 1440 and one under the other at the two others; every mark of the line with a shape or a number, and its words, and the shape of a failure beside the ones that carry one and no other; a page that stands still, with no scrollbar, at the widths around the one its target bar goes to a second line at; a window chosen and the line of time read with the keyboard alone, a mark opened and the focus back on it |
 | OVER-15 | Unit: the reader sends `GET` and nothing else. Component: a late answer of the installation selected before is not shown; no timer is left when the page closes. Packaged: the evidence of DISC-07 of the [discovery](SPEC-0002-installation-discovery.md#evidence-and-deviations) taken with the Overview open, and the lists of the cluster the API server counted are the one of the first opening and one for each read that was asked |
 
 The measure of OVER-12, on 2026-09-29, in Freelens v1.10.3 on macOS 26 with an
@@ -231,10 +231,10 @@ Intel Core i7-9750H and 16 GiB, the test environment running on the same machine
 | --- | --- |
 | Operations read | 1,000 backups and 1,000 restores, spread over the 30 days before they were placed |
 | Interactions, after three to warm | 20 changes of the window, among the three |
-| Marks on the line, in the two rows | 50 with 24 hours, 62 with 7 days, 74 with 30 days |
+| Marks on the line, in the two rows | 46 with 24 hours, 61 with 7 days, 69 with 30 days |
 | Operations listed | 10 in each window, and the others when they are asked for |
-| Response, 95th percentile | 27 ms, against a budget of 250 ms |
-| Response, median and slowest | 23 ms and 27 ms |
+| Response, 95th percentile | 28 ms, against a budget of 250 ms |
+| Response, median and slowest | 23 ms and 35 ms |
 
 One hundred and thirty-two changes made to the code on purpose, one for each
 rule above that the page could get wrong, each made a unit or a component test
@@ -261,6 +261,17 @@ with this slice:
   and a window at twice the zoom is for every page: the host cuts what is
   taller than the room it gives. A page is scrolled there. It is of every page
   of the extension, the ones of the slices before among them.
+- **A page that is scrolled was narrower with its scrollbar than without it**,
+  by what the scrollbar is wide. At the widths where the target bar has one
+  line without the scrollbar and two with it, the page took the scrollbar, sent
+  the bar to a second line, gave the list less room, lost the scrollbar and
+  began again, at every frame: nothing on it could be clicked. The hosted
+  runner found it, where the time of a read is written with the half of the day
+  and the bar is longer: on the machine the suites were written on the window
+  of the suites is not of those widths. The room of the scrollbar is kept when
+  there is none, the figures of the time of a read are as wide as each other,
+  and the pre-review looks for a page that does not stand still around the
+  width its bar goes to a second line at, whatever that width is.
 
 What was decided while implementing, inside the requirements:
 

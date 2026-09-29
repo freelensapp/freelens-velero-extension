@@ -134,6 +134,47 @@ describe("pre-review of the views", () => {
   );
 
   it(
+    "stands still at the widths where the target bar goes to a second line",
+    async () => {
+      await cluster.showList(frame);
+      const tall = async (width: number) => {
+        await velero.setWindowSize(started.app, width, 900);
+        await frame.waitForTimeout(300);
+        return (await cluster.movesOf(frame, cluster.BACKUPS, 1)).bar;
+      };
+      const wide = await tall(1440);
+      let width = 1440;
+
+      // The width the bar is taller at is of the words it holds and of the font they are written in.
+      while (width > 900 && (await tall(width)) <= wide) width -= 8;
+      expect(width).toBeGreaterThan(900);
+      // A scrollbar that comes and goes makes the page narrower and wider by what it is wide: around the
+      // width the bar goes to a second line at, the page with it would not be the page without it.
+      const moved: Record<number, unknown> = {};
+
+      try {
+        for (let at = width + 24; at >= width - 8; at -= 2) {
+          await velero.setWindowSize(started.app, at, 900);
+          await frame.waitForTimeout(500);
+          let found = await cluster.movesOf(frame);
+
+          // A page that was given another width takes a moment to be still, and the installation may be
+          // read while it is looked at, once: what comes and goes is never still, however long it is
+          // looked at.
+          for (let again = 0; again < 3 && found.changes > 1; again += 1) found = await cluster.movesOf(frame);
+          if (found.changes > 1 || found.scrolled) moved[at] = found;
+        }
+      } finally {
+        // The views after this one are looked at in the window they expect.
+        await velero.setWindowSize(started.app, 1440, 900);
+        await frame.waitForTimeout(1000);
+      }
+      expect(moved).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
     "opens a backup and comes back with the keyboard alone, and finds the focus where it was",
     async () => {
       await cluster.showList(frame);

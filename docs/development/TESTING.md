@@ -1,6 +1,6 @@
 # Testing Strategy
 
-Date: 2026-09-28
+Date: 2026-09-29
 
 Status: T0.3-T0.6 scaffold, environment, fixture and compiled-main transport checks
 pass. The [integration test](#integration-tests) covers the activation in Freelens.
@@ -183,7 +183,7 @@ The build is the one of the
 | `velero-e2e-schedules` | The schedules Velero took, refused and has not read, with paused and validation as two facts; the last submission beside the newest backup; the history of a schedule, from the newest, on its line of time and in its list, with the backup that never started at the time it was created; the template and where its backups go; the way between a schedule and its backups in both directions; no way to edit, pause or run; the section in the details of the host |
 | `velero-e2e-locations` | The storage locations with availability, access mode and default as three facts; the location the controller validates, which is not late, and the synthetic ones, which are; none and two marked default; a message of many lines; where a location points and the Secrets it names, by their names; what uses a location, and the way to it and back; the way from a backup, a restore and a schedule to their locations; the snapshot locations, with a phase that has the mark of what is not known; no way to select, edit, delete or set as default; the sections in the details of the host |
 | `velero-e2e-scale` | A thousand backups and a thousand restores: the rows that are mounted, the time of the interactions, the state of each list when an object is opened and closed |
-| `pre-review` | Every view in both themes, at 1440x900, at 900x650 and at twice the zoom, checked for what lies over something else, does not fit, or is cut by what holds the page; the journeys with the keyboard alone |
+| `pre-review` | Every view in both themes, at 1440x900, at 900x650 and at twice the zoom, checked for what lies over something else, does not fit, or is cut by what holds the page; a page that stands still at the widths where its target bar goes to a second line; the journeys with the keyboard alone |
 
 The check of the layout, which every suite asks of the pages it shows, looks at
 the page and at what holds it, up to the frame of the cluster: what is wider

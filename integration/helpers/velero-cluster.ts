@@ -1492,6 +1492,59 @@ export async function layoutProblems(frame: Frame, of: ListOf = BACKUPS): Promis
   }, of);
 }
 
+/**
+ * What moves on the page of a list while nothing is asked of it, frame after
+ * frame: how many times the page, its scrollbar, the target bar, the head of
+ * the list or its first row changed their place or their size. A page that
+ * stands still changes nothing; one that was read meanwhile may change once.
+ * With it, how tall the target bar is and whether the page is scrolled.
+ */
+export async function movesOf(
+  frame: Frame,
+  of: ListOf = BACKUPS,
+  frames = 60,
+): Promise<{ changes: number; bar: number; scrolled: boolean }> {
+  return frame.evaluate(
+    async ({ id, kind, frames }) => {
+      const page = document.querySelector<HTMLElement>(`[data-testid=velero-${id}-page]`);
+      const bar = document.querySelector<HTMLElement>("[data-testid=velero-target]");
+
+      if (!page || !bar) throw new Error(`The page of the ${id} is not there`);
+      const box = (element: Element | null) => {
+        const found = element?.getBoundingClientRect();
+
+        return found ? [found.x, found.y, found.width, found.height].map((value) => Math.round(value * 10) / 10) : [];
+      };
+      const seen = () =>
+        JSON.stringify([
+          page.offsetWidth,
+          page.clientWidth,
+          page.clientHeight,
+          page.scrollHeight,
+          box(bar),
+          box(document.querySelector(`[data-testid=velero-${id}] .TableHead`)),
+          box(document.querySelector(`[data-${kind}-row]`)),
+        ]);
+      let before = seen();
+      let changes = 0;
+
+      for (let at = 0; at < frames; at += 1) {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        const now = seen();
+
+        if (now !== before) changes += 1;
+        before = now;
+      }
+      return {
+        changes,
+        bar: Math.round(bar.getBoundingClientRect().height),
+        scrolled: page.scrollHeight > page.clientHeight,
+      };
+    },
+    { ...of, frames },
+  );
+}
+
 /** The test id, or the name of the row, of what has the focus of the keyboard. */
 export async function focused(frame: Frame): Promise<string> {
   return frame.evaluate(() => {

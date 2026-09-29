@@ -7,6 +7,11 @@
      page is scrolled: the host cuts what is taller than the room it gives, and what is cut is reached
      by nothing. */
   overflow-y: auto;
+  /* The room of the scrollbar is kept when there is none. A page that is narrower with its scrollbar
+     sends the target bar to a second line at a width it has one line at without it: the list under it
+     is given less, the page fits, the scrollbar goes, the bar is one line again, and the page begins
+     again, at every frame. */
+  scrollbar-gutter: stable;
   color: var(--textColorPrimary);
 }
 
@@ -51,6 +56,8 @@
 
 .readTime {
   color: var(--textColorSecondary);
+  /* Every figure as wide as the others: the time of a read does not move what is beside it. */
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
