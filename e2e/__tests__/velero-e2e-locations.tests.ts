@@ -110,6 +110,7 @@ describe("views of the locations", () => {
       await cluster.openPage(frame, STORAGE);
       expect(Object.keys(await cluster.veleroSidebarEntries(frame))).toEqual([
         "velero",
+        "velero-overview",
         "velero-backups",
         "velero-restores",
         "velero-schedules",
@@ -158,6 +159,7 @@ describe("views of the locations", () => {
       // One location is marked default: the list has nothing to say of the default.
       expect(await notes(STORAGE)).toEqual([]);
       expect((await frame.locator(".TabLayout .Tabs .Tab").allInnerTexts()).map(text)).toEqual([
+        "Overview",
         "Backups",
         "Restores",
         "Schedules",

@@ -249,8 +249,8 @@ describe("long list of backups", () => {
       expect(state.search).toBe("scale-location-3");
       expect(state.scroll).toBeGreaterThan(1000);
       expect(state.sorted).toMatch(/^started /);
-      // The order is the one of the start, as the rows are: each backup started an hour after the one
-      // before it, and the ones that are shown here are the latest first.
+      // The order is the one of the start, as the rows are: each backup started after the one before
+      // it, and the ones that are shown here are the latest first.
       expectLatestFirst(await cluster.visibleBackups(frame));
       // A row the operator sees: one that is mounted above or below what is shown is not one to click.
       const name = (await cluster.visibleBackups(frame))[3];

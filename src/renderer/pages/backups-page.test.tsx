@@ -3,7 +3,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { listProps } from "../../../test/host-components";
-import { emptyPreferences, RESOURCES } from "../../common/discovery";
+import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { BACKUP_PHASES } from "../../common/phases";
 import { Backup } from "../api/kinds";
 import { BackupDetails } from "../details/backup-details";
@@ -97,7 +97,7 @@ function mount(table: Answers, preferences: Preferences = emptyPreferences()) {
       return typeof answer === "function" ? answer() : answer;
     },
     now: () => clock.now,
-    storage: { read: () => preferences, write: (next) => written.push(next) },
+    storage: heldPreferences(preferences, (next) => written.push(next)),
   });
   const view = render(<BackupsPage installation={installation} />);
 
@@ -466,7 +466,7 @@ describe("details of the host", () => {
         throw new Error("The details of the host ask nothing of the cluster");
       },
       now: () => 0,
-      storage: { read: () => preferences, write: () => undefined },
+      storage: heldPreferences(preferences),
     });
 
     return render(

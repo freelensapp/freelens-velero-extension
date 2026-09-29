@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { emptyPreferences, RESOURCES } from "../../common/discovery";
+import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { Installation } from "./installation";
 
 import type { Answer, Family, Preferences } from "../../common/discovery";
@@ -33,16 +33,11 @@ function cluster(answers: Record<string, Answer | (() => Promise<Answer>)>) {
   return { asked, read, answers };
 }
 
+// What the store of the host is for the views: it answers what was last written to it.
 function storage(initial: Preferences = emptyPreferences()) {
   const written: Preferences[] = [];
 
-  return {
-    written,
-    read: () => initial,
-    write: (preferences: Preferences) => {
-      written.push(preferences);
-    },
-  };
+  return { written, ...heldPreferences(initial, (preferences) => written.push(preferences)) };
 }
 
 function path(family: Family, namespace: string): string {
@@ -377,6 +372,77 @@ describe("what is kept between two sessions", () => {
       configured: { "cluster-b": ["velero-c"] },
     });
     expect(state.entry).toMatchObject({ state: "choose" });
+  });
+
+  it("keeps the window of the recent operations that was chosen, and asks nothing of the cluster for it", async () => {
+    const { state, kept, api } = installation(two, { selected: { "cluster-a": "velero-a" }, configured: {} });
+
+    await state.open();
+    // Seven days when none was chosen.
+    expect(state.window).toBe("7d");
+    const asked = api.asked.length;
+
+    state.chooseWindow("30d");
+    expect(state.window).toBe("30d");
+    expect(kept.written.at(-1)).toEqual({ selected: { "cluster-a": "velero-a" }, configured: {}, window: "30d" });
+    expect(api.asked).toHaveLength(asked);
+    // What is not one of the three is not taken.
+    const written = kept.written.length;
+
+    state.chooseWindow("1h" as never);
+    state.chooseWindow(undefined as never);
+    expect(state.window).toBe("30d");
+    expect(kept.written).toHaveLength(written);
+    // The window is of the extension, and stays when a namespace is chosen, named or taken back.
+    state.select("velero-b");
+    expect(kept.written.at(-1)).toMatchObject({ selected: { "cluster-a": "velero-b" }, window: "30d" });
+    state.configure("velero-c");
+    expect(kept.written.at(-1)).toMatchObject({ configured: { "cluster-a": ["velero-c"] }, window: "30d" });
+    state.forget("velero-c");
+    expect(kept.written.at(-1)).toEqual({ selected: {}, configured: {}, window: "30d" });
+    expect(JSON.stringify(kept.written)).not.toMatch(/nightly|uid|resourceVersion|token|kubeconfig|write/i);
+  });
+
+  it("keeps what the frame of another cluster kept, and takes the window that was chosen there", async () => {
+    // One store for every cluster, and an installation for the frame of each.
+    const store = storage();
+    const frame = (id: string) =>
+      new Installation({
+        cluster: { id, name: id },
+        read: cluster(two).read,
+        now: () => 1000,
+        storage: store,
+      });
+    const one = frame("cluster-a");
+    const other = frame("cluster-b");
+
+    await one.open();
+    await other.open();
+    one.select("velero-a");
+    one.chooseWindow("30d");
+    // The other frame was made before the window was chosen: what it keeps is added to what the store
+    // holds now, and takes nothing away from it.
+    other.select("velero-b");
+    other.configure("velero-c");
+    expect(store.read()).toEqual({
+      selected: { "cluster-a": "velero-a", "cluster-b": "velero-c" },
+      configured: { "cluster-b": ["velero-c"] },
+      window: "30d",
+    });
+    expect(other.window).toBe("30d");
+    // A window chosen in one frame is the one of the other at its next read.
+    other.chooseWindow("24h");
+    expect(one.window).toBe("30d");
+    await one.refresh();
+    expect(one.window).toBe("24h");
+    expect(one.namespace).toBe("velero-a");
+    one.forget("velero-a");
+    expect(store.read()).toMatchObject({ selected: { "cluster-b": "velero-c" }, window: "24h" });
+  });
+
+  it("takes the window that was kept, and seven days for one that is not a window", () => {
+    expect(installation(two, { ...emptyPreferences(), window: "24h" }).state.window).toBe("24h");
+    expect(installation(two, { ...emptyPreferences(), window: "soon" as never }).state.window).toBe("7d");
   });
 });
 

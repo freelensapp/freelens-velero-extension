@@ -1,8 +1,10 @@
 import { backupView } from "./backup-view";
+import { MARK_GAP, operationLine } from "./operation-line";
 import { newestFirst, operationTime } from "./operation-time";
 import { LABELS } from "./types";
 
 import type { BackupView } from "./backup-view";
+import type { Line, LineMark } from "./operation-line";
 import type { OperationTime } from "./operation-time";
 import type { FamilyRead } from "./read-state";
 import type { BackupResource } from "./types";
@@ -75,7 +77,7 @@ export function historyCounts(items: HistoryItem[]): HistoryCounts {
 // once for each read: a list asks for the history of every schedule it shows, each time it is drawn.
 const bySchedule = new WeakMap<BackupResource[], Map<string, BackupResource[]>>();
 
-function backupsOf(items: BackupResource[], namespace: string, schedule: string): BackupResource[] {
+export function backupsOf(items: BackupResource[], namespace: string, schedule: string): BackupResource[] {
   let index = bySchedule.get(items);
 
   if (!index) {
@@ -133,69 +135,13 @@ export function countsText(counts: HistoryCounts): string {
 }
 
 // One mark of the line of time: a backup, or the backups that would be drawn over each other.
-export interface StripMark {
-  // Where the mark is between the two ends of the line, from 0 to 1.
-  at: number;
-  // From the newest.
-  items: HistoryItem[];
-  // One of them carries a failure.
-  failing: boolean;
-  inFlight: boolean;
-  // One of them did not start: it is at the time it was created.
-  notStarted: boolean;
-}
+export type StripMark = LineMark<HistoryItem>;
+export type Strip = Line<HistoryItem>;
 
-export interface Strip {
-  // The two ends of the line: the time of the oldest backup that is drawn, and now.
-  from: number;
-  to: number;
-  // From the oldest, as they are read along the line.
-  marks: StripMark[];
-  // The backups that have no time: they are in the list, and not on the line.
-  undrawn: HistoryItem[];
-}
+export { MARK_GAP };
 
-// How far from each other two marks are drawn at least, in the units of the width: the width of a mark, and
-// what tells it from the one beside it.
-export const MARK_GAP = 28;
-
-// Where each backup is on a line of time of a given width, in the units the width is given in. Two marks
-// closer than `gap` would be drawn over each other: they are one mark, which says how many they are.
-// Nothing is made for the time between two backups: not a missed run, not an expected one. The line ends
-// now, or at the newest backup when the clock of the cluster is ahead of the one that draws the line.
+// Where each backup of a history is on a line of time of a given width: the line of the operations, from
+// the oldest backup that exists to now.
 export function historyStrip(items: HistoryItem[], now: number, width: number, gap = MARK_GAP): Strip | undefined {
-  const timed = items
-    .filter((item): item is HistoryItem & { time: { time: number } } => item.time.of !== "none")
-    // Inside a mark the backups are from the newest, and the ones of the same time by their names.
-    .sort((one, other) => one.time.time - other.time.time || other.view.name.localeCompare(one.view.name));
-  const drawn = new Set<HistoryItem>(timed);
-  const undrawn = items.filter((item) => !drawn.has(item));
-
-  if (!timed.length) return undefined;
-  const from = timed[0].time.time;
-  const to = Math.max(now, timed[timed.length - 1].time.time);
-  const span = Math.max(to - from, 1);
-  const room = Math.max(width, 1);
-  const marks: StripMark[] = [];
-  let first = 0;
-
-  for (const item of timed) {
-    const at = (item.time.time - from) / span;
-    const last = marks[marks.length - 1];
-    const failing = item.view.evidence.signal === "failure";
-    const inFlight = item.view.state.lifecycle === "in-flight";
-    const notStarted = item.time.of === "creation" && item.view.state.execution === "not-started";
-
-    // The distance is from the first backup of the mark: a mark does not grow along the line.
-    if (last && (at - first) * room < gap) {
-      last.items.unshift(item);
-      last.failing ||= failing;
-      last.inFlight ||= inFlight;
-      last.notStarted ||= notStarted;
-    } else {
-      first = at;
-      marks.push({ at, items: [item], failing, inFlight, notStarted });
-    }
-  }
-  return { from, to, marks, undrawn };
+  return operationLine(items, now, width, { gap });
 }

@@ -49,6 +49,7 @@ export function fixtureNames(run: string) {
     static: `velero-static-${run}`,
     views: `velero-views-${run}`,
     defaults: `velero-defaults-${run}`,
+    overview: `velero-overview-${run}`,
     scale: `velero-scale-${run}`,
     backup: `fixture-backup-${run}`,
     restore: `fixture-restore-${run}`,
@@ -58,7 +59,7 @@ export function fixtureNames(run: string) {
 export function fixtureNamespaces(run: string): string[] {
   const names = fixtureNames(run);
 
-  return [names.source, names.restored, names.static, names.views, names.defaults, names.scale];
+  return [names.source, names.restored, names.static, names.views, names.defaults, names.overview, names.scale];
 }
 
 export function fixtureArtifactPaths(run: string) {
@@ -713,21 +714,43 @@ function reader(name: string, namespace: string, labels: Record<string, string>,
 // The long lists: a namespace with no storage location, which no discovery suggests, a thousand backups and
 // a thousand restores in every phase. Each list is created in one request of the client, and they are
 // deleted with their namespace.
+// What is placed by the clock: objects whose times are counted back from when they were put in place, so
+// that a window of the last hours holds some of them. They say when that was, and are put in place again
+// when it was longer ago than they are good for.
+export const PLACED_ANNOTATION = "freelensapp.io/velero-fixture-placed";
+export const PLACED_FOR = 12 * 3_600_000;
+// What the fixtures are made of, as a digest of them: the ones that are in place are put in place again
+// when the ones that would be made now are not the same, whatever their age.
+export const SHAPE_ANNOTATION = "freelensapp.io/velero-fixture-shape";
+
+const DAY = 86_400_000;
+
+function placedAt(placed: number): { annotations: Record<string, string> } {
+  requireCondition(Number.isFinite(placed), "The time the fixtures are placed at is required");
+  return { annotations: { [PLACED_ANNOTATION]: new Date(placed).toISOString() } };
+}
+
+// A thousand backups and a thousand restores, spread over the thirty days before they were put in place:
+// every window of the recent operations holds some of them.
 export function scaleFixtures(
   owner: string,
   run: string,
+  placed = Date.parse("2026-09-01T00:00:00Z"),
 ): { namespace: KubeResource; backups: KubeResource[]; restores: KubeResource[] } {
   requireCondition(owner, "Fixture ownership is required");
   const names = fixtureNames(run);
   const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
-  const first = Date.parse("2026-08-01T00:00:00Z");
+  const step = (30 * DAY) / SCALE_BACKUPS;
+  // The last of them started a step before they were put in place: none is of a time that is to come.
+  const first = Math.floor(placed / 1000) * 1000 - 30 * DAY;
+  const at = placedAt(placed);
 
   return {
     namespace: { apiVersion: "v1", kind: "Namespace", metadata: { name: names.scale, labels } },
     backups: Array.from({ length: SCALE_BACKUPS }, (_, index) => ({
       apiVersion: "velero.io/v1",
       kind: "Backup",
-      metadata: { name: `backup-${String(index + 1).padStart(4, "0")}`, namespace: names.scale, labels },
+      metadata: { name: `backup-${String(index + 1).padStart(4, "0")}`, namespace: names.scale, labels, ...at },
       spec: {
         includedNamespaces: [names.source],
         includeClusterResources: false,
@@ -735,12 +758,12 @@ export function scaleFixtures(
         snapshotVolumes: false,
         ttl: "720h0m0s",
       },
-      status: syntheticStatus(BACKUP_PHASES[index % BACKUP_PHASES.length], "itemsBackedUp", first + index * 3_600_000),
+      status: syntheticStatus(BACKUP_PHASES[index % BACKUP_PHASES.length], "itemsBackedUp", first + index * step),
     })),
     restores: Array.from({ length: SCALE_RESTORES }, (_, index) => ({
       apiVersion: "velero.io/v1",
       kind: "Restore",
-      metadata: { name: `restore-${String(index + 1).padStart(4, "0")}`, namespace: names.scale, labels },
+      metadata: { name: `restore-${String(index + 1).padStart(4, "0")}`, namespace: names.scale, labels, ...at },
       spec: restoreSpec(RESTORE_PHASES[index % RESTORE_PHASES.length], {
         backupName: `backup-${String((index % SCALE_BACKUPS) + 1).padStart(4, "0")}`,
         includedNamespaces: [names.source],
@@ -752,10 +775,162 @@ export function scaleFixtures(
       status: syntheticStatus(
         RESTORE_PHASES[index % RESTORE_PHASES.length],
         "itemsRestored",
-        first + index * 3_600_000 + 1_800_000,
+        first + index * step + step / 2,
       ),
     })),
   };
+}
+
+export const OVERVIEW_SCHEDULES = 12;
+
+// An installation for the Overview: storage locations a rule names, twelve schedules of which the rules
+// name two, and backups and restores whose times are counted back from when they were put in place, so
+// that each window of the recent operations holds some of them and leaves some out. No controller reads
+// them.
+export function overviewFixtures(owner: string, run: string, placed: number): KubeResource[] {
+  requireCondition(owner, "Fixture ownership is required");
+  const names = fixtureNames(run);
+  const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
+  const at = placedAt(placed);
+  const HOUR = 3_600_000;
+  const before = (time: number) => Math.floor(placed / 1000) * 1000 - time;
+  const time = (value: number) => new Date(value).toISOString().replace(".000Z", "Z");
+  const metadata = (name: string, more: Record<string, string> = {}) => ({
+    name,
+    namespace: names.overview,
+    labels: { ...labels, ...more },
+    ...at,
+  });
+  const location = (name: string, spec: object, status?: object): KubeResource => ({
+    apiVersion: "velero.io/v1",
+    kind: "BackupStorageLocation",
+    metadata: metadata(name),
+    spec: {
+      provider: "aws",
+      objectStorage: { bucket: BUCKET, prefix: name },
+      config: { region: "us-east-1" },
+      ...spec,
+    },
+    ...(status ? { status } : {}),
+  });
+  const schedule = (index: number): KubeResource => {
+    const name = `overview-schedule-${String(index).padStart(2, "0")}`;
+    const template = {
+      includedNamespaces: [names.source],
+      includeClusterResources: false,
+      // The eleventh sends its backups to the location that is not available.
+      storageLocation: index === 11 ? "overview-unavailable" : "overview-default",
+      ttl: "720h0m0s",
+    };
+
+    // The release writes the time of the last backup it asked for a schedule into the schedule: the first
+    // asked for one an hour before, and the seventh eight hours before, when its expression was one the
+    // release took.
+    const submitted = index === 1 ? HOUR : index === 7 ? 8 * HOUR : undefined;
+    const last = submitted === undefined ? {} : { lastBackup: time(before(submitted)) };
+
+    // The seventh was refused, the eleventh was not read, the fifth is paused.
+    return {
+      apiVersion: "velero.io/v1",
+      kind: "Schedule",
+      metadata: metadata(name),
+      spec: {
+        schedule: index === 7 ? "every night" : `0 ${index} * * *`,
+        paused: index === 5,
+        ...(index === 11 ? {} : { skipImmediately: false }),
+        template,
+      },
+      ...(index === 11
+        ? {}
+        : {
+            status:
+              index === 7
+                ? {
+                    phase: "FailedValidation",
+                    validationErrors: ["invalid schedule: expected exactly 5 fields, found 2: [every night]"],
+                    ...last,
+                  }
+                : { phase: "Enabled", ...last },
+          }),
+    };
+  };
+  const backup = (name: string, phase: string, started: number, schedule?: string): KubeResource => ({
+    apiVersion: "velero.io/v1",
+    kind: "Backup",
+    metadata: metadata(name, schedule ? { "velero.io/schedule-name": schedule } : {}),
+    spec: {
+      includedNamespaces: [names.source],
+      includeClusterResources: false,
+      storageLocation: "overview-default",
+      snapshotVolumes: false,
+      ttl: "720h0m0s",
+    },
+    // The release writes its place in the queue into a backup that waits.
+    status: {
+      ...syntheticStatus(phase, "itemsBackedUp", before(started)),
+      ...(phase === "Queued" ? { queuePosition: 1 } : {}),
+    },
+  });
+  const restore = (name: string, phase: string, started: number): KubeResource => ({
+    apiVersion: "velero.io/v1",
+    kind: "Restore",
+    metadata: metadata(name),
+    spec: restoreSpec(phase, {
+      backupName: "recent-5d",
+      includedNamespaces: [names.source],
+      namespaceMapping: { [names.source]: names.restored },
+      includeClusterResources: false,
+      restorePVs: false,
+      existingResourcePolicy: "none",
+    }),
+    status: syntheticStatus(phase, "itemsRestored", before(started)),
+  });
+
+  return [
+    location(
+      "overview-default",
+      { default: true, accessMode: "ReadWrite" },
+      { phase: "Available", lastValidationTime: time(before(2 * DAY)) },
+    ),
+    location(
+      "overview-unavailable",
+      { accessMode: "ReadWrite" },
+      {
+        phase: "Unavailable",
+        message: "Synthetic storage failure; no endpoint was contacted",
+        lastValidationTime: time(before(3 * DAY)),
+      },
+    ),
+    location("overview-silent", {}),
+    ...Array.from({ length: OVERVIEW_SCHEDULES }, (_, index) => schedule(index + 1)),
+    // What ended, in every window and outside them. The ones of no schedule that ended with a failure are
+    // items of the window they are in.
+    backup("recent-1h", "Completed", HOUR, "overview-schedule-01"),
+    backup("recent-3h", "Failed", 3 * HOUR),
+    backup("recent-5h", "Completed", 5 * HOUR),
+    backup("recent-2d", "PartiallyFailed", 2 * DAY),
+    backup("recent-5d", "Completed", 5 * DAY),
+    backup("recent-10d", "Completed", 10 * DAY),
+    backup("recent-25d", "Failed", 25 * DAY),
+    backup("recent-40d", "Completed", 40 * DAY),
+    // The backups of the schedule that was refused: one the release asked for while it took the
+    // expression, which completed, and after it the newest, which a client asked from the schedule as
+    // the release lets one do, with the label of the schedule. It failed its validation: it never
+    // started, and is at the time it was created.
+    backup("scheduled-8h", "Completed", 8 * HOUR, "overview-schedule-07"),
+    backup("scheduled-refused", "FailedValidation", 0, "overview-schedule-07"),
+    // What is in flight: at work, waiting, and at work with a failure.
+    backup("flying-running", "InProgress", 10 * 60_000),
+    backup("flying-queued", "Queued", 0),
+    backup("flying-failing", "WaitingForPluginOperationsPartiallyFailed", 2 * HOUR),
+    restore("restored-3h", "Completed", 3 * HOUR),
+    restore("restored-3d", "Failed", 3 * DAY),
+    restore("restored-20d", "Completed", 20 * DAY),
+    restore("restored-35d", "PartiallyFailed", 35 * DAY),
+    // It failed its validation: it never started, and is at the time it was created.
+    restore("restore-refused", "FailedValidation", 0),
+    restore("restore-flying", "FinalizingPartiallyFailed", HOUR),
+  ];
 }
 
 export function staticFixtures(owner: string, run: string): KubeResource[] {
@@ -851,6 +1026,17 @@ export interface FixtureRuntime {
   owner: string;
   kubectl(args: string[], input?: string, timeout?: number, recordOutput?: boolean): string;
   apply(resource: KubeResource): void;
+  // Waits before the cluster is read again. Without it the process waits where it is.
+  pause?(milliseconds: number): void;
+}
+
+// How long what was removed is given to be gone, and how often the cluster is asked whether it is.
+const REMOVAL_TIMEOUT = 300_000;
+const REMOVAL_POLL = 1000;
+
+function pause(runtime: FixtureRuntime, milliseconds: number): void {
+  if (runtime.pause) runtime.pause(milliseconds);
+  else Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
 }
 
 export function readFixture(runtime: FixtureRuntime, expected: KubeResource): KubeResource {
@@ -976,12 +1162,127 @@ export function readerKubeconfig(config: KindConfig, token: string, namespace: s
   return reader;
 }
 
-// The fixtures of the views, put in place once: a second call finds them and changes nothing.
+// What is placed by the clock is found by what it says of when it was placed. It is left as it is while it
+// is good, and put in place again when it is not: the objects of the namespace that are of this run are
+// removed, and the ones of now are created. Nothing else of the cluster is touched.
+export function placeByTheClock(
+  runtime: FixtureRuntime,
+  run: string,
+  namespace: string,
+  now: number,
+  make: (placed: number) => KubeResource[],
+): { placed: number; count: number; again: boolean } {
+  const names = fixtureNames(run);
+
+  // The other namespaces of the run hold fixtures whose times are fixed, with the labels of the run: they
+  // would be removed with what is placed by the clock.
+  requireCondition(
+    [names.overview, names.scale].includes(namespace),
+    "Refusing to place fixtures outside the namespaces that are placed by the clock",
+  );
+  requireCondition(
+    make(now).every((resource) => resource.metadata.namespace === namespace),
+    `Refusing to place in ${namespace} what is made for another namespace`,
+  );
+  // The digest is of the fixtures made for one moment, which is the same at every call.
+  const shape = createHash("sha256")
+    .update(JSON.stringify(make(0)))
+    .digest("hex")
+    .slice(0, 16);
+  const made = () =>
+    make(now).map((resource) => ({
+      ...resource,
+      metadata: {
+        ...resource.metadata,
+        annotations: { ...resource.metadata.annotations, [SHAPE_ANNOTATION]: shape },
+      },
+    }));
+  const kinds = [...new Set(make(now).map((resource) => `${resource.kind}.velero.io`.toLowerCase()))].sort();
+  const listed = () =>
+    (
+      JSON.parse(
+        runtime.kubectl(["get", kinds.join(","), "--namespace", namespace, "-o", "json"], undefined, undefined, false),
+      ) as { items: (KubeResource & { status?: { phase?: string } })[] }
+    ).items;
+  const times = (items: KubeResource[]) =>
+    items.map((item) => Date.parse(item.metadata.annotations?.[PLACED_ANNOTATION] ?? ""));
+  const before = listed();
+  const good =
+    before.length === make(now).length &&
+    before.every((item) => item.metadata.annotations?.[SHAPE_ANNOTATION] === shape) &&
+    times(before).every((time) => Number.isFinite(time) && time <= now && now - time <= PLACED_FOR);
+
+  if (!good) {
+    requireCondition(
+      before.every(
+        (item) =>
+          item.metadata.namespace === namespace &&
+          item.metadata.labels?.[OWNER_LABEL] === runtime.owner &&
+          item.metadata.labels?.[FIXTURE_LABEL] === run,
+      ),
+      "The namespace holds what is not of this run; nothing is removed",
+    );
+    if (before.length) {
+      // The client waits for what it removed one object at a time, which is minutes for two thousand:
+      // it is asked not to, and the namespace is read until nothing of it is left.
+      runtime.kubectl(
+        [
+          "delete",
+          kinds.join(","),
+          "--namespace",
+          namespace,
+          "--selector",
+          `${OWNER_LABEL}=${runtime.owner},${FIXTURE_LABEL}=${run}`,
+          "--wait=false",
+        ],
+        undefined,
+        600_000,
+        false,
+      );
+      const started = Date.now();
+
+      for (let left = listed().length; left > 0; left = listed().length) {
+        requireCondition(
+          Date.now() - started < REMOVAL_TIMEOUT,
+          `${left} fixtures of ${namespace} are still there after they were removed`,
+        );
+        pause(runtime, REMOVAL_POLL);
+      }
+    }
+    runtime.kubectl(
+      ["create", "-f", "-", "-o", "name"],
+      JSON.stringify({ apiVersion: "v1", kind: "List", items: made() }),
+      600_000,
+      false,
+    );
+  }
+  const found = listed();
+  const placed = Math.min(...times(found));
+
+  requireCondition(
+    found.length === make(now).length &&
+      found.every(
+        (item) =>
+          item.metadata.labels?.[OWNER_LABEL] === runtime.owner &&
+          item.metadata.labels?.[FIXTURE_LABEL] === run &&
+          (item.kind === "Schedule" || item.kind === "BackupStorageLocation" || item.status?.phase),
+      ) &&
+      Number.isFinite(placed) &&
+      now - placed <= PLACED_FOR,
+    `The fixtures of ${namespace} are not the ones of this run`,
+  );
+  return { placed, count: found.length, again: !good };
+}
+
+// The fixtures of the views. The ones whose times are fixed are put in place once: a second call finds
+// them and changes nothing. The ones that are placed by the clock are put in place again when they are
+// older than they are good for.
 export function createViewFixtures(
   runtime: FixtureRuntime,
   run: string,
   started: number,
-): { views: number; scale: number; restores: number } {
+  now = started,
+): { views: number; overview: number; scale: number; restores: number; again: string[] } {
   const names = fixtureNames(run);
   // The newest backup of the schedule with a history goes first, after the namespaces: the time it was
   // created is the last submission of its schedule. A second call finds the backup, and asks for the
@@ -997,48 +1298,25 @@ export function createViewFixtures(
 
   requireCondition(Number.isFinite(submitted), "The newest backup of the history has the time it was created");
   const views = createWithStatus(runtime, viewFixtures(runtime.owner, run, started, submitted));
-  const scale = scaleFixtures(runtime.owner, run);
-  const place = (kind: string, items: KubeResource[]): number => {
-    const listed = () =>
-      (
-        JSON.parse(
-          runtime.kubectl(
-            ["get", `${kind}.velero.io`, "--namespace", names.scale, "-o", "json"],
-            undefined,
-            undefined,
-            false,
-          ),
-        ) as { items: (KubeResource & { status?: { phase?: string } })[] }
-      ).items;
+  const labels = { [OWNER_LABEL]: runtime.owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
 
-    if (!listed().length) {
-      runtime.kubectl(
-        ["create", "-f", "-", "-o", "name"],
-        JSON.stringify({ apiVersion: "v1", kind: "List", items }),
-        600_000,
-        false,
-      );
-    }
-    const found = listed();
+  runtime.apply(scaleFixtures(runtime.owner, run, now).namespace);
+  runtime.apply({ apiVersion: "v1", kind: "Namespace", metadata: { name: names.overview, labels } });
+  const overview = placeByTheClock(runtime, run, names.overview, now, (placed) =>
+    overviewFixtures(runtime.owner, run, placed),
+  );
+  const scale = placeByTheClock(runtime, run, names.scale, now, (placed) => {
+    const made = scaleFixtures(runtime.owner, run, placed);
 
-    requireCondition(
-      found.length === items.length &&
-        found.every(
-          (item) =>
-            item.metadata.labels?.[OWNER_LABEL] === runtime.owner &&
-            item.metadata.labels?.[FIXTURE_LABEL] === run &&
-            item.status?.phase,
-        ),
-      `The ${kind} of the long list are not the ones of this run`,
-    );
-    return found.length;
-  };
+    return [...made.backups, ...made.restores];
+  });
 
-  runtime.apply(scale.namespace);
   return {
     views: views.length,
-    scale: place("backups", scale.backups),
-    restores: place("restores", scale.restores),
+    overview: overview.count,
+    scale: SCALE_BACKUPS,
+    restores: scale.count - SCALE_BACKUPS,
+    again: [...(overview.again ? [names.overview] : []), ...(scale.again ? [names.scale] : [])],
   };
 }
 

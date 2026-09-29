@@ -3,6 +3,15 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  /* In a room shorter than what the page cannot give up, which a small window at twice the zoom is, the
+     page is scrolled: the host cuts what is taller than the room it gives, and what is cut is reached
+     by nothing. */
+  overflow-y: auto;
+  /* The room of the scrollbar is kept when there is none. A page that is narrower with its scrollbar
+     sends the target bar to a second line at a width it has one line at without it: the list under it
+     is given less, the page fits, the scrollbar goes, the bar is one line again, and the page begins
+     again, at every frame. */
+  scrollbar-gutter: stable;
   color: var(--textColorPrimary);
 }
 
@@ -47,6 +56,8 @@
 
 .readTime {
   color: var(--textColorSecondary);
+  /* Every figure as wide as the others: the time of a read does not move what is beside it. */
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
@@ -649,9 +660,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 26px;
+  box-sizing: border-box;
+  /* A mark is as wide as the gap between two marks lets it be, whatever it holds. */
+  width: 26px;
   height: 26px;
-  padding: 0 4px;
+  padding: 0;
   border: 1px solid var(--borderColor);
   border-radius: 13px;
   background: var(--contentColor);
@@ -677,6 +690,25 @@
   color: var(--colorError);
 }
 
+/* A failure is said by a shape as well: a mark of many, and one of an operation in flight, have the same
+   drawing with a failure and without one. */
+.stripFailing::after {
+  content: "!";
+  position: absolute;
+  top: -5px;
+  right: -3px;
+  box-sizing: border-box;
+  width: 12px;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--colorError);
+  color: var(--contentColor);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 12px;
+  text-align: center;
+}
+
 /* More than one backup: a mark with its number, and a border that is doubled. */
 .stripGroup {
   border-style: double;
@@ -688,8 +720,21 @@
 }
 
 .stripCount {
+  max-width: 20px;
+  overflow: hidden;
   font-size: 12px;
   font-weight: 600;
+  line-height: 1;
+}
+
+/* A number of more than one character is written smaller: the mark stays as wide as it is. */
+.stripCount[data-characters="2"] {
+  font-size: 11px;
+}
+
+.stripCount[data-characters="3"] {
+  font-size: 9px;
+  letter-spacing: -0.3px;
 }
 
 .stripEnds {
@@ -717,4 +762,188 @@
 
 .scrolled .references .status {
   white-space: nowrap;
+}
+
+/* The Overview: bands without frames, one under the other, and two side by side where the room is wide. */
+.overview {
+  /* What is taken out of the flow inside the page, as the words for who does not see are, is placed in
+     the page: placed in what holds it, it would make that taller than its room, and the keyboard would
+     scroll the target bar out of reach. */
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 24px 32px;
+  container-type: inline-size;
+}
+
+.overviewRead {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px 24px;
+  padding-bottom: 16px;
+}
+
+.overviewCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 0;
+  border-top: 2px solid var(--borderColor);
+  color: inherit;
+  text-decoration: none;
+}
+
+.overviewCell:hover,
+.overviewCell:focus-visible {
+  border-top-color: var(--primary);
+  outline: none;
+}
+
+.overviewCell:focus-visible {
+  box-shadow: 0 0 0 2px var(--primary);
+}
+
+.overviewCount {
+  font-size: 20px;
+  overflow-wrap: anywhere;
+}
+
+/* A state in words is not a number: it has the size of the words. */
+.overviewCell:not([data-read="read"], [data-read="stale"]) .overviewCount {
+  font-size: 14px;
+  color: var(--textColorSecondary);
+}
+
+.overviewRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0 32px;
+}
+
+@container (min-width: 1000px) {
+  .overviewRow {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+.overviewBand {
+  min-width: 0;
+  padding: 8px 0 16px;
+  border-top: 1px solid var(--borderFaintColor);
+}
+
+/* The line over a band is the one of the band: its title has none of its own. */
+.overviewBand .sectionTitle {
+  margin: 0;
+  padding-top: 8px;
+  border-top: 0;
+}
+
+/* A name of the length most names have is on one line, and so is a value of two words. */
+.overview .references td:first-child {
+  min-width: 20ch;
+}
+
+.overview .references .short {
+  white-space: nowrap;
+}
+
+/* What is in flight, in half the page: two lines for each operation. */
+.flights {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.flight {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--borderFaintColor);
+}
+
+.flightHead {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+  overflow-wrap: anywhere;
+}
+
+.flightFacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  margin-top: 4px;
+}
+
+.flights .flightFacts .status {
+  align-items: flex-start;
+  white-space: normal;
+}
+
+.overviewItems {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.overviewItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--borderFaintColor);
+  overflow-wrap: anywhere;
+}
+
+.overviewItem > :first-child {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.overviewWindows {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 0;
+  border: 0;
+}
+
+.overviewWindow {
+  padding: 4px 12px;
+  border: 1px solid var(--borderColor);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--textColorPrimary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.overviewWindow:hover,
+.overviewWindow:focus-visible {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.overviewWindow:focus-visible {
+  box-shadow: 0 0 0 2px var(--primary);
+}
+
+/* The window that is chosen is said by its state to who does not see it, and by its border and its
+   weight to who does: not by a color alone. */
+.overviewWindowChosen {
+  border-width: 2px;
+  border-color: var(--primary);
+  font-weight: 600;
+}
+
+.lineRow {
+  margin-bottom: 8px;
+}
+
+.lineTitle {
+  color: var(--textColorSecondary);
+  font-size: 12px;
 }

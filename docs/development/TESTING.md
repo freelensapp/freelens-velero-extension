@@ -1,6 +1,6 @@
 # Testing Strategy
 
-Date: 2026-09-28
+Date: 2026-09-29
 
 Status: T0.3-T0.6 scaffold, environment, fixture and compiled-main transport checks
 pass. The [integration test](#integration-tests) covers the activation in Freelens.
@@ -175,14 +175,22 @@ The build is the one of the
 | Suite | What it proves |
 | --- | --- |
 | `velero-e2e-journey` | Nothing is asked before a view opens; the choice among the installations; the list of every phase; the workspace; the references that lead somewhere and the ones that do not; equal names in two installations; no way to select, edit or delete; the section in the details of the host |
-| `velero-e2e-preferences` | What is kept between two starts of the application, and nothing else; a namespace that is not there any more stays selected |
+| `velero-e2e-overview` | The Overview as the first entry under Velero, with what the API server counted when it opens; what was read of the five families; what needs attention by its rules, in its order, with the reason of each; what is in flight; the newest completed backup; the three windows, on the line of time and in the list; ten lines of twelve schedules; every way of the page followed, and the way back; an installation where no rule finds anything; no value of the whole in any installation; two thousand operations within the budget, and the scroll after a read |
+| `velero-e2e-preferences` | What is kept between two starts of the application, which is the two maps of the namespaces and the window of the recent operations, and nothing else; a namespace that is not there any more stays selected |
 | `velero-e2e-restores` | The list of every phase of a restore; a restore as Velero keeps it, with where it restores into and the scope it carries; one that failed its validation, with no time and no backup made up; a source that is not there; the way between a restore and its backup in both directions, over the list the first view was opened from; no way to select, edit or delete; the section in the details of the host |
-| `velero-e2e-restricted` | The views for an identity that reads three kinds of one namespace: what is denied is said, and is neither absent nor empty; a location shown with the Secrets it names, to an identity the API server refuses the Secrets to |
-| `velero-e2e-restricted-restores` | The views for an identity that reads the restores and the schedules and not the backups: the source of a restore, the history of a schedule and the backups that name a location are said denied, and are neither absent nor empty |
+| `velero-e2e-restricted` | The views for an identity that reads three kinds of one namespace: what is denied is said, and is neither absent nor empty; a location shown with the Secrets it names, to an identity the API server refuses the Secrets to; the Overview, which says what the rules did not look at |
+| `velero-e2e-restricted-restores` | The views for an identity that reads the restores and the schedules and not the backups: the source of a restore, the history of a schedule, the backups that name a location and the newest completed backup of the Overview are said denied or not known, and are neither absent nor empty |
 | `velero-e2e-schedules` | The schedules Velero took, refused and has not read, with paused and validation as two facts; the last submission beside the newest backup; the history of a schedule, from the newest, on its line of time and in its list, with the backup that never started at the time it was created; the template and where its backups go; the way between a schedule and its backups in both directions; no way to edit, pause or run; the section in the details of the host |
 | `velero-e2e-locations` | The storage locations with availability, access mode and default as three facts; the location the controller validates, which is not late, and the synthetic ones, which are; none and two marked default; a message of many lines; where a location points and the Secrets it names, by their names; what uses a location, and the way to it and back; the way from a backup, a restore and a schedule to their locations; the snapshot locations, with a phase that has the mark of what is not known; no way to select, edit, delete or set as default; the sections in the details of the host |
 | `velero-e2e-scale` | A thousand backups and a thousand restores: the rows that are mounted, the time of the interactions, the state of each list when an object is opened and closed |
-| `pre-review` | Every view in both themes, at 1440x900, at 900x650 and at twice the zoom, checked for what lies over something else or does not fit; the journeys with the keyboard alone |
+| `pre-review` | Every view in both themes, at 1440x900, at 900x650 and at twice the zoom, checked for what lies over something else, does not fit, or is cut by what holds the page; a page that stands still at the widths where its target bar goes to a second line; the journeys with the keyboard alone |
+
+The check of the layout, which every suite asks of the pages it shows, looks at
+the page and at what holds it, up to the frame of the cluster: what is wider
+than its room, what lies over something else, and what holds more than its
+height without being scrolled by who reads. The last is what the keyboard
+scrolls when it brings what it reaches into view, and what the host cuts in a
+room that is too short.
 
 The suites read the application and the cluster, and write to neither. The helper
 that runs `kubectl` for them refuses every verb but `get`. Each suite compares
@@ -224,13 +232,30 @@ step that does not end says which one it was, with a picture of the window.
 | Second reader | `velero-views-<run>` | A service account that reads restores, schedules, storage locations and snapshot locations of its namespace, and not the backups |
 | Locations | `velero-views-<run>` | Storage locations: one that names its frequency and one that names none, each with a validation that is days old; one whose name and bucket have 63 characters and whose prefix has many parts; one without a status; one unavailable, with a message of three lines; one that names the Secret of its credential and the one of its certificate, with the validation and the sync turned off and an address that carries a query. A snapshot location with a phase, and one without a status that names the Secret of its credential. No Secret is among the fixtures |
 | Defaults | `velero-defaults-<run>` | Two storage locations marked default, the one that is read-only created first. The one the release would keep is the one created last; of two created in the same second it is not settled which. The suite reads when each was created, and expects what the view says of that |
-| Long lists | `velero-scale-<run>` | A thousand backups and a thousand restores in every phase, each restore of one of the backups, and no storage location: nothing suggests the namespace, the operator names it |
+| Overview | `velero-overview-<run>` | An installation no controller reads, placed by the clock: a default storage location validated two days before, one that is unavailable, one that reports nothing; twelve schedules, of which one was refused, one was not read and names the location that is unavailable, one is paused, and two carry the time of the last backup the release asked for them; backups and restores that ended one hour to forty days before, some with a failure; operations in flight, at work, waiting with its place in the queue, and with a failure; a backup a client asked from the schedule that was refused, and a restore, which failed their validation and never started |
+| Long lists | `velero-scale-<run>` | A thousand backups and a thousand restores in every phase, spread over the thirty days before they were placed, each restore of one of the backups, and no storage location: nothing suggests the namespace, the operator names it |
 
 They are put in place by `pnpm e2e:views`, once: a second run finds them. The
 times of the history of a schedule are counted back from when the fixtures were
 started, which the environment keeps: a second run asks for the same objects. No
 controller of Velero watches these namespaces. They go with
 `pnpm e2e:cluster:down`, or with the cleanup of the fixtures.
+
+The fixtures of the Overview and of the long lists are placed by the clock: their
+times are counted back from the moment they are put in place, which each object
+says in an annotation, so that a window of the last day holds some of them. They
+are good for twelve hours. Each says as well what it was made as, which is a
+digest of the fixtures of its namespace. A run that finds them older, finds them
+placed at a time that is after its own, finds that one is missing, or finds that
+they are not made as it would make them, removes the objects of its own run from
+their two namespaces and creates the ones of now; it removes nothing when it
+finds there what is not of its run, and places nothing by the clock in another
+namespace, the others of the run among them.
+What the suites expect of them holds for the twelve hours: an operation of three
+hours before is of the last day until the fixtures are placed again. The
+operations that never started are at the time they were created, which is the
+one of the placement to a second or two: the suites expect them first, in any
+order among themselves.
 
 No controller validates a synthetic location: what one reports is of a
 validation that is days old, whatever the age of the environment, and the views

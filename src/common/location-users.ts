@@ -42,7 +42,7 @@ export interface LocationUsers {
   byDefault?: SentByDefault;
 }
 
-function unread(plural: string, read: FamilyRead<unknown>): Unread {
+export function unread(plural: string, read: FamilyRead<unknown>): Unread {
   switch (read.status) {
     case "forbidden":
       return { state: "inaccessible", reason: `The ${plural} of this installation cannot be read: access is denied` };

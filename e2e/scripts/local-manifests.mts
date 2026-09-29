@@ -38,6 +38,7 @@ export interface KubeResource {
     namespace?: string;
     uid?: string;
     labels?: Record<string, string>;
+    annotations?: Record<string, string>;
     resourceVersion?: string;
   };
   [key: string]: unknown;

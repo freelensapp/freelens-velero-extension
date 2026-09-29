@@ -123,6 +123,7 @@ describe("views of the first milestone", () => {
       // Only the views that exist have an entry: the group, and under it the lists that are there.
       expect(await cluster.veleroSidebarEntries(frame)).toEqual({
         velero: "Velero",
+        "velero-overview": "Overview",
         "velero-backups": "Backups",
         "velero-restores": "Restores",
         "velero-schedules": "Schedules",
@@ -194,7 +195,7 @@ describe("views of the first milestone", () => {
       expect(
         (await frame.locator(".TabLayout .Tabs .Tab").allInnerTexts()).map((tab) => tab.replace(/\s+/g, " ").trim()),
       ).toEqual(Object.values(lists));
-      expect(Object.values(lists).slice(0, 2)).toEqual(["Backups", "Restores"]);
+      expect(Object.values(lists).slice(0, 3)).toEqual(["Overview", "Backups", "Restores"]);
       expect(await frame.locator(".TabLayout .TabLayout").count()).toBe(0);
       // A phase that finished in a failure does not carry the mark of what went well.
       expect(await frame.locator('[data-testid=velero-backups] [data-phase="Failed"] .Icon').first().innerText()).toBe(

@@ -3,7 +3,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { listProps } from "../../../test/host-components";
-import { emptyPreferences, RESOURCES } from "../../common/discovery";
+import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { REFUSED_WHEN_NOT_AVAILABLE } from "../../common/location-users";
 import { LEFT_OUT, SNAPSHOT_PHASE_NOTE } from "../../common/location-view";
 import { BackupStorageLocation, VolumeSnapshotLocation } from "../api/kinds";
@@ -231,7 +231,7 @@ function mount(table: Answers, preferences: Preferences = emptyPreferences(), pa
       return typeof answer === "function" ? answer() : answer;
     },
     now: () => clock.now,
-    storage: { read: () => preferences, write: () => undefined },
+    storage: heldPreferences(preferences),
   });
   const Page = page;
   const view = render(<Page installation={installation} />);
@@ -1310,7 +1310,7 @@ describe("details of the host for a location", () => {
       cluster: { id: "cluster-a", name: "local-demo" },
       read: async () => ({ status: 404 }),
       now: () => NOW,
-      storage: { read: () => preferences, write: () => undefined },
+      storage: heldPreferences(preferences),
     });
   const item = (name: string) => document.querySelector(`[data-name="${name}"] .value`)?.textContent;
 

@@ -148,6 +148,21 @@ commands open the explicit Velero operation, not an unrestricted YAML editor.
 - Recent-operation history places actual operations by start time with known duration
   and outcome. Use a list fallback and accessible details; gaps are not labelled
   missed runs until the schedule-adherence contract can establish that fact.
+- The Overview is bands without frames, in the order an operator would look: what
+  was read, what needs attention beside the newest completed backup and what is in
+  flight, the recent operations, the schedules beside the storage. At 1,000 pixels
+  or more the bands of a row are side by side, under that one is under the other.
+  It has no value for the installation as a whole: no score, no percentage, no
+  single mark, and none of the words that would read as a verdict. A band shows
+  ten items and the way to the ones after them. Every cell, item, mark and line
+  is a way to an object or to a list. What needs attention is in four groups,
+  in this order: what is in flight, the storage, the schedules, what ended. The
+  storage is by name, and the others from the newest: the order does not change
+  while the operator reads. What is in flight has half the page, and is
+  two lines for each operation: its name, its kind and for how long it has been
+  at work, then where it is, what it carries and how many of its items are done.
+  When it started is what the elapsed time says to who points at it. The recent
+  operations have the page, and are a table.
 - A compact relationship path can connect schedule, backup, storage and restore.
   It is not a freeform graph editor; missing references keep their explanation.
 - Logs use bounded rendering, search and clear loading/error/cancel states. Results

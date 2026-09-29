@@ -1,5 +1,5 @@
 import { Renderer } from "@freelensapp/extensions";
-import { emptyPreferences } from "../../common/discovery";
+import { heldPreferences } from "../../common/discovery";
 import { PreferencesStore } from "../../common/preferences-store";
 import { readCluster } from "../api/reader";
 import { Installation } from "./installation";
@@ -12,15 +12,7 @@ let installation: Installation | undefined;
 function storage(): PreferenceStorage {
   const store = PreferencesStore.getInstance<PreferencesStore>(false);
 
-  if (store) return store;
-  let preferences = emptyPreferences();
-
-  return {
-    read: () => preferences,
-    write: (next) => {
-      preferences = next;
-    },
-  };
+  return store ?? heldPreferences();
 }
 
 // The state of the views of this frame, which is the frame of one cluster: the one the host shows in it.

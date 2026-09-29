@@ -2572,11 +2572,17 @@ function placeViewFixtures(): ReturnType<typeof fixtureNames> {
     { owner: journal.owner, kubectl, apply: applyOwned },
     journal.fixtureRun.id,
     Date.parse(journal.fixtureRun.started),
+    Date.now(),
   );
 
   console.log(
-    `PASS: ${placed.views} objects of the views in ${names.views} and ${names.defaults}, and ${placed.scale} backups and ${placed.restores} restores of the long lists in ${names.scale}, are in place, outside the reach of the controllers.`,
+    `PASS: ${placed.views} objects of the views in ${names.views} and ${names.defaults}, ${placed.overview} of the Overview in ${names.overview}, and ${placed.scale} backups and ${placed.restores} restores of the long lists in ${names.scale}, are in place, outside the reach of the controllers.`,
   );
+  if (placed.again.length) {
+    console.log(
+      `NOTE: the fixtures that are placed by the clock were put in place again in ${placed.again.join(" and ")}.`,
+    );
+  }
   return names;
 }
 
@@ -2611,7 +2617,7 @@ function prepareDemo(): void {
       `  all the namespaces:     ${CONFIG}`,
       `  the reader of a part:   ${reader} (backups, schedules, storage locations; its credential lasts eight hours)`,
       `  the second reader:      ${second} (restores, schedules, locations and no backup; eight hours)`,
-      `The namespaces of Velero: ${DEMO_NAMESPACE}, ${names.static}, ${names.views}, ${names.defaults}; to be named: ${names.scale}.`,
+      `The namespaces of Velero: ${DEMO_NAMESPACE}, ${names.static}, ${names.views}, ${names.defaults}, ${names.overview}; to be named: ${names.scale}.`,
     ].join("\n"),
   );
 }
@@ -2685,6 +2691,7 @@ function runViews(): void {
           E2E_STATIC_NAMESPACE: names.static,
           E2E_VIEWS_NAMESPACE: names.views,
           E2E_DEFAULTS_NAMESPACE: names.defaults,
+          E2E_OVERVIEW_NAMESPACE: names.overview,
           E2E_SCALE_NAMESPACE: names.scale,
           E2E_FIXTURE_RUN: run,
           E2E_ARTIFACTS_DIR: artifacts,

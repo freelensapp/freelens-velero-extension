@@ -27,7 +27,8 @@ const RESTORES = cluster.RESTORES;
 const RESTORED = "restore-mapped";
 const LONG_RESTORE = cluster.LONG_RESTORE_NAME;
 // The views that are checked, each in both themes at every size.
-const VIEWS = 23;
+const VIEWS = 27;
+const OVERVIEW = cluster.OVERVIEW;
 const SCHEDULES = cluster.SCHEDULES;
 const SCHEDULED = "views-history";
 const STORAGE = cluster.STORAGE_LOCATIONS;
@@ -128,6 +129,47 @@ describe("pre-review of the views", () => {
       await cluster.showList(frame);
       await everyLayout("backups");
       expect(found("backups")).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "stands still at the widths where the target bar goes to a second line",
+    async () => {
+      await cluster.showList(frame);
+      const tall = async (width: number) => {
+        await velero.setWindowSize(started.app, width, 900);
+        await frame.waitForTimeout(300);
+        return (await cluster.movesOf(frame, cluster.BACKUPS, 1)).bar;
+      };
+      const wide = await tall(1440);
+      let width = 1440;
+
+      // The width the bar is taller at is of the words it holds and of the font they are written in.
+      while (width > 900 && (await tall(width)) <= wide) width -= 8;
+      expect(width).toBeGreaterThan(900);
+      // A scrollbar that comes and goes makes the page narrower and wider by what it is wide: around the
+      // width the bar goes to a second line at, the page with it would not be the page without it.
+      const moved: Record<number, unknown> = {};
+
+      try {
+        for (let at = width + 24; at >= width - 8; at -= 2) {
+          await velero.setWindowSize(started.app, at, 900);
+          await frame.waitForTimeout(500);
+          let found = await cluster.movesOf(frame);
+
+          // A page that was given another width takes a moment to be still, and the installation may be
+          // read while it is looked at, once: what comes and goes is never still, however long it is
+          // looked at.
+          for (let again = 0; again < 3 && found.changes > 1; again += 1) found = await cluster.movesOf(frame);
+          if (found.changes > 1 || found.scrolled) moved[at] = found;
+        }
+      } finally {
+        // The views after this one are looked at in the window they expect.
+        await velero.setWindowSize(started.app, 1440, 900);
+        await frame.waitForTimeout(1000);
+      }
+      expect(moved).toEqual({});
     },
     TIMEOUT,
   );
@@ -533,6 +575,156 @@ describe("pre-review of the views", () => {
       ]) {
         expect([view, found(view)]).toEqual([view, {}]);
       }
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows the Overview in both themes, at every size, with its bands side by side where there is room",
+    async () => {
+      await cluster.showList(frame);
+      await cluster.openPage(frame, OVERVIEW);
+      await cluster.selectInstallation(frame, cluster.E2E_OVERVIEW_NAMESPACE);
+      await frame.waitForSelector('[data-testid="velero-open-backup-recent-1h"]', { timeout: 60_000 });
+      const sides: Record<string, boolean> = {};
+      // Where a band is, from the left of the page: two bands of a row are beside each other, or one
+      // under the other.
+      const beside = (one: string, other: string) =>
+        frame.evaluate(
+          ([first, second]) => {
+            const left = (id: string) =>
+              document.querySelector(`[data-testid=velero-overview-${id}]`)?.getBoundingClientRect().left ?? -1;
+
+            return left(second) > left(first) + 100;
+          },
+          [one, other],
+        );
+
+      await everyLayout(
+        "overview",
+        async () => {
+          await cluster.scrollOverview(frame, 0);
+          const { width } = await cluster.applied(frame);
+
+          sides[`${width} attention`] = await beside("attention", "completed");
+          sides[`${width} schedules`] = await beside("schedules", "storage");
+          // The marks of the line carry what they mean without the colour: a shape or a number, and words.
+          expect(
+            await frame
+              .locator("[data-line-mark]")
+              .evaluateAll((marks) =>
+                marks
+                  .filter(
+                    (mark) =>
+                      !(mark.getAttribute("aria-label") ?? "").trim() ||
+                      !(mark.getAttribute("title") ?? "").trim() ||
+                      !(mark.textContent ?? "").trim(),
+                  )
+                  .map((mark) => mark.getAttribute("data-line-mark")),
+              ),
+          ).toEqual([]);
+          expect(await frame.locator("[data-line-mark]").count()).toBeGreaterThan(3);
+          // A failure is a shape beside the mark, and what carries none has none: a mark of many and
+          // one of an operation in flight are drawn the same with a failure and without.
+          const shapes = await frame
+            .locator("[data-line-mark]")
+            .evaluateAll((marks) =>
+              marks.map((mark) => [
+                mark.getAttribute("data-failing"),
+                getComputedStyle(mark, "::after").content.replace(/"/g, ""),
+              ]),
+            );
+
+          expect(shapes.filter(([failing, shape]) => (failing === "true") !== (shape === "!"))).toEqual([]);
+          expect(shapes.filter(([failing]) => failing === "true").length).toBeGreaterThan(0);
+          expect(shapes.filter(([failing]) => failing === "false").length).toBeGreaterThan(0);
+        },
+        OVERVIEW,
+      );
+      // At 1440 the bands that share a row are beside each other; at 900, and at twice the zoom, one
+      // is under the other.
+      expect(sides).toEqual({
+        "1440 attention": true,
+        "1440 schedules": true,
+        "900 attention": false,
+        "900 schedules": false,
+        "720 attention": false,
+        "720 schedules": false,
+      });
+      await everyLayout(
+        "overview-recent",
+        async () => {
+          await frame.locator("[data-testid=velero-overview-recent]").scrollIntoViewIfNeeded();
+          await frame.locator("[data-testid=velero-overview-recent-list]").scrollIntoViewIfNeeded();
+        },
+        OVERVIEW,
+      );
+      await everyLayout(
+        "overview-schedules-and-storage",
+        async () => {
+          await frame.locator("[data-testid=velero-overview-storage]").scrollIntoViewIfNeeded();
+        },
+        OVERVIEW,
+      );
+      await cluster.scrollOverview(frame, 0);
+      await cluster.selectInstallation(frame, cluster.E2E_NAMESPACE);
+      await frame.waitForSelector("[data-testid=velero-overview-in-flight-none]", { timeout: 60_000 });
+      await everyLayout("overview-nothing-to-report", undefined, OVERVIEW);
+      for (const view of [
+        "overview",
+        "overview-recent",
+        "overview-schedules-and-storage",
+        "overview-nothing-to-report",
+      ]) {
+        expect([view, found(view)]).toEqual([view, {}]);
+      }
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "chooses a window and reads the line of time with the keyboard alone, and comes back to the mark",
+    async () => {
+      await velero.setColorTheme(started.app, started.window, "Dark");
+      await velero.setWindowSize(started.app, 1440, 900);
+      await velero.setZoom(started.app, 1);
+      await cluster.showList(frame);
+      await cluster.openPage(frame, OVERVIEW);
+      await cluster.selectInstallation(frame, cluster.E2E_OVERVIEW_NAMESPACE);
+      await frame.waitForSelector('[data-testid="velero-open-backup-recent-1h"]', { timeout: 60_000 });
+      expect((await cluster.overview(frame)).window).toBe("7d");
+      // The windows are reached one after the other, and the one that is chosen says so.
+      await frame.locator("[data-testid=velero-overview-window-24h]").focus();
+      await started.window.keyboard.press("Enter");
+      await frame.waitForSelector("[data-testid=velero-overview-window-24h][aria-pressed=true]", { timeout: 60_000 });
+      expect(await cluster.focused(frame)).toBe("velero-overview-window-24h");
+      expect(await cluster.tabTo(frame, (focus) => focus === "velero-overview-window-30d", 3)).toBe(2);
+      // After the windows, the marks of the line: the backups from the oldest, then the restores. Each
+      // one says what it is of to who reaches it.
+      const said: string[] = [];
+      const marks = await frame.locator("[data-line-mark]").count();
+      const presses = await cluster.tabTo(
+        frame,
+        (focus) => {
+          said.push(focus);
+          return focus.startsWith("restored-3h, Completed, ");
+        },
+        marks + 2,
+      );
+
+      expect(presses).toBeLessThanOrEqual(marks);
+      expect(said.filter((focus) => focus.startsWith("recent-5h, Completed, "))).toHaveLength(1);
+      const mark = await cluster.focused(frame);
+
+      expect(mark).toMatch(/^restored-3h, Completed, No errors, Started .+, 1m$/);
+      await started.window.keyboard.press("Enter");
+      await frame.waitForSelector('[data-testid=velero-restore-name] >> text="restored-3h"', { timeout: 60_000 });
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      await started.window.keyboard.press("Escape");
+      await frame.waitForSelector("[data-testid=velero-restore-workspace]", { state: "detached", timeout: 60_000 });
+      // Who comes back is on the mark the view was opened from.
+      expect(await cluster.focusOn(frame, mark)).toBe(mark);
+      await cluster.chooseWindow(frame, "7d");
     },
     TIMEOUT,
   );

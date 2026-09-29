@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { observer } from "mobx-react";
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { emptyPreferences, RESOURCES } from "../../common/discovery";
+import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { Installation } from "../state/installation";
 import { EntryState } from "./entry-state";
 import { Coverage, TargetBar } from "./target-bar";
@@ -84,7 +84,7 @@ function mount(table: Answers, preferences: Preferences = emptyPreferences(), fa
       return typeof answer === "function" ? answer() : answer;
     },
     now: () => clock.now,
-    storage: { read: () => preferences, write: (next) => written.push(next) },
+    storage: heldPreferences(preferences, (next) => written.push(next)),
   });
   const view = render(<Views installation={installation} families={families} />);
 

@@ -1,6 +1,6 @@
 # Architecture
 
-Date: 2026-09-28
+Date: 2026-09-29
 
 Status: the foundation is complete and the first views are in place: the discovery of
 the installation, the Backups, the Restores, the Schedules and the storage and
@@ -118,13 +118,14 @@ before changing the client version. The main build replaces undici with
 extension never calls, and the real module installs a dispatcher for the whole
 process when it loads, which inside Freelens is the process of the host. Supported
 `WS_NO_*` build defines disable optional native accelerators without patching the
-library. The 932 tests of the unit run, on the separate modules and on the
-production build, are 17 of the scaffold, 110 of the environment and its fixtures,
+library. The 1031 tests of the unit run, on the separate modules and on the
+production build, are 17 of the scaffold, 119 of the environment and its fixtures,
 48 of the diagnostic contracts, 151 of the operation states and of their stages,
-54 of the rules of the discovery, 206 of what the views show of a backup, of a
+55 of the rules of the discovery, 206 of what the views show of a backup, of a
 restore and of a schedule, of what they refer to and of the views in the address,
-141 of what they show of a location, of its durations and of what uses it, 30 of
-the state of an installation and of its reader, and 175 of the components. The integration test
+141 of what they show of a location, of its durations and of what uses it, 38 of
+what the Overview says of an installation and of the line of time, 33 of the state
+of an installation and of its reader, and 223 of the components. The integration test
 covers the installation in the host, the suites of the views what the views do
 in it.
 The electron-vite warning about a missing standalone renderer
@@ -275,6 +276,12 @@ every page of the group the tabs of the group: the entries of the lists are
 registered before the entry of the group, which is how the host knows a page of a
 group, and no page has a layout of the host of its own.
 
+What is around a page is written once as well. The
+[frame of a page](../../src/renderer/components/views-frame.tsx) has the target
+bar, what is missing of the installation, the view that is open over what the
+page shows, and the focus given back to what the view was opened from. The page
+of a list and the Overview are what is inside it.
+
 The views that are open are in the address of the page, as the values of one
 parameter, `view`, each one the kind and the name of an object: `backup/nightly`,
 then `restore/restore-of-nightly`. The last one is shown. What the address names
@@ -331,10 +338,17 @@ is not known, which is not an empty one. The backups of a read are put in order 
 their schedule once for the read: a list asks for the history of each of its rows
 every time it is drawn.
 
-The line of time is computed by a pure function from the history, the clock and
-the width it is drawn in: each backup at its time between the oldest and now, and
-one mark for the backups that would be drawn over each other, which says how many
-they are and whether one of them failed. Two marks are as far from each other as
+The line of time is computed by a [pure function](../../src/common/operation-line.ts)
+from the operations, the clock and the width it is drawn in: each operation at
+its time between the beginning of the line and now, and one mark for the ones
+that would be drawn over each other, which says how many they are and whether
+one of them failed. The line of a history begins at its oldest backup; the one
+of the Overview at the beginning of its window, and has no operation before it.
+A mark is as wide as the gap between two marks lets it be, whatever it holds:
+its number is written in three characters at most, the thousands from a
+thousand on, and how many operations it holds is in its words, with the five
+newest of them. A failure is a shape beside the mark, and not its colour
+alone. Two marks are as far from each other as
 a mark is wide, at least. The line ends at the newest backup when the clock of
 the cluster is ahead of the one that draws it. The width is measured where the
 line is drawn, when it is drawn. Nothing is computed from the cron expression, and nothing is drawn between
@@ -375,6 +389,45 @@ was not read is not known, which is not none.
 A view says what is missing of the families it reads, which its kind
 [names](../../src/common/views.ts): the view of a location shows nothing of the
 restores, and what is denied of them is not said over it.
+
+### The Overview
+
+The [Overview](../../src/renderer/pages/overview-page.tsx) asks the cluster
+nothing of its own. It is computed from the five reads of the installation by
+[pure functions](../../src/common/overview.ts) that are given the reads, the
+clock and the window: what was read, what needs attention, what is in flight, the
+newest backup that completed, the operations of the window, a line for each
+schedule and for each storage location. What was read of a family is what every
+view reads of it, with what the cluster says that it serves.
+
+What needs attention is the items of ten rules, each a function of what was
+read. An item is of one rule and of one object, or of the list of a kind when it
+is of no single object, with its reason in words and the time the reason refers
+to. A rule gives items from the families that were read and from no other: a
+family that was not read gives one line, which says what the rules did not look
+at. The order is fixed: what is in flight, the storage, the schedules, what
+ended; each group from the newest, and by name where there is no time. No
+function computes a value for the installation as a whole, and the page has
+none.
+
+The [window](../../src/common/window.ts) of the recent operations is a
+preference of the extension, kept in the store beside the two maps of the
+namespaces. It is one of three values, and seven days when the store holds none
+or holds what is not one of them. Choosing one asks nothing of the cluster. The
+store is one for every cluster, and each cluster has its frame: what a frame
+keeps is changed from what the store holds at that moment, and what another
+frame kept is taken at every read.
+
+The views of the operations are built once for a read and a clock, and the
+backups of a schedule are found in an index made once for a read: what needs
+attention, what is in flight and the recent operations are made from the same
+ones, and the newest completed backup is looked for of the ten schedules that
+have a line.
+
+A band shows ten items, and the ones after them when they are asked for: an
+installation of a thousand operations is not drawn whole to say what is first.
+What was asked of a band stays shown when the installation is read again, and
+the page stays where it was scrolled.
 
 ### Create-Only Adapter Decision
 

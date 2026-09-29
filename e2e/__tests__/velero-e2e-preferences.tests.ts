@@ -3,8 +3,9 @@
  * Licensed under MIT License. See LICENSE in root directory for more information.
  */
 
-// What the extension keeps between two starts of the application, and what it
-// does with a choice that is not valid any more. The application is started
+// What the extension keeps between two starts of the application, which is two
+// maps of namespaces and the window of the recent operations, and what it does
+// with a choice that is not valid any more. The application is started
 // three times on the same profile; the cluster is only read.
 
 import { readFile, writeFile } from "node:fs/promises";
@@ -67,13 +68,18 @@ describe("preferences of the views", () => {
   }, TIMEOUT);
 
   it(
-    "keeps the namespace that was configured and the one that was chosen, and nothing of the cluster",
+    "keeps the namespace that was configured, the one that was chosen and the window, and nothing of the cluster",
     async () => {
       await frame.waitForSelector("[data-testid=velero-state-choose]", { timeout: 60_000 });
       await cluster.configureInstallation(frame, cluster.E2E_SCALE_NAMESPACE);
       await cluster.waitForBackups(frame);
       await cluster.selectInstallation(frame, cluster.E2E_STATIC_NAMESPACE);
       await cluster.expectRow(frame, "backup-completed", "Completed");
+      // The window of the recent operations is seven days until one is chosen, on the Overview.
+      await cluster.openPage(frame, cluster.OVERVIEW);
+      expect((await cluster.overview(frame)).window).toBe("7d");
+      await cluster.chooseWindow(frame, "30d");
+      await cluster.openBackups(frame);
       // The host writes the store when what it holds changes: a moment for the file.
       await frame.waitForTimeout(3000);
       const stored = await velero.storedPreferences(profile);
@@ -85,6 +91,7 @@ describe("preferences of the views", () => {
       expect(kept).toEqual({
         selected: { [identifier]: cluster.E2E_STATIC_NAMESPACE },
         configured: { [identifier]: [cluster.E2E_SCALE_NAMESPACE] },
+        window: "30d",
       });
       const text = await readFile(path.join(profile, stored[0].file), "utf8");
 
@@ -109,6 +116,10 @@ describe("preferences of the views", () => {
         [...cluster.SUGGESTED_NAMESPACES.filter(Boolean), `${cluster.E2E_SCALE_NAMESPACE} (configured)`].sort(),
       );
       await started?.window.keyboard.press("Escape");
+      // The window is the one that was chosen before the application was closed.
+      await cluster.openPage(frame, cluster.OVERVIEW);
+      expect((await cluster.overview(frame)).window).toBe("30d");
+      await cluster.openBackups(frame);
     },
     TIMEOUT,
   );

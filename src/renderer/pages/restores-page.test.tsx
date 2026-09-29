@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { addressChanges } from "../../../test/freelens-extensions";
 import { listProps } from "../../../test/host-components";
-import { emptyPreferences, RESOURCES } from "../../common/discovery";
+import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { RESTORE_PHASES } from "../../common/phases";
 import { Restore } from "../api/kinds";
 import { RestoreDetails } from "../details/restore-details";
@@ -131,7 +131,7 @@ function mount(table: Answers, preferences: Preferences = emptyPreferences(), pa
       return typeof answer === "function" ? answer() : answer;
     },
     now: () => clock.now,
-    storage: { read: () => preferences, write: () => undefined },
+    storage: heldPreferences(preferences),
   });
   const Page = page;
   const view = render(<Page installation={installation} />);
@@ -1000,7 +1000,7 @@ describe("details of the host for a restore", () => {
         throw new Error("The details of the host ask nothing of the cluster");
       },
       now: () => 0,
-      storage: { read: () => preferences, write: () => undefined },
+      storage: heldPreferences(preferences),
     });
 
     return render(

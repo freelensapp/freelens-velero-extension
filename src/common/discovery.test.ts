@@ -302,6 +302,17 @@ describe("what is kept of the preferences", () => {
   it.each([undefined, null, "", 7, [], "{}", { selected: "velero", configured: 7 }])("is empty for %j", (stored) => {
     expect(readPreferences(stored)).toEqual(emptyPreferences());
   });
+
+  it("keeps the window of the recent operations when it is one of the three, and no other", () => {
+    for (const window of ["24h", "7d", "30d"]) {
+      expect(readPreferences({ window })).toEqual({ selected: {}, configured: {}, window });
+    }
+    for (const window of ["1h", "7D", "", 7, null, ["24h"], { length: "24h" }, "30d "]) {
+      expect(readPreferences({ window })).toEqual(emptyPreferences());
+    }
+    // No window is kept where none was chosen: the one that is taken is not a choice.
+    expect("window" in readPreferences({ selected: { "cluster-a": "velero-demo" } })).toBe(false);
+  });
 });
 
 describe("generation of a selection", () => {

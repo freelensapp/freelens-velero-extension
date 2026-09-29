@@ -38,7 +38,8 @@ export function newestFirst(one: Timed, other: Timed): number {
   } else if (first.time !== second.time) {
     return second.time - first.time;
   }
-  return one.metadata.name.localeCompare(other.metadata.name);
+  // By their characters, which is the same order on every machine.
+  return one.metadata.name < other.metadata.name ? -1 : one.metadata.name > other.metadata.name ? 1 : 0;
 }
 
 // Which of the two times is shown, in words: a time of creation is not shown as a start. That the

@@ -307,6 +307,32 @@ Build output goes to `out/`.
 - A fixture that a view of the milestone needs goes with the fixtures of the views,
   which `pnpm e2e:views` puts in place on an environment that is already up. The
   ones of the phases are put in place once, when the environment is created.
+- A fixture whose time must be of the last hours is placed by the clock: its
+  times are counted back from the moment it is put in place, which it says in an
+  annotation, and `pnpm e2e:views` puts it in place again when it is older than
+  it is good for. What a suite expects of it holds for as long as it is good.
+  Objects that are created together may have the same creation time or not:
+  expect no order among the ones that are placed by their creation alone.
+- `kubectl delete` waits for each object it removed, one at a time: two thousand
+  take minutes. Remove with `--wait=false`, then read the namespace until
+  nothing is left.
+- A page that is not a list is inside the frame of the pages,
+  `src/renderer/components/views-frame.tsx`, which gives it the target bar, the
+  view that is open over it and the focus given back. It reads a family through
+  `installation.read`, which knows what the cluster does not serve, and never
+  through the reads themselves.
+- What is taken out of the flow inside a part that is scrolled, as the words for
+  who does not see are, is placed in what holds the part unless the part is
+  positioned: the holder becomes taller than its room, and the keyboard scrolls
+  it, with the target bar, where nothing brings it back from. Give the part
+  `position: relative`. The check of the layout of the suites finds it.
+- The entry of a group of the sidebar opens the group, in the host: it leads to no
+  page when it has entries under it. The page it names is the one it is marked
+  with.
+- `innerText` reads the words as they are drawn, in capitals where the style
+  writes them so, and `textContent` reads them with nothing between two parts.
+  A suite reads the words of a part with `innerText` and its marks hidden, and
+  the name of a family as it is written.
 - `pnpm exec biome` does not exist here: `pnpm biome:fix` and `pnpm biome:check`.
 
 ## Architecture And UI
