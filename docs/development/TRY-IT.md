@@ -47,6 +47,7 @@ wrote. Take the environment down first, with `pnpm demo:down`.
 | `velero-static-<run>` | A backup and a restore for every phase, three schedules, storage locations that are available and not |
 | `velero-views-<run>` | A backup with every reference in place, backups that name what is not there, a name of 63 characters, a backup that reports nothing; a restore into two namespaces, one that failed its validation, one of a backup that is not there; a schedule with the history of a week, and the schedules Velero has not read; storage locations that are late, unavailable, silent, and one that names its Secrets |
 | `velero-defaults-<run>` | Two storage locations marked default, and nothing else |
+| `velero-overview-<run>` | An installation for the Overview: operations of the last hours and of the last weeks, some in flight, twelve schedules, three storage locations |
 | `velero-scale-<run>` | A thousand backups, a thousand restores and no storage location |
 
 `<run>` is the identifier of the fixtures, eight characters the second command
@@ -65,13 +66,30 @@ state. The cluster is `kind-freelens-velero-dev`.
 
 ## 3. Walk through it
 
-Open the cluster and, in its sidebar, Velero. Every page of Velero has the tabs
-of the group over it, as the pages of the host have.
+Open the cluster and, in its sidebar, Velero, then Overview, the first page of
+the group. Every page of Velero has the tabs of the group over it, as the pages
+of the host have.
 
 | Step | What to look at |
 | --- | --- |
-| The first time | Three namespaces hold a storage location: the view asks which one, and chooses none |
-| Choose `velero-static-<run>` | Thirteen backups, one for each phase. The phase says where the operation is, the failure is beside it: a backup that is finalizing with an error is neither finished nor healthy. That nothing went wrong is marked of the backups Velero counted: one that waits, one that is at work and one that failed before it was counted say that no failure is reported, or the failure |
+| The first time | Five namespaces hold a storage location: the view asks which one, and chooses none |
+| Choose `velero-overview-<run>` | What was read of the five kinds, each a way to its list. What needs attention, in the order an operator would look: what is in flight with a failure, the storage, the schedules, what ended with a failure. Each item names its object and its reason, and is a way to the object. Nothing on the page is a value of the installation as a whole |
+| Newest completed backup, In flight | The backup that completed last, with what completed means. The operations in flight from the oldest: one that waits did not start, and is at the time it was created |
+| Recent operations | The line of time of the last seven days, the backups over the restores, and the same operations in the list under it, ten at a time. Choose 24 hours and 30 days: what ended with a failure before the window is no item of it. A mark with a number holds the operations that are close to each other: a click shows them alone in the list |
+| Schedules, Storage | Ten of the twelve schedules, the ones a rule names first, with the newest completed backup of each; the two others are in the list, which the line under them leads to. `overview-schedule-05` is paused, and no item is of it |
+| Open an item, a mark, a line | The view of the object opens over the Overview, which is the way back. Escape returns to the page where it was, with the focus on what was opened |
+| Select `velero-demo` | Nothing in what was read needs attention, which is what the page says: it does not say that all is well |
+| Other namespace, `velero-scale-<run>` | Two thousand operations: change the window, ask for more items, read again. The page stays where it was scrolled |
+
+The operations of `velero-overview-<run>` are counted back from the moment they
+were put in place, and are good for twelve hours: `pnpm demo:views` places them
+again when they are older.
+
+Then the Backups, under Velero in the sidebar:
+
+| Step | What to look at |
+| --- | --- |
+| Select `velero-static-<run>` | Thirteen backups, one for each phase. The phase says where the operation is, the failure is beside it: a backup that is finalizing with an error is neither finished nor healthy. That nothing went wrong is marked of the backups Velero counted: one that waits, one that is at work and one that failed before it was counted say that no failure is reported, or the failure |
 | Open `backup-finalizingpartiallyfailed` | All its items are done and it is in flight, with its error. The way back, and Escape, return to the list where it was |
 | Open `backup-failedvalidation` | Why it failed, what it was asked to include, where it would have gone |
 | Select `velero-views-<run>` in the target bar | Another installation: nothing of the one before is left. `backup-inprogress` is a name the two installations share, for two different backups |
@@ -81,7 +99,7 @@ of the group over it, as the pages of the host have.
 | Custom Resources, `velero.io`, Backups | The page of the host. In the details of a backup the section of Velero reads it as the views do, and leads to the workspace when the backup is of the installation selected |
 | Close Freelens and open it again | The namespace that was selected is the one shown |
 
-Then the Restores, under Velero in the sidebar:
+Then the Restores:
 
 | Step | What to look at |
 | --- | --- |
@@ -135,7 +153,7 @@ of time, Escape comes back and the focus is on the row that was open.
 
 For the restricted access, add `views-reader.json` in the same way. It has the
 same name as the first in the catalog: it is the one whose Velero asks for a
-namespace instead of offering four. Name `velero-views-<run>`: the backups are
+namespace instead of offering five. Name `velero-views-<run>`: the backups are
 read, and the workspace of one says which of its references cannot be. With
 `views-reader-of-restores.json` it is the other way round: the restores are read,
 and the source of one is said denied, which is not said absent; the schedules are

@@ -3,6 +3,7 @@ import { observer } from "mobx-react";
 import React from "react";
 import { backupScope } from "../../common/backup-scope";
 import { manyDefaultsText } from "../../common/location-view";
+import { shownWords } from "../../common/operation-line";
 import { durationText, signalText } from "../../common/operation-text";
 import { operationTimeText } from "../../common/operation-time";
 import { isStale } from "../../common/read-state";
@@ -12,6 +13,7 @@ import { NOTES, ownedText, pausedText, scheduleView, zoneText } from "../../comm
 import { HistoryStrip } from "../components/history-strip";
 import { Phase, Signal, time } from "../components/status";
 import styles from "../components/views.module.css";
+import { focusFirst } from "../components/views-frame";
 import { Fact, NotShown, Restores, Stale, Target, ViewLink, Workspace } from "../components/workspace";
 import { openView } from "../navigation";
 
@@ -55,9 +57,16 @@ export function ValidationMark({ state }: { state: ScheduleState }) {
 // How many backups of a history are shown at once, and how many more each time it is asked.
 const PAGE = 20;
 
+// The backups of a history that are of the mark that was chosen, or all of them when none was.
+function shownOf(history: Extract<History, { state: "listed" }>, shown?: string[]) {
+  const chosen = shown ? new Set(shown) : undefined;
+
+  return chosen ? history.items.filter((item) => chosen.has(item.view.name)) : history.items;
+}
+
 function HistoryList({ history, shown }: { history: Extract<History, { state: "listed" }>; shown?: string[] }) {
   const [pages, setPages] = React.useState(1);
-  const items = shown ? history.items.filter((item) => shown.includes(item.view.name)) : history.items;
+  const items = shownOf(history, shown);
   const visible = items.slice(0, pages * PAGE);
 
   if (!items.length) return null;
@@ -318,8 +327,20 @@ export const ScheduleWorkspace = observer(({ installation, name, now, back, onBa
           />
           {shown ? (
             <p className={styles.factNote} data-testid="velero-history-shown">
-              The {shown.length} backups of one mark are shown.{" "}
-              <button type="button" className={styles.link} onClick={() => setShown(undefined)}>
+              {/* The ones that are there now: one of them may be gone since the mark was chosen. */}
+              <span role="status">{shownWords(shownOf(history, shown).length, "backup")}</span>{" "}
+              <button
+                type="button"
+                className={styles.link}
+                onClick={(event) => {
+                  // The button goes away with what it says: the focus goes to the mark that was chosen, or
+                  // to the way back when the mark is not there any more.
+                  const view = event.currentTarget.closest<HTMLElement>('[data-testid="velero-schedule-workspace"]');
+
+                  focusFirst(view, ['[data-strip-mark][aria-pressed="true"]', '[data-testid="velero-back"]']);
+                  setShown(undefined);
+                }}
+              >
                 Show all
               </button>
             </p>

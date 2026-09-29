@@ -29,11 +29,19 @@ export const E2E_STATIC_NAMESPACE = process.env.E2E_STATIC_NAMESPACE || "";
 export const E2E_VIEWS_NAMESPACE = process.env.E2E_VIEWS_NAMESPACE || "";
 /** Where two storage locations are marked default, and nothing else is. */
 export const E2E_DEFAULTS_NAMESPACE = process.env.E2E_DEFAULTS_NAMESPACE || "";
+/** Where the installation of the Overview is: operations whose times are counted back from their placement. */
+export const E2E_OVERVIEW_NAMESPACE = process.env.E2E_OVERVIEW_NAMESPACE || "";
 /** Where the long list is: a thousand backups and no storage location. */
 export const E2E_SCALE_NAMESPACE = process.env.E2E_SCALE_NAMESPACE || "";
 
 /** The namespaces a discovery finds: the ones that hold a backup storage location. */
-export const SUGGESTED_NAMESPACES = [E2E_NAMESPACE, E2E_STATIC_NAMESPACE, E2E_VIEWS_NAMESPACE, E2E_DEFAULTS_NAMESPACE];
+export const SUGGESTED_NAMESPACES = [
+  E2E_NAMESPACE,
+  E2E_STATIC_NAMESPACE,
+  E2E_VIEWS_NAMESPACE,
+  E2E_DEFAULTS_NAMESPACE,
+  E2E_OVERVIEW_NAMESPACE,
+];
 
 /** Connecting a cluster involves starting a proxy, so it is not quick. */
 const CLUSTER_TIMEOUT = 3 * 60 * 1000;
@@ -154,6 +162,8 @@ export const MARK_WIDTH = 28;
 export const LONG_LOCATION_NAME = "location-with-a-name-as-long-as-the-name-of-an-object-can-be-63";
 export const LONG_RESTORE_NAME = "restore-with-a-name-as-long-as-the-name-of-a-restore-can-be-one";
 
+/** The Overview is a page and not a list: it has no rows, and no view of its kind. */
+export const OVERVIEW: ListOf = { id: "overview", kind: "overview", menu: "velero-overview" };
 export const BACKUPS: ListOf = { id: "backups", kind: "backup", menu: "velero-backups" };
 export const RESTORES: ListOf = { id: "restores", kind: "restore", menu: "velero-restores" };
 export const SCHEDULES: ListOf = { id: "schedules", kind: "schedule", menu: "velero-schedules" };
@@ -210,6 +220,8 @@ export function fixturesReady(): boolean {
     [E2E_VIEWS_NAMESPACE, "schedules.velero.io", "schedule-unread"],
     [E2E_VIEWS_NAMESPACE, "backupstoragelocations.velero.io", "views-with-credential"],
     [E2E_DEFAULTS_NAMESPACE, "backupstoragelocations.velero.io", "defaults-newer"],
+    [E2E_OVERVIEW_NAMESPACE, "backups.velero.io", "recent-1h"],
+    [E2E_OVERVIEW_NAMESPACE, "schedules.velero.io", "overview-schedule-12"],
     [E2E_SCALE_NAMESPACE, "backups.velero.io", "backup-1000"],
     [E2E_SCALE_NAMESPACE, "restores.velero.io", "restore-1000"],
   ];
@@ -254,7 +266,13 @@ export function clusterSnapshot(): ClusterSnapshot {
     return (JSON.parse(stdout) as { items: { metadata: { name: string; uid: string; resourceVersion: string } }[] })
       .items;
   };
-  const synthetic = [E2E_STATIC_NAMESPACE, E2E_VIEWS_NAMESPACE, E2E_DEFAULTS_NAMESPACE, E2E_SCALE_NAMESPACE];
+  const synthetic = [
+    E2E_STATIC_NAMESPACE,
+    E2E_VIEWS_NAMESPACE,
+    E2E_DEFAULTS_NAMESPACE,
+    E2E_OVERVIEW_NAMESPACE,
+    E2E_SCALE_NAMESPACE,
+  ];
   const versions: Record<string, string> = {};
   const installed: string[] = [];
   let requests = 0;
@@ -1398,7 +1416,7 @@ export async function layoutProblems(frame: Frame, of: ListOf = BACKUPS): Promis
     if (inside.right > window.innerWidth + 1) problems.push("The page is wider than the window");
     // What holds the page, up to the frame: the page is given a room by the host, and what is wider than
     // it is scrolled sideways by the host, under a bar the operator has to find.
-    for (let holder = page.parentElement; holder; holder = holder.parentElement) {
+    for (let holder: HTMLElement | null = page; holder; holder = holder.parentElement) {
       const scrolls = ["auto", "scroll"].includes(getComputedStyle(holder).overflowX);
 
       if (scrolls && holder.scrollWidth > holder.clientWidth + 1) {
@@ -1406,6 +1424,19 @@ export async function layoutProblems(frame: Frame, of: ListOf = BACKUPS): Promis
           `The page is wider than the room the host gives it: ${holder.scrollWidth} in ${holder.clientWidth} of ${name(holder)}`,
         );
       }
+    }
+    // The page has the height of its room, and what is taller is scrolled inside the page. What holds the
+    // page and is taller than itself can be scrolled by the keyboard, which brings what it reaches into
+    // view: the target bar would go where nothing brings it back from.
+    for (let holder: HTMLElement | null = page; holder; holder = holder.parentElement) {
+      // What is scrolled by who reads it is reached, and brought back: what is cut is not.
+      if (["auto", "scroll"].includes(getComputedStyle(holder).overflowY)) continue;
+      if (holder.scrollHeight > holder.clientHeight + 1) {
+        problems.push(
+          `${name(holder)} cuts what is taller than its room: ${holder.scrollHeight} in ${holder.clientHeight}`,
+        );
+      }
+      if (holder.scrollTop !== 0) problems.push(`${name(holder)} is scrolled by ${holder.scrollTop}`);
     }
     if (document.querySelectorAll(".TabLayout .TabLayout").length > 0) {
       problems.push("The layout of the host is inside itself: the page has its margins twice");
@@ -1422,6 +1453,17 @@ export async function layoutProblems(frame: Frame, of: ListOf = BACKUPS): Promis
     overlaps("[data-testid$=-workspace] [data-testid$=-scope] > *");
     overlaps("[data-testid$=-workspace] [data-testid$=-stages] > *");
     overlaps("[data-testid=velero-history-strip] [data-strip-mark]");
+    overlaps("[data-testid=velero-overview-read] > *");
+    overlaps("[data-testid=velero-overview-windows] > button");
+    overlaps("[data-line-row=backups] [data-line-mark]");
+    overlaps("[data-line-row=restores] [data-line-mark]");
+    for (const band of page.querySelectorAll<HTMLElement>(
+      "[data-testid=velero-overview] > *, section[data-testid^=velero-overview-]",
+    )) {
+      if (shown(band) && band.scrollWidth > band.clientWidth + 1) {
+        problems.push(`${name(band)} is wider than its room: ${band.scrollWidth} in ${band.clientWidth}`);
+      }
+    }
     overlaps(`[data-testid=velero-${id}] .TableHead .TableCell`);
     for (const row of [...page.querySelectorAll(`[data-testid=velero-${id}] .TableRow:not(.TableHead)`)].slice(0, 20)) {
       const cells = [...row.querySelectorAll(".TableCell")].filter(shown);
@@ -1661,4 +1703,247 @@ export async function closeDetails(frame: Frame): Promise<void> {
     .click({ timeout: DRAWER_ESCAPE_TIMEOUT })
     .catch(() => {});
   await frame.waitForSelector(".Drawer.KubeObjectDetails", { state: "hidden", timeout: ELEMENT_TIMEOUT });
+}
+
+export interface OverviewShown {
+  /** What was read of each family: the words of its cell, and its state. */
+  read: Record<string, { text: string; state: string }>;
+  summary: string;
+  /** The items that are shown, in their order: the rule, and what each one names. */
+  items: [rule: string, name: string][];
+  unchecked: string[];
+  inFlight: string[];
+  recent: string[];
+  /** The window that is chosen. */
+  window: string;
+  from: string;
+  marks: { backups: string[]; restores: string[] };
+  schedules: string[];
+  storage: string[];
+  completed: string;
+}
+
+/**
+ * Waits for the Overview to have read the installation that is selected, and
+ * answers what it shows, in the words of each of its parts and without the
+ * names of the marks.
+ */
+export async function overview(frame: Frame): Promise<OverviewShown> {
+  await frame.waitForFunction(
+    () => {
+      const cells = [...document.querySelectorAll("[data-testid^=velero-overview-read-]")];
+
+      return cells.length === 5 && cells.every((cell) => cell.getAttribute("data-read") !== "not-read");
+    },
+    undefined,
+    { timeout: ELEMENT_TIMEOUT },
+  );
+
+  return frame.evaluate(() => {
+    // The words as they are read, a part after the other, without the names of the marks: the marks
+    // are taken out of what is drawn for the time of the reading, and put back.
+    const words = (element: Element | null | undefined) => {
+      if (!element) return "";
+      const icons = [...element.querySelectorAll<HTMLElement>(".Icon")];
+      const shown = icons.map((icon) => icon.style.display);
+
+      for (const icon of icons) icon.style.display = "none";
+      const text = (element as HTMLElement).innerText.replace(/\s+/g, " ").trim();
+
+      icons.forEach((icon, index) => {
+        icon.style.display = shown[index];
+      });
+      return text;
+    };
+    const all = (selector: string) => [...document.querySelectorAll(selector)];
+    const names = (selector: string, attribute: string) =>
+      all(selector).map((element) => element.getAttribute(attribute) ?? "");
+
+    return {
+      read: Object.fromEntries(
+        all("[data-testid^=velero-overview-read-]").map((cell) => [
+          (cell.getAttribute("data-testid") ?? "").replace("velero-overview-read-", ""),
+          // The parts of a cell are one under the other: a space is between them when they are read.
+          // They are read as they are written: how the name of a family is drawn is of its style.
+          {
+            text: [...cell.children].map((part) => (part.textContent ?? "").replace(/\s+/g, " ").trim()).join(" "),
+            state: cell.getAttribute("data-read") ?? "",
+          },
+        ]),
+      ),
+      summary: words(document.querySelector("[data-testid=velero-overview-attention-summary]")),
+      items: all("[data-testid=velero-overview-attention] [data-rule]").map(
+        (item) => [item.getAttribute("data-rule") ?? "", words(item.querySelector("button, a"))] as [string, string],
+      ),
+      unchecked: names("[data-testid=velero-overview-attention] [data-unchecked]", "data-unchecked"),
+      inFlight: names("[data-testid=velero-overview-in-flight-list] [data-operation]", "data-operation"),
+      recent: names("[data-testid=velero-overview-recent-list] [data-operation]", "data-operation"),
+      window: (
+        document
+          .querySelector("[data-testid^=velero-overview-window-][aria-pressed=true]")
+          ?.getAttribute("data-testid") ?? ""
+      ).replace("velero-overview-window-", ""),
+      from: words(document.querySelector("[data-testid=velero-overview-line-from]")),
+      marks: {
+        backups: names("[data-line-row=backups] [data-line-mark]", "data-line-mark"),
+        restores: names("[data-line-row=restores] [data-line-mark]", "data-line-mark"),
+      },
+      schedules: names("[data-testid=velero-overview-schedules-list] [data-line]", "data-line"),
+      storage: names("[data-testid=velero-overview-storage-list] [data-line]", "data-line"),
+      completed: words(document.querySelector("[data-testid=velero-overview-completed] [data-completed]")),
+    };
+  });
+}
+
+/** Chooses a window of the recent operations, and waits for the page to show it. */
+export async function chooseWindow(frame: Frame, window: string): Promise<void> {
+  await frame.click(`[data-testid=velero-overview-window-${window}]`);
+  await frame.waitForSelector(`[data-testid=velero-overview-window-${window}][aria-pressed=true]`, {
+    timeout: ELEMENT_TIMEOUT,
+  });
+}
+
+/**
+ * Chooses a window of the recent operations and measures the answer: from the
+ * click to the frame after the one in which the page shows the window.
+ */
+export async function measureWindow(frame: Frame, window: string): Promise<Measure> {
+  return frame.evaluate(
+    (chosen) =>
+      new Promise<{ total: number; response: number }>((resolve, reject) => {
+        const button = document.querySelector<HTMLElement>(`[data-testid=velero-overview-window-${chosen}]`);
+        const from = () => document.querySelector("[data-testid=velero-overview-line-from]")?.textContent ?? "";
+
+        if (!button) {
+          reject(new Error(`The Overview has no window of ${chosen}`));
+          return;
+        }
+        // A window that is chosen already changes nothing: it has no time, and is not a sample.
+        if (button.getAttribute("aria-pressed") === "true") {
+          reject(new Error(`The window of ${chosen} is chosen already: nothing to measure`));
+          return;
+        }
+        const before = from();
+        const start = performance.now();
+        const deadline = setTimeout(() => reject(new Error(`Nothing changed after the window of ${chosen}`)), 10_000);
+        const wait = () => {
+          if (button.getAttribute("aria-pressed") === "true" && from() !== before) {
+            requestAnimationFrame(() => {
+              const end = performance.now();
+
+              clearTimeout(deadline);
+              resolve({ total: end - start, response: end - start });
+            });
+          } else {
+            requestAnimationFrame(wait);
+          }
+        };
+
+        button.click();
+        requestAnimationFrame(wait);
+      }),
+    window,
+  );
+}
+
+/** Where the Overview is scrolled, after it was asked to go somewhere when a position is given. */
+export async function scrollOverview(frame: Frame, position?: number): Promise<number> {
+  const scrolled = await frame.evaluate((top) => {
+    const page = document.querySelector<HTMLElement>("[data-testid=velero-overview]");
+
+    if (!page) throw new Error("The Overview is not shown");
+    if (top !== undefined) page.scrollTop = top;
+    return page.scrollTop;
+  }, position);
+
+  if (position !== undefined) await frame.waitForTimeout(300);
+  return scrolled;
+}
+
+/**
+ * What is said of an operation in a list of the Overview, without the names
+ * of the marks: by the names of the columns in the list of the recent
+ * operations, and by the names of its parts among the ones in flight, which
+ * are not in a table.
+ */
+export async function operationCells(
+  frame: Frame,
+  list: "in-flight" | "recent",
+  operation: string,
+): Promise<Record<string, string>> {
+  const row = frame.locator(`[data-testid=velero-overview-${list}-list] [data-operation="${operation}"]`);
+
+  await row.waitFor({ state: "visible", timeout: ELEMENT_TIMEOUT });
+  return row.evaluate((element) => {
+    const columns = [...(element.closest("table")?.querySelectorAll("thead th") ?? [])].map((head) =>
+      (head.textContent ?? "").trim().toLowerCase(),
+    );
+    // As a part is read, with its marks out of what is drawn for the time of the reading.
+    const words = (part: HTMLElement | null) => {
+      if (!part) return "";
+      const icons = [...part.querySelectorAll<HTMLElement>(".Icon")];
+      const shown = icons.map((icon) => icon.style.display);
+
+      for (const icon of icons) icon.style.display = "none";
+      const text = part.innerText.replace(/\s+/g, " ").trim();
+
+      icons.forEach((icon, at) => {
+        icon.style.display = shown[at];
+      });
+      return text;
+    };
+    const cells = [...element.querySelectorAll<HTMLElement>("td")];
+
+    if (cells.length) {
+      return Object.fromEntries(cells.map((cell, index) => [columns[index] ?? String(index), words(cell)]));
+    }
+    return {
+      operation: words(element.querySelector<HTMLElement>("[data-testid^=velero-open-]")),
+      ...Object.fromEntries(
+        [...element.querySelectorAll<HTMLElement>("[data-part]")].map((part) => [
+          part.getAttribute("data-part") ?? "",
+          words(part),
+        ]),
+      ),
+    };
+  });
+}
+
+/**
+ * What the Overview would say of the installation as a whole, if it said it:
+ * the words of a verdict, a percentage outside the progress of an operation,
+ * a meter. An empty answer is a page that says none.
+ */
+export async function valuesOfTheWhole(frame: Frame): Promise<string[]> {
+  return frame.evaluate(() => {
+    const page = document.querySelector<HTMLElement>("[data-testid=velero-overview]");
+
+    if (!page) return ["The Overview is not shown"];
+    const found: string[] = [];
+    const verdict = /healthy|protected|\bsafe\b|all is well|\bscore\b|\bstatus of the installation\b/i;
+    const said = (element: Element) => {
+      const copy = element.cloneNode(true) as HTMLElement;
+
+      for (const icon of copy.querySelectorAll(".Icon")) icon.remove();
+      // What a mark says to who points at it is said as well.
+      return [
+        copy.textContent ?? "",
+        ...[...element.querySelectorAll("[title], [aria-label]")].map(
+          (part) => `${part.getAttribute("title") ?? ""} ${part.getAttribute("aria-label") ?? ""}`,
+        ),
+      ].join(" ");
+    };
+    const words = verdict.exec(said(page));
+
+    if (words) found.push(`The page says "${words[0]}"`);
+    for (const band of page.querySelectorAll("[data-testid=velero-overview-read], section[data-testid]")) {
+      const id = band.getAttribute("data-testid") ?? "";
+
+      // A percentage is of the items of one operation, in the lists of the operations.
+      if (id === "velero-overview-in-flight" || id === "velero-overview-recent") continue;
+      if (/%/.test(said(band))) found.push(`${id} shows a percentage`);
+    }
+    if (page.querySelector("[role=progressbar], [role=meter], meter, progress")) found.push("The page has a meter");
+    return found;
+  });
 }

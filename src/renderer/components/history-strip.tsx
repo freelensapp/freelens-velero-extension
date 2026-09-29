@@ -1,5 +1,6 @@
 import { Renderer } from "@freelensapp/extensions";
 import React from "react";
+import { MARK_LISTED, markCount, markWords } from "../../common/operation-line";
 import { durationText, phaseText, signalText } from "../../common/operation-text";
 import { operationTimeText } from "../../common/operation-time";
 import { historyStrip } from "../../common/schedule-history";
@@ -25,14 +26,7 @@ export function markText(mark: StripMark): string {
       .filter(Boolean)
       .join(", ");
 
-  if (mark.items.length === 1) return say(mark.items[0]);
-  return [
-    `${mark.items.length} backups close to each other`,
-    mark.failing ? "one of them at least with a failure" : "",
-    ...mark.items.map(say),
-  ]
-    .filter(Boolean)
-    .join(". ");
+  return markWords(mark, "backup", say);
 }
 
 export interface HistoryStripProps {
@@ -69,6 +63,7 @@ export function HistoryStrip({ items, now, shown, onOpen, onShow }: HistoryStrip
     return () => observer.disconnect();
   }, [line]);
   const strip = historyStrip(items, now, width);
+  const chosen = shown ? new Set(shown) : undefined;
 
   if (!strip) return null;
   return (
@@ -78,11 +73,11 @@ export function HistoryStrip({ items, now, shown, onOpen, onShow }: HistoryStrip
           const names = mark.items.map((item) => item.view.name);
           const single = mark.items.length === 1 ? mark.items[0] : undefined;
           const text = markText(mark);
-          const active = shown !== undefined && names.every((name) => shown.includes(name));
+          const active = chosen !== undefined && names.every((name) => chosen.has(name));
 
           return (
             <button
-              key={names.join("/")}
+              key={names[0]}
               type="button"
               className={`${styles.stripMark} ${mark.failing ? styles.stripFailing : ""} ${
                 single ? "" : styles.stripGroup
@@ -91,7 +86,8 @@ export function HistoryStrip({ items, now, shown, onOpen, onShow }: HistoryStrip
               title={text}
               aria-label={text}
               aria-pressed={single ? undefined : active}
-              data-strip-mark={names.join(",")}
+              data-strip-mark={names.slice(0, MARK_LISTED).join(",")}
+              data-strip-held={names.length}
               data-failing={mark.failing}
               data-not-started={mark.notStarted}
               onClick={() => (single ? onOpen(single.view.name) : onShow(active ? undefined : names))}
@@ -99,7 +95,9 @@ export function HistoryStrip({ items, now, shown, onOpen, onShow }: HistoryStrip
               {single ? (
                 <Icon material={mark.notStarted ? "block" : phaseIcon(single.view.state)} small aria-hidden />
               ) : (
-                <span className={styles.stripCount}>{mark.items.length}</span>
+                <span className={styles.stripCount} data-characters={markCount(mark.items.length).length}>
+                  {markCount(mark.items.length)}
+                </span>
               )}
             </button>
           );

@@ -7,6 +7,8 @@ import type { ViewKind, ViewTarget } from "../common/views";
 // of the views finds the entries by these names.
 
 export const ROOT_MENU_ID = "velero";
+export const OVERVIEW_PAGE_ID = "overview";
+export const OVERVIEW_MENU_ID = "velero-overview";
 export const BACKUPS_PAGE_ID = "backups";
 export const BACKUPS_MENU_ID = "velero-backups";
 export const RESTORES_PAGE_ID = "restores";

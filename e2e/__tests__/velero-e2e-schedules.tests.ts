@@ -74,6 +74,7 @@ describe("views of the schedules", () => {
       await cluster.openPage(frame, SCHEDULES);
       expect(Object.keys(await cluster.veleroSidebarEntries(frame))).toEqual([
         "velero",
+        "velero-overview",
         "velero-backups",
         "velero-restores",
         "velero-schedules",
@@ -106,6 +107,7 @@ describe("views of the schedules", () => {
       expect(await frame.locator("[data-testid=velero-schedules]").innerText()).not.toMatch(EXPECTATION);
       // Every page of the group has the tabs of the group, and the layout of the host once.
       expect((await frame.locator(".TabLayout .Tabs .Tab").allInnerTexts()).map(text)).toEqual([
+        "Overview",
         "Backups",
         "Restores",
         "Schedules",

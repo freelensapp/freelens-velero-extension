@@ -1,7 +1,7 @@
 # SPEC-0006: Read-Only Schedules
 
 - **Status:** Implemented
-- **Date:** 2026-09-28
+- **Date:** 2026-09-29
 - **Milestone / tasks:** M2 / T1.5
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`; compared with v1.18.3, `cd3fd10b093dad32ee284e27fcba4e9073c9c94b`
 - **Reviewed main:** `60163e0827e72658bb6546165a727300170e628b`
@@ -228,6 +228,12 @@ What was decided while implementing, inside the requirements:
   one of more than one shows its backups alone in the list under the line. Each
   says in words what it is, how many backups it holds and whether one of them
   failed.
+- **What is shown of a mark that was chosen is counted as it is shown**, since
+  the [Overview](SPEC-0008-overview.md) has the same line: the number is of the
+  backups of the mark that exist now, and not of the ones it held when it was
+  chosen. One is said as one, and none as none. The way back to all of them
+  leaves the focus on the mark, or on the way back of the view when the mark is
+  not there any more.
 - **The list says of each schedule that its newest backup is not known** when the
   backups cannot be read, and the notice of what is denied is of the view of one
   schedule, which shows its history.

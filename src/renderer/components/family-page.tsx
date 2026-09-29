@@ -3,19 +3,18 @@ import { observer } from "mobx-react";
 import React from "react";
 import { hasItems } from "../../common/read-state";
 import { VIEWS } from "../../common/views";
-import { closeView, closeViews, openView, openViews } from "../navigation";
+import { openView } from "../navigation";
 import { FamilyListStore } from "../state/list-store";
-import { EntryState } from "./entry-state";
-import { Styles } from "./styles";
-import { Coverage, TargetBar } from "./target-bar";
 import styles from "./views.module.css";
+import { ViewsFrame } from "./views-frame";
 
 import type { ReactNode } from "react";
 
 import type { Family } from "../../common/discovery";
-import type { ViewKind, ViewTarget } from "../../common/views";
+import type { ViewKind } from "../../common/views";
 import type { Installation, Resource } from "../state/installation";
 import type { VeleroKind } from "../state/list-store";
+import type { OpenViewProps } from "./views-frame";
 
 const {
   Component: { Icon, KubeObjectListLayout },
@@ -51,26 +50,9 @@ export interface ListDefinition<View extends { name: string }> {
   notes?(installation: Installation): string[];
 }
 
-export interface OpenViewProps {
-  installation: Installation;
-  target: ViewTarget;
-  now: number;
-  // Where the way back leads, in words.
-  back: string;
-  onBack: () => void;
-}
+export { useNow } from "./views-frame";
 
-// The clock of the views: one reading for every row, taken again while a view is open.
-export function useNow(interval = 5000): number {
-  const [now, setNow] = React.useState(() => Date.now());
-
-  React.useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), interval);
-
-    return () => clearInterval(timer);
-  }, [interval]);
-  return now;
-}
+export type { OpenViewProps } from "./views-frame";
 
 interface ListProps<View extends { name: string }> {
   definition: ListDefinition<View>;
@@ -194,101 +176,25 @@ interface PageProps<View extends { name: string }> {
 // list stays where it is while a view is open, with its search, its order and its scroll: a view opened from
 // another one is over the same list, and every way back ends on it.
 function FamilyPageView<View extends { name: string }>({ definition, installation, view }: PageProps<View>) {
-  const now = useNow();
-  const path = openViews();
-  const open = path[path.length - 1];
-  const before = path[path.length - 2];
-  const first = path[0];
-  const ready = installation.entry.state === "ready";
-  const list = React.useRef<HTMLDivElement>(null);
-  const opened = React.useRef<ViewTarget>();
-  const shown = open ? `${open.kind}/${open.name}` : "";
+  const { kind, id, uses } = definition;
 
-  React.useEffect(() => {
-    void installation.open();
-    return installation.watch();
-  }, [installation]);
-
-  // The views that are open are of the installation they were opened in: with another one selected, the
-  // way back would name what the other does not have.
-  const namespace = installation.namespace;
-  const shownOf = React.useRef(namespace);
-
-  React.useEffect(() => {
-    if (namespace === undefined) return;
-    if (shownOf.current !== undefined && shownOf.current !== namespace && openViews().length) closeViews();
-    shownOf.current = namespace;
-  }, [namespace]);
-
-  // Who comes back to the list is where they were: on the row they had opened.
-  React.useEffect(() => {
-    if (open) {
-      opened.current = first;
-      return;
-    }
-    const target = opened.current;
-    let frame = 0;
-    let tries = 0;
-    // The list of the host may draw its rows again when it is shown: the focus is given to the row that
-    // is there, and again if the row that had it was replaced and nothing has it. Once the operator
-    // moved it somewhere else it is theirs: the row does not take it back.
-    const focus = () => {
-      const rows = [...(list.current?.querySelectorAll<HTMLElement>(`[data-${target?.kind}-row]`) ?? [])];
-      const row = rows.find((candidate) => candidate.getAttribute(`data-${target?.kind}-row`) === target?.name);
-      const active = document.activeElement;
-      const free = active === null || active === document.body || !document.body.contains(active);
-
-      if (tries > 0 && !free && active !== row) return;
-      // The list is where it was scrolled: the focus does not move it.
-      if (active !== row) row?.focus({ preventScroll: true });
-      tries += 1;
-      if (tries < 20) frame = requestAnimationFrame(focus);
-    };
-
-    opened.current = undefined;
-    if (!target) return;
-    focus();
-    return () => cancelAnimationFrame(frame);
-  }, [shown]);
-
-  // The host lays the page out, with the tabs of the group over it: a layout of the host inside that
-  // one would give the page its margins twice, and less room than it has.
   return (
-    <>
-      <Styles />
-      <div className={styles.page} data-testid={`velero-${definition.id}-page`}>
-        <TargetBar installation={installation} />
-        <Coverage
-          installation={installation}
-          families={open ? [...VIEWS[open.kind].reads] : [VIEWS[definition.kind].family]}
-          earlier={open ? [] : definition.uses}
-        />
-        {ready ? (
-          <div className={styles.content}>
-            <div
-              ref={list}
-              className={`${styles.content} ${open ? styles.behind : ""}`}
-              aria-hidden={open ? true : undefined}
-            >
-              <FamilyList definition={definition} installation={installation} now={now} />
-            </div>
-            {open ? (
-              <div className={styles.over}>
-                {view({
-                  installation,
-                  target: open,
-                  now,
-                  back: before ? `${VIEWS[before.kind].title} / ${before.name}` : VIEWS[definition.kind].title,
-                  onBack: closeView,
-                })}
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <EntryState installation={installation} />
-        )}
-      </div>
-    </>
+    <ViewsFrame
+      id={id}
+      title={VIEWS[kind].title}
+      installation={installation}
+      families={[VIEWS[kind].family]}
+      earlier={uses}
+      view={view}
+      // Who comes back to the list is where they were: on the row they had opened.
+      origin={(root, target) =>
+        [...root.querySelectorAll<HTMLElement>(`[data-${target.kind}-row]`)].find(
+          (row) => row.getAttribute(`data-${target.kind}-row`) === target.name,
+        )
+      }
+    >
+      {(now) => <FamilyList definition={definition} installation={installation} now={now} />}
+    </ViewsFrame>
   );
 }
 

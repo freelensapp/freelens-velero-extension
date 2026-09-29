@@ -12,6 +12,7 @@ import {
 } from "../../common/discovery";
 import { PATHS } from "../../common/paths";
 import { emptyRead, failed, failedStatus, loading, succeeded } from "../../common/read-state";
+import { readWindow } from "../../common/window";
 
 import type {
   Answer,
@@ -34,6 +35,7 @@ import type {
   VeleroResource,
   VolumeSnapshotLocationResource,
 } from "../../common/types";
+import type { Window } from "../../common/window";
 
 // What asks the cluster: one verb, and the status of the answer beside its body.
 export type Reader = (path: string, signal?: AbortSignal) => Promise<Answer>;
@@ -101,7 +103,9 @@ export class Installation {
       entry: computed,
       namespace: computed,
       reading: computed,
+      window: computed,
       select: action,
+      chooseWindow: action,
       configure: action,
       forget: action,
     });
@@ -189,10 +193,10 @@ export class Installation {
   // The operator chose a namespace among the ones that can be chosen. The choice is kept.
   select(namespace: string): void {
     if (!validNamespace(namespace) || !this.choices.some((choice) => choice.namespace === namespace)) return;
-    this.keep({
-      ...this.preferences,
-      selected: { ...this.preferences.selected, [this.cluster.id]: namespace },
-    });
+    this.keep((kept) => ({
+      ...kept,
+      selected: { ...kept.selected, [this.cluster.id]: namespace },
+    }));
     this.target();
     void this.readFamilies();
   }
@@ -200,30 +204,46 @@ export class Installation {
   // The operator named a namespace that no discovery suggested. It becomes one that can be chosen.
   configure(namespace: string): boolean {
     if (!validNamespace(namespace)) return false;
-    this.keep({
-      ...this.preferences,
+    this.keep((kept) => ({
+      ...kept,
       configured: {
-        ...this.preferences.configured,
-        [this.cluster.id]: [...new Set([...this.configured, namespace])].sort(),
+        ...kept.configured,
+        [this.cluster.id]: [...new Set([...(kept.configured[this.cluster.id] ?? []), namespace])].sort(),
       },
-    });
+    }));
     this.select(namespace);
     return true;
   }
 
   // The operator takes back a namespace that was configured. If it was the one selected, none is.
   forget(namespace: string): void {
-    const left = this.configured.filter((name) => name !== namespace);
-    const { [this.cluster.id]: _removed, ...others } = this.preferences.configured;
-    const { [this.cluster.id]: chosen, ...selections } = this.preferences.selected;
     const suggested = this.found.state === "listed" && this.found.namespaces.includes(namespace);
 
-    this.keep({
-      configured: left.length ? { ...others, [this.cluster.id]: left } : others,
-      selected: chosen === namespace && !suggested ? selections : this.preferences.selected,
+    this.keep((kept) => {
+      const left = (kept.configured[this.cluster.id] ?? []).filter((name) => name !== namespace);
+      const { [this.cluster.id]: _removed, ...others } = kept.configured;
+      const { [this.cluster.id]: chosen, ...selections } = kept.selected;
+
+      return {
+        ...kept,
+        configured: left.length ? { ...others, [this.cluster.id]: left } : others,
+        selected: chosen === namespace && !suggested ? selections : kept.selected,
+      };
     });
     this.target();
     void this.readFamilies();
+  }
+
+  // The window of the recent operations: the one that was chosen, or seven days when none was.
+  get window(): Window {
+    return readWindow(this.preferences.window);
+  }
+
+  // The operator chose how far back the recent operations go. The choice is kept, and asks nothing of the
+  // cluster: the operations were read.
+  chooseWindow(window: Window): void {
+    if (readWindow(window) !== window) return;
+    this.keep((kept) => ({ ...kept, window }));
   }
 
   // A view that is open asks again every so often, for as long as it is: the last one that closes stops it.
@@ -240,9 +260,21 @@ export class Installation {
     };
   }
 
-  private keep(preferences: Preferences): void {
+  // What is kept is changed from what the store holds now, and not from what this installation read of
+  // it when it was made. The store is one for every cluster, and the frame of another cluster may have
+  // written to it since: what it wrote would be lost, the window with it.
+  private keep(change: (kept: Preferences) => Preferences): void {
+    const preferences = change(this.dependencies.storage.read());
+
     this.preferences = preferences;
     this.dependencies.storage.write(preferences);
+  }
+
+  // What another frame kept is taken at every read: the window that was chosen there is the one of here.
+  private kept(): void {
+    const stored = this.dependencies.storage.read();
+
+    if (JSON.stringify(stored) !== JSON.stringify(this.preferences)) this.preferences = stored;
   }
 
   // The target of the reads follows the selection. When it changes, what was read of the target before is
@@ -257,6 +289,10 @@ export class Installation {
   }
 
   private async readFamilies(): Promise<void> {
+    runInAction(() => {
+      this.kept();
+      this.target();
+    });
     return this.during(() => this.readFamiliesOf(this.generation));
   }
 

@@ -1,7 +1,7 @@
 # SPEC-0008: Overview Of An Installation
 
-- **Status:** Approved
-- **Date:** 2026-09-28
+- **Status:** Implemented
+- **Date:** 2026-09-29
 - **Milestone / tasks:** M2 / T1.7
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`; compared with v1.18.3, `cd3fd10b093dad32ee284e27fcba4e9073c9c94b`
 - **Reviewed main:** `60163e0827e72658bb6546165a727300170e628b`
@@ -191,6 +191,162 @@ on the installation. Record role, date and verdict.
 
 ## Evidence And Deviations
 
-Approved on 2026-09-28. No implementation, tests or runtime evidence yet. Nothing this page reads changes
-between the reviewed release and the one after it, but the field of the Restore
-the [Restores](SPEC-0005-restore-read-only.md) cover.
+Approved on 2026-09-28. Nothing this page reads changes between the reviewed
+release and the one after it, but the field of the Restore the
+[Restores](SPEC-0005-restore-read-only.md) cover.
+
+What the page says of an installation is computed by
+[pure functions](../../src/common/overview.ts) from the five reads of the
+installation, the clock and the [window](../../src/common/window.ts): they are
+given plain data and ask nothing. The [page](../../src/renderer/pages/overview-page.tsx)
+shows what they answer, in bands. The line of time is the
+[one](../../src/common/operation-line.ts) of the history of a schedule, drawn in
+[two rows](../../src/renderer/components/operation-lines.tsx). What is around the
+page, which is the target bar, what is missing of the installation and the view
+that is open over it, is the [frame](../../src/renderer/components/views-frame.tsx)
+the pages of the lists have.
+
+| Check | Evidence |
+| --- | --- |
+| OVER-01 | Packaged: the Overview is the first entry under Velero and the first tab of the group, and the entry of Velero is marked while it is shown; the entry of Velero opens its group, leads to no page and asks the cluster nothing; before an installation is chosen the API server counted one list of the storage locations of the cluster and no read of a family; once one is chosen, a list of each of the five families in its namespace and nothing more of the cluster; the Overview opened from another page, between two reads of the installation, is counted no read at all |
+| OVER-02 | Unit and component: a number for a family that was read, its state for one that is denied, not served, failed or not read yet, the time of the read for one that is stale; each cell leads to its list. Packaged: the five numbers of the installation of the fixtures are the ones the suite counts on the cluster; with the first reader the restores and the snapshot locations are said denied, with the second the backups, and none is a count of zero |
+| OVER-03 | Unit: no function answers a value of the whole. Component: the words of a verdict, a percentage outside the progress of an operation and a meter are looked for in every state of the page. Packaged: the same in six installations, the one of the long lists among them, in what is shown and in what the marks say to who points at them |
+| OVER-04 | Unit, table-driven: each of the ten rules with a case that gives an item and one that gives none; a paused schedule gives none for A6, A7 and A8; a schedule whose newest backup failed its validation gives A7, by the time the backup was created; an installation with no storage location; a backup whose schedule is not there any more; objects of the same name in another namespace and of another kind; the order of the groups and inside a group. Packaged: the fourteen items of the installation of the fixtures in the order of the page, ten shown and four asked for, with the reason of each rule in words; every rule gave an item on the cluster, in one installation or in another |
+| OVER-05 | Unit and component: with the restores denied no item is of a restore, and one line says what the rules did not look at; the items of a read that is not the last one say that they were read before, and the page says beside their number that a part of what was read is of an earlier read. Packaged: the same line for the restores with the first reader and for the backups with the second, with no item of what was denied |
+| OVER-06 | Unit and component: no item with everything read, and no item with a family denied, which the page says beside what was not read; with none of the four families the rules look at read, the page says that nothing was read, and not that nothing needs attention. Packaged: the installation the controllers of Velero are at work in has no item, and the page says that nothing in what was read needs attention |
+| OVER-07 | Unit: the operations in flight in every phase, from the oldest, the ones with no time last. Component and packaged: with and without progress, with and without a start; one that waits is at the time it was created, which is said, and did not start; none in flight is said when both kinds were read; with one kind read and the other not, that none of the first is in flight and that the second is not known |
+| OVER-08 | Unit and component: the newest completed backup by the time of its completion and not of its start, of the installation and of each schedule; one that completed and does not say when; none among the backups that exist; not known when the backups were not read or are not served, with the reason in words. Packaged: the one of the installation and the ones of three schedules, one of which has a newer backup that failed its validation; not known with the second reader |
+| OVER-09 | Unit: the three windows, an operation at the edge of the window and one a millisecond before it, operations at the same time, one without a start, a store that holds what is not a window; a window chosen in the frame of a cluster kept when the frame of another keeps a namespace, and taken by the other at its next read. Component: the window kept, with no request for it; the operations of a mark forgotten when another window is chosen; the ones of a mark that was chosen counted as they are shown, after a read and when the window moves past them with no read, and said of many, of one and of none, to who does not see the page as well; the operations that report no time counted, and said of one and of many; what a mark says in words of what did not start and of a failure among many; the two rows on one line, which ends at the newest operation when the clock of the cluster is ahead. Packaged: the operations of each window in the list, from the newest, ten at a time, and the same on the line of time, each in the row of its kind; a mark of many shows its operations alone; the operation that did not start has its mark. The choice is in the store after it is made, and is the window of the next start |
+| OVER-10 | Unit and component: ten lines at most of the schedules and of the storage locations, the ones a rule names first, then by name, with the number of the others and the way to their list. Packaged: ten of the twelve schedules, the two the rules name first, the number of the others and the way to the list, which has the twelve; the three storage locations, with the facts their list shows |
+| OVER-11 | Component: the focus is on what a view was opened from at every return and not at the first alone, where the object is named in three places, from a mark, with the keyboard; a view that opens from the address gives it to where the object is named. Packaged: the five cells to their lists; an item to its object and to the other object its reason names; the newest completed backup, an operation in flight, one of the list, a line of a schedule and one of a storage location, a mark of the line, each to its view over the Overview, which is the way back; from a view to another one and back in two steps; the focus on what the view was opened from, at the first view and after ten. Component: the focus on the mark that was chosen when what it holds is not shown alone any more, and on the window when the mark is not there. Every way of the page names an object that the suite finds on the cluster, of a kind that has a view, and the page has no button that is not a way, a window, a mark or what shows more of a list |
+| OVER-12 | Packaged performance: the measure below. Packaged: with what was asked of the bands shown, the page scrolled and the installation read again, by the command and by itself, the page is where it was and shows the same items |
+| OVER-13 | Component: for each of the four families the bands made from it denied or failed, not served, and not read yet, while the others are read; an installation with nothing in it; what was read of a band, and of a row of the line of time, kept when its family stops answering, with the day and the time it was read |
+| OVER-14 | Pre-review: the page, its recent operations, its schedules and its storage, and the page of an installation with nothing to report, in both themes, at 1440x900, at 900x650 and at twice the zoom; the bands of a row side by side at 1440 and one under the other at the two others; every mark of the line with a shape or a number, and its words, and the shape of a failure beside the ones that carry one and no other; a window chosen and the line of time read with the keyboard alone, a mark opened and the focus back on it |
+| OVER-15 | Unit: the reader sends `GET` and nothing else. Component: a late answer of the installation selected before is not shown; no timer is left when the page closes. Packaged: the evidence of DISC-07 of the [discovery](SPEC-0002-installation-discovery.md#evidence-and-deviations) taken with the Overview open, and the lists of the cluster the API server counted are the one of the first opening and one for each read that was asked |
+
+The measure of OVER-12, on 2026-09-29, in Freelens v1.10.3 on macOS 26 with an
+Intel Core i7-9750H and 16 GiB, the test environment running on the same machine:
+
+| Measure | Value |
+| --- | --- |
+| Operations read | 1,000 backups and 1,000 restores, spread over the 30 days before they were placed |
+| Interactions, after three to warm | 20 changes of the window, among the three |
+| Marks on the line, in the two rows | 50 with 24 hours, 62 with 7 days, 74 with 30 days |
+| Operations listed | 10 in each window, and the others when they are asked for |
+| Response, 95th percentile | 27 ms, against a budget of 250 ms |
+| Response, median and slowest | 23 ms and 27 ms |
+
+One hundred and thirty-two changes made to the code on purpose, one for each
+rule above that the page could get wrong, each made a unit or a component test
+fail. Nineteen made to the placing of the fixtures by the clock each made a test
+of the environment fail. The pull request of the task names them.
+
+What the suites found that the tests of the components did not, each corrected
+with this slice:
+
+- **A mark that holds many operations was wider than the gap between two
+  marks**, and was drawn over the one beside it: with the long lists every mark
+  holds ten operations or more. A mark is as wide as the gap lets it be, its
+  number is written in three characters at most, the thousands from a thousand
+  on, and how many it holds is in its words. The line of the history of a
+  [schedule](SPEC-0006-schedule-read-only.md) is the same line, and has the same
+  marks.
+- **The words for who does not see, which are taken out of the flow, were
+  placed in what holds the page**, which became taller than its room: the
+  keyboard, which brings what it reaches into view, would have scrolled the
+  target bar where nothing brings it back from. They are placed in the page.
+  The check of the layout looks at what holds a page, for every page.
+- **That check found that a page is cut in a room shorter than what it cannot
+  give up**, which a window of 900 by 650 is for the choice of the installation
+  and a window at twice the zoom is for every page: the host cuts what is
+  taller than the room it gives. A page is scrolled there. It is of every page
+  of the extension, the ones of the slices before among them.
+
+What was decided while implementing, inside the requirements:
+
+- **Every band shows ten items at a time**, and the ones after them when they
+  are asked for. The requirement asks it of the list of the recent operations;
+  what needs attention and what is in flight are shown in the same way. The
+  installation of the long lists has hundreds of items: it is not drawn whole to
+  say what is first. What was asked of a band stays shown when the installation
+  is read again.
+- **An installation with no storage location is an item of rule A4.** None is
+  marked default where none is there, and the release refuses a backup sent to a
+  location that is not there. The storage locations that could not be read are
+  not an installation that has none: they are what the rules did not look at.
+- **The items of the storage are by name**, where the design has every group
+  from the newest. The time of such an item is the one of the last validation,
+  which moves at every validation: by it, two locations that Velero validates
+  every minute would change places while they are read, and the same design
+  asks that the order does not change while the operator reads. The time is
+  shown beside the name.
+- **A backup that carries the name of a schedule that is not among the schedules
+  is one of no schedule**, for rule A10: no schedule is there to be an item of,
+  and its failure would be in no item. When the schedules were not read, whose
+  backup it is cannot be said: the line of what was not checked says so.
+- **The page says beside the number of its items what the rules did not look at
+  and what they looked at as it was before.** With none of the four families
+  read it says that nothing was read, and not that nothing needs attention.
+- **A failure is a shape beside a mark of the line of time**, as well as a
+  colour: a mark of many operations, and one of an operation in flight, are
+  drawn the same with a failure and without. A mark of many names the five
+  newest of its operations in its words, and says how many more it holds. The
+  history of a [schedule](SPEC-0006-schedule-read-only.md) has the same marks.
+- **What is shown of a mark that was chosen is counted as it is shown.** While
+  its operations are shown alone one of them may expire, be deleted, or become
+  older than the window, which moves with the clock: the number the page says is
+  of the ones that are shown, one is said as one, and when none is left the page
+  says that none is among the ones of the window that exist now, which is not
+  that they do not exist. It says it to who does not see the page as well, and
+  the way back to all of them leaves the focus on the mark, or on the window
+  when the mark is not there any more. The history of a
+  [schedule](SPEC-0006-schedule-read-only.md) says the same of its backups,
+  where it said the number the mark held when it was chosen.
+- **What is kept is changed from what the store holds**, and not from what the
+  frame of a cluster read of it when it opened: the store is one for every
+  cluster, and the window one for the extension. A window chosen in a frame is
+  the one of the others at their next read.
+- **What could not be checked is said before the items.** It is what the items
+  that follow do not cover: read after them, the list would look complete.
+- **What is in flight is two lines for each operation, and not a table.** Its
+  band has half the page at 1440 pixels, where a table of its columns broke
+  every phase of many words in three lines. When an operation started is what
+  its elapsed time says to who points at it; in the list of the recent
+  operations, which has the page, it is a column.
+- **An operation that waits says that it did not start**, as its list does,
+  where the elapsed time would be: it has no elapsed time. One that is at work
+  and reports no start says that its start is not reported.
+- **Rule A2 is of a location that reports no availability.** One that reports
+  what this version does not know gives no item: its line has the mark of what
+  is not known, with what it reports.
+- **A location that is unavailable and was validated long ago gives two items**,
+  one of rule A1 and one of rule A3: they are two facts, and each is read by its
+  own rule.
+- **The time of an item of rule A7 is the time of the operation of the backup**,
+  which is its creation for one that failed its validation. The item leads to
+  the schedule, and to the backup beside its reason.
+- **The two rows of the line of time have the same ends**: the beginning of the
+  window and now, or the newest operation of either row when the clock of the
+  cluster is ahead of the one that draws the line.
+- **The fixtures of the Overview are placed by the clock.** Their times are
+  counted back from the moment they are put in place, and they are good for
+  twelve hours: a run that finds them older, placed at a time that is after its
+  own, which a clock that went back gives, or made as they would not be made
+  now, puts them in place again, in their two namespaces and nowhere else: the
+  other namespaces of the run hold fixtures of fixed times, and nothing is
+  placed by the clock there. Each says when it was placed and what it was made
+  as. They are in a namespace of their own, which the discovery finds as an
+  installation: the suites that count the installations count five. The ones of
+  the long lists are spread over the thirty days before they are placed.
+- **Removing two thousand objects takes the client minutes when it waits for
+  each**: the fixtures are removed without that wait, and their namespace is
+  read until nothing of it is left, for five minutes at most.
+- **What is around a page is written once**, for the pages of the lists and for
+  the Overview: the page of a list is what it was, inside the frame.
+
+One deviation waits for the approval of the lead maintainer at the review of
+the milestone:
+
+| Requirement | What it says | What the extension does, and why |
+| --- | --- | --- |
+| REQ-093 | The Overview is the first entry under Velero and the page the entry of Velero opens | The Overview is the first entry under Velero, the first tab of the group and the page the entry of Velero names. In the host the entry of a group that has entries under it opens the group and leads to no page: the host follows the page an entry names when the entry has none under it, and marks the entry while that page is shown. What a click on a group does is of the host, for its own groups as for the ones of an extension |

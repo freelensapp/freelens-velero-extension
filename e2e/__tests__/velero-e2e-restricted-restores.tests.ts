@@ -207,6 +207,51 @@ describe("restores with restricted access", () => {
   );
 
   it(
+    "says on the Overview that the backups are not known: the newest that completed, the ones in flight, the ones of a schedule",
+    async () => {
+      await cluster.openPage(frame, cluster.OVERVIEW);
+      const shown = await cluster.overview(frame);
+
+      expect(shown.read.backups).toEqual({ text: "Backups Access denied", state: "denied" });
+      expect(shown.read.restores).toEqual({ text: "Restores 6", state: "read" });
+      expect(shown.unchecked).toEqual(["backups"]);
+      const attention = (await frame.locator("[data-testid=velero-overview-attention]").innerText()).replace(
+        /\s+/g,
+        " ",
+      );
+
+      expect(attention).toContain("The backups of this installation cannot be read: access is denied.");
+      expect(attention).toContain(
+        "Whether a backup in flight carries a failure, whether one ended with a failure, and how the newest backup of each schedule ended were not checked.",
+      );
+      // No item is of a backup or names one, and no schedule is said to have a newest backup that failed.
+      expect(await frame.locator("[data-testid=velero-overview] [data-testid^=velero-open-backup-]").count()).toBe(0);
+      expect(shown.items.filter(([rule]) => rule === "A7")).toEqual([]);
+      // The newest backup that completed is not known, which is not that none completed.
+      expect(shown.completed).toBe("Not known: the backups of this installation cannot be read: access is denied");
+      expect(
+        await frame
+          .locator("[data-testid=velero-overview-schedules-list] [data-completed]")
+          .evaluateAll((elements) => [...new Set(elements.map((element) => (element.textContent ?? "").trim()))]),
+      ).toEqual(["Not known"]);
+      expect(
+        (await frame.locator("[data-testid=velero-overview-in-flight]").innerText()).replace(/\s+/g, " "),
+      ).toContain("Whether a backup is in flight is not known.");
+      expect(await frame.locator("[data-testid=velero-overview-in-flight-none]").count()).toBe(0);
+      expect(
+        (await frame.locator("[data-testid=velero-overview-line-backups-unread]").innerText()).replace(/\s+/g, " "),
+      ).toMatch(/^The backups of this installation cannot be read: access is denied\. The backups of the last 7 days /);
+      // The restores that were read are where they would be: in flight, with their failures.
+      expect(shown.inFlight.length).toBeGreaterThan(0);
+      expect(shown.inFlight.every((operation) => operation.startsWith("restore/"))).toBe(true);
+      expect(await cluster.valuesOfTheWhole(frame)).toEqual([]);
+      expect(await cluster.layoutProblems(frame, cluster.OVERVIEW)).toEqual([]);
+      await cluster.captureScreenshot(frame, "dark-restricted-restores-overview");
+    },
+    TIMEOUT,
+  );
+
+  it(
     "leaves the objects of Velero as they were",
     async () => {
       const after = cluster.clusterSnapshot();

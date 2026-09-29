@@ -3,8 +3,10 @@
 // the CRDs are of the whole cluster and say nothing of a server running in a namespace.
 
 import { failedStatus } from "./read-state";
+import { readWindow, WINDOWS } from "./window";
 
 import type { ReadStatus } from "./read-state";
+import type { Window } from "./window";
 
 export const FAMILIES = ["backups", "restores", "schedules", "storageLocations", "snapshotLocations"] as const;
 export type Family = (typeof FAMILIES)[number];
@@ -104,9 +106,11 @@ export interface Preferences {
   selected: Record<string, string>;
   // The namespaces the operator configured for each cluster, which no discovery suggested.
   configured: Record<string, string[]>;
+  // The window of the recent operations of the Overview, when one was chosen.
+  window?: Window;
 }
 
-// Where the preferences are kept between two sessions: the namespaces and nothing else.
+// Where the preferences are kept between two sessions: the namespaces, the window, and nothing else.
 export interface PreferenceStorage {
   read(): Preferences;
   write(preferences: Preferences): void;
@@ -116,10 +120,27 @@ export function emptyPreferences(): Preferences {
   return { selected: {}, configured: {} };
 }
 
+// What is kept for as long as it is held, and no longer: what the views have where the store of the host
+// is not there, and what a test gives them. It answers what was last written, as the store does.
+export function heldPreferences(
+  initial: Preferences = emptyPreferences(),
+  written?: (preferences: Preferences) => void,
+): PreferenceStorage {
+  let preferences = initial;
+
+  return {
+    read: () => preferences,
+    write: (next) => {
+      preferences = next;
+      written?.(next);
+    },
+  };
+}
+
 // What is kept of a stored value: the names that are names, and nothing else that a file may hold.
 export function readPreferences(stored: unknown): Preferences {
   const preferences = emptyPreferences();
-  const value = (stored ?? {}) as { selected?: unknown; configured?: unknown };
+  const value = (stored ?? {}) as { selected?: unknown; configured?: unknown; window?: unknown };
 
   if (value.selected && typeof value.selected === "object") {
     for (const [cluster, namespace] of Object.entries(value.selected)) {
@@ -133,6 +154,8 @@ export function readPreferences(stored: unknown): Preferences {
       if (cluster && valid.length) preferences.configured[cluster] = valid;
     }
   }
+  // A window that is not one of the three is not kept: the one that is taken is the one of no choice.
+  if ((WINDOWS as readonly unknown[]).includes(value.window)) preferences.window = readWindow(value.window);
   return preferences;
 }
 

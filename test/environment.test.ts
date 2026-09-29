@@ -13,7 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   allowsFixtureArtifact,
   assertFixtureNamespaceContents,
@@ -36,12 +36,18 @@ import {
   NEWEST_OF_THE_HISTORY,
   NOT_COUNTED,
   NOT_STARTED,
+  OVERVIEW_SCHEDULES,
+  overviewFixtures,
+  PLACED_ANNOTATION,
+  PLACED_FOR,
+  placeByTheClock,
   RESTORE_PHASES,
   readerKubeconfig,
   restoreSpec,
   restrictedFixtures,
   SCALE_BACKUPS,
   SCALE_RESTORES,
+  SHAPE_ANNOTATION,
   scaleFixtures,
   staticFixtures,
   syntheticStatus,
@@ -106,6 +112,8 @@ import {
   withhold,
 } from "../e2e/scripts/local-platform.mts";
 import { assertOfficialImages, IMAGE_NAMES } from "../e2e/scripts/local-security.mts";
+
+const HOUR = 3_600_000;
 
 describe("foundation fixture boundaries", () => {
   const run = "a1b2c3d4";
@@ -565,6 +573,13 @@ describe("foundation fixture boundaries", () => {
     const order: string[] = [];
     let created = 0;
     let changes = 0;
+    const removed: string[] = [];
+    // What was removed is listed for some reads more: the server removes an object after it said it would.
+    const leaving: string[] = [];
+    const paused: number[] = [];
+    // The commands the cluster was asked, by their first words.
+    const asked: string[] = [];
+    let linger = 0;
     const key = (kind: string, namespace: unknown, name: unknown) =>
       `${kind.split(".")[0].toLowerCase().replace(/s$/, "")}/${String(namespace ?? "")}/${String(name)}`;
     const create = (resource: { kind: string; metadata: Record<string, unknown> }) => {
@@ -592,9 +607,18 @@ describe("foundation fixture boundaries", () => {
       objects,
       order,
       changes: () => changes,
+      removed,
+      paused,
+      asked,
+      linger: (reads: number) => {
+        linger = reads;
+      },
       find: (kind: string, namespace: string | undefined, name: string) => objects.get(key(kind, namespace, name)),
       runtime: {
         owner,
+        pause(milliseconds: number) {
+          paused.push(milliseconds);
+        },
         apply(resource: { kind: string; metadata: Record<string, unknown> }) {
           const found = objects.get(key(resource.kind, resource.metadata.namespace, resource.metadata.name));
 
@@ -609,8 +633,13 @@ describe("foundation fixture boundaries", () => {
         kubectl(args: string[], input?: string) {
           const namespace = args.includes("--namespace") ? flag(args, "--namespace") || undefined : undefined;
 
+          asked.push(args[0]);
           if (args[0] === "create") {
             for (const item of (JSON.parse(input ?? "{}") as { items: Parameters<typeof create>[0][] }).items) {
+              // An API server refuses an object of a name that is taken, the one that is leaving as well.
+              if (objects.has(key(item.kind, item.metadata.namespace, item.metadata.name))) {
+                throw new Error(`${item.kind} "${String(item.metadata.name)}" already exists`);
+              }
               create(item);
             }
             return "";
@@ -624,18 +653,50 @@ describe("foundation fixture boundaries", () => {
             found.status = patch.status;
             return "";
           }
+          // The objects of one or more kinds in a namespace, which a selector may choose among.
+          const of = (kinds: string) => {
+            const prefixes = kinds.split(",").map((kind) => key(kind, namespace, ""));
+
+            return [...objects.entries()].filter(([name]) => prefixes.some((prefix) => name.startsWith(prefix)));
+          };
+
+          if (args[0] === "delete") {
+            const wanted = Object.fromEntries(
+              flag(args, "--selector")
+                .split(",")
+                .map((pair) => pair.split("=")),
+            ) as Record<string, string>;
+
+            if (!namespace || !args.includes("--selector"))
+              throw new Error("A delete names its namespace and its labels");
+            // The client waits for each object it removed, one at a time: two thousand take minutes.
+            if (!args.includes("--wait=false")) throw new Error("A delete does not wait for each object");
+            for (const [name, found] of of(args[1])) {
+              const labels = (found.metadata.labels ?? {}) as Record<string, string>;
+
+              if (Object.entries(wanted).every(([label, value]) => labels[label] === value)) {
+                if (linger > 0) leaving.push(name);
+                else objects.delete(name);
+                removed.push(name);
+              }
+            }
+            return "";
+          }
           if (args[0] !== "get") throw new Error(`Not a command of the fixtures: ${args[0]}`);
+          if (leaving.length) {
+            if (linger > 0) {
+              linger -= 1;
+            } else {
+              for (const name of leaving.splice(0)) objects.delete(name);
+            }
+          }
           if (args[2] && !args[2].startsWith("-")) {
             const found = objects.get(key(args[1], namespace, args[2]));
 
             if (!found) throw new Error(`${args[1]} "${args[2]}" not found`);
             return JSON.stringify(found);
           }
-          return JSON.stringify({
-            items: [...objects.entries()]
-              .filter(([name]) => name.startsWith(`${key(args[1], namespace, "")}`))
-              .map(([, found]) => found),
-          });
+          return JSON.stringify({ items: of(args[1]).map(([, found]) => found) });
         },
       },
     };
@@ -645,13 +706,18 @@ describe("foundation fixture boundaries", () => {
     const names = fixtureNames(run);
     const started = Date.parse("2026-09-28T07:31:17.123Z");
     const target = cluster("synthetic-owner", Date.parse("2026-09-28T07:43:00Z"));
-    const placed = createViewFixtures(target.runtime as never, run, started);
+    const now = Date.parse("2026-09-28T07:45:00Z");
+    const placed = createViewFixtures(target.runtime as never, run, started, now);
 
     expect(placed).toEqual({
       views: viewFixtures("synthetic-owner", run).filter((resource) => resource.kind !== "Namespace").length,
+      overview: overviewFixtures("synthetic-owner", run, now).length,
       scale: SCALE_BACKUPS,
       restores: SCALE_RESTORES,
+      // What is placed by the clock was not there: it was put in place, and nothing was removed.
+      again: [names.overview, names.scale],
     });
+    expect(target.removed).toEqual([]);
     // A namespace is there before what is put into it: the cluster refuses an object of one that is not.
     const newest = target.find("Backup", names.views, NEWEST_OF_THE_HISTORY);
     const schedule = target.find("Schedule", names.views, "views-history");
@@ -673,9 +739,485 @@ describe("foundation fixture boundaries", () => {
     const objects = structuredClone([...target.objects.entries()]);
     const changes = target.changes();
 
-    expect(createViewFixtures(target.runtime as never, run, started + 60_000)).toEqual(placed);
+    expect(createViewFixtures(target.runtime as never, run, started + 60_000, now + HOUR)).toEqual({
+      ...placed,
+      again: [],
+    });
     expect(target.changes()).toBe(changes);
+    expect(target.removed).toEqual([]);
     expect([...target.objects.entries()]).toEqual(objects);
+  });
+
+  it("puts in place again what is placed by the clock when it is older than it is good for, and nothing else", () => {
+    const names = fixtureNames(run);
+    const started = Date.parse("2026-09-28T07:31:17.123Z");
+    const target = cluster("synthetic-owner", Date.parse("2026-09-28T07:43:00Z"));
+    const now = Date.parse("2026-09-28T07:45:00Z");
+    const placedAt = (namespace: string, kind: string, name: string) =>
+      (target.find(kind, namespace, name)?.metadata.annotations as Record<string, string> | undefined)?.[
+        PLACED_ANNOTATION
+      ];
+    const started1h = (name: string) =>
+      (target.find("Backup", names.overview, name)?.status as { startTimestamp?: string } | undefined)?.startTimestamp;
+
+    createViewFixtures(target.runtime as never, run, started, now);
+    expect(PLACED_FOR).toBe(12 * HOUR);
+    expect(placedAt(names.overview, "Backup", "recent-1h")).toBe("2026-09-28T07:45:00.000Z");
+    expect(placedAt(names.scale, "Backup", "backup-0001")).toBe("2026-09-28T07:45:00.000Z");
+    expect(started1h("recent-1h")).toBe("2026-09-28T06:45:00Z");
+    const fixed = structuredClone(
+      [...target.objects.entries()].filter(
+        ([name]) => !name.includes(`/${names.overview}/`) && !name.includes(`/${names.scale}/`),
+      ),
+    );
+    // Within the time they are good for they are found as they are.
+    const later = createViewFixtures(target.runtime as never, run, started, now + PLACED_FOR);
+
+    expect(later.again).toEqual([]);
+    expect(target.removed).toEqual([]);
+    // A second after it they are removed, and the ones of now are created: the times are counted again.
+    const after = now + PLACED_FOR + 1000;
+    const again = createViewFixtures(target.runtime as never, run, started, after);
+    const overview = overviewFixtures("synthetic-owner", run, after).length;
+
+    expect(again).toMatchObject({ again: [names.overview, names.scale], overview, scale: SCALE_BACKUPS });
+    expect(target.removed).toHaveLength(overview + SCALE_BACKUPS + SCALE_RESTORES);
+    expect(
+      target.removed.every((name) => name.includes(`/${names.overview}/`) || name.includes(`/${names.scale}/`)),
+    ).toBe(true);
+    expect(placedAt(names.overview, "Backup", "recent-1h")).toBe(new Date(after).toISOString());
+    expect(started1h("recent-1h")).toBe(new Date(after - HOUR).toISOString().replace(".000Z", "Z"));
+    // The fixtures whose times are fixed are as they were: the same objects, with the same versions.
+    expect(
+      [...target.objects.entries()].filter(
+        ([name]) => !name.includes(`/${names.overview}/`) && !name.includes(`/${names.scale}/`),
+      ),
+    ).toEqual(fixed);
+    // Nothing waited: what was removed was gone at once.
+    expect(target.paused).toEqual([]);
+    // What was removed may be there for a while: the namespace is read until it is not, and the ones of
+    // now are created after that. An object created while the one of its name is there would be refused.
+    target.linger(2);
+    const third = after + PLACED_FOR + 1000;
+
+    expect(createViewFixtures(target.runtime as never, run, started, third)).toMatchObject({
+      again: [names.overview, names.scale],
+    });
+    // Each of the two namespaces was read twice more than it would have been.
+    expect(target.paused).toEqual([1000, 1000]);
+    expect(placedAt(names.overview, "Backup", "recent-1h")).toBe(new Date(third).toISOString());
+    expect(placedAt(names.scale, "Backup", "backup-0001")).toBe(new Date(third).toISOString());
+    // What is there of another run is not removed: nothing is, and the placement stops.
+    const foreign = target.find("Backup", names.overview, "recent-1h");
+
+    if (!foreign) throw new Error("The backup is there");
+    (foreign.metadata.labels as Record<string, string>)[FIXTURE_LABEL] = "b1b2b3b4";
+    const removed = target.removed.length;
+
+    expect(() => createViewFixtures(target.runtime as never, run, started, third + 2 * PLACED_FOR)).toThrow(
+      "The namespace holds what is not of this run; nothing is removed",
+    );
+    expect(target.removed).toHaveLength(removed);
+  });
+
+  it("puts in place again what is not made as it would be made now, whatever its age", () => {
+    const names = fixtureNames(run);
+    const started = Date.parse("2026-09-28T07:31:17.123Z");
+    const target = cluster("synthetic-owner", Date.parse("2026-09-28T07:43:00Z"));
+    const now = Date.parse("2026-09-28T07:45:00Z");
+    const shape = (namespace: string, kind: string, name: string) =>
+      (target.find(kind, namespace, name)?.metadata.annotations as Record<string, string> | undefined)?.[
+        SHAPE_ANNOTATION
+      ];
+
+    createViewFixtures(target.runtime as never, run, started, now);
+    const overview = shape(names.overview, "Backup", "recent-1h");
+    const scale = shape(names.scale, "Backup", "backup-0001");
+
+    // Every object says what it was made as, and the ones of a namespace say the same.
+    expect(overview).toMatch(/^[0-9a-f]{16}$/);
+    expect(scale).toMatch(/^[0-9a-f]{16}$/);
+    expect(scale).not.toBe(overview);
+    expect(shape(names.overview, "Schedule", "overview-schedule-12")).toBe(overview);
+    // A minute later they are what would be made, and are left as they are.
+    expect(createViewFixtures(target.runtime as never, run, started, now + 60_000).again).toEqual([]);
+    // One that was made by the fixtures of before is not what would be made now: its namespace is put in
+    // place again, and the other is left as it is.
+    const old = target.find("Restore", names.overview, "restored-3h");
+
+    if (!old) throw new Error("The restore is there");
+    (old.metadata.annotations as Record<string, string>)[SHAPE_ANNOTATION] = "0000000000000000";
+    expect(createViewFixtures(target.runtime as never, run, started, now + 120_000).again).toEqual([names.overview]);
+    expect(shape(names.overview, "Restore", "restored-3h")).toBe(overview);
+    expect(target.removed.every((name) => name.includes(`/${names.overview}/`))).toBe(true);
+  });
+
+  it("puts in place again what says that it was placed after now", () => {
+    const names = fixtureNames(run);
+    const started = Date.parse("2026-09-28T07:31:17.123Z");
+    const target = cluster("synthetic-owner", Date.parse("2026-09-28T07:43:00Z"));
+    const now = Date.parse("2026-09-28T07:45:00Z");
+    const placedAt = (namespace: string, name: string) =>
+      (target.find("Backup", namespace, name)?.metadata.annotations as Record<string, string> | undefined)?.[
+        PLACED_ANNOTATION
+      ];
+
+    createViewFixtures(target.runtime as never, run, started, now);
+    // The clock of the machine went back an hour: the times of what is in place are counted from a moment
+    // that is not yet, and an operation of an hour ago would be one of now.
+    const before = now - HOUR;
+
+    expect(createViewFixtures(target.runtime as never, run, started, before).again).toEqual([
+      names.overview,
+      names.scale,
+    ]);
+    // What was in place was removed before the ones of now were created, and nothing else was.
+    expect(target.removed).toHaveLength(
+      overviewFixtures("synthetic-owner", run, before).length + SCALE_BACKUPS + SCALE_RESTORES,
+    );
+    expect(
+      target.removed.every((name) => name.includes(`/${names.overview}/`) || name.includes(`/${names.scale}/`)),
+    ).toBe(true);
+    expect(placedAt(names.overview, "recent-1h")).toBe(new Date(before).toISOString());
+    expect(placedAt(names.scale, "backup-0001")).toBe(new Date(before).toISOString());
+  });
+
+  it("stops when what it placed is not what the cluster holds", () => {
+    const names = fixtureNames(run);
+    const started = Date.parse("2026-09-28T07:31:17.123Z");
+    const target = cluster("synthetic-owner", Date.parse("2026-09-28T07:43:00Z"));
+    const now = Date.parse("2026-09-28T07:45:00Z");
+    type Made = { kind: string; metadata: { name: string; annotations?: Record<string, string> }; status?: object };
+    // A cluster that keeps what it is asked to create as `kept` says.
+    const keeping = (from: ReturnType<typeof cluster>, kept: (items: Made[]) => Made[]) => ({
+      ...from.runtime,
+      kubectl: (args: string[], input?: string) => {
+        if (args[0] !== "create") return from.runtime.kubectl(args, input);
+        const list = JSON.parse(input ?? "{}") as { items: Made[] };
+
+        return from.runtime.kubectl(args, JSON.stringify({ ...list, items: kept(list.items) }));
+      },
+    });
+    const refused = `The fixtures of ${names.overview} are not the ones of this run`;
+
+    // One that keeps no status of the restores: an operation with no phase is one the views would show as
+    // not reported, and no suite would find what it looks for.
+    expect(() =>
+      createViewFixtures(
+        keeping(target, (items) =>
+          items.map(({ status, ...item }) => (item.kind === "Restore" ? item : { ...item, status })),
+        ) as never,
+        run,
+        started,
+        now,
+      ),
+    ).toThrow(refused);
+    // One that keeps one object less than it was given.
+    expect(() =>
+      createViewFixtures(
+        keeping(cluster("synthetic-owner", Date.parse("2026-09-28T07:43:00Z")), (items) =>
+          items.filter((item) => item.metadata.name !== "recent-1h"),
+        ) as never,
+        run,
+        started,
+        now,
+      ),
+    ).toThrow(refused);
+    // One that does not keep when an object was placed.
+    expect(() =>
+      createViewFixtures(
+        keeping(cluster("synthetic-owner", Date.parse("2026-09-28T07:43:00Z")), (items) =>
+          items.map((item) => ({
+            ...item,
+            metadata: {
+              ...item.metadata,
+              annotations: Object.fromEntries(
+                Object.entries(item.metadata.annotations ?? {}).filter(([name]) => name !== PLACED_ANNOTATION),
+              ),
+            },
+          })),
+        ) as never,
+        run,
+        started,
+        now,
+      ),
+    ).toThrow(refused);
+    // Nothing made, which leaves nothing to say when it was placed: the suites would find nothing.
+    expect(() =>
+      placeByTheClock(
+        cluster("synthetic-owner", Date.parse("2026-09-28T07:43:00Z")).runtime as never,
+        run,
+        names.overview,
+        now,
+        () => [],
+      ),
+    ).toThrow(refused);
+    // What is in place, of the age and of the shape it is good with, and says that it is of another run:
+    // it is left as it is, and the placing stops.
+    const good = cluster("synthetic-owner", Date.parse("2026-09-28T07:43:00Z"));
+
+    createViewFixtures(good.runtime as never, run, started, now);
+    const foreign = good.find("Backup", names.overview, "recent-1h");
+
+    if (!foreign) throw new Error("The backup is there");
+    (foreign.metadata.labels as Record<string, string>)[FIXTURE_LABEL] = "b1b2b3b4";
+    expect(() => createViewFixtures(good.runtime as never, run, started, now + HOUR)).toThrow(refused);
+    expect(good.removed).toEqual([]);
+  });
+
+  it("places nothing by the clock in a namespace that is not of the run", () => {
+    const names = fixtureNames(run);
+    const started = Date.parse("2026-09-28T07:31:17.123Z");
+    const target = cluster("synthetic-owner", Date.parse("2026-09-28T07:43:00Z"));
+    const now = Date.parse("2026-09-28T07:45:00Z");
+
+    createViewFixtures(target.runtime as never, run, started, now);
+    const objects = structuredClone([...target.objects.entries()]);
+    const created = target.order.length;
+    const asked = target.asked.length;
+    const later = now + 2 * PLACED_FOR;
+
+    // The one of Velero, one of the cluster, one of another run, one that begins as one of this run, and
+    // the one of this run whose fixtures have fixed times: they carry the labels of the run, and would be
+    // removed with what is placed by the clock.
+    for (const namespace of [
+      "velero",
+      "default",
+      fixtureNames("b1b2b3b4").overview,
+      `${names.overview}-more`,
+      names.views,
+    ]) {
+      expect(() =>
+        placeByTheClock(target.runtime as never, run, namespace, later, (placed) =>
+          overviewFixtures("synthetic-owner", run, placed).map((resource) => ({
+            ...resource,
+            metadata: { ...resource.metadata, namespace },
+          })),
+        ),
+      ).toThrow("Refusing to place fixtures outside the namespaces that are placed by the clock");
+    }
+    // What is made for another namespace is not placed by way of one that is placed by the clock.
+    expect(() =>
+      placeByTheClock(target.runtime as never, run, names.overview, later, (placed) => {
+        const made = scaleFixtures("synthetic-owner", run, placed);
+
+        return [...overviewFixtures("synthetic-owner", run, placed), made.backups[0]];
+      }),
+    ).toThrow(`Refusing to place in ${names.overview} what is made for another namespace`);
+    // Nothing was asked of the cluster: what is there is what was there.
+    expect(target.asked).toHaveLength(asked);
+    expect(target.removed).toEqual([]);
+    expect(target.order).toHaveLength(created);
+    expect([...target.objects.entries()]).toEqual(objects);
+  });
+
+  it("gives the fixtures of the Overview what the release writes into the objects it takes", () => {
+    const placed = Date.parse("2026-09-28T07:45:30.250Z");
+    const resources = overviewFixtures("synthetic-owner", run, placed);
+    const status = (name: string) =>
+      resources.find((resource) => resource.metadata.name === name)?.status as Record<string, unknown> | undefined;
+    const ago = (time: number) =>
+      new Date(Date.parse("2026-09-28T07:45:30Z") - time).toISOString().replace(".000Z", "Z");
+
+    // The time of the last backup the release asked for a schedule is in the schedule, with the time its
+    // backup started at; a schedule with no backup has none.
+    expect(status("overview-schedule-01")).toEqual({ phase: "Enabled", lastBackup: ago(HOUR) });
+    expect(status("recent-1h")).toMatchObject({ startTimestamp: ago(HOUR) });
+    expect(status("overview-schedule-07")).toMatchObject({ phase: "FailedValidation", lastBackup: ago(8 * HOUR) });
+    expect(status("scheduled-8h")).toMatchObject({ startTimestamp: ago(8 * HOUR) });
+    expect(status("overview-schedule-02")).toEqual({ phase: "Enabled" });
+    // A backup that waits has its place in the queue, and no other has one.
+    expect(status("flying-queued")).toEqual({ phase: "Queued", queuePosition: 1 });
+    expect(
+      resources.filter((resource) => "queuePosition" in ((resource.status as object | undefined) ?? {})),
+    ).toHaveLength(1);
+  });
+
+  it("stops when what it removed is still there after the time it is given", () => {
+    const started = Date.parse("2026-09-28T07:31:17.123Z");
+    const target = cluster("synthetic-owner", Date.parse("2026-09-28T07:43:00Z"));
+    const now = Date.parse("2026-09-28T07:45:00Z");
+
+    createViewFixtures(target.runtime as never, run, started, now);
+    vi.useFakeTimers({ toFake: ["Date"], now });
+    try {
+      // The time goes by while the placement waits, and what was removed never goes.
+      const runtime = {
+        ...target.runtime,
+        pause: (milliseconds: number) => {
+          target.paused.push(milliseconds);
+          vi.setSystemTime(Date.now() + milliseconds);
+        },
+      };
+
+      target.linger(10_000);
+      expect(() => createViewFixtures(runtime as never, run, started, now + PLACED_FOR + 1000)).toThrow(
+        `fixtures of ${fixtureNames(run).overview} are still there after they were removed`,
+      );
+      // Five minutes, a second at a time, and nothing was created over what is still there.
+      expect(target.paused).toHaveLength(300);
+      expect(target.find("Backup", fixtureNames(run).overview, "recent-1h")?.metadata.annotations).toMatchObject({
+        [PLACED_ANNOTATION]: new Date(now).toISOString(),
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("gives the Overview an installation whose operations are counted back from when they were placed", () => {
+    const names = fixtureNames(run);
+    const placed = Date.parse("2026-09-28T07:45:30.250Z");
+    const resources = overviewFixtures("synthetic-owner", run, placed);
+    const named = (name: string) => resources.find((resource) => resource.metadata.name === name);
+    const status = (name: string) => named(name)?.status as Record<string, string> | undefined;
+    const ago = (time: number) =>
+      new Date(Date.parse("2026-09-28T07:45:30Z") - time).toISOString().replace(".000Z", "Z");
+
+    expect(
+      resources.every(
+        (resource) =>
+          resource.metadata.namespace === names.overview &&
+          resource.metadata.labels?.[OWNER_LABEL] === "synthetic-owner" &&
+          resource.metadata.labels?.[FIXTURE_LABEL] === run &&
+          resource.metadata.annotations?.[PLACED_ANNOTATION] === "2026-09-28T07:45:30.250Z" &&
+          resource.kind !== "Secret",
+      ),
+    ).toBe(true);
+    // Twelve schedules, of which the rules name two: one that was refused, one that was not read.
+    const schedules = resources.filter((resource) => resource.kind === "Schedule");
+
+    expect(OVERVIEW_SCHEDULES).toBe(12);
+    expect(schedules.map((resource) => resource.metadata.name)).toEqual(
+      Array.from({ length: 12 }, (_, index) => `overview-schedule-${String(index + 1).padStart(2, "0")}`),
+    );
+    expect(
+      schedules
+        .filter((resource) => (resource.status as { phase?: string } | undefined)?.phase !== "Enabled")
+        .map((resource) => [resource.metadata.name, (resource.status as { phase?: string } | undefined)?.phase]),
+    ).toEqual([
+      ["overview-schedule-07", "FailedValidation"],
+      ["overview-schedule-11", undefined],
+    ]);
+    // What Velero read carries what it writes into it, and what it did not read does not.
+    expect(
+      schedules
+        .filter((resource) => !("skipImmediately" in (resource.spec as object)))
+        .map((resource) => resource.metadata.name),
+    ).toEqual(["overview-schedule-11"]);
+    expect(
+      schedules
+        .filter((resource) => (resource.spec as { paused: boolean }).paused)
+        .map((resource) => resource.metadata.name),
+    ).toEqual(["overview-schedule-05"]);
+    // Each window holds some operations and leaves some out, for as long as the fixtures are good for.
+    const starts = resources
+      .filter((resource) => resource.kind === "Backup" || resource.kind === "Restore")
+      .map((resource) => [resource.metadata.name, (resource.status as { startTimestamp?: string }).startTimestamp]);
+    const within = (window: number) =>
+      starts
+        .filter(([, start]) => start !== undefined && placed + PLACED_FOR - Date.parse(start) <= window)
+        .map(([name]) => name);
+
+    expect(within(24 * HOUR)).toEqual([
+      "recent-1h",
+      "recent-3h",
+      "recent-5h",
+      "scheduled-8h",
+      "flying-running",
+      "flying-failing",
+      "restored-3h",
+      "restore-flying",
+    ]);
+    expect(within(7 * 24 * HOUR).filter((name) => !within(24 * HOUR).includes(name))).toEqual([
+      "recent-2d",
+      "recent-5d",
+      "restored-3d",
+    ]);
+    expect(within(30 * 24 * HOUR).filter((name) => !within(7 * 24 * HOUR).includes(name))).toEqual([
+      "recent-10d",
+      "recent-25d",
+      "restored-20d",
+    ]);
+    expect(starts.filter(([name, start]) => start !== undefined && !within(30 * 24 * HOUR).includes(name))).toEqual([
+      ["recent-40d", ago(40 * 24 * HOUR)],
+      ["restored-35d", ago(35 * 24 * HOUR)],
+    ]);
+    // What did not start has no start: it is at the time it is created, which is when it is placed.
+    expect(starts.filter(([, start]) => start === undefined).map(([name]) => name)).toEqual([
+      "scheduled-refused",
+      "flying-queued",
+      "restore-refused",
+    ]);
+    // The newest backup of the schedule that was refused failed its validation, after one that completed.
+    expect(
+      resources
+        .filter((resource) => resource.metadata.labels?.["velero.io/schedule-name"] === "overview-schedule-07")
+        .map((resource) => [resource.metadata.name, (resource.status as { phase: string }).phase]),
+    ).toEqual([
+      ["scheduled-8h", "Completed"],
+      ["scheduled-refused", "FailedValidation"],
+    ]);
+    // One schedule names the location that is not available, and it is the one that was not read.
+    expect(
+      schedules
+        .filter(
+          (resource) =>
+            (resource.spec as { template: { storageLocation: string } }).template.storageLocation !==
+            "overview-default",
+        )
+        .map((resource) => [
+          resource.metadata.name,
+          (resource.spec as { template: { storageLocation: string } }).template.storageLocation,
+        ]),
+    ).toEqual([["overview-schedule-11", "overview-unavailable"]]);
+    expect(status("restore-refused")).toEqual({
+      phase: "FailedValidation",
+      validationErrors: ["Synthetic validation error; no operation was executed"],
+    });
+    expect(status("recent-1h")).toMatchObject({ phase: "Completed", startTimestamp: ago(HOUR) });
+    expect(named("recent-1h")?.metadata.labels?.["velero.io/schedule-name"]).toBe("overview-schedule-01");
+    // No counter of zero, as the release writes none.
+    expect(JSON.stringify(resources)).not.toMatch(/"(errors|warnings)":0/);
+    // The storage locations a rule names: one unavailable, one silent, and the default, validated days ago.
+    expect(
+      resources
+        .filter((resource) => resource.kind === "BackupStorageLocation")
+        .map((resource) => [
+          resource.metadata.name,
+          (resource.status as { phase?: string } | undefined)?.phase,
+          (resource.status as { lastValidationTime?: string } | undefined)?.lastValidationTime,
+        ]),
+    ).toEqual([
+      ["overview-default", "Available", ago(2 * 24 * HOUR)],
+      ["overview-unavailable", "Unavailable", ago(3 * 24 * HOUR)],
+      ["overview-silent", undefined, undefined],
+    ]);
+    expect(() => overviewFixtures("", run, placed)).toThrow();
+    expect(() => overviewFixtures("synthetic-owner", run, Number.NaN)).toThrow();
+  });
+
+  it("spreads the long lists over the thirty days before they were placed", () => {
+    const placed = Date.parse("2026-09-28T07:45:30Z");
+    const { backups, restores } = scaleFixtures("synthetic-owner", run, placed);
+    const starts = (items: typeof backups) =>
+      items
+        .map((item) => (item.status as { startTimestamp?: string }).startTimestamp)
+        .filter((start): start is string => start !== undefined)
+        .map((start) => Date.parse(start));
+
+    for (const items of [backups, restores]) {
+      expect(Math.min(...starts(items))).toBeGreaterThanOrEqual(placed - 30 * 24 * HOUR);
+      expect(Math.max(...starts(items))).toBeLessThan(placed);
+      // Every window holds some of them, and the ones of a day are not the ones of a month.
+      const held = (window: number) => starts(items).filter((start) => placed - start <= window).length;
+
+      expect(held(24 * HOUR)).toBeGreaterThan(10);
+      expect(held(7 * 24 * HOUR)).toBeGreaterThan(held(24 * HOUR) * 5);
+      expect(held(30 * 24 * HOUR)).toBeGreaterThan(held(7 * 24 * HOUR) * 3);
+      expect(
+        items.every((item) => item.metadata.annotations?.[PLACED_ANNOTATION] === new Date(placed).toISOString()),
+      ).toBe(true);
+    }
   });
 
   it("gives the views schedules whose backups go where none is taken, and one that names its time zone", () => {
@@ -920,6 +1462,7 @@ describe("foundation fixture boundaries", () => {
       names.static,
       names.views,
       names.defaults,
+      names.overview,
       names.scale,
     ]);
   });

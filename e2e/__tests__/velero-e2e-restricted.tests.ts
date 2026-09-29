@@ -260,6 +260,71 @@ describe("views with restricted access", () => {
   );
 
   it(
+    "says on the Overview what is denied, which is not a count of none, and what could not be checked",
+    async () => {
+      await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+      await cluster.openPage(frame, cluster.OVERVIEW);
+      const shown = await cluster.overview(frame);
+
+      expect(shown.read.restores).toEqual({ text: "Restores Access denied", state: "denied" });
+      expect(shown.read.snapshotLocations).toEqual({
+        text: "Volume Snapshot Locations Access denied",
+        state: "denied",
+      });
+      expect([shown.read.backups.state, shown.read.schedules.state, shown.read.storageLocations.state]).toEqual([
+        "read",
+        "read",
+        "read",
+      ]);
+      expect(shown.read.backups.text).toMatch(/^Backups \d+$/);
+      // The rules looked at what was read, and say what they did not look at: the restores. No rule is
+      // of the snapshot locations, and nothing is said of them among what needs attention.
+      expect(shown.unchecked).toEqual(["restores"]);
+      expect(shown.summary).toMatch(/^\d+ items in what was read\. Not everything was read\.$/);
+      const attention = (await frame.locator("[data-testid=velero-overview-attention]").innerText()).replace(
+        /\s+/g,
+        " ",
+      );
+
+      expect(attention).toContain("The restores of this installation cannot be read: access is denied.");
+      expect(attention).toContain(
+        "Whether a restore in flight carries a failure, and whether one ended with a failure, were not checked.",
+      );
+      // No item is of a restore, and the restores are not said none: in flight, and on the line of time.
+      expect(await frame.locator("[data-testid=velero-overview] [data-testid^=velero-open-restore-]").count()).toBe(0);
+      expect(await frame.locator("[data-testid=velero-overview-in-flight-none]").count()).toBe(0);
+      expect(
+        (await frame.locator("[data-testid=velero-overview-in-flight]").innerText()).replace(/\s+/g, " "),
+      ).toContain("Whether a restore is in flight is not known.");
+      expect(
+        (await frame.locator("[data-testid=velero-overview-line-restores-unread]").innerText()).replace(/\s+/g, " "),
+      ).toMatch(
+        /^The restores of this installation cannot be read: access is denied\. The restores of the last 7 days are not known, which is not that there are none\.$/,
+      );
+      expect(await frame.locator("[data-line-row=restores] [data-line-mark]").count()).toBe(0);
+      // The backups were read, and their row is drawn: what it holds depends on how old the fixtures
+      // are, which are not placed again, and is not what is looked at here.
+      expect(await frame.locator("[data-line-row=backups]").getAttribute("data-line")).toBe("listed");
+      expect(await frame.locator("[data-testid=velero-overview-line-backups-unread]").count()).toBe(0);
+      expect(
+        (await frame.locator("[data-testid=velero-overview-in-flight-none-of-one]").count()) +
+          (await frame.locator('[data-testid=velero-overview-in-flight-list] [data-operation^="backup/"]').count()),
+      ).toBeGreaterThan(0);
+      // What was read is shown as where everything is: the newest backup that completed, the schedules.
+      expect(shown.completed).toMatch(/ completed \S/);
+      expect(shown.schedules.length).toBeGreaterThan(0);
+      expect(shown.storage.length).toBeGreaterThan(0);
+      expect(await cluster.valuesOfTheWhole(frame)).toEqual([]);
+      expect(await cluster.layoutProblems(frame, cluster.OVERVIEW)).toEqual([]);
+      await cluster.captureScreenshot(frame, "dark-restricted-overview");
+      // The cell of what is denied leads to its list, which says the same.
+      await frame.click("[data-testid=velero-overview-read-restores]");
+      await frame.waitForSelector("[data-testid=velero-restores-unavailable]", { timeout: 60_000 });
+    },
+    TIMEOUT,
+  );
+
+  it(
     "leaves the objects of Velero as they were",
     async () => {
       const after = cluster.clusterSnapshot();

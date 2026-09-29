@@ -3,7 +3,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { listProps } from "../../../test/host-components";
-import { emptyPreferences, RESOURCES } from "../../common/discovery";
+import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { NOTES } from "../../common/schedule-view";
 import { Schedule } from "../api/kinds";
 import { ScheduleDetails } from "../details/schedule-details";
@@ -152,7 +152,7 @@ function mount(table: Answers, preferences: Preferences = emptyPreferences(), pa
       return typeof answer === "function" ? answer() : answer;
     },
     now: () => clock.now,
-    storage: { read: () => preferences, write: () => undefined },
+    storage: heldPreferences(preferences),
   });
   const Page = page;
   const view = render(<Page installation={installation} />);
@@ -708,6 +708,91 @@ describe("history of a schedule", () => {
     fireEvent.click(within(workspace).getByText("Show all"));
     expect(history()).toHaveLength(4);
     expect(within(workspace).queryByTestId("velero-history-shown")).toBeNull();
+    // The button went away with what it said: the focus is on the mark that was chosen.
+    expect(document.activeElement).toBe(group);
+    expect(group.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("says of a mark that was chosen how many of its backups are there now", async () => {
+    const old = object("Backup", "hourly-old", A, template, ran("2026-08-01"), of("nightly"));
+    const close = ["01", "02", "03"].map((hour) =>
+      object(
+        "Backup",
+        `hourly-${hour}`,
+        A,
+        template,
+        { ...ran("2026-09-09"), startTimestamp: `2026-09-09T${hour}:00:00Z` },
+        of("nightly"),
+      ),
+    );
+    const { installation, table } = mount(answers({ [path("backups", A)]: list(old, ...close) }), chosen(A));
+    const said = () => screen.getByTestId("velero-history-shown").textContent;
+    const read = async (...items: unknown[]) => {
+      table[path("backups", A)] = list(old, ...items);
+      await act(() => installation.refresh());
+    };
+
+    await open("nightly");
+    fireEvent.click(document.querySelector('[data-strip-mark="hourly-03,hourly-02,hourly-01"]') as HTMLElement);
+    expect(said()).toBe("The 3 backups of one mark are shown. Show all");
+    // One of them expired at the read after: the number is of the ones that are shown.
+    await read(close[0], close[2]);
+    expect(history()).toEqual(["hourly-03", "hourly-01"]);
+    expect(said()).toBe("The 2 backups of one mark are shown. Show all");
+    await read(close[2]);
+    expect(history()).toEqual(["hourly-03"]);
+    expect(said()).toBe("One backup of one mark is shown. Show all");
+    await read();
+    expect(history()).toEqual([]);
+    expect(said()).toBe("No backup of the mark that was chosen is among the ones that exist now. Show all");
+    // What is said is said to who does not see it as well, when it changes.
+    expect(screen.getByTestId("velero-history-shown").querySelector('[role="status"]')?.textContent).toBe(
+      "No backup of the mark that was chosen is among the ones that exist now.",
+    );
+    fireEvent.click(screen.getByText("Show all"));
+    expect(screen.queryByTestId("velero-history-shown")).toBeNull();
+    expect(history()).toEqual(["hourly-old"]);
+    // The mark is not there any more: the focus is on the way back, and not on nothing.
+    expect(document.activeElement?.getAttribute("data-testid")).toBe("velero-back");
+  });
+
+  it("writes the number of a mark of many in the room of a mark, and names the newest of them", async () => {
+    // Twelve hundred backups in twenty minutes of the same day are one mark, after one of a week before.
+    const crowd = [
+      object("Backup", "first", A, template, ran("2026-09-02"), of("nightly")),
+      ...Array.from({ length: 1200 }, (_, index) =>
+        object(
+          "Backup",
+          `crowd-${String(index).padStart(4, "0")}`,
+          A,
+          template,
+          {
+            ...ran("2026-09-09"),
+            startTimestamp: new Date(Date.parse("2026-09-09T03:00:00Z") + index * 1000)
+              .toISOString()
+              .replace(".000Z", "Z"),
+          },
+          of("nightly"),
+        ),
+      ),
+    ];
+
+    mount(answers({ [path("backups", A)]: list(...crowd) }), chosen(A));
+    await open("nightly");
+    const drawn = [...document.querySelectorAll<HTMLElement>("[data-strip-mark]")];
+    const group = drawn[1];
+
+    expect(drawn).toHaveLength(2);
+    expect(group.textContent).toBe("1k");
+    expect(group.querySelector("span")?.getAttribute("data-characters")).toBe("2");
+    expect(group.getAttribute("data-strip-held")).toBe("1200");
+    expect((group.getAttribute("data-strip-mark") ?? "").split(",")).toHaveLength(20);
+    expect(group.getAttribute("aria-label")).toMatch(
+      /^1200 backups close to each other\. crowd-1199, Completed, .+\. crowd-1195, Completed, [^.]+\. and 1195 more$/,
+    );
+    // Every backup of the mark is shown when the mark is chosen, the ones it does not name as well.
+    fireEvent.click(group);
+    expect(screen.getByTestId("velero-history-shown").textContent).toContain("The 1200 backups of one mark are shown.");
   });
 
   it("shows twenty backups at a time, from the newest, and the others when they are asked", async () => {
@@ -979,7 +1064,7 @@ describe("details of the host for a schedule", () => {
         throw new Error("The details of the host ask nothing of the cluster");
       },
       now: () => 0,
-      storage: { read: () => preferences, write: () => undefined },
+      storage: heldPreferences(preferences),
     });
 
     return render(

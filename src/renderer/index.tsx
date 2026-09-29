@@ -10,6 +10,8 @@ import { StorageLocationDetails } from "./details/storage-location-details";
 import {
   BACKUPS_MENU_ID,
   BACKUPS_PAGE_ID,
+  OVERVIEW_MENU_ID,
+  OVERVIEW_PAGE_ID,
   RESTORES_MENU_ID,
   RESTORES_PAGE_ID,
   ROOT_MENU_ID,
@@ -21,6 +23,7 @@ import {
   STORAGE_LOCATIONS_PAGE_ID,
 } from "./navigation";
 import { BackupsPage } from "./pages/backups-page";
+import { OverviewPage } from "./pages/overview-page";
 import { RestoresPage } from "./pages/restores-page";
 import { SchedulesPage } from "./pages/schedules-page";
 import { SnapshotLocationsPage } from "./pages/snapshot-locations-page";
@@ -29,6 +32,7 @@ import { StorageLocationsPage } from "./pages/storage-locations-page";
 export default class VeleroRenderer extends Renderer.LensExtension {
   // Only the views that exist have a page and an entry: nothing here leads to a page that is not there.
   clusterPages = [
+    { id: OVERVIEW_PAGE_ID, components: { Page: () => <OverviewPage extension={this} /> } },
     { id: BACKUPS_PAGE_ID, components: { Page: () => <BackupsPage /> } },
     { id: RESTORES_PAGE_ID, components: { Page: () => <RestoresPage /> } },
     { id: SCHEDULES_PAGE_ID, components: { Page: () => <SchedulesPage /> } },
@@ -37,9 +41,17 @@ export default class VeleroRenderer extends Renderer.LensExtension {
   ];
 
   // The host gives a page the tabs of its group when the first entry that leads to it is an entry of the
-  // group: the entries of the lists come before the one of the group, which leads to the first of them.
-  // With the group first, the page it leads to would be the only one without the tabs.
+  // group: the entries of the pages come before the one of the group, which names the first of them.
+  // With the group first, the page it names would be the only one without the tabs. The entry of a
+  // group opens the group, in the host, and is marked while the page it names is shown.
   clusterPageMenus = [
+    {
+      id: OVERVIEW_MENU_ID,
+      parentId: ROOT_MENU_ID,
+      title: "Overview",
+      target: { pageId: OVERVIEW_PAGE_ID },
+      components: {},
+    },
     {
       id: BACKUPS_MENU_ID,
       parentId: ROOT_MENU_ID,
@@ -75,7 +87,7 @@ export default class VeleroRenderer extends Renderer.LensExtension {
       target: { pageId: SNAPSHOT_LOCATIONS_PAGE_ID },
       components: {},
     },
-    { id: ROOT_MENU_ID, title: "Velero", target: { pageId: BACKUPS_PAGE_ID }, components: { Icon: VeleroIcon } },
+    { id: ROOT_MENU_ID, title: "Velero", target: { pageId: OVERVIEW_PAGE_ID }, components: { Icon: VeleroIcon } },
   ];
 
   kubeObjectDetailItems = [
