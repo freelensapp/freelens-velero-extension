@@ -26,6 +26,7 @@ import type {
   Selection,
   Suggestions,
 } from "../../common/discovery";
+import type { GateState } from "../../common/ipc";
 import type { FamilyRead } from "../../common/read-state";
 import type {
   BackupResource,
@@ -36,6 +37,7 @@ import type {
   VolumeSnapshotLocationResource,
 } from "../../common/types";
 import type { Window } from "../../common/window";
+import type { GateClient } from "../api/ipc";
 
 // What asks the cluster: one verb, and the status of the answer beside its body.
 export type Reader = (path: string, signal?: AbortSignal) => Promise<Answer>;
@@ -62,7 +64,13 @@ export interface InstallationDependencies {
   read: Reader;
   now: () => number;
   storage: PreferenceStorage;
+  // The gate of the main process, when the views have a way to it. Without it writes are off, and the
+  // views say that they cannot be turned on.
+  gate?: GateClient;
 }
+
+// What the views show of the gate: what the main process last said of it, and why it could not be asked.
+export type Writes = GateState["writes"];
 
 function emptyReads(): Reads {
   return Object.fromEntries(FAMILIES.map((family) => [family, emptyRead<Resource>()])) as Reads;
@@ -82,6 +90,10 @@ export class Installation {
   // The reads that were asked and did not end: what the cluster serves, where the installations are, and
   // the families.
   asking = 0;
+  // What the main process last said of the gate of this cluster: a mirror, and never a decision.
+  gate?: GateState;
+  // Why the gate could not be asked, in words, when it could not.
+  gateFailure?: string;
   private readonly dependencies: InstallationDependencies;
   private watchers = 0;
   private timer?: ReturnType<typeof setInterval>;
@@ -98,17 +110,82 @@ export class Installation {
       reads: observable.ref,
       asked: observable,
       asking: observable,
+      gate: observable.ref,
+      gateFailure: observable,
       choices: computed,
       selection: computed,
       entry: computed,
       namespace: computed,
       reading: computed,
       window: computed,
+      writes: computed,
       select: action,
       chooseWindow: action,
       configure: action,
       forget: action,
     });
+  }
+
+  // Whether writes are on for the installation that is shown, as the main process last said.
+  get writes(): Writes {
+    const gate = this.gate;
+
+    if (!gate?.writes.on || gate.writes.namespace !== this.namespace) return { on: false };
+    return gate.writes;
+  }
+
+  // Asks the main process what the gate of this cluster is. The first view asks it once; the target bar
+  // asks it again when the main process says that it changed.
+  async openGate(): Promise<void> {
+    const client = this.dependencies.gate;
+
+    if (!client) {
+      runInAction(() => {
+        this.gateFailure = "The views have no way to the main process of the extension: writes cannot be turned on.";
+      });
+      return;
+    }
+    this.takeGate(await client.state(this.cluster.id));
+  }
+
+  // Turns writes on for the namespace that is shown, with the confirmation the dialog named.
+  async enableWrites(confirmation: { context: string; namespace: string }): Promise<boolean> {
+    const client = this.dependencies.gate;
+    const namespace = this.namespace;
+
+    if (!client || !namespace || confirmation.namespace !== namespace) return false;
+    const answer = await client.enable(this.cluster.id, namespace, confirmation);
+
+    this.takeGate(answer);
+    return answer.ok;
+  }
+
+  async disableWrites(): Promise<void> {
+    const client = this.dependencies.gate;
+
+    if (!client) return;
+    this.takeGate(await client.disable(this.cluster.id));
+  }
+
+  private takeGate(answer: Awaited<ReturnType<GateClient["state"]>>): void {
+    runInAction(() => {
+      if (answer.ok) {
+        this.gate = answer.value;
+        this.gateFailure = undefined;
+      } else {
+        this.gate = undefined;
+        this.gateFailure = answer.text;
+      }
+    });
+  }
+
+  // Writes are off when the target changes: the mirror says so at once, and the main process is told.
+  private dropWrites(): void {
+    const gate = this.gate;
+
+    if (!gate?.writes.on) return;
+    this.gate = { ...gate, writes: { on: false } };
+    void this.disableWrites();
   }
 
   get cluster(): ClusterIdentity {
@@ -286,6 +363,7 @@ export class Installation {
     this.generation = { cluster: this.cluster.id, namespace, number: this.generation.number + 1 };
     this.reads = emptyReads();
     this.asked = undefined;
+    this.dropWrites();
   }
 
   private async readFamilies(): Promise<void> {

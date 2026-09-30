@@ -131,14 +131,77 @@ describe("explicit create-only Kubernetes adapter", () => {
     expect(requests).toEqual([]);
   });
 
-  it("rejects kubeconfig changes without default or proxy fallback", async () => {
+  it("rejects a change of the entry of the context before network access, and not one of another context", async () => {
     const api = new DiagnosticKubernetes(binding(), () => true);
+    const users = configuration.users as { name: string; user: Record<string, string> }[];
 
-    await writeFile(path, `${JSON.stringify(configuration)}\n`);
+    // A byte of the file, and another context of it: not the identity of this one.
+    await writeFile(
+      path,
+      `${JSON.stringify({
+        ...configuration,
+        "current-context": "elsewhere",
+        contexts: [
+          ...(configuration.contexts as unknown[]),
+          { name: "elsewhere", context: { cluster: "fixture", user: "elsewhere" } },
+        ],
+        users: [...users, { name: "elsewhere", user: { token: "rotated-elsewhere" } }],
+      })}\n`,
+    );
+    await api.read("Backup", "fixture", "backup", new AbortController().signal).catch(() => undefined);
+    expect(requests).toHaveLength(1);
+    // The credential of this context: the identity.
+    await writeFile(
+      path,
+      JSON.stringify({ ...configuration, users: [{ name: "fixture", user: { token: "rotated-here" } }] }),
+    );
     await expect(api.read("Backup", "fixture", "backup", new AbortController().signal)).rejects.toMatchObject({
       code: "target-changed",
     });
-    expect(requests).toEqual([]);
+    expect(requests).toHaveLength(1);
+  });
+
+  it("runs the plugin of a context for its credential, within its bound, and refuses what it cannot read", async () => {
+    const script = join(certificates.directory, "plugin.mjs");
+    const plugin = (token: string, wait = 0) => ({
+      ...configuration,
+      users: [
+        {
+          name: "fixture",
+          user: {
+            exec: {
+              apiVersion: "client.authentication.k8s.io/v1",
+              command: process.execPath,
+              args: [script, token, String(wait)],
+              env: [{ name: "PLUGIN_PROFILE", value: "synthetic" }],
+            },
+          },
+        },
+      ],
+    });
+
+    await writeFile(
+      script,
+      `const [token, wait] = process.argv.slice(2); if (process.env.PLUGIN_PROFILE !== "synthetic") process.exit(3); setTimeout(() => process.stdout.write(JSON.stringify({ apiVersion: "client.authentication.k8s.io/v1", kind: "ExecCredential", status: { token } })), Number(wait));`,
+    );
+    await writeFile(path, JSON.stringify(plugin("synthetic-token")));
+    const api = new DiagnosticKubernetes(binding(), () => true);
+    const read = await api
+      .read("DownloadRequest", "fixture", "absent", new AbortController().signal)
+      .catch((error: unknown) => error);
+
+    // The plugin gave the token the fixture accepts: the request reached the server and was answered.
+    expect(read).toMatchObject({ code: "not-found" });
+    expect(requests).toHaveLength(1);
+    await writeFile(path, JSON.stringify(plugin("wrong-token")));
+    const wrong = new DiagnosticKubernetes(binding(), () => true);
+
+    await expect(
+      wrong.read("DownloadRequest", "fixture", "absent", new AbortController().signal),
+    ).rejects.toMatchObject({
+      code: "forbidden",
+    });
+    expect(requests).toHaveLength(2);
   });
 
   it("does not retry an ambiguous POST and permits an explicit read to reconcile", async () => {

@@ -1,8 +1,8 @@
-import { createHash, X509Certificate } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { X509Certificate } from "node:crypto";
 import { type RequestOptions, request } from "node:https";
 import { isAbsolute } from "node:path";
 import { KubeConfig } from "@kubernetes/client-node/dist/config.js";
+import { type ContextEntry, type Credential, readContext, runCredentialPlugin } from "./context-identity.ts";
 import { DiagnosticError } from "./diagnostic-transport.ts";
 
 export const ARTIFACT_TARGETS = [
@@ -48,11 +48,20 @@ function name(value: string, maximum = 253): string {
   return value;
 }
 
+// The adapter binds to one context of one kubeconfig, by the entry of the context: the address of the
+// server, its certificate authority and the credential of the user. It takes a client certificate, a token
+// or a plugin that gives a credential, which it runs within a bound and reads for the credential alone;
+// it refuses an authentication provider, a proxy, a user name with a password and a verification of TLS
+// turned off. The entry is read again before every request: a change of it is a change of the target, a
+// change of another context of the same file is not.
 export class DiagnosticKubernetes {
   readonly binding: Readonly<KubernetesBinding>;
   readonly configuration: KubeConfig;
+  private readonly entry: ContextEntry;
   private readonly fingerprint: string;
   private readonly endpoint: URL;
+  // The credential the plugin gave, kept until it expires and never beyond the adapter.
+  private credential?: Credential;
 
   constructor(
     binding: KubernetesBinding,
@@ -63,27 +72,13 @@ export class DiagnosticKubernetes {
     try {
       if (!binding.clusterId || !binding.context || !isAbsolute(binding.kubeconfigPath) || !isCurrent())
         throw new DiagnosticError("validation");
-      this.fingerprint = this.hash();
-      this.configuration = new KubeConfig();
-      this.configuration.loadFromFile(binding.kubeconfigPath);
-      if (this.configuration.getContexts().filter((context) => context.name === binding.context).length !== 1)
-        throw new DiagnosticError("validation");
-      this.configuration.setCurrentContext(binding.context);
-      const cluster = this.configuration.getCurrentCluster();
-      const user = this.configuration.getCurrentUser();
+      const read = readContext(binding.kubeconfigPath, binding.context);
 
-      if (
-        !cluster ||
-        !user ||
-        cluster.skipTLSVerify ||
-        cluster.proxyUrl ||
-        user.exec ||
-        user.authProvider ||
-        user.username ||
-        (!user.token && !user.certData && !user.certFile)
-      )
-        throw new DiagnosticError("validation");
-      this.endpoint = new URL(cluster.server);
+      if ("missing" in read || !read.connection.supported) throw new DiagnosticError("validation");
+      this.entry = read.entry;
+      this.fingerprint = read.digest;
+      this.configuration = read.configuration;
+      this.endpoint = new URL(read.entry.cluster.server);
       if (
         this.endpoint.protocol !== "https:" ||
         this.endpoint.username ||
@@ -97,21 +92,46 @@ export class DiagnosticKubernetes {
     }
   }
 
-  private hash(): string {
-    return createHash("sha256").update(readFileSync(this.binding.kubeconfigPath)).digest("hex");
-  }
-
+  // Whether the entry of the context is what it was when the adapter was made.
   assertCurrent(): void {
     try {
-      if (
-        !this.isCurrent() ||
-        this.hash() !== this.fingerprint ||
-        this.configuration.getCurrentContext() !== this.binding.context
-      )
+      const read = readContext(this.binding.kubeconfigPath, this.binding.context);
+
+      if (!this.isCurrent() || "missing" in read || read.digest !== this.fingerprint)
         throw new DiagnosticError("target-changed");
     } catch {
       throw new DiagnosticError("target-changed");
     }
+  }
+
+  // The options of a request, with the credential of the user: the one of the entry, or the one its
+  // plugin gives, which is asked of the plugin when there is none or the one there is expired.
+  private async authenticate(options: RequestOptions): Promise<void> {
+    if (!this.entry.user.exec) {
+      await this.configuration.applyToHTTPSOptions(options);
+      return;
+    }
+    if (!this.credential || (this.credential.expires !== undefined && this.credential.expires <= Date.now()))
+      this.credential = await runCredentialPlugin(this.entry);
+    // The configuration is copied with the credential in place of the plugin: the client of Kubernetes
+    // would otherwise run the plugin itself, without a bound.
+    const copy = new KubeConfig();
+    const cluster = this.configuration.getCluster(this.entry.cluster.name);
+
+    if (!cluster) throw new DiagnosticError("target-changed");
+    copy.loadFromOptions({
+      clusters: [cluster],
+      users: [
+        {
+          name: this.entry.user.name,
+          ...(this.credential.token ? { token: this.credential.token } : {}),
+          ...(this.credential.certData ? { certData: this.credential.certData, keyData: this.credential.keyData } : {}),
+        },
+      ],
+      contexts: [{ name: this.binding.context, cluster: cluster.name, user: this.entry.user.name }],
+      currentContext: this.binding.context,
+    });
+    await copy.applyToHTTPSOptions(options);
   }
 
   private path(kind: DiagnosticKind, namespace: string, objectName?: string): string {
@@ -131,7 +151,7 @@ export class DiagnosticKubernetes {
     const authentication: RequestOptions = {};
 
     try {
-      await this.configuration.applyToHTTPSOptions(authentication);
+      await this.authenticate(authentication);
     } catch {
       throw new DiagnosticError("forbidden");
     }

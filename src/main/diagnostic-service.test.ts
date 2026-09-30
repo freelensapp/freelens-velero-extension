@@ -74,7 +74,7 @@ function fixture(urlTimeoutMs = 30) {
     name: "backup",
     uid: "target-uid",
   } as const;
-  const input = () => ({ ...target, requestId: randomUUID(), confirmation: service.confirm(7, target) });
+  const input = () => ({ ...target, requestId: randomUUID(), confirmation: service.confirm("frame-7", target) });
 
   return {
     service,
@@ -106,7 +106,7 @@ describe("confirmed diagnostic lifecycle", () => {
     value.service.enableWrites("fixture");
     const input = value.input();
 
-    await expect(value.service.run(8, input, new AbortController().signal)).rejects.toMatchObject({
+    await expect(value.service.run("frame-8", input, new AbortController().signal)).rejects.toMatchObject({
       code: "forbidden",
     });
     expect(value.api.createDownload).not.toHaveBeenCalled();
@@ -117,8 +117,8 @@ describe("confirmed diagnostic lifecycle", () => {
 
     value.service.enableWrites("fixture");
     const input = value.input();
-    const first = value.service.run(7, input, new AbortController().signal);
-    const second = value.service.run(7, input, new AbortController().signal);
+    const first = value.service.run("frame-7", input, new AbortController().signal);
+    const second = value.service.run("frame-7", input, new AbortController().signal);
 
     expect(first).toBe(second);
     const result = await first;
@@ -127,7 +127,9 @@ describe("confirmed diagnostic lifecycle", () => {
     expect(JSON.stringify(result)).not.toContain("PRIVATE-SENTINEL");
     expect(value.api.createDownload).toHaveBeenCalledTimes(1);
     expect(value.close).toHaveBeenCalledTimes(1);
-    await expect(value.service.run(7, input, new AbortController().signal)).rejects.toMatchObject({ code: "conflict" });
+    await expect(value.service.run("frame-7", input, new AbortController().signal)).rejects.toMatchObject({
+      code: "conflict",
+    });
   });
 
   it.each(["BackupContents", "UnexpectedKind"])("rejects non-allowlisted targets: %s", async (target) => {
@@ -135,7 +137,7 @@ describe("confirmed diagnostic lifecycle", () => {
 
     value.service.enableWrites("fixture");
     await expect(
-      value.service.run(7, { ...value.input(), target } as DiagnosticInput, new AbortController().signal),
+      value.service.run("frame-7", { ...value.input(), target } as DiagnosticInput, new AbortController().signal),
     ).rejects.toMatchObject({ code: "validation" });
     expect(value.api.createDownload).not.toHaveBeenCalled();
   });
@@ -148,13 +150,13 @@ describe("confirmed diagnostic lifecycle", () => {
 
     await expect(
       value.service.run(
-        7,
+        "frame-7",
         { ...input, url: "https://example.invalid" } as DiagnosticInput,
         new AbortController().signal,
       ),
     ).rejects.toMatchObject({ code: "validation" });
     value.setUid("recreated-uid");
-    await expect(value.service.run(7, input, new AbortController().signal)).rejects.toMatchObject({
+    await expect(value.service.run("frame-7", input, new AbortController().signal)).rejects.toMatchObject({
       code: "target-changed",
     });
     value.setCurrent(false);
@@ -170,7 +172,7 @@ describe("confirmed diagnostic lifecycle", () => {
 
     value.service.enableWrites("fixture");
     value.setPhase(phase);
-    await expect(value.service.run(7, value.input(), new AbortController().signal)).rejects.toMatchObject({
+    await expect(value.service.run("frame-7", value.input(), new AbortController().signal)).rejects.toMatchObject({
       code,
       message: `Diagnostic operation failed: ${code}`,
     });
@@ -182,7 +184,9 @@ describe("confirmed diagnostic lifecycle", () => {
 
     value.service.enableWrites("fixture");
     value.ambiguous();
-    await expect(value.service.run(7, value.input(), new AbortController().signal)).resolves.toHaveProperty("content");
+    await expect(value.service.run("frame-7", value.input(), new AbortController().signal)).resolves.toHaveProperty(
+      "content",
+    );
     expect(value.api.createDownload).toHaveBeenCalledTimes(1);
   });
 
@@ -202,7 +206,7 @@ describe("confirmed diagnostic lifecycle", () => {
         } as DiagnosticObject;
       return result;
     });
-    await expect(value.service.run(7, value.input(), new AbortController().signal)).rejects.toMatchObject({
+    await expect(value.service.run("frame-7", value.input(), new AbortController().signal)).rejects.toMatchObject({
       code: "deadline",
     });
     expect(value.download).not.toHaveBeenCalled();
@@ -210,12 +214,12 @@ describe("confirmed diagnostic lifecycle", () => {
     value.close.mockImplementation(() => {
       throw new Error("PRIVATE-SENTINEL");
     });
-    await expect(value.service.run(7, value.input(), new AbortController().signal)).rejects.toMatchObject({
+    await expect(value.service.run("frame-7", value.input(), new AbortController().signal)).rejects.toMatchObject({
       code: "transport-unreachable",
       message: "Diagnostic operation failed: transport-unreachable",
     });
     value.download.mockRejectedValueOnce(new DiagnosticError("artifact-missing"));
-    await expect(value.service.run(7, value.input(), new AbortController().signal)).rejects.toMatchObject({
+    await expect(value.service.run("frame-7", value.input(), new AbortController().signal)).rejects.toMatchObject({
       code: "artifact-missing",
     });
   });
@@ -233,9 +237,9 @@ describe("confirmed diagnostic lifecycle", () => {
     const secondInput = second.input();
     const queuedInput = queued.input();
     const results = [
-      first.service.run(7, firstInput, new AbortController().signal),
-      second.service.run(7, secondInput, new AbortController().signal),
-      queued.service.run(7, queuedInput, new AbortController().signal),
+      first.service.run("frame-7", firstInput, new AbortController().signal),
+      second.service.run("frame-7", secondInput, new AbortController().signal),
+      queued.service.run("frame-7", queuedInput, new AbortController().signal),
     ].map((operation) => operation.catch((error: unknown) => error));
 
     await vi.waitFor(() => {
@@ -243,7 +247,7 @@ describe("confirmed diagnostic lifecycle", () => {
       expect(second.api.createDownload).toHaveBeenCalledOnce();
     });
     expect(queued.api.createDownload).not.toHaveBeenCalled();
-    queued.service.cancel(7, queuedInput.requestId);
+    queued.service.cancel("frame-7", queuedInput.requestId);
     first.service.invalidate();
     second.service.invalidate();
     expect(await Promise.all(results)).toEqual([
@@ -259,12 +263,12 @@ describe("confirmed diagnostic lifecycle", () => {
     value.service.enableWrites("fixture");
     value.setPhase("New");
     const input = value.input();
-    const pending = value.service.run(7, input, new AbortController().signal);
+    const pending = value.service.run("frame-7", input, new AbortController().signal);
     const cancelled = expect(pending).rejects.toMatchObject({ code: "cancelled" });
 
     await vi.waitFor(() => expect(value.api.createDownload).toHaveBeenCalledOnce());
-    expect(() => value.service.cancel(9, input.requestId)).toThrow("forbidden");
-    value.service.cancel(7, input.requestId);
+    expect(() => value.service.cancel("frame-9", input.requestId)).toThrow("forbidden");
+    value.service.cancel("frame-7", input.requestId);
     await cancelled;
     expect(value.download).not.toHaveBeenCalled();
   });

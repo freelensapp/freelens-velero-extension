@@ -7,11 +7,12 @@ import { ConfigureNamespace } from "./entry-state";
 import styles from "./views.module.css";
 
 import type { Family } from "../../common/discovery";
+import type { Connection } from "../../common/ipc";
 import type { ReadStatus } from "../../common/read-state";
 import type { Installation } from "../state/installation";
 
 const {
-  Component: { Button, Icon, Select },
+  Component: { Button, ConfirmDialog, Icon, Select },
 } = Renderer;
 
 interface Option {
@@ -25,9 +26,101 @@ const REASONS: Partial<Record<ReadStatus, string>> = {
   failed: "could not be read",
 };
 
+// Why the writes of the extension cannot use the connection of a cluster, by the reason the main process
+// gives: the form of the kubeconfig the adapter refuses, or what is missing of it.
+export const CONNECTION_REASONS: Record<Exclude<Connection, { supported: true }>["reason"], string> = {
+  entry: "The cluster is not in the catalog of Freelens any more.",
+  file: "The kubeconfig of the cluster cannot be read.",
+  context: "The context of the cluster is not in its kubeconfig.",
+  "auth-provider":
+    "The connection of this cluster uses an authentication provider of the kubeconfig, which the writes of the extension do not use.",
+  proxy: "The connection of this cluster goes through a proxy, which the writes of the extension do not use.",
+  basic:
+    "The connection of this cluster uses a user name and a password, which the writes of the extension do not use.",
+  "insecure-tls":
+    "The connection of this cluster turns the verification of TLS off, which the writes of the extension never do.",
+  "no-credential": "The connection of this cluster has no credential the writes of the extension can use.",
+};
+
 export function readTime(time: number | undefined): string {
   return time === undefined ? "Not read yet" : `Read at ${new Date(time).toLocaleTimeString()}`;
 }
+
+// The words of the dialog that turns writes on: what they allow, for which installation of which cluster.
+export function writesDialogWords(
+  namespace: string,
+  cluster: string,
+  context: string,
+): { first: string; second: string } {
+  return {
+    first: `Turn writes on for the installation ${namespace} of the cluster ${cluster} (context ${context})?`,
+    second:
+      "Until they are turned off, or another installation is selected, the extension may create in that namespace the requests the views ask for on purpose: a DownloadRequest for the log, the results, the resources or the volumes of an operation, and a ServerStatusRequest for the version of the server. Each one is confirmed where it is asked for. Nothing else is written.",
+  };
+}
+
+// The gate of the writes, as the main process last said of it, and the commands that turn it: on, through
+// the confirmation dialog of the host, which names the cluster, its context and the namespace; off, at
+// once. The state is what the main process holds: the views show it and decide nothing.
+export const WritesControl = observer(({ installation }: { installation: Installation }) => {
+  const entry = installation.entry;
+  const namespace = entry.state === "ready" ? entry.namespace : undefined;
+  const gate = installation.gate;
+  const writes = installation.writes;
+
+  React.useEffect(() => {
+    void installation.openGate();
+  }, [installation]);
+  const turnOn = () => {
+    if (!gate || !namespace) return;
+    const confirmation = { context: gate.cluster.context, namespace };
+    const words = writesDialogWords(namespace, gate.cluster.name, gate.cluster.context);
+
+    ConfirmDialog.open({
+      message: (
+        <div data-testid="velero-writes-dialog">
+          <p>{words.first}</p>
+          <p>{words.second}</p>
+        </div>
+      ),
+      labelOk: "Turn writes on",
+      labelCancel: "Keep writes off",
+      ok: () => installation.enableWrites(confirmation),
+    });
+  };
+
+  return (
+    <div className={styles.target} data-testid="velero-writes" data-writes={writes.on ? "on" : "off"}>
+      <span className={styles.targetLabel}>Writes</span>
+      <span className={styles.targetValue} data-testid="velero-writes-state">
+        {writes.on ? `On for ${writes.namespace} since ${new Date(writes.since).toLocaleTimeString()}` : "Off"}
+      </span>
+      {namespace && gate ? (
+        writes.on ? (
+          <Button plain data-testid="velero-writes-off" onClick={() => void installation.disableWrites()}>
+            <Icon material="lock" small />
+            Turn writes off
+          </Button>
+        ) : (
+          <Button plain data-testid="velero-writes-on" onClick={turnOn}>
+            <Icon material="lock_open" small />
+            Turn writes on
+          </Button>
+        )
+      ) : null}
+      {installation.gateFailure ? (
+        <span className={styles.muted} data-testid="velero-writes-failure">
+          {installation.gateFailure}
+        </span>
+      ) : null}
+      {writes.on && gate?.connection && !gate.connection.supported ? (
+        <span className={styles.muted} data-testid="velero-writes-connection">
+          {CONNECTION_REASONS[gate.connection.reason]}
+        </span>
+      ) : null}
+    </div>
+  );
+});
 
 // What says, on every view, which installation is shown: the cluster of the host and the namespace of
 // Velero. It is never the namespaces a backup includes, which are data of the backup.
@@ -86,6 +179,7 @@ export const TargetBar = observer(({ installation }: { installation: Installatio
             </Button>
           ) : null}
         </div>
+        <WritesControl installation={installation} />
         <div className={styles.spacer} />
         <span
           className={styles.readTime}

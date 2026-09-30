@@ -17,25 +17,42 @@ it("imports both entry points without contacting a cluster or registering IPC", 
   expect(importCalls).toEqual([]);
 });
 
+// What the activation asks of the host: the store of the preferences in both processes, which the host
+// writes from the main one; the way between the processes in both; and in the main process the
+// procedures of the gate, registered and not called. Nothing of a cluster, and nothing of the catalog.
+export const ACTIVATION_CALLS = {
+  main: [
+    "ExtensionStore.loadExtension",
+    "Ipc.constructor",
+    "Ipc.handle gate.state",
+    "Ipc.handle gate.enable",
+    "Ipc.handle gate.disable",
+    "Ipc.handle write.confirm",
+    "Ipc.handle write.status",
+    "Ipc.handle write.cancel",
+    "Ipc.handle write.run",
+  ],
+  renderer: ["ExtensionStore.loadExtension", "Ipc.constructor"],
+} as const;
+
 describe.each([
   ["main", VeleroMain, Main.LensExtension],
   ["renderer", VeleroRenderer, Renderer.LensExtension],
-] as const)("%s entry point", (_name, Extension, HostExtension) => {
+] as const)("%s entry point", (name, Extension, HostExtension) => {
   it("extends the correct host process base class", () => {
     expect(Object.getPrototypeOf(Extension)).toBe(HostExtension);
   });
 
-  it("activates and deactivates without cluster, catalog or IPC access", () => {
+  it("activates and deactivates without cluster or catalog access, and asks nothing through the IPC", () => {
     const extension = Reflect.construct(Extension, []) as HostExtensionStub;
 
     extension.activate();
     extension.disable();
 
     expect(forbiddenAccesses).toEqual([]);
-    // Neither an API nor a request: the activation asks nothing of a cluster.
-    expect(hostCalls.filter((call) => !call.startsWith("ExtensionStore."))).toEqual([]);
-    // The store of the preferences is opened in both processes: the host writes it from the main one.
-    expect(hostCalls).toEqual(["ExtensionStore.loadExtension"]);
+    // Neither an API nor a request: the activation asks nothing of a cluster, and calls no procedure.
+    expect(hostCalls.filter((call) => !call.startsWith("ExtensionStore.") && !call.startsWith("Ipc."))).toEqual([]);
+    expect(hostCalls).toEqual(ACTIVATION_CALLS[name]);
   });
 
   it("adds no control to the objects of the cluster", () => {

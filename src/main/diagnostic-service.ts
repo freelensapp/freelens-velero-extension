@@ -37,16 +37,22 @@ export interface DiagnosticOptions {
   totalMs?: number;
 }
 
+// A sender is the key of a frame of the host: the cluster of the frame with the process and the frame
+// identifiers, as a string, which every frame of the window has its own of.
 interface Active {
   signature: string;
-  sender: number;
+  sender: string;
   promise: Promise<DiagnosticResult>;
   controller: AbortController;
 }
 interface Approval {
-  sender: number;
+  sender: string;
   signature: string;
   expires: number;
+}
+
+function validSender(sender: string): boolean {
+  return typeof sender === "string" && sender.length > 0 && sender.length <= 256;
 }
 
 function validateInput(value: DiagnosticInput): void {
@@ -103,14 +109,13 @@ export class DiagnosticService {
     for (const operation of this.active.values()) operation.controller.abort();
   }
 
-  confirm(sender: number, target: Omit<DiagnosticInput, "confirmation" | "requestId">): string {
+  confirm(sender: string, target: Omit<DiagnosticInput, "confirmation" | "requestId">): string {
     this.api.assertCurrent();
     const token = randomUUID();
 
     validateInput({ ...target, confirmation: token, requestId: randomUUID() });
     if (
-      !Number.isSafeInteger(sender) ||
-      sender < 0 ||
+      !validSender(sender) ||
       target.clusterId !== this.api.binding.clusterId ||
       target.context !== this.api.binding.context ||
       target.namespace !== this.enabledNamespace
@@ -122,14 +127,14 @@ export class DiagnosticService {
     return token;
   }
 
-  cancel(sender: number, requestId: string): void {
+  cancel(sender: string, requestId: string): void {
     const operation = this.active.get(requestId);
 
     if (!operation || operation.sender !== sender) throw new DiagnosticError("forbidden");
     operation.controller.abort();
   }
 
-  run(sender: number, input: DiagnosticInput, signal: AbortSignal): Promise<DiagnosticResult> {
+  run(sender: string, input: DiagnosticInput, signal: AbortSignal): Promise<DiagnosticResult> {
     try {
       validateInput(input);
       this.api.assertCurrent();

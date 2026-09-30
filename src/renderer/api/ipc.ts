@@ -1,0 +1,127 @@
+// The way of the renderer to the main process: the procedures of the contract, each with its request
+// and its answer read as the contract gives them. What the main process answers is not trusted: an
+// answer that is not one of the contract is a failure of the way, never a value.
+
+import { Renderer } from "@freelensapp/extensions";
+import {
+  type Answer,
+  CHANNELS,
+  failure,
+  type GateState,
+  readAnswer,
+  readGateState,
+  readServerStatusValue,
+  readWriteConfirmAnswer,
+  readWriteStatus,
+  type ServerStatusValue,
+  type WriteConfirmAnswer,
+  type WriteKind,
+  type WriteStatus,
+  type WriteTarget,
+} from "../../common/ipc";
+
+// What the views ask of the gate, in the words of the contract.
+export interface GateClient {
+  state(cluster: string): Promise<Answer<GateState>>;
+  enable(
+    cluster: string,
+    namespace: string,
+    confirmation: { context: string; namespace: string },
+  ): Promise<Answer<GateState>>;
+  disable(cluster: string): Promise<Answer<GateState>>;
+  onChanged(listener: (cluster: string) => void): () => void;
+}
+
+export interface WriteClient {
+  confirm(
+    cluster: string,
+    namespace: string,
+    kind: WriteKind,
+    target?: WriteTarget,
+  ): Promise<Answer<WriteConfirmAnswer>>;
+  runServerStatus(
+    cluster: string,
+    namespace: string,
+    token: string,
+    request: string,
+  ): Promise<Answer<ServerStatusValue>>;
+  status(cluster: string, request: string): Promise<Answer<WriteStatus>>;
+  cancel(cluster: string, request: string): Promise<Answer<null>>;
+}
+
+const NO_ANSWER = failure("request-failed", "way", true, "The main process did not answer.");
+
+export class VeleroIpcRenderer extends Renderer.Ipc implements GateClient, WriteClient {
+  private async ask<Value>(
+    channel: string,
+    request: unknown,
+    read: (value: unknown) => Value | undefined,
+  ): Promise<Answer<Value>> {
+    let answer: unknown;
+
+    try {
+      answer = await this.invoke(channel, request);
+    } catch {
+      return NO_ANSWER;
+    }
+    return readAnswer(answer, read);
+  }
+
+  state(cluster: string): Promise<Answer<GateState>> {
+    return this.ask(CHANNELS.gateState, { cluster }, readGateState);
+  }
+
+  enable(
+    cluster: string,
+    namespace: string,
+    confirmation: { context: string; namespace: string },
+  ): Promise<Answer<GateState>> {
+    return this.ask(CHANNELS.gateEnable, { cluster, namespace, confirmation }, readGateState);
+  }
+
+  disable(cluster: string): Promise<Answer<GateState>> {
+    return this.ask(CHANNELS.gateDisable, { cluster }, readGateState);
+  }
+
+  onChanged(listener: (cluster: string) => void): () => void {
+    return this.listen(CHANNELS.gateChanged, (_event, payload: unknown) => {
+      const cluster = (payload as { cluster?: unknown } | undefined)?.cluster;
+
+      if (typeof cluster === "string") listener(cluster);
+    });
+  }
+
+  confirm(
+    cluster: string,
+    namespace: string,
+    kind: WriteKind,
+    target?: WriteTarget,
+  ): Promise<Answer<WriteConfirmAnswer>> {
+    return this.ask(
+      CHANNELS.writeConfirm,
+      { cluster, namespace, kind, ...(target ? { target } : {}) },
+      readWriteConfirmAnswer,
+    );
+  }
+
+  runServerStatus(
+    cluster: string,
+    namespace: string,
+    token: string,
+    request: string,
+  ): Promise<Answer<ServerStatusValue>> {
+    return this.ask(
+      CHANNELS.writeRun,
+      { cluster, namespace, kind: "ServerStatusRequest", token, request },
+      readServerStatusValue,
+    );
+  }
+
+  status(cluster: string, request: string): Promise<Answer<WriteStatus>> {
+    return this.ask(CHANNELS.writeStatus, { cluster, request }, readWriteStatus);
+  }
+
+  cancel(cluster: string, request: string): Promise<Answer<null>> {
+    return this.ask(CHANNELS.writeCancel, { cluster, request }, (value) => (value === null ? null : undefined));
+  }
+}
