@@ -1,7 +1,7 @@
 # SPEC-0007: Read-Only Storage And Snapshot Locations
 
-- **Status:** Implemented
-- **Date:** 2026-09-28
+- **Status:** Verified
+- **Date:** 2026-09-30
 - **Milestone / tasks:** M2 / T1.6
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`; compared with v1.18.3, `cd3fd10b093dad32ee284e27fcba4e9073c9c94b`
 - **Reviewed main:** `60163e0827e72658bb6546165a727300170e628b`
@@ -269,10 +269,16 @@ An independent review of the change, read only, found three things of weight and
 fifteen smaller ones. They are corrected here, and the facts they rest on are in
 the [recon](../development/RECON-T0.1.md#start-of-the-second-milestone-2026-09-28).
 
-Two deviations from the requirements, which wait for the approval of the lead
-maintainer at the review of the milestone:
+Two deviations from the requirements, approved by the lead maintainer at the
+review of the milestone on 2026-09-30:
 
 | Requirement | What it says | What the views do, and why |
 | --- | --- | --- |
 | REQ-085 | For the provider `aws`, the key `insecureSkipTLSVerify` with the value `true` is marked as the verification of TLS turned off; for the other providers the keys have no such mark | The key is marked with every value the release reads as true, which are six, and for the backend of AWS by each of its names. With another backend the mark says what the release turns off, which is the verification for what it moves with restic: the release reads the key there whatever the provider. A configuration that turns a verification off and has no mark is what the requirement wanted to avoid |
 | REQ-082 | With a frequency above zero, the availability may be out of date when the last validation is older than three times the frequency | The bound is three times the frequency and one minute at least. The release looks every ten seconds for what is due and the views read every fifteen: with a frequency of seconds a location validated in time would be said late between two reads. The note says that the age is counted by the clock of the machine that shows it |
+
+Review of the milestone, 2026-09-30. The steps of the manual review were run in
+the packaged application by the pre-review pass, with the keyboard alone where the
+criteria ask for it; the lead maintainer judged its report and its screenshots, in
+both themes, and approved. Verdict: approved, with what was decided while
+implementing accepted as it is and the two deviations above approved. No finding was recorded.

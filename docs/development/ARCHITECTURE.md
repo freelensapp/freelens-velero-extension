@@ -1,6 +1,6 @@
 # Architecture
 
-Date: 2026-09-29
+Date: 2026-09-30
 
 Status: the foundation is complete and the first views are in place: the discovery of
 the installation, the Backups, the Restores, the Schedules and the storage and
@@ -259,7 +259,7 @@ operation is not among the counted ones: the release can fail one before it
 counts. The facts are in the
 [recon](RECON-T0.1.md#start-of-the-second-milestone-2026-09-28), and the reading
 is a [deviation](../specs/SPEC-0003-backup-read-only.md#evidence-and-deviations)
-from the design of the states that waits for its approval.
+from the design of the states, approved at the review of the second milestone.
 
 ### The Lists And The Views Of One Object
 

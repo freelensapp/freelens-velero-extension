@@ -13,8 +13,8 @@ kinds of `velero.io`) inside Freelens, with their logs and results, the
 adherence of the schedules and guarded recovery actions. It was scaffolded from
 freelens-example-extension and is developed spec by spec.
 
-The foundation, the first milestone and the second milestone are in place: the
-second waits for its review. Scope and progress toward v1.0.0 are in `docs/development/ROADMAP.md`.
+The foundation, the first milestone and the second milestone are in place and
+reviewed. Scope and progress toward v1.0.0 are in `docs/development/ROADMAP.md`.
 
 - **Language**: TypeScript 7.0.2
 - **Runtime**: Node.js >= 22.12.0, Freelens >= 1.10.3

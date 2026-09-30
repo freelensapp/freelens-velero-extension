@@ -1,7 +1,7 @@
 # SPEC-0005: Read-Only Restores
 
-- **Status:** Implemented
-- **Date:** 2026-09-28
+- **Status:** Verified
+- **Date:** 2026-09-30
 - **Milestone / tasks:** M2 / T1.4
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`; compared with v1.18.3, `cd3fd10b093dad32ee284e27fcba4e9073c9c94b`
 - **Reviewed main:** `60163e0827e72658bb6546165a727300170e628b`
@@ -283,7 +283,7 @@ What was decided while implementing, inside the requirements:
 
 One deviation, recorded with the one of the
 [states](SPEC-0003-backup-read-only.md#evidence-and-deviations) it comes from, and
-waiting for the approval of the lead maintainer at the review of the milestone.
+approved by the lead maintainer at the review of the milestone, on 2026-09-30.
 REQ-054 reads the counts of the errors and of the warnings, of the hooks and of
 the item operations through the helpers of the states, which said that a counter
 that is missing is not zero. The reviewed release writes no counter of zero: on an
@@ -296,3 +296,9 @@ the object, the others were counted. The hooks of a restore are counted when the
 restore is finalized, whatever its phase says: they are read by their status
 being in the object. Everywhere else a counter that is missing stays not
 reported.
+
+Review of the milestone, 2026-09-30. The steps of the manual review were run in
+the packaged application by the pre-review pass, with the keyboard alone where the
+criteria ask for it; the lead maintainer judged its report and its screenshots, in
+both themes, and approved. Verdict: approved, with what was decided while
+implementing accepted as it is and the deviation above approved. No finding was recorded.
