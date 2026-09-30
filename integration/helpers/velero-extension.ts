@@ -14,7 +14,7 @@
 // the tests run but not inside this repository.
 
 import { execFileSync } from "node:child_process";
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { setImmediate } from "node:timers";
@@ -272,8 +272,18 @@ export async function storedPreferences(directory: string): Promise<{ file: stri
  * The clusters of the catalog. The suite asks for their number and for nothing
  * else of them: what a catalog holds beside the test cluster is not for a log.
  */
+/**
+ * How many clusters the catalog lists. The catalog reads the kubeconfigs of the profile as they are
+ * written, a moment after: the first row is waited for, a minute at most, and the count is of then.
+ */
 export async function catalogClusterCount(window: Page): Promise<number> {
-  return window.locator("div.TableRow:not(.TableHead)").count();
+  const rows = window.locator("div.TableRow:not(.TableHead)");
+
+  await rows
+    .first()
+    .waitFor({ state: "visible", timeout: ELEMENT_TIMEOUT })
+    .catch(() => undefined);
+  return rows.count();
 }
 
 /** The text of every notification currently shown, for failure messages. */
@@ -546,6 +556,59 @@ export async function setColorTheme(app: ElectronApplication, window: Page, them
 const INSTALL_TIMEOUT = 90 * 1000;
 
 /**
+ * The host gave up on the install. The host gives its loader ten seconds to see the extension among
+ * the ones it unpacked, and on a busy machine it gives up, with a notification that the installation
+ * failed: the extension never appears as installed, or appears and stays disabled. A second attempt
+ * in the same application gives up as well. What helps is a second start, in a new profile.
+ */
+export class HostGaveUpError extends Error {}
+
+/**
+ * A file the runner may leave beside the artifacts of the suites, for one start: the main process of the
+ * application is held for thirteen seconds right after the install is asked, which is how the host
+ * is made to give up on purpose. The file goes when it is read, so that the start after is not held.
+ */
+const STALL_SIGNAL = path.join(ARTIFACTS_DIR, "..", "stall-the-host-once");
+
+async function stallIfAsked(app: ElectronApplication): Promise<void> {
+  try {
+    await unlink(STALL_SIGNAL);
+  } catch {
+    return;
+  }
+  const identifier = app.process().pid;
+
+  if (!identifier) return;
+  console.log("The main process of the application is held for 13 seconds, as the signal asks");
+  process.kill(identifier, "SIGSTOP");
+  await new Promise((resolve) => setTimeout(resolve, 13_000));
+  process.kill(identifier, "SIGCONT");
+}
+
+/**
+ * Starts the application in a new profile, leaves the welcome and installs the extension. When the
+ * host gives up on the install the application is closed, its profile removed, and another one is
+ * started in a new profile, once: the host does not recover inside the same application.
+ */
+export async function startWithExtension(theme: ColorTheme = "Dark", attempts = 2): Promise<StartedApplication> {
+  for (let attempt = 1; ; attempt++) {
+    const started = await startIsolated(undefined, theme);
+
+    try {
+      await utils.clickWelcomeButton(started.window);
+      await installExtension(started.app, started.window);
+      return started;
+    } catch (error) {
+      await started.cleanup();
+      if (attempt >= attempts || !(error instanceof HostGaveUpError)) throw error;
+      console.log(
+        `The host gave up on the install (start ${attempt} of ${attempts}): the application is started again in a new profile`,
+      );
+    }
+  }
+}
+
+/**
  * Installs the packed extension and waits for it to be listed as enabled.
  *
  * `EXTENSION_PATH` points at the tarball built from this repository; without it
@@ -579,6 +642,7 @@ export async function installExtension(
   const installButtonSelector = 'button[class*="Button install-module__button--"]';
 
   await window.click(installButtonSelector.concat("[data-waiting=false]"), { timeout: INSTALL_TIMEOUT });
+  await stallIfAsked(app);
 
   const extensionNameSelector = 'div[class*="installed-extensions-module__extensionName--"]';
 
@@ -592,7 +656,7 @@ export async function installExtension(
     const screenshot = await captureWindowScreenshot(window, "install-timed-out");
     const notifications = await notificationTexts(window);
 
-    throw new Error(
+    throw new HostGaveUpError(
       `"${EXTENSION_NAME}" never appeared as installed within ${INSTALL_TIMEOUT}ms.` +
         (notifications.length > 0
           ? ` Notifications shown: ${notifications.join(" | ")}.`
@@ -621,7 +685,7 @@ export async function installExtension(
   } catch {
     const screenshot = await captureWindowScreenshot(window, "install-not-enabled");
 
-    throw new Error(
+    throw new HostGaveUpError(
       `"${EXTENSION_NAME}" was installed but never showed its enabled state within ${INSTALL_TIMEOUT}ms.` +
         (screenshot ? ` Screenshot: ${screenshot}` : ""),
     );

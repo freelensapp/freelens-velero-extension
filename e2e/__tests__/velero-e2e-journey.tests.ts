@@ -10,7 +10,6 @@
 // cluster, and writes to neither.
 
 import { expect } from "@jest/globals";
-import * as utils from "../helpers/utils";
 import * as cluster from "../helpers/velero-cluster";
 import * as velero from "../helpers/velero-extension";
 
@@ -81,12 +80,9 @@ describe("views of the first milestone", () => {
     }
     before = cluster.clusterSnapshot();
     errors.start();
-    started = await velero.startIsolated();
+    started = await velero.startWithExtension();
     errors.watch(started.window);
     const kubeconfig = await cluster.publishKubeconfig();
-
-    await utils.clickWelcomeButton(started.window);
-    await velero.installExtension(started.app, started.window);
     await velero.dismissNotifications(started.window);
     await velero.navigateToCatalog(started.app);
     // The catalog holds the test cluster and nothing of the machine it runs on.

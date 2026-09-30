@@ -223,6 +223,17 @@ Every step of a start has its time and its name: the end of the application, its
 start, the way to the catalog, the row of the cluster, its frame, its sidebar. A
 step that does not end says which one it was, with a picture of the window.
 
+The host gives its loader ten seconds to see an extension it unpacked among the
+ones it loaded, and on a busy machine it gives up, with a notification that the
+installation failed: the extension never appears as installed, or appears and
+stays disabled, and a second attempt in the same application gives up as well. Every
+suite starts the application through `startWithExtension`, which closes an
+application the host gave up in, removes its profile and starts another one in a
+new profile, once. The second start is proven on purpose, not assumed: a file
+`e2e-artifacts/stall-the-host-once` makes the helper hold the main process of the
+application for thirteen seconds right after the install is asked, the host gives
+up, and the suite passes on its second start. The file goes when it is read.
+
 | Fixture of the views | Namespace | Purpose |
 | --- | --- | --- |
 | References | `velero-views-<run>` | A backup with a schedule, a storage location, a snapshot location and its restores; backups that name a schedule and a location that are not there; a name of 63 characters; a backup that reports nothing; a name that the namespace of the phases has too |
