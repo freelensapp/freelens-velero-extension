@@ -154,8 +154,8 @@ Approved on 2026-09-27. T1.2 and T1.3 are separate pull requests; the status of
 the spec follows the second. No deviation was accepted in the first milestone.
 
 One deviation was made on 2026-09-28, with the Restores of the second milestone,
-and waits for the approval of the lead maintainer at the review of that
-milestone. The design says that a counter that is missing is not zero, and the
+and was approved by the lead maintainer at the review of that milestone, on
+2026-09-30. The design says that a counter that is missing is not zero, and the
 fixtures of the first milestone wrote a zero into every counter. The reviewed
 release writes none: `errors`, `warnings`, the items done, the hooks and the item
 operations are left out of the object when they count none, as the

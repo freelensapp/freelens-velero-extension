@@ -80,11 +80,9 @@ approved the review of the milestone on 2026-09-28. The Overview was read at the
 approval of its spec as what needs attention beside what was read, with no single
 value for an installation: the row above has those words since then.
 
-The second milestone is on main. Its four specs are Implemented: they become
-Verified with the manual review of their success criteria, which is the review
-of the milestone and is not recorded yet. The deviations from their
-requirements wait for their approval at that review: each is recorded in the
-evidence of its spec.
+The second milestone is on main and its four specs are Verified: the lead
+maintainer approved the review of the milestone on 2026-09-30, with the
+deviations from their requirements, each recorded in the evidence of its spec.
 
 Exit of M1 and M2: the five primary kinds usable in a packaged Freelens, every
 phase covered, missing data never shown as healthy, pre-review on both themes.

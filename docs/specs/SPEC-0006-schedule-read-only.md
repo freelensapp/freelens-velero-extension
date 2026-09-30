@@ -1,7 +1,7 @@
 # SPEC-0006: Read-Only Schedules
 
-- **Status:** Implemented
-- **Date:** 2026-09-29
+- **Status:** Verified
+- **Date:** 2026-09-30
 - **Milestone / tasks:** M2 / T1.5
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`; compared with v1.18.3, `cd3fd10b093dad32ee284e27fcba4e9073c9c94b`
 - **Reviewed main:** `60163e0827e72658bb6546165a727300170e628b`
@@ -273,8 +273,8 @@ that the release does not do, and ten smaller ones. They are corrected here, and
 the facts they rest on are in the
 [recon](../development/RECON-T0.1.md#start-of-the-second-milestone-2026-09-28).
 
-One deviation from the requirements, which waits for the approval of the lead
-maintainer at the review of the milestone:
+One deviation from the requirements, approved by the lead maintainer at the
+review of the milestone on 2026-09-30:
 
 | Requirement | What it says | What the view does, and why |
 | --- | --- | --- |
@@ -283,3 +283,9 @@ maintainer at the review of the milestone:
 The reading of the counters of a backup of the history is the one of the
 [states](SPEC-0003-backup-read-only.md#evidence-and-deviations), with the deviation
 recorded there.
+
+Review of the milestone, 2026-09-30. The steps of the manual review were run in
+the packaged application by the pre-review pass, with the keyboard alone where the
+criteria ask for it; the lead maintainer judged its report and its screenshots, in
+both themes, and approved. Verdict: approved, with what was decided while
+implementing accepted as it is and the deviation above approved. No finding was recorded.

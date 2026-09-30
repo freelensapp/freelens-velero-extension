@@ -1,7 +1,7 @@
 # SPEC-0008: Overview Of An Installation
 
-- **Status:** Implemented
-- **Date:** 2026-09-29
+- **Status:** Verified
+- **Date:** 2026-09-30
 - **Milestone / tasks:** M2 / T1.7
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`; compared with v1.18.3, `cd3fd10b093dad32ee284e27fcba4e9073c9c94b`
 - **Reviewed main:** `60163e0827e72658bb6546165a727300170e628b`
@@ -355,9 +355,15 @@ What was decided while implementing, inside the requirements:
 - **What is around a page is written once**, for the pages of the lists and for
   the Overview: the page of a list is what it was, inside the frame.
 
-One deviation waits for the approval of the lead maintainer at the review of
-the milestone:
+One deviation, approved by the lead maintainer at the review of the milestone
+on 2026-09-30:
 
 | Requirement | What it says | What the extension does, and why |
 | --- | --- | --- |
 | REQ-093 | The Overview is the first entry under Velero and the page the entry of Velero opens | The Overview is the first entry under Velero, the first tab of the group and the page the entry of Velero names. In the host the entry of a group that has entries under it opens the group and leads to no page: the host follows the page an entry names when the entry has none under it, and marks the entry while that page is shown. What a click on a group does is of the host, for its own groups as for the ones of an extension |
+
+Review of the milestone, 2026-09-30. The steps of the manual review were run in
+the packaged application by the pre-review pass, with the keyboard alone where the
+criteria ask for it; the lead maintainer judged its report and its screenshots, in
+both themes, and approved. Verdict: approved, with what was decided while
+implementing accepted as it is and the deviation above approved. No finding was recorded.

@@ -1,9 +1,8 @@
 # Specifications
 
-Date: 2026-09-29
+Date: 2026-09-30
 
-Status: SPEC-0001 is Approved; SPEC-0002, SPEC-0003 and SPEC-0004 are Verified;
-SPEC-0005, SPEC-0006, SPEC-0007 and SPEC-0008 are Implemented.
+Status: SPEC-0001 is Approved; SPEC-0002 to SPEC-0008 are Verified.
 
 The [roadmap](../development/ROADMAP.md) owns scope and progress; the
 [process](../development/PROCESS.md) owns approvals and review gates.
@@ -19,10 +18,10 @@ slice per task even when a spec covers several closely related tasks.
 | [SPEC-0002: Installation discovery](SPEC-0002-installation-discovery.md) | T1.1 | REQ-013 through REQ-023 | Verified | 100 tests of the rules, of the state and of the components; the suites of the views in a packaged Freelens, with the reader of a part and across three starts |
 | [SPEC-0003: States and read-only Backups](SPEC-0003-backup-read-only.md) | T1.2, T1.3 separately | REQ-024 through REQ-037 | Verified | 151 unit tests of the states and of the stages, 70 of what the views show of a backup and of the components; the suites of the views in a packaged Freelens, with a list of a thousand backups; the pre-review |
 | [SPEC-0004: Test environment on every platform](SPEC-0004-test-environment-every-platform.md) | Foundation | REQ-038 through REQ-049 | Verified | 119 environment tests; runs on macOS x64 and on the hosted runner, Linux ARM64 |
-| [SPEC-0005: Read-only Restores](SPEC-0005-restore-read-only.md) | T1.4 | REQ-050 through REQ-063 | Implemented | 122 tests: 59 of what the views show of a restore and of what it refers to, 21 of the views in the address, 42 of the components; the suites of the views in a packaged Freelens, with the reader of the restores and a list of a thousand; the pre-review |
-| [SPEC-0006: Read-only Schedules](SPEC-0006-schedule-read-only.md) | T1.5 | REQ-064 through REQ-077 | Implemented | 120 tests: 75 of what the views show of a schedule, of its history, of its line of time and of what it refers to, 45 of the components; the suites of the views in a packaged Freelens, with the reader to which the history is denied; the pre-review |
-| [SPEC-0007: Read-only storage and snapshot locations](SPEC-0007-locations-read-only.md) | T1.6 | REQ-078 through REQ-092 | Implemented | 196 tests: 141 of what the views show of a location, of its durations and of what uses it, 55 of the components; the suites of the views in a packaged Freelens, with the two readers and the location the controller validates; the pre-review |
-| [SPEC-0008: Overview of an installation](SPEC-0008-overview.md) | T1.7 | REQ-093 through REQ-107 | Implemented | 88 tests: 42 of what the page says of an installation, of its window and of the line of time, 46 of the components; the suites of the views in a packaged Freelens, with the two readers and the long lists; the pre-review |
+| [SPEC-0005: Read-only Restores](SPEC-0005-restore-read-only.md) | T1.4 | REQ-050 through REQ-063 | Verified | 122 tests: 59 of what the views show of a restore and of what it refers to, 21 of the views in the address, 42 of the components; the suites of the views in a packaged Freelens, with the reader of the restores and a list of a thousand; the pre-review |
+| [SPEC-0006: Read-only Schedules](SPEC-0006-schedule-read-only.md) | T1.5 | REQ-064 through REQ-077 | Verified | 120 tests: 75 of what the views show of a schedule, of its history, of its line of time and of what it refers to, 45 of the components; the suites of the views in a packaged Freelens, with the reader to which the history is denied; the pre-review |
+| [SPEC-0007: Read-only storage and snapshot locations](SPEC-0007-locations-read-only.md) | T1.6 | REQ-078 through REQ-092 | Verified | 196 tests: 141 of what the views show of a location, of its durations and of what uses it, 55 of the components; the suites of the views in a packaged Freelens, with the two readers and the location the controller validates; the pre-review |
+| [SPEC-0008: Overview of an installation](SPEC-0008-overview.md) | T1.7 | REQ-093 through REQ-107 | Verified | 88 tests: 42 of what the page says of an installation, of its window and of the line of time, 46 of the components; the suites of the views in a packaged Freelens, with the two readers and the long lists; the pre-review |
 
 Next unallocated requirement ID: REQ-108. IDs are unique across this project;
 references in test tables do not redefine a requirement. Do not allocate IDs to
@@ -82,7 +81,9 @@ cluster in place of a session by hand.
 
 SPEC-0005, SPEC-0006, SPEC-0007 and SPEC-0008 approval was recorded on 2026-09-28,
 as drafted. They are the second milestone: T1.4 to T1.7, each its own pull request,
-in that order.
+in that order. They are Verified since 2026-09-30, when the lead maintainer approved
+the review of the milestone on the report and the screenshots of the pre-review pass,
+with the deviations recorded in the evidence of each spec.
 
 ## Document Review
 
@@ -97,7 +98,7 @@ This is document coverage, not test execution:
 | Safety and privacy | Local-only writes, exact targets, no implicit requests, synthetic evidence |
 | UI decisions | Native lists plus dedicated operation workspace, with non-happy and accessible states |
 | Source grounding | Every draft carries exact reviewed revisions and recon dependencies |
-| Honest status | SPEC-0001 is Approved with setup, fixture and compiled-main transport evidence; SPEC-0002, SPEC-0003 and SPEC-0004 are Verified; SPEC-0005, SPEC-0006, SPEC-0007 and SPEC-0008 are Implemented |
+| Honest status | SPEC-0001 is Approved with setup, fixture and compiled-main transport evidence; SPEC-0002 to SPEC-0008 are Verified |
 
 No blocking product preference is required to review these drafts. Fixture isolation
 and main transport have scoped local evidence. Actual-host authentication, IPC
