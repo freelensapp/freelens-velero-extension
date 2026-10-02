@@ -1,13 +1,13 @@
 # SPEC-0009: The Write Gate And The Way Between The Processes
 
-- **Status:** Draft
+- **Status:** Approved
 - **Date:** 2026-09-30
 - **Milestone / tasks:** M3 / T4.1
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`; compared with v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`
 - **Reviewed main:** `e5d9354ddf7607e0bad3ebc7744a4964c24b489a`, for the phase Failed of a DownloadRequest, which no release has
 - **Freelens validation target:** v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`
 - **Dependencies:** [local foundation](SPEC-0001-local-foundation.md), whose T0.6 is the create-only adapter and the service this gate is enforced in; [target discovery](SPEC-0002-installation-discovery.md); the [architecture](../development/ARCHITECTURE.md#ipc-errors-and-write-policy)
-- **Approval:** Pending
+- **Approval:** Approved by the lead maintainer on 2026-09-30, as drafted, with the open question of REQ-115 decided: the adapter runs the plugin a context names for its credential
 
 Governed by [AGENTS.md](../../AGENTS.md).
 
@@ -239,18 +239,19 @@ role, date and verdict.
 - **The identity of a context, not of a file.** The proof of T0.6 took the whole
   file as the identity, which stopped a write when another context of the same
   file changed: a file shared by many clusters is the common layout.
-- **NEEDS CLARIFICATION, REQ-115: plugins for the credential.** The proof of T0.6
-  refuses a context that runs a plugin for its credential, which is what the
-  managed clusters of the cloud providers and the ones with OpenID Connect use.
-  The host runs that same plugin for that same cluster, through its proxy, every
-  time a view reads. The default this spec proposes: the adapter runs the plugin
-  the context names, as the client of Kubernetes does for the command line, with
-  the environment of the host, a bound of thirty seconds, and nothing of its
-  output ever logged or sent between the processes; it keeps refusing a proxy, a
-  user name with a password and a verification of TLS turned off. The
-  alternative is to leave the diagnostics off for those clusters in v1.0.0, and
-  say so. Which one?
+- **Plugins for the credential, decided at approval.** The proof of T0.6 refused
+  a context that runs a plugin for its credential, which is what the managed
+  clusters of the cloud providers and the ones with OpenID Connect use. The
+  host runs that same plugin for that same cluster, through its proxy, every
+  time a view reads. The spec proposed two ways: the adapter runs the plugin
+  the context names, as the client of Kubernetes does for the command line,
+  with the environment of the host, a bound of thirty seconds, and nothing of
+  its output ever logged or sent between the processes, keeping the refusal of
+  a proxy, of a user name with a password and of a verification of TLS turned
+  off; or the diagnostics left off for those clusters in v1.0.0. The lead
+  maintainer chose the first on 2026-09-30: it is what REQ-115 says.
 
 ## Evidence And Deviations
 
-Initially: no implementation, tests or runtime evidence.
+Approved on 2026-09-30, as drafted, with the decision above. No implementation,
+tests or runtime evidence yet.

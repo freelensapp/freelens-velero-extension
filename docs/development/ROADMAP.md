@@ -91,19 +91,19 @@ phase covered, missing data never shown as healthy, pre-review on both themes.
 
 | Feature | Task | Spec | Status |
 | --- | --- | --- | --- |
-| Write gate enforced in main: off by default, scoped to cluster and namespace, confirmation that names both | T4.1 | [SPEC-0009](../specs/SPEC-0009-write-gate.md) | Draft |
-| `DownloadRequest` workflow owned by main: confirmation, allowlisted targets, URL, failure and timeout exits, cancellation, cleanup | T2.1 | [SPEC-0010](../specs/SPEC-0010-diagnostic-request-and-transport.md) | Draft |
-| Streaming transport: destination and redirect policy, inline CA and `caCertRef`, size limits, URL redaction, preserved signed path, Host and SNI | T2.2 | [SPEC-0010](../specs/SPEC-0010-diagnostic-request-and-transport.md) | Draft |
-| Log, results, resource list and volume info viewers, with search and clear unavailable, expired and forbidden states | T2.3 | [SPEC-0011](../specs/SPEC-0011-artifact-viewers.md) | Draft |
-| Direct access to the object store and the in-cluster strategy; a missing artifact is distinct from a failed storage | T2.4 | [SPEC-0010](../specs/SPEC-0010-diagnostic-request-and-transport.md) | Draft |
-| Server version and installed plugins through `ServerStatusRequest` | T5.3 | [SPEC-0012](../specs/SPEC-0012-server-status.md) | Draft |
+| Write gate enforced in main: off by default, scoped to cluster and namespace, confirmation that names both | T4.1 | [SPEC-0009](../specs/SPEC-0009-write-gate.md) | Approved |
+| `DownloadRequest` workflow owned by main: confirmation, allowlisted targets, URL, failure and timeout exits, cancellation, cleanup | T2.1 | [SPEC-0010](../specs/SPEC-0010-diagnostic-request-and-transport.md) | Approved |
+| Streaming transport: destination and redirect policy, inline CA and `caCertRef`, size limits, URL redaction, preserved signed path, Host and SNI | T2.2 | [SPEC-0010](../specs/SPEC-0010-diagnostic-request-and-transport.md) | Approved |
+| Log, results, resource list and volume info viewers, with search and clear unavailable, expired and forbidden states | T2.3 | [SPEC-0011](../specs/SPEC-0011-artifact-viewers.md) | Approved |
+| Direct access to the object store and the in-cluster strategy; a missing artifact is distinct from a failed storage | T2.4 | [SPEC-0010](../specs/SPEC-0010-diagnostic-request-and-transport.md) | Approved |
+| Server version and installed plugins through `ServerStatusRequest` | T5.3 | [SPEC-0012](../specs/SPEC-0012-server-status.md) | Approved |
 
 The write gate comes here and not with the actions of M5 because creating a
 `DownloadRequest` or a `ServerStatusRequest` is a write. The known defects of
 the diagnostic code that do not act at load time are fixed in this milestone,
 with the spec that wires that code to the host.
 
-The four specs of the milestone are drafted and wait for their approval. The
+The four specs of the milestone were approved on 2026-09-30, as drafted. The
 order of the slices is the one of their dependencies: the gate, then the
 version of the server, which is the smallest write and proves the way between
 the processes end to end, then the request and its transport, then the viewers.
