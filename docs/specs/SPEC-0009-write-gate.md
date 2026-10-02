@@ -1,6 +1,6 @@
 # SPEC-0009: The Write Gate And The Way Between The Processes
 
-- **Status:** Approved
+- **Status:** Implemented
 - **Date:** 2026-09-30
 - **Milestone / tasks:** M3 / T4.1
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`; compared with v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`
@@ -253,5 +253,64 @@ role, date and verdict.
 
 ## Evidence And Deviations
 
-Approved on 2026-09-30, as drafted, with the decision above. No implementation,
-tests or runtime evidence yet.
+Approved on 2026-09-30, as drafted, with the decision above, and implemented by
+2026-10-02, after an independent review of the first implementation, whose findings
+are in the code and in its tests. The [gate](../../src/main/write-gate.ts), the
+[procedures](../../src/main/ipc.ts), the [contract](../../src/common/ipc.ts), the
+[rule of the frame](../../src/common/frame.ts) and the
+[identity of a context](../../src/main/context-identity.ts) are what the
+[architecture](../development/ARCHITECTURE.md#the-gate-and-the-way-between-the-processes)
+describes; the [target bar](../../src/renderer/components/target-bar.tsx) shows the
+state and opens the dialog of the host; the
+[state of an installation](../../src/renderer/state/installation.ts) holds the mirror
+and turns writes off when the namespace changes.
+
+| Check | Evidence |
+| --- | --- |
+| GATE-01 | Unit: off at the start, on for one namespace refuses another and another cluster. Packaged: off when the session starts, on every page of the group; the mirror of the views is what the main process answered |
+| GATE-02 | Component: the dialog with the installation, the cluster and the context in its words; nothing on before it is answered. Packaged: the dialog of the host, its words, the state after it on every page, off from the bar, off when the dialog is left |
+| GATE-03 | Unit: a token for one target, one sender, one use, thirty seconds on a fake clock; the 33rd confirmation and the 17th write of a cluster refused |
+| GATE-04 | Unit: a change of namespace with a write in flight aborts it and clears the confirmations; the entry gone; the deactivation. The frame that turned writes on gone, found on a request and when the catalog is looked at, and a frame that cannot be asked taken as gone; a write whose frame is another at the creation, goes while the write waits, or goes before its result. State: the mirror off at once and the main process told whatever the mirror said. Packaged: off when another installation is selected; a frame that goes is not proven in the packaged application |
+| GATE-05 | Unit: every field of every request with a wrong kind, a wrong form, an extra field, a request too large; every procedure answering a result, one that raises among them; every code without a URL, a header, a body or a path, with a sentinel |
+| GATE-06 | Unit: the identifier from the addresses of the packaged application and of development, the window, a frame of another cluster, the key of each frame. Packaged: two frames of one window, the second entry of the catalog under a context of another name, each with a gate of its own |
+| GATE-07 | Unit: an entry that is not there, a file that is not there, a context that is not in it; the adapter made once when writes are turned on and discarded when they are turned off; a connection the adapter does not take refuses to turn writes on, with its reason, which the state keeps. The catalog is the one of the host: no default kubeconfig is read, which the activation tests prove |
+| GATE-08 | Unit: a context of each refused form and the words of each; a certificate, a token and a plugin accepted, the plugin a script of the test; a plugin that fails, one that ignores the request to end and is killed at its bound, one whose output is not a credential, each a real command and each said as a failure of the plugin, by the name of its command, with nothing of its output; a write cancelled while its plugin runs; one run for the requests that wait together, and another after a 401; the user a context impersonates sent with a token and with a plugin, and groups, a uid or extra fields refused; a certificate a plugin gives presented to the server; a real plugin against the API fixture, with the token it gives and with a wrong one |
+| GATE-09 | Unit: the entry of the context changed in the file between two steps refuses the request; another context changed, and a byte of the file, do not; the user it impersonates is part of what is compared |
+| GATE-10 | Component: the command in the name of the kind, the dialog with the object of the gate. The confirmation of one write, with its object, comes with the first write that has a view, the version of the server |
+| GATE-11 | Packaged: writes on, the application closed and started again, off; the store of the preferences without a field of the gate |
+| GATE-12 | Packaged: no write counted by the API server through the whole suite, with the gate off and on. The counts of the creations with and without a confirmation come with the first write that has a view, the version of the server |
+
+What was decided while implementing, inside the requirements:
+
+- **The state of the gate carries the name of the cluster and its context**, as the
+  catalog of the host gives them, so that the dialog names them without a read of its
+  own.
+- **The catalog is looked at every five seconds while writes are on somewhere**, and
+  not before: the list the host gives is an observable value, and the poll asks
+  nothing of a cluster. Nothing of the catalog is read at activation.
+- **The run of a ServerStatusRequest is in this slice**, as the smallest write and the
+  proof of the way between the processes end to end: its band in the Overview comes
+  with its own spec. The run of a DownloadRequest answers that it comes with a later
+  slice, before the gate is looked at.
+- **The frame of a second entry is a second entry of the catalog**, the same cluster
+  through another kubeconfig under a context of another name: it is what a window
+  with two clusters is, and the packaged suite opens both.
+- **A frame that goes is found by asking the event that turned writes on for its
+  frame again**: the host answers none, or raises, for a frame that was disposed, and
+  another address for one that left the cluster. It is asked on every request of
+  the cluster and every five seconds, and four times a second by a write in flight.
+- **Turning writes on is refused for a connection the adapter does not take**, as the
+  table of the procedures says, with the words of the reason; a file or a context
+  that is not there is a target that changed. Two reasons were added to the ones of
+  the connection: an impersonation the client cannot send, and an adapter that
+  cannot be made.
+- **A plugin that gives no credential is a failed request at the stage of the
+  credential**, safe to ask again, and not a code of its own: the words name the
+  file of the command, never its folder, its arguments or what it printed.
+- **A command a plugin starts is not killed with it**: the bound ends the wait and
+  kills the command the context names; what that command started is left to it.
+
+Left for the slice of the DownloadRequest, where they are first used: the kind of the
+artifact as a part of what a confirmation is for, and the service of the diagnostics
+given the gate in place of its own enablement.
+

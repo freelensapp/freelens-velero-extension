@@ -4,9 +4,9 @@ Date: 2026-09-30
 
 Status: the foundation is complete and the first views are in place: the discovery of
 the installation, the Backups, the Restores, the Schedules and the storage and
-snapshot locations, read only. The diagnostics, the IPC between the processes and
-the actions are not implemented: their sections below are the design their specs
-start from.
+snapshot locations, read only; and the gate of the writes, with the way between the
+processes. The diagnostics and the actions are not implemented: their sections below
+are the design their specs start from.
 
 Authority: [directives](../../AGENTS.md), [roadmap](ROADMAP.md), and
 [versioned evidence](RECON-T0.1.md). The evidence report pins Velero v1.18.2,
@@ -118,14 +118,16 @@ before changing the client version. The main build replaces undici with
 extension never calls, and the real module installs a dispatcher for the whole
 process when it loads, which inside Freelens is the process of the host. Supported
 `WS_NO_*` build defines disable optional native accelerators without patching the
-library. The 1031 tests of the unit run, on the separate modules and on the
+library. The 1148 tests of the unit run, on the separate modules and on the
 production build, are 17 of the scaffold, 119 of the environment and its fixtures,
 48 of the diagnostic contracts, 151 of the operation states and of their stages,
 55 of the rules of the discovery, 206 of what the views show of a backup, of a
 restore and of a schedule, of what they refer to and of the views in the address,
 141 of what they show of a location, of its durations and of what uses it, 38 of
 what the Overview says of an installation and of the line of time, 33 of the state
-of an installation and of its reader, and 223 of the components. The integration test
+of an installation and of its reader, 223 of the components, and 117 of the gate of
+the writes, of the way between the processes and of the credential of a context. The
+integration test
 covers the installation in the host, the suites of the views what the views do
 in it.
 The electron-vite warning about a missing standalone renderer
@@ -496,6 +498,56 @@ artifact-missing, transport-unreachable, tls-invalid, destination-denied, and
 payload-too-large. Carry stage, retry safety, and safe presentation text separately.
 Never forward raw client errors, request/response bodies, headers, paths, or URLs.
 An unknown underlying error remains unknown, not a fabricated storage diagnosis.
+
+### The Gate And The Way Between The Processes
+
+The [gate](../../src/main/write-gate.ts) is held by the main process, one for each
+cluster: off when the session starts, on for one namespace of the cluster after a
+confirmation that names the context of the entry of the catalog and the namespace,
+off again when the namespace changes, when the entry of the catalog goes or changes
+its file or its context, when the frame that turned it on goes, when the operator
+turns it off, and when the extension is deactivated. A connection the adapter does
+not take refuses to turn writes on, with the reason. Every write is confirmed for one exact target with a token bound to the
+frame that asked, good for thirty seconds and for one use; a cluster has at most 32
+confirmations that wait and 16 writes that run. The renderer shows a mirror of what
+the main process answered and decides nothing.
+
+The [procedures](../../src/main/ipc.ts) are the ones of the
+[contract](../../src/common/ipc.ts): every request is read by its reader, which
+refuses a field the contract does not know, a form it does not give and a request
+beyond 64 KiB; every answer is a result, with a code, a stage, whether it is safe to
+try again and words that are safe to show; a procedure never raises. The sender of a
+request is the frame it comes from: its cluster is read from the address of the frame
+with the [rule of the host](../../src/common/frame.ts), and its key is that cluster
+with the process and the frame identifiers of the frame. A request that names another
+cluster, or that comes from the window of the host, is refused. The frame of a write
+is checked again at the creation, four times a second while the write runs, and
+before its result: a write whose frame went is aborted. The result of a write
+is the answer of the call that ran it; its progress is read by the frame that asked,
+by the identifier of the request; nothing of a write is broadcast. The main process
+broadcasts only that the gate of a cluster changed for a reason of its own, the entry
+of the catalog, the connection or the frame that turned writes on, and looks at the
+catalog and at that frame every five seconds while writes are on somewhere.
+
+A cluster is resolved from the catalog of the host, by the identifier of its frame:
+the path of its kubeconfig and the name of its context are the ones of the entry, and
+no default kubeconfig, current context or shown cluster is ever taken in their place.
+The [identity](../../src/main/context-identity.ts) of the cluster is the entry of
+the context, the address of the server, its certificate authority and the credential
+of the user, with the content of the files they name: it is read again before every
+request of the adapter and compared by its digest, so that a change of another
+context of the same file does not stop a write. The adapter takes a client
+certificate, a token, or a plugin that gives a credential, which it runs as the
+client of Kubernetes runs it for the command line, within thirty seconds, and reads
+for the credential alone: the command is killed at its bound and when the write is
+cancelled, runs once for the requests that wait together and again after a 401, and
+its failure is said as its own, by the name of its command, never as a refusal of
+the cluster. The user a context impersonates is part of the entry and goes with the
+credential. The adapter refuses an authentication provider, a proxy, a user name
+with a password, a verification of TLS turned off and an impersonation of groups, of
+a uid or of extra fields, which the client cannot send, and the gate says which. The
+run of a ServerStatusRequest is in this slice as the smallest write; the one of a
+DownloadRequest comes with the request and its transport.
 
 The extension-owned Backup list, context menu, drawer toolbar and bulk controls must
 not expose generic edit/delete. Use the pinned public overrides and menu handlers;
