@@ -174,6 +174,7 @@ const stores = new Map<unknown, ExtensionStoreStub>();
 // The store of the host is one for each class that extends it: the class is what it is asked by.
 class ExtensionStoreStub {
   static getInstanceOrCreate(this: new () => ExtensionStoreStub): ExtensionStoreStub {
+    // biome-ignore lint/complexity/noThisInStatic: see above
     let instance = stores.get(this);
 
     if (!instance) {
