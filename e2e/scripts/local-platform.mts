@@ -113,7 +113,7 @@ export const BINARIES = {
     },
   },
   kubectl: {
-    version: "1.33.4",
+    version: "1.37.1",
     checksums: {
       "linux-amd64": "c2ba72c115d524b72aaee9aab8df8b876e1596889d2f3f27d68405262ce86ca1",
       "linux-arm64": "76cd7a2aa59571519b68c3943521404cbce55dafb7d8866f8d0ea2995b396eef",
