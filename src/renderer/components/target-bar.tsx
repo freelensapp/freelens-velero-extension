@@ -2,12 +2,12 @@ import { Renderer } from "@freelensapp/extensions";
 import { observer } from "mobx-react";
 import React from "react";
 import { TITLES } from "../../common/discovery";
+import { CONNECTION_REASONS } from "../../common/ipc";
 import { isStale } from "../../common/read-state";
 import { ConfigureNamespace } from "./entry-state";
 import styles from "./views.module.css";
 
 import type { Family } from "../../common/discovery";
-import type { Connection } from "../../common/ipc";
 import type { ReadStatus } from "../../common/read-state";
 import type { Installation } from "../state/installation";
 
@@ -26,21 +26,8 @@ const REASONS: Partial<Record<ReadStatus, string>> = {
   failed: "could not be read",
 };
 
-// Why the writes of the extension cannot use the connection of a cluster, by the reason the main process
-// gives: the form of the kubeconfig the adapter refuses, or what is missing of it.
-export const CONNECTION_REASONS: Record<Exclude<Connection, { supported: true }>["reason"], string> = {
-  entry: "The cluster is not in the catalog of Freelens any more.",
-  file: "The kubeconfig of the cluster cannot be read.",
-  context: "The context of the cluster is not in its kubeconfig.",
-  "auth-provider":
-    "The connection of this cluster uses an authentication provider of the kubeconfig, which the writes of the extension do not use.",
-  proxy: "The connection of this cluster goes through a proxy, which the writes of the extension do not use.",
-  basic:
-    "The connection of this cluster uses a user name and a password, which the writes of the extension do not use.",
-  "insecure-tls":
-    "The connection of this cluster turns the verification of TLS off, which the writes of the extension never do.",
-  "no-credential": "The connection of this cluster has no credential the writes of the extension can use.",
-};
+// The words of every reason a connection is refused for are the ones the main process says.
+export { CONNECTION_REASONS };
 
 export function readTime(time: number | undefined): string {
   return time === undefined ? "Not read yet" : `Read at ${new Date(time).toLocaleTimeString()}`;
@@ -67,6 +54,7 @@ export const WritesControl = observer(({ installation }: { installation: Install
   const namespace = entry.state === "ready" ? entry.namespace : undefined;
   const gate = installation.gate;
   const writes = installation.writes;
+  const unknown = installation.gateUnknown;
 
   React.useEffect(() => {
     void installation.openGate();
@@ -90,12 +78,33 @@ export const WritesControl = observer(({ installation }: { installation: Install
   };
 
   return (
-    <div className={styles.target} data-testid="velero-writes" data-writes={writes.on ? "on" : "off"}>
+    <div
+      className={styles.target}
+      data-testid="velero-writes"
+      data-writes={unknown ? "unknown" : writes.on ? "on" : "off"}
+    >
       <span className={styles.targetLabel}>Writes</span>
       <span className={styles.targetValue} data-testid="velero-writes-state">
-        {writes.on ? `On for ${writes.namespace} since ${new Date(writes.since).toLocaleTimeString()}` : "Off"}
+        {unknown
+          ? "Not known"
+          : writes.on
+            ? `On for ${writes.namespace} since ${new Date(writes.since).toLocaleTimeString()}`
+            : "Off"}
       </span>
-      {namespace && gate ? (
+      {/* The answer of the main process is not known: they may be on. Asking again says what they are, and
+          turning them off is safe whatever they are. */}
+      {unknown ? (
+        <>
+          <Button plain data-testid="velero-writes-ask" onClick={() => void installation.openGate()}>
+            <Icon material="refresh" small />
+            Ask again
+          </Button>
+          <Button plain data-testid="velero-writes-off" onClick={() => void installation.disableWrites()}>
+            <Icon material="lock" small />
+            Turn writes off
+          </Button>
+        </>
+      ) : namespace && gate ? (
         writes.on ? (
           <Button plain data-testid="velero-writes-off" onClick={() => void installation.disableWrites()}>
             <Icon material="lock" small />
@@ -113,7 +122,9 @@ export const WritesControl = observer(({ installation }: { installation: Install
           {installation.gateFailure}
         </span>
       ) : null}
-      {writes.on && gate?.connection && !gate.connection.supported ? (
+      {/* What the main process holds of a connection it does not use, when the reason is not already said
+          by the answer that was refused. */}
+      {!unknown && !installation.gateFailure && gate?.connection && !gate.connection.supported ? (
         <span className={styles.muted} data-testid="velero-writes-connection">
           {CONNECTION_REASONS[gate.connection.reason]}
         </span>

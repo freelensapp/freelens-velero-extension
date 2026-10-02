@@ -265,27 +265,48 @@ describe("the write gate", () => {
     });
   });
 
-  it("turns writes on for a connection the adapter does not take, and refuses every write with the reason", () => {
+  it("refuses to turn writes on for a connection the adapter does not take, with the reason, and says it in the state", () => {
     const { gate, confirmation, adapters } = fixture({ connection: { supported: false, reason: "proxy" } });
+    const refused = gate.enable("cluster-a", "velero", confirmation);
+
+    expect(refused).toMatchObject({ ok: false, code: "connection-unsupported", stage: "connection", retry: false });
+    expect(refused.ok ? "" : refused.text).toContain("proxy");
+    expect(adapters).toHaveLength(0);
+    expect(gate.state("cluster-a")).toMatchObject({
+      ok: true,
+      value: { writes: { on: false }, connection: { supported: false, reason: "proxy" } },
+    });
+    expect(gate.confirm("s", "cluster-a", "velero", "ServerStatusRequest", undefined)).toMatchObject({
+      ok: false,
+      code: "forbidden",
+      stage: "gate",
+    });
+  });
+
+  it("refuses to turn writes on as a target that changed when the file or the context is not there", () => {
+    for (const reason of ["file", "context"] as const) {
+      const { gate, confirmation } = fixture({ connection: { supported: false, reason } });
+
+      expect(gate.enable("cluster-a", "velero", confirmation)).toMatchObject({
+        ok: false,
+        code: "target-changed",
+        stage: reason,
+      });
+      expect(gate.state("cluster-a")).toMatchObject({ ok: true, value: { writes: { on: false } } });
+    }
+  });
+
+  it("refuses to turn writes on when the adapter cannot be made, and says the connection is not usable", () => {
+    const { gate, confirmation } = fixture({ adapterFails: true });
 
     expect(gate.enable("cluster-a", "velero", confirmation)).toMatchObject({
-      ok: true,
-      value: { writes: { on: true }, connection: { supported: false, reason: "proxy" } },
-    });
-    expect(adapters).toHaveLength(0);
-    expect(gate.confirm("s", "cluster-a", "velero", "ServerStatusRequest", undefined)).toMatchObject({
       ok: false,
       code: "connection-unsupported",
       stage: "connection",
     });
-  });
-
-  it("says the connection is not usable when the adapter cannot be made", () => {
-    const { gate, confirmation } = fixture({ adapterFails: true });
-
-    expect(gate.enable("cluster-a", "velero", confirmation)).toMatchObject({
+    expect(gate.state("cluster-a")).toMatchObject({
       ok: true,
-      value: { connection: { supported: false, reason: "context" } },
+      value: { writes: { on: false }, connection: { supported: false, reason: "unusable" } },
     });
   });
 
@@ -307,5 +328,113 @@ describe("the write gate", () => {
     gate.enable("cluster-a", "velero", confirmation);
     gate.dispose();
     expect(gate.state("cluster-a")).toMatchObject({ ok: true, value: { writes: { on: false } } });
+  });
+});
+
+describe("the frame that turned writes on, and what the gate tells", () => {
+  const owner = (state: { alive: boolean }) => ({ key: "cluster-a:1:4", alive: () => state.alive });
+
+  it("turns writes off when the frame that turned them on is gone, aborts its writes and tells it", () => {
+    const { gate, confirmation } = fixture();
+    const frame = { alive: true };
+    const told: string[] = [];
+
+    gate.onChanged((cluster) => told.push(cluster));
+    expect(gate.enable("cluster-a", "velero", confirmation, owner(frame))).toMatchObject({ ok: true });
+    const confirmed = gate.confirm("cluster-a:1:4", "cluster-a", "velero", "ServerStatusRequest", undefined);
+
+    if (!confirmed.ok) throw new Error("not confirmed");
+    const taken = gate.take(
+      "cluster-a:1:4",
+      "cluster-a",
+      "velero",
+      "ServerStatusRequest",
+      undefined,
+      confirmed.value.token,
+      randomUUID(),
+    );
+
+    if (!taken.ok) throw new Error("not taken");
+    expect(taken.value.write.controller.signal.aborted).toBe(false);
+    expect(told).toEqual([]);
+
+    frame.alive = false;
+    expect(gate.state("cluster-a")).toMatchObject({ ok: true, value: { writes: { on: false } } });
+    expect(taken.value.write.controller.signal.aborted).toBe(true);
+    expect(told).toEqual(["cluster-a"]);
+    expect(gate.confirm("cluster-a:1:4", "cluster-a", "velero", "ServerStatusRequest", undefined)).toMatchObject({
+      ok: false,
+      code: "forbidden",
+      stage: "gate",
+    });
+  });
+
+  it("finds the frame gone when it reconciles, and treats a frame that cannot be asked as gone", () => {
+    const { gate, confirmation } = fixture();
+    const told: string[] = [];
+
+    gate.onChanged((cluster) => told.push(cluster));
+    gate.enable("cluster-a", "velero", confirmation, {
+      key: "cluster-a:1:4",
+      alive: () => {
+        throw new Error("the frame was disposed");
+      },
+    });
+    gate.reconcile();
+    expect(told).toEqual(["cluster-a"]);
+    expect(gate.state("cluster-a")).toMatchObject({ ok: true, value: { writes: { on: false } } });
+  });
+
+  it("keeps writes on while the frame is there, and for a gate turned on without a frame", () => {
+    const { gate, confirmation } = fixture();
+    const told: string[] = [];
+
+    gate.onChanged((cluster) => told.push(cluster));
+    gate.enable("cluster-a", "velero", confirmation, owner({ alive: true }));
+    gate.reconcile();
+    expect(gate.state("cluster-a")).toMatchObject({ ok: true, value: { writes: { on: true } } });
+    expect(told).toEqual([]);
+  });
+
+  it("tells the frame when it turns writes off because the connection changed", () => {
+    const { gate, confirmation, change } = fixture();
+    const told: string[] = [];
+
+    gate.onChanged((cluster) => told.push(cluster));
+    gate.enable("cluster-a", "velero", confirmation);
+    change();
+    expect(gate.confirm("cluster-a:1:4", "cluster-a", "velero", "ServerStatusRequest", undefined)).toMatchObject({
+      ok: false,
+      code: "target-changed",
+    });
+    expect(told).toEqual(["cluster-a"]);
+  });
+
+  it("tells the frame when the entry of the catalog changed under a gate that was on", () => {
+    const { gate, confirmation, catalog } = fixture();
+    const told: string[] = [];
+
+    gate.onChanged((cluster) => told.push(cluster));
+    gate.enable("cluster-a", "velero", confirmation);
+    catalog[0] = { ...catalog[0], contextName: "kind-renamed" };
+    expect(gate.state("cluster-a")).toMatchObject({ ok: true, value: { writes: { on: false } } });
+    expect(told).toEqual(["cluster-a"]);
+  });
+
+  it("tells nothing when writes are turned off on request, and nothing of a gate that was never on", () => {
+    const { gate, confirmation, catalog } = fixture();
+    const told: string[] = [];
+
+    gate.onChanged((cluster) => told.push(cluster));
+    gate.enable("cluster-a", "velero", confirmation);
+    gate.disable("cluster-a");
+    gate.enable("cluster-a", "velero", confirmation);
+    gate.enable("cluster-a", "other", { context: "kind-a", namespace: "other" });
+    expect(told).toEqual([]);
+    // cluster-b was only asked its state: its entry goes, and there is nothing to tell.
+    gate.state("cluster-b");
+    catalog.splice(1, 1);
+    gate.reconcile();
+    expect(told).toEqual([]);
   });
 });

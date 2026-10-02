@@ -1,8 +1,16 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { type ContextEntry, connectionOf, type Runner, readContext, runCredentialPlugin } from "./context-identity";
+import {
+  type ContextEntry,
+  CredentialPluginError,
+  connectionOf,
+  type Runner,
+  readContext,
+  runCredentialPlugin,
+} from "./context-identity";
 
 let directory: string;
 let file: string;
@@ -92,6 +100,90 @@ describe("the entry of a context", () => {
 
     expect("digest" in before && "digest" in otherChanged && before.digest === otherChanged.digest).toBe(true);
     expect("digest" in before && "digest" in entryChanged && before.digest !== entryChanged.digest).toBe(true);
+  });
+
+  it("carries the impersonation of the user into the entry and its digest", async () => {
+    const impersonating = async (name: string, user: Record<string, unknown>) => {
+      const target = join(directory, name);
+
+      await writeFile(
+        target,
+        JSON.stringify(configuration({ users: [{ name: "fixture", user }, ...configuration().users.slice(1)] })),
+      );
+      return readContext(target, "fixture");
+    };
+    const plain = readContext(file, "fixture");
+    const alice = await impersonating("alice", { token: "synthetic-token", as: "alice" });
+    const bob = await impersonating("bob", { token: "synthetic-token", as: "bob" });
+
+    expect("entry" in alice && alice.entry.user.impersonate).toEqual({ user: "alice" });
+    expect("entry" in alice && alice.connection).toEqual({ supported: true, credential: "token" });
+    expect("digest" in plain && "digest" in alice && plain.digest !== alice.digest).toBe(true);
+    expect("digest" in alice && "digest" in bob && alice.digest !== bob.digest).toBe(true);
+  });
+
+  it("refuses a context that impersonates groups, a uid or extra fields, written in YAML as in JSON", async () => {
+    const yaml = join(directory, "groups.yaml");
+
+    await writeFile(
+      yaml,
+      [
+        "apiVersion: v1",
+        "kind: Config",
+        "contexts:",
+        "- name: fixture",
+        "  context: {cluster: fixture, user: fixture}",
+        "clusters:",
+        "- name: fixture",
+        "  cluster: {server: 'https://127.0.0.1:6443'}",
+        "users:",
+        "- name: fixture",
+        "  user:",
+        "    token: synthetic-token",
+        "    as: alice",
+        "    as-groups:",
+        "    - first",
+        "    - second",
+        "",
+      ].join("\n"),
+    );
+    const groups = readContext(yaml, "fixture");
+
+    expect("entry" in groups && groups.entry.user.impersonate).toEqual({ user: "alice", groups: ["first", "second"] });
+    expect("entry" in groups && groups.connection).toMatchObject({ supported: false });
+    for (const [name, field] of [
+      ["uid", { "as-uid": "1" }],
+      ["extra", { "as-user-extra": { scope: ["a"] } }],
+    ] as const) {
+      const target = join(directory, name);
+
+      await writeFile(
+        target,
+        JSON.stringify(
+          configuration({
+            users: [
+              { name: "fixture", user: { token: "synthetic-token", ...field } },
+              ...configuration().users.slice(1),
+            ],
+          }),
+        ),
+      );
+      const read = readContext(target, "fixture");
+
+      expect("entry" in read && read.connection).toMatchObject({ supported: false });
+    }
+    // The fields of another user of the file do not refuse this context.
+    const elsewhere = join(directory, "elsewhere");
+
+    await writeFile(
+      elsewhere,
+      JSON.stringify(
+        configuration({
+          users: [...configuration().users.slice(0, 1), { name: "other", user: { token: "t", "as-groups": ["g"] } }],
+        }),
+      ),
+    );
+    expect(readContext(elsewhere, "fixture")).toMatchObject({ connection: { supported: true } });
   });
 
   it("names the connection the adapter takes and the one it refuses", () => {
@@ -184,13 +276,42 @@ describe("the plugin of a context", () => {
     const wrongKind: Runner = (_c, _a, _o, callback) =>
       callback(null, JSON.stringify({ kind: "Secret", status: { token: "PRIVATE-SENTINEL" } }), "");
 
-    for (const run of [failing, empty, text, wrongKind]) {
+    for (const [run, reason] of [
+      [failing, "failed"],
+      [empty, "unreadable"],
+      [text, "unreadable"],
+      [wrongKind, "unreadable"],
+    ] as const) {
       const error = await runCredentialPlugin(entry, { run }).catch((caught: unknown) => caught);
 
-      expect(error).toMatchObject({ code: "forbidden" });
+      // A failure of the plugin, named by its command, and not a refusal of the cluster.
+      expect(error).toBeInstanceOf(CredentialPluginError);
+      expect(error).toMatchObject({ code: "request-failed", command: "plugin", reason });
       expect(JSON.stringify(error)).not.toContain("PRIVATE-SENTINEL");
       expect(String(error)).not.toContain("PRIVATE-SENTINEL");
     }
+  });
+
+  it("names the command of the plugin by its file alone, and nothing of its arguments", async () => {
+    const failing: Runner = (_c, _a, _o, callback) => callback(new Error("x"), "", "");
+    const at = (command: string) => ({
+      ...entry,
+      user: { name: "u", exec: { command, args: ["--profile", "PRIVATE"] } },
+    });
+
+    await expect(runCredentialPlugin(at("/home/PRIVATE/bin/aws"), { run: failing })).rejects.toMatchObject({
+      command: "aws",
+    });
+    await expect(runCredentialPlugin(at("C:\\Users\\PRIVATE\\kubelogin.exe"), { run: failing })).rejects.toMatchObject({
+      command: "kubelogin.exe",
+    });
+    const long = await runCredentialPlugin(at(`plugin\u0007${"x".repeat(300)}`), { run: failing }).then(
+      () => undefined,
+      (caught: unknown) => caught as CredentialPluginError,
+    );
+
+    expect(long?.command).toMatch(/^plugin x+$/);
+    expect(long?.command.length).toBeLessThanOrEqual(64);
   });
 
   it("refuses a context that names no plugin", async () => {
@@ -216,6 +337,96 @@ describe("the plugin of a context", () => {
     };
 
     await expect(runCredentialPlugin(quick)).resolves.toEqual({ token: "real-token" });
-    await expect(runCredentialPlugin(slow, { timeoutMs: 300 })).rejects.toMatchObject({ code: "forbidden" });
+    await expect(runCredentialPlugin(slow, { timeoutMs: 300 })).rejects.toMatchObject({
+      code: "request-failed",
+      reason: "deadline",
+    });
+  });
+
+  it("refuses, and never throws in the main process, a real command that ends well and prints no credential", async () => {
+    const script = join(directory, "printing.mjs");
+
+    // What it prints is the first argument, as it is; it ends with 0.
+    await writeFile(script, `process.stdout.write(process.argv[2]);`);
+    const printing = (output: string): ContextEntry => ({
+      ...entry,
+      user: { name: "p", exec: { command: process.execPath, args: [script, output] } },
+    });
+    const outputs = [
+      "PRIVATE-SENTINEL not json",
+      JSON.stringify({ kind: "Secret", status: { token: "PRIVATE-SENTINEL" } }),
+      credential({}),
+      "null",
+    ];
+
+    for (const output of outputs) {
+      const error = await runCredentialPlugin(printing(output)).catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(CredentialPluginError);
+      expect(error).toMatchObject({ code: "request-failed", reason: "unreadable" });
+      expect(String(error)).not.toContain("PRIVATE-SENTINEL");
+    }
+  });
+
+  // A command that writes its process number, ignores SIGTERM and gives a credential after a wait.
+  async function stubborn(name: string): Promise<{ plugin: ContextEntry; pid: () => Promise<number> }> {
+    const script = join(directory, `${name}.mjs`);
+    const pidFile = join(directory, `${name}.pid`);
+
+    await writeFile(
+      script,
+      `import { writeFileSync } from "node:fs"; writeFileSync(process.argv[2], String(process.pid)); process.on("SIGTERM", () => {}); setTimeout(() => process.stdout.write(JSON.stringify({ apiVersion: "client.authentication.k8s.io/v1", kind: "ExecCredential", status: { token: "late-token" } })), 2500);`,
+    );
+    return {
+      plugin: { ...entry, user: { name: "p", exec: { command: process.execPath, args: [script, pidFile] } } },
+      pid: async () => Number(await readFile(pidFile, "utf8")),
+    };
+  }
+  const alive = (pid: number) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const waitFor = async (condition: () => boolean, bound = 2000) => {
+    const end = Date.now() + bound;
+
+    while (!condition() && Date.now() < end) await delay(25);
+    return condition();
+  };
+
+  it("ends at its bound, and kills, a command that ignores the request to end", async () => {
+    const { plugin, pid } = await stubborn("stubborn");
+    const started = Date.now();
+    const error = await runCredentialPlugin(plugin, { timeoutMs: 500 }).catch((caught: unknown) => caught);
+
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(error).toMatchObject({ code: "request-failed", reason: "deadline" });
+    const child = await pid();
+
+    expect(await waitFor(() => !alive(child))).toBe(true);
+  });
+
+  it("ends as cancelled, and kills the command, when the write is cancelled", async () => {
+    const { plugin, pid } = await stubborn("cancelled");
+    const controller = new AbortController();
+    const started = Date.now();
+    const pending = runCredentialPlugin(plugin, { signal: controller.signal }).catch((caught: unknown) => caught);
+
+    await delay(400);
+    controller.abort();
+    const error = await pending;
+
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(error).toMatchObject({ code: "cancelled" });
+    const child = await pid();
+
+    expect(await waitFor(() => !alive(child))).toBe(true);
+    // Already cancelled: the command is not run at all.
+    await expect(runCredentialPlugin(plugin, { signal: controller.signal })).rejects.toMatchObject({
+      code: "cancelled",
+    });
   });
 });

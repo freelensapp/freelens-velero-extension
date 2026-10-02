@@ -5,6 +5,7 @@
 
 import { setTimeout as delay } from "node:timers/promises";
 import { type Failure, failure, type ServerStatusValue } from "../common/ipc";
+import { CredentialPluginError, PLUGIN_TIMEOUT } from "./context-identity.ts";
 import { DiagnosticError } from "./diagnostic-transport.ts";
 
 import type { DiagnosticObject } from "./diagnostic-kubernetes";
@@ -24,6 +25,20 @@ export interface ServerStatusApi {
   ): Promise<DiagnosticObject>;
 }
 
+// A request the server processed without saying its version or when: the answer would have empty words,
+// which the view does not take.
+export class IncompleteServerStatusError extends DiagnosticError {
+  constructor() {
+    super("request-failed");
+    this.name = "IncompleteServerStatusError";
+  }
+}
+
+// A text the view takes: not empty, and within its bound.
+function text(value: unknown, bound: number): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= bound;
+}
+
 export interface ServerStatusOptions {
   signal: AbortSignal;
   onStep?(step: string, count?: number): void;
@@ -34,6 +49,29 @@ export interface ServerStatusOptions {
 
 // The words of each way it can end, safe to show.
 export function serverStatusFailure(error: unknown, requestName?: string): Failure {
+  // The plugin of the context gave no credential: the cluster was not asked, so it refused nothing. Asking
+  // again is safe; it runs the plugin again.
+  if (error instanceof CredentialPluginError) {
+    const plugin = `The credential plugin ${error.command} of the context`;
+
+    return failure(
+      "request-failed",
+      "credential",
+      true,
+      error.reason === "deadline"
+        ? `${plugin} did not give a credential in ${PLUGIN_TIMEOUT / 1000} seconds. Run it in a terminal to see what it waits for, then ask again.`
+        : error.reason === "unreadable"
+          ? `${plugin} ended, but what it printed is not a credential the extension can read.`
+          : `${plugin} did not give a credential: it failed, or it is not installed. Run it in a terminal, for example to sign in again, then ask again.`,
+    );
+  }
+  if (error instanceof IncompleteServerStatusError)
+    return failure(
+      "request-failed",
+      "wait",
+      false,
+      "The server processed the request but did not say its version, or when it processed it. The request stays: it is a ServerStatusRequest whose name begins with freelens-velero-.",
+    );
   const code = error instanceof DiagnosticError ? error.code : "request-failed";
   const stage = requestName ? "wait" : "creation";
 
@@ -115,13 +153,15 @@ export async function readServerStatus(
     if (status?.phase === "Processed") {
       const plugins = Array.isArray(status.plugins)
         ? (status.plugins as { name?: unknown; kind?: unknown }[])
-            .filter((plugin) => typeof plugin?.name === "string" && typeof plugin?.kind === "string")
+            .filter((plugin) => text(plugin?.name, 256) && text(plugin?.kind, 256))
             .map((plugin) => ({ name: String(plugin.name), kind: String(plugin.kind) }))
         : [];
 
+      if (!text(status.serverVersion, 256) || !text(status.processedTimestamp, 64))
+        throw new IncompleteServerStatusError();
       return {
-        version: typeof status.serverVersion === "string" ? status.serverVersion : "",
-        processed: typeof status.processedTimestamp === "string" ? status.processedTimestamp : "",
+        version: status.serverVersion,
+        processed: status.processedTimestamp,
         plugins,
         request: identity,
       };

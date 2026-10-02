@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { CredentialPluginError } from "./context-identity";
 import { DiagnosticError } from "./diagnostic-transport";
 import { readServerStatus, SERVER_STATUS_PREFIX, serverStatusFailure } from "./server-status";
 
@@ -75,6 +76,50 @@ describe("the version of the server", () => {
     expect(steps[1]).toEqual(["waiting", 0]);
   });
 
+  it("answers a failure, with words, when the processed request lacks the version or the time, and not empty text", async () => {
+    for (const status of [
+      { phase: "Processed", processedTimestamp: "2026-09-30T10:00:00Z", plugins: [] },
+      { phase: "Processed", serverVersion: "v1.18.2", plugins: [] },
+      { phase: "Processed", serverVersion: "", processedTimestamp: "2026-09-30T10:00:00Z" },
+      { phase: "Processed", serverVersion: "v".repeat(300), processedTimestamp: "2026-09-30T10:00:00Z" },
+    ]) {
+      const { api, options } = fixture({ processedAfterReads: 0 });
+
+      (api.read as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        metadata: { name: "freelens-velero-abcde", namespace: "velero", uid: "request-uid" },
+        status,
+      });
+      const error = await readServerStatus(api, "velero", options).catch((caught: unknown) => caught);
+      const failed = serverStatusFailure(error, "created");
+
+      expect(error).toBeInstanceOf(DiagnosticError);
+      expect(failed).toMatchObject({ ok: false, code: "request-failed", stage: "wait" });
+      expect(failed.text).toContain("did not say its version");
+      expect(failed.text).toContain("freelens-velero-");
+    }
+  });
+
+  it("leaves out the plugins whose name or kind is empty, which the view would not take", async () => {
+    const { api, options } = fixture({ processedAfterReads: 0 });
+
+    (api.read as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      metadata: { name: "freelens-velero-abcde", namespace: "velero", uid: "request-uid" },
+      status: {
+        phase: "Processed",
+        serverVersion: "v1.18.2",
+        processedTimestamp: "2026-09-30T10:00:00Z",
+        plugins: [
+          { name: "", kind: "ObjectStore" },
+          { name: "velero.io/aws", kind: "" },
+          { name: "velero.io/gcp", kind: "ObjectStore" },
+        ],
+      },
+    });
+    await expect(readServerStatus(api, "velero", options)).resolves.toMatchObject({
+      plugins: [{ name: "velero.io/gcp", kind: "ObjectStore" }],
+    });
+  });
+
   it("ends with the deadline when the server does not process the request in time, and deletes nothing", async () => {
     const { api, options } = fixture();
 
@@ -115,5 +160,23 @@ describe("the version of the server", () => {
     expect(serverStatusFailure(new DiagnosticError("submission-unknown")).text).toContain("freelens-velero-");
     expect(serverStatusFailure(new Error("PRIVATE-SENTINEL"))).toMatchObject({ code: "request-failed" });
     expect(JSON.stringify(serverStatusFailure(new Error("PRIVATE-SENTINEL")))).not.toContain("PRIVATE-SENTINEL");
+  });
+
+  it("says that the credential plugin failed, by its command, and not that the cluster refused", () => {
+    for (const [reason, words] of [
+      ["failed", "did not give a credential"],
+      ["deadline", "30 seconds"],
+      ["unreadable", "not a credential"],
+    ] as const) {
+      for (const requestName of [undefined, "x"]) {
+        const failed = serverStatusFailure(new CredentialPluginError("kubelogin", reason), requestName);
+
+        expect(failed).toMatchObject({ ok: false, code: "request-failed", stage: "credential", retry: true });
+        expect(failed.text).toContain("credential plugin kubelogin");
+        expect(failed.text).toContain(words);
+        expect(failed.text).not.toContain("refused");
+        expect(failed.text).not.toContain("verb");
+      }
+    }
   });
 });

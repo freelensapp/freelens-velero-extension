@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   REQUEST_BOUND,
   readAnswer,
+  readGateDisableRequest,
   readGateEnableRequest,
   readGateState,
   readGateStateRequest,
@@ -138,9 +139,39 @@ describe("the requests between the processes", () => {
     expect(readWriteStatusRequest({ cluster, request, token: request })).toBeUndefined();
   });
 
-  it("refuses a request beyond the bound before reading it", () => {
-    expect(readGateStateRequest({ cluster, padding: "x".repeat(REQUEST_BOUND) })).toBeUndefined();
-    expect(readWriteStatusRequest({ cluster: "x".repeat(REQUEST_BOUND + 1), request: randomUUID() })).toBeUndefined();
+  it("refuses a request beyond the bound, whatever its fields say", () => {
+    // Every field is the one of a valid request: only what the request weighs between the processes is
+    // beyond the bound, or cannot be weighed at all.
+    const heavy = (fields: Record<string, unknown>, weight: number) =>
+      Object.assign(Object.create({ toJSON: () => "x".repeat(weight) }), fields);
+    const request = randomUUID();
+
+    expect(readGateStateRequest(heavy({ cluster }, REQUEST_BOUND - 2))).toEqual({ cluster });
+    expect(readGateStateRequest(heavy({ cluster }, REQUEST_BOUND + 1))).toBeUndefined();
+    expect(readGateDisableRequest(heavy({ cluster }, REQUEST_BOUND + 1))).toBeUndefined();
+    expect(readWriteStatusRequest(heavy({ cluster, request }, REQUEST_BOUND - 2))).toEqual({ cluster, request });
+    expect(readWriteStatusRequest(heavy({ cluster, request }, REQUEST_BOUND + 1))).toBeUndefined();
+    expect(
+      readGateEnableRequest(
+        heavy(
+          { cluster, namespace: "velero", confirmation: { context: "kind-a", namespace: "velero" } },
+          REQUEST_BOUND + 1,
+        ),
+      ),
+    ).toBeUndefined();
+    expect(
+      readWriteConfirmRequest(heavy({ cluster, namespace: "velero", kind: "ServerStatusRequest" }, REQUEST_BOUND + 1)),
+    ).toBeUndefined();
+    const unreadable = Object.assign(
+      Object.create({
+        toJSON: () => {
+          throw new Error("cannot be weighed");
+        },
+      }),
+      { cluster },
+    );
+
+    expect(readGateStateRequest(unreadable)).toBeUndefined();
   });
 });
 

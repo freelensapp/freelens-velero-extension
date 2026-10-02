@@ -6,7 +6,9 @@
 
 import { randomUUID } from "node:crypto";
 import {
+  CONNECTION_REASONS,
   type Connection,
+  type ConnectionReason,
   type Failure,
   failure,
   type GateState,
@@ -40,11 +42,20 @@ export interface GateDependencies<Adapter extends GateAdapter> {
   now?(): number;
 }
 
+// The frame that turned writes on: when it goes, writes go off with it.
+export interface GateOwner {
+  // The key of the sender, as the procedures know it.
+  key: string;
+  // Whether the frame is still there, and still the frame of that cluster.
+  alive(): boolean;
+}
+
 // The state the gate holds of one cluster.
 interface ClusterGate<Adapter> {
   entry: CatalogEntry;
   namespace?: string;
   since?: number;
+  owner?: GateOwner;
   connection?: Connection;
   adapter?: Adapter;
   confirmations: Map<string, { sender: string; signature: string; expires: number }>;
@@ -79,6 +90,14 @@ function sameEntry(one: CatalogEntry, other: CatalogEntry | undefined): boolean 
   );
 }
 
+// Why writes are not turned on for a connection: a file or a context that is not there is a target that
+// changed, anything else is a connection the writes of the extension do not use.
+function refusalOf(reason: ConnectionReason): Failure {
+  return reason === "file" || reason === "context"
+    ? failure("target-changed", reason, false, CONNECTION_REASONS[reason])
+    : failure("connection-unsupported", "connection", false, CONNECTION_REASONS[reason]);
+}
+
 export function signatureOf(namespace: string, kind: WriteKind, target: WriteTarget | undefined): string {
   return JSON.stringify([namespace, kind, target ? [target.kind, target.name, target.uid] : null]);
 }
@@ -107,12 +126,23 @@ export class WriteGate<Adapter extends GateAdapter> {
     if ("ok" in entry) return entry;
     const held = this.clusters.get(cluster);
 
-    // The entry changed its file or its context: what was held is of another cluster.
-    if (held && !sameEntry(entry, held.entry)) this.invalidate(cluster);
+    // The entry changed its file or its context: what was held is of another cluster. The frame that
+    // turned writes on went: they are off with it. Both are reasons of the gate itself, and are told.
+    if (held && (!sameEntry(entry, held.entry) || this.ownerGone(held))) this.invalidate(cluster, true);
     const gate = this.clusters.get(cluster) ?? { entry, confirmations: new Map(), writes: new Map() };
 
     this.clusters.set(cluster, gate);
     return gate;
+  }
+
+  // Whether writes are on for a frame that is not there any more. A frame that cannot be asked is gone.
+  private ownerGone(gate: ClusterGate<Adapter>): boolean {
+    if (!gate.namespace || !gate.owner) return false;
+    try {
+      return !gate.owner.alive();
+    } catch {
+      return true;
+    }
   }
 
   private stateOf(gate: ClusterGate<Adapter>): GateState {
@@ -134,11 +164,13 @@ export class WriteGate<Adapter extends GateAdapter> {
   }
 
   // Turns writes on for one namespace of one cluster. The confirmation must name the context of the
-  // entry and the namespace, as the dialog showed them.
+  // entry and the namespace, as the dialog showed them. The owner is the frame that asked: writes stay on
+  // while it is there.
   enable(
     cluster: string,
     namespace: string,
     confirmation: { context: string; namespace: string },
+    owner?: GateOwner,
   ): { ok: true; value: GateState } | Failure {
     const gate = this.gateOf(cluster);
 
@@ -162,11 +194,23 @@ export class WriteGate<Adapter extends GateAdapter> {
           sameEntry(held.entry, this.entryOf(cluster) as CatalogEntry),
         );
       } catch {
-        held.connection = { supported: false, reason: "context" };
+        held.connection = { supported: false, reason: "unusable" };
       }
+    }
+    // A connection the adapter does not take: writes are not turned on, and what was on for it goes. The
+    // state keeps what the adapter said of the connection.
+    if (!held.connection.supported) {
+      const connection = held.connection;
+
+      this.invalidate(cluster);
+      const off = this.gateOf(cluster);
+
+      if (!("ok" in off)) off.connection = connection;
+      return refusalOf(connection.reason);
     }
     held.namespace = namespace;
     held.since = this.now();
+    held.owner = owner;
     return { ok: true, value: this.stateOf(held) };
   }
 
@@ -180,13 +224,15 @@ export class WriteGate<Adapter extends GateAdapter> {
     return "ok" in off ? off : { ok: true, value: this.stateOf(off) };
   }
 
-  // Writes off, the confirmations cleared, the writes in flight aborted on this side.
-  invalidate(cluster: string): void {
+  // Writes off, the confirmations cleared, the writes in flight aborted on this side. When the reason is
+  // one of the gate itself, and writes were on, the frames are told: their mirror asks the state again.
+  invalidate(cluster: string, told = false): void {
     const gate = this.clusters.get(cluster);
 
     if (!gate) return;
     for (const write of gate.writes.values()) write.controller.abort();
     this.clusters.delete(cluster);
+    if (told && gate.namespace) for (const listener of this.listeners) listener(cluster);
   }
 
   // A confirmation for one exact target, for the frame that asks it.
@@ -237,7 +283,7 @@ export class WriteGate<Adapter extends GateAdapter> {
     try {
       gate.adapter.assertCurrent();
     } catch {
-      this.invalidate(gate.entry.id);
+      this.invalidate(gate.entry.id, true);
       return failure("target-changed", "connection", false, "The connection of this cluster changed: writes are off.");
     }
     return undefined;
@@ -320,20 +366,18 @@ export class WriteGate<Adapter extends GateAdapter> {
     return { ok: true, value: null };
   }
 
-  // Every cluster whose entry went or changed in the catalog is turned off, and told.
+  // Every cluster whose entry went or changed in the catalog, or whose frame went, is turned off, and
+  // told when writes were on.
   reconcile(): void {
     const catalog = this.dependencies.catalog();
 
     for (const [cluster, gate] of [...this.clusters]) {
-      if (
-        !sameEntry(
-          gate.entry,
-          catalog.find((item) => item.id === cluster),
-        )
-      ) {
-        this.invalidate(cluster);
-        for (const listener of this.listeners) listener(cluster);
-      }
+      const changed = !sameEntry(
+        gate.entry,
+        catalog.find((item) => item.id === cluster),
+      );
+
+      if (changed || this.ownerGone(gate)) this.invalidate(cluster, true);
     }
   }
 

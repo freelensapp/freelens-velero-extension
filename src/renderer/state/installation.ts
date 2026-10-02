@@ -119,6 +119,7 @@ export class Installation {
       reading: computed,
       window: computed,
       writes: computed,
+      gateUnknown: computed,
       select: action,
       chooseWindow: action,
       configure: action,
@@ -132,6 +133,13 @@ export class Installation {
 
     if (!gate?.writes.on || gate.writes.namespace !== this.namespace) return { on: false };
     return gate.writes;
+  }
+
+  // The main process was asked and its answer is not known: it failed, or was lost on the way, and the
+  // main process may have done what it was asked or not. The views show neither on nor off, and offer to
+  // ask again. Without a way to the main process there is nothing to ask: writes are off.
+  get gateUnknown(): boolean {
+    return Boolean(this.dependencies.gate) && !this.gate && this.gateFailure !== undefined;
   }
 
   // Asks the main process what the gate of this cluster is. The first view asks it once; the target bar
@@ -148,14 +156,30 @@ export class Installation {
     this.takeGate(await client.state(this.cluster.id));
   }
 
-  // Turns writes on for the namespace that is shown, with the confirmation the dialog named.
+  // Turns writes on for the namespace that is shown, with the confirmation the dialog named. When the
+  // target changed while the main process was asked, even to the same namespace and back, what it answered
+  // is of a choice the operator left: writes are turned off for it, and never shown as on.
   async enableWrites(confirmation: { context: string; namespace: string }): Promise<boolean> {
     const client = this.dependencies.gate;
     const namespace = this.namespace;
+    const asked = this.generation;
 
     if (!client || !namespace || confirmation.namespace !== namespace) return false;
     const answer = await client.enable(this.cluster.id, namespace, confirmation);
 
+    if (!current(this.generation, asked)) {
+      await this.disableWrites();
+      return false;
+    }
+    // The main process refused: that is an answer, and what it holds is known. It is asked, and the words
+    // of the refusal are kept beside it. Only an answer that was lost leaves the state not known.
+    if (!answer.ok && answer.stage !== "way") {
+      this.takeGate(await client.state(this.cluster.id));
+      runInAction(() => {
+        this.gateFailure = answer.text;
+      });
+      return false;
+    }
     this.takeGate(answer);
     return answer.ok;
   }
@@ -167,6 +191,8 @@ export class Installation {
     this.takeGate(await client.disable(this.cluster.id));
   }
 
+  // What the main process answered is the mirror. A failure leaves the state not known, with its reason,
+  // until the main process is asked again.
   private takeGate(answer: Awaited<ReturnType<GateClient["state"]>>): void {
     runInAction(() => {
       if (answer.ok) {
@@ -179,13 +205,14 @@ export class Installation {
     });
   }
 
-  // Writes are off when the target changes: the mirror says so at once, and the main process is told.
-  private dropWrites(): void {
+  // Writes are off when the target changes: the mirror says so at once, and the main process is told
+  // whatever the mirror said, which may be behind it: an enable that has not answered yet, or an answer
+  // that was lost. Writes are only ever on for a namespace that was the target, so leaving none asks nothing.
+  private dropWrites(left: string): void {
     const gate = this.gate;
 
-    if (!gate?.writes.on) return;
-    this.gate = { ...gate, writes: { on: false } };
-    void this.disableWrites();
+    if (gate?.writes.on) this.gate = { ...gate, writes: { on: false } };
+    if (left && this.dependencies.gate) void this.disableWrites();
   }
 
   get cluster(): ClusterIdentity {
@@ -358,12 +385,13 @@ export class Installation {
   // not of this one: it goes, and what was asked for it will not be taken when it answers.
   private target(): void {
     const namespace = this.namespace ?? "";
+    const left = this.generation.namespace;
 
-    if (namespace === this.generation.namespace) return;
+    if (namespace === left) return;
     this.generation = { cluster: this.cluster.id, namespace, number: this.generation.number + 1 };
     this.reads = emptyReads();
     this.asked = undefined;
-    this.dropWrites();
+    this.dropWrites(left);
   }
 
   private async readFamilies(): Promise<void> {

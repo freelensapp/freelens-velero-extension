@@ -42,8 +42,42 @@ export type Connection =
   | { supported: true; credential: "certificate" | "token" | "plugin" }
   | {
       supported: false;
-      reason: "entry" | "file" | "context" | "auth-provider" | "proxy" | "basic" | "insecure-tls" | "no-credential";
+      reason: ConnectionReason;
     };
+
+export const CONNECTION_REASON_NAMES = [
+  "entry",
+  "file",
+  "context",
+  "auth-provider",
+  "proxy",
+  "basic",
+  "insecure-tls",
+  "no-credential",
+  "impersonation",
+  "unusable",
+] as const;
+export type ConnectionReason = (typeof CONNECTION_REASON_NAMES)[number];
+
+// Why the writes of the extension cannot use the connection of a cluster: the form of the kubeconfig the
+// adapter refuses, or what is missing of it. The main process says them when it refuses to turn writes
+// on, and the views show them.
+export const CONNECTION_REASONS: Record<ConnectionReason, string> = {
+  entry: "The cluster is not in the catalog of Freelens any more.",
+  file: "The kubeconfig of the cluster cannot be read.",
+  context: "The context of the cluster is not in its kubeconfig.",
+  "auth-provider":
+    "The connection of this cluster uses an authentication provider of the kubeconfig, which the writes of the extension do not use.",
+  proxy: "The connection of this cluster goes through a proxy, which the writes of the extension do not use.",
+  basic:
+    "The connection of this cluster uses a user name and a password, which the writes of the extension do not use.",
+  "insecure-tls":
+    "The connection of this cluster turns the verification of TLS off, which the writes of the extension never do.",
+  "no-credential": "The connection of this cluster has no credential the writes of the extension can use.",
+  impersonation:
+    "The connection of this cluster impersonates groups, a uid or extra fields, which the writes of the extension cannot send.",
+  unusable: "The connection of this cluster is not one the writes of the extension can use.",
+};
 
 // The state of the gate of one cluster, as the main process holds it.
 export interface GateState {
@@ -315,7 +349,7 @@ export function readGateState(value: unknown): GateState | undefined {
   };
 }
 
-const REASONS = ["entry", "file", "context", "auth-provider", "proxy", "basic", "insecure-tls", "no-credential"];
+const REASONS: readonly string[] = CONNECTION_REASON_NAMES;
 const CREDENTIALS = ["certificate", "token", "plugin"];
 
 export function readConnection(value: unknown): Connection | undefined {
@@ -325,7 +359,7 @@ export function readConnection(value: unknown): Connection | undefined {
     return { supported: true, credential: value.credential as "certificate" | "token" | "plugin" };
   }
   if (!hasKeys(value, ["supported", "reason"]) || !REASONS.includes(value.reason as string)) return;
-  return { supported: false, reason: value.reason as Exclude<Connection, { supported: true }>["reason"] };
+  return { supported: false, reason: value.reason as ConnectionReason };
 }
 
 export function readWriteConfirmAnswer(value: unknown): WriteConfirmAnswer | undefined {

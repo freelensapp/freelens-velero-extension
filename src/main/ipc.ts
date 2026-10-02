@@ -36,15 +36,29 @@ export interface Sender {
 // The frame of an event, as its cluster and its key; nothing for the window of the host and for what
 // names no frame.
 export function senderOf(event: IpcEvent): Sender | undefined {
-  const address = event.senderFrame?.url;
+  let address: unknown;
 
+  // The host raises when the frame of an event was disposed: that is the frame of no cluster.
+  try {
+    address = event.senderFrame?.url;
+  } catch {
+    return;
+  }
   if (typeof address !== "string" || !Number.isInteger(event.processId) || !Number.isInteger(event.frameId)) return;
   const cluster = clusterOfAddress(address);
 
   return cluster ? { cluster, key: senderKey(cluster, event.processId, event.frameId) } : undefined;
 }
 
+// The frame of a write went, or is not the frame of that cluster any more.
+class SenderGone extends Error {}
+
+const SENDER_GONE = () =>
+  failure("forbidden", "frame", false, "The frame that asked for the write is not there any more.");
+
 const CATALOG_POLL = 5_000;
+// How often a write in flight looks whether its frame is still there.
+const FRAME_WATCH = 250;
 
 type Handler = (event: IpcEvent, payload: unknown) => Promise<unknown>;
 
@@ -75,15 +89,24 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
     });
   let poll: ReturnType<typeof setInterval> | undefined;
   const watch = () => {
-    if (!poll) poll = setInterval(() => gate.reconcile(), dependencies.pollMs ?? CATALOG_POLL);
+    if (!poll)
+      poll = setInterval(() => {
+        // What the catalog or a frame raises now is asked again at the next turn.
+        try {
+          gate.reconcile();
+        } catch {
+          /* the next turn */
+        }
+      }, dependencies.pollMs ?? CATALOG_POLL);
   };
   const stopChanged = gate.onChanged((cluster) => registrar.broadcast(CHANNELS.gateChanged, { cluster }));
 
   // A procedure: the request read by its reader, the sender bound to its frame, the answer a result.
+  // `still` says whether the frame of the request is still the same frame of the same cluster.
   const procedure = <Request extends { cluster: string }, Value>(
     channel: string,
     read: (payload: unknown) => Request | undefined,
-    answer: (sender: Sender, request: Request) => Promise<Answer<Value>> | Answer<Value>,
+    answer: (sender: Sender, request: Request, still: () => boolean) => Promise<Answer<Value>> | Answer<Value>,
   ) => {
     registrar.handle(channel, async (event, payload) => {
       try {
@@ -97,7 +120,7 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
           return failure("validation", "request", false, "The request is not one the main process understands.");
         if (request.cluster !== sender.cluster)
           return failure("forbidden", "frame", false, "The request names a cluster that is not the one of its frame.");
-        return await answer(sender, request);
+        return await answer(sender, request, () => senderOf(event)?.key === sender.key);
       } catch {
         return failure("request-failed", "handler", false, "The main process could not answer the request.");
       }
@@ -105,8 +128,11 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
   };
 
   procedure(CHANNELS.gateState, readGateStateRequest, (_sender, request) => gate.state(request.cluster));
-  procedure(CHANNELS.gateEnable, readGateEnableRequest, (_sender, request) => {
-    const answer = gate.enable(request.cluster, request.namespace, request.confirmation);
+  procedure(CHANNELS.gateEnable, readGateEnableRequest, (sender, request, still) => {
+    const answer = gate.enable(request.cluster, request.namespace, request.confirmation, {
+      key: sender.key,
+      alive: still,
+    });
 
     if (answer.ok) watch();
     return answer;
@@ -121,7 +147,7 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
   procedure(CHANNELS.writeCancel, readWriteCancelRequest, (sender, request) =>
     gate.cancel(sender.key, request.cluster, request.request),
   );
-  procedure(CHANNELS.writeRun, readWriteRunRequest, async (sender, request) => {
+  procedure(CHANNELS.writeRun, readWriteRunRequest, async (sender, request, still) => {
     if (request.kind !== "ServerStatusRequest")
       return failure(
         "validation",
@@ -142,24 +168,38 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
     if (!taken.ok) return taken;
     const { adapter, write } = taken.value;
     let name: string | undefined;
+    // While the write runs its frame is watched: a frame that goes aborts it, so that nothing is
+    // submitted for it after a wait, as the one for a plugin that gives the credential.
+    const watching = setInterval(
+      () => {
+        if (!still()) write.controller.abort();
+      },
+      Math.min(dependencies.pollMs ?? FRAME_WATCH, FRAME_WATCH),
+    );
 
     try {
       const value = await readServerStatus(adapter, request.namespace, {
         signal: write.controller.signal,
         onStep: (step, count) => {
+          // The frame is checked again before the object is submitted.
+          if (step === "creating" && !still()) throw new SenderGone();
           write.status = count === undefined ? { step } : { step, count };
           if (step === "waiting" && count === 0) name = "created";
         },
       });
 
+      // And again before the result is given.
+      if (!still()) throw new SenderGone();
       write.status = { step: "done" };
       return { ok: true, value };
     } catch (error) {
-      const failed: Failure = serverStatusFailure(error, name);
+      const failed: Failure =
+        error instanceof SenderGone || !still() ? SENDER_GONE() : serverStatusFailure(error, name);
 
       write.status = { step: `failed: ${failed.code}` };
       return failed;
     } finally {
+      clearInterval(watching);
       gate.finish(request.cluster, request.request);
     }
   });
