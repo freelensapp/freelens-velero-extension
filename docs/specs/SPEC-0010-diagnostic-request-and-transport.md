@@ -1,6 +1,6 @@
 # SPEC-0010: The Diagnostic Request And Its Transport
 
-- **Status:** Draft
+- **Status:** Approved
 - **Date:** 2026-09-30
 - **Milestone / tasks:** M3 / T2.1, T2.2, T2.4, each its own slice
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`; compared with v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`; reviewed AWS plugin v1.14.2, `5463822fd77bc1c2a1151ee76c830ad979ff2781`
@@ -249,6 +249,6 @@ date and verdict.
 
 ## Evidence And Deviations
 
-Initially: no implementation, tests or runtime evidence. The proof of T0.6 is
-the evidence of what this spec reuses, in
+Approved on 2026-09-30, as drafted. No implementation, tests or runtime evidence
+yet. The proof of T0.6 is the evidence of what this spec reuses, in
 [TESTING.md](../development/TESTING.md#t06-main-transport-proof).

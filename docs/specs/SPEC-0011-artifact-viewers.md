@@ -7,7 +7,7 @@
 - **Reviewed main:** `e5d9354ddf7607e0bad3ebc7744a4964c24b489a`
 - **Freelens validation target:** v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`
 - **Dependencies:** [the write gate](SPEC-0009-write-gate.md), [the request and its transport](SPEC-0010-diagnostic-request-and-transport.md), [states and Backups](SPEC-0003-backup-read-only.md), [Restores](SPEC-0005-restore-read-only.md)
-- **Approval:** Pending
+- **Approval:** Approved by the lead maintainer on 2026-09-30, as drafted
 
 Governed by [AGENTS.md](../../AGENTS.md).
 
