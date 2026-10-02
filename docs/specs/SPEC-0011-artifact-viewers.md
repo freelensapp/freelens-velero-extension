@@ -1,6 +1,6 @@
 # SPEC-0011: The Log, The Results, The Resources And The Volumes Of An Operation
 
-- **Status:** Draft
+- **Status:** Approved
 - **Date:** 2026-09-30
 - **Milestone / tasks:** M3 / T2.3
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`; compared with v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`
@@ -228,4 +228,5 @@ storage. Record role, date and verdict.
 
 ## Evidence And Deviations
 
-Initially: no implementation, tests or runtime evidence.
+Approved on 2026-09-30, as drafted. No implementation, tests or runtime evidence
+yet.

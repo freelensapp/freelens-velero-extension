@@ -7,7 +7,7 @@
 - **Reviewed main:** `e5d9354ddf7607e0bad3ebc7744a4964c24b489a`, for the phase Failed of a DownloadRequest, which no release has
 - **Freelens validation target:** v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`
 - **Dependencies:** [local foundation](SPEC-0001-local-foundation.md), whose T0.6 is the service, the adapter, the transport and the tunnel this spec wires to the host; [the write gate](SPEC-0009-write-gate.md); [states and Backups](SPEC-0003-backup-read-only.md); [Restores](SPEC-0005-restore-read-only.md); [locations](SPEC-0007-locations-read-only.md)
-- **Approval:** Pending
+- **Approval:** Approved by the lead maintainer on 2026-09-30, as drafted
 
 Governed by [AGENTS.md](../../AGENTS.md).
 

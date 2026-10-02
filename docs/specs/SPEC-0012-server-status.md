@@ -152,4 +152,5 @@ that it is down. Record role, date and verdict.
 
 ## Evidence And Deviations
 
-Initially: no implementation, tests or runtime evidence.
+Approved on 2026-09-30, as drafted. No implementation, tests or runtime evidence
+yet.
