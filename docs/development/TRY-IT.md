@@ -79,6 +79,7 @@ of the host have.
 | Schedules, Storage | Ten of the twelve schedules, the ones a rule names first, with the newest completed backup of each; the two others are in the list, which the line under them leads to. `overview-schedule-05` is paused, and no item is of it |
 | Open an item, a mark, a line | The view of the object opens over the Overview, which is the way back. Escape returns to the page where it was, with the focus on what was opened |
 | Select `velero-demo` | Nothing in what was read needs attention, which is what the page says: it does not say that all is well |
+| Writes, in the target bar | Off. Turn them on: the dialog names the installation, the cluster and its context, and what the extension may create. After it, on for `velero-demo`, on every page of the group; select another namespace and they are off |
 | Other namespace, `velero-scale-<run>` | Two thousand operations: change the window, ask for more items, read again. The page stays where it was scrolled |
 
 The operations of `velero-overview-<run>` are counted back from the moment they

@@ -33,7 +33,7 @@ export function compiledDiagnostics(): typeof import("../../src/main/index.ts") 
   const previous = { sdk: globals.LensExtensions, state: globals.Mobx };
 
   globals.LensExtensions = {
-    Main: { LensExtension: class {} },
+    Main: { LensExtension: class {}, Ipc: class {} },
     Common: { Store: { ExtensionStore: class {} } },
     Renderer: {},
   };
@@ -263,12 +263,12 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
       const input: DiagnosticInput = {
         ...selection,
         requestId: randomUUID(),
-        confirmation: service.confirm(1, selection),
+        confirmation: service.confirm("proof", selection),
       };
-      const operation = service.run(1, input, controller.signal);
+      const operation = service.run("proof", input, controller.signal);
 
       requireCondition(
-        operation === service.run(1, input, controller.signal),
+        operation === service.run("proof", input, controller.signal),
         "Live request ID did not rejoin the operation",
       );
       const result = await operation;

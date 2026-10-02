@@ -88,9 +88,10 @@ describe("owned Kubernetes pod tunnel", () => {
     const previous = { sdk: globals.LensExtensions, state: globals.Mobx };
     const load = createRequire(import.meta.url);
 
-    // What the bundle asks of the host when it loads: its SDK and its state library.
+    // What the bundle asks of the host when it loads: its SDK, with the IPC of the main process, and its
+    // state library.
     globals.LensExtensions = {
-      Main: { LensExtension: class {} },
+      Main: { LensExtension: class {}, Ipc: class {} },
       Common: { Store: { ExtensionStore: class {} } },
       Renderer: {},
     };

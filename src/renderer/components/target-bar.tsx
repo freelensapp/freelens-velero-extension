@@ -2,6 +2,7 @@ import { Renderer } from "@freelensapp/extensions";
 import { observer } from "mobx-react";
 import React from "react";
 import { TITLES } from "../../common/discovery";
+import { CONNECTION_REASONS } from "../../common/ipc";
 import { isStale } from "../../common/read-state";
 import { ConfigureNamespace } from "./entry-state";
 import styles from "./views.module.css";
@@ -11,7 +12,7 @@ import type { ReadStatus } from "../../common/read-state";
 import type { Installation } from "../state/installation";
 
 const {
-  Component: { Button, Icon, Select },
+  Component: { Button, ConfirmDialog, Icon, Select },
 } = Renderer;
 
 interface Option {
@@ -25,9 +26,112 @@ const REASONS: Partial<Record<ReadStatus, string>> = {
   failed: "could not be read",
 };
 
+// The words of every reason a connection is refused for are the ones the main process says.
+export { CONNECTION_REASONS };
+
 export function readTime(time: number | undefined): string {
   return time === undefined ? "Not read yet" : `Read at ${new Date(time).toLocaleTimeString()}`;
 }
+
+// The words of the dialog that turns writes on: what they allow, for which installation of which cluster.
+export function writesDialogWords(
+  namespace: string,
+  cluster: string,
+  context: string,
+): { first: string; second: string } {
+  return {
+    first: `Turn writes on for the installation ${namespace} of the cluster ${cluster} (context ${context})?`,
+    second:
+      "Until they are turned off, or another installation is selected, the extension may create in that namespace the requests the views ask for on purpose: a DownloadRequest for the log, the results, the resources or the volumes of an operation, and a ServerStatusRequest for the version of the server. Each one is confirmed where it is asked for. Nothing else is written.",
+  };
+}
+
+// The gate of the writes, as the main process last said of it, and the commands that turn it: on, through
+// the confirmation dialog of the host, which names the cluster, its context and the namespace; off, at
+// once. The state is what the main process holds: the views show it and decide nothing.
+export const WritesControl = observer(({ installation }: { installation: Installation }) => {
+  const entry = installation.entry;
+  const namespace = entry.state === "ready" ? entry.namespace : undefined;
+  const gate = installation.gate;
+  const writes = installation.writes;
+  const unknown = installation.gateUnknown;
+
+  React.useEffect(() => {
+    void installation.openGate();
+  }, [installation]);
+  const turnOn = () => {
+    if (!gate || !namespace) return;
+    const confirmation = { context: gate.cluster.context, namespace };
+    const words = writesDialogWords(namespace, gate.cluster.name, gate.cluster.context);
+
+    ConfirmDialog.open({
+      message: (
+        <div data-testid="velero-writes-dialog">
+          <p>{words.first}</p>
+          <p>{words.second}</p>
+        </div>
+      ),
+      labelOk: "Turn writes on",
+      labelCancel: "Keep writes off",
+      ok: () => installation.enableWrites(confirmation),
+    });
+  };
+
+  return (
+    <div
+      className={styles.target}
+      data-testid="velero-writes"
+      data-writes={unknown ? "unknown" : writes.on ? "on" : "off"}
+    >
+      <span className={styles.targetLabel}>Writes</span>
+      <span className={styles.targetValue} data-testid="velero-writes-state">
+        {unknown
+          ? "Not known"
+          : writes.on
+            ? `On for ${writes.namespace} since ${new Date(writes.since).toLocaleTimeString()}`
+            : "Off"}
+      </span>
+      {/* The answer of the main process is not known: they may be on. Asking again says what they are, and
+          turning them off is safe whatever they are. */}
+      {unknown ? (
+        <>
+          <Button plain data-testid="velero-writes-ask" onClick={() => void installation.openGate()}>
+            <Icon material="refresh" small />
+            Ask again
+          </Button>
+          <Button plain data-testid="velero-writes-off" onClick={() => void installation.disableWrites()}>
+            <Icon material="lock" small />
+            Turn writes off
+          </Button>
+        </>
+      ) : namespace && gate ? (
+        writes.on ? (
+          <Button plain data-testid="velero-writes-off" onClick={() => void installation.disableWrites()}>
+            <Icon material="lock" small />
+            Turn writes off
+          </Button>
+        ) : (
+          <Button plain data-testid="velero-writes-on" onClick={turnOn}>
+            <Icon material="lock_open" small />
+            Turn writes on
+          </Button>
+        )
+      ) : null}
+      {installation.gateFailure ? (
+        <span className={styles.muted} data-testid="velero-writes-failure">
+          {installation.gateFailure}
+        </span>
+      ) : null}
+      {/* What the main process holds of a connection it does not use, when the reason is not already said
+          by the answer that was refused. */}
+      {!unknown && !installation.gateFailure && gate?.connection && !gate.connection.supported ? (
+        <span className={styles.muted} data-testid="velero-writes-connection">
+          {CONNECTION_REASONS[gate.connection.reason]}
+        </span>
+      ) : null}
+    </div>
+  );
+});
 
 // What says, on every view, which installation is shown: the cluster of the host and the namespace of
 // Velero. It is never the namespaces a backup includes, which are data of the backup.
@@ -86,6 +190,7 @@ export const TargetBar = observer(({ installation }: { installation: Installatio
             </Button>
           ) : null}
         </div>
+        <WritesControl installation={installation} />
         <div className={styles.spacer} />
         <span
           className={styles.readTime}

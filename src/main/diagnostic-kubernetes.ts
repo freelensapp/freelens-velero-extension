@@ -1,8 +1,14 @@
-import { createHash, X509Certificate } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { X509Certificate } from "node:crypto";
 import { type RequestOptions, request } from "node:https";
 import { isAbsolute } from "node:path";
 import { KubeConfig } from "@kubernetes/client-node/dist/config.js";
+import {
+  type ContextEntry,
+  type Credential,
+  CredentialPluginError,
+  readContext,
+  runCredentialPlugin,
+} from "./context-identity.ts";
 import { DiagnosticError } from "./diagnostic-transport.ts";
 
 export const ARTIFACT_TARGETS = [
@@ -48,11 +54,24 @@ function name(value: string, maximum = 253): string {
   return value;
 }
 
+// The adapter binds to one context of one kubeconfig, by the entry of the context: the address of the
+// server, its certificate authority and the credential of the user. It takes a client certificate, a token
+// or a plugin that gives a credential, which it runs within a bound and reads for the credential alone;
+// it refuses an authentication provider, a proxy, a user name with a password and a verification of TLS
+// turned off. The entry is read again before every request: a change of it is a change of the target, a
+// change of another context of the same file is not.
 export class DiagnosticKubernetes {
   readonly binding: Readonly<KubernetesBinding>;
   readonly configuration: KubeConfig;
+  private readonly entry: ContextEntry;
   private readonly fingerprint: string;
   private readonly endpoint: URL;
+  // The credential the plugin gave, kept until it expires or the cluster answers 401, and never beyond the
+  // adapter.
+  private credential?: Credential;
+  // The run of the plugin the requests wait for together, with how many still wait: when the last of them
+  // is cancelled, the run is too, and the plugin is killed.
+  private pending?: { promise: Promise<Credential>; controller: AbortController; waiting: number };
 
   constructor(
     binding: KubernetesBinding,
@@ -63,27 +82,13 @@ export class DiagnosticKubernetes {
     try {
       if (!binding.clusterId || !binding.context || !isAbsolute(binding.kubeconfigPath) || !isCurrent())
         throw new DiagnosticError("validation");
-      this.fingerprint = this.hash();
-      this.configuration = new KubeConfig();
-      this.configuration.loadFromFile(binding.kubeconfigPath);
-      if (this.configuration.getContexts().filter((context) => context.name === binding.context).length !== 1)
-        throw new DiagnosticError("validation");
-      this.configuration.setCurrentContext(binding.context);
-      const cluster = this.configuration.getCurrentCluster();
-      const user = this.configuration.getCurrentUser();
+      const read = readContext(binding.kubeconfigPath, binding.context);
 
-      if (
-        !cluster ||
-        !user ||
-        cluster.skipTLSVerify ||
-        cluster.proxyUrl ||
-        user.exec ||
-        user.authProvider ||
-        user.username ||
-        (!user.token && !user.certData && !user.certFile)
-      )
-        throw new DiagnosticError("validation");
-      this.endpoint = new URL(cluster.server);
+      if ("missing" in read || !read.connection.supported) throw new DiagnosticError("validation");
+      this.entry = read.entry;
+      this.fingerprint = read.digest;
+      this.configuration = read.configuration;
+      this.endpoint = new URL(read.entry.cluster.server);
       if (
         this.endpoint.protocol !== "https:" ||
         this.endpoint.username ||
@@ -97,21 +102,113 @@ export class DiagnosticKubernetes {
     }
   }
 
-  private hash(): string {
-    return createHash("sha256").update(readFileSync(this.binding.kubeconfigPath)).digest("hex");
-  }
-
+  // Whether the entry of the context is what it was when the adapter was made.
   assertCurrent(): void {
     try {
-      if (
-        !this.isCurrent() ||
-        this.hash() !== this.fingerprint ||
-        this.configuration.getCurrentContext() !== this.binding.context
-      )
+      const read = readContext(this.binding.kubeconfigPath, this.binding.context);
+
+      if (!this.isCurrent() || "missing" in read || read.digest !== this.fingerprint)
         throw new DiagnosticError("target-changed");
     } catch {
       throw new DiagnosticError("target-changed");
     }
+  }
+
+  // The credential of the plugin: the one kept while it is good, or the one of a run, shared by the
+  // requests that ask for it at the same time. A cancelled request stops waiting at once.
+  private credentialOfPlugin(signal: AbortSignal): Promise<Credential> {
+    const kept = this.credential;
+
+    if (kept && (kept.expires === undefined || kept.expires > Date.now())) return Promise.resolve(kept);
+    if (!this.pending) {
+      const controller = new AbortController();
+      const run: NonNullable<DiagnosticKubernetes["pending"]> = {
+        controller,
+        waiting: 0,
+        promise: runCredentialPlugin(this.entry, { signal: controller.signal })
+          .then((credential) => {
+            if (this.pending === run) this.credential = credential;
+            return credential;
+          })
+          .finally(() => {
+            if (this.pending === run) this.pending = undefined;
+          }),
+      };
+
+      this.pending = run;
+    }
+    const run = this.pending;
+
+    run.waiting += 1;
+    return new Promise((resolve, reject) => {
+      let left = false;
+      const leave = () => {
+        if (left) return false;
+        left = true;
+        run.waiting -= 1;
+        signal.removeEventListener("abort", abort);
+        return true;
+      };
+      const abort = () => {
+        if (!leave()) return;
+        if (run.waiting === 0) {
+          if (this.pending === run) this.pending = undefined;
+          run.controller.abort();
+        }
+        reject(new DiagnosticError("cancelled"));
+      };
+
+      signal.addEventListener("abort", abort, { once: true });
+      run.promise.then(
+        (credential) => {
+          if (leave()) resolve(credential);
+        },
+        (error: unknown) => {
+          if (leave()) reject(error);
+        },
+      );
+      if (signal.aborted) abort();
+    });
+  }
+
+  // The options of a request, with the credential of the user: the one of the entry, or the one its
+  // plugin gives, which is asked of the plugin when there is none or the one there is expired. What it
+  // returns is the credential of the plugin it used, if any.
+  private async authenticate(options: RequestOptions, signal: AbortSignal): Promise<Credential | undefined> {
+    if (!this.entry.user.exec) {
+      await this.configuration.applyToHTTPSOptions(options);
+      return undefined;
+    }
+    const credential = await this.credentialOfPlugin(signal);
+    // The configuration is copied with the credential in place of the plugin: the client of Kubernetes
+    // would otherwise run the plugin itself, without a bound.
+    const copy = new KubeConfig();
+    const cluster = this.configuration.getCluster(this.entry.cluster.name);
+
+    if (!cluster) throw new DiagnosticError("target-changed");
+    copy.loadFromOptions({
+      clusters: [cluster],
+      users: [
+        {
+          name: this.entry.user.name,
+          // Who the context impersonates goes with the credential: the client sends it as a header.
+          ...(this.entry.user.impersonate?.user ? { impersonateUser: this.entry.user.impersonate.user } : {}),
+          ...(credential.token ? { token: credential.token } : {}),
+          // A plugin gives the certificate and its key as PEM; the kubeconfig, and so the copy, holds them in
+          // base64, which the client decodes.
+          ...(credential.certData && credential.keyData
+            ? {
+                certData: Buffer.from(credential.certData, "utf8").toString("base64"),
+                keyData: Buffer.from(credential.keyData, "utf8").toString("base64"),
+              }
+            : {}),
+        },
+      ],
+      contexts: [{ name: this.binding.context, cluster: cluster.name, user: this.entry.user.name }],
+      currentContext: this.binding.context,
+    });
+    await copy.applyToHTTPSOptions(options);
+    return credential;
   }
 
   private path(kind: DiagnosticKind, namespace: string, objectName?: string): string {
@@ -129,10 +226,14 @@ export class DiagnosticKubernetes {
     this.assertCurrent();
     if (signal.aborted) throw new DiagnosticError("cancelled");
     const authentication: RequestOptions = {};
+    let used: Credential | undefined;
 
     try {
-      await this.configuration.applyToHTTPSOptions(authentication);
-    } catch {
+      used = await this.authenticate(authentication, signal);
+    } catch (error) {
+      // A cancellation, and a plugin that gave no credential, are said as such: neither is a refusal.
+      if (error instanceof CredentialPluginError || (error instanceof DiagnosticError && error.code === "cancelled"))
+        throw error;
       throw new DiagnosticError("forbidden");
     }
     this.assertCurrent();
@@ -189,6 +290,9 @@ export class DiagnosticKubernetes {
         const code = response.statusCode ?? 0;
 
         if (code < 200 || code >= 300) {
+          // The cluster does not take the credential of the plugin: the next request asks the plugin again,
+          // as kubectl does, whether the credential said an expiration or not.
+          if (code === 401 && used && this.credential === used) this.credential = undefined;
           finish(
             new DiagnosticError(
               code === 403 || code === 401

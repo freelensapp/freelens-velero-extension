@@ -1,5 +1,6 @@
 import { Renderer } from "@freelensapp/extensions";
 import { PreferencesStore } from "../common/preferences-store";
+import { VeleroIpcRenderer } from "./api/ipc";
 import { Backup, BackupStorageLocation, Restore, Schedule, VolumeSnapshotLocation } from "./api/kinds";
 import { VeleroIcon } from "./components/velero-icon";
 import { BackupDetails } from "./details/backup-details";
@@ -143,8 +144,10 @@ export default class VeleroRenderer extends Renderer.LensExtension {
     },
   ];
 
-  // What the activation does is to open the store of the preferences. Nothing is asked of a cluster.
+  // What the activation does is to open the store of the preferences and the way to the main process.
+  // Nothing is asked of a cluster, or of the main process, until a view asks.
   protected onActivate(): void {
     PreferencesStore.getInstanceOrCreate<PreferencesStore>().loadExtension(this);
+    VeleroIpcRenderer.createInstance(this);
   }
 }

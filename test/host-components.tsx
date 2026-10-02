@@ -152,8 +152,26 @@ function KubeObjectAge({ object }: Passed) {
   return <span>{(object as { metadata?: { creationTimestamp?: string } }).metadata?.creationTimestamp ?? ""}</span>;
 }
 
+// The confirmation dialog of the host: what an extension opens it with is recorded, and a test answers
+// it by calling what it was given. Nothing is drawn.
+export interface ConfirmDialogParams {
+  message: ReactNode;
+  labelOk?: ReactNode;
+  labelCancel?: ReactNode;
+  ok?: () => unknown;
+  cancel?: () => unknown;
+}
+export const confirmDialogs: ConfirmDialogParams[] = [];
+
+const ConfirmDialog = Object.assign((_props: Passed) => null, {
+  open: (params: ConfirmDialogParams) => {
+    confirmDialogs.push(params);
+  },
+});
+
 export const hostComponents: Record<string, (props: Passed) => ReactNode> = {
   Button,
+  ConfirmDialog,
   DrawerItem,
   Icon,
   Input,

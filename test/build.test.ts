@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { ACTIVATION_CALLS } from "../src/entrypoints.test";
 import { Common, forbiddenAccesses, type HostExtensionStub, hostCalls, Main, Renderer } from "./freelens-extensions";
 
 interface Manifest {
@@ -55,7 +56,7 @@ it("limits package contents to the compiled process entry points", () => {
 describe.each([
   ["main", manifest.main, Main.LensExtension],
   ["renderer", manifest.renderer, Renderer.LensExtension],
-] as const)("%s bundle", (_name, entry, HostExtension) => {
+] as const)("%s bundle", (name, entry, HostExtension) => {
   it("loads as CommonJS using only the host's extension runtime", () => {
     const compiled = load(resolve(entry)) as { default: new () => HostExtensionStub };
     const extension = new compiled.default();
@@ -64,7 +65,8 @@ describe.each([
     extension.activate();
     extension.disable();
     expect(forbiddenAccesses).toEqual([]);
-    expect(hostCalls).toEqual(["ExtensionStore.loadExtension"]);
+    // The same as the source entry points: the store, the way between the processes, the procedures.
+    expect(hostCalls).toEqual(ACTIVATION_CALLS[name]);
   });
 
   it("contains no host SDK implementation or test fixtures", () => {
@@ -114,7 +116,7 @@ it("main bundle leaves the dispatcher of the host process alone", () => {
   const probe = `
     globalThis.LensExtensions = {
       Common: { Store: { ExtensionStore: class {} } },
-      Main: { LensExtension: class {} },
+      Main: { LensExtension: class {}, Ipc: class {} },
     };
     globalThis.Mobx = require("mobx");
     const slots = ["undici.globalDispatcher.1", "undici.globalDispatcher.2"].map((key) => Symbol.for(key));

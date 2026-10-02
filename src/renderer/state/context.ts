@@ -1,6 +1,7 @@
 import { Renderer } from "@freelensapp/extensions";
 import { heldPreferences } from "../../common/discovery";
 import { PreferencesStore } from "../../common/preferences-store";
+import { VeleroIpcRenderer } from "../api/ipc";
 import { readCluster } from "../api/reader";
 import { Installation } from "./installation";
 
@@ -20,13 +21,20 @@ function storage(): PreferenceStorage {
 export function currentInstallation(): Installation {
   if (!installation) {
     const cluster = Renderer.Catalog.activeCluster.get();
-
-    installation = new Installation({
+    const gate = VeleroIpcRenderer.getInstance(false);
+    const created = new Installation({
       cluster: { id: cluster?.getId() ?? window.location.hostname, name: cluster?.getName() ?? "Unknown cluster" },
       read: readCluster,
       now: () => Date.now(),
       storage: storage(),
+      gate,
     });
+
+    // When the main process turns writes off on its own, the frame of that cluster asks the state again.
+    gate?.onChanged((changed) => {
+      if (changed === created.cluster.id) void created.openGate();
+    });
+    installation = created;
   }
   return installation;
 }
