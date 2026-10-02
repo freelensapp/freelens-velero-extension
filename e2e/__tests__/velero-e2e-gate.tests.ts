@@ -48,9 +48,11 @@ describe("the gate of the writes", () => {
     }
     before = cluster.clusterSnapshot();
     counted = cluster.apiRequests();
-    started = await velero.startWithExtension();
+    // The kubeconfig is in the profile before the install is asked, for each start of the application.
+    started = await velero.startWithExtension(async () => {
+      kubeconfig = await cluster.publishKubeconfig();
+    });
     profile = started.directory;
-    kubeconfig = await cluster.publishKubeconfig();
     await velero.dismissNotifications(started.window);
     await velero.navigateToCatalog(started.app);
     expect(await velero.catalogClusterCount(started.window)).toBe(1);
