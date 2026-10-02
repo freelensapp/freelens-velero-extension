@@ -6,7 +6,7 @@ export const IMAGES = {
   velero: "docker.io/velero/velero:v1.18.2@sha256:37396519f399536e5f01427d723565ae69294ec3fb5625cf1c87c09eaa9de16b",
   plugin:
     "docker.io/velero/velero-plugin-for-aws:v1.14.2@sha256:0751144c1c8e52d52c48717fbd13ad5a3061e612ae4d7ad744a946cd5b139d1a",
-  storage: "docker.io/chrislusf/seaweedfs:4.47@sha256:ce9e796f1fe6f06968f4c04bdaf8f678dad9c8acdfef3d244133d71bfa6bf882",
+  storage: "docker.io/chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d",
 } as const;
 // The runtime of the helpers that run beside the cluster: the direct transport proof and the egress check.
 export const DIRECT_PROOF_IMAGE =
