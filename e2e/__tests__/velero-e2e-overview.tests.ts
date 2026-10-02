@@ -167,9 +167,13 @@ describe("overview of an installation", () => {
     }
     before = cluster.clusterSnapshot();
     errors.start();
-    started = await velero.startWithExtension();
+    let kubeconfig = "";
+
+    // The kubeconfig is in the profile before the install is asked, for each start of the application.
+    started = await velero.startWithExtension(async () => {
+      kubeconfig = await cluster.publishKubeconfig();
+    });
     errors.watch(started.window);
-    const kubeconfig = await cluster.publishKubeconfig();
     await velero.dismissNotifications(started.window);
     await velero.navigateToCatalog(started.app);
     expect(await velero.catalogClusterCount(started.window)).toBe(1);
