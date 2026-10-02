@@ -9,7 +9,6 @@
 // does not fit, and is left as a screenshot of the frame of the test cluster.
 
 import { expect } from "@jest/globals";
-import * as utils from "../helpers/utils";
 import * as cluster from "../helpers/velero-cluster";
 import * as velero from "../helpers/velero-extension";
 
@@ -82,11 +81,8 @@ describe("pre-review of the views", () => {
       throw new Error(`The fixtures are missing from ${cluster.E2E_CLUSTER_NAME}. Run \`pnpm demo:up\` first.`);
     }
     before = cluster.clusterSnapshot();
-    started = await velero.startIsolated();
+    started = await velero.startWithExtension();
     const kubeconfig = await cluster.publishKubeconfig();
-
-    await utils.clickWelcomeButton(started.window);
-    await velero.installExtension(started.app, started.window);
     await velero.dismissNotifications(started.window);
     await velero.navigateToCatalog(started.app);
     expect(await velero.catalogClusterCount(started.window)).toBe(1);

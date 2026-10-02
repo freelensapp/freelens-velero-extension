@@ -276,6 +276,11 @@ Build output goes to `out/`.
 - What passes on a machine of a developer may not end on the hosted runner. Give
   every step of a suite its own time, shorter than the one of its case, so that
   the step that does not end is the one that is reported.
+- The host gives its loader ten seconds to see an extension it unpacked, and on a
+  busy machine it gives up, for that application: the extension never appears, or
+  appears and stays disabled. The suites start the application
+  through `startWithExtension`, which starts it again in a new profile, once; the
+  file `e2e-artifacts/stall-the-host-once` makes the host give up on purpose.
 - Do not hide a list of the host with `display: none`: it loses its scroll. The
   list behind a workspace is hidden with `visibility`.
 - A view opened from another one is shown over the same list, on the same page:
