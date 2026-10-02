@@ -589,12 +589,21 @@ async function stallIfAsked(app: ElectronApplication): Promise<void> {
  * Starts the application in a new profile, leaves the welcome and installs the extension. When the
  * host gives up on the install the application is closed, its profile removed, and another one is
  * started in a new profile, once: the host does not recover inside the same application.
+ *
+ * What a suite puts in the profile, its kubeconfig, is put there by `beforeInstall`, for each start and
+ * before the welcome is left: the suites did so before they started through here, and the installs that
+ * were asked of a profile without it were given up on by the host far more often on the runners.
  */
-export async function startWithExtension(theme: ColorTheme = "Dark", attempts = 2): Promise<StartedApplication> {
+export async function startWithExtension(
+  beforeInstall?: (started: StartedApplication) => Promise<void>,
+  theme: ColorTheme = "Dark",
+  attempts = 2,
+): Promise<StartedApplication> {
   for (let attempt = 1; ; attempt++) {
     const started = await startIsolated(undefined, theme);
 
     try {
+      await beforeInstall?.(started);
       await utils.clickWelcomeButton(started.window);
       await installExtension(started.app, started.window);
       return started;

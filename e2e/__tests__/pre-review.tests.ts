@@ -81,8 +81,12 @@ describe("pre-review of the views", () => {
       throw new Error(`The fixtures are missing from ${cluster.E2E_CLUSTER_NAME}. Run \`pnpm demo:up\` first.`);
     }
     before = cluster.clusterSnapshot();
-    started = await velero.startWithExtension();
-    const kubeconfig = await cluster.publishKubeconfig();
+    let kubeconfig = "";
+
+    // The kubeconfig is in the profile before the install is asked, for each start of the application.
+    started = await velero.startWithExtension(async () => {
+      kubeconfig = await cluster.publishKubeconfig();
+    });
     await velero.dismissNotifications(started.window);
     await velero.navigateToCatalog(started.app);
     expect(await velero.catalogClusterCount(started.window)).toBe(1);
