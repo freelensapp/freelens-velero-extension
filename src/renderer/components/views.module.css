@@ -983,6 +983,17 @@
   margin: 8px 0;
 }
 
+/* What the band of the server gives the focus to when a command went: the words that say what it is
+   doing, and the version the server answered. */
+.serverFocus:focus {
+  outline: none;
+}
+
+.serverFocus:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 /* The plugins of a kind, and beside the object store plugins the providers of the storage locations. */
 .serverNames,
 .serverProviders {
@@ -990,6 +1001,14 @@
   padding: 0;
   list-style: none;
   overflow-wrap: anywhere;
+}
+
+/* The names of a kind one after the other, for as many lines as they need: a kind of thirty plugins
+   is not thirty lines of the page. */
+.serverNames {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 20px;
 }
 
 .serverProviders {

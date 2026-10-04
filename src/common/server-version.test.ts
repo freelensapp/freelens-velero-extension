@@ -38,6 +38,9 @@ describe("the version of the server against the reviewed release", () => {
       "This server runs v1.18.4, of the series v1.18 the extension was reviewed against, in v1.18.2.",
     );
     expect(compareVersion("v1.18.0", "v1.18.2").relation).toBe("series");
+    // The series is the major and the minor: the same minor of another major is another series.
+    expect(compareVersion("v2.18.2", "v1.18.2")).toMatchObject({ relation: "other", newer: true });
+    expect(compareVersion("v0.18.2", "v1.18.2")).toMatchObject({ relation: "other", newer: false });
   });
 
   it("says of a prerelease or a build with a suffix of the reviewed series that it is that series, as written", () => {
@@ -110,6 +113,7 @@ describe("the plugins by kind", () => {
     ]);
 
     expect(found.total).toBe(10);
+    expect(found.repeated).toBe(0);
     expect(found.groups.map((group) => [group.kind, group.names, group.count, group.known])).toEqual([
       ["ObjectStore", ["example.io/blob", "velero.io/aws"], 2, true],
       ["VolumeSnapshotter", ["velero.io/aws"], 1, true],
@@ -144,7 +148,33 @@ describe("the plugins by kind", () => {
       ["Unheard", 2, false],
     ]);
     expect(found.groups.at(-1)?.names).toEqual(["velero.io/a", "velero.io/b"]);
-    expect(pluginGroups([]).total).toBe(0);
+    expect(pluginGroups([])).toMatchObject({ total: 0, repeated: 0 });
+  });
+
+  it("counts once a plugin the object lists more than once, and says how many entries repeat one", () => {
+    // As the reviewed release lists them: an action of an older kind a second time, with its own kind.
+    const found = pluginGroups([
+      { name: "velero.io/pod", kind: "BackupItemAction" },
+      { name: "velero.io/pv", kind: "BackupItemAction" },
+      { name: "velero.io/csi-pvc-backupper", kind: "BackupItemActionV2" },
+      { name: "velero.io/pv", kind: "BackupItemAction" },
+      { name: "velero.io/pod", kind: "BackupItemAction" },
+      { name: "velero.io/pod", kind: "BackupItemAction" },
+      // The same name in another kind is another plugin.
+      { name: "velero.io/pod", kind: "RestoreItemAction" },
+      { name: "velero.io/pod", kind: "ItemBlockAction" },
+    ]);
+
+    expect(found.total).toBe(5);
+    expect(found.repeated).toBe(3);
+    expect(
+      found.groups.filter((group) => group.count > 0).map((group) => [group.kind, group.names, group.count]),
+    ).toEqual([
+      ["BackupItemAction", ["velero.io/pod", "velero.io/pv"], 2],
+      ["BackupItemActionV2", ["velero.io/csi-pvc-backupper"], 1],
+      ["RestoreItemAction", ["velero.io/pod"], 1],
+      ["ItemBlockAction", ["velero.io/pod"], 1],
+    ]);
   });
 });
 

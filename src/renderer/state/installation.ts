@@ -219,7 +219,7 @@ export class Installation {
         this.gate = undefined;
         this.gateFailure = answer.text;
       }
-      if (!this.writes.on) this.server.off();
+      if (!this.writes.on) this.server.leave();
     });
   }
 

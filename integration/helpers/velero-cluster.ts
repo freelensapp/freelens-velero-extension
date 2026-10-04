@@ -2000,3 +2000,132 @@ export async function valuesOfTheWhole(frame: Frame): Promise<string[]> {
     return found;
   });
 }
+
+/** What a part of a page says in words, as it is read: the names of its marks are not words of it. */
+export async function wordsOf(frame: Frame, selector: string): Promise<string> {
+  return frame
+    .locator(selector)
+    .first()
+    .evaluate((element) => {
+      const icons = [...element.querySelectorAll<HTMLElement>(".Icon")];
+      const shown = icons.map((icon) => icon.style.display);
+
+      for (const icon of icons) icon.style.display = "none";
+      const said = (element as HTMLElement).innerText.replace(/\s+/g, " ").trim();
+
+      icons.forEach((icon, index) => {
+        icon.style.display = shown[index];
+      });
+      return said;
+    });
+}
+
+/** The label the extension gives to every request it creates. */
+const REQUEST_LABEL = "app.kubernetes.io/managed-by=freelens-velero-extension";
+
+/** A ServerStatusRequest, as the API server holds it. */
+export interface ServerStatusRequestObject {
+  metadata: { name: string; namespace: string; uid: string; generateName?: string; labels?: Record<string, string> };
+  spec?: Record<string, unknown>;
+  status?: {
+    phase?: string;
+    serverVersion?: string;
+    processedTimestamp?: string;
+    plugins?: { name: string; kind: string }[];
+  };
+}
+
+/** The ServerStatusRequests of a namespace that carry the label of the extension, as the API server holds them. */
+export function serverStatusRequests(namespace: string): ServerStatusRequestObject[] {
+  const { status, stdout, stderr } = kubectlE2E(
+    "get",
+    "serverstatusrequests.velero.io",
+    "--namespace",
+    namespace,
+    "--selector",
+    REQUEST_LABEL,
+    "-o",
+    "json",
+  );
+
+  if (status !== 0) throw new Error(`kubectl get serverstatusrequests failed: ${stderr}`);
+  return (JSON.parse(stdout) as { items: ServerStatusRequestObject[] }).items;
+}
+
+/**
+ * How many requests the API server counted for one kind of Velero, by verb and
+ * by the code it answered with: `POST 201`, `POST 403`. The server counts what
+ * reaches it, whoever asks, and a request it refused is counted with its code.
+ * The watches and the lists are left out: the server of an installation
+ * watches its requests, and lists them again when a watch ends.
+ */
+export function requestCodes(resource: string): Record<string, number> {
+  const { status, stdout, stderr } = kubectlE2E("get", "--raw", "/metrics");
+
+  if (status !== 0) throw new Error(`The counters of the API server could not be read: ${stderr}`);
+  const counts: Record<string, number> = {};
+
+  for (const line of stdout.split("\n")) {
+    if (!line.startsWith("apiserver_request_total{") || !line.includes('group="velero.io"')) continue;
+    const label = (name: string) => new RegExp(`[{,]${name}="([^"]*)"`).exec(line)?.[1] ?? "";
+
+    if (label("resource") !== resource || ["WATCH", "LIST"].includes(label("verb"))) continue;
+    const key = `${label("verb")} ${label("code")}`;
+
+    counts[key] = (counts[key] ?? 0) + Number(line.slice(line.lastIndexOf(" ") + 1));
+  }
+
+  return counts;
+}
+
+/**
+ * Removes what the suite of the writes left in a namespace no server looks at:
+ * the ServerStatusRequests that carry the label of the extension, and nothing
+ * else, and answers how many they were. It is the one write of the suites, of
+ * what one of them asked the extension to create, in the disposable cluster of
+ * the test environment. The namespace of the installation is refused: there
+ * the server removes its requests itself.
+ */
+export function removeRequestsOfTheExtension(namespace: string): number {
+  const synthetic = [
+    E2E_STATIC_NAMESPACE,
+    E2E_VIEWS_NAMESPACE,
+    E2E_DEFAULTS_NAMESPACE,
+    E2E_OVERVIEW_NAMESPACE,
+    E2E_SCALE_NAMESPACE,
+  ];
+
+  if (namespace === "" || !synthetic.includes(namespace)) {
+    throw new Error(`The suites remove the requests of a namespace of the fixtures, and "${namespace}" is not one`);
+  }
+  const found = serverStatusRequests(namespace).length;
+
+  if (found === 0) return 0;
+  const { status, stderr } = spawnSync(
+    required("E2E_KUBECTL"),
+    [
+      "--kubeconfig",
+      kubeconfigPath(),
+      "--context",
+      E2E_KUBE_CONTEXT,
+      "delete",
+      "serverstatusrequests.velero.io",
+      "--namespace",
+      namespace,
+      "--selector",
+      REQUEST_LABEL,
+      "--wait=false",
+    ],
+    { encoding: "utf8", timeout: KUBECTL_TIMEOUT },
+  );
+
+  if (status !== 0) throw new Error(`The requests of the extension could not be removed: ${(stderr ?? "").trim()}`);
+  // Removed without waiting for each one: the namespace is read until nothing is left.
+  for (let tries = 0; tries < 60 && serverStatusRequests(namespace).length > 0; tries += 1) {
+    // Half a second, on every platform, without leaving the step that asked.
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
+  }
+  if (serverStatusRequests(namespace).length > 0) throw new Error(`Requests of the extension are left in ${namespace}`);
+
+  return found;
+}

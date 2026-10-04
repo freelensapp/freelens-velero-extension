@@ -4,7 +4,7 @@
 // extension deletes no request.
 
 import { setTimeout as delay } from "node:timers/promises";
-import { type Failure, failure, REQUEST_PREFIX, type ServerStatusValue } from "../common/ipc";
+import { type Failure, failure, REQUEST_PREFIX, REQUEST_STAGES, type ServerStatusValue } from "../common/ipc";
 import { CredentialPluginError, PLUGIN_TIMEOUT } from "./context-identity.ts";
 import { DiagnosticError } from "./diagnostic-transport.ts";
 
@@ -49,13 +49,14 @@ export interface ServerStatusOptions {
 // The words of each way it can end, safe to show.
 export function serverStatusFailure(error: unknown, requestName?: string): Failure {
   // The plugin of the context gave no credential: the cluster was not asked, so it refused nothing. Asking
-  // again is safe; it runs the plugin again.
+  // again is safe; it runs the plugin again. When the request was created before, it is the wait that
+  // ended, and the request is there.
   if (error instanceof CredentialPluginError) {
     const plugin = `The credential plugin ${error.command} of the context`;
 
     return failure(
       "request-failed",
-      "credential",
+      requestName ? REQUEST_STAGES.wait : REQUEST_STAGES.credential,
       true,
       error.reason === "deadline"
         ? `${plugin} did not give a credential in ${PLUGIN_TIMEOUT / 1000} seconds. Run it in a terminal to see what it waits for, then ask again.`
@@ -67,12 +68,12 @@ export function serverStatusFailure(error: unknown, requestName?: string): Failu
   if (error instanceof IncompleteServerStatusError)
     return failure(
       "request-failed",
-      "wait",
+      REQUEST_STAGES.wait,
       false,
       `The server processed the request but did not say its version, or when it processed it. The request stays: it is a ServerStatusRequest whose name begins with ${REQUEST_PREFIX}.`,
     );
   const code = error instanceof DiagnosticError ? error.code : "request-failed";
-  const stage = requestName ? "wait" : "creation";
+  const stage = requestName ? REQUEST_STAGES.wait : REQUEST_STAGES.creation;
 
   switch (code) {
     case "forbidden":
@@ -89,7 +90,9 @@ export function serverStatusFailure(error: unknown, requestName?: string): Failu
         "cancelled",
         stage,
         true,
-        "The wait was cancelled. The request stays until the server processes it.",
+        requestName
+          ? "The wait was cancelled. The request stays until the server processes it."
+          : "The request was cancelled before the cluster answered its creation: it may have been created.",
       );
     case "deadline":
       return failure(
@@ -101,7 +104,7 @@ export function serverStatusFailure(error: unknown, requestName?: string): Failu
     case "submission-unknown":
       return failure(
         "submission-unknown",
-        "creation",
+        REQUEST_STAGES.creation,
         false,
         `The creation of the request may have happened: the answer of the cluster was lost. Look for a ServerStatusRequest whose name begins with ${REQUEST_PREFIX} before asking again.`,
       );

@@ -25,7 +25,7 @@ export interface SubmittedObject {
 // and the second gesture, which is the one the token of the main process stands for. Nothing is created
 // before it. It can be given the focus, which is how the keyboard and who does not see get to it when it
 // takes the place of the command that asked for it; the focus is not on the command that creates, so that
-// the key that asked is not the one that confirms.
+// the key that asked is not the one that confirms. Escape leaves it, as the command that leaves it does.
 export function WriteConfirmation({
   id,
   object,
@@ -63,6 +63,12 @@ export function WriteConfirmation({
       data-testid={id}
       aria-label={`The ${object.kind} that will be created`}
       tabIndex={-1}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        // The key is of the confirmation: what holds it does not take it for its own way back.
+        event.stopPropagation();
+        onBack();
+      }}
     >
       <p className={styles.stateText}>This {object.kind} will be created when you confirm, and not before:</p>
       <dl className={styles.writeObject}>

@@ -1286,9 +1286,8 @@ describe("the page and the views it leads to", () => {
           !control.startsWith("velero-overview-read-") &&
           !control.startsWith("velero-overview-window-"),
       ),
-      // The way to the writes in the target bar, which the band of the server offers while writes are off,
-      // and what shows more of a list that is there.
-    ).toEqual(["velero-overview-server-to-target", "velero-overview-recent-more"]);
+      // What shows more of a list that is there.
+    ).toEqual(["velero-overview-recent-more"]);
     expect(overview.textContent).not.toMatch(/\b(delete|edit|remove|retry|run now|restore now|back up now)\b/i);
     noValueOfTheWhole();
   });

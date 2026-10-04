@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { Installation } from "./installation";
+import { requestLeft, ServerStatus } from "./server-status";
 
 import type { Answer, Family } from "../../common/discovery";
 import type { Failure, GateState, Answer as IpcAnswer, ServerStatusValue, WriteConfirmAnswer } from "../../common/ipc";
@@ -56,6 +57,14 @@ const GATE_OFF: Failure = {
   stage: "gate",
   retry: false,
   text: "Writes are off for this installation: turn them on in the target bar.",
+};
+
+const LOST: Failure = {
+  ok: false,
+  code: "request-failed",
+  stage: "way",
+  retry: true,
+  text: "The main process did not answer.",
 };
 
 const CANCELLED: Failure = {
@@ -191,7 +200,7 @@ describe("the version of the server, as the views hold it", () => {
     await server.ask();
     expect(main.asked).toEqual(["confirm cluster-a velero-a ServerStatusRequest no-target"]);
     expect(server.step).toMatchObject({ state: "confirming", token: "00000000-0000-4000-8000-000000000001" });
-    server.back();
+    server.leave();
     expect(server.step).toEqual({ state: "idle" });
     await server.run();
     expect(main.asked).toHaveLength(1);
@@ -343,6 +352,24 @@ describe("the version of the server, as the views hold it", () => {
     expect(server.last).toEqual(VALUE);
   });
 
+  it("leaves a confirmation that is still asked when the page that asked for it goes", async () => {
+    const { server, main } = await setUp();
+
+    main.holdConfirmations();
+    const asking = server.ask();
+
+    expect(server.step).toEqual({ state: "asking" });
+    // What the page does when it goes.
+    server.leave();
+    expect(server.step).toEqual({ state: "idle" });
+    await main.confirm();
+    await asking;
+    // It answered on no page: nothing is shown of it when the page is opened again.
+    expect(server.step).toEqual({ state: "idle" });
+    await server.run();
+    expect(main.runs()).toEqual([]);
+  });
+
   it("does not take the answer of a confirmation of the installation that was left", async () => {
     const { installation, server, main } = await setUp();
 
@@ -363,14 +390,14 @@ describe("the version of the server, as the views hold it", () => {
 
     await main.answer(FORBIDDEN);
     await running;
-    expect(server.step).toEqual({ state: "failed", failure: FORBIDDEN });
+    expect(server.step).toEqual({ state: "failed", failure: FORBIDDEN, request: "none" });
     // The main process is asked what it holds of the gate: it is the one that knows.
     expect(main.asked.at(-1)).toBe("state");
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(installation.writes.on).toBe(true);
     expect(main.asked).not.toContain("disable");
     // The words stay while the gate is asked, and the command is offered again with a new confirmation.
-    expect(server.step).toEqual({ state: "failed", failure: FORBIDDEN });
+    expect(server.step).toEqual({ state: "failed", failure: FORBIDDEN, request: "none" });
     await server.ask();
     expect(server.step).toMatchObject({ state: "confirming", token: "00000000-0000-4000-8000-000000000002" });
   });
@@ -400,11 +427,11 @@ describe("the version of the server, as the views hold it", () => {
     main.refuseConfirmWith(GATE_OFF);
     expect(installation.writes.on).toBe(true);
     await server.ask();
-    expect(server.step).toEqual({ state: "failed", failure: GATE_OFF });
+    expect(server.step).toEqual({ state: "failed", failure: GATE_OFF, request: "none" });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(installation.writes.on).toBe(false);
     // The words of the refusal stay beside the state of the gate.
-    expect(server.step).toEqual({ state: "failed", failure: GATE_OFF });
+    expect(server.step).toEqual({ state: "failed", failure: GATE_OFF, request: "none" });
     await server.run();
     await server.ask();
     expect(main.runs()).toEqual([]);
@@ -448,7 +475,7 @@ describe("the version of the server, as the views hold it", () => {
     clock.now = 1000 + 31_000;
     main.refuseConfirmWith(GATE_OFF);
     await server.run();
-    expect(server.step).toEqual({ state: "failed", failure: GATE_OFF });
+    expect(server.step).toEqual({ state: "failed", failure: GATE_OFF, request: "none" });
     expect(main.runs()).toEqual([]);
   });
 
@@ -513,6 +540,78 @@ describe("the version of the server, as the views hold it", () => {
     expect(server.step).toEqual({ state: "idle" });
   });
 
+  it("keeps a request that runs, and takes its answer, when the page that shows it is left", async () => {
+    const { server, main } = await setUp();
+
+    await server.ask();
+    const running = server.run();
+
+    // What the page does when it goes: it leaves a confirmation, and nothing else.
+    server.leave();
+    expect(server.step).toEqual({ state: "running" });
+    await main.answer({ ok: true, value: VALUE });
+    await running;
+    expect(server.last).toEqual(VALUE);
+  });
+
+  it("keeps the words of a request that failed when the page that shows them is left", async () => {
+    const { server, main } = await setUp();
+
+    await server.ask();
+    const running = server.run();
+
+    await main.answer(CANCELLED);
+    await running;
+    server.leave();
+    expect(server.step).toEqual({ state: "failed", failure: CANCELLED, request: "created" });
+  });
+
+  it("does not run a confirmation that is shown when writes are not on, whoever asks", async () => {
+    // The state alone, with what it is given said by the test: writes that go off without the state
+    // being told, which the installation never does.
+    const main = mainProcess();
+    let on = true;
+    const server = new ServerStatus({
+      client: main.writer,
+      cluster: () => "cluster-a",
+      namespace: () => "velero-a",
+      writesOn: () => on,
+      now: () => 1000,
+      requestId: () => "11111111-1111-4111-8111-000000000001",
+      refused: () => undefined,
+    });
+
+    await server.ask();
+    expect(server.step).toMatchObject({ state: "confirming" });
+    on = false;
+    await server.run();
+    expect(main.runs()).toEqual([]);
+    expect(server.step).toMatchObject({ state: "confirming" });
+    on = true;
+    const running = server.run();
+
+    expect(main.runs()).toHaveLength(1);
+    await main.answer({ ok: true, value: VALUE });
+    await running;
+  });
+
+  it("says that a confirmation that failed created nothing, and that a request whose answer was lost may be there", async () => {
+    const { server, main } = await setUp();
+
+    // The confirmation was lost on the way: the cluster was asked nothing.
+    main.refuseConfirmWith(LOST);
+    await server.ask();
+    expect(server.step).toEqual({ state: "failed", failure: LOST, request: "none" });
+    // The same words for a request that ran: the main process may have created it.
+    main.refuseConfirmWith(undefined);
+    await server.ask();
+    const running = server.run();
+
+    await main.answer(LOST);
+    await running;
+    expect(server.step).toEqual({ state: "failed", failure: LOST, request: "unknown" });
+  });
+
   it("takes how a request that runs ended when writes are turned off under it", async () => {
     const { installation, server, main } = await setUp();
 
@@ -524,7 +623,66 @@ describe("the version of the server, as the views hold it", () => {
     expect(server.step).toEqual({ state: "running" });
     await main.answer(CANCELLED);
     await running;
-    expect(server.step).toEqual({ state: "failed", failure: CANCELLED });
+    expect(server.step).toEqual({ state: "failed", failure: CANCELLED, request: "created" });
     expect(installation.writes.on).toBe(false);
+  });
+});
+
+describe("what a request that failed left in the cluster", () => {
+  const failure = (code: string, stage: string): Failure => ({
+    ok: false,
+    code: code as Failure["code"],
+    stage,
+    retry: false,
+    text: "Synthetic.",
+  });
+
+  it("is the request, when it failed while it was waited for, whatever the code", () => {
+    for (const code of ["deadline", "cancelled", "forbidden", "target-changed", "request-failed", "tls-invalid"]) {
+      expect([code, requestLeft(failure(code, "wait"))]).toEqual([code, "created"]);
+    }
+  });
+
+  it("is nothing, when the cluster refused the creation or was not sent it", () => {
+    for (const code of [
+      "forbidden",
+      "deadline",
+      "transport-unreachable",
+      "tls-invalid",
+      "not-found",
+      "conflict",
+      "validation",
+    ]) {
+      expect([code, requestLeft(failure(code, "creation"))]).toEqual([code, "none"]);
+    }
+  });
+
+  it("is not known, when the creation was stopped or its answer was lost", () => {
+    for (const code of ["submission-unknown", "cancelled", "target-changed", "payload-too-large", "request-failed"]) {
+      expect([code, requestLeft(failure(code, "creation"))]).toEqual([code, "unknown"]);
+    }
+    // What the main process did is not known either when its answer was lost, was not one of the contract,
+    // or it raised while it answered.
+    for (const stage of ["way", "answer", "handler"]) {
+      expect([stage, requestLeft(failure("request-failed", stage))]).toEqual([stage, "unknown"]);
+    }
+  });
+
+  it("is nothing, when the main process refused before it asked the cluster", () => {
+    for (const [code, stage] of [
+      ["forbidden", "gate"],
+      ["forbidden", "confirmation"],
+      ["forbidden", "frame"],
+      ["forbidden", "writes"],
+      ["connection-unsupported", "connection"],
+      ["target-changed", "catalog"],
+      ["target-changed", "connection"],
+      ["conflict", "request"],
+      ["validation", "request"],
+      ["validation", "kind"],
+      ["request-failed", "credential"],
+    ]) {
+      expect([code, stage, requestLeft(failure(code, stage))]).toEqual([code, stage, "none"]);
+    }
   });
 });

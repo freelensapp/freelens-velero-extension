@@ -72,6 +72,7 @@ export interface PluginGroup {
   kind: string;
   // The kind is one the reviewed release names.
   known: boolean;
+  // The plugins of the kind, each once, sorted.
   names: string[];
   count: number;
 }
@@ -82,10 +83,15 @@ function byText(one: string, other: string): number {
 
 // The plugins by kind: the kinds of the release in its order, each one even when it has none, then the
 // kinds the release does not name, by their text. The names are sorted: the object lists them in no order.
-export function pluginGroups(plugins: Plugin[]): { groups: PluginGroup[]; total: number } {
-  const names = new Map<string, string[]>();
+//
+// A plugin is one kind and one name, which is what the server registers it by, and the object may list
+// it more than once: the reviewed release lists a BackupItemAction and a RestoreItemAction a second time,
+// from the list of the newer kind it adapts them to. Each plugin is counted once, and `repeated` is how
+// many entries of the object repeat one.
+export function pluginGroups(plugins: Plugin[]): { groups: PluginGroup[]; total: number; repeated: number } {
+  const names = new Map<string, Set<string>>();
 
-  for (const plugin of plugins) names.set(plugin.kind, [...(names.get(plugin.kind) ?? []), plugin.name]);
+  for (const plugin of plugins) names.set(plugin.kind, (names.get(plugin.kind) ?? new Set<string>()).add(plugin.name));
   const known: readonly string[] = PLUGIN_KINDS;
   const others = [...names.keys()].filter((kind) => !known.includes(kind)).sort(byText);
   const groups = [...known, ...others].map((kind) => {
@@ -93,8 +99,9 @@ export function pluginGroups(plugins: Plugin[]): { groups: PluginGroup[]; total:
 
     return { kind, known: known.includes(kind), names: sorted, count: sorted.length };
   });
+  const total = groups.reduce((sum, group) => sum + group.count, 0);
 
-  return { groups, total: plugins.length };
+  return { groups, total, repeated: plugins.length - total };
 }
 
 // The name of the object store plugin of a provider, by the rule of the release: a provider without a

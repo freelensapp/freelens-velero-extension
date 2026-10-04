@@ -27,6 +27,12 @@ export const REQUEST_LABELS: Readonly<Record<string, string>> = {
   "app.kubernetes.io/managed-by": "freelens-velero-extension",
 };
 
+// Where the write of such a request failed, which the main process says and the views read what the
+// request left in the cluster by: before the cluster answered its creation, while the request was waited
+// for, which is after it was created, and while the plugin of the context was asked for its credential
+// before the creation.
+export const REQUEST_STAGES = { creation: "creation", wait: "wait", credential: "credential" } as const;
+
 // The largest request the processes accept of each other.
 export const REQUEST_BOUND = 64 * 1024;
 

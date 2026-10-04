@@ -11,7 +11,7 @@ import { Installation } from "../state/installation";
 import { OverviewPage } from "./overview-page";
 
 import type { Answer, Family } from "../../common/discovery";
-import type { Failure, GateState, Answer as IpcAnswer, ServerStatusValue } from "../../common/ipc";
+import type { Failure, GateState, Answer as IpcAnswer, ServerStatusValue, WriteConfirmAnswer } from "../../common/ipc";
 import type { GateClient, WriteClient } from "../api/ipc";
 
 const DISCOVERY = "/apis/velero.io/v1";
@@ -80,7 +80,12 @@ const DEADLINE: Failure = {
   text: "The server did not answer in ten seconds: it may be stopped, or busy. The request stays until the server processes it.",
 };
 
-// The main process: the gate and the writes, whose runs wait until the test answers them.
+const RUNNING = "Creating the ServerStatusRequest, then waiting for the server to answer for ten seconds at most.";
+const STAYS =
+  "The extension deletes no request: the server deletes one when it looks at it again, five minutes after it processed it, and one that no server processes stays until someone removes it.";
+
+// The main process: the gate and the writes, whose runs wait until the test answers them, and whose
+// confirmations wait as well once the test holds them.
 function mainProcess() {
   let state: GateState = {
     cluster: { id: "cluster-a", name: "local-demo", context: "kind-local-demo" },
@@ -88,8 +93,17 @@ function mainProcess() {
   };
   const asked: string[] = [];
   const runs: ((answer: IpcAnswer<ServerStatusValue>) => void)[] = [];
+  const confirmations: ((answer: IpcAnswer<WriteConfirmAnswer>) => void)[] = [];
   let tokens = 0;
   let lost = false;
+  let held = false;
+  const confirmation = (): IpcAnswer<WriteConfirmAnswer> => {
+    tokens += 1;
+    return {
+      ok: true,
+      value: { token: `00000000-0000-4000-8000-${String(tokens).padStart(12, "0")}`, expires: Date.now() + 30_000 },
+    };
+  };
   const gate: GateClient = {
     state: async () =>
       lost
@@ -107,13 +121,10 @@ function mainProcess() {
     onChanged: () => () => undefined,
   };
   const writer: WriteClient = {
-    confirm: async (_cluster, namespace, kind, target) => {
+    confirm: (_cluster, namespace, kind, target) => {
       asked.push(`confirm ${namespace} ${kind}${target ? " with a target" : ""}`);
-      tokens += 1;
-      return {
-        ok: true,
-        value: { token: `00000000-0000-4000-8000-${String(tokens).padStart(12, "0")}`, expires: Date.now() + 30_000 },
-      };
+      if (!held) return Promise.resolve(confirmation());
+      return new Promise((resolve) => confirmations.push(resolve));
     },
     runServerStatus: (_cluster, namespace) => {
       asked.push(`run ${namespace}`);
@@ -132,6 +143,19 @@ function mainProcess() {
     lose: () => {
       lost = true;
     },
+    // From now on a confirmation waits until the test lets it go.
+    hold: () => {
+      held = true;
+    },
+    confirm: async () => {
+      const resolve = confirmations.shift();
+
+      if (!resolve) throw new Error("No confirmation waits");
+      await act(async () => {
+        resolve(confirmation());
+        await new Promise((done) => setTimeout(done, 0));
+      });
+    },
     answer: async (answer: IpcAnswer<ServerStatusValue>) => {
       const resolve = runs.shift();
 
@@ -144,14 +168,14 @@ function mainProcess() {
   };
 }
 
-function mount(table = answers(), main = mainProcess()) {
+function mount(table = answers(), main = mainProcess(), way = true) {
   const installation = new Installation({
     cluster: { id: "cluster-a", name: "local-demo" },
     read: async (address) => table[address] ?? { status: 404 },
     now: () => Date.now(),
     storage: heldPreferences({ ...emptyPreferences(), selected: { "cluster-a": A } }),
-    gate: main.gate,
-    writer: main.writer,
+    // Without a way to the main process the views have neither its gate nor its writes.
+    ...(way ? { gate: main.gate, writer: main.writer } : {}),
   });
   const view = render(<OverviewPage extension={extension} installation={installation} />);
 
@@ -318,11 +342,8 @@ describe("the band of the server", () => {
     fireEvent.click(part("create"));
     await waitFor(() => expect(maybe("confirm")).toBeTruthy());
     fireEvent.click(part("confirm-create"));
-    await waitFor(() => expect(maybe("running")).toBeTruthy());
-    expect(part("running").textContent).toBe(
-      "Creating the ServerStatusRequest and waiting for the server to answer, for ten seconds at most.",
-    );
-    expect(part("running").getAttribute("role")).toBe("status");
+    await waitFor(() => expect(part("body").getAttribute("data-step")).toBe("running"));
+    expect(part("status").textContent).toBe(RUNNING);
     expect(maybe("create")).toBeNull();
     expect(maybe("confirm")).toBeNull();
     expect(main.asked).toEqual([`confirm ${A} ServerStatusRequest`, `confirm ${A} ServerStatusRequest`, `run ${A}`]);
@@ -347,9 +368,84 @@ describe("the band of the server", () => {
     fireEvent.click(part("confirm-create"));
     await waitFor(() => expect(main.runs()).toHaveLength(1));
     await main.answer({ ok: true, value: VALUE });
-    // The answer is under the command that reads again.
+    // The answer: the version, which is at the top of the band, and not the command under the plugins.
+    await waitFor(() => expect(focused()).toBe("velero-overview-server-version"));
+  });
+
+  it("says what it is doing while the main process is asked, in a part that is always there, and gives it the focus", async () => {
+    const main = mainProcess();
+
+    mount(answers(), main);
+    await opened();
+    await writesOn();
+    // The part is there before anything is asked, and says nothing: its words change, it does not come
+    // with them.
+    const status = part("status");
+
+    expect(status.getAttribute("role")).toBe("status");
+    expect(status.textContent).toBe("");
+    main.hold();
+    part("create").focus();
+    fireEvent.click(part("create"));
+    await waitFor(() => expect(part("body").getAttribute("data-step")).toBe("asking"));
+    expect(status.textContent).toBe("Asking the main process for the confirmation of the request.");
+    expect(maybe("create")).toBeNull();
+    // The command went: the focus is on the words, not on nothing.
+    await waitFor(() => expect(focused()).toBe("velero-overview-server-status"));
+    await main.confirm();
+    await waitFor(() => expect(focused()).toBe("velero-overview-server-confirm"));
+    expect(status.textContent).toBe("");
+    part("confirm-create").focus();
+    fireEvent.click(part("confirm-create"));
+    await waitFor(() => expect(part("body").getAttribute("data-step")).toBe("running"));
+    expect(status.textContent).toBe(RUNNING);
+    await waitFor(() => expect(focused()).toBe("velero-overview-server-status"));
+    await main.answer({ ok: true, value: VALUE });
+    await waitFor(() => expect(focused()).toBe("velero-overview-server-version"));
+    expect(status.textContent).toBe("");
+    expect(part("status")).toBe(status);
+    expect(part("version").getAttribute("tabindex")).toBe("-1");
+  });
+
+  it("leaves the confirmation with Escape, and creates nothing", async () => {
+    const { main } = mount();
+
+    await opened();
+    await writesOn();
+    fireEvent.click(part("create"));
+    await waitFor(() => expect(maybe("confirm")).toBeTruthy());
+    expect(part("confirm").getAttribute("tabindex")).toBe("-1");
+    // Another key is not a way out.
+    fireEvent.keyDown(part("confirm-create"), { key: "Enter" });
+    expect(maybe("confirm")).toBeTruthy();
+    fireEvent.keyDown(part("confirm-create"), { key: "Escape" });
+    expect(maybe("confirm")).toBeNull();
     await waitFor(() => expect(focused()).toBe("velero-overview-server-create"));
-    expect(part("version").getAttribute("role")).toBe("status");
+    expect(main.runs()).toEqual([]);
+  });
+
+  it("gives the focus to the command, and not to the version that was read before, when a request fails or is left", async () => {
+    const { main } = mount();
+
+    await opened();
+    await writesOn();
+    await read(main);
+    // A request that fails: what is shown of the version is of the read before.
+    part("create").focus();
+    fireEvent.click(part("create"));
+    await waitFor(() => expect(focused()).toBe("velero-overview-server-confirm"));
+    part("confirm-create").focus();
+    fireEvent.click(part("confirm-create"));
+    await waitFor(() => expect(main.runs()).toHaveLength(2));
+    await main.answer(DEADLINE);
+    await waitFor(() => expect(maybe("failure")).toBeTruthy());
+    await waitFor(() => expect(focused()).toBe("velero-overview-server-create"));
+    // A confirmation that is left.
+    fireEvent.click(part("create"));
+    await waitFor(() => expect(focused()).toBe("velero-overview-server-confirm"));
+    part("confirm-back").focus();
+    fireEvent.click(part("confirm-back"));
+    await waitFor(() => expect(focused()).toBe("velero-overview-server-create"));
   });
 
   it("leaves the focus where the operator moved it while the server was asked", async () => {
@@ -404,6 +500,11 @@ describe("the band of the server", () => {
     // Beside the object store plugins, and nowhere else, the providers of the locations the installation read.
     expect(part("plugins").querySelectorAll("[data-provider]")).toHaveLength(2);
     const objectStore = part("plugins").querySelector('[data-kind="ObjectStore"]') as HTMLElement;
+
+    // The mark of a provider is for who sees: its words say the same.
+    expect(
+      [...objectStore.querySelectorAll("[data-provider] .Icon")].map((mark) => mark.getAttribute("aria-hidden")),
+    ).toEqual(["true", "true"]);
     const providers = [...objectStore.querySelectorAll("[data-provider]")].map((line) => [
       line.getAttribute("data-provider"),
       line.getAttribute("data-loaded"),
@@ -435,13 +536,37 @@ describe("the band of the server", () => {
   it.each([
     [[], "No plugin loaded."],
     [[{ name: "velero.io/aws", kind: "ObjectStore" }], "1 plugin loaded."],
-  ])("counts the plugins the server loaded: %j", async (plugins, count) => {
+    [
+      [
+        { name: "velero.io/pod", kind: "BackupItemAction" },
+        { name: "velero.io/pod", kind: "BackupItemAction" },
+      ],
+      "1 plugin loaded. The request lists 2 entries: 1 repeats a plugin of the same kind, which is shown once.",
+    ],
+    [
+      [
+        { name: "velero.io/pod", kind: "BackupItemAction" },
+        { name: "velero.io/pv", kind: "BackupItemAction" },
+        { name: "velero.io/pv", kind: "BackupItemAction" },
+        { name: "velero.io/pod", kind: "BackupItemAction" },
+        { name: "velero.io/pod", kind: "RestoreItemAction" },
+      ],
+      "3 plugins loaded. The request lists 5 entries: 2 repeat a plugin of the same kind, which is shown once.",
+    ],
+  ])("counts the plugins the server loaded, each once: %j", async (plugins, count) => {
     const { main } = mount();
 
     await opened();
     await writesOn();
     await read(main, { ...VALUE, plugins });
     expect(part("plugins-count").textContent).toBe(count);
+    // A plugin the request lists twice is one line of its kind.
+    for (const row of part("plugins").querySelectorAll("[data-kind]")) {
+      const names = [...row.querySelectorAll("[data-plugin]")].map((plugin) => plugin.textContent);
+
+      expect([row.getAttribute("data-kind"), names]).toEqual([row.getAttribute("data-kind"), [...new Set(names)]]);
+      expect(row.getAttribute("data-count")).toBe(String(names.length));
+    }
   });
 
   it.each([
@@ -488,6 +613,28 @@ describe("the band of the server", () => {
       "The providers of the storage locations are not known: the storage locations were not read.",
     );
     expect(maybe("providers")).toBeNull();
+  });
+
+  it("follows the storage locations as the installation reads them again, under a version that stays", async () => {
+    const table = answers({ [path("storageLocations", A)]: { status: 403 } });
+    const { main, installation } = mount(table);
+
+    await opened();
+    await writesOn();
+    await read(main);
+    expect(maybe("providers-unknown")).toBeTruthy();
+    // The locations are read at the next read of the installation: the band says what they name.
+    table[path("storageLocations", A)] = list(location("default", A, "aws"));
+    await act(() => installation.refresh());
+    await waitFor(() => expect(maybe("providers")).toBeTruthy());
+    expect(maybe("providers-unknown")).toBeNull();
+    expect(part("plugins").querySelectorAll("[data-provider]")).toHaveLength(1);
+    // And a location that comes after the version was read.
+    table[path("storageLocations", A)] = list(location("default", A, "aws"), location("cold", A, "gcp"));
+    await act(() => installation.refresh());
+    await waitFor(() => expect(part("plugins").querySelectorAll("[data-provider]")).toHaveLength(2));
+    expect(part("version").textContent).toBe(`Velero ${REVIEWED_RELEASE}`);
+    expect(main.runs()).toHaveLength(1);
   });
 
   it("says that no storage location names a provider when none does", async () => {
@@ -548,7 +695,7 @@ describe("the band of the server", () => {
     expect(part("failure").getAttribute("role")).toBe("alert");
     expect(part("failure-text").textContent).toBe(DEADLINE.text);
     expect(part("failure-request").textContent).toBe(
-      `The request is a ServerStatusRequest of ${A} whose name begins with freelens-velero-. The extension deletes no request: the server deletes one when it looks at it again, five minutes after it processed it, and one that no server processes stays until someone removes it.`,
+      `The request is a ServerStatusRequest of ${A} whose name begins with freelens-velero-. ${STAYS}`,
     );
     // Not answered is not a claim that the server is down.
     expect(band().textContent).not.toMatch(/\b(down|dead|broken|crashed)\b/i);
@@ -595,15 +742,18 @@ describe("the band of the server", () => {
   });
 
   it.each([
-    ["cancelled", "wait", true, "The wait was cancelled. The request stays until the server processes it."],
-    ["submission-unknown", "creation", true, "The creation of the request may have happened: look for it."],
-    ["target-changed", "wait", true, "The cluster or the installation changed while the request was made."],
-    ["transport-unreachable", "creation", false, "The API server of the cluster could not be reached."],
-    ["tls-invalid", "creation", false, "The certificate of the API server of the cluster is not trusted."],
-    ["request-failed", "credential", false, "The credential plugin kubelogin of the context did not give one."],
+    ["cancelled", "wait", "created", "The wait was cancelled. The request stays until the server processes it."],
+    ["cancelled", "creation", "unknown", "The request was cancelled before the cluster answered its creation."],
+    ["submission-unknown", "creation", "unknown", "The creation of the request may have happened: look for it."],
+    ["target-changed", "wait", "created", "The cluster or the installation changed while the request was made."],
+    ["transport-unreachable", "creation", "none", "The API server of the cluster could not be reached."],
+    ["tls-invalid", "creation", "none", "The certificate of the API server of the cluster is not trusted."],
+    ["request-failed", "credential", "none", "The credential plugin kubelogin of the context did not give one."],
+    ["request-failed", "way", "unknown", "The main process did not answer."],
+    ["validation", "answer", "unknown", "The main process answered with what the views do not understand."],
   ] as const)(
-    "says the failure %s at the stage %s in the words of the main process",
-    async (code, stage, another, text) => {
+    "says the failure %s at the stage %s in the words of the main process, and what it left: %s",
+    async (code, stage, left, text) => {
       const { main } = mount();
 
       await opened();
@@ -612,14 +762,63 @@ describe("the band of the server", () => {
       expect(part("failure").getAttribute("data-code")).toBe(code);
       expect(part("failure").getAttribute("data-stage")).toBe(stage);
       expect(part("failure-text").textContent).toBe(text);
-      // Where the request is, is said of one that was created, and of no other.
-      expect(maybe("failure-request") !== null).toBe(stage === "wait");
-      // A request may be there already: the command says that it creates another.
+      // Where the request is, is said of one that is there, and that it may be there of one that is not known.
+      expect(maybe("failure-request") === null).toBe(left === "none");
+      expect(maybe("failure-request")?.getAttribute("data-request") ?? "none").toBe(left);
+      if (left === "unknown") {
+        expect(part("failure-request").textContent).toBe(
+          `It is not known whether the request was created: a ServerStatusRequest whose name begins with freelens-velero- may be in ${A}. ${STAYS}`,
+        );
+      }
+      // A request is there already, or may be: the command says that it creates another.
       expect(words(part("create"))).toBe(
-        another ? "Create another ServerStatusRequest" : "Create a ServerStatusRequest",
+        left === "none" ? "Create a ServerStatusRequest" : "Create another ServerStatusRequest",
+      );
+      expect(part("what").textContent).toBe(
+        left === "none"
+          ? `Asking the server for them creates a ServerStatusRequest in ${A}, which the server answers.`
+          : `Asking again creates another ServerStatusRequest in ${A}.`,
       );
     },
   );
+
+  it("says that writes cannot be turned on when the views have no way to the main process, and leads nowhere", async () => {
+    mount(answers(), mainProcess(), false);
+    await opened();
+    await waitFor(() => expect(screen.getByTestId("velero-writes-failure")).toBeTruthy());
+    expect(part("writes-off").textContent).toBe(
+      `Asking the server for them creates a ServerStatusRequest in ${A}, which the server answers. The views have no way to the main process of the extension: writes cannot be turned on.`,
+    );
+    // The target bar offers nothing to turn: the band does not lead to it.
+    expect(maybe("to-target")).toBeNull();
+    expect(maybe("create")).toBeNull();
+  });
+
+  it("keeps saying that a request runs when writes are turned off under it, then says how it ended", async () => {
+    const { main } = mount();
+    const cancelled: Failure = {
+      ok: false,
+      code: "cancelled",
+      stage: "wait",
+      retry: true,
+      text: "The wait was cancelled. The request stays until the server processes it.",
+    };
+
+    await opened();
+    await writesOn();
+    await ask(main);
+    fireEvent.click(screen.getByTestId("velero-writes-off"));
+    await waitFor(() => expect(screen.getByTestId("velero-writes").getAttribute("data-writes")).toBe("off"));
+    // The request is not left: the band says that it runs, and offers nothing over it.
+    expect(part("status").textContent).toBe(RUNNING);
+    expect(maybe("writes-off")).toBeNull();
+    expect(maybe("to-target")).toBeNull();
+    await main.answer(cancelled);
+    await waitFor(() => expect(maybe("failure")).toBeTruthy());
+    expect(part("failure-text").textContent).toBe(cancelled.text);
+    expect(part("status").textContent).toBe("");
+    expect(part("writes-off").textContent).toContain("Writes are off for this installation");
+  });
 
   it("goes back to the state of writes off when they are turned off while the confirmation is shown, and does not show it again", async () => {
     const { main } = mount();
@@ -646,6 +845,25 @@ describe("the band of the server", () => {
     fireEvent.click(part("create"));
     await waitFor(() => expect(maybe("confirm")).toBeTruthy());
     view.unmount();
+    render(<OverviewPage extension={extension} installation={installation} />);
+    await opened();
+    expect(maybe("confirm")).toBeNull();
+    expect(words(part("create"))).toBe("Create a ServerStatusRequest");
+    expect(main.runs()).toEqual([]);
+  });
+
+  it("leaves a confirmation that is still asked with the page that asked for it", async () => {
+    const main = mainProcess();
+    const { installation, view } = mount(answers(), main);
+
+    await opened();
+    await writesOn();
+    main.hold();
+    fireEvent.click(part("create"));
+    await waitFor(() => expect(part("body").getAttribute("data-step")).toBe("asking"));
+    view.unmount();
+    // It answers on no page.
+    await main.confirm();
     render(<OverviewPage extension={extension} installation={installation} />);
     await opened();
     expect(maybe("confirm")).toBeNull();

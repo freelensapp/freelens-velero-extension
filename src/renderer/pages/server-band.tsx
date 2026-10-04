@@ -11,8 +11,11 @@ import { focusFirst } from "../components/views-frame";
 import { WriteConfirmation } from "../components/write-confirmation";
 
 import type { ServerStatusValue } from "../../common/ipc";
-import type { PluginGroup, ProviderPlugin } from "../../common/server-version";
+import type { FamilyRead } from "../../common/read-state";
+import type { PluginGroup } from "../../common/server-version";
+import type { BackupStorageLocationResource } from "../../common/types";
 import type { Installation } from "../state/installation";
+import type { RequestLeft } from "../state/server-status";
 
 const {
   Component: { Button, Icon },
@@ -20,6 +23,11 @@ const {
 
 const ID = "velero-overview-server";
 const KIND = "ServerStatusRequest";
+// What becomes of a request, which the band says of one that is there or may be.
+const STAYS =
+  "The extension deletes no request: the server deletes one when it looks at it again, five minutes after it processed it, and one that no server processes stays until someone removes it.";
+
+type Locations = FamilyRead<BackupStorageLocationResource>;
 
 // The time the server wrote, in the words of the page when it is a time, and as it is written when not.
 function processedText(processed: string): string {
@@ -28,22 +36,26 @@ function processedText(processed: string): string {
   return Number.isFinite(at) ? time(at) : processed;
 }
 
-function pluginsCount(total: number): string {
-  if (total === 0) return "No plugin loaded.";
-  return total === 1 ? "1 plugin loaded." : `${total} plugins loaded.`;
+// How many plugins the server loaded, and what the request lists more than once: each plugin is one.
+function pluginsCount(total: number, repeated: number): string {
+  const loaded = total === 0 ? "No plugin loaded." : total === 1 ? "1 plugin loaded." : `${total} plugins loaded.`;
+
+  if (repeated === 0) return loaded;
+  return `${loaded} The request lists ${total + repeated} entries: ${repeated} ${repeated === 1 ? "repeats" : "repeat"} a plugin of the same kind, which is shown once.`;
 }
 
 // The providers of the storage locations beside the object store plugins: the plugin each one needs, by
-// the rule of the release, and whether the server loaded it.
-function Providers({ installation, providers }: { installation: Installation; providers: ProviderPlugin[] }) {
-  const read = installation.read("storageLocations");
-
-  if (!hasItems(read))
+// the rule of the release, and whether the server loaded it. The locations are the ones the installation
+// read last, which the band is given: they are read again while the version stays.
+function Providers({ locations, read }: { locations: Locations; read: ServerStatusValue }) {
+  if (!hasItems(locations))
     return (
       <p className={styles.factNote} data-testid={`${ID}-providers-unknown`}>
         The providers of the storage locations are not known: the storage locations were not read.
       </p>
     );
+  const providers = providerPlugins(locations.items, read.plugins);
+
   if (!providers.length)
     return (
       <p className={styles.factNote} data-testid={`${ID}-providers-none`}>
@@ -70,14 +82,13 @@ function Providers({ installation, providers }: { installation: Installation; pr
   );
 }
 
-function Plugins({ installation, read }: { installation: Installation; read: ServerStatusValue }) {
-  const { groups, total } = pluginGroups(read.plugins);
-  const providers = providerPlugins(installation.read("storageLocations").items, read.plugins);
+function Plugins({ locations, read }: { locations: Locations; read: ServerStatusValue }) {
+  const { groups, total, repeated } = pluginGroups(read.plugins);
 
   return (
     <>
       <p className={styles.factNote} data-testid={`${ID}-plugins-count`}>
-        {pluginsCount(total)}
+        {pluginsCount(total, repeated)}
       </p>
       <div className={styles.scrolled}>
         <table className={styles.references} data-testid={`${ID}-plugins`}>
@@ -97,9 +108,8 @@ function Plugins({ installation, read }: { installation: Installation; read: Ser
                 <td>
                   {group.count ? (
                     <ul className={styles.serverNames}>
-                      {group.names.map((name, index) => (
-                        // A name may be listed twice by the server: the place keeps the two apart.
-                        <li key={`${name}/${index}`} data-plugin>
+                      {group.names.map((name) => (
+                        <li key={name} data-plugin>
                           {name}
                         </li>
                       ))}
@@ -107,9 +117,7 @@ function Plugins({ installation, read }: { installation: Installation; read: Ser
                   ) : (
                     <span className={styles.muted}>None loaded</span>
                   )}
-                  {group.kind === "ObjectStore" ? (
-                    <Providers installation={installation} providers={providers} />
-                  ) : null}
+                  {group.kind === "ObjectStore" ? <Providers locations={locations} read={read} /> : null}
                 </td>
               </tr>
             ))}
@@ -120,13 +128,19 @@ function Plugins({ installation, read }: { installation: Installation; read: Ser
   );
 }
 
-function Version({ installation, read }: { installation: Installation; read: ServerStatusValue }) {
+function Version({ locations, read }: { locations: Locations; read: ServerStatusValue }) {
   const found = compareVersion(read.version, REVIEWED_RELEASE);
 
   return (
     <>
-      {/* Said to who does not see when it arrives: it is the answer of a command given a moment before. */}
-      <p className={styles.overviewCount} data-testid={`${ID}-version`} data-relation={found.relation} role="status">
+      {/* The answer of a command given a moment before: it is given the focus when it arrives, which shows
+          it and says it to who does not see. */}
+      <p
+        className={`${styles.overviewCount} ${styles.serverFocus}`}
+        data-testid={`${ID}-version`}
+        data-relation={found.relation}
+        tabIndex={-1}
+      >
         Velero {read.version}
       </p>
       <p className={styles.factNote} data-testid={`${ID}-note`}>
@@ -135,12 +149,25 @@ function Version({ installation, read }: { installation: Installation; read: Ser
       <p className={styles.factNote} data-testid={`${ID}-processed`}>
         Processed by the server at {processedText(read.processed)}
       </p>
-      <Plugins installation={installation} read={read} />
+      <Plugins locations={locations} read={read} />
       <p className={styles.factNote} data-testid={`${ID}-request`}>
         The server deletes the request {read.request.name} when it looks at it again, five minutes after it processed
         it.
       </p>
     </>
+  );
+}
+
+// Where the request of a write that failed is, when it is there or may be.
+function RequestNote({ left, namespace }: { left: RequestLeft; namespace: string }) {
+  if (left === "none") return null;
+  return (
+    <p className={styles.factNote} data-testid={`${ID}-failure-request`} data-request={left}>
+      {left === "created"
+        ? `The request is a ${KIND} of ${namespace} whose name begins with ${REQUEST_PREFIX}.`
+        : `It is not known whether the request was created: a ${KIND} whose name begins with ${REQUEST_PREFIX} may be in ${namespace}.`}{" "}
+      {STAYS}
+    </p>
   );
 }
 
@@ -154,45 +181,66 @@ export const ServerBand = observer(({ installation }: { installation: Installati
   const writes = installation.writes;
   const namespace = installation.namespace ?? "";
   const gate = installation.gate;
-  // A request of this band may be in the namespace already: one that was answered, one that was created
-  // and not answered, one whose creation is not known.
-  const another =
-    last !== undefined ||
-    (step.state === "failed" && (step.failure.stage === "wait" || step.failure.code === "submission-unknown"));
+  // Read here, where the band follows what the installation reads: the parts under it are given it.
+  const locations = installation.read("storageLocations");
+  // A request of this band is in the namespace already, or may be.
+  const left = step.state === "failed" ? step.request : "none";
+  const another = last !== undefined || left !== "none";
   // What the command does, said before it is given.
   const what = another
     ? `Asking again creates another ${KIND} in ${namespace}.`
     : `Asking the server for them creates a ${KIND} in ${namespace}, which the server answers.`;
+  // What the band is doing while the main process is asked: no command is offered meanwhile, whatever
+  // the state of the writes becomes, since a request that runs is not left.
+  const busy =
+    step.state === "asking"
+      ? "Asking the main process for the confirmation of the request."
+      : step.state === "running"
+        ? `Creating the ${KIND}, then waiting for the server to answer for ten seconds at most.`
+        : "";
+  // The views have no way to the main process: writes cannot be turned on, here or in the target bar.
+  const noWay = !gate && installation.gateFailure !== undefined && !installation.gateUnknown;
   const body = React.useRef<HTMLDivElement>(null);
+  const status = React.useRef<HTMLDivElement>(null);
   // A gesture of the band changed what it shows: the control that was used went with it.
   const gesture = React.useRef(false);
   const by = (act: () => void) => () => {
     gesture.current = true;
     act();
   };
+  // What the server answered last, as the band last showed it.
+  const answer = React.useRef(last);
 
-  // The focus of a control that went is given to what took its place, once the main process answered: the
-  // confirmation, or the command. When the operator moved to something else in the meantime it is theirs.
+  // The focus of a control that went is given to what took its place: while the main process is asked,
+  // the words that say so; then the version the server answered, which is at the top of the band and far
+  // from the command under it, the confirmation, or the command. When the operator moved to something
+  // else in the meantime the focus is theirs.
   React.useEffect(() => {
-    if (!gesture.current || step.state === "asking" || step.state === "running") return;
-    gesture.current = false;
+    const answered = last !== undefined && last !== answer.current;
+
+    answer.current = last;
+    if (!gesture.current) return;
+    if (!busy) gesture.current = false;
     const active = document.activeElement;
 
-    if (active && active !== document.body && document.body.contains(active)) return;
-    focusFirst(body.current, [
-      `[data-testid="${ID}-confirm"]`,
-      `[data-testid="${ID}-create"]`,
-      `[data-testid="${ID}-to-target"]`,
-    ]);
-  }, [step.state]);
+    if (active && active !== document.body && active !== status.current && document.body.contains(active)) return;
+    if (busy) status.current?.focus();
+    else
+      focusFirst(body.current, [
+        ...(answered ? [`[data-testid="${ID}-version"]`] : []),
+        `[data-testid="${ID}-confirm"]`,
+        `[data-testid="${ID}-create"]`,
+        `[data-testid="${ID}-to-target"]`,
+      ]);
+  }, [busy, step.state, last]);
 
   // A confirmation is left with the page that shows it.
-  React.useEffect(() => () => server.back(), [server]);
+  React.useEffect(() => () => server.leave(), [server]);
 
   return (
     <div ref={body} data-testid={`${ID}-body`} data-server={last ? "read" : "unread"} data-step={step.state}>
       {last ? (
-        <Version installation={installation} read={last} />
+        <Version locations={locations} read={last} />
       ) : (
         <p className={styles.stateText} data-testid={`${ID}-unread`}>
           The version of the server and its plugins are not read.
@@ -203,43 +251,47 @@ export const ServerBand = observer(({ installation }: { installation: Installati
           <p className={styles.stateText} data-testid={`${ID}-failure-text`}>
             {step.failure.text}
           </p>
-          {step.failure.stage === "wait" ? (
-            <p className={styles.factNote} data-testid={`${ID}-failure-request`}>
-              The request is a {KIND} of {namespace} whose name begins with {REQUEST_PREFIX}. The extension deletes no
-              request: the server deletes one when it looks at it again, five minutes after it processed it, and one
-              that no server processes stays until someone removes it.
-            </p>
-          ) : null}
+          <RequestNote left={left} namespace={namespace} />
         </div>
       ) : null}
-      {!writes.on ? (
+      {/* What the band is doing, said to who does not see: the part is always there, and its words change. */}
+      <div
+        ref={status}
+        role="status"
+        tabIndex={-1}
+        className={busy ? `${styles.factNote} ${styles.serverFocus}` : undefined}
+        data-testid={`${ID}-status`}
+      >
+        {busy}
+      </div>
+      {busy ? null : !writes.on ? (
         <>
           <p className={styles.factNote} data-testid={`${ID}-writes-off`}>
             {what}{" "}
-            {installation.gateUnknown
-              ? "Whether writes are on is not known: the target bar asks the main process again."
-              : "Writes are off for this installation: they are turned on in the target bar."}
+            {noWay
+              ? installation.gateFailure
+              : installation.gateUnknown
+                ? "Whether writes are on is not known: the target bar asks the main process again."
+                : "Writes are off for this installation: they are turned on in the target bar."}
           </p>
-          <div className={styles.writeActions}>
-            <button
-              type="button"
-              className={styles.link}
-              data-testid={`${ID}-to-target`}
-              onClick={(event) =>
-                focusFirst(event.currentTarget.ownerDocument.body, [
-                  '[data-testid="velero-writes-on"]',
-                  '[data-testid="velero-writes-ask"]',
-                ])
-              }
-            >
-              Go to the writes in the target bar
-            </button>
-          </div>
+          {noWay ? null : (
+            <div className={styles.writeActions}>
+              <button
+                type="button"
+                className={styles.link}
+                data-testid={`${ID}-to-target`}
+                onClick={(event) =>
+                  focusFirst(event.currentTarget.ownerDocument.body, [
+                    '[data-testid="velero-writes-on"]',
+                    '[data-testid="velero-writes-ask"]',
+                  ])
+                }
+              >
+                Go to the writes in the target bar
+              </button>
+            </div>
+          )}
         </>
-      ) : step.state === "asking" ? (
-        <p className={styles.factNote} role="status" data-testid={`${ID}-asking`}>
-          Asking the main process for the confirmation of the request.
-        </p>
       ) : step.state === "confirming" ? (
         <WriteConfirmation
           id={`${ID}-confirm`}
@@ -255,12 +307,8 @@ export const ServerBand = observer(({ installation }: { installation: Installati
             target: "None: the request is of the server, not of an object",
           }}
           onCreate={by(() => void server.run())}
-          onBack={by(() => server.back())}
+          onBack={by(() => server.leave())}
         />
-      ) : step.state === "running" ? (
-        <p className={styles.factNote} role="status" data-testid={`${ID}-running`}>
-          Creating the {KIND} and waiting for the server to answer, for ten seconds at most.
-        </p>
       ) : (
         <>
           <p className={styles.factNote} data-testid={`${ID}-what`}>
