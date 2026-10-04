@@ -1,6 +1,6 @@
 # SPEC-0012: The Version Of The Server And Its Plugins
 
-- **Status:** Approved
+- **Status:** Implemented
 - **Date:** 2026-09-30
 - **Milestone / tasks:** M3 / T5.3
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`; compared with v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`
@@ -61,7 +61,7 @@ extension does not read; the backup repositories (M4).
 | --- | --- | --- |
 | REQ-152 | The Overview has a band Server, after what was read, whose first state says that the version is not read and offers the command, in the name of the kind, with the state of the gate, as SPEC-0009 says; with writes off it leads to the target bar and creates nothing | SERV-01 |
 | REQ-153 | The request is created with the generated name prefix `freelens-velero-`, an empty spec, no phase, which the release reads as New, and the label that names the extension, through the gate and its confirmation. It is read every 250 milliseconds, for ten seconds at most, until it is Processed; then the band shows the version, the time the server wrote, and the plugins. A request that is not Processed after ten seconds is said not answered, with what it may mean, a stopped or busy server, and the band says that the request stays until the server processes it, and that the server deletes a processed request when it looks at it again, five minutes after. No request is deleted by the extension | SERV-02 |
-| REQ-154 | The plugins are grouped by kind, in the order of the kinds of the release, ObjectStore, VolumeSnapshotter, BackupItemAction, BackupItemActionV2, RestoreItemAction, RestoreItemActionV2, DeleteItemAction and ItemBlockAction, the names sorted in each, since the object lists them in no order, with the count of each and of the whole; a kind the release does not name keeps its text after them. Beside the object store plugins, the band names the providers of the storage locations of the installation and marks the one for which no object store plugin of that name is loaded, by the rule the release uses to name a plugin from a provider | SERV-03 |
+| REQ-154 | The plugins are grouped by kind, in the order of the kinds of the release, ObjectStore, VolumeSnapshotter, BackupItemAction, BackupItemActionV2, RestoreItemAction, RestoreItemActionV2, DeleteItemAction and ItemBlockAction, the names sorted in each, since the object lists them in no order, each plugin once, since the object lists some more than once, with the count of each and of the whole and with how many entries of the object repeat a plugin; a kind the release does not name keeps its text after them. Beside the object store plugins, the band names the providers of the storage locations of the installation and marks the one for which no object store plugin of that name is loaded, by the rule the release uses to name a plugin from a provider | SERV-03 |
 | REQ-155 | The version is compared with the reviewed release: the same, and the band says that it is the release the extension was reviewed against; the same major and minor with another patch, and the band says that it is the series the extension was reviewed against, with the patch; another series, and the band says which release the extension was reviewed against and that what its views say of the behavior of Velero was read there; one that is not a version, shown as written with no comparison | SERV-04 |
 | REQ-156 | What was read is kept for the installation for the session, with its time, through the reads of the Overview and the other pages, and dropped when the installation changes. The command reads again, which is a new request | SERV-05 |
 | REQ-157 | An identity the API refuses the creation to is said so, with the kind and the verb it needs, and writes stay on; every other way the request ends is said in the words of its code | SERV-06 |
@@ -111,7 +111,7 @@ of the demo and on a synthetic installation, where no controller reads.
 | --- | --- | --- | --- |
 | SERV-01 | Component/packaged | REQ-152 | The band after what was read; the first state with writes off and on; nothing created when the page opens, counted on the API server |
 | SERV-02 | Fake-clock unit/packaged | REQ-153 | The prefix, the spec, the label; 250 ms and ten seconds; Processed with its fields; not answered after ten seconds; no delete sent |
-| SERV-03 | Unit/component/packaged | REQ-154 | The eight kinds in order, an unknown kind, the names sorted from an object that lists them unsorted, the counts; the providers of the locations, one with its plugin and one without, and the rule of the name |
+| SERV-03 | Unit/component/packaged | REQ-154 | The eight kinds in order, an unknown kind, the names sorted from an object that lists them unsorted, the counts, a plugin the object lists twice counted once; the providers of the locations, one with its plugin and one without, and the rule of the name |
 | SERV-04 | Unit/component | REQ-155 | The same version, the same series with another patch, a newer series, an older, a prerelease, a text that is not a version |
 | SERV-05 | Component/packaged | REQ-156 | Kept through a read of the Overview and a visit to another page; dropped with the installation; read again as a new request |
 | SERV-06 | Unit/packaged | REQ-157 | The refusal of the API with its words; each other code |
@@ -152,5 +152,83 @@ that it is down. Record role, date and verdict.
 
 ## Evidence And Deviations
 
-Approved on 2026-09-30, as drafted. No implementation, tests or runtime evidence
-yet.
+Approved on 2026-09-30, as drafted, and implemented by 2026-10-04, after an
+independent review of the first implementation and a first run against the server
+of the test environment, whose findings are in the code and in its tests. The
+[comparison of the version and the plugins by kind](../../src/common/server-version.ts)
+are pure functions; the [state of the request](../../src/renderer/state/server-status.ts)
+is held for the installation; the [band](../../src/renderer/pages/server-band.tsx) is
+in the Overview after what was read; the
+[confirmation of one write](../../src/renderer/components/write-confirmation.tsx) is
+the one the tabs of the artifacts will show.
+
+| Check | Evidence |
+| --- | --- |
+| SERV-01 | Component: the band after what was read; its first state with writes off, with writes whose state is not known, with no way to the main process and with writes on; nothing asked of the main process when the page opens. Packaged: the band on the demo, with nothing counted by the API server when the page opens and for a command that is not confirmed |
+| SERV-02 | Unit, through both processes, against an API server of the test: the object the cluster is sent, with the prefix, the empty spec, no phase and the label; one creation, then the reads of the request; nothing deleted. Unit, in the tests of the first slice: the wait and its end on a clock of the test. Packaged: Processed with its fields on the demo; in the synthetic installation not answered after ten seconds, read about four times a second meanwhile, with the request left as it was created |
+| SERV-03 | Unit: the eight kinds in order, an unknown kind after them, the names sorted, a plugin the object lists more than once counted once, the rule of the name. Component: the rows, the counts, the providers beside the object store plugins and nowhere else, one with its plugin and one without, read again with the installation. Packaged: what the band shows against what the server wrote into the request, read from the cluster |
+| SERV-04 | Unit and component: the same version, another patch, a prerelease and a build of the reviewed patch, a newer series, an older, the same minor of another major, a text that is not a version |
+| SERV-05 | Component: kept through a read and a visit to another page, dropped with the installation, read again as a new request while what was read stays. Packaged: kept through a read and a visit, dropped with the installation |
+| SERV-06 | Unit, through both processes: the refusal of the API with the kind and the verb, and writes left on. Component: every code in the words of the main process, with what the write left. Packaged: the reader of a part, refused by the cluster, with writes left on |
+| SERV-07 | Packaged: for the request the server answers, one creation, the reads of the request and what the server writes into it; for the one no server answers, one creation and its reads; through the suite nothing else of the kind but the removal of the processed request, by the server |
+| SERV-08 | Packaged: the real server of the demo, the synthetic installation, the identity that may not create |
+
+What was decided while implementing, inside the requirements:
+
+- **The confirmation is asked when the object is shown, and again when it expired.**
+  The main process is asked for its token at the first gesture, so that a refusal
+  of the gate is said before the object is reviewed. A token that expired while
+  the object was read is asked again once at the second gesture, for the same
+  object: the gesture is what confirms, and the thirty seconds bound the token in
+  the main process, not the reading of the operator.
+- **A confirmation is left** by its command, by Escape, with the page that shows it
+  and when writes go off, whether it is shown or still asked. A request that runs
+  is not left: the band says that it runs, whatever the writes become, and then how
+  it ended.
+- **A write that failed says what it left.** The request, when it failed while it
+  was waited for; nothing, when the cluster refused the creation or the main
+  process refused before asking the cluster; not known, when the answer of the
+  cluster or of the main process was lost, or the write was stopped at the
+  creation. The band says where the request is, or that it may be there, and its
+  command says then that it creates another. The stages the main process says are
+  written once, in the contract, for both processes.
+- **After a write that failed the views ask the main process what it holds of the
+  gate**, and show that: a refusal of the cluster leaves writes on.
+- **The focus follows the band**: to the words that say what it is doing while the
+  main process is asked, to the version when the server answered, to the
+  confirmation and never to its command that creates, to the command when a
+  confirmation is left or a write failed; and it stays where the operator moved it.
+- **The eight kinds of the release are always shown**, the ones with no plugin
+  too, and the names of a kind are one after the other: a kind of many plugins is
+  not as many lines of the page.
+- **The providers are compared as they are written**: `aws` and `velero.io/aws`
+  are two lines, which need the same plugin. They are the ones of the storage
+  locations as the installation last read them, under a version that stays.
+- **A prerelease and a build of the reviewed patch are of the reviewed series**,
+  said as the server wrote them, and not another patch.
+- **The time that is shown is the one the server wrote.**
+- **The wait is not cancelled from the band**: it ends by itself in ten seconds.
+  The cancellation of a write the gate has is for the artifacts, whose load is
+  longer.
+
+What changed in a requirement, from what the release does:
+
+- **REQ-154, each plugin once.** The server of the test environment listed every
+  BackupItemAction and every RestoreItemAction twice, which the
+  [recon](../development/RECON-T0.1.md#while-the-third-milestone-was-implemented-2026-10-04)
+  records with its source. A plugin is one kind and one name: the band shows and
+  counts each once, and says how many entries of the request repeat one. The
+  requirement and its check say so since this slice; the deviation is for the
+  review of the milestone.
+
+What is not proven in the packaged application:
+
+- **Reading again as a new request, and a version that is not the one of the
+  demo**: by the unit and component tests. The demo runs one release.
+- **The count of a creation that is refused.** The API server of the test
+  environment does not count a request it refuses to the identity: the refusal is
+  proven by the words of the band, by the namespace, which holds no request, and
+  by no creation counted. The unit tests prove the same words for a 403 of an API
+  server of the test, through both processes.
+- **A context that runs a plugin for its credential**, and a main process that
+  does not answer: by the unit tests.

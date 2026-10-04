@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import { REQUEST_PREFIX } from "../common/ipc";
 import { CredentialPluginError } from "./context-identity";
 import { DiagnosticError } from "./diagnostic-transport";
-import { readServerStatus, SERVER_STATUS_PREFIX, serverStatusFailure } from "./server-status";
+import { readServerStatus, serverStatusFailure } from "./server-status";
 
 import type { DiagnosticObject } from "./diagnostic-kubernetes";
 import type { ServerStatusApi } from "./server-status";
@@ -66,12 +67,7 @@ describe("the version of the server", () => {
       ],
       request: { name: "freelens-velero-abcde", uid: "request-uid" },
     });
-    expect(api.createGenerated).toHaveBeenCalledWith(
-      "ServerStatusRequest",
-      "velero",
-      SERVER_STATUS_PREFIX,
-      options.signal,
-    );
+    expect(api.createGenerated).toHaveBeenCalledWith("ServerStatusRequest", "velero", REQUEST_PREFIX, options.signal);
     expect(steps[0]).toEqual(["creating", undefined]);
     expect(steps[1]).toEqual(["waiting", 0]);
   });
@@ -158,6 +154,16 @@ describe("the version of the server", () => {
     expect(serverStatusFailure(new DiagnosticError("forbidden"), "x").text).toContain("refused to read");
     expect(serverStatusFailure(new DiagnosticError("deadline"), "x")).toMatchObject({ code: "deadline", retry: true });
     expect(serverStatusFailure(new DiagnosticError("submission-unknown")).text).toContain("freelens-velero-");
+    // A write that was cancelled says whether the request is there: it is, once it was created, and it is
+    // not known before the cluster answered its creation.
+    expect(serverStatusFailure(new DiagnosticError("cancelled"), "x")).toMatchObject({
+      stage: "wait",
+      text: "The wait was cancelled. The request stays until the server processes it.",
+    });
+    expect(serverStatusFailure(new DiagnosticError("cancelled"))).toMatchObject({
+      stage: "creation",
+      text: "The request was cancelled before the cluster answered its creation: it may have been created.",
+    });
     expect(serverStatusFailure(new Error("PRIVATE-SENTINEL"))).toMatchObject({ code: "request-failed" });
     expect(JSON.stringify(serverStatusFailure(new Error("PRIVATE-SENTINEL")))).not.toContain("PRIVATE-SENTINEL");
   });
@@ -171,7 +177,14 @@ describe("the version of the server", () => {
       for (const requestName of [undefined, "x"]) {
         const failed = serverStatusFailure(new CredentialPluginError("kubelogin", reason), requestName);
 
-        expect(failed).toMatchObject({ ok: false, code: "request-failed", stage: "credential", retry: true });
+        // Before the creation it is the stage of the credential; after it, the request is there and it is
+        // the wait that ended.
+        expect(failed).toMatchObject({
+          ok: false,
+          code: "request-failed",
+          stage: requestName ? "wait" : "credential",
+          retry: true,
+        });
         expect(failed.text).toContain("credential plugin kubelogin");
         expect(failed.text).toContain(words);
         expect(failed.text).not.toContain("refused");

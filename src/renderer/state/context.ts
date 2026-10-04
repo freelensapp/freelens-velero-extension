@@ -28,6 +28,7 @@ export function currentInstallation(): Installation {
       now: () => Date.now(),
       storage: storage(),
       gate,
+      writer: gate,
     });
 
     // When the main process turns writes off on its own, the frame of that cluster asks the state again.

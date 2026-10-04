@@ -8,7 +8,9 @@ them the synthetic objects that show what a real installation shows once in a
 while: every phase, references that lead nowhere, a list of a thousand backups.
 
 Everything here is local and synthetic. The extension reads the cluster the
-views are opened for and no other, and it only reads.
+views are opened for and no other. It only reads, until writes are turned on for
+an installation: then it creates the requests that are asked for and confirmed in
+the views, and nothing else.
 
 ## What you need
 
@@ -80,6 +82,8 @@ of the host have.
 | Open an item, a mark, a line | The view of the object opens over the Overview, which is the way back. Escape returns to the page where it was, with the focus on what was opened |
 | Select `velero-demo` | Nothing in what was read needs attention, which is what the page says: it does not say that all is well |
 | Writes, in the target bar | Off. Turn them on: the dialog names the installation, the cluster and its context, and what the extension may create. After it, on for `velero-demo`, on every page of the group; select another namespace and they are off |
+| Server, with writes on for `velero-demo` | The version is not read when the page opens. Create a ServerStatusRequest: the band shows the object it would create, and creates it at the second command. Then the version of the server, that it is the release the extension was reviewed against, when the server processed the request, and its plugins by kind, each once: the request lists some twice, and the band says how many. Beside the object store plugins, the provider of the storage location and the plugin it needs |
+| Select `velero-overview-<run>`, turn writes on, Server | No server looks at this namespace: after ten seconds the band says that the server did not answer, which is not that it is down, and where the request stays. The extension deletes no request: this one goes with the demo |
 | Other namespace, `velero-scale-<run>` | Two thousand operations: change the window, ask for more items, read again. The page stays where it was scrolled |
 
 The operations of `velero-overview-<run>` are counted back from the moment they
@@ -150,7 +154,9 @@ Then the locations, from Backup Storage Locations in the sidebar:
 
 With the keyboard alone: Tab reaches the choices, the search and the names of the
 rows, Enter opens, Tab reaches the ways to the other views and the marks of a line
-of time, Escape comes back and the focus is on the row that was open.
+of time, Escape comes back and the focus is on the row that was open. In the band
+of the server, Enter on the command shows the object, Tab reaches the command that
+creates and the one that leaves, and Escape leaves.
 
 For the restricted access, add `views-reader.json` in the same way. It has the
 same name as the first in the catalog: it is the one whose Velero asks for a
@@ -158,7 +164,9 @@ namespace instead of offering five. Name `velero-views-<run>`: the backups are
 read, and the workspace of one says which of its references cannot be. With
 `views-reader-of-restores.json` it is the other way round: the restores are read,
 and the source of one is said denied, which is not said absent; the schedules are
-read, and the history of one is said not known, which is not said empty.
+read, and the history of one is said not known, which is not said empty. With
+either reader, and writes on, the band of the server says that the cluster refused
+the creation of the request: neither may create.
 
 ## 4. The pass that precedes a review
 

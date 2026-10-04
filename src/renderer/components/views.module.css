@@ -947,3 +947,88 @@
   color: var(--textColorSecondary);
   font-size: 12px;
 }
+
+/* The confirmation of one write, inline where it is offered: the object as it will be submitted. The
+   line beside it says where the review begins and ends. */
+.writeConfirmation {
+  margin: 8px 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--primary);
+}
+
+.writeConfirmation:focus {
+  outline: none;
+}
+
+.writeConfirmation:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+}
+
+.writeObject {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px 24px;
+  margin: 0 0 12px;
+}
+
+.writeObject dd {
+  margin: 0;
+}
+
+.writeActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+/* What the band of the server gives the focus to when a command went: the words that say what it is
+   doing, and the version the server answered. */
+.serverFocus:focus {
+  outline: none;
+}
+
+.serverFocus:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* The plugins of a kind, and beside the object store plugins the providers of the storage locations. */
+.serverNames,
+.serverProviders {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
+/* The names of a kind one after the other, for as many lines as they need: a kind of thirty plugins
+   is not thirty lines of the page. */
+.serverNames {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 20px;
+}
+
+.serverProviders {
+  margin-top: 4px;
+  color: var(--textColorSecondary);
+  font-size: 12px;
+}
+
+/* The mark of a provider beside its words, which say the same without it. */
+.serverProviders li {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.serverProviders li > :first-child {
+  flex: 0 0 auto;
+  color: var(--colorOk);
+}
+
+.serverProviders li[data-loaded="false"] > :first-child {
+  color: var(--colorWarning);
+}
