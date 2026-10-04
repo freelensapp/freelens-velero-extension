@@ -3,9 +3,11 @@
 // renderer, nothing is broadcast of a write, and the catalog of the host is where a cluster is resolved.
 
 import { Main } from "@freelensapp/extensions";
+import { ALLOWANCES_BOUND, type Allowances, isAllowed, withAllowance, withoutAllowance } from "../common/allowances";
 import { type DownloadContext, downloadFailure } from "../common/diagnostic-text";
 import { clusterOfAddress, senderKey } from "../common/frame";
 import {
+  type AllowanceRequest,
   type Answer,
   type ArtifactPage,
   type ArtifactTarget,
@@ -14,6 +16,7 @@ import {
   type Failure,
   failure,
   REQUEST_LABELS,
+  readAllowanceRequest,
   readArtifactPageRequest,
   readArtifactReleaseRequest,
   readGateDisableRequest,
@@ -30,6 +33,7 @@ import {
 import { ArtifactHolder } from "./artifact-holder";
 import { CredentialPluginError, PLUGIN_TIMEOUT } from "./context-identity";
 import { DiagnosticKubernetes } from "./diagnostic-kubernetes";
+import { resolveRoute } from "./diagnostic-route";
 import { type DiagnosticOptions, runDownload } from "./diagnostic-service";
 import { DiagnosticError } from "./diagnostic-transport";
 import { readServerStatus, serverStatusFailure } from "./server-status";
@@ -86,13 +90,18 @@ export interface HandlersDependencies {
   catalog(): CatalogEntry[];
   gate?: WriteGate<DiagnosticKubernetes>;
   pollMs?: number;
-  // The route to the store for a signed URL. Without one no DownloadRequest is created: the route of
-  // the main process comes with its own slice, and the proof of the transport gives its own.
+  // The route to the store for a signed URL, when a test gives its own in place of the one the main
+  // process finds.
   route?: DiagnosticOptions["route"];
+  // What resolves a name on this machine, when a test gives its own.
+  lookup?(host: string): Promise<string[]>;
   // The bounds of the way of a download, which a test makes shorter, and what downloads for it.
   download?: Pick<DiagnosticOptions, "download" | "pollMs" | "urlTimeoutMs" | "totalMs" | "closeMs">;
   // What holds the texts of the artifacts, when a test looks into it.
   holder?: ArtifactHolder;
+  // Where what the operator allowed is kept: the store of the preferences, as the main process holds it.
+  allowances?: { read(): Allowances; write(allowances: Allowances): void };
+  now?(): number;
 }
 
 // The words of how a download ended, from what was raised: the code and the step of a failure of the
@@ -107,7 +116,7 @@ export function downloadFailureOf(error: unknown, context: DownloadContext): Fai
     return downloadFailure(
       error.code,
       error.stage ?? "request",
-      error.verdict ? { ...context, verdict: error.verdict } : context,
+      error.verdict ? { ...context, verdict: error.verdict, ...(error.needs ? { needs: error.needs } : {}) } : context,
     );
   return downloadFailure("request-failed", "handler", context);
 }
@@ -257,7 +266,6 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
     sender: Sender,
     request: WriteRunRequest,
     still: () => boolean,
-    route: DiagnosticOptions["route"],
   ): Promise<Answer<ArtifactValue>> => {
     const target = request.target as WriteTarget;
     const artifact = request.artifact as ArtifactTarget;
@@ -281,6 +289,17 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
       namespace: request.namespace,
       request: `${target.name}-${request.request}`,
     };
+    // The route to the store: the one the main process finds, with the adapter of the gate and with what
+    // the operator allowed for this cluster and no other. Where nothing keeps what is allowed, nothing is.
+    const route: DiagnosticOptions["route"] =
+      dependencies.route ??
+      ((url, input, storage, signal) =>
+        resolveRoute(url, input, storage, signal, {
+          api: adapter,
+          allowed: (what, origin, location) =>
+            isAllowed(dependencies.allowances?.read() ?? {}, request.cluster, what, origin, location),
+          ...(dependencies.lookup ? { lookup: dependencies.lookup } : {}),
+        }));
     const watching = watchFrame(still, write.controller);
 
     try {
@@ -341,16 +360,6 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
     readWriteRunRequest,
     (sender, request, still) => {
       if (request.kind === "ServerStatusRequest") return serverStatus(sender, request, still);
-      const route = dependencies.route;
-
-      // Nothing is created for an artifact while the main process has no route to its store.
-      if (!route)
-        return failure(
-          "validation",
-          "kind",
-          false,
-          "The log, the results, the resources and the volumes of an operation come with a later version of the extension.",
-        );
       const key = `${request.cluster}/${request.request}`;
       const fingerprint = JSON.stringify([
         sender.key,
@@ -364,7 +373,7 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
         return running.fingerprint === fingerprint
           ? running.promise
           : failure("forbidden", "request", false, "No write of this frame has this identifier.");
-      const promise = download(sender, request, still, route).finally(() => downloads.delete(key));
+      const promise = download(sender, request, still).finally(() => downloads.delete(key));
 
       downloads.set(key, { fingerprint, promise });
       return promise;
@@ -394,6 +403,41 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
       return { ok: true, value: null };
     },
   );
+
+  // What the operator allows the downloads to do, and takes back, for the cluster of the frame that asks.
+  // It is no write to the cluster and needs no gate: it is kept between the sessions, and says only where
+  // a download may connect to.
+  procedure<AllowanceRequest, null>(CHANNELS.allowanceGrant, readAllowanceRequest, (_sender, request) => {
+    const store = dependencies.allowances;
+    const { cluster, ...allowed } = request;
+
+    if (!store)
+      return failure("request-failed", "allowances", false, "What is allowed cannot be kept: the store is not there.");
+    const held = store.read();
+
+    if (isAllowed(held, cluster, allowed.what, allowed.origin, allowed.location)) return { ok: true, value: null };
+    if ((held[cluster]?.length ?? 0) >= ALLOWANCES_BOUND)
+      return failure(
+        "forbidden",
+        "allowances",
+        false,
+        "This cluster holds as many allowances as it may: take one back in the target bar first.",
+      );
+    store.write(withAllowance(held, cluster, allowed, (dependencies.now ?? Date.now)()));
+    return { ok: true, value: null };
+  });
+  procedure<AllowanceRequest, null>(CHANNELS.allowanceRevoke, readAllowanceRequest, (_sender, request) => {
+    const store = dependencies.allowances;
+    const { cluster, ...taken } = request;
+
+    if (!store)
+      return failure("request-failed", "allowances", false, "What is allowed cannot be kept: the store is not there.");
+    const held = store.read();
+
+    if (isAllowed(held, cluster, taken.what, taken.origin, taken.location))
+      store.write(withoutAllowance(held, cluster, taken));
+    return { ok: true, value: null };
+  });
 
   return () => {
     if (poll) clearInterval(poll);

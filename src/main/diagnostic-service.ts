@@ -47,7 +47,12 @@ export interface DiagnosticOptions {
     input: Readonly<DiagnosticInput>,
     storage: DiagnosticObject,
     signal: AbortSignal,
-  ): Promise<{ route: ArtifactRoute; close(): void | Promise<void> }>;
+  ): Promise<{
+    route: ArtifactRoute;
+    close(): void | Promise<void>;
+    // Whether the cluster refused the port-forward of a route through it: known once a connection needed it.
+    refused?(): false | "permission" | "credential";
+  }>;
   // Told each step before it is taken, and the seconds waited while the URL is waited for.
   onStep?(stage: DownloadStage, count?: number): void;
   // Told the request once it is known to be in the cluster.
@@ -190,7 +195,7 @@ function failed(error: unknown, stage: DownloadStage): DiagnosticError {
     return new CredentialPluginError(error.command, error.reason, stage);
   }
   if (error instanceof DiagnosticError)
-    return error.stage === undefined ? new DiagnosticError(error.code, stage, error.verdict) : error;
+    return error.stage === undefined ? new DiagnosticError(error.code, stage, error.verdict, error.needs) : error;
   // What is not a code, raised while the request was created, says nothing of whether it was.
   return new DiagnosticError(stage === "creation" ? "submission-unknown" : "request-failed", stage);
 }
@@ -402,6 +407,15 @@ export async function runDownload(
     // handshake that failed for another reason nothing is said of the key: no certificate was refused.
     if (insecure && failure.verdict === "untrusted")
       failure = new DiagnosticError(failure.code, failure.stage, "insecure");
+    // A port-forward the cluster refused is what ended the download, and not a store that was not reached:
+    // to an identity that may not forward a port, or with a credential the cluster did not take.
+    const refusal =
+      failure.code !== "cancelled" && failure.verdict !== "whole" && failure.stage === "download"
+        ? routed?.refused?.()
+        : false;
+
+    if (refusal)
+      failure = new DiagnosticError("forbidden", "forward", refusal === "credential" ? "credential" : undefined);
   } finally {
     clearTimeout(timer);
     outer.removeEventListener("abort", cancelled);

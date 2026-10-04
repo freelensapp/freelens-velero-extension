@@ -114,6 +114,8 @@ describe("the procedures of the main process", () => {
         CHANNELS.writeCancel,
         CHANNELS.artifactPage,
         CHANNELS.artifactRelease,
+        CHANNELS.allowanceGrant,
+        CHANNELS.allowanceRevoke,
       ].sort(),
     );
     dispose();
@@ -195,13 +197,15 @@ describe("the procedures of the main process", () => {
     dispose();
   });
 
-  it("refuses a write while writes are off, and one of a kind this version does not run", async () => {
+  it("refuses a write while writes are off, and the run of an artifact no confirmation gave a token for", async () => {
     const { call, enable, adapter, dispose } = fixture();
 
     await expect(
       call(CHANNELS.writeConfirm, FRAME_A, { cluster: "cluster-a", namespace: "velero", kind: "ServerStatusRequest" }),
     ).resolves.toMatchObject({ ok: false, code: "forbidden", stage: "gate" });
     await enable();
+    // The run of a DownloadRequest goes its way from this version on: without a token of a confirmation
+    // it is refused as every write is, and the cluster is not asked.
     await expect(
       call(CHANNELS.writeRun, FRAME_A, {
         cluster: "cluster-a",
@@ -212,8 +216,9 @@ describe("the procedures of the main process", () => {
         token: randomUUID(),
         request: randomUUID(),
       }),
-    ).resolves.toMatchObject({ ok: false, code: "validation", stage: "kind" });
+    ).resolves.toMatchObject({ ok: false, code: "forbidden", stage: "confirmation" });
     expect(adapter.createGenerated).not.toHaveBeenCalled();
+    expect(adapter.read).not.toHaveBeenCalled();
     dispose();
   });
 

@@ -25,7 +25,17 @@ const pending = () => streaming?.bufferedAmount ?? 0;
 beforeAll(async () => {
   certificates = await createTlsFixture();
   server = createServer(certificates);
-  websocketServer = new WebSocketServer({ server });
+  // The API server of the test refuses the port-forward to the Pod named refused, as it does for an
+  // identity that may not create one.
+  websocketServer = new WebSocketServer({
+    server,
+    verifyClient: (info: { req: { url?: string } }, done: (allowed: boolean, code?: number) => void) =>
+      info.req.url?.includes("/pods/failing/")
+        ? done(false, 500)
+        : info.req.url?.includes("/pods/unknown/")
+          ? done(false, 401)
+          : done(!info.req.url?.includes("/pods/refused/"), 403),
+  });
   websocketServer.on("connection", (socket, request) => {
     requests.push({ url: request.url, authorization: request.headers.authorization });
     socket.send(Buffer.from([0, 141, 32]));
@@ -268,6 +278,58 @@ describe("owned Kubernetes pod tunnel", () => {
       }
     },
   );
+
+  it("says that the port-forward was refused when the API server refuses it, and that it was not when it was made", async () => {
+    const signal = new AbortController().signal;
+    const tunnel = await openPodTunnel(api("refused"), { ...target, name: "refused" }, signal);
+
+    // Nothing was asked of the API server yet: the port-forward is made when a connection needs it.
+    expect(tunnel.refused()).toBe(false);
+    const socket = connect(tunnel.port, tunnel.address);
+
+    socket.on("error", () => undefined);
+    await once(socket, "close");
+    expect(tunnel.refused()).toBe("permission");
+    await tunnel.close();
+    // A credential the API server does not take is a refusal of another kind: it says nothing of what the
+    // identity may do.
+    const unknown = await openPodTunnel(api("unknown"), { ...target, name: "unknown" }, signal);
+    const turned = connect(unknown.port, unknown.address);
+
+    turned.on("error", () => undefined);
+    await once(turned, "close");
+    expect(unknown.refused()).toBe("credential");
+    await unknown.close();
+    // A download through it ends as a connection that was lost, and the tunnel says why.
+    const origin = "http://storage.example.invalid:8333";
+    const again = await openPodTunnel(api("refused"), { ...target, name: "refused" }, signal);
+    const failed = await downloadArtifact(
+      `${origin}/artifact?signature=synthetic`,
+      { origin, pathname: "/artifact", address: again.address, port: again.port, mode: "tunnel", allowHttp: true },
+      signal,
+    ).catch((error: unknown) => error);
+
+    expect(failed).toMatchObject({ code: "transport-unreachable" });
+    expect(again.refused()).toBe("permission");
+    await again.close();
+    // An API server that fails is not one that refuses: the connection ends, and nothing says a refusal.
+    const failing = await openPodTunnel(api("failing"), { ...target, name: "failing" }, signal);
+    const lost = connect(failing.port, failing.address);
+
+    lost.on("error", () => undefined);
+    await once(lost, "close");
+    expect(failing.refused()).toBe(false);
+    await failing.close();
+    // A port-forward that was made, and whose Pod then closes, was not refused.
+    const made = await openPodTunnel(api(), target, signal);
+    const kept = connect(made.port, made.address);
+
+    kept.write("synthetic");
+    await once(kept, "data");
+    kept.destroy();
+    expect(made.refused()).toBe(false);
+    await made.close();
+  });
 
   it("ends as transport-unreachable when its listener cannot listen, and leaves nothing open", async () => {
     // A listener that fails where it would have begun to listen. The wait for it ends with that error

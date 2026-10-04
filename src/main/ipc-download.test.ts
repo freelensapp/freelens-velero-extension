@@ -11,6 +11,7 @@ import { DiagnosticError } from "./diagnostic-transport";
 import { downloadFailureOf, registerHandlers } from "./ipc";
 import { WriteGate } from "./write-gate";
 
+import type { Allowances } from "../common/allowances";
 import type { DiagnosticObject } from "./diagnostic-kubernetes";
 import type { IpcEvent, Registrar } from "./ipc";
 import type { CatalogEntry } from "./write-gate";
@@ -32,7 +33,14 @@ const SIGNED =
 const TARGET = { kind: "Backup" as const, name: "nightly", uid: "backup-uid" };
 const LOG = 'time="2026-09-30T10:00:00Z" level=info msg="Backup completed"';
 
-function fixture(options: { route?: boolean; urlTimeoutMs?: number } = {}) {
+function fixture(
+  options: {
+    route?: boolean;
+    urlTimeoutMs?: number;
+    allowances?: Allowances;
+    lookup?: (host: string) => Promise<string[]>;
+  } = {},
+) {
   const catalog: CatalogEntry[] = [
     { id: "cluster-a", name: "demo", kubeConfigPath: "/synthetic/a", contextName: "kind-a" },
     { id: "cluster-b", name: "other", kubeConfigPath: "/synthetic/b", contextName: "kind-b" },
@@ -51,7 +59,7 @@ function fixture(options: { route?: boolean; urlTimeoutMs?: number } = {}) {
       if (kind === "Backup")
         return { metadata: { name, namespace, uid: "backup-uid" }, spec: { storageLocation: "default" } };
       if (kind === "BackupStorageLocation")
-        return { metadata: { name, namespace, uid: "bsl-uid" }, spec: { objectStorage: {} } };
+        return { metadata: { name, namespace, uid: "bsl-uid" }, spec: { objectStorage: { bucket: "bucket" } } };
       const request = state.requests.get(name);
 
       if (!request) throw new DiagnosticError("not-found");
@@ -102,6 +110,10 @@ function fixture(options: { route?: boolean; urlTimeoutMs?: number } = {}) {
     pollMs: 5,
     holder,
     ...(options.route === false ? {} : { route }),
+    ...(options.allowances
+      ? { allowances: { read: () => options.allowances as Allowances, write: () => undefined } }
+      : {}),
+    ...(options.lookup ? { lookup: options.lookup } : {}),
     download: { download, pollMs: 5, urlTimeoutMs: options.urlTimeoutMs ?? 80 },
   });
   const call = (channel: string, event: IpcEvent, payload: unknown) => {
@@ -179,27 +191,75 @@ describe("the procedures of a DownloadRequest", () => {
         CHANNELS.writeCancel,
         CHANNELS.artifactPage,
         CHANNELS.artifactRelease,
+        CHANNELS.allowanceGrant,
+        CHANNELS.allowanceRevoke,
       ].sort(),
     );
     dispose();
   });
 
-  it("creates nothing for an artifact while the main process has no route to its store, and takes no token for it", async () => {
-    const { enable, confirm, run, adapter, gate, dispose } = fixture({ route: false });
+  it("finds the route by itself when it is given none, and asks the operator for what the storage location does not give", async () => {
+    // The storage location of the fixture names no provider: no origin is one it gives.
+    const { enable, confirm, run, adapter, download, close, dispose } = fixture({ route: false });
 
     await enable();
-    const token = await confirm();
     const request = randomUUID();
+    const answer = await run(await confirm(), request);
 
-    await expect(run(token, request)).resolves.toMatchObject({ ok: false, code: "validation", stage: "kind" });
-    expect(adapter.createDownload).not.toHaveBeenCalled();
-    expect(adapter.read).not.toHaveBeenCalled();
-    // The confirmation was not spent: the gate still holds it.
-    expect(
-      gate.take("cluster-a:1:4", "cluster-a", "velero", "DownloadRequest", TARGET, token, request, "BackupLog"),
-    ).toMatchObject({
-      ok: true,
+    expect(answer).toEqual({
+      ok: false,
+      code: "destination-denied",
+      stage: "route",
+      retry: false,
+      text: `The URL of the request is of https://storage.example.invalid, which the storage location default of velero does not give: downloads from it are made only after they are allowed for this storage location. The DownloadRequest nightly-${request} stays in velero until Velero removes it.`,
+      needs: { what: "origin", origin: "https://storage.example.invalid", location: "velero/default" },
     });
+    // The request was created: the URL is known only once Velero signed it. Nothing was connected to.
+    expect(adapter.createDownload).toHaveBeenCalledTimes(1);
+    expect(download).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
+    // What the views read of it is of the contract, with what may be allowed.
+    expect(readAnswer(answer, readArtifactValue)).toEqual(answer);
+    expect(JSON.stringify(answer)).not.toMatch(/PRIVATE-SENTINEL|X-Amz|nightly-logs/);
+    dispose();
+  });
+
+  it("connects where the operator allowed, for the cluster of the frame and for no other", async () => {
+    const allowed = {
+      what: "origin" as const,
+      origin: "https://storage.example.invalid",
+      location: "velero/default",
+      since: 1,
+    };
+    const lookup = vi.fn(async () => ["203.0.113.7"]);
+    // Allowed for another cluster, it is not allowed for this one.
+    const other = fixture({ route: false, allowances: { "cluster-b": [allowed] }, lookup });
+
+    await other.enable();
+    await expect(other.run(await other.confirm())).resolves.toMatchObject({
+      ok: false,
+      code: "destination-denied",
+      needs: { what: "origin" },
+    });
+    expect(lookup).not.toHaveBeenCalled();
+    other.dispose();
+    const { enable, confirm, run, download, adapter, dispose } = fixture({
+      route: false,
+      allowances: { "cluster-a": [allowed] },
+      lookup,
+    });
+
+    await enable();
+    await expect(run(await confirm())).resolves.toMatchObject({
+      ok: true,
+      value: { route: { mode: "direct", encrypted: true, origin: "https://storage.example.invalid" } },
+    });
+    // The name was resolved on this machine, once, and the download was given the address it resolved to.
+    expect(lookup).toHaveBeenCalledTimes(1);
+    expect(lookup).toHaveBeenCalledWith("storage.example.invalid");
+    expect(download.mock.calls[0][1]).toMatchObject({ address: "203.0.113.7", port: 443, mode: "direct" });
+    // A name of three labels is no Service: the cluster was not asked for one.
+    expect(adapter.read.mock.calls.some(([kind]) => kind === "Service")).toBe(false);
     dispose();
   });
 

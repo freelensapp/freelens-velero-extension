@@ -36,7 +36,10 @@ const resources = {
   Pod: "pods",
   Service: "services",
   Secret: "secrets",
+  EndpointSlice: "endpointslices",
 } as const;
+// The label of an endpoint slice that names the Service it is of.
+const SERVICE_NAME_LABEL = "kubernetes.io/service-name";
 export type DiagnosticKind = keyof typeof resources;
 
 function name(value: string, maximum = 253): string {
@@ -179,17 +182,11 @@ export class DiagnosticKubernetes {
     });
   }
 
-  // The options of a request, with the credential of the user: the one of the entry, or the one its
-  // plugin gives, which is asked of the plugin when there is none or the one there is expired. What it
-  // returns is the credential of the plugin it used, if any.
-  private async authenticate(options: RequestOptions, signal: AbortSignal): Promise<Credential | undefined> {
-    if (!this.entry.user.exec) {
-      await this.configuration.applyToHTTPSOptions(options);
-      return undefined;
-    }
+  // The configuration of the context with the credential of its plugin in place of the plugin, and the
+  // credential it carries. The client of Kubernetes would otherwise run the plugin itself, without a bound
+  // and without an end when the request is cancelled.
+  private async withCredential(signal: AbortSignal): Promise<{ configuration: KubeConfig; credential: Credential }> {
     const credential = await this.credentialOfPlugin(signal);
-    // The configuration is copied with the credential in place of the plugin: the client of Kubernetes
-    // would otherwise run the plugin itself, without a bound.
     const copy = new KubeConfig();
     const cluster = this.configuration.getCluster(this.entry.cluster.name);
 
@@ -215,12 +212,38 @@ export class DiagnosticKubernetes {
       contexts: [{ name: this.binding.context, cluster: cluster.name, user: this.entry.user.name }],
       currentContext: this.binding.context,
     });
-    await copy.applyToHTTPSOptions(options);
+    return { configuration: copy, credential };
+  }
+
+  // The options of a request, with the credential of the user: the one of the entry, or the one its
+  // plugin gives, which is asked of the plugin when there is none or the one there is expired. What it
+  // returns is the credential of the plugin it used, if any.
+  private async authenticate(options: RequestOptions, signal: AbortSignal): Promise<Credential | undefined> {
+    if (!this.entry.user.exec) {
+      await this.configuration.applyToHTTPSOptions(options);
+      return undefined;
+    }
+    const { configuration, credential } = await this.withCredential(signal);
+
+    await configuration.applyToHTTPSOptions(options);
     return credential;
   }
 
+  // What a client of Kubernetes is given for a request the adapter does not make itself, the port-forward
+  // of a tunnel: the configuration of the context as it is when it names no plugin, and with the
+  // credential of the plugin, which the adapter ran within its bound, when it names one.
+  async authenticatedConfiguration(signal: AbortSignal): Promise<KubeConfig> {
+    this.assertCurrent();
+    if (!this.entry.user.exec) return this.configuration;
+    return (await this.withCredential(signal)).configuration;
+  }
+
   private path(kind: DiagnosticKind, namespace: string, objectName?: string): string {
-    const base = ["Pod", "Service", "Secret"].includes(kind) ? "/api/v1" : "/apis/velero.io/v1";
+    const base = ["Pod", "Service", "Secret"].includes(kind)
+      ? "/api/v1"
+      : kind === "EndpointSlice"
+        ? "/apis/discovery.k8s.io/v1"
+        : "/apis/velero.io/v1";
 
     return `${base}/namespaces/${name(namespace, 63)}/${resources[kind]}${objectName ? `/${name(objectName)}` : ""}`;
   }
@@ -323,17 +346,21 @@ export class DiagnosticKubernetes {
           // as kubectl does, whether the credential said an expiration or not.
           if (code === 401 && used && this.credential === used) this.credential = undefined;
           finish(
-            new DiagnosticError(
-              code === 403 || code === 401
-                ? "forbidden"
-                : code === 404
-                  ? "not-found"
-                  : code === 409
-                    ? "conflict"
-                    : method === "POST" && code >= 500
-                      ? "submission-unknown"
-                      : "request-failed",
-            ),
+            // A credential the cluster does not take is a refusal that says nothing of what the identity
+            // may do: it is told from one of a permission.
+            code === 401
+              ? new DiagnosticError("forbidden", undefined, "credential")
+              : new DiagnosticError(
+                  code === 403
+                    ? "forbidden"
+                    : code === 404
+                      ? "not-found"
+                      : code === 409
+                        ? "conflict"
+                        : method === "POST" && code >= 500
+                          ? "submission-unknown"
+                          : "request-failed",
+                ),
           );
           return;
         }
@@ -381,6 +408,30 @@ export class DiagnosticKubernetes {
     if (result.metadata.name !== objectName || result.metadata.namespace !== namespace || !result.metadata.uid)
       throw new DiagnosticError("target-changed");
     return result;
+  }
+
+  // The endpoint slices of a Service, by the label that names it: the one list the adapter asks for, for
+  // the route to a store inside the cluster. What the cluster answers is taken only when every slice is of
+  // that namespace and of that Service.
+  list(kind: "EndpointSlice", namespace: string, service: string, signal: AbortSignal): Promise<DiagnosticObject[]> {
+    if (kind !== "EndpointSlice") throw new DiagnosticError("validation");
+    const selector = encodeURIComponent(`${SERVICE_NAME_LABEL}=${name(service, 63)}`);
+
+    return this.send("GET", `${this.path(kind, namespace)}?labelSelector=${selector}`, signal).then((result) => {
+      const items = (result as { items?: unknown }).items;
+
+      if (
+        !Array.isArray(items) ||
+        !items.every(
+          (item: DiagnosticObject | undefined) =>
+            typeof item?.metadata?.name === "string" &&
+            item.metadata.namespace === namespace &&
+            item.metadata.labels?.[SERVICE_NAME_LABEL] === service,
+        )
+      )
+        throw new DiagnosticError("request-failed");
+      return items as DiagnosticObject[];
+    });
   }
 
   createDownload(
