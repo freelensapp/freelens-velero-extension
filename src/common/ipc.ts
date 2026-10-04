@@ -14,10 +14,36 @@ export const CHANNELS = {
   writeRun: "write.run",
   writeStatus: "write.status",
   writeCancel: "write.cancel",
+  artifactPage: "artifact.page",
+  artifactRelease: "artifact.release",
 } as const;
 
 export const WRITE_KINDS = ["DownloadRequest", "ServerStatusRequest"] as const;
 export type WriteKind = (typeof WRITE_KINDS)[number];
+
+// The artifacts of an operation a DownloadRequest is created for: eight of the fourteen kinds of target
+// the API of the reviewed release has. The contents of a backup are not among them, and never will be:
+// what is not one of the eight is refused where a request is read, before the gate is looked at.
+export const ARTIFACT_TARGETS = [
+  "BackupLog",
+  "RestoreLog",
+  "BackupResults",
+  "RestoreResults",
+  "BackupResourceList",
+  "RestoreResourceList",
+  "BackupVolumeInfos",
+  "RestoreVolumeInfo",
+] as const;
+export type ArtifactTarget = (typeof ARTIFACT_TARGETS)[number];
+
+export function isArtifactTarget(value: unknown): value is ArtifactTarget {
+  return typeof value === "string" && (ARTIFACT_TARGETS as readonly string[]).includes(value);
+}
+
+// The kind of operation an artifact is of.
+export function artifactKind(artifact: ArtifactTarget): "Backup" | "Restore" {
+  return artifact.startsWith("Backup") ? "Backup" : "Restore";
+}
 
 // What a request of a generated name is created with, which the confirmation of the views shows: the
 // prefix of its name, so that an operator who lists the requests knows what created them, and the labels
@@ -26,12 +52,38 @@ export const REQUEST_PREFIX = "freelens-velero-";
 export const REQUEST_LABELS: Readonly<Record<string, string>> = {
   "app.kubernetes.io/managed-by": "freelens-velero-extension",
 };
+// The label a DownloadRequest carries beside them, with the identifier of the request of the views it was
+// created for: it is how the main process knows a request as its own when it reads it back.
+export const DIAGNOSTIC_REQUEST_LABEL = "freelensapp.io/diagnostic-request";
 
 // Where the write of such a request failed, which the main process says and the views read what the
 // request left in the cluster by: before the cluster answered its creation, while the request was waited
 // for, which is after it was created, and while the plugin of the context was asked for its credential
 // before the creation.
 export const REQUEST_STAGES = { creation: "creation", wait: "wait", credential: "credential" } as const;
+
+// The steps of the way of a DownloadRequest, in their order: the wait for one of the two places of the
+// process, the target read again, its backup when it is a restore, the storage location of the backup,
+// its certificate, the creation of the request, the wait for its URL, the route to the store, the
+// download, the delivery of the text and the release of what was opened. A failure names the step it
+// ended at.
+export const DOWNLOAD_STAGES = [
+  "queue",
+  "target",
+  "backup",
+  "location",
+  "certificate",
+  "creation",
+  "wait",
+  "route",
+  "download",
+  "delivery",
+  "release",
+] as const;
+export type DownloadStage = (typeof DOWNLOAD_STAGES)[number];
+
+// The largest page of the text of an artifact the main process gives the views, in bytes of its text.
+export const PAGE_BOUND = 4 * 1024 * 1024;
 
 // The largest request the processes accept of each other.
 export const REQUEST_BOUND = 64 * 1024;
@@ -125,6 +177,9 @@ export interface WriteConfirmRequest {
   namespace: string;
   kind: WriteKind;
   target?: WriteTarget;
+  // What the kind of the write needs beside its target: the artifact a DownloadRequest is for. It is a
+  // part of what is confirmed: a confirmation of the log of a backup is not one of its results.
+  artifact?: ArtifactTarget;
 }
 export interface WriteConfirmAnswer {
   token: string;
@@ -135,10 +190,9 @@ export interface WriteRunRequest {
   namespace: string;
   kind: WriteKind;
   target?: WriteTarget;
+  artifact?: ArtifactTarget;
   token: string;
   request: string;
-  // What the kind of the write needs beside its target: the kind of artifact of a DownloadRequest.
-  artifact?: string;
 }
 export interface WriteStatusRequest {
   cluster: string;
@@ -154,6 +208,37 @@ export interface WriteStatus {
   step: string;
   // What the step counts, when it counts something: bytes, seconds.
   count?: number;
+}
+
+// The page of the text of an artifact a view asks for, of a write of its frame.
+export interface ArtifactPageRequest {
+  cluster: string;
+  request: string;
+  page: number;
+}
+
+// What the main process answers of an artifact it downloaded: the request it created, how much text
+// there is and in how many pages, and the route the bytes came by, in words. The text is asked page by
+// page; the signed URL is in none of it.
+export interface ArtifactValue {
+  request: { name: string; uid: string };
+  // The decoded text, in bytes, and the pages it is given in.
+  size: number;
+  pages: number;
+  route: {
+    // Through a tunnel to the pod of the storage, or directly from this machine.
+    mode: "tunnel" | "direct";
+    // Whether the connection to the store was encrypted.
+    encrypted: boolean;
+    // The origin of the store, without a path and without a query.
+    origin: string;
+  };
+}
+
+export interface ArtifactPage {
+  page: number;
+  pages: number;
+  text: string;
 }
 
 export interface ServerStatusValue {
@@ -255,16 +340,30 @@ export function readGateDisableRequest(value: unknown): GateDisableRequest | und
 }
 
 export function readWriteConfirmRequest(value: unknown): WriteConfirmRequest | undefined {
-  if (!withinBound(value) || !isRecord(value) || !hasKeys(value, ["cluster", "namespace", "kind"], ["target"])) return;
+  if (
+    !withinBound(value) ||
+    !isRecord(value) ||
+    !hasKeys(value, ["cluster", "namespace", "kind"], ["target", "artifact"])
+  )
+    return;
   if (!isCluster(value.cluster) || !isNamespace(value.namespace) || !isWriteKind(value.kind)) return;
   if ("target" in value && !isTarget(value.target)) return;
-  // A DownloadRequest is of a backup or of a restore; a ServerStatusRequest is of none.
+  // A DownloadRequest is of a backup or of a restore, and for one artifact of it; a ServerStatusRequest
+  // is of none.
   if ((value.kind === "DownloadRequest") !== "target" in value) return;
+  if ((value.kind === "DownloadRequest") !== "artifact" in value) return;
+  // One of the eight artifacts, and of the kind of its target: the log of a restore is not asked of a
+  // backup. The contents of a backup, and every other target of the API, are refused here.
+  if ("artifact" in value) {
+    if (!isArtifactTarget(value.artifact)) return;
+    if (artifactKind(value.artifact) !== (value.target as WriteTarget).kind) return;
+  }
   return {
     cluster: value.cluster,
     namespace: value.namespace,
     kind: value.kind,
     ...(value.target ? { target: { ...(value.target as WriteTarget) } } : {}),
+    ...(isArtifactTarget(value.artifact) ? { artifact: value.artifact } : {}),
   };
 }
 
@@ -275,22 +374,17 @@ export function readWriteRunRequest(value: unknown): WriteRunRequest | undefined
     !hasKeys(value, ["cluster", "namespace", "kind", "token", "request"], ["target", "artifact"])
   )
     return;
+  // What is run is what was confirmed, with the token of its confirmation and the identifier of the request.
   const confirm = readWriteConfirmRequest({
     cluster: value.cluster,
     namespace: value.namespace,
     kind: value.kind,
     ...("target" in value ? { target: value.target } : {}),
+    ...("artifact" in value ? { artifact: value.artifact } : {}),
   });
 
   if (!confirm || !isUuid(value.token) || !isUuid(value.request)) return;
-  if ("artifact" in value && !isText(value.artifact, 64)) return;
-  if ((value.kind === "DownloadRequest") !== "artifact" in value) return;
-  return {
-    ...confirm,
-    token: value.token,
-    request: value.request,
-    ...(typeof value.artifact === "string" ? { artifact: value.artifact } : {}),
-  };
+  return { ...confirm, token: value.token, request: value.request };
 }
 
 export function readWriteStatusRequest(value: unknown): WriteStatusRequest | undefined {
@@ -300,9 +394,24 @@ export function readWriteStatusRequest(value: unknown): WriteStatusRequest | und
 }
 
 export const readWriteCancelRequest = readWriteStatusRequest;
+export const readArtifactReleaseRequest = readWriteStatusRequest;
 
-// The answers, read by the renderer: what is not an answer of the contract is a failure of the way.
-export function readAnswer<Value>(value: unknown, readValue: (inner: unknown) => Value | undefined): Answer<Value> {
+export function readArtifactPageRequest(value: unknown): ArtifactPageRequest | undefined {
+  if (!withinBound(value) || !isRecord(value) || !hasKeys(value, ["cluster", "request", "page"])) return;
+  if (!isCluster(value.cluster) || !isUuid(value.request)) return;
+  if (!Number.isSafeInteger(value.page) || (value.page as number) < 0) return;
+  return { cluster: value.cluster, request: value.request, page: value.page as number };
+}
+
+// The answers, read by the renderer: what is not an answer of the contract is a failure of the way. An
+// answer is within the bound of a request, but for the page of a text, which is as large as a page is:
+// `bounded` says that the reader of the value bounds it itself. A failure is bounded by its fields, each
+// of which has a length, and by having no other.
+export function readAnswer<Value>(
+  value: unknown,
+  readValue: (inner: unknown) => Value | undefined,
+  bounded = false,
+): Answer<Value> {
   const broken: Failure = {
     ok: false,
     code: "validation",
@@ -311,7 +420,8 @@ export function readAnswer<Value>(value: unknown, readValue: (inner: unknown) =>
     text: "The main process answered with what the views do not understand.",
   };
 
-  if (!withinBound(value) || !isRecord(value) || typeof value.ok !== "boolean") return broken;
+  if (!isRecord(value) || typeof value.ok !== "boolean") return broken;
+  if (!bounded && !withinBound(value)) return broken;
   if (value.ok) {
     if (!hasKeys(value, ["ok", "value"])) return broken;
     const read = readValue(value.value);
@@ -386,6 +496,38 @@ export function readWriteStatus(value: unknown): WriteStatus | undefined {
   if (!isRecord(value) || !hasKeys(value, ["step"], ["count"]) || !isText(value.step, 64)) return;
   if ("count" in value && (typeof value.count !== "number" || !Number.isFinite(value.count))) return;
   return { step: value.step, ...(typeof value.count === "number" ? { count: value.count } : {}) };
+}
+
+const ORIGIN = /^https?:\/\/[^/?#@\s]{1,253}$/;
+
+export function readArtifactValue(value: unknown): ArtifactValue | undefined {
+  if (!isRecord(value) || !hasKeys(value, ["request", "size", "pages", "route"])) return;
+  const request = value.request;
+  const route = value.route;
+
+  if (!isRecord(request) || !hasKeys(request, ["name", "uid"]) || !isName(request.name) || !isText(request.uid)) return;
+  if (!Number.isSafeInteger(value.size) || (value.size as number) < 0) return;
+  if (!Number.isSafeInteger(value.pages) || (value.pages as number) < 0) return;
+  if (!isRecord(route) || !hasKeys(route, ["mode", "encrypted", "origin"])) return;
+  if (route.mode !== "tunnel" && route.mode !== "direct") return;
+  // The origin of the store and nothing after it: no path, no query, no user.
+  if (typeof route.encrypted !== "boolean" || typeof route.origin !== "string" || !ORIGIN.test(route.origin)) return;
+  return {
+    request: { name: request.name, uid: request.uid },
+    size: value.size as number,
+    pages: value.pages as number,
+    route: { mode: route.mode, encrypted: route.encrypted, origin: route.origin },
+  };
+}
+
+// A page of the text of an artifact: as large as a page is, and no larger.
+export function readArtifactPage(value: unknown): ArtifactPage | undefined {
+  if (!isRecord(value) || !hasKeys(value, ["page", "pages", "text"])) return;
+  if (!Number.isSafeInteger(value.page) || !Number.isSafeInteger(value.pages)) return;
+  if ((value.page as number) < 0 || (value.page as number) >= (value.pages as number)) return;
+  // The text of a page of bytes has no more units than the page has bytes.
+  if (typeof value.text !== "string" || value.text.length > PAGE_BOUND) return;
+  return { page: value.page as number, pages: value.pages as number, text: value.text };
 }
 
 export function readServerStatusValue(value: unknown): ServerStatusValue | undefined {

@@ -6,6 +6,7 @@
 
 import { randomUUID } from "node:crypto";
 import {
+  type ArtifactTarget,
   CONNECTION_REASONS,
   type Connection,
   type ConnectionReason,
@@ -29,6 +30,8 @@ export interface CatalogEntry {
 // What a write needs of the cluster: made when writes are turned on for a connection the adapter takes.
 export interface GateAdapter {
   assertCurrent(): void;
+  // Closes what the adapter keeps open. Called when the gate lets the adapter go.
+  dispose?(): void;
 }
 
 export interface GateDependencies<Adapter extends GateAdapter> {
@@ -98,13 +101,21 @@ function refusalOf(reason: ConnectionReason): Failure {
     : failure("connection-unsupported", "connection", false, CONNECTION_REASONS[reason]);
 }
 
-export function signatureOf(namespace: string, kind: WriteKind, target: WriteTarget | undefined): string {
-  return JSON.stringify([namespace, kind, target ? [target.kind, target.name, target.uid] : null]);
+// What a confirmation is for: the namespace, the kind of the write, its target and, for a DownloadRequest,
+// the artifact. A token confirmed for the log of a backup does not run for its results.
+export function signatureOf(
+  namespace: string,
+  kind: WriteKind,
+  target: WriteTarget | undefined,
+  artifact?: ArtifactTarget,
+): string {
+  return JSON.stringify([namespace, kind, target ? [target.kind, target.name, target.uid] : null, artifact ?? null]);
 }
 
 export class WriteGate<Adapter extends GateAdapter> {
   private readonly clusters = new Map<string, ClusterGate<Adapter>>();
   private readonly listeners = new Set<(cluster: string) => void>();
+  private readonly holders = new Set<(cluster: string) => void>();
 
   constructor(private readonly dependencies: GateDependencies<Adapter>) {}
 
@@ -231,17 +242,28 @@ export class WriteGate<Adapter extends GateAdapter> {
 
     if (!gate) return;
     for (const write of gate.writes.values()) write.controller.abort();
+    // The adapter goes with the gate of its cluster, and what it kept open with it: the writes it carried
+    // were aborted before. An adapter that cannot close does not keep writes on.
+    try {
+      gate.adapter?.dispose?.();
+    } catch {
+      /* the gate goes all the same */
+    }
     this.clusters.delete(cluster);
-    if (told && gate.namespace) for (const listener of this.listeners) listener(cluster);
+    if (!told) return;
+    // What was read from the cluster as it was is let go, whether writes were on or not.
+    for (const holder of this.holders) holder(cluster);
+    if (gate.namespace) for (const listener of this.listeners) listener(cluster);
   }
 
-  // A confirmation for one exact target, for the frame that asks it.
+  // A confirmation for one exact target, and one artifact of it, for the frame that asks it.
   confirm(
     sender: string,
     cluster: string,
     namespace: string,
     kind: WriteKind,
     target: WriteTarget | undefined,
+    artifact?: ArtifactTarget,
   ): { ok: true; value: { token: string; expires: number } } | Failure {
     const gate = this.gateOf(cluster);
 
@@ -260,7 +282,7 @@ export class WriteGate<Adapter extends GateAdapter> {
     const token = randomUUID();
     const expires = this.now() + TOKEN_LIFETIME;
 
-    gate.confirmations.set(token, { sender, signature: signatureOf(namespace, kind, target), expires });
+    gate.confirmations.set(token, { sender, signature: signatureOf(namespace, kind, target, artifact), expires });
     return { ok: true, value: { token, expires } };
   }
 
@@ -290,7 +312,7 @@ export class WriteGate<Adapter extends GateAdapter> {
   }
 
   // Takes a token for a write: the write may run, with the adapter of the cluster, when the token is of
-  // this sender, of this target, and has not expired or been used.
+  // this sender, of this target and of this artifact, and has not expired or been used.
   take(
     sender: string,
     cluster: string,
@@ -299,6 +321,7 @@ export class WriteGate<Adapter extends GateAdapter> {
     target: WriteTarget | undefined,
     token: string,
     request: string,
+    artifact?: ArtifactTarget,
   ): { ok: true; value: { adapter: Adapter; write: Write } } | Failure {
     const gate = this.gateOf(cluster);
 
@@ -311,7 +334,7 @@ export class WriteGate<Adapter extends GateAdapter> {
     if (
       !held ||
       held.sender !== sender ||
-      held.signature !== signatureOf(namespace, kind, target) ||
+      held.signature !== signatureOf(namespace, kind, target, artifact) ||
       held.expires <= this.now()
     )
       return failure(
@@ -386,9 +409,18 @@ export class WriteGate<Adapter extends GateAdapter> {
     return () => this.listeners.delete(listener);
   }
 
+  // Told whenever what the gate held of a cluster is let go for a reason of the gate itself, the entry of
+  // the catalog, the connection or the frame that turned writes on, with writes on or off: what the main
+  // process holds of that cluster beside the gate goes with it.
+  onLetGo(holder: (cluster: string) => void): () => void {
+    this.holders.add(holder);
+    return () => this.holders.delete(holder);
+  }
+
   // Everything off: the extension is deactivated.
   dispose(): void {
     for (const cluster of [...this.clusters.keys()]) this.invalidate(cluster);
     this.listeners.clear();
+    this.holders.clear();
   }
 }

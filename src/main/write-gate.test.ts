@@ -5,7 +5,7 @@ import { CONFIRMATIONS_BOUND, TOKEN_LIFETIME, WRITES_BOUND, WriteGate } from "./
 import type { Connection } from "../common/ipc";
 import type { CatalogEntry } from "./write-gate";
 
-function fixture(options: { connection?: Connection; adapterFails?: boolean } = {}) {
+function fixture(options: { connection?: Connection; adapterFails?: boolean; disposeFails?: boolean } = {}) {
   let now = 1_700_000_000_000;
   const catalog: CatalogEntry[] = [
     { id: "cluster-a", name: "demo", kubeConfigPath: "/synthetic/a", contextName: "kind-a" },
@@ -13,6 +13,8 @@ function fixture(options: { connection?: Connection; adapterFails?: boolean } = 
   ];
   let current = true;
   const adapters: { entry: CatalogEntry; isCurrent: () => boolean }[] = [];
+  // The adapters the gate let go, by the cluster of each, in the order they were let go.
+  const disposed: string[] = [];
   const gate = new WriteGate({
     catalog: () => catalog,
     connection: () => options.connection ?? { supported: true, credential: "token" },
@@ -22,6 +24,10 @@ function fixture(options: { connection?: Connection; adapterFails?: boolean } = 
       return {
         assertCurrent: () => {
           if (!current) throw new Error("changed");
+        },
+        dispose: () => {
+          disposed.push(entry.id);
+          if (options.disposeFails) throw new Error("the adapter could not close");
         },
       };
     },
@@ -33,6 +39,7 @@ function fixture(options: { connection?: Connection; adapterFails?: boolean } = 
     gate,
     catalog,
     adapters,
+    disposed,
     confirmation,
     tick: (milliseconds: number) => {
       now += milliseconds;
@@ -148,6 +155,42 @@ describe("the write gate", () => {
         randomUUID(),
       ),
     ).toMatchObject({ ok: false, code: "forbidden" });
+  });
+
+  it("gives a token for one artifact of its target: the log that was confirmed is not the results", () => {
+    const { gate, confirmation } = fixture();
+    const target = { kind: "Backup" as const, name: "nightly", uid: "uid-1" };
+
+    gate.enable("cluster-a", "velero", confirmation);
+    const confirmed = gate.confirm("frame-1", "cluster-a", "velero", "DownloadRequest", target, "BackupLog");
+
+    expect(confirmed).toMatchObject({ ok: true });
+    if (!confirmed.ok) return;
+    const { token } = confirmed.value;
+    const take = (artifact?: "BackupLog" | "BackupResults") =>
+      gate.take("frame-1", "cluster-a", "velero", "DownloadRequest", target, token, randomUUID(), artifact);
+
+    // Another artifact of the same target, and no artifact at all, are not what was confirmed; the token
+    // is still good for the one that was.
+    expect(take("BackupResults")).toMatchObject({ ok: false, code: "forbidden", stage: "confirmation" });
+    expect(take()).toMatchObject({ ok: false, code: "forbidden", stage: "confirmation" });
+    expect(take("BackupLog")).toMatchObject({ ok: true, value: { write: { kind: "DownloadRequest" } } });
+    expect(take("BackupLog")).toMatchObject({ ok: false, code: "forbidden", stage: "confirmation" });
+    // A confirmation of no artifact is not one of an artifact.
+    const bare = gate.confirm("frame-1", "cluster-a", "velero", "DownloadRequest", target);
+
+    expect(
+      gate.take(
+        "frame-1",
+        "cluster-a",
+        "velero",
+        "DownloadRequest",
+        target,
+        bare.ok ? bare.value.token : "",
+        randomUUID(),
+        "BackupLog",
+      ),
+    ).toMatchObject({ ok: false, code: "forbidden", stage: "confirmation" });
   });
 
   it("bounds the confirmations that wait and the writes that run for a cluster", () => {
@@ -322,6 +365,59 @@ describe("the write gate", () => {
     expect(gate.state("cluster-a")).toMatchObject({ ok: true, value: { writes: { on: false } } });
   });
 
+  it("lets the adapter go, with what it kept open, every time writes go off, and after the writes it carried were aborted", () => {
+    const { gate, catalog, adapters, disposed, confirmation, change } = fixture();
+
+    // Off on request.
+    gate.enable("cluster-a", "velero", confirmation);
+    expect(disposed).toEqual([]);
+    gate.disable("cluster-a");
+    expect(disposed).toEqual(["cluster-a"]);
+    // On for another namespace: the adapter of the first is let go, and another is made.
+    gate.enable("cluster-a", "velero", confirmation);
+    const confirmed = gate.confirm("s", "cluster-a", "velero", "ServerStatusRequest", undefined);
+    const taken = gate.take(
+      "s",
+      "cluster-a",
+      "velero",
+      "ServerStatusRequest",
+      undefined,
+      confirmed.ok ? confirmed.value.token : "",
+      randomUUID(),
+    );
+    let abortedBefore: boolean | undefined;
+
+    if (taken.ok)
+      taken.value.adapter.dispose = () => {
+        abortedBefore = taken.value.write.controller.signal.aborted;
+        disposed.push("cluster-a");
+      };
+    gate.enable("cluster-a", "other", { context: "kind-a", namespace: "other" });
+    expect(disposed).toEqual(["cluster-a", "cluster-a"]);
+    expect(abortedBefore).toBe(true);
+    expect(adapters).toHaveLength(3);
+    // The connection changed under a confirmation.
+    change();
+    gate.confirm("s", "cluster-a", "other", "ServerStatusRequest", undefined);
+    expect(disposed).toHaveLength(3);
+    // The entry of the catalog changed, found when the gate looks at the catalog.
+    gate.enable("cluster-b", "velero", { context: "kind-b", namespace: "velero" });
+    catalog[1] = { ...catalog[1], kubeConfigPath: "/synthetic/other" };
+    gate.reconcile();
+    expect(disposed).toEqual(["cluster-a", "cluster-a", "cluster-a", "cluster-b"]);
+  });
+
+  it("lets every adapter go when it is disposed, and goes off for an adapter that cannot close", () => {
+    const { gate, disposed, confirmation } = fixture({ disposeFails: true });
+
+    gate.enable("cluster-a", "velero", confirmation);
+    gate.enable("cluster-b", "velero", { context: "kind-b", namespace: "velero" });
+    expect(gate.disable("cluster-a")).toMatchObject({ ok: true, value: { writes: { on: false } } });
+    gate.dispose();
+    expect(disposed).toEqual(["cluster-a", "cluster-b"]);
+    expect(gate.state("cluster-b")).toMatchObject({ ok: true, value: { writes: { on: false } } });
+  });
+
   it("leaves nothing on when it is disposed", () => {
     const { gate, confirmation } = fixture();
 
@@ -419,6 +515,41 @@ describe("the frame that turned writes on, and what the gate tells", () => {
     catalog[0] = { ...catalog[0], contextName: "kind-renamed" };
     expect(gate.state("cluster-a")).toMatchObject({ ok: true, value: { writes: { on: false } } });
     expect(told).toEqual(["cluster-a"]);
+  });
+
+  it("says that what it held of a cluster is let go for a reason of its own, with writes on or off, and not on request", () => {
+    const { gate, catalog, confirmation, change } = fixture();
+    const told: string[] = [];
+    const letGo: string[] = [];
+
+    gate.onChanged((cluster) => told.push(cluster));
+    const stop = gate.onLetGo((cluster) => letGo.push(cluster));
+
+    // Writes turned on, then off on request, or on for another namespace: nothing is let go.
+    gate.enable("cluster-a", "velero", confirmation);
+    gate.disable("cluster-a");
+    gate.enable("cluster-a", "velero", confirmation);
+    gate.enable("cluster-a", "other", { context: "kind-a", namespace: "other" });
+    gate.disable("cluster-a");
+    expect(letGo).toEqual([]);
+    // The entry changes after writes were turned off: the frames have nothing to be told, and what was
+    // read from the cluster as it was is let go all the same.
+    catalog[0] = { ...catalog[0], kubeConfigPath: "/synthetic/other" };
+    gate.reconcile();
+    expect(told).toEqual([]);
+    expect(letGo).toEqual(["cluster-a"]);
+    // With writes on, both are told: the connection that changed under a confirmation.
+    gate.enable("cluster-b", "velero", { context: "kind-b", namespace: "velero" });
+    change();
+    gate.confirm("s", "cluster-b", "velero", "ServerStatusRequest", undefined);
+    expect(told).toEqual(["cluster-b"]);
+    expect(letGo).toEqual(["cluster-a", "cluster-b"]);
+    // Who stopped listening is told nothing more.
+    stop();
+    gate.enable("cluster-b", "velero", { context: "kind-b", namespace: "velero" });
+    catalog[1] = { ...catalog[1], contextName: "kind-other" };
+    gate.reconcile();
+    expect(letGo).toEqual(["cluster-a", "cluster-b"]);
   });
 
   it("tells nothing when writes are turned off on request, and nothing of a gate that was never on", () => {
