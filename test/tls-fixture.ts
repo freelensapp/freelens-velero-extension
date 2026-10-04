@@ -13,6 +13,54 @@ export async function createTlsFixture(hostname = "storage.example.invalid") {
   const keyFile = join(directory, "server.key");
   const requestFile = join(directory, "server.csr");
   const certificateFile = join(directory, "server.crt");
+  const names = `subjectAltName=DNS:${hostname},DNS:api.example.invalid,IP:127.0.0.1,IP:::1`;
+  // Another certificate of the same authority, for the same names and with the same key, that a client
+  // refuses: one for the purpose of a client and not of a server, or one whose validity has ended. A
+  // certificate signed for no day at all has expired as soon as it is made.
+  const flawed = async (flaw: "purpose" | "expired") => {
+    const request = join(directory, `${flaw}.csr`);
+    const certificate = join(directory, `${flaw}.crt`);
+
+    await execute(
+      "openssl",
+      [
+        "req",
+        "-new",
+        "-key",
+        keyFile,
+        "-out",
+        request,
+        "-subj",
+        `/CN=${hostname}`,
+        "-addext",
+        names,
+        ...(flaw === "purpose" ? ["-addext", "extendedKeyUsage=clientAuth"] : []),
+      ],
+      { timeout: 30_000 },
+    );
+    await execute(
+      "openssl",
+      [
+        "x509",
+        "-req",
+        "-in",
+        request,
+        "-CA",
+        caFile,
+        "-CAkey",
+        caKey,
+        "-CAcreateserial",
+        "-out",
+        certificate,
+        "-days",
+        flaw === "expired" ? "0" : "1",
+        "-copy_extensions",
+        "copy",
+      ],
+      { timeout: 30_000 },
+    );
+    return readFile(certificate, "utf8");
+  };
 
   try {
     await execute(
@@ -51,7 +99,7 @@ export async function createTlsFixture(hostname = "storage.example.invalid") {
         "-subj",
         `/CN=${hostname}`,
         "-addext",
-        `subjectAltName=DNS:${hostname},DNS:api.example.invalid,IP:127.0.0.1,IP:::1`,
+        names,
       ],
       { timeout: 30_000 },
     );
@@ -83,6 +131,7 @@ export async function createTlsFixture(hostname = "storage.example.invalid") {
       ca: await readFile(caFile, "utf8"),
       cert: await readFile(certificateFile, "utf8"),
       key: await readFile(keyFile, "utf8"),
+      flawed,
       dispose: () => rm(directory, { recursive: true, force: true }),
     };
   } catch (error) {

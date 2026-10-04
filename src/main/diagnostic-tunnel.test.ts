@@ -2,12 +2,13 @@ import { randomBytes } from "node:crypto";
 import { once } from "node:events";
 import { createServer, type Server } from "node:https";
 import { createRequire } from "node:module";
-import { connect } from "node:net";
+import { connect, Server as Listener } from "node:net";
 import { setTimeout as delay } from "node:timers/promises";
 import { KubeConfig } from "@kubernetes/client-node/dist/config.js";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
 import { createTlsFixture } from "../../test/tls-fixture";
+import { downloadArtifact } from "./diagnostic-transport";
 import { openPodTunnel } from "./diagnostic-tunnel";
 
 let certificates: Awaited<ReturnType<typeof createTlsFixture>>;
@@ -37,6 +38,8 @@ beforeAll(async () => {
       socket.close();
       return;
     }
+    // A pod that takes what it is sent and answers nothing.
+    if (request.url?.includes("/pods/silent/")) return;
     socket.on("message", (message) => socket.send(message));
   });
   server.listen(0, "127.0.0.1");
@@ -187,6 +190,105 @@ describe("owned Kubernetes pod tunnel", () => {
       await tunnel.close();
     }
   }, 60_000);
+
+  // The listener of a tunnel, which the tunnel keeps to itself: the one that was told to listen last.
+  const withListener = async (open: typeof openPodTunnel, name = "storage") => {
+    const listen = vi.spyOn(Listener.prototype, "listen");
+
+    try {
+      const tunnel = await open(api(name), { ...target, name }, new AbortController().signal);
+
+      return { tunnel, listener: listen.mock.contexts.at(-1) as Listener };
+    } finally {
+      listen.mockRestore();
+    }
+  };
+  // What a listener raises when the process has no descriptor left for the connection it is given.
+  const exhausted = () => Object.assign(new Error("accept EMFILE"), { code: "EMFILE", syscall: "accept" });
+
+  it.each(["source", "compiled"])(
+    "ends the tunnel of the %s implementation when its listener fails, and raises nothing",
+    async (mode) => {
+      const arrived = once(websocketServer, "connection");
+      const { tunnel, listener } = await withListener(mode === "compiled" ? compiled() : openPodTunnel);
+      const socket = connect(tunnel.port, tunnel.address);
+
+      try {
+        await once(socket, "connect");
+        const response = once(socket, "data");
+
+        socket.write("synthetic-port-forward");
+        expect((await response)[0].toString()).toBe("synthetic-port-forward");
+        const [pod] = (await arrived) as [WebSocket];
+        const gone = Promise.all([once(socket, "close"), once(pod, "close")]);
+
+        // Nobody but the tunnel hears its listener: an error nobody hears is raised to the whole process.
+        expect(() => listener.emit("error", exhausted())).not.toThrow();
+        // The local socket and the connection to the pod are closed, and the listener with them.
+        await gone;
+        await tunnel.close();
+        expect(listener.listening).toBe(false);
+      } finally {
+        socket.destroy();
+        await tunnel.close();
+      }
+      const refused = connect(tunnel.port, tunnel.address);
+
+      await expect(once(refused, "connect")).rejects.toMatchObject({ code: "ECONNREFUSED" });
+    },
+  );
+
+  it.each(["http", "https"])(
+    "ends a download over %s through it as transport-unreachable when its listener fails",
+    async (scheme) => {
+      const arrived = once(websocketServer, "connection");
+      const { tunnel, listener } = await withListener(openPodTunnel, "silent");
+      const origin = `${scheme}://storage.example.invalid:8333`;
+      const pending = downloadArtifact(
+        `${origin}/artifact?signature=synthetic`,
+        {
+          origin,
+          pathname: "/artifact",
+          address: tunnel.address,
+          port: tunnel.port,
+          mode: "tunnel",
+          allowHttp: true,
+          ca: certificates.ca,
+        },
+        new AbortController().signal,
+      ).catch((error: unknown) => error);
+
+      try {
+        // The request, or the first message of its handshake, is on its way to a pod that answers nothing.
+        await arrived;
+        expect(() => listener.emit("error", exhausted())).not.toThrow();
+        expect(await pending).toMatchObject({ code: "transport-unreachable" });
+      } finally {
+        await tunnel.close();
+      }
+    },
+  );
+
+  it("ends as transport-unreachable when its listener cannot listen, and leaves nothing open", async () => {
+    // A listener that fails where it would have begun to listen. The wait for it ends with that error
+    // whether or not anything else hears the listener: what proves that its errors are heard is the
+    // listener that fails after it listens, above.
+    const listen = vi.spyOn(Listener.prototype, "listen").mockImplementation(function (this: Listener) {
+      process.nextTick(() =>
+        this.emit("error", Object.assign(new Error("listen EADDRNOTAVAIL"), { code: "EADDRNOTAVAIL" })),
+      );
+      return this;
+    });
+
+    try {
+      await expect(openPodTunnel(api(), target, new AbortController().signal)).rejects.toMatchObject({
+        code: "transport-unreachable",
+      });
+      expect((listen.mock.contexts.at(-1) as Listener).listening).toBe(false);
+    } finally {
+      listen.mockRestore();
+    }
+  });
 
   it("refuses changed pod identities and undeclared ports before opening a listener", async () => {
     await expect(

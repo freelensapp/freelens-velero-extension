@@ -132,6 +132,10 @@ export async function openPodTunnel(
   };
 
   signal.addEventListener("abort", abort, { once: true });
+  // Nobody else hears the listener, and an error nobody hears is an exception of the whole process, which
+  // is the one of the host. An error it raises after it listens, as when no descriptor is left for the
+  // connection it is given, ends the tunnel: what went through it ends as a store that was not reached.
+  server.on("error", abort);
   server.listen(0, "127.0.0.1");
   try {
     await once(server, "listening", { signal });
