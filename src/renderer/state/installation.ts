@@ -1,4 +1,5 @@
 import { action, computed, makeObservable, observable, runInAction } from "mobx";
+import { withAllowance, withoutAllowance } from "../../common/allowances";
 import {
   apiAvailability,
   choices,
@@ -15,6 +16,7 @@ import { emptyRead, failed, failedStatus, loading, succeeded } from "../../commo
 import { readWindow } from "../../common/window";
 import { ServerStatus } from "./server-status";
 
+import type { Allowance, AllowanceFor } from "../../common/allowances";
 import type {
   Answer,
   ApiAvailability,
@@ -38,7 +40,7 @@ import type {
   VolumeSnapshotLocationResource,
 } from "../../common/types";
 import type { Window } from "../../common/window";
-import type { GateClient, WriteClient } from "../api/ipc";
+import type { AllowanceClient, GateClient, WriteClient } from "../api/ipc";
 
 // What asks the cluster: one verb, and the status of the answer beside its body.
 export type Reader = (path: string, signal?: AbortSignal) => Promise<Answer>;
@@ -70,6 +72,8 @@ export interface InstallationDependencies {
   gate?: GateClient;
   // The writes of the main process, through the same way as the gate.
   writer?: WriteClient;
+  // What keeps, in the main process, what the operator allowed the downloads to do.
+  allowances?: AllowanceClient;
   // The identifier of a new request of a write. A random UUID when none is given.
   requestId?: () => string;
 }
@@ -99,6 +103,8 @@ export class Installation {
   gate?: GateState;
   // Why the gate could not be asked, in words, when it could not.
   gateFailure?: string;
+  // Why an allowance could not be given or taken back, in words, when it could not.
+  allowanceFailure?: string;
   // The version of the server and its plugins, when the operator asked for them.
   readonly server: ServerStatus;
   private readonly dependencies: InstallationDependencies;
@@ -128,6 +134,7 @@ export class Installation {
       asking: observable,
       gate: observable.ref,
       gateFailure: observable,
+      allowanceFailure: observable,
       choices: computed,
       selection: computed,
       entry: computed,
@@ -354,6 +361,49 @@ export class Installation {
     });
     this.target();
     void this.readFamilies();
+  }
+
+  // What the operator allowed the downloads of this cluster to do, as the store of the preferences keeps it.
+  get allowances(): Allowance[] {
+    return this.preferences.allowances?.[this.cluster.id] ?? [];
+  }
+
+  // The operator allows what a download said it needs. The main process is what keeps it, with the moment
+  // it was allowed: this window writes nothing of it, and shows it at once, with its own moment, until its
+  // store hears of what was kept. The answer is whether it was kept: a download is asked again only then.
+  async allow(allowed: AllowanceFor): Promise<boolean> {
+    const client = this.dependencies.allowances;
+
+    if (!client) return false;
+    const answer = await client.allow(this.cluster.id, allowed);
+
+    runInAction(() => {
+      this.allowanceFailure = answer.ok ? undefined : answer.text;
+      if (!answer.ok) return;
+      this.preferences = {
+        ...this.preferences,
+        allowances: withAllowance(this.preferences.allowances ?? {}, this.cluster.id, allowed, this.dependencies.now()),
+      };
+    });
+    return answer.ok;
+  }
+
+  // The operator takes an allowance back. The main process is what keeps them: it is asked, and what it
+  // kept is shown at once, before the store of this window hears of it.
+  async takeBack(allowed: AllowanceFor): Promise<void> {
+    const client = this.dependencies.allowances;
+
+    if (!client) return;
+    const answer = await client.takeBack(this.cluster.id, allowed);
+
+    runInAction(() => {
+      this.allowanceFailure = answer.ok ? undefined : answer.text;
+      if (!answer.ok) return;
+      const { allowances: _before, ...others } = this.preferences;
+      const left = withoutAllowance(this.preferences.allowances ?? {}, this.cluster.id, allowed);
+
+      this.preferences = Object.keys(left).length ? { ...others, allowances: left } : others;
+    });
   }
 
   // The window of the recent operations: the one that was chosen, or seven days when none was.

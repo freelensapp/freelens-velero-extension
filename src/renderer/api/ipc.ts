@@ -25,6 +25,8 @@ import {
   type WriteTarget,
 } from "../../common/ipc";
 
+import type { AllowanceFor } from "../../common/allowances";
+
 // What the views ask of the gate, in the words of the contract.
 export interface GateClient {
   state(cluster: string): Promise<Answer<GateState>>;
@@ -70,9 +72,18 @@ export interface ArtifactClient {
   release(cluster: string, request: string): Promise<Answer<null>>;
 }
 
+// What the views ask of what the operator allows the downloads to do: to keep it, and to take it back.
+export interface AllowanceClient {
+  allow(cluster: string, allowed: AllowanceFor): Promise<Answer<null>>;
+  takeBack(cluster: string, allowed: AllowanceFor): Promise<Answer<null>>;
+}
+
 const NO_ANSWER = failure("request-failed", "way", true, "The main process did not answer.");
 
-export class VeleroIpcRenderer extends Renderer.Ipc implements GateClient, WriteClient, ArtifactClient {
+export class VeleroIpcRenderer
+  extends Renderer.Ipc
+  implements GateClient, WriteClient, ArtifactClient, AllowanceClient
+{
   // `bounded` says that the reader of the value bounds it itself: it is so for the page of a text, which
   // is larger than every other answer.
   private async ask<Value>(
@@ -163,6 +174,14 @@ export class VeleroIpcRenderer extends Renderer.Ipc implements GateClient, Write
 
   release(cluster: string, request: string): Promise<Answer<null>> {
     return this.ask(CHANNELS.artifactRelease, { cluster, request }, (value) => (value === null ? null : undefined));
+  }
+
+  allow(cluster: string, allowed: AllowanceFor): Promise<Answer<null>> {
+    return this.ask(CHANNELS.allowanceGrant, { cluster, ...allowed }, (value) => (value === null ? null : undefined));
+  }
+
+  takeBack(cluster: string, allowed: AllowanceFor): Promise<Answer<null>> {
+    return this.ask(CHANNELS.allowanceRevoke, { cluster, ...allowed }, (value) => (value === null ? null : undefined));
   }
 
   status(cluster: string, request: string): Promise<Answer<WriteStatus>> {
