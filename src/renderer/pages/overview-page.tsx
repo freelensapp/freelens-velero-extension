@@ -34,6 +34,7 @@ import { openView, PAGES, pageUrl } from "../navigation";
 import { currentInstallation } from "../state/context";
 import { OpenView } from "./open-view";
 import { ValidationMark } from "./schedule-workspace";
+import { ServerBand } from "./server-band";
 
 import type { ReactNode } from "react";
 
@@ -385,6 +386,10 @@ export const Overview = observer(({ installation, now, ways }: OverviewProps) =>
   return (
     <div className={styles.overview} data-testid="velero-overview">
       <WhatWasRead reads={reads} ways={ways} />
+
+      <Band id="server" title="Server">
+        <ServerBand installation={installation} />
+      </Band>
 
       <div className={styles.overviewRow}>
         <Band id="attention" title="Needs attention">

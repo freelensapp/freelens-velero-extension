@@ -19,6 +19,14 @@ export const CHANNELS = {
 export const WRITE_KINDS = ["DownloadRequest", "ServerStatusRequest"] as const;
 export type WriteKind = (typeof WRITE_KINDS)[number];
 
+// What a request of a generated name is created with, which the confirmation of the views shows: the
+// prefix of its name, so that an operator who lists the requests knows what created them, and the labels
+// that say the same. The tests of the main process prove that it creates with these.
+export const REQUEST_PREFIX = "freelens-velero-";
+export const REQUEST_LABELS: Readonly<Record<string, string>> = {
+  "app.kubernetes.io/managed-by": "freelens-velero-extension",
+};
+
 // The largest request the processes accept of each other.
 export const REQUEST_BOUND = 64 * 1024;
 

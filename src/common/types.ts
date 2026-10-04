@@ -192,6 +192,9 @@ export type ScheduleResource = VeleroResource<ScheduleSpec, ScheduleStatus>;
 export type BackupStorageLocationResource = VeleroResource<BackupStorageLocationSpec, BackupStorageLocationStatus>;
 export type VolumeSnapshotLocationResource = VeleroResource<VolumeSnapshotLocationSpec, VolumeSnapshotLocationStatus>;
 
+// The release of Velero the specs were reviewed against, whose CRD schemas these types are written from.
+export const REVIEWED_RELEASE = "v1.18.2";
+
 // The labels Velero writes on the objects it creates for another one.
 export const LABELS = {
   schedule: "velero.io/schedule-name",

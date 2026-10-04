@@ -947,3 +947,41 @@
   color: var(--textColorSecondary);
   font-size: 12px;
 }
+
+/* The confirmation of one write, inline where it is offered: the object as it will be submitted. */
+.writeConfirmation {
+  margin: 8px 0;
+}
+
+.writeObject {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px 24px;
+  margin: 0 0 12px;
+}
+
+.writeObject dd {
+  margin: 0;
+}
+
+.writeActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+/* The plugins of a kind, and beside the object store plugins the providers of the storage locations. */
+.serverNames,
+.serverProviders {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-wrap: anywhere;
+}
+
+.serverProviders {
+  margin-top: 4px;
+  color: var(--textColorSecondary);
+  font-size: 12px;
+}

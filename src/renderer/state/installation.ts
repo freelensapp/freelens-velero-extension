@@ -13,6 +13,7 @@ import {
 import { PATHS } from "../../common/paths";
 import { emptyRead, failed, failedStatus, loading, succeeded } from "../../common/read-state";
 import { readWindow } from "../../common/window";
+import { ServerStatus } from "./server-status";
 
 import type {
   Answer,
@@ -37,7 +38,7 @@ import type {
   VolumeSnapshotLocationResource,
 } from "../../common/types";
 import type { Window } from "../../common/window";
-import type { GateClient } from "../api/ipc";
+import type { GateClient, WriteClient } from "../api/ipc";
 
 // What asks the cluster: one verb, and the status of the answer beside its body.
 export type Reader = (path: string, signal?: AbortSignal) => Promise<Answer>;
@@ -67,6 +68,10 @@ export interface InstallationDependencies {
   // The gate of the main process, when the views have a way to it. Without it writes are off, and the
   // views say that they cannot be turned on.
   gate?: GateClient;
+  // The writes of the main process, through the same way as the gate.
+  writer?: WriteClient;
+  // The identifier of a new request of a write. A random UUID when none is given.
+  requestId?: () => string;
 }
 
 // What the views show of the gate: what the main process last said of it, and why it could not be asked.
@@ -94,6 +99,8 @@ export class Installation {
   gate?: GateState;
   // Why the gate could not be asked, in words, when it could not.
   gateFailure?: string;
+  // The version of the server and its plugins, when the operator asked for them.
+  readonly server: ServerStatus;
   private readonly dependencies: InstallationDependencies;
   private watchers = 0;
   private timer?: ReturnType<typeof setInterval>;
@@ -102,6 +109,15 @@ export class Installation {
     this.dependencies = dependencies;
     this.preferences = dependencies.storage.read();
     this.generation = { cluster: dependencies.cluster.id, namespace: "", number: 0 };
+    this.server = new ServerStatus({
+      client: dependencies.writer,
+      cluster: () => this.cluster.id,
+      namespace: () => this.namespace,
+      generation: () => this.generation,
+      writesOn: () => this.writes.on,
+      now: dependencies.now,
+      requestId: dependencies.requestId ?? (() => crypto.randomUUID()),
+    });
     makeObservable(this, {
       api: observable.ref,
       found: observable.ref,
@@ -391,6 +407,7 @@ export class Installation {
     this.generation = { cluster: this.cluster.id, namespace, number: this.generation.number + 1 };
     this.reads = emptyReads();
     this.asked = undefined;
+    this.server.drop();
     this.dropWrites(left);
   }
 
