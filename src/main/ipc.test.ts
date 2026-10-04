@@ -112,6 +112,8 @@ describe("the procedures of the main process", () => {
         CHANNELS.writeRun,
         CHANNELS.writeStatus,
         CHANNELS.writeCancel,
+        CHANNELS.artifactPage,
+        CHANNELS.artifactRelease,
       ].sort(),
     );
     dispose();

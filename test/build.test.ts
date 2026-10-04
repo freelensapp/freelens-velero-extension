@@ -91,7 +91,7 @@ it("main bundle loads for the proofs of the test environment, which have no host
     import("./e2e/scripts/local-download-proof.mts").then(({ compiledDiagnostics }) => {
       const main = compiledDiagnostics();
       process.stdout.write(JSON.stringify({
-        exported: ["DiagnosticKubernetes", "DiagnosticService", "downloadArtifact", "openPodTunnel"]
+        exported: ["DiagnosticKubernetes", "WriteGate", "downloadArtifact", "openPodTunnel", "registerHandlers"]
           .filter((name) => typeof main[name] === "function"),
         left: ["LensExtensions", "Mobx"].filter((name) => name in globalThis),
       }));
@@ -107,7 +107,7 @@ it("main bundle loads for the proofs of the test environment, which have no host
     result.stderr.replace(/^\(node:\d+\) \[MODULE_TYPELESS[\s\S]*?\n\(Use `node --trace-warnings[^\n]*\n/gm, ""),
   ).toBe("");
   expect(JSON.parse(result.stdout)).toEqual({
-    exported: ["DiagnosticKubernetes", "DiagnosticService", "downloadArtifact", "openPodTunnel"],
+    exported: ["DiagnosticKubernetes", "WriteGate", "downloadArtifact", "openPodTunnel", "registerHandlers"],
     left: [],
   });
 });

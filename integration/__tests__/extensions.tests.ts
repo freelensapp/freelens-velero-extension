@@ -187,9 +187,10 @@ describe("extensions page tests", () => {
       expect.arrayContaining([
         "DiagnosticError",
         "DiagnosticKubernetes",
-        "DiagnosticService",
+        "WriteGate",
         "downloadArtifact",
         "openPodTunnel",
+        "registerHandlers",
       ]),
     );
   });

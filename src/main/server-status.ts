@@ -4,6 +4,7 @@
 // extension deletes no request.
 
 import { setTimeout as delay } from "node:timers/promises";
+import { API_WORDS, pluginWords } from "../common/diagnostic-text";
 import { type Failure, failure, REQUEST_PREFIX, REQUEST_STAGES, type ServerStatusValue } from "../common/ipc";
 import { CredentialPluginError, PLUGIN_TIMEOUT } from "./context-identity.ts";
 import { DiagnosticError } from "./diagnostic-transport.ts";
@@ -51,20 +52,13 @@ export function serverStatusFailure(error: unknown, requestName?: string): Failu
   // The plugin of the context gave no credential: the cluster was not asked, so it refused nothing. Asking
   // again is safe; it runs the plugin again. When the request was created before, it is the wait that
   // ended, and the request is there.
-  if (error instanceof CredentialPluginError) {
-    const plugin = `The credential plugin ${error.command} of the context`;
-
+  if (error instanceof CredentialPluginError)
     return failure(
       "request-failed",
       requestName ? REQUEST_STAGES.wait : REQUEST_STAGES.credential,
       true,
-      error.reason === "deadline"
-        ? `${plugin} did not give a credential in ${PLUGIN_TIMEOUT / 1000} seconds. Run it in a terminal to see what it waits for, then ask again.`
-        : error.reason === "unreadable"
-          ? `${plugin} ended, but what it printed is not a credential the extension can read.`
-          : `${plugin} did not give a credential: it failed, or it is not installed. Run it in a terminal, for example to sign in again, then ask again.`,
+      pluginWords(error.command, error.reason, PLUGIN_TIMEOUT / 1000),
     );
-  }
   if (error instanceof IncompleteServerStatusError)
     return failure(
       "request-failed",
@@ -95,11 +89,14 @@ export function serverStatusFailure(error: unknown, requestName?: string): Failu
           : "The request was cancelled before the cluster answered its creation: it may have been created.",
       );
     case "deadline":
+      // A creation the cluster did not take in time was not sent: the adapter says a deadline only then.
       return failure(
         "deadline",
         stage,
         true,
-        "The server did not answer in ten seconds: it may be stopped, or busy. The request stays until the server processes it.",
+        requestName
+          ? "The server did not answer in ten seconds: it may be stopped, or busy. The request stays until the server processes it."
+          : `${API_WORDS.late} Nothing was created.`,
       );
     case "submission-unknown":
       return failure(
@@ -109,18 +106,13 @@ export function serverStatusFailure(error: unknown, requestName?: string): Failu
         `The creation of the request may have happened: the answer of the cluster was lost. Look for a ServerStatusRequest whose name begins with ${REQUEST_PREFIX} before asking again.`,
       );
     case "target-changed":
-      return failure(
-        "target-changed",
-        stage,
-        false,
-        "The cluster or the installation changed while the request was made.",
-      );
+      return failure("target-changed", stage, false, API_WORDS.changed);
     case "transport-unreachable":
-      return failure("transport-unreachable", stage, true, "The API server of the cluster could not be reached.");
+      return failure("transport-unreachable", stage, true, API_WORDS.unreachable);
     case "tls-invalid":
-      return failure("tls-invalid", stage, false, "The certificate of the API server of the cluster is not trusted.");
+      return failure("tls-invalid", stage, false, API_WORDS.untrusted);
     default:
-      return failure(code, stage, false, "The request could not be made, for a reason the extension does not name.");
+      return failure(code, stage, false, API_WORDS.unnamed);
   }
 }
 
