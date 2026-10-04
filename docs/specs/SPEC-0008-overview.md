@@ -367,3 +367,12 @@ the packaged application by the pre-review pass, with the keyboard alone where t
 criteria ask for it; the lead maintainer judged its report and its screenshots, in
 both themes, and approved. Verdict: approved, with what was decided while
 implementing accepted as it is and the deviation above approved. No finding was recorded.
+
+Since the third milestone the page has one more band, the one of the server of
+[SPEC-0012](SPEC-0012-server-status.md), after what was read. It reads nothing when
+the page opens, as REQ-107 asks of the page: its command creates a request, which
+is a write, when the operator asks for it and confirms it, through the gate of
+[SPEC-0009](SPEC-0009-write-gate.md). With writes off the band has one control, the
+way to the writes in the target bar, which the suite of this page expects beside
+the ways, the windows and the marks; what the page asks of the cluster by itself
+is what it asked before.

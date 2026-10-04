@@ -720,8 +720,9 @@ describe("overview of an installation", () => {
           return !found || !objects[found[1] as keyof typeof objects].includes(found[2]);
         }),
       ).toEqual([]);
-      // Nothing of the page edits, deletes or asks Velero for something: its buttons are ways, windows,
-      // marks and what shows more of a list.
+      // Nothing of the page edits or deletes, and with writes off nothing of it asks Velero for something:
+      // its buttons are ways, windows, marks, what shows more of a list, and the way to the writes in the
+      // target bar, which the band of the server offers while they are off and which creates nothing.
       expect(
         await page()
           .locator("button")
@@ -733,9 +734,10 @@ describe("overview of an installation", () => {
                     element.getAttribute("data-testid") ?? "",
                   ) && !element.hasAttribute("data-line-mark"),
               )
-              .map((element) => (element.textContent ?? "").trim()),
+              .map((element) => element.getAttribute("data-testid") ?? (element.textContent ?? "").trim()),
           ),
-      ).toEqual([]);
+      ).toEqual(["velero-overview-server-to-target"]);
+      expect(await frame.locator("[data-testid=velero-writes]").getAttribute("data-writes")).toBe("off");
     },
     TIMEOUT,
   );
