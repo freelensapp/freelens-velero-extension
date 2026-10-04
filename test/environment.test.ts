@@ -2332,7 +2332,11 @@ describe("local storage setup contracts", () => {
   const velero = { accessKey: "C".repeat(24), secretKey: "D".repeat(48) };
 
   it("maps only known digest pins to their official offline tags", () => {
-    expect(preloadedImage(IMAGES.storage)).toBe("docker.io/chrislusf/seaweedfs:4.47");
+    // The tag of the pin, without its digest, whatever version the pin names: an update of the pin
+    // changes the one place that names the version.
+    expect(IMAGES.storage).toMatch(/^docker\.io\/chrislusf\/seaweedfs:\d+\.\d+@sha256:[a-f0-9]{64}$/);
+    expect(preloadedImage(IMAGES.storage)).toMatch(/^docker\.io\/chrislusf\/seaweedfs:\d+\.\d+$/);
+    expect(IMAGES.storage.startsWith(`${preloadedImage(IMAGES.storage)}@sha256:`)).toBe(true);
     expect(() => preloadedImage("freelens-velero-lab/storage:custom")).toThrow();
     expect(() => preloadedImage("docker.io/chrislusf/seaweedfs:latest")).toThrow();
   });
