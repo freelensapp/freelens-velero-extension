@@ -1,7 +1,9 @@
-import { X509Certificate } from "node:crypto";
-import { type RequestOptions, request } from "node:https";
+import { createHash, X509Certificate } from "node:crypto";
+import { Agent, type RequestOptions, request } from "node:https";
 import { isAbsolute } from "node:path";
+import { TLSSocket } from "node:tls";
 import { KubeConfig } from "@kubernetes/client-node/dist/config.js";
+import { type ArtifactTarget, DIAGNOSTIC_REQUEST_LABEL, isArtifactTarget } from "../common/ipc";
 import {
   type ContextEntry,
   type Credential,
@@ -11,17 +13,6 @@ import {
 } from "./context-identity.ts";
 import { DiagnosticError } from "./diagnostic-transport.ts";
 
-export const ARTIFACT_TARGETS = [
-  "BackupLog",
-  "RestoreLog",
-  "BackupResults",
-  "RestoreResults",
-  "BackupResourceList",
-  "RestoreResourceList",
-  "BackupVolumeInfos",
-  "RestoreVolumeInfo",
-] as const;
-export type ArtifactTarget = (typeof ARTIFACT_TARGETS)[number];
 export interface KubernetesBinding {
   clusterId: string;
   context: string;
@@ -54,6 +45,14 @@ function name(value: string, maximum = 253): string {
   return value;
 }
 
+// The value of a label that carries a name, by the rule of the reviewed release: a name longer than the 63
+// characters a label value may have is cut to its first 57, followed by the first 6 hexadecimal characters
+// of the SHA-256 of the whole name. The release counts bytes, which for a name are its characters.
+function labelOf(value: string): string {
+  if (value.length <= 63) return value;
+  return `${value.slice(0, 57)}${createHash("sha256").update(value).digest("hex").slice(0, 6)}`;
+}
+
 // The adapter binds to one context of one kubeconfig, by the entry of the context: the address of the
 // server, its certificate authority and the credential of the user. It takes a client certificate, a token
 // or a plugin that gives a credential, which it runs within a bound and reads for the credential alone;
@@ -72,6 +71,15 @@ export class DiagnosticKubernetes {
   // The run of the plugin the requests wait for together, with how many still wait: when the last of them
   // is cancelled, the run is too, and the plugin is killed.
   private pending?: { promise: Promise<Credential>; controller: AbortController; waiting: number };
+  // The connections of the adapter, kept between its requests: the reads of a wait, a quarter of a second
+  // apart, go on one of them in place of a handshake each. At most four are open at once for each client
+  // certificate the requests present, and a request beyond them waits its turn within its own bound. A
+  // connection no request used for two seconds is closed: one kept longer may have been closed on the way
+  // without this side knowing, which a creation written on it would learn as an answer that was lost. The
+  // agent is given nothing of TLS, since what it is given overrides the request: the authority, the
+  // certificate and the key stay with each request, and Node gives a request a connection that was made
+  // with the same ones.
+  private readonly agent = new Agent({ keepAlive: true, maxSockets: 4, timeout: 2_000 });
 
   constructor(
     binding: KubernetesBinding,
@@ -242,23 +250,41 @@ export class DiagnosticKubernetes {
 
     return new Promise((resolve, reject) => {
       let settled = false;
+      // Whether the request went on a connection to the server. Until the handshake ends, with a certificate
+      // this side takes, nothing of the request leaves this machine, and a creation cannot have happened.
+      // What Node calls headers sent is true as soon as the request is ended, before any connection, and
+      // says nothing of this.
+      let connected = false;
       let incoming: import("node:http").IncomingMessage | undefined;
       const chunks: Buffer[] = [];
       let size = 0;
-      const outgoing = request({
+      const options: RequestOptions = {
         ...authentication,
-        hostname: this.endpoint.hostname,
+        // The address of the server holds an IPv6 address between brackets; a socket takes it without them.
+        hostname: this.endpoint.hostname.replace(/^\[|\]$/g, ""),
         port: this.endpoint.port || 443,
         path: `${this.endpoint.pathname.replace(/\/$/, "")}${path}`,
         method,
-        agent: false,
+        // The agent of the adapter, in place of the one the client of Kubernetes puts in the options.
+        agent: this.agent,
         rejectUnauthorized: true,
         headers: {
           ...authentication.headers,
           Accept: "application/json",
           ...(payload ? { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) } : {}),
         },
-      });
+      };
+      let outgoing: import("node:http").ClientRequest;
+
+      // Node raises at once, and not on the request, what it refuses to make: a credential that cannot be
+      // written in a header, or a certificate with a key that is not its own. Nothing was sent: the request
+      // is refused as one this side cannot write, and what Node says of it goes no further.
+      try {
+        outgoing = request(options);
+      } catch {
+        reject(new DiagnosticError("validation"));
+        return;
+      }
       const finish = (error?: DiagnosticError, value?: DiagnosticObject) => {
         if (settled) return;
         settled = true;
@@ -272,18 +298,21 @@ export class DiagnosticKubernetes {
       };
       const abort = () => finish(new DiagnosticError("cancelled"));
       const timer = setTimeout(
-        () =>
-          finish(new DiagnosticError(method === "POST" && outgoing.headersSent ? "submission-unknown" : "deadline")),
+        () => finish(new DiagnosticError(method === "POST" && connected ? "submission-unknown" : "deadline")),
         10_000,
       );
 
       signal.addEventListener("abort", abort, { once: true });
+      outgoing.once("socket", (socket) => {
+        // A connection the agent kept is made already; a new one is when its handshake ends.
+        if (socket instanceof TLSSocket && socket.authorized) connected = true;
+        else
+          socket.once("secureConnect", () => {
+            connected = true;
+          });
+      });
       outgoing.once("error", () =>
-        finish(
-          new DiagnosticError(
-            method === "POST" && outgoing.headersSent ? "submission-unknown" : "transport-unreachable",
-          ),
-        ),
+        finish(new DiagnosticError(method === "POST" && connected ? "submission-unknown" : "transport-unreachable")),
       );
       outgoing.once("response", (response) => {
         incoming = response;
@@ -310,7 +339,9 @@ export class DiagnosticKubernetes {
         }
         response.on("data", (chunk: Buffer) => {
           size += chunk.length;
-          if (size > 4 * 1024 ** 2) finish(new DiagnosticError("payload-too-large"));
+          // The answer of a creation that cannot be read says nothing of the creation.
+          if (size > 4 * 1024 ** 2)
+            finish(new DiagnosticError(method === "POST" ? "submission-unknown" : "payload-too-large"));
           else chunks.push(chunk);
         });
         response.once("error", () =>
@@ -360,15 +391,14 @@ export class DiagnosticKubernetes {
     requestId: string,
     signal: AbortSignal,
   ): Promise<DiagnosticObject> {
-    if (!ARTIFACT_TARGETS.includes(target) || !/^[a-f0-9-]{36}$/.test(requestId))
-      throw new DiagnosticError("validation");
+    if (!isArtifactTarget(target) || !/^[a-f0-9-]{36}$/.test(requestId)) throw new DiagnosticError("validation");
     return this.send("POST", this.path("DownloadRequest", namespace), signal, {
       apiVersion: "velero.io/v1",
       kind: "DownloadRequest",
       metadata: {
         namespace: name(namespace, 63),
         name: name(requestName),
-        labels: { ...this.requestLabels, "freelensapp.io/diagnostic-request": requestId },
+        labels: { ...this.requestLabels, [DIAGNOSTIC_REQUEST_LABEL]: requestId },
       },
       spec: { target: { kind: target, name: name(targetName) } },
     });
@@ -393,7 +423,9 @@ export class DiagnosticKubernetes {
         generateName: prefix,
         labels: {
           ...this.requestLabels,
-          ...(backup ? { "velero.io/backup-name": name(backup.name), "velero.io/backup-uid": backup.uid } : {}),
+          ...(backup
+            ? { "velero.io/backup-name": labelOf(name(backup.name)), "velero.io/backup-uid": backup.uid }
+            : {}),
         },
       },
       spec: kind === "DeleteBackupRequest" ? { backupName: backup?.name } : {},
@@ -428,5 +460,12 @@ export class DiagnosticKubernetes {
     } catch {
       throw new DiagnosticError("tls-invalid");
     }
+  }
+
+  // Closes the connections the adapter keeps, and the ones that carry a request, which ends as one whose
+  // connection was lost. Called when the adapter is let go: a request made after it, or one that waited
+  // its turn, opens a connection again, which is closed when nothing uses it.
+  dispose(): void {
+    this.agent.destroy();
   }
 }
