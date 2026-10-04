@@ -184,6 +184,7 @@ The build is the one of the
 | `velero-e2e-locations` | The storage locations with availability, access mode and default as three facts; the location the controller validates, which is not late, and the synthetic ones, which are; none and two marked default; a message of many lines; where a location points and the Secrets it names, by their names; what uses a location, and the way to it and back; the way from a backup, a restore and a schedule to their locations; the snapshot locations, with a phase that has the mark of what is not known; no way to select, edit, delete or set as default; the sections in the details of the host |
 | `velero-e2e-scale` | A thousand backups and a thousand restores: the rows that are mounted, the time of the interactions, the state of each list when an object is opened and closed |
 | `velero-e2e-gate` | The gate of the writes: off when the session starts, on every page of the group; on through the dialog of the host, which names the cluster, its context and the namespace, and not before the dialog is answered; off when another installation is selected, when the dialog is left, and when the application is started again; each frame of a cluster with a gate of its own; nothing of it in the store, and nothing written to the cluster |
+| `velero-e2e-server` | The band of the server in the Overview: nothing asked of the cluster when the page opens, nor for a command that is not confirmed; the object shown before it is created, reached with the keyboard alone and left with Escape; the version and the plugins of the real server of the environment, against what the server wrote into the request, each plugin once; kept through a read and a visit to another page, and dropped with the installation; the answer and the confirmation in both themes, at every size; a request no server answers, said not answered after ten seconds and left as it was created; the refusal of the cluster to the reader of a part, with writes left on; what the API server counted of the requests, by verb and by code; the request the server processed, removed by the server five minutes after |
 | `pre-review` | Every view in both themes, at 1440x900, at 900x650 and at twice the zoom, checked for what lies over something else, does not fit, or is cut by what holds the page; a page that stands still at the widths where its target bar goes to a second line; the journeys with the keyboard alone |
 
 The check of the layout, which every suite asks of the pages it shows, looks at
@@ -193,8 +194,16 @@ height without being scrolled by who reads. The last is what the keyboard
 scrolls when it brings what it reaches into view, and what the host cuts in a
 room that is too short.
 
-The suites read the application and the cluster, and write to neither. The helper
-that runs `kubectl` for them refuses every verb but `get`. Each suite compares
+The suites read the application and the cluster, and write to neither, but for
+one: the suite of the band of the server asks the extension to create a
+ServerStatusRequest, which is what it proves, in the namespace of the
+installation, in a namespace of the fixtures and, refused, as the reader of a
+part. It leaves nothing behind. It waits for the server to remove the request it
+processed, which the release does when it looks at it again, five minutes after;
+and it removes the one no server looks at, with the one helper of the suites that
+deletes, which takes the ServerStatusRequests that carry the label of the
+extension in a namespace of the fixtures, and nothing else. The helper that runs
+`kubectl` for the suites refuses every verb but `get`. Each suite compares
 what the API server holds of Velero before and after: the version of every
 synthetic object, the identity of the objects of the real installation, and the
 absence of any request to Velero.
@@ -207,6 +216,18 @@ discovery of the extension asks: the controllers of Velero ask for their own
 namespace, and what the control plane of the cluster asks of every kind is a
 watch, which the suites leave out. The count of that list says when the
 extension asked, and how many times.
+
+The requests of one kind are counted by their verb and by the code of the answer
+as well, without the lists and the watches, which the server of the installation
+asks on its own. A request the API server refuses to the identity is not among
+what it counts: the creation the reader of a part is refused leaves the counters
+as they were, and is proven by the words of the band, by the namespace, which
+holds no request, and by no creation counted.
+
+The server of the test environment is the reviewed release as it is, and not as
+a fixture would make it: it lists every BackupItemAction and RestoreItemAction
+twice in a ServerStatusRequest. The suite expects of it what the release does,
+and a release that lists them otherwise is one to read again.
 
 The application reads the kubeconfig of the user when nothing tells it otherwise.
 The profile of the suites is written before the first start with no kubeconfig to

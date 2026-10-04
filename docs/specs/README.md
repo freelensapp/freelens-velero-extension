@@ -1,9 +1,9 @@
 # Specifications
 
-Date: 2026-09-30
+Date: 2026-10-04
 
-Status: SPEC-0001 is Approved; SPEC-0002 to SPEC-0008 are Verified; SPEC-0009,
-SPEC-0010, SPEC-0011 and SPEC-0012 are Approved.
+Status: SPEC-0001 is Approved; SPEC-0002 to SPEC-0008 are Verified; SPEC-0009
+and SPEC-0012 are Implemented; SPEC-0010 and SPEC-0011 are Approved.
 
 The [roadmap](../development/ROADMAP.md) owns scope and progress; the
 [process](../development/PROCESS.md) owns approvals and review gates.
@@ -15,7 +15,7 @@ slice per task even when a spec covers several closely related tasks.
 
 | Specification | Tasks | Requirement IDs | Status | Runtime evidence |
 | --- | --- | --- | --- | --- |
-| [SPEC-0001: Local foundation](SPEC-0001-local-foundation.md) | T0.3, T0.4, T0.5, T0.6 separately | REQ-001 through REQ-012 | Approved | 184 of the 1148 tests; local setup, recovery, RBAC and compiled-main transport/cleanup pass; activation in Freelens as an integration test |
+| [SPEC-0001: Local foundation](SPEC-0001-local-foundation.md) | T0.3, T0.4, T0.5, T0.6 separately | REQ-001 through REQ-012 | Approved | 184 of the 1243 tests; local setup, recovery, RBAC and compiled-main transport/cleanup pass; activation in Freelens as an integration test |
 | [SPEC-0002: Installation discovery](SPEC-0002-installation-discovery.md) | T1.1 | REQ-013 through REQ-023 | Verified | 100 tests of the rules, of the state and of the components; the suites of the views in a packaged Freelens, with the reader of a part and across three starts |
 | [SPEC-0003: States and read-only Backups](SPEC-0003-backup-read-only.md) | T1.2, T1.3 separately | REQ-024 through REQ-037 | Verified | 151 unit tests of the states and of the stages, 70 of what the views show of a backup and of the components; the suites of the views in a packaged Freelens, with a list of a thousand backups; the pre-review |
 | [SPEC-0004: Test environment on every platform](SPEC-0004-test-environment-every-platform.md) | Foundation | REQ-038 through REQ-049 | Verified | 119 environment tests; runs on macOS x64 and on the hosted runner, Linux ARM64 |
@@ -23,10 +23,10 @@ slice per task even when a spec covers several closely related tasks.
 | [SPEC-0006: Read-only Schedules](SPEC-0006-schedule-read-only.md) | T1.5 | REQ-064 through REQ-077 | Verified | 120 tests: 75 of what the views show of a schedule, of its history, of its line of time and of what it refers to, 45 of the components; the suites of the views in a packaged Freelens, with the reader to which the history is denied; the pre-review |
 | [SPEC-0007: Read-only storage and snapshot locations](SPEC-0007-locations-read-only.md) | T1.6 | REQ-078 through REQ-092 | Verified | 196 tests: 141 of what the views show of a location, of its durations and of what uses it, 55 of the components; the suites of the views in a packaged Freelens, with the two readers and the location the controller validates; the pre-review |
 | [SPEC-0008: Overview of an installation](SPEC-0008-overview.md) | T1.7 | REQ-093 through REQ-107 | Verified | 88 tests: 42 of what the page says of an installation, of its window and of the line of time, 46 of the components; the suites of the views in a packaged Freelens, with the two readers and the long lists; the pre-review |
-| [SPEC-0009: The write gate and the way between the processes](SPEC-0009-write-gate.md) | T4.1 | REQ-108 through REQ-119 | Implemented | 115 tests: 16 of the contract and of the frame, 61 of the gate, of the procedures, of their wiring with the host, of the identity of a context and of the version of the server, 16 of the adapter, 22 of the state of the views and of the target bar; the suite of the gate in a packaged Freelens, with two frames of one window and a second start |
+| [SPEC-0009: The write gate and the way between the processes](SPEC-0009-write-gate.md) | T4.1 | REQ-108 through REQ-119 | Implemented | 115 tests: 16 of the contract and of the frame, 61 of the gate, of the procedures, of their wiring with the host, of the identity of a context and of the version of the server, 16 of the adapter, 22 of the state of the views and of the target bar; the suite of the gate in a packaged Freelens, with two frames of one window and a second start, and the confirmation of one write and the counts of its creations in the suite of the band of the server |
 | [SPEC-0010: The diagnostic request and its transport](SPEC-0010-diagnostic-request-and-transport.md) | T2.1, T2.2, T2.4 separately | REQ-120 through REQ-137 | Approved | The transport proof of T0.6, which this spec reuses |
 | [SPEC-0011: The log, the results, the resources and the volumes of an operation](SPEC-0011-artifact-viewers.md) | T2.3 | REQ-138 through REQ-151 | Approved | None yet |
-| [SPEC-0012: The version of the server and its plugins](SPEC-0012-server-status.md) | T5.3 | REQ-152 through REQ-159 | Approved | None yet |
+| [SPEC-0012: The version of the server and its plugins](SPEC-0012-server-status.md) | T5.3 | REQ-152 through REQ-159 | Implemented | 95 tests: 12 of the comparison of the version, of the plugins and of the providers, 32 of the state of the request and of what a write that failed left, 47 of the band and of the confirmation of one write, 4 of the object the cluster is sent, through both processes; the suite of the band in a packaged Freelens, on the real server of the test environment, on a synthetic installation and with the reader of a part |
 
 Next unallocated requirement ID: REQ-160. IDs are unique across this project;
 references in test tables do not redefine a requirement. Do not allocate IDs to
@@ -107,7 +107,7 @@ This is document coverage, not test execution:
 | Safety and privacy | Local-only writes, exact targets, no implicit requests, synthetic evidence |
 | UI decisions | Native lists plus dedicated operation workspace, with non-happy and accessible states |
 | Source grounding | Every draft carries exact reviewed revisions and recon dependencies |
-| Honest status | SPEC-0001 is Approved with setup, fixture and compiled-main transport evidence; SPEC-0002 to SPEC-0008 are Verified; SPEC-0009 to SPEC-0012 are Approved |
+| Honest status | SPEC-0001 is Approved with setup, fixture and compiled-main transport evidence; SPEC-0002 to SPEC-0008 are Verified; SPEC-0009 and SPEC-0012 are Implemented; SPEC-0010 and SPEC-0011 are Approved |
 
 No blocking product preference is required to review these drafts. Fixture isolation
 and main transport have scoped local evidence. Actual-host authentication, IPC

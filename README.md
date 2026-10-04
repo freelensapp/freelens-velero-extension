@@ -23,7 +23,9 @@ is a from-scratch MIT implementation and it is not a Velero product.
 > process that fetches logs and results, and so are the first views: the
 > discovery of the Velero installations of a cluster, the Overview of an
 > installation, the Backups, the Restores, the Schedules and the storage and
-> snapshot locations, read only. The repository is developed spec-first: one spec
+> snapshot locations, read only. The write mode is in place too, off until it is
+> turned on, with its first write: the version of the server and its plugins, in
+> the Overview. The repository is developed spec-first: one spec
 > per feature under [docs/specs](docs/specs/). See the
 > [roadmap](docs/development/ROADMAP.md).
 

@@ -339,6 +339,16 @@ Build output goes to `out/`.
   A suite reads the words of a part with `innerText` and its marks hidden, and
   the name of a family as it is written.
 - `pnpm exec biome` does not exist here: `pnpm biome:fix` and `pnpm biome:check`.
+- The reviewed release lists every BackupItemAction and RestoreItemAction twice in
+  a ServerStatusRequest, each time with its own kind. A fixture with each plugin
+  once is an object no server writes: a plugin is one kind and one name, shown
+  and counted once.
+- The API server does not count in `apiserver_request_total` a request it refuses
+  to the identity. A suite proves such a refusal by what the views say and by what
+  is not in the cluster, not by a count.
+- Every suite expects no request to Velero in the cluster when it starts. A suite
+  that asks the extension to create one leaves none when it ends: it waits for
+  the server to remove what the server processed, and removes the rest.
 
 ## Architecture And UI
 

@@ -152,6 +152,10 @@ commands open the explicit Velero operation, not an unrestricted YAML editor.
   was read, what needs attention beside the newest completed backup and what is in
   flight, the recent operations, the schedules beside the storage. At 1,000 pixels
   or more the bands of a row are side by side, under that one is under the other.
+  After what was read is the band of the server, which reads nothing when the
+  page opens: the version of the server and its plugins are asked of the server
+  through a request, which is a write, by a command of the band, through the gate
+  and an inline confirmation that shows the object.
   It has no value for the installation as a whole: no score, no percentage, no
   single mark, and none of the words that would read as a verdict. A band shows
   ten items and the way to the ones after them. Every cell, item, mark and line

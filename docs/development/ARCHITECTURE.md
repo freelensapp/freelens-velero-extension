@@ -118,15 +118,17 @@ before changing the client version. The main build replaces undici with
 extension never calls, and the real module installs a dispatcher for the whole
 process when it loads, which inside Freelens is the process of the host. Supported
 `WS_NO_*` build defines disable optional native accelerators without patching the
-library. The 1148 tests of the unit run, on the separate modules and on the
+library. The 1243 tests of the unit run, on the separate modules and on the
 production build, are 17 of the scaffold, 119 of the environment and its fixtures,
 48 of the diagnostic contracts, 151 of the operation states and of their stages,
 55 of the rules of the discovery, 206 of what the views show of a backup, of a
 restore and of a schedule, of what they refer to and of the views in the address,
 141 of what they show of a location, of its durations and of what uses it, 38 of
 what the Overview says of an installation and of the line of time, 33 of the state
-of an installation and of its reader, 223 of the components, and 117 of the gate of
-the writes, of the way between the processes and of the credential of a context. The
+of an installation and of its reader, 223 of the components, 117 of the gate of
+the writes, of the way between the processes and of the credential of a context, and
+95 of the version of the server: its comparison, its plugins, the state of its
+request, its band, the confirmation of one write and the object the cluster is sent. The
 integration test
 covers the installation in the host, the suites of the views what the views do
 in it.
@@ -548,6 +550,21 @@ with a password, a verification of TLS turned off and an impersonation of groups
 a uid or of extra fields, which the client cannot send, and the gate says which. The
 run of a ServerStatusRequest is in this slice as the smallest write; the one of a
 DownloadRequest comes with the request and its transport.
+
+In the renderer a write is asked in two gestures, where it is offered. The
+[state of the request](../../src/renderer/state/server-status.ts) of the version of
+the server is held by the installation: the first gesture asks the main process for
+the confirmation and shows the object, the second runs the write with the token.
+A step takes the answer of the main process only while it is still the step of the
+band: what arrives after the operator went back, writes went off or the
+installation changed is not taken, and a confirmation is left when the gate goes
+off. A write that failed carries what it left in the cluster, the request, nothing,
+or that it is not known, read from the stage the main process says, which both
+processes take from the contract; after it the views ask the main process what it
+holds of the gate. The [confirmation of one write](../../src/renderer/components/write-confirmation.tsx)
+is inline and shows the object as it is submitted: the prefix of the generated name
+and the labels are written once, in the contract, and a test reads the object the
+API server is sent through both processes.
 
 The extension-owned Backup list, context menu, drawer toolbar and bulk controls must
 not expose generic edit/delete. Use the pinned public overrides and menu handlers;

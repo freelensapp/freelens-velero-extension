@@ -387,6 +387,15 @@ time against the whole tree. Nothing was run.
 | A label of a name longer than 63 characters is cut to 57 and six characters of its digest | [The label](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/label/label.go#L37-L51) |
 | The AWS plugin signs a URL with the presign client of the SDK, over the endpoint `publicUrl` of the configuration when it is set and over `s3Url` otherwise; with neither, over the endpoint of the region of the bucket, which it looks up. The plugin forces the bucket into the path only when `s3ForcePathStyle` is true, and leaves the addressing to the SDK otherwise, which is a label of the host; it sets no other option of the endpoint. The signature of the SDK covers the host, the path and the query, which the proof of T0.6 saw a storage refuse when the host was changed | [The signing](https://github.com/velero-io/velero-plugin-for-aws/blob/5463822fd77bc1c2a1151ee76c830ad979ff2781/velero-plugin-for-aws/object_store.go#L485-L497), [the endpoint of the signing](https://github.com/velero-io/velero-plugin-for-aws/blob/5463822fd77bc1c2a1151ee76c830ad979ff2781/velero-plugin-for-aws/object_store.go#L227-L235), [the region](https://github.com/velero-io/velero-plugin-for-aws/blob/5463822fd77bc1c2a1151ee76c830ad979ff2781/velero-plugin-for-aws/object_store.go#L164-L178), [the client](https://github.com/velero-io/velero-plugin-for-aws/blob/5463822fd77bc1c2a1151ee76c830ad979ff2781/velero-plugin-for-aws/config.go#L91-L107), [the style of the path](https://github.com/velero-io/velero-plugin-for-aws/blob/5463822fd77bc1c2a1151ee76c830ad979ff2781/backupstoragelocation.md), [the signer](https://github.com/aws/aws-sdk-go-v2/blob/v1.41.12/aws/signer/v4/v4.go) |
 
+### While The Third Milestone Was Implemented, 2026-10-04
+
+What the server of the test environment, which is the reviewed release, answered
+to a ServerStatusRequest, and where the source of that release says why:
+
+| Fact | Source |
+| --- | --- |
+| The server lists a BackupItemAction and a RestoreItemAction twice in a ServerStatusRequest, each time with its own kind. Its registry puts a plugin of a kind that a newer kind adapts, BackupItemAction for BackupItemActionV2 and RestoreItemAction for RestoreItemActionV2, in the list of the newer kind as well, and the request is filled from the list of every kind, with the kind of each entry. The registry holds one plugin for a kind and a name: an entry of a request that repeats both repeats a plugin. The server of the test environment answered with 57 entries for 36 plugins | [The registration](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/plugin/clientmgmt/process/registry.go#L211-L235), [the kinds that are adapted](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/plugin/framework/common/plugin_kinds.go#L57-L63), [the plugins of a request](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/internal/velero/serverstatusrequest.go#L31-L44) |
+
 ## Verification And Remaining Work
 
 Completed checks:
