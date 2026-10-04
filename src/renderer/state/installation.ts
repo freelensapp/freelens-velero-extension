@@ -113,10 +113,10 @@ export class Installation {
       client: dependencies.writer,
       cluster: () => this.cluster.id,
       namespace: () => this.namespace,
-      generation: () => this.generation,
       writesOn: () => this.writes.on,
       now: dependencies.now,
       requestId: dependencies.requestId ?? (() => crypto.randomUUID()),
+      refused: () => void this.openGate(),
     });
     makeObservable(this, {
       api: observable.ref,
@@ -208,7 +208,8 @@ export class Installation {
   }
 
   // What the main process answered is the mirror. A failure leaves the state not known, with its reason,
-  // until the main process is asked again.
+  // until the main process is asked again. With writes that are not on, a write that waits for its
+  // confirmation waits for nothing: the main process cleared it.
   private takeGate(answer: Awaited<ReturnType<GateClient["state"]>>): void {
     runInAction(() => {
       if (answer.ok) {
@@ -218,6 +219,7 @@ export class Installation {
         this.gate = undefined;
         this.gateFailure = answer.text;
       }
+      if (!this.writes.on) this.server.off();
     });
   }
 

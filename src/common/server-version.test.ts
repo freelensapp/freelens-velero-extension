@@ -35,7 +35,7 @@ describe("the version of the server against the reviewed release", () => {
 
     expect(found).toEqual({ relation: "series", version: "v1.18.4", series: "v1.18", reviewed: "v1.18.2" });
     expect(versionNote(found)).toBe(
-      "This is the series v1.18 the extension was reviewed against, in v1.18.2; this server runs the patch v1.18.4.",
+      "This server runs v1.18.4, of the series v1.18 the extension was reviewed against, in v1.18.2.",
     );
     expect(compareVersion("v1.18.0", "v1.18.2").relation).toBe("series");
   });
@@ -47,7 +47,11 @@ describe("the version of the server against the reviewed release", () => {
       series: "v1.18",
       reviewed: "v1.18.2",
     });
-    expect(versionNote(compareVersion("v1.18.3+build.7", "v1.18.2"))).toContain("runs the patch v1.18.3+build.7");
+    // A prerelease of the reviewed patch is not another patch: the note says what the server runs, as written.
+    expect(versionNote(compareVersion("v1.18.2-rc.1", "v1.18.2"))).toBe(
+      "This server runs v1.18.2-rc.1, of the series v1.18 the extension was reviewed against, in v1.18.2.",
+    );
+    expect(versionNote(compareVersion("v1.18.3+build.7", "v1.18.2"))).toContain("runs v1.18.3+build.7, of the series");
   });
 
   it("says of a newer series and of an older one which release the extension was reviewed against", () => {

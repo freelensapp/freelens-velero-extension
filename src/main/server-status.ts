@@ -4,13 +4,12 @@
 // extension deletes no request.
 
 import { setTimeout as delay } from "node:timers/promises";
-import { type Failure, failure, type ServerStatusValue } from "../common/ipc";
+import { type Failure, failure, REQUEST_PREFIX, type ServerStatusValue } from "../common/ipc";
 import { CredentialPluginError, PLUGIN_TIMEOUT } from "./context-identity.ts";
 import { DiagnosticError } from "./diagnostic-transport.ts";
 
 import type { DiagnosticObject } from "./diagnostic-kubernetes";
 
-export const SERVER_STATUS_PREFIX = "freelens-velero-";
 export const SERVER_STATUS_WAIT = 10_000;
 export const SERVER_STATUS_INTERVAL = 250;
 
@@ -70,7 +69,7 @@ export function serverStatusFailure(error: unknown, requestName?: string): Failu
       "request-failed",
       "wait",
       false,
-      "The server processed the request but did not say its version, or when it processed it. The request stays: it is a ServerStatusRequest whose name begins with freelens-velero-.",
+      `The server processed the request but did not say its version, or when it processed it. The request stays: it is a ServerStatusRequest whose name begins with ${REQUEST_PREFIX}.`,
     );
   const code = error instanceof DiagnosticError ? error.code : "request-failed";
   const stage = requestName ? "wait" : "creation";
@@ -104,7 +103,7 @@ export function serverStatusFailure(error: unknown, requestName?: string): Failu
         "submission-unknown",
         "creation",
         false,
-        "The creation of the request may have happened: the answer of the cluster was lost. Look for a ServerStatusRequest whose name begins with freelens-velero- before asking again.",
+        `The creation of the request may have happened: the answer of the cluster was lost. Look for a ServerStatusRequest whose name begins with ${REQUEST_PREFIX} before asking again.`,
       );
     case "target-changed":
       return failure(
@@ -134,7 +133,7 @@ export async function readServerStatus(
 
   options.onStep?.("creating");
   api.assertCurrent();
-  const created = await api.createGenerated("ServerStatusRequest", namespace, SERVER_STATUS_PREFIX, signal);
+  const created = await api.createGenerated("ServerStatusRequest", namespace, REQUEST_PREFIX, signal);
   const identity = { name: created.metadata.name, uid: created.metadata.uid };
   const deadline = now() + wait;
 

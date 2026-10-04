@@ -39,8 +39,8 @@ export type VersionComparison =
   | { relation: "unknown"; version: string };
 
 // The version of the server against the reviewed release. The same text is the same release; the same
-// major and minor is the same series, whatever the patch and the suffix; a text that is not of the form
-// is not compared.
+// major and minor is the same series, whatever the patch and the suffix, which a prerelease or a build
+// of the reviewed patch has too; a text that is not of the form is not compared.
 export function compareVersion(version: string, reviewed: string): VersionComparison {
   const server = parse(version);
   const release = parse(reviewed);
@@ -60,7 +60,7 @@ export function versionNote(found: VersionComparison): string {
     case "same":
       return "This is the release the extension was reviewed against.";
     case "series":
-      return `This is the series ${found.series} the extension was reviewed against, in ${found.reviewed}; this server runs the patch ${found.version}.`;
+      return `This server runs ${found.version}, of the series ${found.series} the extension was reviewed against, in ${found.reviewed}.`;
     case "other":
       return `This server runs ${found.newer ? "a newer" : "an older"} series than the release the extension was reviewed against, ${found.reviewed}: what its views say of the behavior of Velero was read in ${found.reviewed}.`;
     default:

@@ -9,6 +9,7 @@ import {
   CHANNELS,
   type Failure,
   failure,
+  REQUEST_LABELS,
   readGateDisableRequest,
   readGateEnableRequest,
   readGateStateRequest,
@@ -84,7 +85,7 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
         new DiagnosticKubernetes(
           { clusterId: entry.id, context: entry.contextName, kubeconfigPath: entry.kubeConfigPath },
           isCurrent,
-          { "app.kubernetes.io/managed-by": "freelens-velero-extension" },
+          { ...REQUEST_LABELS },
         ),
     });
   let poll: ReturnType<typeof setInterval> | undefined;

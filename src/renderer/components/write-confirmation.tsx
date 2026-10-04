@@ -2,7 +2,7 @@ import { Renderer } from "@freelensapp/extensions";
 import styles from "./views.module.css";
 
 const {
-  Component: { Button },
+  Component: { Button, Icon },
 } = Renderer;
 
 export interface SubmittedObject {
@@ -23,7 +23,9 @@ export interface SubmittedObject {
 
 // The confirmation of one write, inline where the write is offered: the object as it will be submitted,
 // and the second gesture, which is the one the token of the main process stands for. Nothing is created
-// before it.
+// before it. It can be given the focus, which is how the keyboard and who does not see get to it when it
+// takes the place of the command that asked for it; the focus is not on the command that creates, so that
+// the key that asked is not the one that confirms.
 export function WriteConfirmation({
   id,
   object,
@@ -60,6 +62,7 @@ export function WriteConfirmation({
       className={styles.writeConfirmation}
       data-testid={id}
       aria-label={`The ${object.kind} that will be created`}
+      tabIndex={-1}
     >
       <p className={styles.stateText}>This {object.kind} will be created when you confirm, and not before:</p>
       <dl className={styles.writeObject}>
@@ -72,9 +75,11 @@ export function WriteConfirmation({
       </dl>
       <div className={styles.writeActions}>
         <Button primary data-testid={`${id}-create`} onClick={onCreate}>
+          <Icon material="check" small />
           Create the {object.kind}
         </Button>
         <Button plain data-testid={`${id}-back`} onClick={onBack}>
+          <Icon material="close" small />
           Do not create it
         </Button>
       </div>

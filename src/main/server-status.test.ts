@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import { REQUEST_PREFIX } from "../common/ipc";
 import { CredentialPluginError } from "./context-identity";
 import { DiagnosticError } from "./diagnostic-transport";
-import { readServerStatus, SERVER_STATUS_PREFIX, serverStatusFailure } from "./server-status";
+import { readServerStatus, serverStatusFailure } from "./server-status";
 
 import type { DiagnosticObject } from "./diagnostic-kubernetes";
 import type { ServerStatusApi } from "./server-status";
@@ -66,12 +67,7 @@ describe("the version of the server", () => {
       ],
       request: { name: "freelens-velero-abcde", uid: "request-uid" },
     });
-    expect(api.createGenerated).toHaveBeenCalledWith(
-      "ServerStatusRequest",
-      "velero",
-      SERVER_STATUS_PREFIX,
-      options.signal,
-    );
+    expect(api.createGenerated).toHaveBeenCalledWith("ServerStatusRequest", "velero", REQUEST_PREFIX, options.signal);
     expect(steps[0]).toEqual(["creating", undefined]);
     expect(steps[1]).toEqual(["waiting", 0]);
   });

@@ -21,7 +21,7 @@ export type WriteKind = (typeof WRITE_KINDS)[number];
 
 // What a request of a generated name is created with, which the confirmation of the views shows: the
 // prefix of its name, so that an operator who lists the requests knows what created them, and the labels
-// that say the same. The tests of the main process prove that it creates with these.
+// that say the same. The main process creates with these and the views show these: they are written once.
 export const REQUEST_PREFIX = "freelens-velero-";
 export const REQUEST_LABELS: Readonly<Record<string, string>> = {
   "app.kubernetes.io/managed-by": "freelens-velero-extension",

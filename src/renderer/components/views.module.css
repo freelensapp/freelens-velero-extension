@@ -948,9 +948,21 @@
   font-size: 12px;
 }
 
-/* The confirmation of one write, inline where it is offered: the object as it will be submitted. */
+/* The confirmation of one write, inline where it is offered: the object as it will be submitted. The
+   line beside it says where the review begins and ends. */
 .writeConfirmation {
   margin: 8px 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--primary);
+}
+
+.writeConfirmation:focus {
+  outline: none;
+}
+
+.writeConfirmation:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
 }
 
 .writeObject {
@@ -984,4 +996,20 @@
   margin-top: 4px;
   color: var(--textColorSecondary);
   font-size: 12px;
+}
+
+/* The mark of a provider beside its words, which say the same without it. */
+.serverProviders li {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.serverProviders li > :first-child {
+  flex: 0 0 auto;
+  color: var(--colorOk);
+}
+
+.serverProviders li[data-loaded="false"] > :first-child {
+  color: var(--colorWarning);
 }

@@ -1,5 +1,6 @@
 import { Renderer } from "@freelensapp/extensions";
 import { observer } from "mobx-react";
+import React from "react";
 import { REQUEST_LABELS, REQUEST_PREFIX } from "../../common/ipc";
 import { hasItems } from "../../common/read-state";
 import { compareVersion, pluginGroups, providerPlugins, versionNote } from "../../common/server-version";
@@ -9,12 +10,12 @@ import styles from "../components/views.module.css";
 import { focusFirst } from "../components/views-frame";
 import { WriteConfirmation } from "../components/write-confirmation";
 
+import type { ServerStatusValue } from "../../common/ipc";
 import type { PluginGroup, ProviderPlugin } from "../../common/server-version";
 import type { Installation } from "../state/installation";
-import type { ServerRead } from "../state/server-status";
 
 const {
-  Component: { Button },
+  Component: { Button, Icon },
 } = Renderer;
 
 const ID = "velero-overview-server";
@@ -57,17 +58,21 @@ function Providers({ installation, providers }: { installation: Installation; pr
     >
       {providers.map((line) => (
         <li key={line.provider} data-provider={line.provider} data-loaded={line.loaded}>
-          {line.provider}, of {line.locations.join(", ")}: needs {line.plugin}, which is{" "}
-          {line.loaded ? "loaded" : <strong>not loaded</strong>}
+          <Icon material={line.loaded ? "check" : "warning_amber"} small aria-hidden />
+          <span>
+            The provider {line.provider} of the storage {line.locations.length === 1 ? "location" : "locations"}{" "}
+            {line.locations.join(", ")} needs the object store plugin {line.plugin}, which is{" "}
+            {line.loaded ? "loaded" : <strong>not loaded</strong>}.
+          </span>
         </li>
       ))}
     </ul>
   );
 }
 
-function Plugins({ installation, read }: { installation: Installation; read: ServerRead }) {
-  const { groups, total } = pluginGroups(read.value.plugins);
-  const providers = providerPlugins(installation.read("storageLocations").items, read.value.plugins);
+function Plugins({ installation, read }: { installation: Installation; read: ServerStatusValue }) {
+  const { groups, total } = pluginGroups(read.plugins);
+  const providers = providerPlugins(installation.read("storageLocations").items, read.plugins);
 
   return (
     <>
@@ -115,24 +120,25 @@ function Plugins({ installation, read }: { installation: Installation; read: Ser
   );
 }
 
-function Version({ installation, read }: { installation: Installation; read: ServerRead }) {
-  const found = compareVersion(read.value.version, REVIEWED_RELEASE);
+function Version({ installation, read }: { installation: Installation; read: ServerStatusValue }) {
+  const found = compareVersion(read.version, REVIEWED_RELEASE);
 
   return (
     <>
-      <p className={styles.overviewCount} data-testid={`${ID}-version`} data-relation={found.relation}>
-        Velero {read.value.version}
+      {/* Said to who does not see when it arrives: it is the answer of a command given a moment before. */}
+      <p className={styles.overviewCount} data-testid={`${ID}-version`} data-relation={found.relation} role="status">
+        Velero {read.version}
       </p>
       <p className={styles.factNote} data-testid={`${ID}-note`}>
         {versionNote(found)}
       </p>
       <p className={styles.factNote} data-testid={`${ID}-processed`}>
-        Processed by the server at {processedText(read.value.processed)}
+        Processed by the server at {processedText(read.processed)}
       </p>
       <Plugins installation={installation} read={read} />
       <p className={styles.factNote} data-testid={`${ID}-request`}>
-        The server deletes the request {read.value.request.name} when it looks at it again, five minutes after it
-        processed it.
+        The server deletes the request {read.request.name} when it looks at it again, five minutes after it processed
+        it.
       </p>
     </>
   );
@@ -148,10 +154,43 @@ export const ServerBand = observer(({ installation }: { installation: Installati
   const writes = installation.writes;
   const namespace = installation.namespace ?? "";
   const gate = installation.gate;
-  const another = last !== undefined || (step.state === "failed" && step.failure.stage === "wait");
+  // A request of this band may be in the namespace already: one that was answered, one that was created
+  // and not answered, one whose creation is not known.
+  const another =
+    last !== undefined ||
+    (step.state === "failed" && (step.failure.stage === "wait" || step.failure.code === "submission-unknown"));
+  // What the command does, said before it is given.
+  const what = another
+    ? `Asking again creates another ${KIND} in ${namespace}.`
+    : `Asking the server for them creates a ${KIND} in ${namespace}, which the server answers.`;
+  const body = React.useRef<HTMLDivElement>(null);
+  // A gesture of the band changed what it shows: the control that was used went with it.
+  const gesture = React.useRef(false);
+  const by = (act: () => void) => () => {
+    gesture.current = true;
+    act();
+  };
+
+  // The focus of a control that went is given to what took its place, once the main process answered: the
+  // confirmation, or the command. When the operator moved to something else in the meantime it is theirs.
+  React.useEffect(() => {
+    if (!gesture.current || step.state === "asking" || step.state === "running") return;
+    gesture.current = false;
+    const active = document.activeElement;
+
+    if (active && active !== document.body && document.body.contains(active)) return;
+    focusFirst(body.current, [
+      `[data-testid="${ID}-confirm"]`,
+      `[data-testid="${ID}-create"]`,
+      `[data-testid="${ID}-to-target"]`,
+    ]);
+  }, [step.state]);
+
+  // A confirmation is left with the page that shows it.
+  React.useEffect(() => () => server.back(), [server]);
 
   return (
-    <div data-testid={`${ID}-body`} data-server={last ? "read" : "unread"} data-step={step.state}>
+    <div ref={body} data-testid={`${ID}-body`} data-server={last ? "read" : "unread"} data-step={step.state}>
       {last ? (
         <Version installation={installation} read={last} />
       ) : (
@@ -164,35 +203,39 @@ export const ServerBand = observer(({ installation }: { installation: Installati
           <p className={styles.stateText} data-testid={`${ID}-failure-text`}>
             {step.failure.text}
           </p>
-          {step.failure.code === "deadline" ? (
-            <p className={styles.factNote} data-testid={`${ID}-failure-deletion`}>
-              When the server processes it, it deletes it when it looks at it again, five minutes after.
+          {step.failure.stage === "wait" ? (
+            <p className={styles.factNote} data-testid={`${ID}-failure-request`}>
+              The request is a {KIND} of {namespace} whose name begins with {REQUEST_PREFIX}. The extension deletes no
+              request: the server deletes one when it looks at it again, five minutes after it processed it, and one
+              that no server processes stays until someone removes it.
             </p>
           ) : null}
         </div>
       ) : null}
       {!writes.on ? (
-        <div className={styles.writeActions}>
+        <>
           <p className={styles.factNote} data-testid={`${ID}-writes-off`}>
-            Reading them creates a {KIND} in {namespace}, which the server answers.{" "}
+            {what}{" "}
             {installation.gateUnknown
               ? "Whether writes are on is not known: the target bar asks the main process again."
               : "Writes are off for this installation: they are turned on in the target bar."}
           </p>
-          <button
-            type="button"
-            className={styles.link}
-            data-testid={`${ID}-to-target`}
-            onClick={(event) =>
-              focusFirst(event.currentTarget.ownerDocument.body, [
-                '[data-testid="velero-writes-on"]',
-                '[data-testid="velero-writes-ask"]',
-              ])
-            }
-          >
-            Go to the writes in the target bar
-          </button>
-        </div>
+          <div className={styles.writeActions}>
+            <button
+              type="button"
+              className={styles.link}
+              data-testid={`${ID}-to-target`}
+              onClick={(event) =>
+                focusFirst(event.currentTarget.ownerDocument.body, [
+                  '[data-testid="velero-writes-on"]',
+                  '[data-testid="velero-writes-ask"]',
+                ])
+              }
+            >
+              Go to the writes in the target bar
+            </button>
+          </div>
+        </>
       ) : step.state === "asking" ? (
         <p className={styles.factNote} role="status" data-testid={`${ID}-asking`}>
           Asking the main process for the confirmation of the request.
@@ -211,19 +254,25 @@ export const ServerBand = observer(({ installation }: { installation: Installati
             spec: "Empty",
             target: "None: the request is of the server, not of an object",
           }}
-          onCreate={() => void server.run()}
-          onBack={() => server.back()}
+          onCreate={by(() => void server.run())}
+          onBack={by(() => server.back())}
         />
       ) : step.state === "running" ? (
         <p className={styles.factNote} role="status" data-testid={`${ID}-running`}>
           Creating the {KIND} and waiting for the server to answer, for ten seconds at most.
         </p>
       ) : (
-        <div className={styles.writeActions}>
-          <Button primary data-testid={`${ID}-create`} onClick={() => void server.ask()}>
-            {another ? `Create another ${KIND}` : `Create a ${KIND}`}
-          </Button>
-        </div>
+        <>
+          <p className={styles.factNote} data-testid={`${ID}-what`}>
+            {what}
+          </p>
+          <div className={styles.writeActions}>
+            <Button plain data-testid={`${ID}-create`} onClick={by(() => void server.ask())}>
+              <Icon material="add_circle_outline" small />
+              {another ? `Create another ${KIND}` : `Create a ${KIND}`}
+            </Button>
+          </div>
+        </>
       )}
     </div>
   );
