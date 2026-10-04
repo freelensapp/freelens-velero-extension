@@ -1,15 +1,32 @@
 {
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Read|Edit|Write|NotebookEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 -c \"\nimport json, sys, re\ninput_data = json.load(sys.stdin)\nparams = input_data.get('tool_input', {})\npath = params.get('file_path', '') or params.get('notebook_path', '')\npatterns = [\n    r'(^|/)\\.env$',\n    r'(^|/)\\.env\\.',\n    r'\\.npmrc$',\n    r'\\.jks$',\n    r'\\.keystore$',\n    r'\\.p12$',\n    r'\\.pfx$',\n    r'\\.pem$',\n    r'\\.key$',\n    r'\\.kubeconfig$',\n    r'(^|/)serviceAccountKey\\.json$',\n    r'(^|/)credentials\\.json$',\n    r'(^|/)velero-credentials$'\n]\nif any(re.search(p, path) for p in patterns):\n    print(json.dumps({'hookSpecificOutput': {'hookEventName': 'PreToolUse', 'permissionDecision': 'deny', 'permissionDecisionReason': 'Sensitive file excluded for security: ' + path}}))\n\""
-          }
-        ]
-      }
+  "permissions": {
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/.envrc)",
+      "Read(**/.npmrc)",
+      "Read(**/*.jks)",
+      "Read(**/*.keystore)",
+      "Read(**/*.p12)",
+      "Read(**/*.pfx)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/*.kubeconfig)",
+      "Read(**/credentials.json)",
+      "Read(**/velero-credentials)",
+      "Edit(**/.env)",
+      "Edit(**/.env.*)",
+      "Edit(**/.envrc)",
+      "Edit(**/.npmrc)",
+      "Edit(**/*.jks)",
+      "Edit(**/*.keystore)",
+      "Edit(**/*.p12)",
+      "Edit(**/*.pfx)",
+      "Edit(**/*.pem)",
+      "Edit(**/*.key)",
+      "Edit(**/*.kubeconfig)",
+      "Edit(**/credentials.json)",
+      "Edit(**/velero-credentials)"
     ]
   }
 }
