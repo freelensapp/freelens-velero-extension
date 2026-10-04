@@ -315,6 +315,32 @@ describe("what is kept of the preferences", () => {
   });
 });
 
+describe("what is kept of what the operator allowed", () => {
+  const allowed = { what: "private", origin: "https://storage.example:9000", since: 1000 };
+
+  it("is kept with the namespaces, read with no trust in its form, and left out when there is none", () => {
+    expect(
+      readPreferences({
+        selected: { "cluster-a": "velero-demo" },
+        allowances: {
+          "cluster-a": [
+            allowed,
+            { what: "http", origin: "https://storage.example/bucket?signature=synthetic", since: 1 },
+          ],
+          "cluster-b": "everything",
+        },
+      }),
+    ).toEqual({
+      selected: { "cluster-a": "velero-demo" },
+      configured: {},
+      allowances: { "cluster-a": [allowed] },
+    });
+    // An operator who allowed nothing keeps a file without the key.
+    for (const allowances of [undefined, {}, { "cluster-a": [] }, "everything", { "cluster-a": [{ what: "all" }] }])
+      expect("allowances" in readPreferences({ allowances })).toBe(false);
+  });
+});
+
 describe("generation of a selection", () => {
   const asked = { cluster: "cluster-a", namespace: "velero-a", number: 3 };
 

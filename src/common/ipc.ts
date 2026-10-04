@@ -3,6 +3,8 @@
 // by the one that receives it, and neither trusts the other. No raw error, URL, header, body or path of a
 // file is in any of them: a failure is a code, a stage, whether it is safe to try again and words.
 
+import { type AllowanceFor, readAllowanceFor } from "./allowances";
+
 import type { DiagnosticCode } from "../main/diagnostic-transport";
 
 export const CHANNELS = {
@@ -16,6 +18,8 @@ export const CHANNELS = {
   writeCancel: "write.cancel",
   artifactPage: "artifact.page",
   artifactRelease: "artifact.release",
+  allowanceGrant: "allowance.grant",
+  allowanceRevoke: "allowance.revoke",
 } as const;
 
 export const WRITE_KINDS = ["DownloadRequest", "ServerStatusRequest"] as const;
@@ -64,9 +68,10 @@ export const REQUEST_STAGES = { creation: "creation", wait: "wait", credential: 
 
 // The steps of the way of a DownloadRequest, in their order: the wait for one of the two places of the
 // process, the target read again, its backup when it is a restore, the storage location of the backup,
-// its certificate, the creation of the request, the wait for its URL, the route to the store, the
-// download, the delivery of the text and the release of what was opened. A failure names the step it
-// ended at.
+// its certificate, the creation of the request, the wait for its URL, the route to the store, with the
+// reads a route through the cluster needs, of the Service of the store, of its endpoint slices and of
+// its Pod, and the port-forward to that Pod, the download, the delivery of the text and the release of
+// what was opened. A failure names the step it ended at.
 export const DOWNLOAD_STAGES = [
   "queue",
   "target",
@@ -76,6 +81,10 @@ export const DOWNLOAD_STAGES = [
   "creation",
   "wait",
   "route",
+  "service",
+  "endpoints",
+  "pod",
+  "forward",
   "download",
   "delivery",
   "release",
@@ -99,6 +108,9 @@ export interface Failure {
   retry: boolean;
   // Words that are safe to show.
   text: string;
+  // What the operator may allow for the request to go on, when that is what stopped it: an origin, a
+  // private address or a connection that is not encrypted, for that origin. Never a URL.
+  needs?: AllowanceFor;
 }
 export type Answer<Value> = { ok: true; value: Value } | Failure;
 
@@ -393,6 +405,19 @@ export function readWriteStatusRequest(value: unknown): WriteStatusRequest | und
   return { cluster: value.cluster, request: value.request };
 }
 
+// What the operator allows, or takes back, for the cluster of the frame that asks.
+export interface AllowanceRequest extends AllowanceFor {
+  cluster: string;
+}
+
+export function readAllowanceRequest(value: unknown): AllowanceRequest | undefined {
+  if (!withinBound(value) || !isRecord(value) || !isCluster(value.cluster)) return;
+  const { cluster, ...rest } = value;
+  const allowed = readAllowanceFor(rest);
+
+  return allowed ? { cluster, ...allowed } : undefined;
+}
+
 export const readWriteCancelRequest = readWriteStatusRequest;
 export const readArtifactReleaseRequest = readWriteStatusRequest;
 
@@ -429,14 +454,26 @@ export function readAnswer<Value>(
     return read === undefined ? broken : { ok: true, value: read };
   }
   if (
-    !hasKeys(value, ["ok", "code", "stage", "retry", "text"]) ||
+    !hasKeys(value, ["ok", "code", "stage", "retry", "text"], ["needs"]) ||
     !isText(value.code, 64) ||
     !isText(value.stage, 64) ||
     typeof value.retry !== "boolean" ||
     !isText(value.text, 1024)
   )
     return broken;
-  return { ok: false, code: value.code as FailureCode, stage: value.stage, retry: value.retry, text: value.text };
+  const read: Failure = {
+    ok: false,
+    code: value.code as FailureCode,
+    stage: value.stage,
+    retry: value.retry,
+    text: value.text,
+  };
+
+  if (!("needs" in value)) return read;
+  // What the operator may allow is of the form an allowance has, or the failure is not one of the contract.
+  const needs = readAllowanceFor(value.needs);
+
+  return needs ? { ...read, needs } : broken;
 }
 
 export function readGateState(value: unknown): GateState | undefined {
