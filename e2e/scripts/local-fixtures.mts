@@ -53,6 +53,12 @@ export function fixtureNames(run: string) {
     scale: `velero-scale-${run}`,
     backup: `fixture-backup-${run}`,
     restore: `fixture-restore-${run}`,
+    // The operations the server refuses, which the transport proof asks the artifacts of: a backup and a
+    // restore that fail their validation, and a restore asked from a schedule that has no backup.
+    invalidBackup: `fixture-invalid-backup-${run}`,
+    invalidRestore: `fixture-invalid-restore-${run}`,
+    orphanRestore: `fixture-orphan-restore-${run}`,
+    emptySchedule: `fixture-empty-schedule-${run}`,
   };
 }
 
@@ -60,6 +66,30 @@ export function fixtureNamespaces(run: string): string[] {
   const names = fixtureNames(run);
 
   return [names.source, names.restored, names.static, names.views, names.defaults, names.overview, names.scale];
+}
+
+// The path of the log or of the results of a backup or of a restore in the bucket of the environment, as
+// the release lays the store out, for the operations of a run and for no other name.
+export function fixtureArtifactPath(
+  run: string,
+  artifact: "BackupLog" | "BackupResults" | "RestoreLog" | "RestoreResults",
+  name: string,
+): string {
+  const names = fixtureNames(run);
+  const ofBackup = artifact.startsWith("Backup");
+
+  requireCondition(
+    (ofBackup
+      ? [names.backup, names.invalidBackup]
+      : [names.restore, names.invalidRestore, names.orphanRestore]
+    ).includes(name),
+    "An artifact of an operation outside this fixture run is not asked for",
+  );
+  const file = artifact.endsWith("Log") ? "logs" : "results";
+
+  return ofBackup
+    ? `/${BUCKET}/backups/${name}/${name}-${file}.gz`
+    : `/${BUCKET}/restores/${name}/restore-${name}-${file}.gz`;
 }
 
 export function fixtureArtifactPaths(run: string) {
@@ -103,25 +133,36 @@ export function assertFixtureNamespaceContents(
   }
 }
 
-export function fixtureDeletionRequest(owner: string, run: string, backupUid: string): KubeResource {
+// The request that asks the controller to delete a backup of the fixtures: the real one, or the one that
+// failed its validation. No other backup is deleted this way.
+export function fixtureDeletionRequest(
+  owner: string,
+  run: string,
+  backupUid: string,
+  backupName = fixtureNames(run).backup,
+): KubeResource {
   const names = fixtureNames(run);
 
   requireCondition(owner && backupUid, "Bound backup ownership is required for deletion");
+  requireCondition(
+    backupName === names.backup || backupName === names.invalidBackup,
+    "Only a backup of the fixtures is deleted",
+  );
   return {
     apiVersion: "velero.io/v1",
     kind: "DeleteBackupRequest",
     metadata: {
-      name: `${names.backup}-delete`,
+      name: `${backupName}-delete`,
       namespace: DEMO_NAMESPACE,
       labels: {
         [OWNER_LABEL]: owner,
         [FIXTURE_LABEL]: run,
         [FIXTURE_MODE]: "live",
-        "velero.io/backup-name": names.backup,
+        "velero.io/backup-name": backupName,
         "velero.io/backup-uid": backupUid,
       },
     },
-    spec: { backupName: names.backup },
+    spec: { backupName },
   };
 }
 
@@ -1382,6 +1423,137 @@ export function liveRestore(owner: string, run: string): KubeResource {
       existingResourcePolicy: "none",
     },
   };
+}
+
+// The operations the server refuses. A backup and a restore that name both kinds of selector fail their
+// validation, and nothing of them is written into the store, while the backup of the restore and the
+// storage location of both are valid: a URL is signed for their artifacts, and the store has no such
+// file. A restore asked from a schedule that has no backup fails its validation without the name of a
+// backup: no URL is signed for it at all.
+export function refusedFixtures(
+  owner: string,
+  run: string,
+): { backup: KubeResource; restore: KubeResource; orphan: KubeResource } {
+  const names = fixtureNames(run);
+  const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" };
+  const selectors = {
+    labelSelector: { matchLabels: { [FIXTURE_LABEL]: run } },
+    orLabelSelectors: [{ matchLabels: { [FIXTURE_LABEL]: run } }],
+  };
+
+  requireCondition(owner, "Fixture ownership is required");
+  return {
+    backup: {
+      apiVersion: "velero.io/v1",
+      kind: "Backup",
+      metadata: { name: names.invalidBackup, namespace: DEMO_NAMESPACE, labels },
+      spec: {
+        includedNamespaces: [names.source],
+        includedResources: ["configmaps"],
+        ...selectors,
+        includeClusterResources: false,
+        storageLocation: "default",
+        snapshotVolumes: false,
+        defaultVolumesToFsBackup: false,
+        ttl: LIVE_RETENTION,
+      },
+    },
+    restore: {
+      apiVersion: "velero.io/v1",
+      kind: "Restore",
+      metadata: { name: names.invalidRestore, namespace: DEMO_NAMESPACE, labels },
+      spec: {
+        backupName: names.backup,
+        includedNamespaces: [names.source],
+        includedResources: ["configmaps"],
+        ...selectors,
+        namespaceMapping: { [names.source]: names.restored },
+        includeClusterResources: false,
+        restorePVs: false,
+        existingResourcePolicy: "none",
+      },
+    },
+    orphan: {
+      apiVersion: "velero.io/v1",
+      kind: "Restore",
+      metadata: { name: names.orphanRestore, namespace: DEMO_NAMESPACE, labels },
+      spec: {
+        scheduleName: names.emptySchedule,
+        includedNamespaces: [names.source],
+        includedResources: ["configmaps"],
+        namespaceMapping: { [names.source]: names.restored },
+        includeClusterResources: false,
+        restorePVs: false,
+        existingResourcePolicy: "none",
+      },
+    },
+  };
+}
+
+// What the release writes when it refuses each of them, as the controller of each says it.
+export const REFUSALS = {
+  backup: "encountered labelSelector as well as orLabelSelectors in backup spec, only one can be specified",
+  restore: "encountered labelSelector as well as orLabelSelectors in restore spec, only one can be specified",
+  orphan: "No backups found for schedule",
+} as const;
+
+// The phases an operation is in before its controller validates it: a restore is new, and a backup of this
+// release goes through its queue first.
+const BEFORE_VALIDATION = ["", "New", "Queued", "ReadyToStart"];
+
+// Whether the server refused an operation for the reason the operation was made for. One its controller
+// has not validated yet is not refused yet; one in any other phase, or refused for another reason, is not
+// the fixture it was made to be.
+export function isRefused(
+  kind: string,
+  status: { phase?: string; validationErrors?: string[] } | undefined,
+  reason: string,
+): boolean {
+  if (status?.phase === "FailedValidation") {
+    requireCondition(
+      status.validationErrors?.includes(reason),
+      `Refused ${kind} failed its validation for another reason`,
+    );
+    return true;
+  }
+  requireCondition(
+    BEFORE_VALIDATION.includes(status?.phase ?? ""),
+    `Refused ${kind} is ${status?.phase} where it was expected to fail its validation`,
+  );
+  return false;
+}
+
+async function waitRefused(runtime: FixtureRuntime, expected: KubeResource, reason: string): Promise<KubeResource> {
+  const deadline = Date.now() + 120_000;
+
+  while (Date.now() < deadline) {
+    const actual = readFixture(runtime, expected);
+
+    if (isRefused(expected.kind, actual.status as Parameters<typeof isRefused>[1], reason)) return actual;
+    await delay(1000);
+  }
+  throw new Error(`Refused ${expected.kind} was not looked at by the server within the fixture deadline`);
+}
+
+// Applies the three, after the real backup completed, and waits until the server refused each for the
+// reason it is made for. What it answers is each object as the cluster holds it.
+export async function runRefusedFixtures(
+  runtime: FixtureRuntime,
+  run: string,
+): Promise<{ backup: KubeResource; restore: KubeResource; orphan: KubeResource }> {
+  const manifests = refusedFixtures(runtime.owner, run);
+
+  for (const manifest of Object.values(manifests)) runtime.apply(manifest);
+  const backup = await waitRefused(runtime, manifests.backup, REFUSALS.backup);
+  const restore = await waitRefused(runtime, manifests.restore, REFUSALS.restore);
+  const orphan = await waitRefused(runtime, manifests.orphan, REFUSALS.orphan);
+
+  // The restore of a schedule without a backup carries no name of a backup: the server found none.
+  requireCondition(
+    !(orphan.spec as { backupName?: string }).backupName,
+    "The restore of a schedule without a backup names a backup",
+  );
+  return { backup, restore, orphan };
 }
 
 async function waitCompleted(runtime: FixtureRuntime, expected: KubeResource): Promise<KubeResource> {

@@ -4,11 +4,11 @@ import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import { FIXTURE_LABEL, fixtureArtifactPaths, fixtureNames } from "./local-fixtures.mts";
+import { FIXTURE_LABEL, fixtureArtifactPath, fixtureNames } from "./local-fixtures.mts";
 import { DEMO_CONTEXT, DEMO_NAMESPACE, OWNER_LABEL, requireCondition, SUBNETS, subnetsOverlap } from "./local-kind.mts";
 import { type KubeResource, STORAGE_ENDPOINT } from "./local-manifests.mts";
 
-import type { Answer, ArtifactPage, ArtifactTarget, ArtifactValue, WriteConfirmAnswer } from "../../src/common/ipc.ts";
+import type { Answer, ArtifactPage, ArtifactValue, WriteConfirmAnswer } from "../../src/common/ipc.ts";
 import type { DiagnosticKind } from "../../src/main/diagnostic-kubernetes.ts";
 
 export { DIRECT_PROOF_IMAGE } from "./local-manifests.mts";
@@ -21,6 +21,9 @@ export interface DownloadProofContext {
   origin?: string;
   port?: number;
   direct?: boolean;
+  // The operations the server refused, when the proof asks for their artifacts as well: a backup and a
+  // restore that failed their validation, and a restore without a backup.
+  refused?: Record<"backup" | "restore" | "orphan", { name: string; uid: string }>;
   assertCurrent(): void;
   record(kind: DiagnosticKind, identity: { name: string; uid: string }): void;
 }
@@ -127,6 +130,8 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
   invalidSignature: boolean;
   invalidHost: boolean;
   untrustedCa: boolean;
+  missingArtifacts: number;
+  refusedBeforeCreation: boolean;
 }> {
   const main = compiledDiagnostics();
   const api = new main.DiagnosticKubernetes(
@@ -138,12 +143,13 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
     { [OWNER_LABEL]: context.owner, [FIXTURE_LABEL]: context.run },
   );
   const names = fixtureNames(context.run);
-  const artifacts = fixtureArtifactPaths(context.run);
-  const paths: Partial<Record<ArtifactTarget, string>> = {
-    BackupLog: artifacts.backupLog,
-    BackupResults: artifacts.backupResults,
-    RestoreLog: artifacts.restoreLog,
-    RestoreResults: artifacts.restoreResults,
+  // The path of an artifact of an operation of this run: the four the proof asks for, and no other.
+  const pathOf = (target: string, name: string) => {
+    requireCondition(
+      target === "BackupLog" || target === "BackupResults" || target === "RestoreLog" || target === "RestoreResults",
+      "Unexpected fixture artifact",
+    );
+    return fixtureArtifactPath(context.run, target, name);
   };
   const controller = new AbortController();
   const origin = context.origin ?? STORAGE_ENDPOINT;
@@ -205,11 +211,10 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
         const parsed = new URL(url);
         const config = storage.spec?.config as { s3Url?: string; publicUrl?: string } | undefined;
 
+        const pathname = pathOf(input.target, input.name);
+
         requireCondition(
-          config?.s3Url === origin &&
-            !config.publicUrl &&
-            parsed.origin === origin &&
-            parsed.pathname === paths[input.target],
+          config?.s3Url === origin && !config.publicUrl && parsed.origin === origin && parsed.pathname === pathname,
           "Unexpected fixture artifact origin or target",
         );
         const tunnel = await newConnection(signal);
@@ -217,7 +222,7 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
         return {
           route: {
             origin,
-            pathname: paths[input.target] ?? "",
+            pathname,
             address: tunnel.address,
             port: tunnel.port,
             mode: context.direct ? "direct" : "tunnel",
@@ -291,7 +296,54 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
     if (!answer.ok) throw new Error(`The procedure ${channel} failed: ${answer.code} at ${answer.stage}`);
     return answer.value;
   };
+  // The answer of a run that is expected not to end with its text: its code and its step.
+  const refusal = async (
+    target: { kind: "Backup" | "Restore"; name: string; uid: string },
+    artifact: "BackupLog" | "RestoreLog",
+    request: string,
+  ): Promise<{ code: string; stage: string }> => {
+    const { token } = await call<WriteConfirmAnswer>("write.confirm", {
+      cluster,
+      namespace: DEMO_NAMESPACE,
+      kind: "DownloadRequest",
+      target,
+      artifact,
+    });
+    const handler = handlers.get("write.run");
+
+    requireCondition(handler, "A procedure of the main process is not registered");
+    const answer = (await handler(frame, {
+      cluster,
+      namespace: DEMO_NAMESPACE,
+      kind: "DownloadRequest",
+      target,
+      artifact,
+      token,
+      request,
+    })) as Answer<ArtifactValue>;
+
+    requireCondition(!answer.ok, "An artifact of an operation the server refused was downloaded");
+    requireCondition(
+      !/X-Amz|downloadURL|[?]|https?:/.test(JSON.stringify(answer)),
+      "A failure of the proof carries a URL",
+    );
+    return { code: answer.code, stage: answer.stage };
+  };
+  // Whether a request of that name is in the cluster, and its identity when it is.
+  const requestOf = (name: string) =>
+    api.read("DownloadRequest", DEMO_NAMESPACE, name, controller.signal).then(
+      (found) => ({ name, uid: found.metadata.uid }),
+      (error: unknown) => {
+        requireCondition(
+          error instanceof main.DiagnosticError && error.code === "not-found",
+          "A request of the proof could not be looked for",
+        );
+        return undefined;
+      },
+    );
   let downloads = 0;
+  let missingArtifacts = 0;
+  let refusedBeforeCreation = false;
 
   try {
     await call("gate.enable", {
@@ -348,6 +400,41 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
       );
       downloads += 1;
     }
+    // What the server and the store answer when there is nothing to download.
+    if (context.refused) {
+      // An operation that failed its validation wrote nothing into the store, and its backup and its
+      // storage location are valid: the server signs a URL, and the store says that it has no such file.
+      for (const [target, artifact] of [
+        [{ kind: "Backup", ...context.refused.backup }, "BackupLog"],
+        [{ kind: "Restore", ...context.refused.restore }, "RestoreLog"],
+      ] as const) {
+        const request = randomUUID();
+        const ended = await refusal(target, artifact, request);
+        const created = await requestOf(`${target.name}-${request}`);
+
+        // The request was created for it, and stays: the proof removes it with the others.
+        requireCondition(created, "No request was created for an artifact the store was asked for");
+        context.record("DownloadRequest", created);
+        requireCondition(
+          ended.code === "artifact-missing" && ended.stage === "download",
+          `A file the store does not have ended as ${ended.code} at ${ended.stage}`,
+        );
+        missingArtifacts += 1;
+      }
+      // A restore that names no backup: the server would sign no URL, and no request is created for it.
+      const request = randomUUID();
+      const ended = await refusal({ kind: "Restore", ...context.refused.orphan }, "RestoreLog", request);
+
+      requireCondition(
+        ended.code === "not-found" && ended.stage === "backup",
+        `A restore without a backup ended as ${ended.code} at ${ended.stage}`,
+      );
+      requireCondition(
+        !(await requestOf(`${context.refused.orphan.name}-${request}`)),
+        "A request was created for a restore without a backup",
+      );
+      refusedBeforeCreation = true;
+    }
     const collisionName = `${names.backup}-${randomUUID()}`;
     const requestId = randomUUID();
     const created = await api.createDownload(
@@ -394,7 +481,16 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
       status = await api.read("ServerStatusRequest", DEMO_NAMESPACE, generated.metadata.name, controller.signal);
     }
     requireCondition(typeof status.status?.serverVersion === "string", "Local server-status response missing version");
-    return { downloads, generatedNames: true, conflictRefused: true, invalidSignature, invalidHost, untrustedCa };
+    return {
+      downloads,
+      generatedNames: true,
+      conflictRefused: true,
+      invalidSignature,
+      invalidHost,
+      untrustedCa,
+      missingArtifacts,
+      refusedBeforeCreation,
+    };
   } finally {
     controller.abort();
     release();
