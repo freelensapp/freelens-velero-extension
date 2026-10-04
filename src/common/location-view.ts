@@ -1,4 +1,5 @@
 import { formatDuration, timestamp } from "./duration";
+import { readsAsTrue } from "./go-boolean";
 import { duration } from "./go-duration";
 
 import type { Duration } from "./go-duration";
@@ -280,8 +281,6 @@ export function shownText(text: string): { value: string; shortened: boolean } {
 
 export const LEFT_OUT = "What a URL carries before its host and after its path is left out of what is shown.";
 
-// What the reviewed release reads as true in the text of a key: it parses it as Go parses a boolean.
-const READ_AS_TRUE = new Set(["1", "t", "T", "TRUE", "true", "True"]);
 const BACKENDS = ["velero.io/aws", "velero.io/azure", "velero.io/gcp", "velero.io/fs"];
 
 // The release takes for the backend of AWS the provider of that name, with the group of Velero or without
@@ -313,7 +312,7 @@ export function configEntries(
     .map(([key, raw]) => {
       const written = typeof raw === "string" ? raw : JSON.stringify(raw);
       const shown = shownValue(written ?? "");
-      const unverified = of === "storage" && key === "insecureSkipTLSVerify" && READ_AS_TRUE.has(written ?? "");
+      const unverified = of === "storage" && key === "insecureSkipTLSVerify" && readsAsTrue(written);
 
       return {
         key,

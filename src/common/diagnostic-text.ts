@@ -14,6 +14,19 @@ export const API_WORDS = {
   late: "The cluster did not answer in time.",
 } as const;
 
+// What is said of a store whose connection was not trusted. The transport tells a certificate that was
+// refused from a handshake that failed for another reason, as of a store that does not speak TLS on that
+// port: only the first is something the certificate of a location, or what a location asks of the
+// verification, has to do with. Where it is not known which it was, the words name both.
+const STORE_CERTIFICATE = "The certificate of the store is not trusted.";
+const STORE_HANDSHAKE =
+  "The handshake of TLS with the store failed, and no certificate was refused: the store may not speak TLS at the port of its URL, or a version of it the extension does not, or the connection was closed while it was made.";
+const STORE_UNTRUSTED =
+  "The connection to the store was not trusted: its certificate was refused, or the handshake of TLS failed.";
+// What an operator can do about a certificate that is not trusted.
+const NAME_THE_AUTHORITY =
+  "The storage location can name the certificate of its authority; the verification is never turned off.";
+
 // A plugin of the context that gave no credential: the cluster was not asked, so it refused nothing. The
 // command is named by its file alone.
 export function pluginWords(command: string, reason: "failed" | "deadline" | "unreadable", seconds: number): string {
@@ -34,8 +47,20 @@ export function pluginWords(command: string, reason: "failed" | "deadline" | "un
 //   expired: the request says that it expired already;
 //   another: the request of that name is not the one that was created;
 //   replaced: the target of that name is not the object that was confirmed;
-//   whole: the bound of the whole operation was reached, at whatever step.
-export type DownloadVerdict = "unsigned" | "failed" | "expired" | "another" | "replaced" | "whole";
+//   whole: the bound of the whole operation was reached, at whatever step;
+//   untrusted: the certificate of the store was refused, which a handshake of TLS that failed for another
+//   reason is told from;
+//   insecure: the certificate of the store was refused, and its storage location asks that it is not
+//   verified, which the extension does not do.
+export type DownloadVerdict =
+  | "unsigned"
+  | "failed"
+  | "expired"
+  | "another"
+  | "replaced"
+  | "whole"
+  | "untrusted"
+  | "insecure";
 
 export interface DownloadContext {
   artifact: ArtifactTarget;
@@ -221,11 +246,14 @@ export function downloadFailure(code: FailureCode, stage: string, context: Downl
           false,
           `What the storage location gives as its certificate is not a certificate, and no connection is made without verification. ${none}`,
         );
-      if (store || stage === "route")
+      if (context.verdict === "insecure")
         return say(
           false,
-          `The certificate of the store is not trusted. The storage location can name the certificate of its authority; the verification is never turned off. ${stays}`,
+          `${STORE_CERTIFICATE} The storage location asks, with insecureSkipTLSVerify, that the certificate is not verified: the extension verifies it all the same. The storage location can name the certificate of its authority. ${stays}`,
         );
+      if (context.verdict === "untrusted") return say(false, `${STORE_CERTIFICATE} ${NAME_THE_AUTHORITY} ${stays}`);
+      if (store) return say(false, `${STORE_HANDSHAKE} ${stays}`);
+      if (stage === "route") return say(false, `${STORE_UNTRUSTED} ${NAME_THE_AUTHORITY} ${stays}`);
       return say(false, `${API_WORDS.untrusted}${left}`);
     case "destination-denied":
       return say(false, `The address of the store is not one the extension connects to.${left}`);
