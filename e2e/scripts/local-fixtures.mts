@@ -1490,6 +1490,69 @@ export function refusedFixtures(
   };
 }
 
+// The identities of the transport proof. Three may do what a download asks of the cluster up to one step,
+// and are refused at the next: the reader at the creation of the request; the requester at the read of the
+// Secret a location refers to, and at the read of the Service of the store; the router at the port-forward,
+// for which it has the verb create alone. The downloader has what the documentation lists for a download
+// through the cluster, and downloads. Each is an account of the namespace of the installation, of this
+// run, with a role of that namespace.
+export function proofIdentities(
+  owner: string,
+  run: string,
+): Record<"reader" | "requester" | "router" | "downloader", KubeResource[]> {
+  const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" };
+  // What a download reads of Velero before it creates its request.
+  const reads = {
+    apiGroups: ["velero.io"],
+    resources: ["backups", "restores", "backupstoragelocations"],
+    verbs: ["get"],
+  };
+  const requests = { apiGroups: ["velero.io"], resources: ["downloadrequests"], verbs: ["create", "get"] };
+  // What the route through the cluster reads: the Service of the store, its endpoint slices and its Pod.
+  const route = [
+    { apiGroups: [""], resources: ["services", "pods"], verbs: ["get"] },
+    { apiGroups: ["discovery.k8s.io"], resources: ["endpointslices"], verbs: ["list"] },
+  ];
+  const identity = (role: string, rules: unknown[]): KubeResource[] => {
+    const name = `proof-${role}-${run}`;
+    const metadata = { name, namespace: DEMO_NAMESPACE, labels };
+
+    return [
+      { apiVersion: "v1", kind: "ServiceAccount", metadata, automountServiceAccountToken: false },
+      { apiVersion: "rbac.authorization.k8s.io/v1", kind: "Role", metadata, rules },
+      {
+        apiVersion: "rbac.authorization.k8s.io/v1",
+        kind: "RoleBinding",
+        metadata,
+        roleRef: { apiGroup: "rbac.authorization.k8s.io", kind: "Role", name },
+        subjects: [{ kind: "ServiceAccount", name, namespace: DEMO_NAMESPACE }],
+      },
+    ];
+  };
+
+  requireCondition(owner, "Fixture ownership is required");
+  fixtureNames(run);
+  return {
+    reader: identity("reader", [reads]),
+    requester: identity("requester", [reads, requests]),
+    // A port-forward over a WebSocket is asked of the API server with the verb get; the releases that
+    // check the verb create for it as well ask for both. The verb create alone, which is what the older
+    // protocol asks with, is refused.
+    router: identity("router", [
+      reads,
+      requests,
+      ...route,
+      { apiGroups: [""], resources: ["pods/portforward"], verbs: ["create"] },
+    ]),
+    downloader: identity("downloader", [
+      reads,
+      requests,
+      ...route,
+      { apiGroups: [""], resources: ["pods/portforward"], verbs: ["get", "create"] },
+    ]),
+  };
+}
+
 // What the release writes when it refuses each of them, as the controller of each says it.
 export const REFUSALS = {
   backup: "encountered labelSelector as well as orLabelSelectors in backup spec, only one can be specified",

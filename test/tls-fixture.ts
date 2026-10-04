@@ -4,8 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-export async function createTlsFixture(hostname = "storage.example.invalid") {
-  if (!/^[a-z0-9.-]+$/.test(hostname) || hostname.length > 253) throw new Error("Invalid synthetic TLS hostname");
+// A certificate of an authority made for the test, for a name and for the other names it is given.
+export async function createTlsFixture(hostname = "storage.example.invalid", also: string[] = []) {
+  for (const name of [hostname, ...also])
+    if (!/^[a-z0-9.-]+$/.test(name) || name.length > 253) throw new Error("Invalid synthetic TLS hostname");
   const directory = await mkdtemp(join(tmpdir(), "velero-tls-"));
   const execute = promisify(execFile);
   const caKey = join(directory, "ca.key");
@@ -13,7 +15,7 @@ export async function createTlsFixture(hostname = "storage.example.invalid") {
   const keyFile = join(directory, "server.key");
   const requestFile = join(directory, "server.csr");
   const certificateFile = join(directory, "server.crt");
-  const names = `subjectAltName=DNS:${hostname},DNS:api.example.invalid,IP:127.0.0.1,IP:::1`;
+  const names = `subjectAltName=${[hostname, ...also, "api.example.invalid"].map((name) => `DNS:${name}`).join(",")},IP:127.0.0.1,IP:::1`;
   // Another certificate of the same authority, for the same names and with the same key, that a client
   // refuses: one for the purpose of a client and not of a server, or one whose validity has ended. A
   // certificate signed for no day at all has expired as soon as it is made.

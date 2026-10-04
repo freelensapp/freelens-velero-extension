@@ -4,9 +4,10 @@
  */
 
 // What the extension keeps between two starts of the application, which is two
-// maps of namespaces and the window of the recent operations, and what it does
-// with a choice that is not valid any more. The application is started
-// three times on the same profile; the cluster is only read.
+// maps of namespaces, the window of the recent operations and what the operator
+// allowed the downloads to do, and what it does with a choice that is not valid
+// any more. The application is started five times on the same profile; the
+// cluster is only read.
 
 import { readFile, writeFile } from "node:fs/promises";
 import * as path from "node:path";
@@ -19,6 +20,18 @@ import type { Frame } from "playwright";
 const TIMEOUT = 10 * 60 * 1000;
 // The name of a namespace that is not in the cluster: what is left of a choice when its namespace goes.
 const REMOVED = "velero-removed-installation";
+// What the file says the operator allowed for the downloads of the test cluster: an origin no name
+// resolves, for a storage location, and a private address of that origin.
+const ORIGIN = "https://storage.example.invalid:9000";
+const ALLOWED = [
+  { what: "origin", origin: ORIGIN, location: "velero/default", since: Date.UTC(2026, 9, 4, 10, 0, 0) },
+  { what: "private", origin: ORIGIN, since: Date.UTC(2026, 9, 4, 10, 5, 0) },
+];
+// What the target bar shows of them, behind its command: the lines, each with its parts.
+const shown = async (frame: Frame): Promise<string[]> =>
+  (await frame.locator("[data-testid=velero-allowances] li").allInnerTexts()).map((line) =>
+    line.replace(/\s+/g, " ").trim(),
+  );
 
 describe("preferences of the views", () => {
   let started: velero.StartedApplication | undefined;
@@ -87,10 +100,13 @@ describe("preferences of the views", () => {
       const { __internal__: _host, ...kept } = stored[0].content as Record<string, unknown>;
       const identifier = cluster.clusterEntityId(kubeconfig, cluster.E2E_KUBE_CONTEXT);
 
+      // The key of what was allowed is always written, empty when nothing is: the host writes a file key
+      // by key and removes none, so a key left out would keep what it held before.
       expect(kept).toEqual({
         selected: { [identifier]: cluster.E2E_STATIC_NAMESPACE },
         configured: { [identifier]: [cluster.E2E_SCALE_NAMESPACE] },
         window: "30d",
+        allowances: {},
       });
       const text = await readFile(path.join(profile, stored[0].file), "utf8");
 
@@ -132,9 +148,14 @@ describe("preferences of the views", () => {
         const content = stored.content as { selected: Record<string, string> };
         const identifier = cluster.clusterEntityId(kubeconfig, cluster.E2E_KUBE_CONTEXT);
 
+        // The same file says what the operator allowed the downloads of this cluster to do.
         await writeFile(
           path.join(profile, stored.file),
-          JSON.stringify({ ...content, selected: { ...content.selected, [identifier]: REMOVED } }),
+          JSON.stringify({
+            ...content,
+            selected: { ...content.selected, [identifier]: REMOVED },
+            allowances: { [identifier]: ALLOWED },
+          }),
           { mode: 0o600 },
         );
       });
@@ -149,6 +170,91 @@ describe("preferences of the views", () => {
       await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
       await cluster.expectRow(frame, "views-daily-20260901030000", "Completed");
       expect(await frame.locator("[data-testid=velero-notice-stale-selection]").count()).toBe(0);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows what the operator allowed the downloads of this cluster to do, and takes one back through the main process",
+    async () => {
+      const identifier = cluster.clusterEntityId(kubeconfig, cluster.E2E_KUBE_CONTEXT);
+      const toggle = frame.locator("[data-testid=velero-allowances-toggle]");
+
+      // The file held two for this cluster at this start.
+      await toggle.waitFor({ timeout: 60_000 });
+      expect((await toggle.innerText()).replace(/\s+/g, " ")).toContain("Allowed for downloads: 2");
+      expect(await toggle.getAttribute("aria-expanded")).toBe("false");
+      expect(await frame.locator("[data-testid=velero-allowances]").count()).toBe(0);
+      await toggle.click();
+      const lines = await shown(frame);
+
+      expect(lines).toHaveLength(2);
+      expect(lines[0]).toContain(ORIGIN);
+      expect(lines[0]).toContain("Downloads from this origin, for the storage location default of velero");
+      expect(lines[1]).toContain("A connection to a private address of this origin");
+      for (const line of lines) expect(line).toMatch(/since .+Take back$/);
+      expect(lines.join(" ")).not.toMatch(/[?]|X-Amz/);
+      expect(await cluster.layoutProblems(frame)).toEqual([]);
+      await cluster.captureScreenshot(frame, "dark-allowances");
+      // Taken back, the line goes, and the main process writes what is left.
+      await frame.click("[data-testid=velero-allowances-take-back-0]");
+      await frame.waitForFunction(
+        () => document.querySelectorAll("[data-testid=velero-allowances] li").length === 1,
+        undefined,
+        { timeout: 30_000 },
+      );
+      expect(await frame.locator("[data-testid=velero-allowances-failure]").count()).toBe(0);
+      expect((await toggle.innerText()).replace(/\s+/g, " ")).toContain("Allowed for downloads: 1");
+      // The host writes the store when what it holds changes: a moment for the file.
+      await frame.waitForTimeout(3000);
+      const [stored] = await velero.storedPreferences(profile);
+
+      expect((stored.content as { allowances?: unknown }).allowances).toEqual({ [identifier]: [ALLOWED[1]] });
+      const text = await readFile(path.join(profile, stored.file), "utf8");
+
+      // An allowance holds an origin and when it was given: no credential, and nothing of a URL after it.
+      expect(text).not.toMatch(/token|client-key|certificate|BEGIN |password|secret|X-Amz|[?]/i);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "finds at the next start the allowance that was left, and not the one that was taken back",
+    async () => {
+      await restart();
+      const toggle = frame.locator("[data-testid=velero-allowances-toggle]");
+
+      await toggle.waitFor({ timeout: 60_000 });
+      expect((await toggle.innerText()).replace(/\s+/g, " ")).toContain("Allowed for downloads: 1");
+      await toggle.click();
+      const lines = await shown(frame);
+
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toContain(ORIGIN);
+      expect(lines[0]).toContain("A connection to a private address of this origin");
+      // The last one taken back leaves nothing to show, and the file says that nothing is allowed.
+      await frame.click("[data-testid=velero-allowances-take-back-0]");
+      await toggle.waitFor({ state: "detached", timeout: 30_000 });
+      expect(await frame.locator("[data-testid=velero-allowances]").count()).toBe(0);
+      await frame.waitForTimeout(3000);
+      const [stored] = await velero.storedPreferences(profile);
+
+      expect((stored.content as { allowances?: unknown }).allowances).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "allows nothing at the start after the last allowance was taken back",
+    async () => {
+      // What was taken back is not in the file the application starts from, and does not come back.
+      await restart();
+      await cluster.waitForBackups(frame);
+      expect(await frame.locator("[data-testid=velero-allowances-toggle]").count()).toBe(0);
+      expect(await frame.locator("[data-testid=velero-allowances]").count()).toBe(0);
+      const [stored] = await velero.storedPreferences(profile);
+
+      expect((stored.content as { allowances?: unknown }).allowances).toEqual({});
     },
     TIMEOUT,
   );
