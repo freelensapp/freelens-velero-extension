@@ -5,10 +5,15 @@
 import { Renderer } from "@freelensapp/extensions";
 import {
   type Answer,
+  type ArtifactPage,
+  type ArtifactTarget,
+  type ArtifactValue,
   CHANNELS,
   failure,
   type GateState,
   readAnswer,
+  readArtifactPage,
+  readArtifactValue,
   readGateState,
   readServerStatusValue,
   readWriteConfirmAnswer,
@@ -38,6 +43,7 @@ export interface WriteClient {
     namespace: string,
     kind: WriteKind,
     target?: WriteTarget,
+    artifact?: ArtifactTarget,
   ): Promise<Answer<WriteConfirmAnswer>>;
   runServerStatus(
     cluster: string,
@@ -49,13 +55,31 @@ export interface WriteClient {
   cancel(cluster: string, request: string): Promise<Answer<null>>;
 }
 
+// What the views ask of an artifact of an operation: the download, with the token of its confirmation,
+// then the text page by page, and that the main process lets the text go.
+export interface ArtifactClient {
+  runDownload(
+    cluster: string,
+    namespace: string,
+    target: WriteTarget,
+    artifact: ArtifactTarget,
+    token: string,
+    request: string,
+  ): Promise<Answer<ArtifactValue>>;
+  page(cluster: string, request: string, page: number): Promise<Answer<ArtifactPage>>;
+  release(cluster: string, request: string): Promise<Answer<null>>;
+}
+
 const NO_ANSWER = failure("request-failed", "way", true, "The main process did not answer.");
 
-export class VeleroIpcRenderer extends Renderer.Ipc implements GateClient, WriteClient {
+export class VeleroIpcRenderer extends Renderer.Ipc implements GateClient, WriteClient, ArtifactClient {
+  // `bounded` says that the reader of the value bounds it itself: it is so for the page of a text, which
+  // is larger than every other answer.
   private async ask<Value>(
     channel: string,
     request: unknown,
     read: (value: unknown) => Value | undefined,
+    bounded = false,
   ): Promise<Answer<Value>> {
     let answer: unknown;
 
@@ -64,7 +88,7 @@ export class VeleroIpcRenderer extends Renderer.Ipc implements GateClient, Write
     } catch {
       return NO_ANSWER;
     }
-    return readAnswer(answer, read);
+    return readAnswer(answer, read, bounded);
   }
 
   state(cluster: string): Promise<Answer<GateState>> {
@@ -96,10 +120,11 @@ export class VeleroIpcRenderer extends Renderer.Ipc implements GateClient, Write
     namespace: string,
     kind: WriteKind,
     target?: WriteTarget,
+    artifact?: ArtifactTarget,
   ): Promise<Answer<WriteConfirmAnswer>> {
     return this.ask(
       CHANNELS.writeConfirm,
-      { cluster, namespace, kind, ...(target ? { target } : {}) },
+      { cluster, namespace, kind, ...(target ? { target } : {}), ...(artifact ? { artifact } : {}) },
       readWriteConfirmAnswer,
     );
   }
@@ -115,6 +140,29 @@ export class VeleroIpcRenderer extends Renderer.Ipc implements GateClient, Write
       { cluster, namespace, kind: "ServerStatusRequest", token, request },
       readServerStatusValue,
     );
+  }
+
+  runDownload(
+    cluster: string,
+    namespace: string,
+    target: WriteTarget,
+    artifact: ArtifactTarget,
+    token: string,
+    request: string,
+  ): Promise<Answer<ArtifactValue>> {
+    return this.ask(
+      CHANNELS.writeRun,
+      { cluster, namespace, kind: "DownloadRequest", target, artifact, token, request },
+      readArtifactValue,
+    );
+  }
+
+  page(cluster: string, request: string, page: number): Promise<Answer<ArtifactPage>> {
+    return this.ask(CHANNELS.artifactPage, { cluster, request, page }, readArtifactPage, true);
+  }
+
+  release(cluster: string, request: string): Promise<Answer<null>> {
+    return this.ask(CHANNELS.artifactRelease, { cluster, request }, (value) => (value === null ? null : undefined));
   }
 
   status(cluster: string, request: string): Promise<Answer<WriteStatus>> {

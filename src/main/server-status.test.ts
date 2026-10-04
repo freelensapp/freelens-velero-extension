@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { downloadFailure } from "../common/diagnostic-text";
 import { REQUEST_PREFIX } from "../common/ipc";
 import { CredentialPluginError } from "./context-identity";
 import { DiagnosticError } from "./diagnostic-transport";
@@ -121,7 +122,8 @@ describe("the version of the server", () => {
 
     await expect(readServerStatus(api, "velero", options)).rejects.toMatchObject({ code: "deadline" });
     expect(api.read).toHaveBeenCalled();
-    expect(Object.keys(api)).not.toContain("delete");
+    // One creation, and reads: the way has nothing else to ask of the cluster, and asked nothing else.
+    expect(api.createGenerated).toHaveBeenCalledTimes(1);
   });
 
   it("stops when the request read back is not the one created", async () => {
@@ -152,7 +154,20 @@ describe("the version of the server", () => {
       stage: "creation",
     });
     expect(serverStatusFailure(new DiagnosticError("forbidden"), "x").text).toContain("refused to read");
-    expect(serverStatusFailure(new DiagnosticError("deadline"), "x")).toMatchObject({ code: "deadline", retry: true });
+    expect(serverStatusFailure(new DiagnosticError("deadline"), "x")).toMatchObject({
+      code: "deadline",
+      stage: "wait",
+      retry: true,
+      text: "The server did not answer in ten seconds: it may be stopped, or busy. The request stays until the server processes it.",
+    });
+    // A creation the cluster did not take in time was not sent: no request stays.
+    expect(serverStatusFailure(new DiagnosticError("deadline"))).toEqual({
+      ok: false,
+      code: "deadline",
+      stage: "creation",
+      retry: true,
+      text: "The cluster did not answer in time. Nothing was created.",
+    });
     expect(serverStatusFailure(new DiagnosticError("submission-unknown")).text).toContain("freelens-velero-");
     // A write that was cancelled says whether the request is there: it is, once it was created, and it is
     // not known before the cluster answered its creation.
@@ -166,6 +181,23 @@ describe("the version of the server", () => {
     });
     expect(serverStatusFailure(new Error("PRIVATE-SENTINEL"))).toMatchObject({ code: "request-failed" });
     expect(JSON.stringify(serverStatusFailure(new Error("PRIVATE-SENTINEL")))).not.toContain("PRIVATE-SENTINEL");
+  });
+
+  it("says of the API server what a download says of it: the words are written once", () => {
+    const context = { artifact: "BackupLog" as const, name: "nightly", namespace: "velero" };
+
+    for (const code of ["transport-unreachable", "tls-invalid", "target-changed", "request-failed"] as const) {
+      const band = serverStatusFailure(new DiagnosticError(code), "x").text;
+      const tab = downloadFailure(code, "target", context).text;
+
+      expect([code, tab]).toEqual([code, `${band} No request was created.`]);
+    }
+    expect(serverStatusFailure(new CredentialPluginError("kubelogin", "failed")).text).toBe(
+      downloadFailure("request-failed", "target", {
+        ...context,
+        plugin: { command: "kubelogin", reason: "failed", seconds: 30 },
+      }).text,
+    );
   });
 
   it("says that the credential plugin failed, by its command, and not that the cluster refused", () => {

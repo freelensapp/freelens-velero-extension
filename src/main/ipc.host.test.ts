@@ -64,6 +64,8 @@ describe("the gate through the IPC and the catalog of the host", () => {
         CHANNELS.writeRun,
         CHANNELS.writeStatus,
         CHANNELS.writeCancel,
+        CHANNELS.artifactPage,
+        CHANNELS.artifactRelease,
       ].sort(),
     );
     expect(catalogEntries().map((entry) => entry.id)).toEqual([CLUSTER, "other-cluster"]);

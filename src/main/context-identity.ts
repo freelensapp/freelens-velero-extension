@@ -84,8 +84,9 @@ export class CredentialPluginError extends DiagnosticError {
   constructor(
     command: string,
     readonly reason: "failed" | "deadline" | "unreadable",
+    stage?: string,
   ) {
-    super("request-failed");
+    super("request-failed", stage);
     this.name = "CredentialPluginError";
     this.command = nameOfCommand(command);
   }

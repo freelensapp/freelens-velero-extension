@@ -1,13 +1,17 @@
-import { randomUUID } from "node:crypto";
+import { generateKeyPairSync, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { readFile, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:https";
+import { type AddressInfo, createServer as createListener, type Socket } from "node:net";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { inspect } from "node:util";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTlsFixture } from "../../test/tls-fixture";
 import { CredentialPluginError } from "./context-identity";
 import { DiagnosticKubernetes, type DiagnosticObject } from "./diagnostic-kubernetes";
+import { DiagnosticError } from "./diagnostic-transport";
+import type { TLSSocket } from "node:tls";
 
 let certificates: Awaited<ReturnType<typeof createTlsFixture>>;
 let server: Server;
@@ -79,11 +83,23 @@ beforeAll(async () => {
           response.writeHead(201).end("not-json");
           return;
         }
+        if (name === "unanswered") return;
+        if (name === "failing") {
+          response.writeHead(500).end();
+          return;
+        }
+        // An answer beyond what the adapter reads of an object.
+        if (name === "oversized") {
+          response.writeHead(201).end(JSON.stringify({ ...object, padding: "x".repeat(4 * 1024 ** 2) }));
+          return;
+        }
         response.writeHead(201).end(JSON.stringify(object));
         return;
       }
       const value = objects.get(request.url ?? "");
       if (!value) response.writeHead(404).end();
+      else if (request.url?.endsWith("/oversized"))
+        response.end(JSON.stringify({ ...(value as object), padding: "x".repeat(4 * 1024 ** 2) }));
       else response.end(JSON.stringify(value));
     },
   );
@@ -123,6 +139,24 @@ afterAll(async () => {
 });
 
 describe("explicit create-only Kubernetes adapter", () => {
+  it("has a way to read and a way to create, and none to change or to remove an object", () => {
+    // What the adapter can do, by name: a method added to it is looked at here, against the rule that the
+    // extension deletes no request.
+    expect(Object.getOwnPropertyNames(DiagnosticKubernetes.prototype).sort()).toEqual([
+      "assertCurrent",
+      "authenticate",
+      "certificate",
+      "constructor",
+      "createDownload",
+      "createGenerated",
+      "credentialOfPlugin",
+      "dispose",
+      "path",
+      "read",
+      "send",
+    ]);
+  });
+
   it("uses the selected context and POST, preserves generated names and refuses collisions", async () => {
     const api = new DiagnosticKubernetes(binding(), () => current);
     const signal = new AbortController().signal;
@@ -453,6 +487,428 @@ describe("explicit create-only Kubernetes adapter", () => {
       metadata: { name: "backup", namespace: "other", uid: "unexpected" },
     });
     await expect(api.read("Backup", "fixture", "backup", signal)).rejects.toMatchObject({ code: "target-changed" });
+  });
+
+  // The kubeconfig of the fixture with other fields for its cluster: another address, or no authority.
+  const withCluster = (change: (cluster: Record<string, string>) => Record<string, string>) => {
+    const [fixture] = configuration.clusters as { name: string; cluster: Record<string, string> }[];
+
+    return writeFile(
+      path,
+      JSON.stringify({ ...configuration, clusters: [{ name: fixture.name, cluster: change(fixture.cluster) }] }),
+    );
+  };
+
+  it("says that a creation refused before the connection was not sent, and not that it may have happened", async () => {
+    const signal = new AbortController().signal;
+    const listener = createListener();
+
+    listener.listen(0, "127.0.0.1");
+    await once(listener, "listening");
+    const { port } = listener.address() as AddressInfo;
+
+    await new Promise<void>((resolve) => listener.close(() => resolve()));
+    const refused: unknown[] = [];
+
+    // Nothing listens on the port, then nothing vouches for the certificate of the server: neither is a
+    // connection this side writes on, and the fixture receives no request.
+    for (const change of [
+      (cluster: Record<string, string>) => ({ ...cluster, server: `https://127.0.0.1:${port}` }),
+      (cluster: Record<string, string>) => ({ server: cluster.server }),
+    ]) {
+      await withCluster(change);
+      const api = new DiagnosticKubernetes(binding(), () => true);
+
+      refused.push(
+        await api.createGenerated("ServerStatusRequest", "fixture", "status-", signal).catch((error: unknown) => error),
+      );
+    }
+    expect(refused).toMatchObject([{ code: "transport-unreachable" }, { code: "transport-unreachable" }]);
+    await delay(100);
+    expect(requests).toEqual([]);
+  });
+
+  it("says that a creation still without its connection at the bound was not sent", async () => {
+    // A listener that takes the connection and never answers the handshake.
+    const taken: Socket[] = [];
+    const silent = createListener((socket) => taken.push(socket));
+
+    silent.listen(0, "127.0.0.1");
+    await once(silent, "listening");
+    await withCluster((cluster) => ({
+      ...cluster,
+      server: `https://127.0.0.1:${(silent.address() as AddressInfo).port}`,
+    }));
+    const api = new DiagnosticKubernetes(binding(), () => true);
+
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const connection = once(silent, "connection");
+      const pending = api
+        .createGenerated("ServerStatusRequest", "fixture", "status-", new AbortController().signal)
+        .catch((error: unknown) => error);
+
+      await connection;
+      vi.advanceTimersByTime(10_000);
+      expect(await pending).toMatchObject({ code: "deadline" });
+    } finally {
+      vi.useRealTimers();
+      for (const socket of taken) socket.destroy();
+      await new Promise<void>((resolve) => silent.close(() => resolve()));
+    }
+  });
+
+  it("keeps as unknown a creation the server received and failed, or did not answer within the bound", async () => {
+    const api = new DiagnosticKubernetes(binding(), () => true);
+    const signal = new AbortController().signal;
+
+    await expect(
+      api.createDownload("fixture", "BackupLog", "backup", "failing", randomUUID(), signal),
+    ).rejects.toMatchObject({ code: "submission-unknown" });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const pending = api
+        .createDownload("fixture", "BackupLog", "backup", "unanswered", randomUUID(), signal)
+        .catch((error: unknown) => error);
+
+      // The fixture has read the whole request, and keeps its answer.
+      for (let tries = 0; requests.length < 2 && tries < 400; tries += 1) await delay(5);
+      expect(requests.map((item) => item.method)).toEqual(["POST", "POST"]);
+      vi.advanceTimersByTime(10_000);
+      expect(await pending).toMatchObject({ code: "submission-unknown" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("creates a request for one of the eight artifacts, and sends nothing for any other target", async () => {
+    const api = new DiagnosticKubernetes(binding(), () => true);
+    const signal = new AbortController().signal;
+
+    for (const target of ["BackupContents", "BackupItemOperations", "backuplog", ""])
+      expect(() =>
+        api.createDownload("fixture", target as never, "backup", `refused-${randomUUID()}`, randomUUID(), signal),
+      ).toThrow("validation");
+    // An identifier that is not one is refused the same way.
+    expect(() => api.createDownload("fixture", "BackupLog", "backup", "refused", "not-an-identifier", signal)).toThrow(
+      "validation",
+    );
+    await delay(50);
+    expect(requests).toEqual([]);
+    api.dispose();
+  });
+
+  it("keeps as unknown a creation whose answer is larger than it reads, and says of a read that it is too large", async () => {
+    const api = new DiagnosticKubernetes(binding(), () => true);
+    const signal = new AbortController().signal;
+
+    // The object was created: its answer cannot be read, which says nothing of the creation.
+    await expect(
+      api.createDownload("fixture", "BackupLog", "backup", "oversized", randomUUID(), signal),
+    ).rejects.toMatchObject({ code: "submission-unknown" });
+    await expect(api.read("DownloadRequest", "fixture", "oversized", signal)).rejects.toMatchObject({
+      code: "payload-too-large",
+    });
+    expect(requests.map((item) => item.method)).toEqual(["POST", "GET"]);
+    api.dispose();
+  });
+
+  it("reaches an API server at an IPv6 address, and names no server to it unless the kubeconfig does", async () => {
+    // The fixture again, at the loopback address of IPv6; it notes the server name each connection indicates.
+    const indicated: unknown[] = [];
+    const listener = createServer(
+      { ...certificates, requestCert: true, rejectUnauthorized: false },
+      (request, response) => server.emit("request", request, response),
+    );
+
+    listener.on("secureConnection", (socket) => indicated.push(socket.servername));
+    listener.listen(0, "::1");
+    await once(listener, "listening");
+    const address = `https://[::1]:${(listener.address() as AddressInfo).port}`;
+    const names: Record<string, string>[] = [{}, { "tls-server-name": "api.example.invalid" }];
+
+    try {
+      for (const named of names) {
+        await withCluster((cluster) => ({ ...cluster, ...named, server: address }));
+        const api = new DiagnosticKubernetes(binding(), () => true);
+        const created = await api.createGenerated(
+          "ServerStatusRequest",
+          "fixture",
+          "status-",
+          new AbortController().signal,
+        );
+
+        expect(created.metadata.name).toBe("status-generated");
+        objects.clear();
+        api.dispose();
+      }
+      expect(requests).toHaveLength(2);
+      // An address is not a name: none is indicated for it, and the certificate is checked by the address.
+      expect(indicated).toEqual([false, "api.example.invalid"]);
+    } finally {
+      listener.closeAllConnections();
+      await new Promise<void>((resolve) => listener.close(() => resolve()));
+    }
+  });
+
+  it("labels the deletion of a backup with its name, cut as Velero cuts it beyond 63 characters", async () => {
+    const api = new DiagnosticKubernetes(binding(), () => true);
+    const signal = new AbortController().signal;
+    // Each name with the value the release gives the label: a name of 63 characters whole, a longer one as
+    // its first 57 characters and the first 6 hexadecimal characters of its SHA-256, computed with shasum.
+    const cases = [
+      [`${"a".repeat(59)}.b63`, `${"a".repeat(59)}.b63`],
+      [`${"a".repeat(60)}.b64`, `${"a".repeat(57)}8665a0`],
+      [
+        "nightly-cluster-wide-backup-of-every-namespace-2026-10-04-03-00-00.070",
+        "nightly-cluster-wide-backup-of-every-namespace-2026-10-04c32264",
+      ],
+    ];
+
+    for (const [backup] of cases) {
+      await api.createGenerated("DeleteBackupRequest", "fixture", "delete-", signal, {
+        name: backup,
+        uid: "backup-uid",
+      });
+      objects.clear();
+    }
+    api.dispose();
+    // The request names the backup whole: only the label is cut.
+    expect(requests.map((item) => item.body)).toMatchObject(
+      cases.map(([backup, label]) => ({
+        metadata: { labels: { "velero.io/backup-name": label, "velero.io/backup-uid": "backup-uid" } },
+        spec: { backupName: backup },
+      })),
+    );
+  });
+
+  // The connections the fixture takes while it is watched, in the order it takes them.
+  const connections = () => {
+    const taken: TLSSocket[] = [];
+    const take = (socket: TLSSocket) => taken.push(socket);
+
+    server.on("secureConnection", take);
+    return { taken, stop: () => server.off("secureConnection", take) };
+  };
+  const closed = (socket: TLSSocket) =>
+    socket.destroyed ? Promise.resolve() : new Promise<void>((resolve) => socket.once("close", () => resolve()));
+
+  it("sends a creation and the reads that follow it on one connection, which it keeps", async () => {
+    const api = new DiagnosticKubernetes(binding(), () => true);
+    const signal = new AbortController().signal;
+    const watched = connections();
+
+    try {
+      const created = await api.createGenerated("ServerStatusRequest", "fixture", "status-", signal);
+
+      for (let turn = 0; turn < 3; turn += 1)
+        await api.read("ServerStatusRequest", "fixture", created.metadata.name, signal);
+      expect(requests.map((item) => item.method)).toEqual(["POST", "GET", "GET", "GET"]);
+      expect(watched.taken).toHaveLength(1);
+    } finally {
+      watched.stop();
+      api.dispose();
+    }
+  });
+
+  it("closes the connections it keeps, and the ones of the requests in flight, when it is disposed", async () => {
+    const api = new DiagnosticKubernetes(binding(), () => true);
+    const signal = new AbortController().signal;
+    const watched = connections();
+
+    try {
+      await api.read("Secret", "fixture", "certificate", signal);
+      // Two reads the fixture does not answer: one on the connection that was kept, one on another.
+      const flying = [1, 2].map(() =>
+        api.read("DownloadRequest", "fixture", "pending", signal).catch((error: unknown) => error),
+      );
+
+      for (let tries = 0; requests.length < 3 && tries < 400; tries += 1) await delay(5);
+      await api.read("Secret", "fixture", "certificate", signal);
+      expect(watched.taken).toHaveLength(3);
+      expect(watched.taken.map((socket) => socket.destroyed)).toEqual([false, false, false]);
+      api.dispose();
+      // Well before the two seconds after which a connection nothing uses is closed by itself.
+      const left = await Promise.race([
+        Promise.all(watched.taken.map(closed)).then(() => "closed"),
+        delay(1000, "kept"),
+      ]);
+
+      expect(left).toBe("closed");
+      expect(await Promise.all(flying)).toMatchObject([
+        { code: "transport-unreachable" },
+        { code: "transport-unreachable" },
+      ]);
+    } finally {
+      watched.stop();
+    }
+  });
+
+  it("closes a connection that no request used for two seconds", async () => {
+    const api = new DiagnosticKubernetes(binding(), () => true);
+    const signal = new AbortController().signal;
+    const watched = connections();
+
+    try {
+      await api.read("Secret", "fixture", "certificate", signal);
+      await api.read("Secret", "fixture", "certificate", signal);
+      expect(watched.taken).toHaveLength(1);
+      const freed = Date.now();
+
+      await closed(watched.taken[0]);
+      // By this side, at its bound: the fixture closes a connection nothing uses after five seconds.
+      expect(Date.now() - freed).toBeGreaterThanOrEqual(1900);
+      expect(Date.now() - freed).toBeLessThan(4000);
+    } finally {
+      watched.stop();
+      api.dispose();
+    }
+  });
+
+  it("keeps as unknown a creation written on a connection it kept, when the answer is lost", async () => {
+    const api = new DiagnosticKubernetes(binding(), () => true);
+    const signal = new AbortController().signal;
+    const watched = connections();
+
+    try {
+      await api.read("Secret", "fixture", "certificate", signal);
+      await expect(
+        api.createDownload("fixture", "BackupLog", "backup", "ambiguous", randomUUID(), signal),
+      ).rejects.toMatchObject({ code: "submission-unknown" });
+      // The creation went on the connection of the read: no handshake came between the two.
+      expect(watched.taken).toHaveLength(1);
+      expect(requests.map((item) => item.method)).toEqual(["GET", "POST"]);
+    } finally {
+      watched.stop();
+      api.dispose();
+    }
+  });
+
+  it("takes away the connection of a request that was cancelled or reached its bound", async () => {
+    const api = new DiagnosticKubernetes(binding(), () => true);
+    const signal = new AbortController().signal;
+    const watched = connections();
+
+    try {
+      await api.read("Secret", "fixture", "certificate", signal);
+      const controller = new AbortController();
+      const cancelled = api
+        .read("DownloadRequest", "fixture", "pending", controller.signal)
+        .catch((error: unknown) => error);
+
+      for (let tries = 0; requests.length < 2 && tries < 400; tries += 1) await delay(5);
+      controller.abort();
+      expect(await cancelled).toMatchObject({ code: "cancelled" });
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        const late = api.read("DownloadRequest", "fixture", "pending", signal).catch((error: unknown) => error);
+
+        for (let tries = 0; requests.length < 3 && tries < 400; tries += 1) await delay(5);
+        vi.advanceTimersByTime(10_000);
+        expect(await late).toMatchObject({ code: "deadline" });
+      } finally {
+        vi.useRealTimers();
+      }
+      // The cancelled read went on the connection that was kept, the late one on a new one: both are
+      // closed by this side, and what is asked next is answered, on a third.
+      expect(watched.taken).toHaveLength(2);
+      await Promise.all(watched.taken.map(closed));
+      const secret = await api.read("Secret", "fixture", "certificate", signal);
+
+      expect(secret.metadata.uid).toBe("ca-uid");
+      expect(watched.taken).toHaveLength(3);
+    } finally {
+      watched.stop();
+      api.dispose();
+    }
+  });
+
+  it("gives a request a connection that presented its own client certificate, or none", async () => {
+    const script = join(certificates.directory, "changing-plugin.mjs");
+    const kind = join(certificates.directory, "changing.kind");
+
+    // A plugin that gives the token, with a certificate when the file says so, and a credential that has
+    // expired already: it is asked again for every request.
+    await writeFile(
+      script,
+      `import { readFileSync } from "node:fs"; const [kind, cert, key] = process.argv.slice(2); const certificate = readFileSync(kind, "utf8") === "certificate" ? { clientCertificateData: readFileSync(cert, "utf8"), clientKeyData: readFileSync(key, "utf8") } : {}; process.stdout.write(JSON.stringify({ apiVersion: "client.authentication.k8s.io/v1", kind: "ExecCredential", status: { token: "synthetic-token", expirationTimestamp: "2000-01-01T00:00:00Z", ...certificate } }));`,
+    );
+    await writeFile(join(certificates.directory, "client.crt"), certificates.cert);
+    await writeFile(join(certificates.directory, "client.key"), certificates.key, { mode: 0o600 });
+    await writeFile(
+      path,
+      JSON.stringify({
+        ...configuration,
+        users: [
+          {
+            name: "fixture",
+            user: {
+              exec: {
+                command: process.execPath,
+                args: [
+                  script,
+                  kind,
+                  join(certificates.directory, "client.crt"),
+                  join(certificates.directory, "client.key"),
+                ],
+              },
+            },
+          },
+        ],
+      }),
+    );
+    const api = new DiagnosticKubernetes(binding(), () => true);
+    const signal = new AbortController().signal;
+    const watched = connections();
+
+    try {
+      for (const given of ["certificate", "token", "certificate", "token"]) {
+        await writeFile(kind, given);
+        await api.read("Secret", "fixture", "certificate", signal);
+      }
+      // What the fixture saw of the client of each request, and how many connections carried the four.
+      expect(requests.map((item) => item.client)).toEqual([
+        "storage.example.invalid",
+        undefined,
+        "storage.example.invalid",
+        undefined,
+      ]);
+      expect(watched.taken).toHaveLength(2);
+    } finally {
+      watched.stop();
+      api.dispose();
+    }
+  });
+
+  it("turns a request that cannot be made into a code, with nothing of the credential in it", async () => {
+    const signal = new AbortController().signal;
+    const data = (text: string) => Buffer.from(text).toString("base64");
+    const other = generateKeyPairSync("rsa", { modulusLength: 2048 })
+      .privateKey.export({ type: "pkcs8", format: "pem" })
+      .toString();
+    const failures: unknown[] = [];
+
+    // A token that ends with a new line, as the only line of a file is read, which no header takes; then a
+    // certificate with a key that is not its own, which no connection takes. Node raises both at once.
+    for (const user of [
+      { token: "SENTINEL-OF-THE-TOKEN\n" },
+      { "client-certificate-data": data(certificates.cert), "client-key-data": data(other) },
+    ]) {
+      await writeFile(path, JSON.stringify({ ...configuration, users: [{ name: "fixture", user }] }));
+      const api = new DiagnosticKubernetes(binding(), () => true);
+
+      failures.push(
+        await api.createGenerated("ServerStatusRequest", "fixture", "status-", signal).catch((error: unknown) => error),
+        await api.read("Backup", "fixture", "backup", signal).catch((error: unknown) => error),
+      );
+      api.dispose();
+    }
+    // Nothing was sent: the request is refused here, as one this side cannot write.
+    expect(failures.map((failure) => failure instanceof DiagnosticError)).toEqual([true, true, true, true]);
+    expect(failures).toMatchObject([1, 2, 3, 4].map(() => ({ code: "validation" })));
+    expect(inspect(failures, { depth: 8, showHidden: true })).not.toMatch(/SENTINEL|PRIVATE KEY/);
+    await delay(100);
+    expect(requests).toEqual([]);
   });
 
   it("resolves only the named certificate value and does not bypass a denied Secret read", async () => {

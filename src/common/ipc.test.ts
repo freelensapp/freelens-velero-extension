@@ -1,8 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
+  ARTIFACT_TARGETS,
+  artifactKind,
+  PAGE_BOUND,
   REQUEST_BOUND,
   readAnswer,
+  readArtifactPage,
+  readArtifactPageRequest,
+  readArtifactReleaseRequest,
+  readArtifactValue,
   readGateDisableRequest,
   readGateEnableRequest,
   readGateState,
@@ -42,13 +49,15 @@ describe("the requests between the processes", () => {
     expect(readGateEnableRequest({ cluster, namespace: "velero" })).toBeUndefined();
   });
 
-  it("reads a confirmation of a write, of one object for a DownloadRequest and of none for a ServerStatusRequest", () => {
-    expect(readWriteConfirmRequest({ cluster, namespace: "velero", kind: "DownloadRequest", target })).toEqual({
-      cluster,
-      namespace: "velero",
-      kind: "DownloadRequest",
-      target,
-    });
+  it("reads a confirmation of a write, of one artifact of one object for a DownloadRequest and of none for a ServerStatusRequest", () => {
+    const download = { cluster, namespace: "velero", kind: "DownloadRequest", target, artifact: "BackupLog" };
+
+    expect(readWriteConfirmRequest(download)).toEqual(download);
+    // The artifact is a part of what is confirmed: a DownloadRequest without one is not a request.
+    expect(readWriteConfirmRequest({ cluster, namespace: "velero", kind: "DownloadRequest", target })).toBeUndefined();
+    expect(
+      readWriteConfirmRequest({ cluster, namespace: "velero", kind: "ServerStatusRequest", artifact: "BackupLog" }),
+    ).toBeUndefined();
     expect(readWriteConfirmRequest({ cluster, namespace: "velero", kind: "ServerStatusRequest" })).toEqual({
       cluster,
       namespace: "velero",
@@ -58,39 +67,55 @@ describe("the requests between the processes", () => {
     expect(
       readWriteConfirmRequest({ cluster, namespace: "velero", kind: "ServerStatusRequest", target }),
     ).toBeUndefined();
-    expect(readWriteConfirmRequest({ cluster, namespace: "velero", kind: "Backup", target })).toBeUndefined();
-    expect(
-      readWriteConfirmRequest({
-        cluster,
-        namespace: "velero",
-        kind: "DownloadRequest",
-        target: { ...target, kind: "Pod" },
-      }),
-    ).toBeUndefined();
-    expect(
-      readWriteConfirmRequest({
-        cluster,
-        namespace: "velero",
-        kind: "DownloadRequest",
-        target: { ...target, uid: "" },
-      }),
-    ).toBeUndefined();
-    expect(
-      readWriteConfirmRequest({
-        cluster,
-        namespace: "velero",
-        kind: "DownloadRequest",
-        target: { ...target, name: "Not A Name" },
-      }),
-    ).toBeUndefined();
-    expect(
-      readWriteConfirmRequest({
-        cluster,
-        namespace: "velero",
-        kind: "DownloadRequest",
-        target: { ...target, more: 1 },
-      }),
-    ).toBeUndefined();
+    expect(readWriteConfirmRequest({ ...download, kind: "Backup" })).toBeUndefined();
+    expect(readWriteConfirmRequest({ ...download, target: { ...target, kind: "Pod" } })).toBeUndefined();
+    expect(readWriteConfirmRequest({ ...download, target: { ...target, uid: "" } })).toBeUndefined();
+    expect(readWriteConfirmRequest({ ...download, target: { ...target, name: "Not A Name" } })).toBeUndefined();
+    expect(readWriteConfirmRequest({ ...download, target: { ...target, more: 1 } })).toBeUndefined();
+  });
+
+  it("takes the eight artifacts the extension shows, each of the kind of its target, and no other target of the API", () => {
+    const of = (artifact: unknown, kind: string) => ({
+      cluster,
+      namespace: "velero",
+      kind: "DownloadRequest",
+      target: { ...target, kind },
+      artifact,
+    });
+
+    expect(ARTIFACT_TARGETS).toHaveLength(8);
+    for (const artifact of ARTIFACT_TARGETS) {
+      const kind = artifactKind(artifact);
+      const other = kind === "Backup" ? "Restore" : "Backup";
+
+      expect([artifact, kind]).toEqual([artifact, artifact.startsWith("Backup") ? "Backup" : "Restore"]);
+      expect(readWriteConfirmRequest(of(artifact, kind))).toMatchObject({ artifact, target: { kind } });
+      // The log of a restore is not asked of a backup.
+      expect([artifact, readWriteConfirmRequest(of(artifact, other))]).toEqual([artifact, undefined]);
+    }
+    // The six other targets of the API of the reviewed release, the contents of a backup first, and what
+    // is not a target at all.
+    for (const refused of [
+      "BackupContents",
+      "BackupVolumeSnapshots",
+      "BackupItemOperations",
+      "RestoreItemOperations",
+      "CSIBackupVolumeSnapshots",
+      "CSIBackupVolumeSnapshotContents",
+      "backuplog",
+      "BackupLog ",
+      "",
+      ["BackupLog"],
+      { kind: "BackupLog" },
+      1,
+      null,
+    ]) {
+      expect([refused, readWriteConfirmRequest(of(refused, "Backup"))]).toEqual([refused, undefined]);
+      expect([
+        refused,
+        readWriteRunRequest({ ...of(refused, "Backup"), token: randomUUID(), request: randomUUID() }),
+      ]).toEqual([refused, undefined]);
+    }
   });
 
   it("reads a run of a write, with its token and its identifier", () => {
@@ -119,7 +144,26 @@ describe("the requests between the processes", () => {
       readWriteRunRequest({ cluster, namespace: "velero", kind: "DownloadRequest", target, token, request }),
     ).toBeUndefined();
     expect(
-      readWriteRunRequest({ cluster, namespace: "velero", kind: "ServerStatusRequest", token, request, artifact: "x" }),
+      readWriteRunRequest({
+        cluster,
+        namespace: "velero",
+        kind: "ServerStatusRequest",
+        token,
+        request,
+        artifact: "BackupLog",
+      }),
+    ).toBeUndefined();
+    // What is run is what was confirmed: an artifact that is not of the kind of its target is not read.
+    expect(
+      readWriteRunRequest({
+        cluster,
+        namespace: "velero",
+        kind: "DownloadRequest",
+        target,
+        token,
+        request,
+        artifact: "RestoreLog",
+      }),
     ).toBeUndefined();
     expect(
       readWriteRunRequest({ cluster, namespace: "velero", kind: "ServerStatusRequest", token: "abc", request }),
@@ -137,6 +181,21 @@ describe("the requests between the processes", () => {
     expect(readWriteCancelRequest({ cluster, request })).toEqual({ cluster, request });
     expect(readWriteStatusRequest({ cluster, request: "1" })).toBeUndefined();
     expect(readWriteStatusRequest({ cluster, request, token: request })).toBeUndefined();
+  });
+
+  it("reads the request of a page of the text of an artifact, and the one that lets the text go", () => {
+    const request = randomUUID();
+
+    expect(readArtifactPageRequest({ cluster, request, page: 0 })).toEqual({ cluster, request, page: 0 });
+    expect(readArtifactPageRequest({ cluster, request, page: 15 })).toEqual({ cluster, request, page: 15 });
+    for (const page of [-1, 1.5, "0", Number.NaN, Number.POSITIVE_INFINITY, 2 ** 53, null, undefined]) {
+      expect([page, readArtifactPageRequest({ cluster, request, page })]).toEqual([page, undefined]);
+    }
+    expect(readArtifactPageRequest({ cluster, request })).toBeUndefined();
+    expect(readArtifactPageRequest({ cluster, request: "1", page: 0 })).toBeUndefined();
+    expect(readArtifactPageRequest({ cluster, request, page: 0, url: "https://leak.invalid" })).toBeUndefined();
+    expect(readArtifactReleaseRequest({ cluster, request })).toEqual({ cluster, request });
+    expect(readArtifactReleaseRequest({ cluster, request, page: 0 })).toBeUndefined();
   });
 
   it("refuses a request beyond the bound, whatever its fields say", () => {
@@ -207,6 +266,69 @@ describe("the answers between the processes", () => {
         stage: "answer",
       });
     }
+  });
+
+  it("reads what the main process answers of an artifact: the request, the size, the pages and the route in words", () => {
+    const value = {
+      request: { name: "nightly-0e7c5b7a", uid: "uid" },
+      size: 12,
+      pages: 1,
+      route: { mode: "tunnel", encrypted: false, origin: "http://storage.velero.svc:8333" },
+    };
+
+    expect(readArtifactValue(value)).toEqual(value);
+    expect(readArtifactValue({ ...value, route: { ...value.route, mode: "direct", encrypted: true } })).toMatchObject({
+      route: { mode: "direct", encrypted: true },
+    });
+    // A text of no byte is a text: it has no page.
+    expect(readArtifactValue({ ...value, size: 0, pages: 0 })).toMatchObject({ size: 0, pages: 0 });
+    expect(readArtifactValue({ ...value, route: { ...value.route, mode: "test" } })).toBeUndefined();
+    expect(readArtifactValue({ ...value, route: { ...value.route, encrypted: "yes" } })).toBeUndefined();
+    expect(readArtifactValue({ ...value, size: -1 })).toBeUndefined();
+    expect(readArtifactValue({ ...value, pages: 1.5 })).toBeUndefined();
+    expect(readArtifactValue({ ...value, request: { name: "nightly" } })).toBeUndefined();
+    expect(readArtifactValue({ ...value, url: "https://leak.invalid/?X-Amz-Signature=1" })).toBeUndefined();
+    // The origin of the store and nothing of a URL after it: no path, no query, no user.
+    for (const origin of [
+      "http://storage.velero.svc:8333/bucket/backups/nightly/nightly-logs.gz",
+      "https://storage.example.invalid/?X-Amz-Signature=SENTINEL",
+      "https://user:secret@storage.example.invalid",
+      "https://storage.example.invalid#fragment",
+      "ftp://storage.example.invalid",
+      "storage.example.invalid",
+      "",
+      1,
+    ]) {
+      expect([origin, readArtifactValue({ ...value, route: { ...value.route, origin } })]).toEqual([origin, undefined]);
+    }
+  });
+
+  it("reads a page of the text of an artifact, as large as a page is and no larger", () => {
+    const page = { page: 0, pages: 2, text: 'time="2026-09-30T10:00:00Z" level=info msg="Backup completed"' };
+    const full = { page: 1, pages: 2, text: "x".repeat(PAGE_BOUND) };
+
+    expect(readArtifactPage(page)).toEqual(page);
+    expect(readArtifactPage(full)).toEqual(full);
+    expect(readArtifactPage({ ...full, text: `${full.text}x` })).toBeUndefined();
+    expect(readArtifactPage({ ...page, page: 2 })).toBeUndefined();
+    expect(readArtifactPage({ ...page, page: -1 })).toBeUndefined();
+    expect(readArtifactPage({ ...page, text: ["x"] })).toBeUndefined();
+    expect(readArtifactPage({ ...page, more: 1 })).toBeUndefined();
+    // A page is beyond the bound of a request, and is read when its reader bounds it itself; every other
+    // answer stays within the bound, and so does a failure, whoever reads it.
+    expect(readAnswer({ ok: true, value: full }, readArtifactPage, true)).toEqual({ ok: true, value: full });
+    expect(readAnswer({ ok: true, value: full }, readArtifactPage)).toMatchObject({ ok: false, stage: "answer" });
+    expect(readAnswer({ ok: true, value: { ...full, text: `${full.text}x` } }, readArtifactPage, true)).toMatchObject({
+      ok: false,
+      stage: "answer",
+    });
+    expect(
+      readAnswer(
+        { ok: false, code: "forbidden", stage: "request", retry: false, text: "x".repeat(REQUEST_BOUND) },
+        readArtifactPage,
+        true,
+      ),
+    ).toMatchObject({ ok: false, code: "validation", stage: "answer" });
   });
 
   it("reads the state of the gate, on and off, with the connection when it is there", () => {

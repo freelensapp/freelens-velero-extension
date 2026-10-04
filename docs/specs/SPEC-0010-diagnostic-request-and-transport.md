@@ -249,6 +249,94 @@ date and verdict.
 
 ## Evidence And Deviations
 
-Approved on 2026-09-30, as drafted. No implementation, tests or runtime evidence
-yet. The proof of T0.6 is the evidence of what this spec reuses, in
+Approved on 2026-09-30, as drafted. The spec is implemented in three slices, each
+with its evidence here, and is Implemented with the last of them. The proof of T0.6
+is the evidence of what this spec reuses, in
 [TESTING.md](../development/TESTING.md#t06-main-transport-proof).
+
+### The Request Through The Gate, T2.1
+
+Implemented by 2026-10-04, after an independent review of the slice, whose findings
+are in the code and in its tests. The [way](../../src/main/diagnostic-service.ts) of
+a request is one function, given the adapter the [gate](../../src/main/write-gate.ts)
+holds for the cluster; the [procedures](../../src/main/ipc.ts) run it for the
+artifact that was confirmed, join a request in flight and hold the text in the
+[holder](../../src/main/artifact-holder.ts) for the frame that asked for it; the
+[contract](../../src/common/ipc.ts) names the artifacts, the steps, the answer and
+the pages; the [words](../../src/common/diagnostic-text.ts) are one function, which
+the band of SPEC-0012 takes its words of the API server from. No view asks for an
+artifact yet, and the main process has no route to the store: until the slice of the
+route gives it one, the run of a DownloadRequest is refused before its token is
+taken, and the extension creates none.
+
+| Check | Evidence of this slice | Left |
+| --- | --- | --- |
+| DIAG-01 | Unit: the eight artifacts read, each of the kind of its target; the contents of a backup, the five other targets of the API, an artifact of the other kind and a text that is none refused by the readers of the confirmation and of the run, before the gate is asked, which a spy on the gate proves | Nothing |
+| DIAG-02 | Unit: the steps in their order on a fake adapter, the target read once more before the creation and before the delivery; a restore that names no backup and a backup whose location is not there ending before the creation; a request sent again while it runs joined, one creation for the two. Through both processes: the API server of a test sent nothing by the confirmation, then the reads of the way and one creation, in their order; the extension as it is activated creating nothing | Packaged: the reads the API server counts, with the tabs of SPEC-0011 (T2.3); not run yet |
+| DIAG-03 | Unit: the name, the labels and the target of the object, as the API server of a test receives it through both processes; a request read back with another UID, another label, another target or another name, and one without a UID, refused, and nothing of it used. Proof: the name and the identity of every request the cluster created | Nothing |
+| DIAG-04 | Unit, on the clock of the test and on the bounds of the way itself: a read every 250 milliseconds, the wait ended at thirty seconds, the whole operation at 120, each told from the other. On bounds a test may make shorter and never longer: a request without a phase and without a URL until the bound; an expiration that passed and one that is not a time; a phase Failed | Nothing |
+| DIAG-05 | Unit: every code at every step an answer of the contract, with its step, whether asking again is safe, and words without a URL; no two codes with the same words at any step; what the way found told from what a read of the cluster ended with, at the same code and step; nothing claimed of what was left at a step that is not known; every procedure answering and none raising, with a sentinel of the URL in what was raised | The codes only the transport and the route raise, and the rule of a destination that is denied, with their slices |
+| DIAG-14 | Unit, in part: two operations at once, the third waiting and cancelled while it waits, through the procedures as well; the pages of a text of the largest size, none ending inside a character; the text let go by its frame, after ten minutes, when the gate lets go of its cluster for a reason of its own, and for room; a route that does not close within its bound said, and its place given back; a route and a download that do not stop left behind, and a route given late closed | The bounds of the transport (T2.2) |
+| DIAG-15 | Unit, in part: a sentinel of the URL in no answer, status, failure or broadcast, through both processes; what the views take of an answer is what the contract names. Proof: no signed URL in its output | The transport (T2.2), the packaged suites (T2.3) |
+| DIAG-16 | Unit: what the adapter can do pinned by name, a way to read and a way to create; the API server of a test asked for reads and one creation in each way a download ends, a file the store does not have and a cancellation among them, and both requests left as they were created; an answer of the creation lost, the request found by its name and never created a second time; not found, submission-unknown with its name. Proof: a second creation of the same name refused by the cluster, and the first kept | Nothing |
+| DIAG-17 | Unit, in part, each seen failing on the code of T0.6: a creation refused before the connection, for a closed port and for a certificate that is not trusted, and one still without its connection at the bound, said not sent; an API server at an IPv6 address; the label of the name of a backup of 63, 64 and 70 characters; one connection for a creation and the reads after it, closed after two seconds without a request and when the adapter is let go, and never shared between two client certificates; a token no header takes and a certificate with a key that is not its own turned into a code, with nothing of them in it; a field of the input that is not a text; a route that does not close. The identity of the context and the key of a sender are the ones of SPEC-0009, with their evidence there | The trust of the host, the addresses, the errors of the listener, the codes of TLS, the form of the URL and the two certificates (T2.2); the endpoint slices (T2.4) |
+| DIAG-18 | Proof, in part: the four modes, through the procedures of the main process, as a frame calls them | The packaged application and the identities (T2.3, T2.4) |
+
+What was decided while implementing, inside the requirements:
+
+- **The gate is the only authority.** The service of T0.6 confirmed a request, bound
+  it to its sender and cancelled it by itself, and the design above says that the
+  service stays what it is. With the gate of SPEC-0009 that would be a second
+  authority beside the first: the way is a function now, the first step of REQ-121
+  is the confirmation of the gate, and the cancellation is the one of the gate.
+- **Nothing is created while there is no route.** A request the main process could
+  not download for would be a write for nothing: the run is refused before its token
+  is taken, with words that say the artifacts come with a later version.
+- **An artifact is of the kind of its target.** The log of a restore is not asked of
+  a backup: the readers refuse it, as they refuse a target that is none of the eight.
+- **A request sent again joins only its own.** The same identifier, from the same
+  frame, for the same artifact of the same target and with the same token, is given
+  the answer of the request in flight; from any other it is refused, and learns
+  nothing of it.
+- **The step of the creation is the creation alone.** The target is read once more
+  before it, as a step of its own, so that what ends at the creation says what is
+  known of the request: a cancellation, the end of the whole operation and a
+  connection that changed say that it may be in the cluster; a refusal of the
+  cluster, and a creation that was not sent, say that it is not.
+- **What the way found is told from what a read ended with.** REQ-124 gives one code
+  to a URL that was not signed and to a read the cluster did not answer in time,
+  one to a request that says it failed and to a read that failed, one to a request
+  that is another and to a connection that changed. The failure carries which of
+  them it is, and the words of the second kind say nothing of Velero. An expiration
+  that passed has words of its own: on a request this machine created a moment
+  before, it says that two clocks do not agree.
+- **The two bounds are told apart.** The thirty seconds of the wait say that Velero
+  signed no URL; the two minutes of the whole operation say only that it was
+  stopped, and what it left.
+- **What the way waits for ends with the operation.** A route or a download that
+  does not stop when it is told to is left behind, so that it holds neither the
+  operation nor one of the two places of the process; a route given late is closed.
+  An operation that was stopped while what it opened was closed delivers nothing.
+- **What the process holds is bounded.** REQ-133 gives the ten minutes and the
+  release by the view. The holder adds a bound on what is held at once, sixteen
+  texts and 128 MiB, and lets the oldest go for room: sixteen views that never let
+  their text go would otherwise hold 1 GiB. A text goes as well when the gate lets
+  go of its cluster for a reason of its own, with writes on or off; writes turned
+  off by the operator leave it.
+- **A page ends where a character ends**, so that no page begins with half of one:
+  a page is 4 MiB at most, and less by up to three bytes.
+- **The adapter is let go with the gate of its cluster**, and closes the connections
+  it kept. A connection is kept for two seconds without a request, and no longer: a
+  creation written on one that was closed on the way would be an answer that was
+  lost.
+- **A creation that was not sent says so in the band of the server too.** The words
+  of SPEC-0012 for a request the server did not answer said that it stays: with the
+  adapter telling a creation that was not sent from one that may have been, a
+  creation the cluster did not take in time says that nothing was created.
+
+Open, for the slice of the transport: REQ-131 says that a Secret the identity may
+not read ends as tls-invalid, REQ-124 and REQ-137 that it ends as forbidden at the
+step of the Secret. The code of T0.6 gives forbidden, and the words of this slice say
+that the cluster refused the read of the Secret, which verb the identity needs, and
+that no connection is made without verification. The two requirements are to be
+made one before that slice is implemented.

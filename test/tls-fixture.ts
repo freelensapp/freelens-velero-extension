@@ -51,7 +51,7 @@ export async function createTlsFixture(hostname = "storage.example.invalid") {
         "-subj",
         `/CN=${hostname}`,
         "-addext",
-        `subjectAltName=DNS:${hostname},DNS:api.example.invalid,IP:127.0.0.1`,
+        `subjectAltName=DNS:${hostname},DNS:api.example.invalid,IP:127.0.0.1,IP:::1`,
       ],
       { timeout: 30_000 },
     );

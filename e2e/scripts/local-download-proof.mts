@@ -8,8 +8,8 @@ import { FIXTURE_LABEL, fixtureArtifactPaths, fixtureNames } from "./local-fixtu
 import { DEMO_CONTEXT, DEMO_NAMESPACE, OWNER_LABEL, requireCondition, SUBNETS, subnetsOverlap } from "./local-kind.mts";
 import { type KubeResource, STORAGE_ENDPOINT } from "./local-manifests.mts";
 
-import type { ArtifactTarget, DiagnosticKind } from "../../src/main/diagnostic-kubernetes.ts";
-import type { DiagnosticInput } from "../../src/main/diagnostic-service.ts";
+import type { Answer, ArtifactPage, ArtifactTarget, ArtifactValue, WriteConfirmAnswer } from "../../src/common/ipc.ts";
+import type { DiagnosticKind } from "../../src/main/diagnostic-kubernetes.ts";
 
 export { DIRECT_PROOF_IMAGE } from "./local-manifests.mts";
 
@@ -166,118 +166,186 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
     );
     return { address, port, close: async () => {} };
   };
-  const service = new main.DiagnosticService(api, {
-    onCreated: (identity) => context.record("DownloadRequest", identity),
-    route: async (url, input, storage, signal) => {
-      const parsed = new URL(url);
-      const config = storage.spec?.config as { s3Url?: string; publicUrl?: string } | undefined;
-
-      requireCondition(
-        config?.s3Url === origin &&
-          !config.publicUrl &&
-          parsed.origin === origin &&
-          parsed.pathname === paths[input.target],
-        "Unexpected fixture artifact origin or target",
-      );
-      const tunnel = await newConnection(signal);
-
-      return {
-        route: {
-          origin,
-          pathname: paths[input.target] ?? "",
-          address: tunnel.address,
-          port: tunnel.port,
-          mode: context.direct ? "direct" : "tunnel",
-          allowPrivate: context.direct,
-          allowHttp: origin.startsWith("http:"),
+  // The procedures of the main process, as the extension registers them with the host: the proof calls
+  // them as a frame of the cluster does, with the gate, its confirmations and its tokens. The cluster is
+  // the one entry of a catalog of the proof, and the requests carry the labels of the environment beside
+  // the ones of the extension, so that the environment knows them as its own.
+  const cluster = "velero-proof";
+  const catalog = [{ id: cluster, name: "proof", kubeConfigPath: context.kubeconfig, contextName: DEMO_CONTEXT }];
+  const gate = new main.WriteGate({
+    catalog: () => catalog,
+    adapter: (entry, isCurrent) =>
+      new main.DiagnosticKubernetes(
+        { clusterId: entry.id, context: entry.contextName, kubeconfigPath: entry.kubeConfigPath },
+        () => {
+          context.assertCurrent();
+          return isCurrent();
         },
-        close: tunnel.close,
-      };
+        {
+          "app.kubernetes.io/managed-by": "freelens-velero-extension",
+          [OWNER_LABEL]: context.owner,
+          [FIXTURE_LABEL]: context.run,
+        },
+      ),
+  });
+  const handlers = new Map<string, (event: unknown, payload: unknown) => Promise<unknown>>();
+  const frame = { senderFrame: { url: `https://${cluster}.renderer.freelens.app:1/` }, processId: 1, frameId: 1 };
+  const release = main.registerHandlers(
+    {
+      handle: (channel, handler) =>
+        handlers.set(channel, handler as (event: unknown, payload: unknown) => Promise<unknown>),
+      broadcast: () => undefined,
     },
-    download: async (url, route, signal) => {
-      const content = await main.downloadArtifact(url, route, signal);
+    {
+      catalog: () => catalog,
+      gate,
+      // The route of the proof: the origin and the path the fixtures have, through a tunnel to the pod of
+      // the storage or to its address. The route of the main process comes with its own slice.
+      route: async (url, input, storage, signal) => {
+        const parsed = new URL(url);
+        const config = storage.spec?.config as { s3Url?: string; publicUrl?: string } | undefined;
 
-      if (!invalidSignature) {
-        const altered = new URL(url);
-
-        requireCondition(altered.searchParams.has("X-Amz-Signature"), "Expected a server-signed fixture URL");
-        altered.searchParams.set("X-Amz-Signature", "0".repeat(64));
+        requireCondition(
+          config?.s3Url === origin &&
+            !config.publicUrl &&
+            parsed.origin === origin &&
+            parsed.pathname === paths[input.target],
+          "Unexpected fixture artifact origin or target",
+        );
         const tunnel = await newConnection(signal);
 
-        try {
-          await main.downloadArtifact(altered.href, { ...route, port: tunnel.port }, signal);
-        } catch (error) {
-          invalidSignature = error instanceof main.DiagnosticError && error.code === "request-failed";
-        } finally {
-          await tunnel.close();
-        }
-        requireCondition(invalidSignature, "Storage did not reject an altered signature");
-        const second = await newConnection(signal);
+        return {
+          route: {
+            origin,
+            pathname: paths[input.target] ?? "",
+            address: tunnel.address,
+            port: tunnel.port,
+            mode: context.direct ? "direct" : "tunnel",
+            allowPrivate: context.direct,
+            allowHttp: origin.startsWith("http:"),
+          },
+          close: tunnel.close,
+        };
+      },
+      download: {
+        download: async (url, route, signal) => {
+          const content = await main.downloadArtifact(url, route, signal);
 
-        try {
-          if (origin.startsWith("https:")) {
-            try {
-              await main.downloadArtifact(url, { ...route, port: second.port, ca: undefined }, signal);
-            } catch (error) {
-              untrustedCa = error instanceof main.DiagnosticError && error.code === "tls-invalid";
-            }
-            requireCondition(untrustedCa, "The TLS proof succeeded without its private CA");
-          } else {
-            const wrongHost = new URL(url);
+          if (!invalidSignature) {
+            const altered = new URL(url);
 
-            wrongHost.hostname = "wrong-host.example.invalid";
+            requireCondition(altered.searchParams.has("X-Amz-Signature"), "Expected a server-signed fixture URL");
+            altered.searchParams.set("X-Amz-Signature", "0".repeat(64));
+            const tunnel = await newConnection(signal);
+
             try {
-              await main.downloadArtifact(
-                wrongHost.href,
-                { ...route, origin: wrongHost.origin, port: second.port },
-                signal,
-              );
+              await main.downloadArtifact(altered.href, { ...route, port: tunnel.port }, signal);
             } catch (error) {
-              invalidHost = error instanceof main.DiagnosticError && error.code === "request-failed";
+              invalidSignature = error instanceof main.DiagnosticError && error.code === "request-failed";
+            } finally {
+              await tunnel.close();
             }
-            requireCondition(invalidHost, "Storage did not reject a changed signed Host");
+            requireCondition(invalidSignature, "Storage did not reject an altered signature");
+            const second = await newConnection(signal);
+
+            try {
+              if (origin.startsWith("https:")) {
+                try {
+                  await main.downloadArtifact(url, { ...route, port: second.port, ca: undefined }, signal);
+                } catch (error) {
+                  untrustedCa = error instanceof main.DiagnosticError && error.code === "tls-invalid";
+                }
+                requireCondition(untrustedCa, "The TLS proof succeeded without its private CA");
+              } else {
+                const wrongHost = new URL(url);
+
+                wrongHost.hostname = "wrong-host.example.invalid";
+                try {
+                  await main.downloadArtifact(
+                    wrongHost.href,
+                    { ...route, origin: wrongHost.origin, port: second.port },
+                    signal,
+                  );
+                } catch (error) {
+                  invalidHost = error instanceof main.DiagnosticError && error.code === "request-failed";
+                }
+                requireCondition(invalidHost, "Storage did not reject a changed signed Host");
+              }
+            } finally {
+              await second.close();
+            }
           }
-        } finally {
-          await second.close();
-        }
-      }
-      return content;
+          return content;
+        },
+      },
     },
-  });
-  service.enableWrites(DEMO_NAMESPACE);
+  );
+  // A call of a procedure, from the frame of the cluster of the proof. A failure says its code and its
+  // step, which name nothing of the environment; its words are not printed.
+  const call = async <Value,>(channel: string, payload: unknown): Promise<Value> => {
+    const handler = handlers.get(channel);
+
+    requireCondition(handler, "A procedure of the main process is not registered");
+    const answer = (await handler(frame, payload)) as Answer<Value>;
+
+    if (!answer.ok) throw new Error(`The procedure ${channel} failed: ${answer.code} at ${answer.stage}`);
+    return answer.value;
+  };
   let downloads = 0;
 
   try {
-    for (const target of ["BackupLog", "BackupResults", "RestoreLog", "RestoreResults"] as const) {
-      const kind = target.startsWith("Backup") ? "Backup" : "Restore";
+    await call("gate.enable", {
+      cluster,
+      namespace: DEMO_NAMESPACE,
+      confirmation: { context: DEMO_CONTEXT, namespace: DEMO_NAMESPACE },
+    });
+    for (const artifact of ["BackupLog", "BackupResults", "RestoreLog", "RestoreResults"] as const) {
+      const kind = artifact.startsWith("Backup") ? "Backup" : "Restore";
       const objectName = kind === "Backup" ? names.backup : names.restore;
       const object = await api.read(kind, DEMO_NAMESPACE, objectName, controller.signal);
-      const selection = {
-        clusterId: context.owner,
-        context: DEMO_CONTEXT,
+      const target = { kind, name: objectName, uid: object.metadata.uid };
+      const { token } = await call<WriteConfirmAnswer>("write.confirm", {
+        cluster,
         namespace: DEMO_NAMESPACE,
+        kind: "DownloadRequest",
         target,
-        name: objectName,
-        uid: object.metadata.uid,
-      };
-      const input: DiagnosticInput = {
-        ...selection,
-        requestId: randomUUID(),
-        confirmation: service.confirm("proof", selection),
-      };
-      const operation = service.run("proof", input, controller.signal);
+        artifact,
+      });
+      const request = randomUUID();
+      const run = { cluster, namespace: DEMO_NAMESPACE, kind: "DownloadRequest", target, artifact, token, request };
+      // The same request sent again while it runs joins it: one object is created for the two.
+      const [result, joined] = await Promise.all([
+        call<ArtifactValue>("write.run", run),
+        call<ArtifactValue>("write.run", run),
+      ]);
 
+      requireCondition(result === joined, "Live request ID did not rejoin the operation");
+      context.record("DownloadRequest", result.request);
       requireCondition(
-        operation === service.run("proof", input, controller.signal),
-        "Live request ID did not rejoin the operation",
-      );
-      const result = await operation;
-
-      requireCondition(
-        result.content.length > 0 && !Object.hasOwn(result, "downloadURL"),
+        result.request.name === `${objectName}-${request}` &&
+          result.size > 0 &&
+          result.pages > 0 &&
+          result.route.origin === origin &&
+          result.route.mode === (context.direct ? "direct" : "tunnel") &&
+          result.route.encrypted === origin.startsWith("https:") &&
+          !/X-Amz|downloadURL|[?]/.test(JSON.stringify(result)),
         "Live artifact result is invalid",
       );
-      if (target.endsWith("Results")) JSON.parse(result.content.toString("utf8"));
+      // The text is held by the main process and given in pages, to the frame that asked for it.
+      let content = "";
+
+      for (let page = 0; page < result.pages; page += 1)
+        content += (await call<ArtifactPage>("artifact.page", { cluster, request, page })).text;
+      requireCondition(Buffer.byteLength(content) === result.size, "Live artifact pages do not hold the whole text");
+      if (artifact.endsWith("Results")) JSON.parse(content);
+      await call<null>("artifact.release", { cluster, request });
+      requireCondition(
+        await call<ArtifactPage>("artifact.page", { cluster, request, page: 0 }).then(
+          () => false,
+          () => true,
+        ),
+        "A text that was let go is still given",
+      );
       downloads += 1;
     }
     const collisionName = `${names.backup}-${randomUUID()}`;
@@ -329,7 +397,8 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
     return { downloads, generatedNames: true, conflictRefused: true, invalidSignature, invalidHost, untrustedCa };
   } finally {
     controller.abort();
-    service.invalidate();
+    release();
+    api.dispose();
   }
 }
 

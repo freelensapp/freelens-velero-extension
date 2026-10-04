@@ -6,6 +6,8 @@ import { pipeline } from "node:stream/promises";
 import { checkServerIdentity, rootCertificates } from "node:tls";
 import { createGunzip } from "node:zlib";
 
+import type { DownloadVerdict } from "../common/diagnostic-text";
+
 export type DiagnosticCode =
   | "validation"
   | "forbidden"
@@ -23,8 +25,15 @@ export type DiagnosticCode =
   | "request-failed"
   | "target-changed";
 
+// A way an operation ends that is not its result: a code, and the step it ended at when what raised it
+// knows it. Its message is the code and nothing of what caused it.
 export class DiagnosticError extends Error {
-  constructor(readonly code: DiagnosticCode) {
+  constructor(
+    readonly code: DiagnosticCode,
+    readonly stage?: string,
+    // What the way of a request found by itself, where the code alone does not say it.
+    readonly verdict?: DownloadVerdict,
+  ) {
     super(`Diagnostic operation failed: ${code}`);
     this.name = "DiagnosticError";
   }
