@@ -1,6 +1,6 @@
 # SPEC-0010: The Diagnostic Request And Its Transport
 
-- **Status:** Approved
+- **Status:** Implemented
 - **Date:** 2026-09-30
 - **Milestone / tasks:** M3 / T2.1, T2.2, T2.4, each its own slice
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`; compared with v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`; reviewed AWS plugin v1.14.2, `5463822fd77bc1c2a1151ee76c830ad979ff2781`
@@ -432,3 +432,113 @@ says tls-invalid; REQ-124 and REQ-137 say forbidden at the step of the Secret, w
 is what the code gives and what the words say, with the verb the identity needs. No
 connection is made without verification either way. The two requirements are to be
 made one, and the code follows what is decided.
+
+### The Route, T2.4
+
+Implemented by 2026-10-04, after an independent review of the slice, whose findings
+are in the code and in its tests. The [route](../../src/main/diagnostic-route.ts) to
+the store is found by the main process, from the URL the server signed and from the
+storage location it was signed for: the [origin and the path](../../src/common/artifact-origin.ts)
+by pure rules, the Service of the cluster by the reads of the
+[adapter](../../src/main/diagnostic-kubernetes.ts), a name of this machine by its
+addresses. [What the operator allows](../../src/common/allowances.ts) is kept by the
+main process in the store of the preferences, given and taken back through two
+[procedures](../../src/main/ipc.ts), and listed in the
+[target bar](../../src/renderer/components/target-bar.tsx). With this slice the run of
+a DownloadRequest creates its request: the views that ask for one are the tabs of
+SPEC-0011.
+
+| Check | Evidence of this slice | Left |
+| --- | --- | --- |
+| DIAG-07 | Unit: the URL of the store with the bucket in the path and as a label of the host, by what the location says of the path style; the public URL, and the URL of the store refused for a location that has one; the endpoints of S3 in the two partitions of AWS, with the bucket before them and in their path, and a host of those domains that is not one, or is the one of another bucket, with a folder named as the bucket of the location; a host of another partition and one that merely ends with the letters of the domain; a provider the rules were not written for; a user, a fragment, another scheme. The route asks the allowance of an origin the location does not give, for that location, and resolves nothing before | Packaged, with the tabs (T2.3) |
+| DIAG-08 | Unit: the key of each of the eight artifacts, with and without a prefix, alone when the bucket is in the host and after it when it is in the path; the bucket and the prefix read as the release reads them, with the slashes around them taken off and the prefix cleaned as a path; another file of the same backup, a path that does not decode or that names another folder, a bucket of another name, a prefix that climbs above the bucket: refused, on an origin the location gives and on one that was allowed | Nothing |
+| DIAG-09 | Unit: a name resolved once, the first address that is allowed taken and the cluster asked nothing; addresses that are never connected to refused whatever was allowed, an IPv4 address inside an IPv6 one among them; a private address asked, and connected to once allowed for that origin; a host that is an address. Proof: a private address refused until the allowance is given, with the socket connected to the address and the name kept for TLS | Nothing |
+| DIAG-10 | Unit: the forms of a name; a name of the form of a Service never resolved, with the bucket before it as well; a bare name that is a Service, one that is a name of this machine, one that is both, one the cluster refuses to say; the Service, its port, its endpoint slices, the first endpoint that is ready and is a Pod, the Pod; the target port followed into the Pod by number, by name and by itself, whatever a slice says; no ready endpoint, a port that is not of the Service, a Service without a selector, a Pod that is not ready, that the Service does not select, that does not declare the port or that was made again; the listener closed with the operation. Proof: the three modes through the tunnel, by the route the main process found, with the host and the server name kept | Packaged, with the tabs (T2.3) |
+| DIAG-11 | Unit: plain HTTP directly from this machine asked before anything is resolved on it, for a name and for a name that is no Service, and made once allowed for that origin; plain HTTP through the tunnel with no allowance. Proof: HTTP through the tunnel | What the state says of it, with the tabs (T2.3) |
+| DIAG-12 | Proof: an identity that may not read the Secret a location refers to ends as forbidden at the step of the certificate, and no request is created for it | Packaged, with the tabs (T2.3). The code of that way: see below |
+| DIAG-13 | Unit: what is and is not an origin; nothing allowed that was not given, for that cluster, that origin, that kind and that location, by its namespace and its name; the time of an allowance given again; what a store holds read with no trust in its form; the bound of a cluster; the key of the allowances given to the host whatever it holds; what a window sends of them left by the process that keeps them. The procedures: given and taken back for the cluster of the frame that asks, the frame of another cluster refused. Component: the count, the lines and the command that takes one back; an allowance given through the state shown at once. Packaged: what the file holds shown in the target bar at a start, one taken back through the main process, the one that is left found at the next start, the last one taken back, and nothing allowed at the start after it; nothing of a URL or of a credential in the file. The same suite on the store as it was first written fails at that last start, where the allowance comes back | An allowance asked in a tab (T2.3) |
+| DIAG-15 | Unit: a sentinel in the query of the URL in nothing the route raises. Proof: no URL in any answer of the procedures, the origin of an allowance aside, and none in its output or in its reports | The reports of the packaged suites (T2.3) |
+| DIAG-17 | Unit: the endpoint slices of a Service listed by its label, in place of its endpoints; with T2.1 and T2.2, every item of REQ-136 | Nothing |
+| DIAG-18 | Proof: the four modes, each by the route the main process found; three identities ending as forbidden, one at the creation of the request, one at the read of the Service and, once the location refers to a Secret, at the read of that Secret, one at the port-forward; and a fourth, with the permissions the architecture lists, downloading through the cluster | The packaged application (T2.3) |
+
+What was decided while implementing, inside the requirements:
+
+- **The main process is what keeps an allowance.** The views ask it through a
+  procedure, which takes the cluster from the frame that asks and gives nothing to
+  the frame of another. The store is the one of the preferences, as REQ-132 says,
+  which the host passes between its windows: in the main process what a window
+  sends of the allowances is not taken, so that a frame cannot allow for another
+  cluster around the procedures. The key is always written, empty when nothing is
+  allowed: the host writes a file key by key and removes none, and a key left out
+  would bring back at the next start what was taken back.
+- **An allowance of an origin is for a location by its namespace and its name**:
+  a cluster may have two installations, each with a location of the same name.
+- **A failure says what the operator may allow**: which kind, for which origin, and
+  for which location when it is an origin. The contract of a failure carries it
+  beside its words, so that a tab offers the command without reading the words.
+- **Only an endpoint of S3 is an origin a location of AWS gives by itself.**
+  REQ-126 says a host under the two domains with the bucket as its first label or
+  as the first folder of its path. Other services live under those domains, and a
+  bucket of someone else may hold a folder named as the bucket of the location:
+  what they serve is not of the location. The rule takes the endpoints of S3, of a
+  region, with its two stacks, in its validated form, in its older form and without
+  a region, with the bucket before them or as the first folder of their path, and
+  the accelerated one with the bucket before it. Every other host goes to the
+  allowance, as the hosts of the other partitions do.
+- **The bucket and the prefix are read as the release reads them**: the slashes
+  around them taken off, the prefix joined to the rest as a path, a bucket with a
+  slash inside refused. A store whose URL has a path of its own was not seen: its
+  downloads end as a path that is not the one of the file.
+- **A slice says which Pod answers, and nothing else.** The Pod is read and must be
+  one the Service selects; the port is the target port of the Service in that Pod,
+  by number or by name, which the Pod declares. Whoever may write a slice in the
+  namespace cannot send the request to another Pod, or to another port. A Service
+  without a selector is not followed.
+- **The reads of the route are steps of their own**, the Service, the endpoint
+  slices, the Pod and the port-forward, so that a refusal says which of them the
+  identity may not do, as REQ-124 asks.
+- **A port-forward the cluster refused is said as such.** The download it was for
+  ends as a connection that was lost; the answer of the API server to the upgrade
+  is what says that the identity may not forward a port.
+- **A credential the cluster does not take is told from a permission.** The cluster
+  answers both with a refusal, and only the second says what the identity may do:
+  the words of the first name no verb, and say to sign in again.
+- **A port-forward needs the verbs `get` and `create`**, where REQ-137 lists
+  `create`. A port-forward over a WebSocket, which is what the handler of the
+  client opens, is asked of the API server with `get`, and the releases of
+  Kubernetes from 1.35 check `create` for it as well. The proof runs as an identity
+  with `create` alone, which is refused, and as one with both, which downloads. The
+  list is in the [architecture](../development/ARCHITECTURE.md), for the
+  documentation of v1.0.0 to take.
+- **The identities of this slice are of the proof.** The packaged application meets
+  the identities of the demo with the tabs of SPEC-0011.
+- **The direct mode of the proof is reached by a name.** A name of the form of a
+  Service is never resolved on this machine, so the storage location of that mode is
+  given a public URL, over which the server signs, and the proof answers for the
+  resolver with the address of the Pod of the storage.
+- **A cluster keeps sixty-four allowances at most**, and what a store holds beyond
+  that, or in another form, is left out when it is read.
+- **A bare name whose resolution fails is a name that does not resolve**: it is the
+  Service of that name when there is one, and a store that was not reached
+  otherwise.
+
+What the rules do not do, and say:
+
+- A name of one or two labels may be a Service, by REQ-129, and the cluster is
+  asked. An identity that may not read the Services of the namespace the name would
+  be of cannot tell, and the download ends there, with words that say that the name
+  only may be a Service and which read was refused. A store named that way is
+  reached by an identity that may read Services, or by a longer name.
+- A name whose third label is `svc` is a Service by its form, whatever follows it:
+  a name of this machine of that form is looked for in the cluster, and ends as a
+  Service that is not there.
+- A Service of any namespace the storage location names is followed, with the
+  permissions the identity has there.
+- An origin the operator allowed is taken with the bucket in its host or in its
+  path, since nothing says where it is.
+- An allowance of an origin holds for a location of that namespace and that name,
+  one deleted and made again as well.
+
+Still open, for the review of the milestone: the code of a Secret the identity may
+not read, above. The proof shows what the code gives, forbidden at the step of the
+certificate, which is what REQ-124 and REQ-137 say.

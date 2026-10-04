@@ -176,7 +176,7 @@ The build is the one of the
 | --- | --- |
 | `velero-e2e-journey` | Nothing is asked before a view opens; the choice among the installations; the list of every phase; the workspace; the references that lead somewhere and the ones that do not; equal names in two installations; no way to select, edit or delete; the section in the details of the host |
 | `velero-e2e-overview` | The Overview as the first entry under Velero, with what the API server counted when it opens; what was read of the five families; what needs attention by its rules, in its order, with the reason of each; what is in flight; the newest completed backup; the three windows, on the line of time and in the list; ten lines of twelve schedules; every way of the page followed, and the way back; an installation where no rule finds anything; no value of the whole in any installation; two thousand operations within the budget, and the scroll after a read |
-| `velero-e2e-preferences` | What is kept between two starts of the application, which is the two maps of the namespaces and the window of the recent operations, and nothing else; a namespace that is not there any more stays selected |
+| `velero-e2e-preferences` | What is kept between two starts of the application, which is the two maps of the namespaces, the window of the recent operations and what the operator allowed the downloads to do, and nothing else; a namespace that is not there any more stays selected; what the file says was allowed is shown in the target bar, one is taken back through the main process, the one that is left is found at the next start, and once the last is taken back nothing is allowed at the start after it |
 | `velero-e2e-restores` | The list of every phase of a restore; a restore as Velero keeps it, with where it restores into and the scope it carries; one that failed its validation, with no time and no backup made up; a source that is not there; the way between a restore and its backup in both directions, over the list the first view was opened from; no way to select, edit or delete; the section in the details of the host |
 | `velero-e2e-restricted` | The views for an identity that reads three kinds of one namespace: what is denied is said, and is neither absent nor empty; a location shown with the Secrets it names, to an identity the API server refuses the Secrets to; the Overview, which says what the rules did not look at |
 | `velero-e2e-restricted-restores` | The views for an identity that reads the restores and the schedules and not the backups: the source of a restore, the history of a schedule, the backups that name a location and the newest completed backup of the Overview are said denied or not known, and are neither absent nor empty |
@@ -658,31 +658,51 @@ lab. The implementation is main-only and activation stays inert. The runner load
 the actual compiled CommonJS main under Node with minimal host globals; this is
 not an actual Electron/IPC/catalog integration result.
 
-Since the slice of the request through the gate the proof calls the procedures of
-the main process as a frame of a cluster does, on a registrar of its own: it turns
-writes on for the namespace of the fixtures, confirms each artifact of each target,
-runs it with the token, reads the text page by page and lets it go. The cluster is
-the one entry of a catalog of the proof, the requests carry the labels of the
-environment beside the ones of the extension, and the route to the store is still
-the one the script gives, until the main process has its own. What follows is the
-record of the first run, whose service held the confirmations the gate holds now.
+Since the slice of the request through the gate the proof calls the procedures of the
+main process as a frame of a cluster does, on a registrar of its own: it turns writes
+on for the namespace of the fixtures, confirms each artifact of each target, runs it
+with the token, reads the text page by page and lets it go. The cluster is the one
+entry of a catalog of the proof, and the requests carry the labels of the environment
+beside the ones of the extension. What follows is the record of the first run, whose
+service held the confirmations the gate holds now, and whose route was the one the
+script gave.
 
 Since the slice of the transport the proof asks the server and the store for what is
 not there as well. After the real backup and the real restore it applies three
 operations the server refuses, and waits until each failed its validation for the
 reason it is made for, through the phases an operation has before its controller
-validates it, the queue of a backup among them: a backup and a restore that name both kinds of selector,
-whose storage location and whose backup are valid, and a restore asked from a
-schedule that has no backup, which keeps no name of a backup. Through the tunnel
-over HTTP it asks for the log of each. For the first two the server signs a URL and
-the store answers that it has no such file: the run ends as a file the store does
+validates it, the queue of a backup among them: a backup and a restore that name both
+kinds of selector, whose storage location and whose backup are valid, and a restore
+asked from a schedule that has no backup, which keeps no name of a backup. Through the
+tunnel over HTTP it asks for the log of each. For the first two the server signs a URL
+and the store answers that it has no such file: the run ends as a file the store does
 not have, at the step of the download, and its request is in the cluster. For the
-third the run ends before any creation, at the step of the backup, and no request
-of its name is in the cluster. The cleanup removes the backup that failed its
-validation as it removes the real one, through a deletion request the controller
-carries out, the restore that names the real backup with that backup, and the
-restore without a backup by the identity the cluster gives of it. A backup a cleanup
-that was interrupted left while it was deleted is waited for with the same request.
+third the run ends before any creation, at the step of the backup, and no request of
+its name is in the cluster. The cleanup removes the backup that failed its validation
+as it removes the real one, through a deletion request the controller carries out, the
+restore that names the real backup with that backup, and the restore without a backup
+by the identity the cluster gives of it. A backup a cleanup that was interrupted left
+while it was deleted is waited for with the same request.
+
+Since the slice of the route the proof gives the main process no route: the procedures
+find it by themselves, from the URL the server signed and from the objects of the
+cluster, and the proof checks the one each download was given. Through the tunnel the
+host of the URL is the Service of the storage, which is read with its endpoint slices
+and its Pod. Directly, the storage location is given a public URL with a name no
+resolver knows, over which the server signs, and the proof answers for the resolver of
+the machine with the address of the Pod of the storage: a private one, which the first
+run refuses, saying that the operator may allow it and for which origin, and which the
+downloads reach once the allowance is given through the procedure, as a frame gives
+it.
+
+The proof then runs as four identities of its own, each an account of the namespace of
+the installation with a credential of ten minutes. One reads and may not create the
+request: it ends as forbidden at the creation. One creates the request and may read no
+Service and no Secret: it ends at the Service, with its request in the cluster, and,
+once the location refers to a Secret, at the certificate, with no request. One has the
+verb `create` alone for the port-forward: it ends at the port-forward. One has what
+the architecture lists for a download through the cluster: it downloads the log. The
+accounts and their roles are removed with the run.
 
 ```sh
 pnpm test:unit

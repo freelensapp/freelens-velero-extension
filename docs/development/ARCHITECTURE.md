@@ -118,20 +118,23 @@ before changing the client version. The main build replaces undici with
 extension never calls, and the real module installs a dispatcher for the whole
 process when it loads, which inside Freelens is the process of the host. Supported
 `WS_NO_*` build defines disable optional native accelerators without patching the
-library. The 1719 tests of the unit run, on the separate modules and on the
-production build, are 17 of the scaffold, 123 of the environment and its fixtures,
-161 of the diagnostic contracts, 151 of the operation states and of their stages,
-55 of the rules of the discovery, 206 of what the views show of a backup, of a
+library. The 1790 tests of the unit run, on the separate modules and on the
+production build, are 17 of the scaffold, 124 of the environment and its fixtures,
+164 of the diagnostic contracts, 151 of the operation states and of their stages,
+56 of the rules of the discovery, 206 of what the views show of a backup, of a
 restore and of a schedule, of what they refer to and of the views in the address,
 141 of what they show of a location, of its durations and of what uses it, 38 of
 what the Overview says of an installation and of the line of time, 33 of the state
-of an installation and of its reader, 223 of the components, 126 of the gate of
+of an installation and of its reader, 223 of the components, 128 of the gate of
 the writes, of the way between the processes and of the credential of a context,
 95 of the version of the server: its comparison, its plugins, the state of its
 request, its band, the confirmation of one write and the object the cluster is sent,
-106 of the request for an artifact: its way, its words, its text in pages, its
-procedures and the object the cluster is sent, and 244 of the addresses a download
-connects to: their written forms, their ranges and what an IPv6 address carries. The
+111 of the request for an artifact: its way, its words, its text in pages, its
+procedures and the object the cluster is sent, 244 of the addresses a download
+connects to: their written forms, their ranges and what an IPv6 address carries, and
+59 of the route to the store: the origin and the path of a signed URL, the Service
+of the cluster, the name of this machine, what the operator allows and the store
+that keeps it. The
 integration test
 covers the installation in the host, the suites of the views what the views do
 in it.
@@ -227,6 +230,9 @@ application:
   changes between its windows. The [store of the preferences](../../src/common/preferences-store.ts)
   is opened in both processes: opened in the renderer alone, what the operator
   chose was never written.
+- The host writes the file of a store key by key, from what the store gives it, and
+  removes no key: one the store stops giving keeps in the file what it held. A key
+  that may become empty is always given, empty.
 - The search of the lists of the host waits 250 ms after the last key before it
   gives the list what was typed.
 
@@ -692,6 +698,42 @@ the system says was lost during the handshake is a store the tunnel did not reac
 listener of the [tunnel](../../src/main/diagnostic-tunnel.ts) hears its own errors,
 which end the tunnel and never the process. A storage location that carries a
 certificate and refers to one is read as the release reads it: the reference is taken.
+
+The [route](../../src/main/diagnostic-route.ts) to the store is found by the main
+process, from the URL the server signed and from the storage location it was signed
+for, before the transport is given anything. The [origin and the
+path](../../src/common/artifact-origin.ts) are pure rules: the origin must be one the
+location gives, its public URL when it has one and the URL of its store otherwise,
+with the bucket in the path or as the first label of the host, or an endpoint of S3
+for the plugin of AWS with neither, and no other host of the domains of AWS; the path
+must be the key of the artifact that was asked, in the layout of the store, with the
+bucket and the prefix read as the release reads them. A host of the form of a Service
+is a Service of the cluster and is never resolved on this machine: the Service is
+read, the port of the URL matched to one of its ports, its endpoint slices read for an
+endpoint that is ready and is a Pod, the Pod read and checked as one the Service
+selects, the port followed to its target port in that Pod, and a port-forward opened
+to it through the API server, to a listener on the loopback of this machine for one
+connection. A slice says which Pod answers, and nothing else is taken from it. A bare
+name is a Service when one of that name is there, a name of this machine otherwise,
+and refused when it is both. Any other name is resolved on this machine, once, and the
+connection is made to the first of its addresses that is allowed, with the host and
+the server name of the URL. What the location does not give, an origin, a private
+address, plain HTTP directly from this machine, is [allowed by the
+operator](../../src/common/allowances.ts) for that cluster and that origin, or not at
+all: the failure says what may be allowed, the main process keeps what was allowed in
+the store of the preferences with its time, and the target bar lists it and takes it
+back. The store is one the host passes between its windows: in the main process what a
+window sends of the allowances is not taken, and the procedures, which check which
+frame asks, are the only way to them.
+
+A download through the cluster asks of the identity of the kubeconfig, beside the
+kinds of Velero it reads and the DownloadRequest it creates and reads: `get` on
+services and on pods, `list` on the endpointslices of `discovery.k8s.io`, `get` and
+`create` on `pods/portforward`, and `get` on the Secret a storage location refers to
+for its certificate. A port-forward over a WebSocket is asked of the API server with
+the verb `get`, and the releases of Kubernetes that check the verb `create` for it as
+well ask for both: `create` alone is refused. What the identity may not do ends the
+download as forbidden, at the step that was refused.
 
 Stream with backpressure and explicit decompression limits; parsing/rendering also
 needs bounded memory. A limit stops the operation with an explicit incomplete/error
