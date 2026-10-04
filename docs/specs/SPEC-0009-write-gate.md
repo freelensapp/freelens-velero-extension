@@ -114,9 +114,9 @@ The main process, on activation, registers its procedures with `Main.Ipc` and
 keeps one gate: for each cluster the namespace writes are on for, the time they
 were turned on, the adapter of the cluster, and the confirmations. The
 [service of the diagnostics](../../src/main/diagnostic-service.ts) of T0.6 keeps
-its confirmation, its run and its cancellation, and is given the gate and the
-binding from outside: what it knew as the enabled namespace is what the gate
-says.
+its run, and is given the adapter of the gate from outside: what it knew as the
+enabled namespace, its confirmations and its cancellation are what the gate
+holds.
 
 | Procedure | From the renderer | The main process answers |
 | --- | --- | --- |
@@ -310,7 +310,10 @@ What was decided while implementing, inside the requirements:
 - **A command a plugin starts is not killed with it**: the bound ends the wait and
   kills the command the context names; what that command started is left to it.
 
-Left for the slice of the DownloadRequest, where they are first used: the kind of the
-artifact as a part of what a confirmation is for, and the service of the diagnostics
-given the gate in place of its own enablement.
+Left for the slice of the DownloadRequest, where they are first used, and done with
+it: the kind of the artifact as a part of what a confirmation is for, and the service
+of the diagnostics given the gate in place of its own enablement. The service kept a
+confirmation and a cancellation of its own in the proof of T0.6; with the gate they
+would be a second authority beside it, and the design above says now that the gate
+holds them. The evidence is with [SPEC-0010](SPEC-0010-diagnostic-request-and-transport.md#evidence-and-deviations).
 

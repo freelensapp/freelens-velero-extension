@@ -118,17 +118,19 @@ before changing the client version. The main build replaces undici with
 extension never calls, and the real module installs a dispatcher for the whole
 process when it loads, which inside Freelens is the process of the host. Supported
 `WS_NO_*` build defines disable optional native accelerators without patching the
-library. The 1243 tests of the unit run, on the separate modules and on the
+library. The 1359 tests of the unit run, on the separate modules and on the
 production build, are 17 of the scaffold, 119 of the environment and its fixtures,
-48 of the diagnostic contracts, 151 of the operation states and of their stages,
+52 of the diagnostic contracts, 151 of the operation states and of their stages,
 55 of the rules of the discovery, 206 of what the views show of a backup, of a
 restore and of a schedule, of what they refer to and of the views in the address,
 141 of what they show of a location, of its durations and of what uses it, 38 of
 what the Overview says of an installation and of the line of time, 33 of the state
-of an installation and of its reader, 223 of the components, 117 of the gate of
-the writes, of the way between the processes and of the credential of a context, and
+of an installation and of its reader, 223 of the components, 126 of the gate of
+the writes, of the way between the processes and of the credential of a context,
 95 of the version of the server: its comparison, its plugins, the state of its
-request, its band, the confirmation of one write and the object the cluster is sent. The
+request, its band, the confirmation of one write and the object the cluster is sent,
+and 103 of the request for an artifact: its way, its words, its text in pages, its
+procedures and the object the cluster is sent. The
 integration test
 covers the installation in the host, the suites of the views what the views do
 in it.
@@ -474,6 +476,21 @@ namespace/name plus UID presence on reads. A malformed or lost POST response has
 an unknown submission outcome, not an automatic retry. The service reconciles only
 the named DownloadRequest and checks its ownership/target before reuse.
 
+A creation is unknown only when it may have reached the server. The adapter knows
+that a request went on a connection by the end of the handshake on its socket, and
+not by what Node says of the headers, which it says sent before any connection: a
+connection that was refused, a certificate that was not trusted and a handshake that
+did not end in time are a creation that was not sent, and are said so. A request
+Node refuses to make, for a credential no header takes or a certificate with a key
+that is not its own, is refused as one that cannot be written, with nothing of the
+credential in what is said. The adapter keeps its connections between its requests,
+so that the reads of a wait do not each pay a handshake: four at most for each
+client certificate, each closed after two seconds without a request, and all of them
+when the gate lets the adapter go, which it does every time writes go off. The agent
+is given nothing of TLS: a request goes only on a connection made with its own
+certificate and key. An API server at an IPv6 address is reached, and the label of
+the name of a backup is cut as the release cuts it.
+
 T0.6 proves certificate authentication, actual generated ServerStatusRequest names
 and 409 preservation on local kind; token/refusal/cancellation and ambiguous POST
 cases have loopback coverage. Actual catalog resolution, credential-plugin execution
@@ -547,9 +564,31 @@ its failure is said as its own, by the name of its command, never as a refusal o
 the cluster. The user a context impersonates is part of the entry and goes with the
 credential. The adapter refuses an authentication provider, a proxy, a user name
 with a password, a verification of TLS turned off and an impersonation of groups, of
-a uid or of extra fields, which the client cannot send, and the gate says which. The
-run of a ServerStatusRequest is in this slice as the smallest write; the one of a
-DownloadRequest comes with the request and its transport.
+a uid or of extra fields, which the client cannot send, and the gate says which. A
+ServerStatusRequest and a DownloadRequest are the two writes the gate lets through.
+
+A DownloadRequest is confirmed for one artifact of one target: the artifact is part
+of what the token stands for, so that the confirmation of the log of a backup does
+not run for its results. The readers of the contract take the eight artifacts the
+extension shows, each of the kind of its target, and refuse every other target of the
+API before the gate is looked at. The run takes the token and goes
+[the way](../../src/main/diagnostic-service.ts) of the request with the adapter the
+gate holds for the cluster; a run sent again with the identifier of one in flight,
+by the same frame, for the same target and with the same token, is given the answer
+of the first and creates nothing, and from any other frame, target or token it is
+refused. The text of the artifact stays in the main process, in the
+[holder](../../src/main/artifact-holder.ts), for the frame that asked for it: the
+answer of the run is the identity of the request, the size of the text, the number of
+its pages and the route in words, and the frame asks for the pages one by one, each
+of 4 MiB at most and none ending inside a character. A text is let go when its frame
+says so, after ten minutes, when the gate of its cluster goes off for a reason of its
+own, the entry of the catalog, the connection or the frame that turned writes on,
+when the extension is deactivated, and, the oldest first, when the process would hold
+more than sixteen texts or 128 MiB of them. Writes turned off by the operator leave
+the texts that were read where they are: they were asked for while writes were on. The [words](../../src/common/diagnostic-text.ts) of every
+way a download ends are written once, by code and by step. The main process has no
+route to the store yet: until the slice of the route gives it one, the run of a
+DownloadRequest is refused before its token is taken, and nothing is created.
 
 In the renderer a write is asked in two gestures, where it is offered. The
 [state of the request](../../src/renderer/state/server-status.ts) of the version of
@@ -602,12 +641,29 @@ Implemented proof bounds; later product changes require explicit evidence/spec r
 | Concurrent artifact operations | 2 globally; queued work remains cancellable |
 
 The fixed polling interval is the proof's simplification of the initial backoff
-proposal, not an increased request or duration budget. One service permits at most
-16 active/queued operations and 32 pending confirmations. Main approvals expire
-after 30 seconds and bind the sender and exact target; in-flight IDs deduplicate
-and the last 256 completed IDs cannot be replayed. Target invalidation aborts work
-and clears write mode. Actual IPC must supply the sender; accepting a renderer's
-claimed sender would not satisfy this contract.
+proposal, not an increased request or duration budget. The confirmations, their
+bounds, the binding to the sender and the writes in flight are the ones of the
+[gate](#the-gate-and-the-way-between-the-processes), which the proof of T0.6 held in
+its service: the gate permits 16 writes in flight and 32 confirmations that wait for
+each cluster, its tokens expire after 30 seconds and bind the frame, the target and
+the artifact, a request with the identifier of one in flight joins it, and a token
+is good for one run. The way of a request is one function, given the adapter of the
+gate, and decides nothing of who may ask. Its steps are the ones the contract names:
+the queue, the target, the backup of a restore, the storage location, the
+certificate, the target once more, the creation, the wait, the route, the download,
+the delivery and the release; a failure says the step it ended at, and what was
+raised is never written on, since the adapter gives one error to every request that
+waited for the same plugin. The step of the creation is the creation alone, so that
+what ends at it says what is known of the request: nothing was created, it may be in
+the cluster, or it is not known. What the way finds by itself is told from what a
+read of the cluster ends with, which has the same code at the same step: a request
+Velero did not sign in thirty seconds, one it says failed, one that says it expired,
+one that is another object, a target that an object of the same name took the place
+of, and the two minutes of the whole operation each have their words, and a read the
+cluster did not answer in time says nothing of Velero. What the way is given to wait
+for ends with the operation: a route or a download that does not stop when it is told
+to is left behind, and a route given late is closed. An operation that was stopped
+while what it opened was closed delivers nothing.
 
 Stream with backpressure and explicit decompression limits; parsing/rendering also
 needs bounded memory. A limit stops the operation with an explicit incomplete/error
@@ -641,7 +697,7 @@ automatic service discovery or that every cluster endpoint is reachable.
 
 ### T0.6 Transport Support Decision
 
-- Reuse [DiagnosticService](../../src/main/diagnostic-service.ts), the create-only
+- Reuse the [service](../../src/main/diagnostic-service.ts), the create-only
   adapter, [bounded transport](../../src/main/diagnostic-transport.ts) and
   [pod tunnel](../../src/main/diagnostic-tunnel.ts) for the later diagnostic slice.
   Accept eight target kinds, but only the four log/results kinds have real artifact

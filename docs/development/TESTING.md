@@ -658,6 +658,15 @@ lab. The implementation is main-only and activation stays inert. The runner load
 the actual compiled CommonJS main under Node with minimal host globals; this is
 not an actual Electron/IPC/catalog integration result.
 
+Since the slice of the request through the gate the proof calls the procedures of
+the main process as a frame of a cluster does, on a registrar of its own: it turns
+writes on for the namespace of the fixtures, confirms each artifact of each target,
+runs it with the token, reads the text page by page and lets it go. The cluster is
+the one entry of a catalog of the proof, the requests carry the labels of the
+environment beside the ones of the extension, and the route to the store is still
+the one the script gives, until the main process has its own. What follows is the
+record of the first run, whose service held the confirmations the gate holds now.
+
 ```sh
 pnpm test:unit
 VITE_PRESERVE_MODULES=false pnpm test:unit

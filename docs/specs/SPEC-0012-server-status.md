@@ -210,6 +210,11 @@ What was decided while implementing, inside the requirements:
 - **The wait is not cancelled from the band**: it ends by itself in ten seconds.
   The cancellation of a write the gate has is for the artifacts, whose load is
   longer.
+- **A creation the cluster did not take in time says that nothing was created**,
+  since the slice of the DownloadRequest: the adapter tells there a creation that was
+  not sent from one that may have been, and the words of a server that did not
+  answer, which say that the request stays, are for a request that was created.
+  The words of the API server are the ones a download says of it, written once.
 
 What changed in a requirement, from what the release does:
 
