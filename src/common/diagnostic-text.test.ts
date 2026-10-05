@@ -55,7 +55,7 @@ describe("the words of a DownloadRequest that did not end with its file", () => 
     expect(downloadFailure("transport-unreachable", "download", created).text).toContain(
       "The store could not be reached.",
     );
-    expect(downloadFailure("tls-invalid", "download", created).text).toContain(
+    expect(downloadFailure("tls-invalid", "download", { ...created, verdict: "untrusted" }).text).toContain(
       "The certificate of the store is not trusted.",
     );
     const unsigned = downloadFailure("deadline", "wait", { ...created, verdict: "unsigned" });
@@ -111,6 +111,40 @@ describe("the words of a DownloadRequest that did not end with its file", () => 
     );
     expect(downloadFailure("target-changed", "delivery", { ...created, verdict: "replaced" }).text).toBe(
       `The backup nightly is not the one that was confirmed: an object of the same name took its place. ${stays}`,
+    );
+  });
+
+  it("says that the certificate is verified whatever the storage location asks", () => {
+    const said = downloadFailure("tls-invalid", "download", { ...created, verdict: "insecure" });
+
+    expect(said).toMatchObject({ code: "tls-invalid", stage: "download", retry: false });
+    expect(said.text).toBe(
+      "The certificate of the store is not trusted. The storage location asks, with insecureSkipTLSVerify, that the certificate is not verified: the extension verifies it all the same. The storage location can name the certificate of its authority. The DownloadRequest nightly-0e7c5b7a-1111-4111-8111-000000000001 stays in velero-a until Velero removes it.",
+    );
+    // Without that key the words say only how to give the certificate.
+    expect(downloadFailure("tls-invalid", "download", { ...created, verdict: "untrusted" }).text).toBe(
+      "The certificate of the store is not trusted. The storage location can name the certificate of its authority; the verification is never turned off. The DownloadRequest nightly-0e7c5b7a-1111-4111-8111-000000000001 stays in velero-a until Velero removes it.",
+    );
+  });
+
+  it("tells a handshake of TLS that failed from a certificate that was refused, and says of neither what it does not know", () => {
+    const stays =
+      "The DownloadRequest nightly-0e7c5b7a-1111-4111-8111-000000000001 stays in velero-a until Velero removes it.";
+    const handshake = downloadFailure("tls-invalid", "download", created);
+
+    // No certificate was refused: the words do not send the operator to the certificate of the location.
+    expect(handshake).toMatchObject({ code: "tls-invalid", stage: "download", retry: false });
+    expect(handshake.text).toBe(
+      `The handshake of TLS with the store failed, and no certificate was refused: the store may not speak TLS at the port of its URL, or a version of it the extension does not, or the connection was closed while it was made. ${stays}`,
+    );
+    expect(handshake.text).not.toMatch(/authority|insecureSkipTLSVerify/);
+    // At the step of the route it is not known which of the two it was.
+    expect(downloadFailure("tls-invalid", "route", created).text).toBe(
+      `The connection to the store was not trusted: its certificate was refused, or the handshake of TLS failed. The storage location can name the certificate of its authority; the verification is never turned off. ${stays}`,
+    );
+    // What a location asks is said of a certificate that was refused, and only there.
+    expect(downloadFailure("tls-invalid", "route", { ...created, verdict: "untrusted" }).text).toContain(
+      "The certificate of the store is not trusted. The storage location can name",
     );
   });
 

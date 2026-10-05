@@ -667,6 +667,23 @@ environment beside the ones of the extension, and the route to the store is stil
 the one the script gives, until the main process has its own. What follows is the
 record of the first run, whose service held the confirmations the gate holds now.
 
+Since the slice of the transport the proof asks the server and the store for what is
+not there as well. After the real backup and the real restore it applies three
+operations the server refuses, and waits until each failed its validation for the
+reason it is made for, through the phases an operation has before its controller
+validates it, the queue of a backup among them: a backup and a restore that name both kinds of selector,
+whose storage location and whose backup are valid, and a restore asked from a
+schedule that has no backup, which keeps no name of a backup. Through the tunnel
+over HTTP it asks for the log of each. For the first two the server signs a URL and
+the store answers that it has no such file: the run ends as a file the store does
+not have, at the step of the download, and its request is in the cluster. For the
+third the run ends before any creation, at the step of the backup, and no request
+of its name is in the cluster. The cleanup removes the backup that failed its
+validation as it removes the real one, through a deletion request the controller
+carries out, the restore that names the real backup with that backup, and the
+restore without a backup by the identity the cluster gives of it. A backup a cleanup
+that was interrupted left while it was deleted is waited for with the same request.
+
 ```sh
 pnpm test:unit
 VITE_PRESERVE_MODULES=false pnpm test:unit

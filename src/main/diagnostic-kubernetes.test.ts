@@ -926,6 +926,33 @@ describe("explicit create-only Kubernetes adapter", () => {
     ).rejects.toMatchObject({ code: "forbidden" });
   });
 
+  it("takes the certificate the location refers to when it gives one inline as well, as the release does", async () => {
+    const api = new DiagnosticKubernetes(binding(), () => true);
+    const signal = new AbortController().signal;
+    // An inline value that is no certificate: taken, it would end as one that is not valid.
+    const inline = Buffer.from("not the certificate of the store").toString("base64");
+
+    expect(
+      await api.certificate("fixture", { caCert: inline, caCertRef: { name: "certificate", key: "ca.crt" } }, signal),
+    ).toBe(certificates.ca);
+    expect(requests.map((item) => `${item.method} ${item.path}`)).toEqual([
+      "GET /api/v1/namespaces/fixture/secrets/certificate",
+    ]);
+    // The reference is the one that counts: a Secret that is refused, and a key that is not in it, are not
+    // made up for with the inline value.
+    const valid = Buffer.from(certificates.ca).toString("base64");
+
+    await expect(
+      api.certificate("fixture", { caCert: valid, caCertRef: { name: "denied", key: "ca.crt" } }, signal),
+    ).rejects.toMatchObject({ code: "forbidden" });
+    await expect(
+      api.certificate("fixture", { caCert: valid, caCertRef: { name: "certificate", key: "absent.crt" } }, signal),
+    ).rejects.toMatchObject({ code: "tls-invalid" });
+    // Without a reference the inline value is what there is.
+    await expect(api.certificate("fixture", { caCert: inline }, signal)).rejects.toMatchObject({ code: "tls-invalid" });
+    api.dispose();
+  });
+
   it("propagates cancellation to an API socket", async () => {
     const api = new DiagnosticKubernetes(binding(), () => true);
     const controller = new AbortController();

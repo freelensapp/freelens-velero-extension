@@ -21,6 +21,8 @@ function fixture(options: Partial<DiagnosticOptions> = {}) {
     locationName: "default" as unknown,
     location: true,
     foreign: false,
+    // The configuration of the storage location, as the object carries it.
+    config: undefined as Record<string, unknown> | undefined,
     request: undefined as DiagnosticObject | undefined,
   };
   const asked: string[] = [];
@@ -43,7 +45,10 @@ function fixture(options: Partial<DiagnosticOptions> = {}) {
         };
       if (kind === "BackupStorageLocation") {
         if (!state.location) throw new DiagnosticError("not-found");
-        return { metadata: { name, namespace: "fixture", uid: "bsl-uid" }, spec: { objectStorage: {} } };
+        return {
+          metadata: { name, namespace: "fixture", uid: "bsl-uid" },
+          spec: { objectStorage: {}, ...(state.config ? { config: state.config } : {}) },
+        };
       }
       if (!state.request) throw new DiagnosticError("not-found");
       return {
@@ -205,6 +210,55 @@ describe("the way of a DownloadRequest", () => {
       encrypted: false,
       origin: "http://storage.example.invalid:9000",
     });
+  });
+
+  it("says, of a certificate of the store that was refused, that its location asks for no verification, and gives the download nothing of what it asks", async () => {
+    // What the transport raises for a certificate it refused.
+    const refused = () => new DiagnosticError("tls-invalid", undefined, "untrusted");
+
+    // Every text the release reads as true in that key.
+    for (const written of ["1", "t", "T", "TRUE", "true", "True"]) {
+      const value = fixture();
+
+      value.state.config = { insecureSkipTLSVerify: written };
+      value.download.mockRejectedValueOnce(refused());
+      expect([written, await ended(value.run())]).toEqual([
+        written,
+        expect.objectContaining({ code: "tls-invalid", stage: "download", verdict: "insecure" }),
+      ]);
+      // The route the download was given carries nothing of the key: whether a certificate is verified is
+      // not something a route says.
+      expect(JSON.stringify(value.download.mock.calls[0][1])).not.toMatch(/insecure|rejectUnauthorized/i);
+    }
+    // What the release reads as false, and a location without the key: the certificate was refused, and
+    // nothing more is said.
+    for (const config of [
+      { insecureSkipTLSVerify: "false" },
+      { insecureSkipTLSVerify: "yes" },
+      { region: "minio" },
+      undefined,
+    ]) {
+      const value = fixture();
+
+      value.state.config = config;
+      value.download.mockRejectedValueOnce(refused());
+      expect([config, await ended(value.run())]).toEqual([
+        config,
+        expect.objectContaining({ code: "tls-invalid", stage: "download", verdict: "untrusted" }),
+      ]);
+    }
+    // A failure in which no certificate was refused says nothing of the key: a handshake that failed, as
+    // of a store that does not speak TLS on its port, and a store that was not reached.
+    for (const code of ["tls-invalid", "transport-unreachable"] as const) {
+      const other = fixture();
+
+      other.state.config = { insecureSkipTLSVerify: "true" };
+      other.download.mockRejectedValueOnce(new DiagnosticError(code));
+      const failure = await ended(other.run());
+
+      expect(failure).toMatchObject({ code, stage: "download" });
+      expect([code, (failure as DiagnosticError).verdict]).toEqual([code, undefined]);
+    }
   });
 
   it("reads the backup of a restore, and the storage location of that backup", async () => {

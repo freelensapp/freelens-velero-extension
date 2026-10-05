@@ -338,5 +338,97 @@ Open, for the slice of the transport: REQ-131 says that a Secret the identity ma
 not read ends as tls-invalid, REQ-124 and REQ-137 that it ends as forbidden at the
 step of the Secret. The code of T0.6 gives forbidden, and the words of this slice say
 that the cluster refused the read of the Secret, which verb the identity needs, and
-that no connection is made without verification. The two requirements are to be
-made one before that slice is implemented.
+that no connection is made without verification. The slice of the transport keeps
+what the code gives, and says below why the two requirements are still to be made
+one.
+
+### The Transport, T2.2
+
+Implemented by 2026-10-04, after an independent review of the slice, whose findings
+are in the code and in its tests. The [transport](../../src/main/diagnostic-transport.ts)
+trusts what the host trusts, reads the addresses by what they are, tells a failure of
+TLS from a store that was not reached by where the connection was, and sends the host
+its URL was signed for; the [rules on the addresses](../../src/common/artifact-address.ts)
+are pure functions; the [tunnel](../../src/main/diagnostic-tunnel.ts) hears the errors
+of its listener; the [adapter](../../src/main/diagnostic-kubernetes.ts) takes the
+certificate a location refers to before the one it carries. The transport proof asks
+the server and the store for what is not there as well.
+
+| Check | Evidence of this slice | Left |
+| --- | --- | --- |
+| DIAG-06 | Unit: a 404 of the store, a connection that is refused, a certificate that is refused and a URL that is not signed are four codes, and a connection lost while the file arrives is a store that was not reached, not a file that cannot be read. Proof, against the store of the test environment: the log of a backup and of a restore that failed their validation for naming both kinds of selector, for which the server signs a URL, ends as a file the store does not have at the step of the download, and its request is in the cluster; the log of a restore asked from a schedule that has no backup ends before any creation, at the step of the backup, and no request of its name is in the cluster | Packaged: the same operations in the tabs (T2.3) |
+| DIAG-09 | Unit, in part: every range REQ-128 names, in IPv4 and in IPv6, in every written form, compressed, expanded, in capitals, carried by an IPv6 address; the metadata addresses that are in no refused range, each refused with an allowance in every written form, and the addresses beside them left what their range is; a private address with and without one; the loopback only through a tunnel or to a server of a test, and a route whose mode is no word of the three refused; the socket given the address in its canonical form and the name of the URL kept for TLS and for the host | The name resolved on this machine, and two addresses of which the first is refused, with the route (T2.4) |
+| DIAG-11 | Unit, in part: plain HTTP refused for a route that does not allow it, and no downgrade of a URL of HTTPS. Proof: HTTP through the tunnel | The allowance and what the state says of it (T2.4) |
+| DIAG-12 | Unit: an authority that is only among the ones the runtime lists, and one that is only among the ones of the system, accepted with and without a certificate of the location; the certificate of the location accepted beside them and alone; an authority that is in none refused; a runtime that cannot list them. The certificate a location refers to, the inline one, both with the reference taken; a key that is not in the Secret and a value that is not a certificate ending as tls-invalid, with no connection made; a location that asks for no verification verified all the same, and the state saying so of a certificate that was refused and not of a handshake that failed for another reason. Proof: the inline and the referenced certificate, and a certificate that is missing refused | Packaged, with the tabs (T2.3). A Secret the identity may not read: see below |
+| DIAG-14 | Unit: each bound reached, of the bytes as they are stored and as they are read, of the connection, of the silence and of the whole download; for each of seventeen ways a download ends, the request, the socket and the decoder closed and the side of the store closed; the listener of the tunnel closed with the operation and on its own errors. With T2.1: the two operations at once, the pages and their release, a route that does not close | Nothing |
+| DIAG-15 | Unit: a sentinel in the query of the URL in no error, no value a failure carries, no line of the console and neither stream of the process, for every way a download ends and for a URL refused before any connection. Proof: no signed URL in its output or in its reports | The reports of the packaged suites (T2.3) |
+| DIAG-17 | Unit, each seen failing on the code of T0.6: the trust of the host; the rules on the addresses in canonical form, with the two metadata addresses; every failure of TLS, by the phase of the connection, with a certificate that was refused told from a handshake that failed, and, through a tunnel, a store that answers the handshake with something else told from a connection that was lost; a URL with the port of its scheme or a host in capitals, with the host sent as it was signed; a listener with a handler of its errors; a location with both certificates. With T2.1 every item of REQ-136 but the endpoint slices | The endpoint slices in place of the endpoints (T2.4) |
+| DIAG-18 | Proof, in part: the four modes, with what the store and the server answer for what is not there | The packaged application and the identities (T2.3, T2.4) |
+
+What was decided while implementing, inside the requirements:
+
+- **A failure of TLS is told by where the connection was.** Before the connection is
+  made the store was not reached; between the connection and the end of the handshake
+  TLS failed, whatever the runtime names the failure; after it the connection was
+  lost. Through a tunnel the connection that is made is the one to the listener of
+  this process, which says nothing of the store: there a connection the system says
+  was lost, by one of the four names it has for that, is a store the tunnel did not
+  reach, and what else fails the handshake is of TLS, as a store that answers it
+  with something else.
+- **A certificate that was refused is told from a handshake that failed.** The
+  socket says which it was. The words send the operator to the certificate of the
+  location only for the first, and say of the second that the store may not speak
+  TLS at the port of its URL; what a location asks with `insecureSkipTLSVerify` is
+  said only where a certificate was refused.
+- **A route says how its address is reached with one of three words**, direct,
+  through a tunnel or to a server of a test, and a route with any other is refused.
+  A tunnel and a server of a test are on the loopback of this machine, and a direct
+  route never is.
+- **An address is read into its numbers.** What is not an address in one written
+  form is refused: a number with a zero before it, which some resolvers read as
+  octal; a zone; a prefix. An IPv4 address an IPv6 one carries is what the IPv4
+  address is, under the two prefixes that say so by themselves; the loopback a
+  translator carries is refused, as it would be the one of the translator; the rest
+  of the range the standard took back, an IPv4 address after ninety-six zeros, is
+  refused. Under the prefix the standard keeps for the translators a network runs
+  for itself, `64:ff9b:1::/48`, the last two groups are read as the IPv4 address
+  that is reached, which is where the usual length of such a prefix carries it. A
+  translator of any other prefix a network chose cannot be known from an address.
+- **More addresses of metadata services are refused than REQ-128 lists.** The
+  requirement names the ranges and the two addresses known when it was written;
+  `100.100.100.200`, `192.0.0.192`, `fd20:ce::254` and `fd00:a9fe:a9fe::1` are
+  where other clouds serve theirs, each one address inside a range a store may be
+  in. Each is refused with or without an allowance, and the addresses beside it are
+  what their range is.
+- **A runtime that cannot list what the host trusts** is left to trust what it
+  trusts by itself where the location gives no certificate, which is more than its
+  own roots, and is given its roots with the certificate where the location gives
+  one.
+- **The host that is sent is the one that was signed**: as the URL writes it,
+  capitals kept, and without the port when it is the one of the scheme. The origin is
+  compared after the capitals and that port are taken out, and nothing else a parser
+  reads as the same origin is taken for it. What the signer of the reviewed plugin
+  does with such a host was not seen against a store: the URLs of the test
+  environment have neither, and a host the store did not sign is answered with a
+  refusal, never with another file.
+- **A location that gives both certificates takes the one it refers to**, as the
+  release does, and what the Secret does not give is not made up for with the inline
+  one.
+- **`insecureSkipTLSVerify` is read to say it, and for nothing else.** The route a
+  download is given never carries it.
+- **A file cut while it arrives is told by its gzip alone when its answer is
+  delimited by the close of the connection.** Such an answer has no length to be
+  short of: it ends as a file that cannot be read, where one with a length ends as
+  a store that was lost.
+- **The operations the server refuses are of the proof, not of the demo.** They are
+  made after the real backup and the real restore, asked for once, through the
+  tunnel over HTTP, and removed with the run: the backup by a deletion request the
+  controller carries out, the restore of the real backup with that backup, the
+  restore without a backup by its identity. The tabs of SPEC-0011 bring them into
+  the demo with their suites.
+
+Open, for the review of the milestone: a Secret the identity may not read. REQ-131
+says tls-invalid; REQ-124 and REQ-137 say forbidden at the step of the Secret, which
+is what the code gives and what the words say, with the verb the identity needs. No
+connection is made without verification either way. The two requirements are to be
+made one, and the code follows what is decided.

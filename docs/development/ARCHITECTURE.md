@@ -118,9 +118,9 @@ before changing the client version. The main build replaces undici with
 extension never calls, and the real module installs a dispatcher for the whole
 process when it loads, which inside Freelens is the process of the host. Supported
 `WS_NO_*` build defines disable optional native accelerators without patching the
-library. The 1359 tests of the unit run, on the separate modules and on the
-production build, are 17 of the scaffold, 119 of the environment and its fixtures,
-52 of the diagnostic contracts, 151 of the operation states and of their stages,
+library. The 1719 tests of the unit run, on the separate modules and on the
+production build, are 17 of the scaffold, 123 of the environment and its fixtures,
+161 of the diagnostic contracts, 151 of the operation states and of their stages,
 55 of the rules of the discovery, 206 of what the views show of a backup, of a
 restore and of a schedule, of what they refer to and of the views in the address,
 141 of what they show of a location, of its durations and of what uses it, 38 of
@@ -129,8 +129,9 @@ of an installation and of its reader, 223 of the components, 126 of the gate of
 the writes, of the way between the processes and of the credential of a context,
 95 of the version of the server: its comparison, its plugins, the state of its
 request, its band, the confirmation of one write and the object the cluster is sent,
-and 103 of the request for an artifact: its way, its words, its text in pages, its
-procedures and the object the cluster is sent. The
+106 of the request for an artifact: its way, its words, its text in pages, its
+procedures and the object the cluster is sent, and 244 of the addresses a download
+connects to: their written forms, their ranges and what an IPv6 address carries. The
 integration test
 covers the installation in the host, the suites of the views what the views do
 in it.
@@ -664,6 +665,33 @@ cluster did not answer in time says nothing of Velero. What the way is given to 
 for ends with the operation: a route or a download that does not stop when it is told
 to is left behind, and a route given late is closed. An operation that was stopped
 while what it opened was closed delivers nothing.
+
+The [transport](../../src/main/diagnostic-transport.ts) is given a URL and a route,
+and is the last check before a byte is sent. It trusts what the host trusts, the
+authorities the runtime lists as its defaults and the ones of the system, with the
+certificate of the location beside them and never in their place; the key of a
+location that turns the verification off is read by the way only to say that it is not
+honored. The address of a route is read into its numbers by [pure
+rules](../../src/common/artifact-address.ts), so that no written form of an address is
+another address to them: what is unspecified, link-local, multicast or the address of
+a metadata service is never connected to, in IPv4, in IPv6 and carried by an IPv6
+address; the loopback is reached only through a tunnel, a private address only when
+the route allows it, and a route that does not say how its address is reached, with
+one of the words it has for that, is refused. The origin of the URL is compared after
+the capitals of its host and the port of its scheme are taken out, the host that is
+sent is the one the URL writes, which is what was signed, and the socket is given the
+address in its canonical form. A failure of the connection is told by where the
+connection was: before it was made the store was not reached, between that and the end
+of the handshake TLS failed, after it the connection was lost; a connection lost while
+the file arrives is a store that was not reached, and not a file that cannot be read.
+A certificate that was refused is told from a handshake that failed for another
+reason, as of a store that does not speak TLS at its port, and the words send the
+operator to the certificate of the location only for the first. Through a tunnel the
+connection that is made is the one to the listener of this process: there a connection
+the system says was lost during the handshake is a store the tunnel did not reach. The
+listener of the [tunnel](../../src/main/diagnostic-tunnel.ts) hears its own errors,
+which end the tunnel and never the process. A storage location that carries a
+certificate and refers to one is read as the release reads it: the reference is taken.
 
 Stream with backpressure and explicit decompression limits; parsing/rendering also
 needs bounded memory. A limit stops the operation with an explicit incomplete/error

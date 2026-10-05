@@ -42,6 +42,7 @@ import {
   readFixture,
   restrictedFixtures,
   runLiveFixtures,
+  runRefusedFixtures,
   VIEW_READER,
   VIEW_READER_OF_RESTORES,
   verifyStaticFixtures,
@@ -1832,14 +1833,18 @@ async function cleanupFixtures(): Promise<void> {
   };
   journal.fixtureRun.phase = "cleanup";
   save();
-  const backupEntry = identity("Backup", names.backup, DEMO_NAMESPACE);
+  // A backup of the fixtures is deleted by the controller, through a request of its own: the real one with
+  // the restores that name it, and the one that failed its validation, of which the store holds nothing.
+  // One a cleanup that was interrupted left while it was deleted is waited for, with the same request.
+  const removeBackup = async (backupName: string) => {
+    const backupEntry = identity("Backup", backupName, DEMO_NAMESPACE);
 
-  if (backupEntry && existing(backupEntry)) {
+    if (!backupEntry || !existing(backupEntry)) return;
     const backup = existing(backupEntry);
 
     requireCondition(
       backup &&
-        ["Completed", "PartiallyFailed", "Failed", "FailedValidation"].includes(
+        ["Completed", "PartiallyFailed", "Failed", "FailedValidation", "Deleting"].includes(
           (backup.status as { phase: string }).phase,
         ),
       "Cannot clean an in-progress fixture backup",
@@ -1848,7 +1853,7 @@ async function cleanupFixtures(): Promise<void> {
       kubectl(["get", "restores.velero.io", "--namespace", DEMO_NAMESPACE, "-o", "json"]),
     ) as { items: (KubeResource & { spec: { backupName?: string } })[] };
 
-    for (const restore of restores.items.filter((item) => item.spec.backupName === names.backup)) {
+    for (const restore of restores.items.filter((item) => item.spec.backupName === backupName)) {
       assertOwnedResource(journal.owner, restore, identity("Restore", restore.metadata.name, DEMO_NAMESPACE)?.uid);
       requireCondition(
         restore.metadata.labels?.[FIXTURE_LABEL] === run,
@@ -1867,7 +1872,7 @@ async function cleanupFixtures(): Promise<void> {
       undefined,
       210_000,
     );
-    const priorDeletion = identity("DeleteBackupRequest", `${names.backup}-delete`, DEMO_NAMESPACE);
+    const priorDeletion = identity("DeleteBackupRequest", `${backupName}-delete`, DEMO_NAMESPACE);
 
     if (priorDeletion) {
       const prior = existing(priorDeletion);
@@ -1890,8 +1895,8 @@ async function cleanupFixtures(): Promise<void> {
         save();
       }
     }
-    applyOwned(fixtureDeletionRequest(journal.owner, run, backup.metadata.uid ?? ""));
-    const deletion = identity("DeleteBackupRequest", `${names.backup}-delete`, DEMO_NAMESPACE);
+    applyOwned(fixtureDeletionRequest(journal.owner, run, backup.metadata.uid ?? "", backupName));
+    const deletion = identity("DeleteBackupRequest", `${backupName}-delete`, DEMO_NAMESPACE);
 
     requireCondition(deletion, "Deletion request ownership was not recorded");
     const deadline = Date.now() + 180_000;
@@ -1904,11 +1909,42 @@ async function cleanupFixtures(): Promise<void> {
       requireCondition(Date.now() < deadline, "Fixture backup deletion timed out");
       await delay(1000);
     }
+  };
+
+  await removeBackup(names.backup);
+  await removeBackup(names.invalidBackup);
+  // The restore without a backup is of no backup the controller deletes: it is removed by its identity,
+  // the one the cluster gives of the object that was just read as owned by this run. An apply that was
+  // interrupted recorded the object without it.
+  const orphan = identity("Restore", names.orphanRestore, DEMO_NAMESPACE);
+  const orphanFound = orphan && existing(orphan);
+
+  if (orphan && orphanFound) {
+    kubectl(
+      ["delete", "--raw", `/apis/velero.io/v1/namespaces/${DEMO_NAMESPACE}/restores/${names.orphanRestore}`, "-f", "-"],
+      JSON.stringify({
+        apiVersion: "v1",
+        kind: "DeleteOptions",
+        preconditions: { uid: orphanFound.metadata.uid },
+      }),
+      undefined,
+      false,
+    );
+    const deadline = Date.now() + 120_000;
+
+    while (existing(orphan)) {
+      requireCondition(Date.now() < deadline, "The restore without a backup was not removed in time");
+      await delay(1000);
+    }
   }
   for (const [kind, name] of [
     ["Backup", names.backup],
     ["Restore", names.restore],
     ["DeleteBackupRequest", `${names.backup}-delete`],
+    ["Backup", names.invalidBackup],
+    ["Restore", names.invalidRestore],
+    ["Restore", names.orphanRestore],
+    ["DeleteBackupRequest", `${names.invalidBackup}-delete`],
   ]) {
     const entry = identity(kind, name, DEMO_NAMESPACE);
 
@@ -2082,6 +2118,18 @@ async function runTransportProof(): Promise<void> {
     await executeLiveFixtures();
     requireCondition(journal.fixtureRun, "Transport fixture run missing");
     const active = journal.fixtureRun as { id: string };
+    // The operations the server refuses, for the artifacts the store does not have and for the restore
+    // without a backup. They are of this run, and are removed with it.
+    const refusedObjects = await runRefusedFixtures({ owner: journal.owner, kubectl, apply: applyOwned }, active.id);
+    const identityOf = (resource: KubeResource) => {
+      requireCondition(resource.metadata.uid, "A refused fixture has no identity");
+      return { name: resource.metadata.name, uid: resource.metadata.uid };
+    };
+    const refused = {
+      backup: identityOf(refusedObjects.backup),
+      restore: identityOf(refusedObjects.restore),
+      orphan: identityOf(refusedObjects.orphan),
+    };
     const pods = JSON.parse(
       kubectl([
         "get",
@@ -2114,7 +2162,14 @@ async function runTransportProof(): Promise<void> {
         writeFileSync(join(STATE, "transport-requests.json"), JSON.stringify(requests), { mode: 0o600 });
       },
     };
-    const http = await runDownloadProof(proofContext);
+    // Asked once, through the tunnel over HTTP: what the store and the server answer does not depend on
+    // the way the bytes would have come by.
+    const http = await runDownloadProof({ ...proofContext, refused });
+
+    requireCondition(
+      http.missingArtifacts === 2 && http.refusedBeforeCreation,
+      "The artifacts of the refused operations were not asked for",
+    );
 
     for (const resource of ["deployment/seaweedfs", "service/seaweedfs", "backupstoragelocation/default"]) {
       const current = JSON.parse(
@@ -2192,7 +2247,7 @@ async function runTransportProof(): Promise<void> {
     });
     writeFileSync(join(STATE, "transport-proof.json"), JSON.stringify(report), { mode: 0o600 });
     console.log(
-      "PASS: compiled main downloaded 16 real artifacts through direct HTTPS and HTTP/HTTPS Kubernetes tunnels, with inline/referenced CA and negative signature/Host/CA checks.",
+      "PASS: compiled main downloaded 16 real artifacts through direct HTTPS and HTTP/HTTPS Kubernetes tunnels, with inline/referenced CA and negative signature/Host/CA checks; the store had no log for a backup and a restore that failed their validation, and no request was created for a restore without a backup.",
     );
   } finally {
     for (const resource of originals) applyOwned(resource);

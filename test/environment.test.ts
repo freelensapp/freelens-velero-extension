@@ -21,10 +21,12 @@ import {
   createViewFixtures,
   FIXTURE_LABEL,
   FIXTURE_MODE,
+  fixtureArtifactPath,
   fixtureArtifactPaths,
   fixtureDeletionRequest,
   fixtureNames,
   fixtureNamespaces,
+  isRefused,
   LIVE_RETENTION,
   LONG_BACKUP_NAME,
   LONG_BUCKET_NAME,
@@ -41,8 +43,10 @@ import {
   PLACED_ANNOTATION,
   PLACED_FOR,
   placeByTheClock,
+  REFUSALS,
   RESTORE_PHASES,
   readerKubeconfig,
+  refusedFixtures,
   restoreSpec,
   restrictedFixtures,
   SCALE_BACKUPS,
@@ -351,6 +355,124 @@ describe("foundation fixture boundaries", () => {
     expect(allowsFixtureArtifact("GET", paths.archive, run)).toBe(false);
     expect(allowsFixtureArtifact("GET", paths.backupLog, "b1b2b3b4")).toBe(false);
     expect(allowsFixtureArtifact("DELETE", paths.backupLog, run)).toBe(false);
+  });
+
+  it("makes the operations the server refuses: both kinds of selector, and a restore of a schedule without a backup", () => {
+    const names = fixtureNames(run);
+    const { backup, restore, orphan } = refusedFixtures("synthetic-owner", run);
+    const labels = { [OWNER_LABEL]: "synthetic-owner", [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" };
+
+    // The three are of this run and of the namespace of the installation, and none carries a status: the
+    // server is what refuses them.
+    for (const resource of [backup, restore, orphan]) {
+      expect(resource.metadata).toMatchObject({ namespace: "velero-demo", labels });
+      expect(resource).not.toHaveProperty("status");
+    }
+    expect([backup.metadata.name, restore.metadata.name, orphan.metadata.name]).toEqual([
+      `fixture-invalid-backup-${run}`,
+      `fixture-invalid-restore-${run}`,
+      `fixture-orphan-restore-${run}`,
+    ]);
+    // A backup and a restore that name both kinds of selector fail their validation, and nothing else of
+    // them is wrong: the storage location of the backup is the one of the environment, and the restore is
+    // of the real backup, so that a URL is signed for their artifacts.
+    for (const resource of [backup, restore]) {
+      expect(resource.spec).toMatchObject({
+        labelSelector: { matchLabels: { [FIXTURE_LABEL]: run } },
+        orLabelSelectors: [{ matchLabels: { [FIXTURE_LABEL]: run } }],
+      });
+    }
+    expect(backup.spec).toMatchObject({ storageLocation: "default", includedNamespaces: [names.source] });
+    expect(restore.spec).toMatchObject({ backupName: names.backup });
+    // The restore of a schedule that has no backup names the schedule, and no backup and one kind of
+    // selector at most: the server refuses it for the schedule alone.
+    expect(orphan.spec).toMatchObject({ scheduleName: `fixture-empty-schedule-${run}` });
+    expect(orphan.spec).not.toHaveProperty("backupName");
+    expect(orphan.spec).not.toHaveProperty("orLabelSelectors");
+    expect(orphan.spec).not.toHaveProperty("labelSelector");
+    expect(() => refusedFixtures("", run)).toThrow();
+    // What the release writes when it refuses each, as the proof expects it.
+    expect(REFUSALS).toEqual({
+      backup: "encountered labelSelector as well as orLabelSelectors in backup spec, only one can be specified",
+      restore: "encountered labelSelector as well as orLabelSelectors in restore spec, only one can be specified",
+      orphan: "No backups found for schedule",
+    });
+  });
+
+  it("waits for a refusal through every phase an operation has before its controller validates it", () => {
+    // A restore is new, and a backup of this release goes through its queue, before either is validated.
+    expect(isRefused("Backup", undefined, REFUSALS.backup)).toBe(false);
+    for (const phase of ["", "New", "Queued", "ReadyToStart"])
+      expect([phase, isRefused("Backup", { phase }, REFUSALS.backup)]).toEqual([phase, false]);
+    expect(
+      isRefused(
+        "Backup",
+        { phase: "FailedValidation", validationErrors: ["another reason", REFUSALS.backup] },
+        REFUSALS.backup,
+      ),
+    ).toBe(true);
+    // Refused for another reason, or in a phase its controller gives to what it did not refuse: the
+    // operation is not the fixture it was made to be.
+    for (const validationErrors of [["another reason"], [], undefined])
+      expect(() => isRefused("Backup", { phase: "FailedValidation", validationErrors }, REFUSALS.backup)).toThrow(
+        "Refused Backup failed its validation for another reason",
+      );
+    for (const phase of ["InProgress", "Completed", "Failed", "PartiallyFailed", "Finalizing", "Deleting"])
+      expect(() => isRefused("Restore", { phase }, REFUSALS.restore)).toThrow(
+        `Refused Restore is ${phase} where it was expected to fail its validation`,
+      );
+  });
+
+  it("asks the controller to delete a backup of the fixtures, the real one or the refused one, and no other", () => {
+    const names = fixtureNames(run);
+
+    expect(fixtureDeletionRequest("synthetic-owner", run, "backup-uid")).toMatchObject({
+      metadata: { name: `${names.backup}-delete`, labels: { "velero.io/backup-name": names.backup } },
+      spec: { backupName: names.backup },
+    });
+    expect(fixtureDeletionRequest("synthetic-owner", run, "invalid-uid", names.invalidBackup)).toMatchObject({
+      kind: "DeleteBackupRequest",
+      metadata: {
+        name: `${names.invalidBackup}-delete`,
+        namespace: "velero-demo",
+        labels: {
+          [OWNER_LABEL]: "synthetic-owner",
+          [FIXTURE_LABEL]: run,
+          "velero.io/backup-name": names.invalidBackup,
+          "velero.io/backup-uid": "invalid-uid",
+        },
+      },
+      spec: { backupName: names.invalidBackup },
+    });
+    for (const other of ["a-backup-of-the-operator", names.restore, fixtureNames("b1b2b3b4").backup, ""])
+      expect(() => fixtureDeletionRequest("synthetic-owner", run, "uid", other)).toThrow();
+    expect(() => fixtureDeletionRequest("synthetic-owner", run, "", names.invalidBackup)).toThrow();
+  });
+
+  it("names the path of an artifact of an operation of the run, and of no other operation", () => {
+    const names = fixtureNames(run);
+    const paths = fixtureArtifactPaths(run);
+
+    // The same paths the real backup and the real restore are verified by.
+    expect(fixtureArtifactPath(run, "BackupLog", names.backup)).toBe(paths.backupLog);
+    expect(fixtureArtifactPath(run, "BackupResults", names.backup)).toBe(paths.backupResults);
+    expect(fixtureArtifactPath(run, "RestoreLog", names.restore)).toBe(paths.restoreLog);
+    expect(fixtureArtifactPath(run, "RestoreResults", names.restore)).toBe(paths.restoreResults);
+    expect(fixtureArtifactPath(run, "BackupLog", names.invalidBackup)).toBe(
+      `/velero-demo/backups/fixture-invalid-backup-${run}/fixture-invalid-backup-${run}-logs.gz`,
+    );
+    expect(fixtureArtifactPath(run, "RestoreLog", names.invalidRestore)).toBe(
+      `/velero-demo/restores/fixture-invalid-restore-${run}/restore-fixture-invalid-restore-${run}-logs.gz`,
+    );
+    // A backup is not asked for the log of a restore, nor an operation of another run or of the operator.
+    for (const [artifact, name] of [
+      ["BackupLog", names.restore],
+      ["RestoreLog", names.backup],
+      ["BackupLog", fixtureNames("b1b2b3b4").backup],
+      ["RestoreResults", "a-restore-of-the-operator"],
+      ["BackupLog", "../../other"],
+    ] as const)
+      expect(() => fixtureArtifactPath(run, artifact, name)).toThrow();
   });
 
   it("grants only namespaced Velero reads and supplies a dangling-location case", () => {

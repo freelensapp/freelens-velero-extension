@@ -437,7 +437,9 @@ export class DiagnosticKubernetes {
     storage: { caCert?: string; caCertRef?: { name: string; key: string } },
     signal: AbortSignal,
   ): Promise<string | undefined> {
-    if (storage.caCert && storage.caCertRef) throw new DiagnosticError("validation");
+    // The inline value, which the release keeps for the locations written before the reference. A location
+    // that gives both is read as the release reads it: the reference is taken, and what the Secret gives
+    // takes the place of the inline value, or the read ends without it.
     let value = storage.caCert;
 
     if (storage.caCertRef) {

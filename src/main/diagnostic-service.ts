@@ -7,6 +7,7 @@
 // The signed URL is read, used and dropped here: it is in no result and in no error. No request is ever
 // deleted: the controller of Velero removes the ones it processed.
 
+import { readsAsTrue } from "../common/go-boolean";
 import {
   type ArtifactTarget,
   artifactKind,
@@ -270,6 +271,9 @@ export async function runDownload(
     return found;
   };
   let acquired = false;
+  // Whether the storage location asks that the certificate of its store is not verified. It is verified
+  // all the same: the key is read only to say so when the certificate is refused.
+  let insecure = false;
   let routed: Awaited<ReturnType<DiagnosticOptions["route"]>> | undefined;
   let result: DiagnosticResult | undefined;
   let failure: DiagnosticError | undefined;
@@ -298,6 +302,7 @@ export async function runDownload(
     if (!locationName) throw new DiagnosticError("not-found");
     const storage = await api.read("BackupStorageLocation", input.namespace, locationName, signal);
 
+    insecure = readsAsTrue((storage.spec?.config as Record<string, unknown> | undefined)?.insecureSkipTLSVerify);
     step("certificate");
     const objectStorage = storage.spec?.objectStorage as
       | { caCert?: string; caCertRef?: { name: string; key: string } }
@@ -393,6 +398,10 @@ export async function runDownload(
       : signal.aborted
         ? new DiagnosticError("cancelled", stage)
         : failed(error, stage);
+    // A certificate of the store that was refused, of a location that asks for no verification. Of a
+    // handshake that failed for another reason nothing is said of the key: no certificate was refused.
+    if (insecure && failure.verdict === "untrusted")
+      failure = new DiagnosticError(failure.code, failure.stage, "insecure");
   } finally {
     clearTimeout(timer);
     outer.removeEventListener("abort", cancelled);
