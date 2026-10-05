@@ -32,12 +32,21 @@
 
 *.tsbuildinfo
 
-# Never in the repository: credentials and cluster access
+# Credentials and keys. Keep in sync with the Security section of AGENTS.md
+# and the permissions.deny rules in .claude/settings.json.
 .env
 .env.*
+.envrc
+.npmrc
+*.jks
+*.keystore
+*.p12
+*.pfx
 *.pem
 *.key
 *.kubeconfig
+credentials.json
+velero-credentials
 
 # Screenshots and reports of the suites of the views
 /e2e-artifacts/
