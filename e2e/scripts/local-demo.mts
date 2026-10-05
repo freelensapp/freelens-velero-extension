@@ -26,7 +26,13 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { gunzipSync } from "node:zlib";
 import { createTlsFixture } from "../../test/tls-fixture.ts";
-import { compiledDiagnostics, runDownloadProof, tlsProofResources } from "./local-download-proof.mts";
+import {
+  compiledDiagnostics,
+  DIRECT_PROOF_ORIGIN,
+  runDownloadProof,
+  runIdentityProof,
+  tlsProofResources,
+} from "./local-download-proof.mts";
 import {
   allowsFixtureArtifact,
   assertFixtureNamespaceContents,
@@ -38,6 +44,7 @@ import {
   fixtureNames,
   fixtureNamespaces,
   liveBackup,
+  proofIdentities,
   readerKubeconfig,
   readFixture,
   restrictedFixtures,
@@ -2107,6 +2114,7 @@ async function runTransportProof(): Promise<void> {
   const requests: { kind: "DownloadRequest" | "ServerStatusRequest"; name: string; uid: string }[] = [];
   const originals: KubeResource[] = [];
   const secrets: KubeResource[] = [];
+  const accounts: KubeResource[] = [];
   let certificates: Awaited<ReturnType<typeof createTlsFixture>> | undefined;
   let requestCleanupFailed = false;
   const report: Record<string, unknown> = { date: new Date().toISOString(), result: "running", cleanup: "pending" };
@@ -2170,6 +2178,42 @@ async function runTransportProof(): Promise<void> {
       http.missingArtifacts === 2 && http.refusedBeforeCreation,
       "The artifacts of the refused operations were not asked for",
     );
+    // The identities of the proof, each with a credential that lasts as long as the proof asks: three
+    // that may not do one step of a download, told so at that step, and one that has what the
+    // documentation lists, which downloads through the cluster. They are of this run and go with it.
+    const identities = proofIdentities(journal.owner, active.id);
+
+    for (const resource of Object.values(identities).flat()) {
+      accounts.push(resource);
+      applyOwned(resource);
+    }
+    const asIdentity = async (
+      identity: keyof typeof identities,
+      stage?: "creation" | "certificate" | "service" | "forward",
+    ) => {
+      const file = join(STATE, `proof-identity-${identity}.json`);
+
+      writeReaderKubeconfig(file, DEMO_NAMESPACE, "10m", `proof-${identity}-${active.id}`);
+      try {
+        return await runIdentityProof({
+          owner: journal.owner,
+          run: active.id,
+          kubeconfig: file,
+          environment: CONFIG,
+          ...(stage ? { stage } : {}),
+          assertCurrent: verifyTarget,
+          record: proofContext.record,
+        });
+      } finally {
+        unlinkSync(file);
+      }
+    };
+    const refusedIdentities = {
+      creation: await asIdentity("reader", "creation"),
+      service: await asIdentity("requester", "service"),
+      forward: await asIdentity("router", "forward"),
+      none: await asIdentity("downloader"),
+    };
 
     for (const resource of ["deployment/seaweedfs", "service/seaweedfs", "backupstoragelocation/default"]) {
       const current = JSON.parse(
@@ -2184,7 +2228,7 @@ async function runTransportProof(): Promise<void> {
         spec: current.spec,
       });
     }
-    certificates = await createTlsFixture(new URL(STORAGE_ENDPOINT).hostname);
+    certificates = await createTlsFixture(new URL(STORAGE_ENDPOINT).hostname, [new URL(DIRECT_PROOF_ORIGIN).hostname]);
     const tls = tlsProofResources(journal.owner, active.id, originals, certificates);
 
     for (const resource of tls) {
@@ -2229,25 +2273,35 @@ async function runTransportProof(): Promise<void> {
     objectStorage.caCertRef = { name: `proof-ca-${active.id}`, key: "ca.crt" };
     applyOwned(location);
     const referencedCa = await runDownloadProof(tlsContext);
+    // The location refers to a Secret now: the identity that may not read one is told so at the step of
+    // the certificate, before any request is created.
+    const certificate = await asIdentity("requester", "certificate");
+    // Directly from this machine the store is reached by a name this machine resolves: the location is
+    // given a public URL, over which the server signs, and the proof answers for the resolver with the
+    // address of the Pod of the storage, a private one the main process connects to only once allowed.
+    (location.spec as { config: Record<string, string> }).config.publicUrl = DIRECT_PROOF_ORIGIN;
+    applyOwned(location);
     const direct = runDirectProof({
       owner: journal.owner,
       run: active.id,
       pod: tlsContext.pod,
-      origin: tlsContext.origin,
+      origin: DIRECT_PROOF_ORIGIN,
       port: tlsContext.port,
-    });
+    }) as { allowanceAsked?: boolean };
 
+    requireCondition(direct.allowanceAsked, "The direct proof connected to a private address nobody allowed");
     Object.assign(report, {
       http,
       inlineCa,
       referencedCa,
       direct,
+      identities: { ...refusedIdentities, certificate },
       directRuntime: DIRECT_PROOF_IMAGE,
       result: "artifacts-passed",
     });
     writeFileSync(join(STATE, "transport-proof.json"), JSON.stringify(report), { mode: 0o600 });
     console.log(
-      "PASS: compiled main downloaded 16 real artifacts through direct HTTPS and HTTP/HTTPS Kubernetes tunnels, with inline/referenced CA and negative signature/Host/CA checks; the store had no log for a backup and a restore that failed their validation, and no request was created for a restore without a backup.",
+      "PASS: compiled main found its route and downloaded 16 real artifacts through direct HTTPS, once the private address was allowed, and HTTP/HTTPS Kubernetes tunnels, with inline/referenced CA and negative signature/Host/CA checks; the store had no log for a backup and a restore that failed their validation, and no request was created for a restore without a backup; three identities were refused, at the creation, at the Service and the certificate, and at the port-forward, and the one with the documented permissions downloaded.",
     );
   } finally {
     for (const resource of originals) applyOwned(resource);
@@ -2283,6 +2337,45 @@ async function runTransportProof(): Promise<void> {
         undefined,
         false,
       );
+      journal.resources = journal.resources.filter((resource) => resource !== entry);
+      save();
+    }
+    // The identities of the proof go by the identity the cluster gives of each, read as owned by this
+    // run: the binding first, then the role and the account.
+    for (const account of [...accounts].reverse()) {
+      const entry = journal.resources.find(
+        (resource) =>
+          resource.kind === account.kind &&
+          resource.name === account.metadata.name &&
+          resource.namespace === DEMO_NAMESPACE,
+      );
+
+      if (!entry) continue;
+      const raw = kubectl(["get", ...resourceArguments(entry), "--ignore-not-found", "-o", "json"]).trim();
+
+      if (raw) {
+        const found = JSON.parse(raw) as KubeResource;
+
+        assertOwnedResource(journal.owner, found, entry.uid);
+        requireCondition(
+          found.metadata.labels?.[FIXTURE_LABEL] === account.metadata.labels?.[FIXTURE_LABEL],
+          "An identity of the proof belongs to a different fixture run",
+        );
+        kubectl(
+          [
+            "delete",
+            "--raw",
+            account.kind === "ServiceAccount"
+              ? `/api/v1/namespaces/${DEMO_NAMESPACE}/serviceaccounts/${entry.name}`
+              : `/apis/rbac.authorization.k8s.io/v1/namespaces/${DEMO_NAMESPACE}/${account.kind === "Role" ? "roles" : "rolebindings"}/${entry.name}`,
+            "-f",
+            "-",
+          ],
+          JSON.stringify({ apiVersion: "v1", kind: "DeleteOptions", preconditions: { uid: found.metadata.uid } }),
+          undefined,
+          false,
+        );
+      }
       journal.resources = journal.resources.filter((resource) => resource !== entry);
       save();
     }

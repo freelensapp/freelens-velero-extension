@@ -7,6 +7,7 @@ import tls from "node:tls";
 import { createGunzip } from "node:zlib";
 import { canonicalAddress, classifyAddress, isMetadataName } from "../common/artifact-address";
 
+import type { AllowanceFor } from "../common/allowances";
 import type { DownloadVerdict } from "../common/diagnostic-text";
 
 export type DiagnosticCode =
@@ -34,6 +35,8 @@ export class DiagnosticError extends Error {
     readonly stage?: string,
     // What the way of a request found by itself, where the code alone does not say it.
     readonly verdict?: DownloadVerdict,
+    // What the operator may allow for the request to go on, when that is what denied its destination.
+    readonly needs?: AllowanceFor,
   ) {
     super(`Diagnostic operation failed: ${code}`);
     this.name = "DiagnosticError";

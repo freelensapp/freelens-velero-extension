@@ -148,6 +148,134 @@ describe("the words of a DownloadRequest that did not end with its file", () => 
     );
   });
 
+  it("says the rule that denies a destination, each in words of its own", () => {
+    const stays =
+      "The DownloadRequest nightly-0e7c5b7a-1111-4111-8111-000000000001 stays in velero-a until Velero removes it.";
+    const denied = (verdict: "url" | "public-url" | "path" | "ambiguous" | "port" | "endpoint" | "address") =>
+      downloadFailure("destination-denied", "route", { ...created, verdict });
+
+    expect(denied("url")).toEqual({
+      ok: false,
+      code: "destination-denied",
+      stage: "route",
+      retry: false,
+      text: `The URL of the request is not one the extension takes: it is not of HTTP or HTTPS, or it carries a user or a fragment. ${stays}`,
+    });
+    expect(denied("public-url").text).toBe(
+      `The storage location signs over its public URL, and the URL of the request is of the URL of its store: it is not one Velero signed for this location. ${stays}`,
+    );
+    expect(denied("path").text).toBe(
+      `The URL of the request is not of the file that was asked: its path is not the one of this artifact in the bucket of the storage location. Nothing was fetched. ${stays}`,
+    );
+    expect(denied("ambiguous").text).toBe(
+      `The host of the store is a Service of the cluster and a name this machine resolves as well: it is not known which of the two Velero signed for. ${stays}`,
+    );
+    expect(denied("port").text).toBe(
+      `The port of the URL is not one the Service of the store has, or its Pod does not declare the port the Service sends it to. ${stays}`,
+    );
+    expect(denied("endpoint").text).toBe(
+      `The Service of the store has no Pod that is ready, among the ones it selects, to send the request to. ${stays}`,
+    );
+    expect(denied("address").text).toBe(
+      `The name of the store gives no address the extension connects to: an address of this machine, of the link or of a metadata service is never one. ${stays}`,
+    );
+    // Seven rules, seven sentences, and none is the one of a destination denied for a reason that is not said.
+    const all = (["url", "public-url", "path", "ambiguous", "port", "endpoint", "address"] as const).map(
+      (verdict) => denied(verdict).text,
+    );
+
+    expect(new Set([...all, downloadFailure("destination-denied", "route", created).text]).size).toBe(8);
+  });
+
+  it("says what the operator may allow, with the origin and nothing after it, and carries it for the views", () => {
+    const stays =
+      "The DownloadRequest nightly-0e7c5b7a-1111-4111-8111-000000000001 stays in velero-a until Velero removes it.";
+    const origin = "https://storage.example:9000";
+    const asked = (needs: { what: "origin" | "private" | "http"; origin: string; location?: string }) =>
+      downloadFailure("destination-denied", "route", { ...created, verdict: "allowance", needs });
+
+    expect(asked({ what: "origin", origin, location: "velero/default" })).toEqual({
+      ok: false,
+      code: "destination-denied",
+      stage: "route",
+      retry: false,
+      text: `The URL of the request is of ${origin}, which the storage location default of velero does not give: downloads from it are made only after they are allowed for this storage location. ${stays}`,
+      needs: { what: "origin", origin, location: "velero/default" },
+    });
+    expect(asked({ what: "private", origin })).toMatchObject({
+      text: `The store of ${origin} is at a private address: a connection to it is made only after it is allowed. ${stays}`,
+      needs: { what: "private", origin },
+    });
+    expect(asked({ what: "http", origin: "http://storage.example" })).toMatchObject({
+      text: `The connection to http://storage.example would not be encrypted, and would be made directly from this machine: it is made only after it is allowed. ${stays}`,
+      needs: { what: "http", origin: "http://storage.example" },
+    });
+    // What the views read of it is of the contract.
+    const said = asked({ what: "private", origin });
+
+    expect(readAnswer(said, () => undefined)).toEqual(said);
+    // Nothing else of a failure carries what may be allowed.
+    expect("needs" in downloadFailure("destination-denied", "route", created)).toBe(false);
+  });
+
+  it("says which read of the route the cluster refused, and what the route through the cluster needs", () => {
+    const stays =
+      "The DownloadRequest nightly-0e7c5b7a-1111-4111-8111-000000000001 stays in velero-a until Velero removes it.";
+
+    expect(downloadFailure("forbidden", "service", created).text).toBe(
+      `The cluster refused to read the Service of the store: the route through the cluster needs the verb get on services. ${stays}`,
+    );
+    expect(downloadFailure("forbidden", "endpoints", created).text).toBe(
+      `The cluster refused to list the endpoint slices of the Service of the store: the route through the cluster needs the verb list on endpointslices. ${stays}`,
+    );
+    expect(downloadFailure("forbidden", "pod", created).text).toBe(
+      `The cluster refused to read the Pod of the store: the route through the cluster needs the verb get on pods. ${stays}`,
+    );
+    // A port-forward over a WebSocket is asked with the verb get, and the releases that check the verb
+    // create as well ask for both: the words name both.
+    expect(downloadFailure("forbidden", "forward", created).text).toBe(
+      `The cluster refused the port-forward to the Pod of the store: the route through the cluster needs the verbs get and create on pods/portforward. ${stays}`,
+    );
+    // A name that only may be a Service, which the cluster refused to say: the words do not call it one.
+    expect(downloadFailure("forbidden", "service", { ...created, verdict: "candidate" }).text).toBe(
+      `The host of the store may be a Service of the cluster or a name of this machine, and the cluster refused the read that tells which: the identity needs the verb get on services in the namespace the host names, or in the one of the installation when it names none. ${stays}`,
+    );
+    // A credential the cluster did not take is not a permission the identity lacks, at any step.
+    for (const stage of ["target", "location", "certificate", "creation", "wait", "service", "pod", "forward"]) {
+      const said = downloadFailure("forbidden", stage, { ...created, verdict: "credential" });
+
+      expect([
+        stage,
+        said.retry,
+        said.text.startsWith("The cluster did not take the credential of the context"),
+      ]).toEqual([stage, true, true]);
+      expect(said.text).not.toMatch(/needs the verb|refused/);
+    }
+    expect(downloadFailure("forbidden", "forward", { ...created, verdict: "credential" }).text).toBe(
+      `The cluster did not take the credential of the context: it may have expired. Sign in again, then ask again. ${stays}`,
+    );
+    expect(downloadFailure("forbidden", "creation", { ...created, verdict: "credential" }).text).toBe(
+      "The cluster did not take the credential of the context: it may have expired. Sign in again, then ask again. No request was created.",
+    );
+    expect(downloadFailure("not-found", "service", created).text).toBe(
+      `The Service the URL of the store names is not in the cluster. ${stays}`,
+    );
+    expect(downloadFailure("not-found", "pod", created).text).toBe(
+      `The Pod of the store is not there any more. ${stays}`,
+    );
+    // Every step of the route is after the creation: the request stays, and is said to.
+    for (const stage of ["service", "endpoints", "pod", "forward"]) {
+      for (const code of CODES)
+        expect([stage, code, downloadFailure(code, stage, created).text.includes("No request was created")]).toEqual([
+          stage,
+          code,
+          false,
+        ]);
+      for (const code of ["cancelled", "deadline", "transport-unreachable", "target-changed", "forbidden"] as const)
+        expect([stage, code, downloadFailure(code, stage, created).text.endsWith(stays)]).toEqual([stage, code, true]);
+    }
+  });
+
   it("claims nothing of what was left at a step it does not know, and says of each step what was asked at it", () => {
     for (const code of CODES) {
       const said = downloadFailure(code, "a-step-of-a-later-slice", created).text;

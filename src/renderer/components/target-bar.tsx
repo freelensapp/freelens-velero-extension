@@ -1,12 +1,14 @@
 import { Renderer } from "@freelensapp/extensions";
 import { observer } from "mobx-react";
 import React from "react";
+import { locationWords } from "../../common/allowances";
 import { TITLES } from "../../common/discovery";
 import { CONNECTION_REASONS } from "../../common/ipc";
 import { isStale } from "../../common/read-state";
 import { ConfigureNamespace } from "./entry-state";
 import styles from "./views.module.css";
 
+import type { Allowance } from "../../common/allowances";
 import type { Family } from "../../common/discovery";
 import type { ReadStatus } from "../../common/read-state";
 import type { Installation } from "../state/installation";
@@ -133,12 +135,25 @@ export const WritesControl = observer(({ installation }: { installation: Install
   );
 });
 
+// What an allowance allows, in words: the origin is shown beside them, and nothing of a URL after it.
+export function allowanceWords(allowance: Pick<Allowance, "what" | "location">): string {
+  return allowance.what === "origin"
+    ? `Downloads from this origin, for the storage location ${locationWords(allowance.location)}`
+    : allowance.what === "private"
+      ? "A connection to a private address of this origin"
+      : "A connection to this origin that is not encrypted, made directly from this machine";
+}
+
 // What says, on every view, which installation is shown: the cluster of the host and the namespace of
 // Velero. It is never the namespaces a backup includes, which are data of the backup.
 export const TargetBar = observer(({ installation }: { installation: Installation }) => {
   const entry = installation.entry;
   const selected = entry.state === "ready" ? entry.namespace : undefined;
   const [naming, setNaming] = React.useState(false);
+  // What the operator allowed the downloads of this cluster to do is behind a command of its own, which
+  // is there only when something was allowed.
+  const [allowed, setAllowed] = React.useState(false);
+  const allowances = installation.allowances;
   const options: Option[] = installation.choices.map((choice) => ({
     value: choice.namespace,
     label: choice.configured && !choice.suggested ? `${choice.namespace} (configured)` : choice.namespace,
@@ -191,6 +206,20 @@ export const TargetBar = observer(({ installation }: { installation: Installatio
           ) : null}
         </div>
         <WritesControl installation={installation} />
+        {allowances.length ? (
+          <div className={styles.target}>
+            <Button
+              plain
+              aria-expanded={allowed}
+              aria-controls="velero-allowances"
+              data-testid="velero-allowances-toggle"
+              onClick={() => setAllowed(!allowed)}
+            >
+              <Icon material={allowed ? "expand_less" : "verified_user"} small />
+              Allowed for downloads: {allowances.length}
+            </Button>
+          </div>
+        ) : null}
         <div className={styles.spacer} />
         <span
           className={styles.readTime}
@@ -239,6 +268,46 @@ export const TargetBar = observer(({ installation }: { installation: Installatio
                 </li>
               ))}
             </ul>
+          ) : null}
+        </section>
+      ) : null}
+      {allowed && allowances.length ? (
+        <section
+          id="velero-allowances"
+          className={styles.namespaces}
+          aria-label="What is allowed for the downloads"
+          data-testid="velero-allowances"
+        >
+          <p className={styles.stateText}>
+            What you allowed the downloads of the artifacts of this cluster to do beyond what its storage locations say.
+            Each is kept until you take it back, and holds an origin and nothing of a URL after it.
+          </p>
+          <ul className={styles.named}>
+            {allowances.map((allowance, index) => (
+              <li key={`${allowance.what} ${allowance.origin} ${allowance.location ?? ""}`}>
+                <span className={styles.choiceName}>{allowance.origin}</span>
+                <span>{allowanceWords(allowance)}</span>
+                <span className={styles.muted}>since {new Date(allowance.since).toLocaleString()}</span>
+                <Button
+                  plain
+                  data-testid={`velero-allowances-take-back-${index}`}
+                  onClick={() =>
+                    void installation.takeBack({
+                      what: allowance.what,
+                      origin: allowance.origin,
+                      ...(allowance.location === undefined ? {} : { location: allowance.location }),
+                    })
+                  }
+                >
+                  Take back
+                </Button>
+              </li>
+            ))}
+          </ul>
+          {installation.allowanceFailure ? (
+            <span className={styles.muted} role="alert" data-testid="velero-allowances-failure">
+              {installation.allowanceFailure}
+            </span>
           ) : null}
         </section>
       ) : null}

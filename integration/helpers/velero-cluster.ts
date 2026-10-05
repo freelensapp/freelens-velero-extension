@@ -671,6 +671,11 @@ export async function selectInstallation(frame: Frame, namespace: string): Promi
  * show it, and where a view is shown it is behind the target bar.
  */
 export async function configureInstallation(frame: Frame, namespace: string): Promise<void> {
+  // The field is in the page itself where no installation is shown, and behind the command of the target
+  // bar otherwise: which of the two is known once the page has drawn one of them.
+  await frame.waitForSelector("[data-testid=velero-configure], [data-testid=velero-namespaces-toggle]", {
+    timeout: ELEMENT_TIMEOUT,
+  });
   if ((await frame.locator("[data-testid=velero-configure]").count()) === 0) {
     await frame.click("[data-testid=velero-namespaces-toggle]");
     await frame.waitForSelector("[data-testid=velero-configure]", { timeout: ELEMENT_TIMEOUT });

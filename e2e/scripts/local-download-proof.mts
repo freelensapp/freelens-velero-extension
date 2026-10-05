@@ -8,10 +8,16 @@ import { FIXTURE_LABEL, fixtureArtifactPath, fixtureNames } from "./local-fixtur
 import { DEMO_CONTEXT, DEMO_NAMESPACE, OWNER_LABEL, requireCondition, SUBNETS, subnetsOverlap } from "./local-kind.mts";
 import { type KubeResource, STORAGE_ENDPOINT } from "./local-manifests.mts";
 
+import type { AllowanceFor, Allowances } from "../../src/common/allowances.ts";
 import type { Answer, ArtifactPage, ArtifactValue, WriteConfirmAnswer } from "../../src/common/ipc.ts";
 import type { DiagnosticKind } from "../../src/main/diagnostic-kubernetes.ts";
+import type { HandlersDependencies } from "../../src/main/ipc.ts";
 
 export { DIRECT_PROOF_IMAGE } from "./local-manifests.mts";
+
+// The origin the direct proof gives the store, as the public URL of its storage location: a name no
+// resolver knows, which the proof answers for with the address of the Pod of the storage.
+export const DIRECT_PROOF_ORIGIN = "https://storage.proof.invalid:8443";
 
 export interface DownloadProofContext {
   owner: string;
@@ -123,6 +129,106 @@ export function tlsProofResources(
   ];
 }
 
+type Main = ReturnType<typeof compiledDiagnostics>;
+
+// The procedures of the main process, as the extension registers them with the host: a proof calls them as
+// a frame of the cluster does, with the gate, its confirmations and its tokens. The cluster is the one
+// entry of a catalog of the proof, over the kubeconfig it is given, and the requests carry the labels of
+// the environment beside the ones of the extension, so that the environment knows them as its own. The
+// route to the store is the one the main process finds by itself.
+function proofProcedures(
+  main: Main,
+  context: Pick<DownloadProofContext, "owner" | "run" | "assertCurrent">,
+  kubeconfig: string,
+  dependencies: Partial<HandlersDependencies>,
+) {
+  const cluster = "velero-proof";
+  const catalog = [{ id: cluster, name: "proof", kubeConfigPath: kubeconfig, contextName: DEMO_CONTEXT }];
+  const gate = new main.WriteGate({
+    catalog: () => catalog,
+    adapter: (entry, isCurrent) =>
+      new main.DiagnosticKubernetes(
+        { clusterId: entry.id, context: entry.contextName, kubeconfigPath: entry.kubeConfigPath },
+        () => {
+          context.assertCurrent();
+          return isCurrent();
+        },
+        {
+          "app.kubernetes.io/managed-by": "freelens-velero-extension",
+          [OWNER_LABEL]: context.owner,
+          [FIXTURE_LABEL]: context.run,
+        },
+      ),
+  });
+  const handlers = new Map<string, (event: unknown, payload: unknown) => Promise<unknown>>();
+  const frame = { senderFrame: { url: `https://${cluster}.renderer.freelens.app:1/` }, processId: 1, frameId: 1 };
+  const release = main.registerHandlers(
+    {
+      handle: (channel, handler) =>
+        handlers.set(channel, handler as (event: unknown, payload: unknown) => Promise<unknown>),
+      broadcast: () => undefined,
+    },
+    { catalog: () => catalog, gate, ...dependencies },
+  );
+  // A call of a procedure, from the frame of the cluster of the proof. A failure says its code and its
+  // step, which name nothing of the environment; its words are not printed.
+  const call = async <Value,>(channel: string, payload: unknown): Promise<Value> => {
+    const handler = handlers.get(channel);
+
+    requireCondition(handler, "A procedure of the main process is not registered");
+    const answer = (await handler(frame, payload)) as Answer<Value>;
+
+    if (!answer.ok) throw new Error(`The procedure ${channel} failed: ${answer.code} at ${answer.stage}`);
+    return answer.value;
+  };
+  // The answer of a run that is expected not to end with its text: its code, its step and what it says
+  // the operator may allow. Nothing of a URL is in it: the origin an allowance is for, which its words
+  // show, is the only thing of one it may carry.
+  const refusal = async (
+    target: { kind: "Backup" | "Restore"; name: string; uid: string },
+    artifact: "BackupLog" | "RestoreLog",
+    request: string,
+    shown?: string,
+  ): Promise<{ code: string; stage: string; needs?: AllowanceFor }> => {
+    const { token } = await call<WriteConfirmAnswer>("write.confirm", {
+      cluster,
+      namespace: DEMO_NAMESPACE,
+      kind: "DownloadRequest",
+      target,
+      artifact,
+    });
+    const handler = handlers.get("write.run");
+
+    requireCondition(handler, "A procedure of the main process is not registered");
+    const answer = (await handler(frame, {
+      cluster,
+      namespace: DEMO_NAMESPACE,
+      kind: "DownloadRequest",
+      target,
+      artifact,
+      token,
+      request,
+    })) as Answer<ArtifactValue>;
+
+    requireCondition(!answer.ok, "An artifact the proof expected to be refused was downloaded");
+    const said = JSON.stringify(answer);
+
+    requireCondition(
+      !/X-Amz|downloadURL|[?]|https?:/.test(shown ? said.split(shown).join("") : said),
+      "A failure of the proof carries a URL",
+    );
+    return { code: answer.code, stage: answer.stage, ...(answer.needs ? { needs: answer.needs } : {}) };
+  };
+  const enable = () =>
+    call("gate.enable", {
+      cluster,
+      namespace: DEMO_NAMESPACE,
+      confirmation: { context: DEMO_CONTEXT, namespace: DEMO_NAMESPACE },
+    });
+
+  return { cluster, call, refusal, enable, release };
+}
+
 export async function runDownloadProof(context: DownloadProofContext): Promise<{
   downloads: number;
   generatedNames: boolean;
@@ -132,6 +238,7 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
   untrustedCa: boolean;
   missingArtifacts: number;
   refusedBeforeCreation: boolean;
+  allowanceAsked: boolean;
 }> {
   const main = compiledDiagnostics();
   const api = new main.DiagnosticKubernetes(
@@ -157,8 +264,9 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
   let invalidSignature = false;
   let invalidHost = false;
   let untrustedCa = false;
-  const newConnection = async (signal: AbortSignal) => {
-    if (!context.direct) return main.openPodTunnel(api, { ...context.pod, namespace: DEMO_NAMESPACE, port }, signal);
+  // The address of the Pod of the storage, which the direct proof connects to: the one of the Pod of this
+  // run, in the network of the Pods of the environment.
+  const podAddress = async (signal: AbortSignal): Promise<string> => {
     const pod = await api.read("Pod", DEMO_NAMESPACE, context.pod.name, signal);
     const address = pod.status?.podIP;
 
@@ -170,165 +278,109 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
         subnetsOverlap(SUBNETS.pods, address),
       "Direct proof pod identity or address changed",
     );
-    return { address, port, close: async () => {} };
+    return address;
   };
-  // The procedures of the main process, as the extension registers them with the host: the proof calls
-  // them as a frame of the cluster does, with the gate, its confirmations and its tokens. The cluster is
-  // the one entry of a catalog of the proof, and the requests carry the labels of the environment beside
-  // the ones of the extension, so that the environment knows them as its own.
-  const cluster = "velero-proof";
-  const catalog = [{ id: cluster, name: "proof", kubeConfigPath: context.kubeconfig, contextName: DEMO_CONTEXT }];
-  const gate = new main.WriteGate({
-    catalog: () => catalog,
-    adapter: (entry, isCurrent) =>
-      new main.DiagnosticKubernetes(
-        { clusterId: entry.id, context: entry.contextName, kubeconfigPath: entry.kubeConfigPath },
-        () => {
-          context.assertCurrent();
-          return isCurrent();
-        },
-        {
-          "app.kubernetes.io/managed-by": "freelens-velero-extension",
-          [OWNER_LABEL]: context.owner,
-          [FIXTURE_LABEL]: context.run,
-        },
-      ),
-  });
-  const handlers = new Map<string, (event: unknown, payload: unknown) => Promise<unknown>>();
-  const frame = { senderFrame: { url: `https://${cluster}.renderer.freelens.app:1/` }, processId: 1, frameId: 1 };
-  const release = main.registerHandlers(
-    {
-      handle: (channel, handler) =>
-        handlers.set(channel, handler as (event: unknown, payload: unknown) => Promise<unknown>),
-      broadcast: () => undefined,
+  // A connection of the proof itself, for what it asks the store beside the downloads of the main process.
+  const newConnection = async (signal: AbortSignal) =>
+    context.direct
+      ? { address: await podAddress(signal), port, close: async () => {} }
+      : main.openPodTunnel(api, { ...context.pod, namespace: DEMO_NAMESPACE, port }, signal);
+  // The paths the proof asks the store for: the artifacts of the real backup and of the real restore, and
+  // the logs of the operations that failed their validation.
+  const paths = new Set([
+    pathOf("BackupLog", names.backup),
+    pathOf("BackupResults", names.backup),
+    pathOf("RestoreLog", names.restore),
+    pathOf("RestoreResults", names.restore),
+    ...(context.refused
+      ? [pathOf("BackupLog", context.refused.backup.name), pathOf("RestoreLog", context.refused.restore.name)]
+      : []),
+  ]);
+  // What the operator allowed, as the proof keeps it for the procedures that give it and take it back.
+  let allowed: Allowances = {};
+  const { cluster, call, refusal, enable, release } = proofProcedures(main, context, context.kubeconfig, {
+    allowances: {
+      read: () => allowed,
+      write: (next) => {
+        allowed = next;
+      },
     },
-    {
-      catalog: () => catalog,
-      gate,
-      // The route of the proof: the origin and the path the fixtures have, through a tunnel to the pod of
-      // the storage or to its address. The route of the main process comes with its own slice.
-      route: async (url, input, storage, signal) => {
-        const parsed = new URL(url);
-        const config = storage.spec?.config as { s3Url?: string; publicUrl?: string } | undefined;
-
-        const pathname = pathOf(input.target, input.name);
-
+    // The name of the direct proof is in no resolver: the proof answers for the one of this machine, with
+    // the address of the Pod of the storage.
+    ...(context.direct
+      ? {
+          lookup: async (host: string) =>
+            host === new URL(origin).hostname ? [await podAddress(controller.signal)] : [],
+        }
+      : {}),
+    download: {
+      download: async (url, route, signal) => {
+        // The route is the one the main process found by itself, from the URL the server signed and from
+        // the objects of the cluster: the origin and the path of the fixtures, through a tunnel to the
+        // loopback of this machine, or directly to the address of the Pod once that was allowed.
         requireCondition(
-          config?.s3Url === origin && !config.publicUrl && parsed.origin === origin && parsed.pathname === pathname,
-          "Unexpected fixture artifact origin or target",
+          route.origin === origin &&
+            route.pathname === new URL(url).pathname &&
+            paths.has(route.pathname) &&
+            (context.direct
+              ? route.mode === "direct" &&
+                route.address === (await podAddress(signal)) &&
+                route.port === port &&
+                route.allowPrivate === true &&
+                !route.allowHttp
+              : route.mode === "tunnel" && route.address === "127.0.0.1" && !route.allowPrivate),
+          "The main process found another route than the one of the fixtures",
         );
-        const tunnel = await newConnection(signal);
+        const content = await main.downloadArtifact(url, route, signal);
 
-        return {
-          route: {
-            origin,
-            pathname,
-            address: tunnel.address,
-            port: tunnel.port,
-            mode: context.direct ? "direct" : "tunnel",
-            allowPrivate: context.direct,
-            allowHttp: origin.startsWith("http:"),
-          },
-          close: tunnel.close,
-        };
-      },
-      download: {
-        download: async (url, route, signal) => {
-          const content = await main.downloadArtifact(url, route, signal);
+        if (!invalidSignature) {
+          const altered = new URL(url);
 
-          if (!invalidSignature) {
-            const altered = new URL(url);
+          requireCondition(altered.searchParams.has("X-Amz-Signature"), "Expected a server-signed fixture URL");
+          altered.searchParams.set("X-Amz-Signature", "0".repeat(64));
+          const tunnel = await newConnection(signal);
 
-            requireCondition(altered.searchParams.has("X-Amz-Signature"), "Expected a server-signed fixture URL");
-            altered.searchParams.set("X-Amz-Signature", "0".repeat(64));
-            const tunnel = await newConnection(signal);
-
-            try {
-              await main.downloadArtifact(altered.href, { ...route, port: tunnel.port }, signal);
-            } catch (error) {
-              invalidSignature = error instanceof main.DiagnosticError && error.code === "request-failed";
-            } finally {
-              await tunnel.close();
-            }
-            requireCondition(invalidSignature, "Storage did not reject an altered signature");
-            const second = await newConnection(signal);
-
-            try {
-              if (origin.startsWith("https:")) {
-                try {
-                  await main.downloadArtifact(url, { ...route, port: second.port, ca: undefined }, signal);
-                } catch (error) {
-                  untrustedCa = error instanceof main.DiagnosticError && error.code === "tls-invalid";
-                }
-                requireCondition(untrustedCa, "The TLS proof succeeded without its private CA");
-              } else {
-                const wrongHost = new URL(url);
-
-                wrongHost.hostname = "wrong-host.example.invalid";
-                try {
-                  await main.downloadArtifact(
-                    wrongHost.href,
-                    { ...route, origin: wrongHost.origin, port: second.port },
-                    signal,
-                  );
-                } catch (error) {
-                  invalidHost = error instanceof main.DiagnosticError && error.code === "request-failed";
-                }
-                requireCondition(invalidHost, "Storage did not reject a changed signed Host");
-              }
-            } finally {
-              await second.close();
-            }
+          try {
+            await main.downloadArtifact(altered.href, { ...route, port: tunnel.port }, signal);
+          } catch (error) {
+            invalidSignature = error instanceof main.DiagnosticError && error.code === "request-failed";
+          } finally {
+            await tunnel.close();
           }
-          return content;
-        },
+          requireCondition(invalidSignature, "Storage did not reject an altered signature");
+          const second = await newConnection(signal);
+
+          try {
+            if (origin.startsWith("https:")) {
+              try {
+                await main.downloadArtifact(url, { ...route, port: second.port, ca: undefined }, signal);
+              } catch (error) {
+                untrustedCa = error instanceof main.DiagnosticError && error.code === "tls-invalid";
+              }
+              requireCondition(untrustedCa, "The TLS proof succeeded without its private CA");
+            } else {
+              const wrongHost = new URL(url);
+
+              wrongHost.hostname = "wrong-host.example.invalid";
+              try {
+                await main.downloadArtifact(
+                  wrongHost.href,
+                  { ...route, origin: wrongHost.origin, port: second.port },
+                  signal,
+                );
+              } catch (error) {
+                invalidHost = error instanceof main.DiagnosticError && error.code === "request-failed";
+              }
+              requireCondition(invalidHost, "Storage did not reject a changed signed Host");
+            }
+          } finally {
+            await second.close();
+          }
+        }
+        return content;
       },
     },
-  );
-  // A call of a procedure, from the frame of the cluster of the proof. A failure says its code and its
-  // step, which name nothing of the environment; its words are not printed.
-  const call = async <Value,>(channel: string, payload: unknown): Promise<Value> => {
-    const handler = handlers.get(channel);
-
-    requireCondition(handler, "A procedure of the main process is not registered");
-    const answer = (await handler(frame, payload)) as Answer<Value>;
-
-    if (!answer.ok) throw new Error(`The procedure ${channel} failed: ${answer.code} at ${answer.stage}`);
-    return answer.value;
-  };
-  // The answer of a run that is expected not to end with its text: its code and its step.
-  const refusal = async (
-    target: { kind: "Backup" | "Restore"; name: string; uid: string },
-    artifact: "BackupLog" | "RestoreLog",
-    request: string,
-  ): Promise<{ code: string; stage: string }> => {
-    const { token } = await call<WriteConfirmAnswer>("write.confirm", {
-      cluster,
-      namespace: DEMO_NAMESPACE,
-      kind: "DownloadRequest",
-      target,
-      artifact,
-    });
-    const handler = handlers.get("write.run");
-
-    requireCondition(handler, "A procedure of the main process is not registered");
-    const answer = (await handler(frame, {
-      cluster,
-      namespace: DEMO_NAMESPACE,
-      kind: "DownloadRequest",
-      target,
-      artifact,
-      token,
-      request,
-    })) as Answer<ArtifactValue>;
-
-    requireCondition(!answer.ok, "An artifact of an operation the server refused was downloaded");
-    requireCondition(
-      !/X-Amz|downloadURL|[?]|https?:/.test(JSON.stringify(answer)),
-      "A failure of the proof carries a URL",
-    );
-    return { code: answer.code, stage: answer.stage };
-  };
+  });
   // Whether a request of that name is in the cluster, and its identity when it is.
   const requestOf = (name: string) =>
     api.read("DownloadRequest", DEMO_NAMESPACE, name, controller.signal).then(
@@ -344,13 +396,44 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
   let downloads = 0;
   let missingArtifacts = 0;
   let refusedBeforeCreation = false;
+  let allowanceAsked = false;
 
   try {
-    await call("gate.enable", {
-      cluster,
-      namespace: DEMO_NAMESPACE,
-      confirmation: { context: DEMO_CONTEXT, namespace: DEMO_NAMESPACE },
-    });
+    await enable();
+    if (context.direct) {
+      // The address of the store is a private one, and nothing was allowed: the run says that the
+      // operator may allow it, and for which origin. Its request is in the cluster, since the route is
+      // looked for once the URL is signed. The allowance is given through the procedure, as a frame
+      // gives it, and the downloads below go by it.
+      const object = await api.read("Backup", DEMO_NAMESPACE, names.backup, controller.signal);
+      const request = randomUUID();
+      const ended = await refusal(
+        { kind: "Backup", name: names.backup, uid: object.metadata.uid },
+        "BackupLog",
+        request,
+        origin,
+      );
+      const created = await requestOf(`${names.backup}-${request}`);
+
+      requireCondition(created, "No request was created before the route was looked for");
+      context.record("DownloadRequest", created);
+      requireCondition(
+        ended.code === "destination-denied" &&
+          ended.stage === "route" &&
+          ended.needs?.what === "private" &&
+          ended.needs.origin === origin &&
+          Object.keys(allowed).length === 0,
+        `A private address that was not allowed ended as ${ended.code} at ${ended.stage}`,
+      );
+      await call<null>("allowance.grant", { cluster, what: "private", origin });
+      requireCondition(
+        allowed[cluster]?.length === 1 &&
+          allowed[cluster][0].what === "private" &&
+          allowed[cluster][0].origin === origin,
+        "The allowance of the proof was not kept",
+      );
+      allowanceAsked = true;
+    }
     for (const artifact of ["BackupLog", "BackupResults", "RestoreLog", "RestoreResults"] as const) {
       const kind = artifact.startsWith("Backup") ? "Backup" : "Restore";
       const objectName = kind === "Backup" ? names.backup : names.restore;
@@ -490,11 +573,98 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
       untrustedCa,
       missingArtifacts,
       refusedBeforeCreation,
+      allowanceAsked,
     };
   } finally {
     controller.abort();
     release();
     api.dispose();
+  }
+}
+
+export interface IdentityProofContext {
+  owner: string;
+  run: string;
+  // The kubeconfig of the identity, and the one of the environment, with which the proof looks at what
+  // the identity left in the cluster.
+  kubeconfig: string;
+  environment: string;
+  // The step of a download the identity may not do; none for the identity that may do them all.
+  stage?: "creation" | "certificate" | "service" | "forward";
+  assertCurrent(): void;
+  record(kind: DiagnosticKind, identity: { name: string; uid: string }): void;
+}
+
+// The steps that come after the creation of the request: an identity refused at one of them left its
+// request in the cluster.
+const AFTER_THE_CREATION = ["service", "forward"];
+
+// What an identity that may not do one step of a download is told: that the cluster forbids it, at that
+// step, with nothing of a URL. Its request is in the cluster only when the step comes after the creation.
+// The identity that has what the documentation lists downloads the log through the cluster.
+export async function runIdentityProof(context: IdentityProofContext): Promise<{ stage: string; created: boolean }> {
+  const main = compiledDiagnostics();
+  const names = fixtureNames(context.run);
+  const controller = new AbortController();
+  const environment = new main.DiagnosticKubernetes(
+    { clusterId: context.owner, context: DEMO_CONTEXT, kubeconfigPath: context.environment },
+    () => {
+      context.assertCurrent();
+      return true;
+    },
+  );
+  const { cluster, call, refusal, enable, release } = proofProcedures(main, context, context.kubeconfig, {});
+
+  try {
+    await enable();
+    const object = await environment.read("Backup", DEMO_NAMESPACE, names.backup, controller.signal);
+    const request = randomUUID();
+    const target = { kind: "Backup" as const, name: names.backup, uid: object.metadata.uid };
+
+    if (!context.stage) {
+      const asked = { cluster, namespace: DEMO_NAMESPACE, kind: "DownloadRequest", target, artifact: "BackupLog" };
+      const { token } = await call<WriteConfirmAnswer>("write.confirm", asked);
+      const result = await call<ArtifactValue>("write.run", { ...asked, token, request });
+
+      context.record("DownloadRequest", result.request);
+      requireCondition(
+        result.size > 0 && result.route.mode === "tunnel" && !/X-Amz|downloadURL|[?]/.test(JSON.stringify(result)),
+        "The identity with the documented permissions did not download through the cluster",
+      );
+      await call<null>("artifact.release", { cluster, request });
+      return { stage: "none", created: true };
+    }
+    const ended = await refusal(target, "BackupLog", request);
+    const created = await environment
+      .read("DownloadRequest", DEMO_NAMESPACE, `${names.backup}-${request}`, controller.signal)
+      .then(
+        (found) => ({ name: found.metadata.name, uid: found.metadata.uid }),
+        (error: unknown) => {
+          requireCondition(
+            error instanceof main.DiagnosticError && error.code === "not-found",
+            "A request of the proof could not be looked for",
+          );
+          return undefined;
+        },
+      );
+
+    // What it left is recorded before its answer is judged, so that the proof removes it either way.
+    if (created) context.record("DownloadRequest", created);
+    requireCondition(
+      ended.code === "forbidden" && ended.stage === context.stage,
+      `An identity that may not do the step ${context.stage} ended as ${ended.code} at ${ended.stage}`,
+    );
+    requireCondition(
+      Boolean(created) === AFTER_THE_CREATION.includes(context.stage),
+      created
+        ? "A request was created for an identity refused before the creation"
+        : "No request was created for an identity refused after the creation",
+    );
+    return { stage: ended.stage, created: Boolean(created) };
+  } finally {
+    controller.abort();
+    release();
+    environment.dispose();
   }
 }
 

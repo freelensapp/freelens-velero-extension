@@ -3,7 +3,10 @@
 // failure is said the same way wherever it is shown. Nothing of a URL, of a header, of a body or of the
 // path of a file is in them: they are given the names of the objects, and nothing else.
 
+import { locationWords } from "./allowances";
 import { type ArtifactTarget, artifactKind, type Failure, type FailureCode, failure } from "./ipc";
+
+import type { AllowanceFor } from "./allowances";
 
 // What the main process says of an API server it could not ask, whatever it asked it.
 export const API_WORDS = {
@@ -52,6 +55,20 @@ export function pluginWords(command: string, reason: "failed" | "deadline" | "un
 //   reason is told from;
 //   insecure: the certificate of the store was refused, and its storage location asks that it is not
 //   verified, which the extension does not do.
+// And the rule that denies a destination, which is one code for all of them:
+//   url: the URL is not of HTTP or HTTPS, or carries a user or a fragment;
+//   public-url: the location signs over its public URL, and the URL is of the URL of its store;
+//   path: the path of the URL is not the key of the artifact that was asked;
+//   ambiguous: the host is a Service of the cluster and a name of this machine as well;
+//   port: the port of the URL is not one of the Service, or its Pod does not listen on it;
+//   endpoint: the Service has no endpoint that is ready and is a Pod;
+//   address: the host gives no address the extension connects to;
+//   allowance: the operator may allow it, and the failure says what.
+// And of a refusal of the cluster:
+//   candidate: the host of the store may be a Service or a name of this machine, and the read that tells
+//   was refused;
+//   credential: the cluster did not take the credential of the context, which says nothing of what the
+//   identity may do.
 export type DownloadVerdict =
   | "unsigned"
   | "failed"
@@ -60,7 +77,17 @@ export type DownloadVerdict =
   | "replaced"
   | "whole"
   | "untrusted"
-  | "insecure";
+  | "insecure"
+  | "url"
+  | "public-url"
+  | "path"
+  | "ambiguous"
+  | "port"
+  | "endpoint"
+  | "address"
+  | "allowance"
+  | "candidate"
+  | "credential";
 
 export interface DownloadContext {
   artifact: ArtifactTarget;
@@ -72,13 +99,54 @@ export interface DownloadContext {
   // The plugin of the context that gave no credential, by the file of its command, with its bound.
   plugin?: { command: string; reason: "failed" | "deadline" | "unreadable"; seconds: number };
   verdict?: DownloadVerdict;
+  // What the operator may allow for the request to go on, when that is what denied its destination.
+  needs?: AllowanceFor;
 }
 
 // The steps before the request is created, and the ones after it is in the cluster. The creation is
 // neither: each way of ending at it says what it knows of the request. Neither is a step this function
 // does not know, of which nothing is claimed.
 const BEFORE_THE_CREATION = ["queue", "target", "backup", "location", "certificate"];
-const AFTER_THE_CREATION = ["wait", "route", "download", "delivery", "release"];
+const AFTER_THE_CREATION = [
+  "wait",
+  "route",
+  "service",
+  "endpoints",
+  "pod",
+  "forward",
+  "download",
+  "delivery",
+  "release",
+];
+// The reads of the route through the cluster, and what each asks of the identity: the tab says which was
+// refused, and what the tunnel needs.
+// A port-forward over a WebSocket is asked of the API server with the verb get, and the releases that
+// check the verb create for it as well ask for both.
+const ROUTE_READS: Record<string, { refused: string; needs: string }> = {
+  service: { refused: "to read the Service of the store", needs: "the verb get on services" },
+  endpoints: {
+    refused: "to list the endpoint slices of the Service of the store",
+    needs: "the verb list on endpointslices",
+  },
+  pod: { refused: "to read the Pod of the store", needs: "the verb get on pods" },
+  forward: {
+    refused: "the port-forward to the Pod of the store",
+    needs: "the verbs get and create on pods/portforward",
+  },
+};
+// The words of each rule that denies a destination.
+const DENIED: Partial<Record<DownloadVerdict, string>> = {
+  url: "The URL of the request is not one the extension takes: it is not of HTTP or HTTPS, or it carries a user or a fragment.",
+  "public-url":
+    "The storage location signs over its public URL, and the URL of the request is of the URL of its store: it is not one Velero signed for this location.",
+  path: "The URL of the request is not of the file that was asked: its path is not the one of this artifact in the bucket of the storage location. Nothing was fetched.",
+  ambiguous:
+    "The host of the store is a Service of the cluster and a name this machine resolves as well: it is not known which of the two Velero signed for.",
+  port: "The port of the URL is not one the Service of the store has, or its Pod does not declare the port the Service sends it to.",
+  endpoint: "The Service of the store has no Pod that is ready, among the ones it selects, to send the request to.",
+  address:
+    "The name of the store gives no address the extension connects to: an address of this machine, of the link or of a metadata service is never one.",
+};
 // The steps at which the target itself is read.
 const OF_THE_TARGET = ["target", "delivery"];
 
@@ -194,6 +262,9 @@ export function downloadFailure(code: FailureCode, stage: string, context: Downl
           true,
           `${request} is not in ${context.namespace} any more: it was removed before Velero signed a URL.`,
         );
+      if (stage === "service")
+        return say(false, `The Service the URL of the store names is not in the cluster. ${stays}`);
+      if (stage === "pod") return say(false, `The Pod of the store is not there any more. ${stays}`);
       if (stage === "route")
         return say(false, `What the route to the store needs in the cluster is not there. ${stays}`);
       if (OF_THE_TARGET.includes(stage))
@@ -212,6 +283,17 @@ export function downloadFailure(code: FailureCode, stage: string, context: Downl
       return say(false, `${API_WORDS.changed}${left}`);
     case "forbidden":
       if (stage === "frame") return say(false, "The frame that asked for the write is not there any more.");
+      // The cluster did not take the credential: nothing is known of what the identity may do.
+      if (context.verdict === "credential")
+        return say(
+          true,
+          `The cluster did not take the credential of the context: it may have expired. Sign in again, then ask again.${stage === "creation" ? ` ${none}` : left}`,
+        );
+      if (stage === "service" && context.verdict === "candidate")
+        return say(
+          false,
+          `The host of the store may be a Service of the cluster or a name of this machine, and the cluster refused the read that tells which: the identity needs the verb get on services in the namespace the host names, or in the one of the installation when it names none. ${stays}`,
+        );
       if (stage === "creation")
         return say(
           false,
@@ -226,6 +308,11 @@ export function downloadFailure(code: FailureCode, stage: string, context: Downl
       if (stage === "backup") return say(false, `The cluster refused to read the backup of ${target}. ${none}`);
       if (stage === "location")
         return say(false, `The cluster refused to read the storage location of the backup of ${target}. ${none}`);
+      if (ROUTE_READS[stage])
+        return say(
+          false,
+          `The cluster refused ${ROUTE_READS[stage].refused}: the route through the cluster needs ${ROUTE_READS[stage].needs}. ${stays}`,
+        );
       if (stage === "route")
         return say(false, `The cluster refused a read, or the port-forward, the route to the store needs. ${stays}`);
       if (OF_THE_TARGET.includes(stage)) return say(false, `The cluster refused to read ${target}.${left}`);
@@ -255,8 +342,24 @@ export function downloadFailure(code: FailureCode, stage: string, context: Downl
       if (store) return say(false, `${STORE_HANDSHAKE} ${stays}`);
       if (stage === "route") return say(false, `${STORE_UNTRUSTED} ${NAME_THE_AUTHORITY} ${stays}`);
       return say(false, `${API_WORDS.untrusted}${left}`);
-    case "destination-denied":
-      return say(false, `The address of the store is not one the extension connects to.${left}`);
+    case "destination-denied": {
+      const needs = context.needs;
+
+      // What the operator may allow is said with its origin, and carried for the views to offer it.
+      if (context.verdict === "allowance" && needs) {
+        const asked =
+          needs.what === "origin"
+            ? `The URL of the request is of ${needs.origin}, which the storage location ${locationWords(needs.location)} does not give: downloads from it are made only after they are allowed for this storage location.`
+            : needs.what === "private"
+              ? `The store of ${needs.origin} is at a private address: a connection to it is made only after it is allowed.`
+              : `The connection to ${needs.origin} would not be encrypted, and would be made directly from this machine: it is made only after it is allowed.`;
+
+        return { ...say(false, `${asked}${left}`), needs };
+      }
+      const rule = context.verdict ? DENIED[context.verdict] : undefined;
+
+      return say(false, `${rule ?? "The address of the store is not one the extension connects to."}${left}`);
+    }
     case "transport-unreachable":
       if (stage === "release")
         return say(

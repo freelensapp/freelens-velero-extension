@@ -51,6 +51,41 @@ beforeAll(async () => {
         return;
       }
       if (request.url?.endsWith("/pending")) return;
+      // The endpoint slices of a Service, as the API lists them for the label that names it.
+      if (request.url?.startsWith("/apis/discovery.k8s.io/v1/namespaces/fixture/endpointslices")) {
+        const selector = new URL(request.url, "https://fixture.invalid").searchParams.get("labelSelector");
+        const slice = (name: string, namespace: string, service: string) => ({
+          metadata: { name, namespace, uid: `${name}-uid`, labels: { "kubernetes.io/service-name": service } },
+          addressType: "IPv4",
+          ports: [{ name: "s3", port: 8333, protocol: "TCP" }],
+          endpoints: [
+            { addresses: ["10.244.0.7"], conditions: { ready: true }, targetRef: { kind: "Pod", name: "storage-0" } },
+          ],
+        });
+
+        if (selector === "kubernetes.io/service-name=refused") {
+          response.writeHead(403).end();
+          return;
+        }
+        response.end(
+          JSON.stringify({
+            kind: "EndpointSliceList",
+            apiVersion: "discovery.k8s.io/v1",
+            metadata: { resourceVersion: "7" },
+            items:
+              selector === "kubernetes.io/service-name=storage"
+                ? [slice("storage-abcde", "fixture", "storage"), slice("storage-fghij", "fixture", "storage")]
+                : selector === "kubernetes.io/service-name=elsewhere"
+                  ? [slice("elsewhere-abcde", "another", "elsewhere")]
+                  : selector === "kubernetes.io/service-name=mislabelled"
+                    ? [slice("mislabelled-abcde", "fixture", "another")]
+                    : selector === "kubernetes.io/service-name=shapeless"
+                      ? "not-a-list"
+                      : [],
+          }),
+        );
+        return;
+      }
       if (request.url?.endsWith("/secrets/denied")) {
         response.writeHead(403).end();
         return;
@@ -145,15 +180,18 @@ describe("explicit create-only Kubernetes adapter", () => {
     expect(Object.getOwnPropertyNames(DiagnosticKubernetes.prototype).sort()).toEqual([
       "assertCurrent",
       "authenticate",
+      "authenticatedConfiguration",
       "certificate",
       "constructor",
       "createDownload",
       "createGenerated",
       "credentialOfPlugin",
       "dispose",
+      "list",
       "path",
       "read",
       "send",
+      "withCredential",
     ]);
   });
 
@@ -340,9 +378,13 @@ describe("explicit create-only Kubernetes adapter", () => {
     const api = new DiagnosticKubernetes(binding(), () => true);
 
     // The fixture answers 403 to a request without its token: the request went out with the certificate.
-    await expect(
-      api.createGenerated("ServerStatusRequest", "fixture", "status-", new AbortController().signal),
-    ).rejects.toMatchObject({ code: "forbidden" });
+    // A refusal of a permission says nothing of the credential.
+    const refused = await api
+      .createGenerated("ServerStatusRequest", "fixture", "status-", new AbortController().signal)
+      .catch((error: unknown) => error);
+
+    expect(refused).toMatchObject({ code: "forbidden" });
+    expect((refused as DiagnosticError).verdict).toBeUndefined();
     expect(requests).toHaveLength(1);
     expect(requests[0].client).toBe("storage.example.invalid");
   });
@@ -382,7 +424,10 @@ describe("explicit create-only Kubernetes adapter", () => {
     const api = new DiagnosticKubernetes(binding(), () => true);
     const signal = new AbortController().signal;
 
-    await expect(api.read("DownloadRequest", "fixture", "absent", signal)).rejects.toMatchObject({ code: "forbidden" });
+    // A credential the cluster does not take is told from a permission the identity lacks.
+    const turned = await api.read("DownloadRequest", "fixture", "absent", signal).catch((error: unknown) => error);
+
+    expect(turned).toMatchObject({ code: "forbidden", verdict: "credential" });
     await plugin.rotate("synthetic-token");
     await expect(api.read("DownloadRequest", "fixture", "absent", signal)).rejects.toMatchObject({ code: "not-found" });
     expect(await plugin.runs()).toBe(2);
@@ -950,6 +995,90 @@ describe("explicit create-only Kubernetes adapter", () => {
     ).rejects.toMatchObject({ code: "tls-invalid" });
     // Without a reference the inline value is what there is.
     await expect(api.certificate("fixture", { caCert: inline }, signal)).rejects.toMatchObject({ code: "tls-invalid" });
+    api.dispose();
+  });
+
+  it("gives the client of a tunnel the configuration of the context with the credential of its plugin, and no plugin to run", async () => {
+    const signal = new AbortController().signal;
+    // A context without a plugin is given as it is: the client of Kubernetes has nothing to run.
+    const plain = new DiagnosticKubernetes(binding(), () => true);
+
+    expect(await plain.authenticatedConfiguration(signal)).toBe(plain.configuration);
+    plain.dispose();
+    // A context with a plugin: the plugin is run by the adapter, once and within its bound, and what the
+    // client is given carries the token it gave and no command.
+    const script = join(certificates.directory, "tunnel-plugin.mjs");
+    const runs = join(certificates.directory, "tunnel-plugin.runs");
+
+    await writeFile(runs, "");
+    await writeFile(
+      script,
+      `import { appendFileSync } from "node:fs"; appendFileSync(process.argv[2], "x"); process.stdout.write(JSON.stringify({ apiVersion: "client.authentication.k8s.io/v1", kind: "ExecCredential", status: { token: "synthetic-token" } }));`,
+    );
+    await writeFile(
+      path,
+      JSON.stringify({
+        ...configuration,
+        users: [{ name: "fixture", user: { exec: { command: process.execPath, args: [script, runs] } } }],
+      }),
+    );
+    const api = new DiagnosticKubernetes(binding(), () => true);
+    const given = await api.authenticatedConfiguration(signal);
+    const user = given.getCurrentUser();
+
+    expect(given).not.toBe(api.configuration);
+    expect(given.getCurrentContext()).toBe("fixture-context");
+    expect(given.getCurrentCluster()?.server).toBe(api.configuration.getCluster("fixture")?.server);
+    expect(user).toMatchObject({ name: "fixture", token: "synthetic-token" });
+    expect(user?.exec).toBeUndefined();
+    expect(user?.authProvider).toBeUndefined();
+    // The credential the adapter keeps is the one it gives again: the plugin ran once for both.
+    await api.read("Secret", "fixture", "certificate", signal);
+    await api.authenticatedConfiguration(signal);
+    expect(await readFile(runs, "utf8")).toBe("x");
+    // A plugin that gives no credential is said as such, and no configuration is given.
+    await writeFile(
+      path,
+      JSON.stringify({
+        ...configuration,
+        users: [{ name: "fixture", user: { exec: { command: join(certificates.directory, "absent-plugin") } } }],
+      }),
+    );
+    const failing = new DiagnosticKubernetes(binding(), () => true);
+
+    await expect(failing.authenticatedConfiguration(signal)).rejects.toBeInstanceOf(CredentialPluginError);
+    api.dispose();
+    failing.dispose();
+  });
+
+  it("lists the endpoint slices of a Service by the label that names it, and takes none that is not of it", async () => {
+    const api = new DiagnosticKubernetes(binding(), () => true);
+    const signal = new AbortController().signal;
+    const slices = await api.list("EndpointSlice", "fixture", "storage", signal);
+
+    expect(slices.map((slice) => slice.metadata.name)).toEqual(["storage-abcde", "storage-fghij"]);
+    expect(requests).toEqual([
+      expect.objectContaining({
+        method: "GET",
+        path: "/apis/discovery.k8s.io/v1/namespaces/fixture/endpointslices?labelSelector=kubernetes.io%2Fservice-name%3Dstorage",
+      }),
+    ]);
+    // A Service without a slice has no endpoint; the list is asked for with GET and nothing else.
+    expect(await api.list("EndpointSlice", "fixture", "empty", signal)).toEqual([]);
+    // A slice of another namespace, or of another Service, and an answer that is not a list, are not taken.
+    for (const service of ["elsewhere", "mislabelled", "shapeless"])
+      await expect(api.list("EndpointSlice", "fixture", service, signal)).rejects.toMatchObject({
+        code: "request-failed",
+      });
+    await expect(api.list("EndpointSlice", "fixture", "refused", signal)).rejects.toMatchObject({ code: "forbidden" });
+    // No other kind is listed, and a name that is not one of a Service asks nothing.
+    const asked = requests.length;
+
+    expect(() => api.list("Secret" as never, "fixture", "storage", signal)).toThrow("validation");
+    expect(() => api.list("EndpointSlice", "fixture", "storage,other=1", signal)).toThrow("validation");
+    expect(() => api.list("EndpointSlice", "fixture", "a".repeat(64), signal)).toThrow("validation");
+    expect(requests).toHaveLength(asked);
+    expect(requests.every((item) => item.method === "GET")).toBe(true);
     api.dispose();
   });
 

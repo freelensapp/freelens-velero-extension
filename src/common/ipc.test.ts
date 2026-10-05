@@ -5,6 +5,7 @@ import {
   artifactKind,
   PAGE_BOUND,
   REQUEST_BOUND,
+  readAllowanceRequest,
   readAnswer,
   readArtifactPage,
   readArtifactPageRequest,
@@ -231,6 +232,67 @@ describe("the requests between the processes", () => {
     );
 
     expect(readGateStateRequest(unreadable)).toBeUndefined();
+  });
+});
+
+describe("what the operator allows, between the processes", () => {
+  const origin = "https://storage.example:9000";
+
+  it("reads a request that allows or takes back: one cluster, one kind, one origin, and a location for an origin", () => {
+    expect(readAllowanceRequest({ cluster, what: "origin", origin, location: "velero/default" })).toEqual({
+      cluster,
+      what: "origin",
+      origin,
+      location: "velero/default",
+    });
+    expect(readAllowanceRequest({ cluster, what: "private", origin })).toEqual({ cluster, what: "private", origin });
+    expect(readAllowanceRequest({ cluster, what: "http", origin: "http://minio.storage:9000" })).toEqual({
+      cluster,
+      what: "http",
+      origin: "http://minio.storage:9000",
+    });
+    for (const broken of [
+      { what: "private", origin },
+      { cluster, origin },
+      { cluster, what: "private" },
+      { cluster, what: "everything", origin },
+      { cluster, what: "origin", origin },
+      { cluster, what: "origin", origin, location: "Not A Name" },
+      { cluster, what: "private", origin, location: "velero/default" },
+      // What is allowed is an origin, and never a URL: nothing after the host and the port.
+      { cluster, what: "private", origin: `${origin}/bucket/key` },
+      { cluster, what: "private", origin: `${origin}?X-Amz-Signature=synthetic` },
+      { cluster, what: "private", origin: "https://user:secret@storage.example" },
+      { cluster, what: "private", origin: "HTTPS://Storage.example" },
+      { cluster, what: "private", origin, since: 1 },
+      { cluster: "../other", what: "private", origin },
+      "allow everything",
+      null,
+    ])
+      expect([broken, readAllowanceRequest(broken)]).toEqual([broken, undefined]);
+  });
+
+  it("reads in a failure what the operator may allow for the request to go on, and nothing else of that form", () => {
+    const refused = { ok: false, code: "destination-denied", stage: "route", retry: false, text: "Not allowed yet." };
+    const read = (needs: unknown) => readAnswer({ ...refused, needs }, readWriteConfirmAnswer);
+
+    expect(read({ what: "origin", origin, location: "velero/default" })).toEqual({
+      ...refused,
+      needs: { what: "origin", origin, location: "velero/default" },
+    });
+    expect(read({ what: "private", origin })).toEqual({ ...refused, needs: { what: "private", origin } });
+    // A failure that asks for nothing has no such field.
+    expect(readAnswer(refused, readWriteConfirmAnswer)).toEqual(refused);
+    for (const needs of [
+      { what: "origin", origin },
+      { what: "private", origin: `${origin}/bucket/key?X-Amz-Signature=synthetic` },
+      { what: "private", origin, url: "https://leak.invalid" },
+      { what: "everything", origin },
+      "https://storage.example",
+      null,
+      [],
+    ])
+      expect([needs, read(needs)]).toEqual([needs, expect.objectContaining({ code: "validation", stage: "answer" })]);
   });
 });
 

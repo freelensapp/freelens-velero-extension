@@ -696,6 +696,51 @@ describe("the way of a DownloadRequest", () => {
     ]);
   });
 
+  it("says that the cluster refused the port-forward when the route says so, and not that the store was not reached", async () => {
+    const route = (refused: false | "permission" | "credential") =>
+      vi.fn(async () => ({
+        route: {
+          origin: "https://storage.example.invalid",
+          pathname: "/bucket/backups/backup/backup-logs.gz",
+          address: "127.0.0.1",
+          port: 1234,
+          mode: "tunnel" as const,
+        },
+        close: vi.fn(),
+        refused: () => refused,
+      }));
+    const refused = fixture({ route: route("permission") });
+
+    refused.download.mockRejectedValueOnce(new DiagnosticError("transport-unreachable"));
+    expect(await ended(refused.run())).toEqual({
+      code: "forbidden",
+      stage: "forward",
+      message: "Diagnostic operation failed: forbidden",
+    });
+    // A credential the cluster did not take is said as that, and not as a permission the identity lacks.
+    const unknown = fixture({ route: route("credential") });
+
+    unknown.download.mockRejectedValueOnce(new DiagnosticError("transport-unreachable"));
+    expect(await ended(unknown.run())).toMatchObject({ code: "forbidden", stage: "forward", verdict: "credential" });
+    // A route that was not refused, and a download that ended with its file, say nothing of it.
+    const reached = fixture({ route: route(false) });
+
+    reached.download.mockRejectedValueOnce(new DiagnosticError("transport-unreachable"));
+    expect(await ended(reached.run())).toMatchObject({ code: "transport-unreachable", stage: "download" });
+    const delivered = fixture({ route: route("permission") });
+
+    expect((await delivered.run()).content.toString()).toBe("synthetic log");
+    // A cancellation is a cancellation, whatever the route says.
+    const controller = new AbortController();
+    const cancelled = fixture({ route: route("permission") });
+
+    cancelled.download.mockImplementationOnce(async () => {
+      controller.abort();
+      throw new DiagnosticError("transport-unreachable");
+    });
+    expect(await ended(cancelled.run(cancelled.input(), controller.signal))).toMatchObject({ code: "cancelled" });
+  });
+
   it("delivers nothing of an operation that was cancelled while what it opened was closed", async () => {
     const controller = new AbortController();
     let closed: () => void = () => undefined;

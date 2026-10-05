@@ -405,6 +405,20 @@ proof asks it to refuse, and where the source says why:
 | A restore that names a schedule takes the most recent completed backup that carries the label of that schedule. With no backup of the schedule it fails its validation, with `No backups found for schedule` and `No completed backups found for schedule`, and its spec keeps no name of a backup: the Schedule itself is not read | [Restore from a schedule](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/restore_controller.go#L367-L389) |
 | A request to delete a backup that failed its validation is carried out. The controller refuses a backup that is still in progress and a storage location that is not there, is read-only or is unavailable, and nothing by the phase of the backup; a tarball the store does not have does not stop the deletion; the restores whose spec names the backup are deleted with it | [In progress](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/backup_deletion_controller.go#L168-L172), [the location](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/backup_deletion_controller.go#L187-L208), [the tarball](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/backup_deletion_controller.go#L265-L281), [the restores](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/backup_deletion_controller.go#L372-L393) |
 
+How the server reads the bucket and the prefix of a storage location, which is what
+the key of an artifact in a signed URL is made of:
+
+| Fact | Source |
+| --- | --- |
+| The slashes before and after the bucket and the prefix of a location are taken off. A bucket that still has a slash inside is refused: the location is not opened, and nothing is signed for it. The folders of the store are the prefix joined to their names as a path, which drops an empty folder and the folder itself, and takes the folder above out with the one before it; the key of an artifact is joined to them the same way | [The bucket and the prefix](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/persistence/object_store.go#L145-L154), [the layout](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/persistence/object_store_layout.go#L32-L50), [a key](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/persistence/object_store_layout.go#L80-L82) |
+
+What the API server asks of the identity that forwards a port, which is what a
+download through the cluster does with the WebSocket handler of the client:
+
+| Fact | Source |
+| --- | --- |
+| A port-forward over a WebSocket begins with an HTTP `GET`, which the API server authorizes as the verb `get` on `pods/portforward`; the older protocol posts, and is authorized as `create`. From Kubernetes 1.35 the gate `AuthorizePodWebsocketUpgradeCreatePermission`, beta and on by default, checks the verb `create` for the upgrade as well. An identity needs both verbs to forward a port on either side of that release. In the test environment, at 1.34, an identity with `create` alone is refused at the port-forward, and one with both downloads | [The description of the gate](https://github.com/kubernetes/website/blob/main/content/en/docs/reference/command-line-tools-reference/feature-gates/AuthorizePodWebsocketUpgradeCreatePermission.md), read on 2026-10-04; the identities of the transport proof |
+
 ## Verification And Remaining Work
 
 Completed checks:

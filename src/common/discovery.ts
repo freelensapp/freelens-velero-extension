@@ -2,6 +2,7 @@
 // The availability of the API, the namespace that was chosen and the access to the data are three facts:
 // the CRDs are of the whole cluster and say nothing of a server running in a namespace.
 
+import { type Allowances, readAllowances } from "./allowances";
 import { failedStatus } from "./read-state";
 import { readWindow, WINDOWS } from "./window";
 
@@ -108,9 +109,12 @@ export interface Preferences {
   configured: Record<string, string[]>;
   // The window of the recent operations of the Overview, when one was chosen.
   window?: Window;
+  // What the operator allowed the downloads of the artifacts to do, for each cluster, when anything was.
+  allowances?: Allowances;
 }
 
-// Where the preferences are kept between two sessions: the namespaces, the window, and nothing else.
+// Where the preferences are kept between two sessions: the namespaces, the window, what the operator
+// allowed, and nothing else.
 export interface PreferenceStorage {
   read(): Preferences;
   write(preferences: Preferences): void;
@@ -140,7 +144,12 @@ export function heldPreferences(
 // What is kept of a stored value: the names that are names, and nothing else that a file may hold.
 export function readPreferences(stored: unknown): Preferences {
   const preferences = emptyPreferences();
-  const value = (stored ?? {}) as { selected?: unknown; configured?: unknown; window?: unknown };
+  const value = (stored ?? {}) as {
+    selected?: unknown;
+    configured?: unknown;
+    window?: unknown;
+    allowances?: unknown;
+  };
 
   if (value.selected && typeof value.selected === "object") {
     for (const [cluster, namespace] of Object.entries(value.selected)) {
@@ -156,6 +165,11 @@ export function readPreferences(stored: unknown): Preferences {
   }
   // A window that is not one of the three is not kept: the one that is taken is the one of no choice.
   if ((WINDOWS as readonly unknown[]).includes(value.window)) preferences.window = readWindow(value.window);
+  // What was allowed is kept only when something was: a file of an operator who allowed nothing has no
+  // such key.
+  const allowances = readAllowances(value.allowances);
+
+  if (Object.keys(allowances).length) preferences.allowances = allowances;
   return preferences;
 }
 

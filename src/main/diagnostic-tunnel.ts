@@ -10,6 +10,10 @@ import type { DiagnosticKubernetes } from "./diagnostic-kubernetes.ts";
 // Bytes of the pod that may wait for the local socket before the WebSocket is paused.
 const PENDING_BYTES = 256 * 1024;
 
+// Whether the API server refused a port-forward, and how: to an identity that may not forward a port,
+// or because it did not take the credential, which says nothing of what the identity may do.
+export type PortForwardRefusal = false | "permission" | "credential";
+
 export interface PodTarget {
   namespace: string;
   name: string;
@@ -21,7 +25,7 @@ export async function openPodTunnel(
   api: Pick<DiagnosticKubernetes, "configuration" | "read" | "assertCurrent">,
   pod: PodTarget,
   signal: AbortSignal,
-): Promise<{ address: string; port: number; close(): Promise<void> }> {
+): Promise<{ address: string; port: number; close(): Promise<void>; refused(): PortForwardRefusal }> {
   api.assertCurrent();
   if (signal.aborted) throw new DiagnosticError("cancelled");
   if (!Number.isInteger(pod.port) || pod.port < 1 || pod.port > 65535) throw new DiagnosticError("validation");
@@ -42,6 +46,10 @@ export async function openPodTunnel(
   const websockets = new Set<WebSocket>();
   let used = false;
   let closing: Promise<void> | undefined;
+  // Whether the API server refused the port-forward to the identity of the kubeconfig. The port-forward is
+  // made when the connection that needs it arrives: what goes through the listener then ends as a
+  // connection that was lost, and this says why.
+  let refused: PortForwardRefusal = false;
   const server = createServer((socket) => {
     if (used || signal.aborted) {
       socket.destroy();
@@ -75,6 +83,14 @@ export async function openPodTunnel(
       });
       websockets.add(websocket);
       websocket.on("error", () => socket.destroy());
+      // An answer that is not the one of a port-forward: heard here, it is not raised as an error. A
+      // refusal of the API server is kept, and the connection ends either way.
+      websocket.on("unexpected-response", (request, response) => {
+        if (response.statusCode === 403) refused = "permission";
+        else if (response.statusCode === 401) refused = "credential";
+        request.destroy();
+        socket.destroy();
+      });
       websocket.once("close", () => {
         if (websocket) websockets.delete(websocket);
         // The pod side is done: deliver what still waits, then close.
@@ -144,7 +160,7 @@ export async function openPodTunnel(
     const address = server.address();
 
     if (!address || typeof address === "string") throw new DiagnosticError("transport-unreachable");
-    return { address: "127.0.0.1", port: address.port, close };
+    return { address: "127.0.0.1", port: address.port, close, refused: () => refused };
   } catch (error) {
     await close();
     if (signal.aborted) throw new DiagnosticError("cancelled");

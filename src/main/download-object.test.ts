@@ -19,6 +19,7 @@ import {
 } from "../../test/freelens-extensions";
 import { createTlsFixture } from "../../test/tls-fixture";
 import { CHANNELS, DIAGNOSTIC_REQUEST_LABEL, PAGE_BOUND, REQUEST_LABELS } from "../common/ipc";
+import { PreferencesStore } from "../common/preferences-store";
 import { VeleroIpcRenderer } from "../renderer/api/ipc";
 import { DiagnosticError } from "./diagnostic-transport";
 import VeleroMain from "./index";
@@ -458,7 +459,7 @@ describe("the object of a DownloadRequest, as the cluster is sent it", () => {
     expect([...new Set(received.map((entry) => entry.method))].sort()).toEqual(["GET", "POST"]);
   });
 
-  it("creates nothing as the extension is activated today, without a route to the store", async () => {
+  it("finds the route by itself as the extension is activated, and asks the operator for an origin the location does not give", async () => {
     main.release();
     resetIpc();
     // The extension as the host activates it, and not the procedures as this test registers them.
@@ -467,14 +468,48 @@ describe("the object of a DownloadRequest, as the cluster is sent it", () => {
     extension.activate();
     try {
       const token = await confirmed(BACKUP, "BackupLog");
-      const answer = await renderer.runDownload(CLUSTER, NAMESPACE, BACKUP, "BackupLog", token, randomUUID());
+      const request = randomUUID();
+      const answer = await renderer.runDownload(CLUSTER, NAMESPACE, BACKUP, "BackupLog", token, request);
 
-      expect(answer).toMatchObject({ ok: false, code: "validation", stage: "kind", retry: false });
-      expect(received).toEqual([]);
-      // The same way runs a ServerStatusRequest: it is the procedures of the extension that answered.
-      const status = await renderer.confirm(CLUSTER, NAMESPACE, "ServerStatusRequest");
+      // The location of the test is of AWS without a URL of its own, and the URL is not of AWS: the
+      // operator is asked, with the origin and nothing after it, and what is asked crosses the contract.
+      expect(answer).toMatchObject({
+        ok: false,
+        code: "destination-denied",
+        stage: "route",
+        retry: false,
+        needs: { what: "origin", origin: ORIGIN, location: "velero/default" },
+      });
+      expect(JSON.stringify(answer)).not.toContain(SENTINEL);
+      // The request was created, and nothing was connected to.
+      expect(received.filter((entry) => entry.method === "POST")).toHaveLength(1);
+      expect(requests.has(`${BACKUP.name}-${request}`)).toBe(true);
+      expect(downloaded).toEqual([]);
+      // Allowed through the procedure of the extension, for the cluster of the frame, it is kept by the
+      // store of the preferences the main process opened.
+      expect(await renderer.allow(CLUSTER, { what: "origin", origin: ORIGIN, location: "velero/default" })).toEqual({
+        ok: true,
+        value: null,
+      });
+      const store = PreferencesStore.getInstanceOrCreate<PreferencesStore>();
+      const kept = {
+        [CLUSTER]: [{ what: "origin", origin: ORIGIN, location: "velero/default", since: expect.any(Number) }],
+      };
 
-      expect(status).toMatchObject({ ok: true });
+      expect(store.read().allowances).toEqual(kept);
+      // The process the extension is activated in is the one that keeps the allowances: once the host
+      // loaded the store, what a window sends of them, for this cluster or for another, changes nothing.
+      store.fromStore(store.toJSON());
+      store.fromStore({
+        ...store.toJSON(),
+        allowances: { [CLUSTER]: [], "another-cluster": [{ what: "private", origin: ORIGIN, since: 1 }] },
+      });
+      expect(store.read().allowances).toEqual(kept);
+      expect(await renderer.takeBack(CLUSTER, { what: "origin", origin: ORIGIN, location: "velero/default" })).toEqual({
+        ok: true,
+        value: null,
+      });
+      expect("allowances" in PreferencesStore.getInstanceOrCreate<PreferencesStore>().read()).toBe(false);
     } finally {
       extension.disable();
     }
