@@ -27,6 +27,55 @@ const DIALOG = '[data-testid="confirmation-dialog"], .Dialog, .ConfirmDialog';
 const LATE = ", may be out of date";
 const REFUSED =
   "The reviewed release refuses the backups sent to a storage location that it does not report Available, and the restores of the backups the location holds.";
+// The phases of a backup that is in flight, and the ones of a backup that ended, with a failure or not.
+const IN_FLIGHT = [
+  "New",
+  "Queued",
+  "ReadyToStart",
+  "InProgress",
+  "WaitingForPluginOperations",
+  "WaitingForPluginOperationsPartiallyFailed",
+  "Finalizing",
+  "FinalizingPartiallyFailed",
+];
+const ENDED = ["Completed", "PartiallyFailed", "Failed", "FailedValidation"];
+const FAILURES = ["WaitingForPluginOperationsPartiallyFailed", "FinalizingPartiallyFailed", ...ENDED.slice(1)];
+
+interface HeldBackup {
+  metadata: { name: string; labels?: Record<string, string> };
+  spec?: { storageLocation?: string; volumeSnapshotLocations?: string[] };
+  status?: { phase?: string; errors?: number; validationErrors?: string[]; failureReason?: string };
+}
+
+// What the views say of the backups that name a location, as their rule says it of the phases the cluster
+// holds: how many exist, how many ended, with a failure or not, and how many are in flight, with a failure
+// or not. A backup carries a failure by its phase, or by the errors, the validation errors or the reason it
+// reports; one of no phase the views know, or that is being deleted, is of a state that is not known.
+function usingBackups(backups: HeldBackup[]): string {
+  const failing = ({ status }: HeldBackup) =>
+    FAILURES.includes(status?.phase ?? "") ||
+    (status?.errors ?? 0) > 0 ||
+    (status?.validationErrors ?? []).length > 0 ||
+    Boolean(status?.failureReason);
+  const ended = backups.filter(({ status }) => ENDED.includes(status?.phase ?? ""));
+  const flying = backups.filter(({ status }) => IN_FLIGHT.includes(status?.phase ?? ""));
+  const completed = ended.filter((backup) => !failing(backup)).length;
+  const failed = ended.filter(failing).length;
+  const failingInFlight = flying.filter(failing).length;
+  const unknown = backups.length - ended.length - flying.length;
+  const parts = [
+    completed ? `${completed} completed` : "",
+    failed ? `${failed} ended with a failure` : "",
+    flying.length ? `${flying.length} in flight` : "",
+    unknown ? `${unknown} of a state that is not known` : "",
+  ];
+  const exist = backups.length === 1 ? "1 backup that exists" : `${backups.length} backups that exist`;
+
+  if (failingInFlight) parts[2] += `, ${failingInFlight} of them with a failure`;
+  return backups.length
+    ? `${exist}: ${parts.filter(Boolean).join("; ")}.`
+    : "No backup that exists names this location.";
+}
 
 describe("views of the locations", () => {
   let started: velero.StartedApplication;
@@ -79,7 +128,7 @@ describe("views of the locations", () => {
 
   beforeAll(async () => {
     if (!cluster.fixturesReady()) {
-      throw new Error(`The fixtures are missing from ${cluster.E2E_CLUSTER_NAME}. Run \`pnpm demo:up\` first.`);
+      throw new Error(cluster.fixturesMissing());
     }
     before = cluster.clusterSnapshot();
     errors.start();
@@ -236,7 +285,7 @@ describe("views of the locations", () => {
   );
 
   it(
-    "shows the location the controller of the installation validates as it reports it",
+    "shows the location the controller of the installation validates as it reports it, what names it, and a snapshot location that is not there",
     async () => {
       await cluster.selectInstallation(frame, cluster.E2E_NAMESPACE);
       await cluster.waitForList(frame, STORAGE);
@@ -270,13 +319,67 @@ describe("views of the locations", () => {
         "The frequency is the one of the server of Velero, which this view does not read.",
       );
       expect(await workspace(STORAGE).locator("[data-testid=velero-location-refused]").count()).toBe(0);
-      // The backup the controller ran names the location, and leads to its view.
+      // The backups that name the location by their spec or by the label the release writes, as the cluster
+      // holds them: the one the controller ran, the two the server synced from the store, and the one it
+      // refused. Their words are built from their phases, by the rule of the views.
+      const read = cluster.kubectlE2E("get", "backups.velero.io", "--namespace", cluster.E2E_NAMESPACE, "-o", "json");
+
+      expect(read.status).toBe(0);
+      const backups = (JSON.parse(read.stdout) as { items: HeldBackup[] }).items;
+      const naming = backups.filter(
+        ({ metadata, spec }) =>
+          (spec?.storageLocation || metadata.labels?.["velero.io/storage-location"]) === "default",
+      );
+
+      expect(naming.map(({ metadata }) => metadata.name).sort()).toEqual(
+        [
+          `fixture-backup-${cluster.E2E_FIXTURE_RUN}`,
+          `fixture-synced-backup-${cluster.E2E_FIXTURE_RUN}`,
+          `fixture-synced-backup-no-log-${cluster.E2E_FIXTURE_RUN}`,
+          `fixture-invalid-backup-${cluster.E2E_FIXTURE_RUN}`,
+        ].sort(),
+      );
       expect(text(await workspace(STORAGE).locator("[data-testid=velero-location-backups-counts]").innerText())).toBe(
-        "1 backup that exists: 1 completed.",
+        usingBackups(naming),
       );
       expect(await cluster.layoutProblems(frame, STORAGE)).toEqual([]);
       await cluster.captureScreenshot(frame, "dark-storage-location-validated");
       await cluster.closeWorkspace(frame);
+      // The backups the server synced from the store name the snapshot location of the installation that took
+      // them, which this one does not have: its list says that it has none, and the backup says of the name
+      // that it is not there, with no way to it.
+      const synced = `fixture-synced-backup-${cluster.E2E_FIXTURE_RUN}`;
+      const [snapshots] = backups.find(({ metadata }) => metadata.name === synced)?.spec?.volumeSnapshotLocations ?? [];
+
+      expect(snapshots).toMatch(/^[a-z0-9-]+$/);
+      expect(
+        cluster.kubectlE2E(
+          "get",
+          "volumesnapshotlocations.velero.io",
+          "--namespace",
+          cluster.E2E_NAMESPACE,
+          "-o",
+          "name",
+        ).stdout,
+      ).toBe("");
+      await cluster.openPage(frame, SNAPSHOT);
+      expect(await words("[data-testid=velero-snapshot-locations-empty]")).toBe(
+        `No volume snapshot location is in the namespace ${cluster.E2E_NAMESPACE} of ${cluster.E2E_KUBE_CONTEXT}.`,
+      );
+      expect(await cluster.mounted(frame, SNAPSHOT)).toEqual([]);
+      await cluster.openBackups(frame);
+      await cluster.waitForBackups(frame);
+      await cluster.openWorkspace(frame, synced);
+      const testId = `velero-reference-VolumeSnapshotLocation-${snapshots}`;
+
+      expect(await cluster.reference(frame, testId, "absent")).toEqual({
+        state: "absent",
+        text: `${snapshots} (No volume snapshot location of this name in ${cluster.E2E_NAMESPACE})`,
+      });
+      expect(await frame.locator(`[data-testid="${testId}"]`).locator("button, a").count()).toBe(0);
+      expect(await frame.locator(`[data-testid="velero-open-snapshot-location-${snapshots}"]`).count()).toBe(0);
+      await cluster.closeWorkspace(frame);
+      await cluster.openPage(frame, STORAGE);
     },
     TIMEOUT,
   );
