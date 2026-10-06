@@ -1032,3 +1032,985 @@
 .serverProviders li[data-loaded="false"] > :first-child {
   color: var(--colorWarning);
 }
+
+/* The tabs of a workspace and the panel of a diagnostic tab. The strip of the host is one line that is
+   scrolled with no scrollbar: in a narrow room its tabs go to a second line, so that none is out of sight.
+   The line under the strip is the one of what it shows. */
+.tabStrip :global(.Tabs) {
+  flex-wrap: wrap;
+}
+
+/* The tab the keyboard is on is said by its outline: the strip of the host draws nothing for it. */
+.tabStrip :global(.Tab):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+/* A view that shows a diagnostic tab is a column, and so is what shows the tab: the panel takes what the
+   room of the view leaves under the title and the tabs, and the list of its viewer what the panel leaves.
+   A list is then whole in the room it is read in, with one scrollbar, its own; where the room is too
+   short for a list of its least height with what is around it, the list has that height and the view is
+   scrolled. The views of the other tabs, and of the other kinds, are laid out as they were. */
+.workspace:has(> [role="tabpanel"] > .artifact) {
+  display: flex;
+  flex-direction: column;
+}
+
+.workspace:has(> [role="tabpanel"] > .artifact) > [role="tabpanel"] {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+}
+
+/* The room of such a view is the one of a list at least, with the margins of the view around it: the
+   target bar takes most of a window at twice the zoom, and a view under it would be read through a slit.
+   The page is scrolled then, target bar and view, as it is for what it cannot give up. The room is
+   shorter than the one a window of 900 by 650 leaves the view, which is given nothing by this. */
+.content:has(> .over .artifact) {
+  min-height: 280px;
+}
+
+/* The panel is positioned: what it holds out of the flow, as the words for who does not see are, is
+   placed in it, and not in the view that is scrolled around it. It is a column: its parts are one under
+   the other at one distance, whatever the margins each has elsewhere. A part that holds nothing takes no
+   room and no distance, but for one whose words are said to who does not see, which is there before it
+   says anything. */
+.artifact {
+  position: relative;
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--borderFaintColor);
+}
+
+.artifact > * {
+  flex: 0 0 auto;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.artifact > :empty:not([role="status"]) {
+  display: none;
+}
+
+/* The commands of a tab, one beside the other, and one under the other where the room is narrow. A
+   command is as wide as the room at most: its words go to a second line, and are read whole. */
+.artifactActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.artifactActions :global(.Button) {
+  max-width: 100%;
+  line-height: 1.3;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+/* A command of a tab is told from the words around it before the keyboard is on it. The host draws a
+   plain command with no edge until it has the focus: these have a line around them, in the color of the
+   edges of the fields beside them, and with the focus the line the host gives. */
+.artifactActions :global(.Button.plain) {
+  box-shadow: inset 0 0 0 1px var(--borderColor);
+}
+
+/* What is said over a text that was loaded, with its commands beside the words: one line where the room
+   has both whole, and the commands under the words where it does not. The words are not broken to make
+   room for the commands. The text comes right after it. */
+.artifactHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+}
+
+.artifactHead > .stateText {
+  flex: 1 1 auto;
+  margin: 0;
+}
+
+/* What is said of a text under it: the request it came through, the way it came by, what loading it
+   again does and until when it can be saved. It is what the commands over the text are described by. */
+.artifactNotes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.artifactNotes > * {
+  margin: 0;
+}
+
+.artifactNote {
+  color: var(--textColorSecondary);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* What the tab is doing while the main process is asked: the mark of the host that moves, and the words
+   of the step beside it. */
+.artifactBusy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.artifactBusy :global(.Spinner) {
+  --spinner-size: 16px;
+
+  flex: 0 0 auto;
+}
+
+/* How a load ended without its text: the mark and the line beside the words say that it is a fault, and
+   the words say which. */
+.artifactFailure {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding-left: 12px;
+  border-left: 3px solid var(--colorError);
+}
+
+.artifactMark {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: var(--colorError);
+}
+
+/* A load the operator cancelled, and a file the store does not have, are no fault: their mark is another
+   one, in the color of the words, and their line the one of what is said for information. */
+.artifactFailure:not([data-ended="fault"]) {
+  border-left-color: var(--colorInfo);
+}
+
+.artifactFailure:not([data-ended="fault"]) .artifactMark {
+  color: inherit;
+}
+
+.artifactWords {
+  min-width: 0;
+}
+
+.artifactWords > :last-child {
+  margin-bottom: 0;
+}
+
+.artifactSaving {
+  min-width: 0;
+  color: var(--textColorSecondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+/* The confirmation of a request can be taller than the room of its view, as it is in a narrow window: its
+   two commands stay in that room, at its lower edge and on the ground of the page, while the object is
+   scrolled under them. The view keeps a margin of 32 pixels under what it holds, which what is held at
+   its lower edge is held above: the commands are held that much lower, at the edge itself. */
+.artifact .writeActions {
+  position: sticky;
+  bottom: -32px;
+  margin: 0;
+  padding: 8px 0;
+  background: var(--mainBackground);
+}
+
+/* What a tab gives the focus to when a command went: the words that say what it is doing, how a load
+   ended, and what became of a saving. */
+.artifactFocus:focus {
+  outline: none;
+}
+
+.artifactFocus:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* The viewer of the log, and the lines of a text that is shown as its lines: a bar with the search, the
+   levels and the choice to wrap, and under it the list of the lines, which is the one of the host. */
+.lines {
+  /* The words for who does not see are placed here, and not in what scrolls the viewer. */
+  position: relative;
+  display: flex;
+  /* The viewer takes what its panel leaves, and its list what the viewer leaves. */
+  flex: 1 0 auto;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.linesBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 24px;
+}
+
+/* How many lines the list shows is the last word of the bar, and ends where the list does. */
+.linesBar > span:last-child {
+  margin-left: auto;
+}
+
+/* The levels are in the bar, on its line, after the two words that say what choosing one does. */
+.linesLevels {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* A choice of the bar is on or off by itself: a level that is shown alone, the lines that are wrapped. It
+   is drawn as the host draws a checkbox, a box before its words with a tick in it when the choice is
+   made, and it is a command, which the Tab key reaches. Its state is said by the tick, and not by a color
+   or by a weight: a choice is as wide chosen as not, and moves nothing beside it. */
+.linesChoice {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  color: var(--textColorPrimary);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.linesChoice::before {
+  content: "";
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-radius: 2px;
+}
+
+.linesChoice:hover::before {
+  border-color: var(--primary);
+}
+
+.linesChoice:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.linesChoice[aria-pressed="true"]::before {
+  border-color: var(--primary);
+  background: var(--primary);
+}
+
+/* The tick, over the box: two sides of a part that is turned, as the host draws the one of its own. */
+.linesChoice[aria-pressed="true"]::after {
+  content: "";
+  position: absolute;
+  top: calc(50% - 5px);
+  left: 4px;
+  box-sizing: border-box;
+  width: 10px;
+  height: 6px;
+  border: solid var(--contentColor);
+  border-width: 0 0 2px 2px;
+  transform: rotate(-45deg);
+}
+
+/* The search is the first line of the bar, and has it to itself unless the bar has the room of all its
+   parts on one. Its field is as wide whatever the search says, and what the search says is beside the
+   field where the line has the room: nothing moves then when the first letter is typed. */
+.linesSearch {
+  display: flex;
+  flex: 1 1 620px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.linesField {
+  flex: 0 1 220px;
+  min-width: 0;
+}
+
+/* The list has the colors the host gives its own logs, in both themes. It takes what is left of the room
+   of its view, between a room of ten lines and the tallest room a list is given, which the viewer sets:
+   it is counted on the room it is read in, and never on the window. */
+.linesList {
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 200px;
+  border: 1px solid var(--borderFaintColor);
+  background: var(--logsBackground);
+  color: var(--logsForeground);
+  font-family: var(--font-monospace);
+  font-size: 12px;
+}
+
+.linesList:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.linesRows {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* The room of the scrollbar is kept when there is none: the columns of a wrapped line are counted on the
+   width that is left, which a scrollbar that comes and goes would change at every count. */
+.linesRows :global(.list) {
+  scrollbar-gutter: stable;
+}
+
+/* A row is as wide as its line when the line is wider than the room: the list is scrolled sideways, and
+   what marks the row goes as far as its text. */
+.linesRow {
+  display: flex;
+  align-items: flex-start;
+  min-width: max-content;
+  white-space: pre;
+}
+
+.linesRow:hover {
+  background: var(--logRowHoverBackground);
+}
+
+.linesRow:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+/* The match the search is at is said by its state to who does not see it, and by a bar beside its number
+   to who does: not by a color alone. */
+.linesMarked {
+  background: var(--logRowHoverBackground);
+  box-shadow: inset 4px 0 0 var(--primary);
+}
+
+/* The words a search found, in the rows that show them: a line under them, in the letters and on the
+   ground of their row. In the row of the match the search is at they have a frame as well: that match is
+   told from the others by more than a color. Neither takes room: a row is as wide and as tall with them. */
+.linesFound {
+  background: transparent;
+  color: inherit;
+  box-shadow: inset 0 -2px 0 var(--primary);
+}
+
+.linesMarked .linesFound {
+  outline: 1px solid var(--primary);
+}
+
+.linesNumber {
+  flex: 0 0 auto;
+  margin: 0 8px 0 12px;
+  color: var(--textColorSecondary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  user-select: none;
+}
+
+/* The command of a row is as tall as a line. It is drawn on the row the pointer is over, on the one the
+   list is at and where the focus is; it is in its place on every row, and the text does not move. */
+.linesCopy {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 1lh;
+  height: 1lh;
+  margin-right: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  /* The line of the list is the one of its command too, which a button does not take by itself. */
+  font: inherit;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.linesRow:hover .linesCopy,
+.linesCopy[tabindex="0"],
+.linesCopy:focus-visible {
+  opacity: 1;
+}
+
+.linesCopy:hover {
+  color: var(--primary);
+}
+
+.linesCopy:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+/* The text of a row ends where the row does: the room that is left beside a wrapped line is the column
+   the viewer leaves out of its count. */
+.linesText {
+  flex: 0 0 auto;
+}
+
+/* A piece of a line is one line of the list tall, whatever it holds: the height of a row is the one that
+   was counted for it. */
+.linesPiece {
+  display: block;
+  height: 1lh;
+}
+
+/* What a cut line says of itself is one line, whatever the room: where the lines are wrapped it ends
+   with the columns, and its words are whole in its tip. */
+.linesCut {
+  overflow: hidden;
+  color: var(--textColorSecondary);
+  font-style: italic;
+  text-overflow: ellipsis;
+}
+
+/* What holds the row the width of a character is measured on, which has the parts of a row and is not
+   shown. The row is wider than a narrow list: it is cut here, and scrolls nothing. */
+.linesProbe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.linesNone:focus {
+  outline: none;
+}
+
+.linesNone:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* The viewer of the results of an operation: the errors and the warnings as headed lists, each message in
+   its parts and, under them, as it is written. It has no room of its own: the workspace scrolls it, and a
+   word longer than the room is broken, so that nothing of it is scrolled sideways. */
+.results {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* What the results hold as a whole, which is given the focus when they arrive. It is the head of what
+   the tab shows, in the weight of one, as the first line of the resources and of the volumes is. */
+.resultsSummary {
+  margin: 0 0 12px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+/* The host takes the outline from everything: what is given the focus by the view shows that it has it. */
+.resultsSummary:focus-visible,
+.resultsMessages > li:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* That the status counts otherwise: a mark beside its words, and a line beside both. */
+.resultsDiffers {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 4px 0 4px 12px;
+  border-left: 3px solid var(--colorInfo);
+  line-height: 1.5;
+}
+
+.resultsMark {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.resultsDiffers p + p {
+  margin-top: 4px;
+}
+
+/* The mark of a group beside its title, which says the same in words. */
+.resultsGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.resultsPlace {
+  margin: 12px 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* The messages of a place are a list, drawn without the marks of one: a line beside them says where the
+   place begins and ends, and one between two messages tells them apart. */
+.resultsMessages {
+  margin: 0;
+  padding: 0 0 0 12px;
+  border-left: 2px solid var(--borderFaintColor);
+  list-style: none;
+}
+
+.resultsMessages > li {
+  padding: 6px 0;
+}
+
+.resultsMessages > li + li {
+  border-top: 1px solid var(--borderFaintColor);
+}
+
+/* The parts of a message: the name of each beside its value, which keeps the lines it was written with. */
+.resultsParts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 2px 12px;
+  margin: 0;
+}
+
+.resultsParts dt {
+  color: var(--textColorSecondary);
+}
+
+.resultsParts dd {
+  min-width: 0;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+/* What is said of a part that is empty is not its value: it is told from one by its letters as well. */
+.resultsEmpty {
+  color: var(--textColorSecondary);
+  font-style: italic;
+}
+
+.resultsText {
+  white-space: pre-wrap;
+}
+
+/* The message as it is written, under its parts: the same words, in the letters of what is not prose. */
+.resultsWritten {
+  margin-top: 4px;
+  color: var(--textColorSecondary);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.resultsWritten > [data-written] {
+  font-family: var(--font-monospace);
+}
+
+/* How many messages of a place are shown, and the command that shows the ones after them. */
+.resultsMore {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin-top: 6px;
+  color: var(--textColorSecondary);
+}
+
+/* The viewer of a resource list: what the list holds in words, its filter, and its rows in the virtual
+   list of the host, under the head of the tables of the host. */
+.resources {
+  /* What is said to who does not see is placed here, and not in what holds the view, which it would
+     make taller than its room. */
+  position: relative;
+  display: flex;
+  /* The viewer takes what its panel leaves, and its table what the viewer leaves. */
+  flex: 1 0 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.resources > * {
+  flex: 0 0 auto;
+}
+
+/* What the list holds, which is given the focus when its text arrives. */
+.resourcesCount {
+  margin: 0 0 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.resourcesCount:focus {
+  outline: none;
+}
+
+.resourcesCount:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.resourcesFilter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 24px;
+  margin-bottom: 12px;
+}
+
+/* The field after its label, and under it where the room is narrow. */
+.resourcesField {
+  display: flex;
+  flex: 1 1 320px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  min-width: 0;
+  max-width: 560px;
+}
+
+.resourcesField > :global(.Input) {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.resourcesActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.resourcesAction {
+  padding: 4px 12px;
+  border: 1px solid var(--borderColor);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--textColorPrimary);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.resourcesAction:hover,
+.resourcesAction:focus-visible {
+  border-color: var(--primary);
+  outline: none;
+}
+
+.resourcesAction:focus-visible {
+  box-shadow: 0 0 0 2px var(--primary);
+}
+
+/* The action that is chosen is said by its state to who does not see it, and by its border and its
+   weight to who does: not by a color alone. Its border takes of its own room, and moves no other. */
+.resourcesActionChosen {
+  padding: 3px 11px;
+  border-width: 2px;
+  border-color: var(--primary);
+  font-weight: 600;
+}
+
+/* The table takes what the viewer leaves under its count and its filter: its head, and under it the
+   rows, which take what the head leaves. */
+.resources > .resourcesTable {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.resourcesTable > * {
+  flex: 0 0 auto;
+}
+
+/* The room of the rows: what is left of the room of the view, between the least and the most the viewer
+   sets for the rows it has. The list of the host measures it, and is as tall. */
+.resourcesTable > .resourcesRows {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+}
+
+.resourcesRows > :global(.VirtualList) {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* The head is not scrolled, and the rows under it are: it keeps the room their scrollbar has, so that a
+   column of the head is over the same column of the rows. */
+.resourcesTable :global(.TableHead) {
+  overflow: hidden;
+  scrollbar-gutter: stable;
+}
+
+/* The part the list of the host scrolls. The room of its scrollbar is kept when there is none: a row is
+   as wide with it as without it. It is reached with the keyboard, and says so. */
+.resourcesTable :global(.VirtualList .list) {
+  scrollbar-gutter: stable;
+}
+
+.resourcesTable :global(.VirtualList .list:focus-visible) {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+/* The cells of a row share its width, a name and a resource with twice the room of a namespace. In a
+   table of the host it is the table that gives the cells their room: here they are in its list. */
+.resourcesTable :global(.TableCell) {
+  flex: 1 0 0;
+  min-width: 0;
+}
+
+.resourcesTable :global(.TableCell.name),
+.resourcesTable :global(.TableCell.resource) {
+  flex-grow: 2;
+}
+
+/* The action has the room of its longest words, and the count of a resource the room of its own. */
+.resourcesTable :global(.TableCell.action) {
+  flex: 0 0 calc(10ch + 16px);
+}
+
+.resourcesTable :global(.TableCell.count) {
+  flex: 0 0 auto;
+  color: var(--textColorSecondary);
+  font-weight: 400;
+}
+
+/* The row of a resource, over the rows of its items. */
+.resourcesKind {
+  background: var(--tableBgcStripe);
+  font-weight: 600;
+}
+
+/* A text on one line of its cell, cut where the cell ends: the rows of the list have one height. What is
+   cut is whole for who points at it. */
+.resourcesText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resourcesFailed {
+  color: var(--colorError);
+}
+
+/* The volumes of an operation: how many there are, then a table of the host, one row for each volume,
+   and under a row its details when they are open. */
+.volumes {
+  /* What is taken out of the flow in it, as the words for who does not see are, is placed in it. */
+  position: relative;
+  /* The room of the table is measured for the details of a row, and is not measured by what it holds: it
+     has the width of what holds it, wherever that places it. */
+  width: 100%;
+  min-width: 0;
+}
+
+/* The first line of the tab, which is given the focus when its text arrives. */
+.volumesCount {
+  margin: 0 0 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* The first line of a viewer that shows nothing after it, as the one of an empty answer is, keeps no
+   distance of its own under it. */
+.resultsSummary:last-child,
+.resourcesCount:last-child,
+.volumesCount:last-child {
+  margin-bottom: 0;
+}
+
+.volumesCount:focus {
+  outline: none;
+}
+
+.volumesCount:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* The table has more columns than a narrow room has width: it is scrolled inside its own room, and the
+   page is not scrolled sideways. Its room is what the details of a row are measured by. */
+.volumesTable {
+  position: relative;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-gutter: stable;
+  container-type: inline-size;
+  border-top: 1px solid var(--borderFaintColor);
+}
+
+/* The table is as wide as its columns need, in whatever room: of a backup, the 122 characters of its ten
+   columns, the padding of each, and the 40 pixels of the command of a row. Two pixels more than their
+   sum: the widths of the columns are rounded one by one, and a row that is a part of a pixel wider than
+   its table would be scrolled in a room it fits. */
+.volumesTable :global(.Table) {
+  min-width: calc(122ch + 202px);
+}
+
+/* A restore says less of a volume: five columns, of 63 characters. */
+.volumesTable[data-of="Restore"] :global(.Table) {
+  min-width: calc(63ch + 122px);
+}
+
+.volumesTable :global(.TableRow) {
+  border-bottom: 1px solid var(--borderFaintColor);
+}
+
+/* The words of a head are on as many lines as its column asks for. */
+.volumesTable :global(.TableHead) {
+  white-space: normal;
+}
+
+/* A cell begins at its top, where it holds more than one line, and its words are broken where a word
+   ends before they are broken inside. A line is as tall as the command of a row. */
+.volumesTable :global(.TableCell) {
+  box-sizing: border-box;
+  align-items: flex-start;
+  line-height: 20px;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+/* The room of a column follows what it shows, and grows with the room of the table: the sum of what the
+   columns begin from is the least width of the table. */
+.volumesTable .volumeToggle {
+  flex: 0 0 40px;
+}
+
+.volumesTable .volumeClaim,
+.volumesTable .volumeName,
+.volumesTable .volumeSkipped {
+  flex: 1.6 0 calc(15ch + 16px);
+}
+
+.volumesTable .volumeMethod {
+  flex: 1.5 0 calc(16ch + 16px);
+}
+
+.volumesTable .volumeResult {
+  flex: 1.2 0 calc(12ch + 16px);
+}
+
+.volumesTable .volumeMoved {
+  flex: 0.8 0 calc(8ch + 16px);
+}
+
+.volumesTable .volumeKept {
+  flex: 1 0 calc(10ch + 16px);
+}
+
+.volumesTable .volumeStarted,
+.volumesTable .volumeEnded {
+  flex: 1.2 0 calc(11ch + 16px);
+}
+
+.volumesTable .volumeSize {
+  flex: 0.9 0 calc(9ch + 16px);
+}
+
+/* The command that opens the details of a row, and closes them. */
+.volumeOpen {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--textColorPrimary);
+  cursor: pointer;
+}
+
+.volumeOpen:hover {
+  color: var(--primary);
+}
+
+.volumeOpen:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
+
+/* A cell of two lines: a claim over its namespace, a text over its mark, a skip over its reason. */
+.volumeLines {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.volumeLines .factNote {
+  line-height: 16px;
+}
+
+/* The mark of what is not known: an icon, which keeps its size, and its words, which say the same
+   without it and go to as many lines as they need. */
+.volumeMark {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px;
+  margin-top: 2px;
+  color: var(--textColorSecondary);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* The details of a row, under it, in one cell: as wide as the room of the table and held at its left
+   while the table is scrolled sideways, so that they are read whole where the columns are not. */
+.volumesTable .volumeDetails {
+  position: sticky;
+  left: 0;
+  display: block;
+  flex: 0 0 auto;
+  width: 100cqw;
+  /* Under the columns, after the command of the row, by less where the room is narrow. */
+  padding: 4px 8px 12px min(40px, 8cqw);
+}
+
+.volumeDetail {
+  margin-top: 8px;
+}
+
+.volumeDetailTitle {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* The fields of a detail side by side for as many as the room holds, and one under the other in a room
+   that holds one. */
+.volumeFields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+  gap: 6px 24px;
+  margin: 0;
+}
+
+.volumeFields dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The name of a field as it is written, in its capitals: two of them are told from the others by theirs. */
+.volumeFieldName {
+  color: var(--textColorSecondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
