@@ -18,6 +18,7 @@ export const CHANNELS = {
   writeCancel: "write.cancel",
   artifactPage: "artifact.page",
   artifactRelease: "artifact.release",
+  artifactSave: "artifact.save",
   allowanceGrant: "allowance.grant",
   allowanceRevoke: "allowance.revoke",
 } as const;
@@ -60,6 +61,12 @@ export const REQUEST_LABELS: Readonly<Record<string, string>> = {
 // created for: it is how the main process knows a request as its own when it reads it back.
 export const DIAGNOSTIC_REQUEST_LABEL = "freelensapp.io/diagnostic-request";
 
+// The name of a DownloadRequest: the one of its target, a dash and the identifier of the request of the
+// views it was created for. The main process creates with it and the views say it: it is written once.
+export function downloadRequestName(target: string, request: string): string {
+  return `${target}-${request}`;
+}
+
 // Where the write of such a request failed, which the main process says and the views read what the
 // request left in the cluster by: before the cluster answered its creation, while the request was waited
 // for, which is after it was created, and while the plugin of the context was asked for its credential
@@ -93,6 +100,15 @@ export type DownloadStage = (typeof DOWNLOAD_STAGES)[number];
 
 // The largest page of the text of an artifact the main process gives the views, in bytes of its text.
 export const PAGE_BOUND = 4 * 1024 * 1024;
+
+// The largest text an artifact is, in bytes: what the main process decodes of a file at most, and so the
+// most the views take of one, a text of so many bytes having no more units than that.
+export const ARTIFACT_TEXT_BOUND = 64 * 1024 * 1024;
+
+// For how long the main process holds the text of an artifact when no view lets it go, in milliseconds,
+// from the moment it holds it. It saves a text from the copy it holds: the views say until when, and
+// offer the saving no longer than that.
+export const ARTIFACT_HOLD_MS = 10 * 60 * 1000;
 
 // The largest request the processes accept of each other.
 export const REQUEST_BOUND = 64 * 1024;
@@ -420,6 +436,37 @@ export function readAllowanceRequest(value: unknown): AllowanceRequest | undefin
 
 export const readWriteCancelRequest = readWriteStatusRequest;
 export const readArtifactReleaseRequest = readWriteStatusRequest;
+// The text a view asks to save is named as the one it lets go: by its cluster and its request, and by
+// nothing of a file, which the operator chooses in a dialog of the host.
+export const readArtifactSaveRequest = readWriteStatusRequest;
+
+// Whether the text was saved: the operator may close the dialog, and nothing is written then.
+export interface ArtifactSaved {
+  saved: boolean;
+}
+
+export function readArtifactSaved(value: unknown): ArtifactSaved | undefined {
+  if (!isRecord(value) || !hasKeys(value, ["saved"]) || typeof value.saved !== "boolean") return;
+  return { saved: value.saved };
+}
+
+// The name a text is saved under, for the artifact it is of: the one of its file in the store, as text.
+const SAVED: Record<ArtifactTarget, (name: string) => string> = {
+  BackupLog: (name) => `${name}-logs.txt`,
+  BackupResults: (name) => `${name}-results.json`,
+  BackupResourceList: (name) => `${name}-resource-list.json`,
+  BackupVolumeInfos: (name) => `${name}-volumeinfo.json`,
+  RestoreLog: (name) => `restore-${name}-logs.txt`,
+  RestoreResults: (name) => `restore-${name}-results.json`,
+  RestoreResourceList: (name) => `restore-${name}-resource-list.json`,
+  RestoreVolumeInfo: (name) => `restore-${name}-volumeinfo.json`,
+};
+
+// The name of the file a dialog suggests. What is not a letter, a digit, a dot, a dash or an underscore
+// is not written into it.
+export function savedFileName(artifact: ArtifactTarget, name: string): string {
+  return SAVED[artifact](name).replace(/[^A-Za-z0-9._-]/g, "_");
+}
 
 export function readArtifactPageRequest(value: unknown): ArtifactPageRequest | undefined {
   if (!withinBound(value) || !isRecord(value) || !hasKeys(value, ["cluster", "request", "page"])) return;

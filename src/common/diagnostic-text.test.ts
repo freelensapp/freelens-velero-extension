@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { downloadFailure, pluginWords } from "./diagnostic-text";
+import { createdNothing, downloadFailure, pluginWords } from "./diagnostic-text";
 import { DOWNLOAD_STAGES, type FailureCode, readAnswer } from "./ipc";
 
 // Every code a DownloadRequest can end with.
@@ -435,6 +435,27 @@ describe("the words of a DownloadRequest that did not end with its file", () => 
       "transport-unreachable",
     ]);
     expect(CODES.filter((code) => retry(code, "creation"))).toEqual(["cancelled", "deadline", "transport-unreachable"]);
+  });
+
+  it("knows the steps before the creation, at which a way that ended left no request, and claims it of no other", () => {
+    // The steps a way is at before it creates its request: one that ends there created nothing.
+    expect(DOWNLOAD_STAGES.filter((stage) => createdNothing(stage))).toEqual([
+      "queue",
+      "target",
+      "backup",
+      "location",
+      "certificate",
+    ]);
+    // They are the steps the words of a cancellation say it of.
+    for (const stage of DOWNLOAD_STAGES) {
+      expect([
+        stage,
+        downloadFailure("cancelled", stage, context).text.includes("before anything was created"),
+      ]).toEqual([stage, createdNothing(stage)]);
+    }
+    // A step this file does not know is one nothing is claimed of.
+    expect(createdNothing("gate")).toBe(false);
+    expect(createdNothing("")).toBe(false);
   });
 
   it("says the bounds of a file that is larger than the extension loads, and that nothing of it is shown", () => {

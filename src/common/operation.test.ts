@@ -4,7 +4,7 @@ import {
   RESTORE_PHASES as FIXTURE_RESTORE_PHASES,
 } from "../../e2e/scripts/local-fixtures.mts";
 import { formatDuration, operationDuration, timestamp } from "./duration";
-import { count, operationEvidence } from "./evidence";
+import { count, operationEvidence, writtenCounters } from "./evidence";
 import { BACKUP_PHASES, isInFlight, isTerminal, operationPhases, operationState, RESTORE_PHASES } from "./phases";
 import { itemProgress } from "./progress";
 
@@ -271,6 +271,25 @@ describe("evidence of a failure", () => {
 
     expect(broken.errors).toEqual({ reported: false, raw: "many" });
     expect(broken.warnings).toEqual({ reported: false });
+  });
+
+  it("gives the counters the status writes, and none for a zero that was counted because the field is absent", () => {
+    // A backup that completed with nothing written: both are zeros of the views, and neither is in the object.
+    expect(writtenCounters(operationEvidence(state("Backup", "Completed"), frozen({})))).toEqual({});
+    // One counter written: the other is the zero the release does not write, and is not given.
+    expect(writtenCounters(operationEvidence(state("Restore", "PartiallyFailed"), frozen({ errors: 2 })))).toEqual({
+      errors: 2,
+    });
+    expect(writtenCounters(operationEvidence(state("Backup", "Completed"), frozen({ warnings: 4 })))).toEqual({
+      warnings: 4,
+    });
+    // A zero that is written is a counter the status writes.
+    expect(
+      writtenCounters(operationEvidence(state("Backup", "Completed"), frozen({ errors: 0, warnings: 1 }))),
+    ).toEqual({ errors: 0, warnings: 1 });
+    // What is not a count, and what an operation at work does not report, is no counter.
+    expect(writtenCounters(operationEvidence(state("Backup", "InProgress"), frozen({ errors: "many" })))).toEqual({});
+    expect(writtenCounters(operationEvidence(state("Backup", "InProgress"), undefined))).toEqual({});
   });
 
   it("names a counter that is not a count, wherever the operation is, without calling it zero", () => {
