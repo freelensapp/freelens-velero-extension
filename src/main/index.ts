@@ -1,5 +1,7 @@
+import { writeFile } from "node:fs/promises";
 import { Main } from "@freelensapp/extensions";
 import { PreferencesStore } from "../common/preferences-store";
+import { hostDialog, saveThroughDialog } from "./artifact-save";
 import { catalogEntries, VeleroIpc } from "./ipc";
 
 export { DiagnosticKubernetes } from "./diagnostic-kubernetes";
@@ -25,6 +27,10 @@ export default class VeleroMain extends Main.LensExtension {
         read: () => store.read().allowances ?? {},
         write: (allowances) => store.write({ ...store.read(), allowances }),
       },
+      // The text of an artifact is saved into the file the operator chooses in the dialog of the host,
+      // which is asked of the module of the host at each save.
+      save: (suggested, content, still) =>
+        saveThroughDialog(hostDialog(), (file, bytes) => writeFile(file, bytes), suggested, content, still),
     });
   }
 

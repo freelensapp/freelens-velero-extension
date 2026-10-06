@@ -13,6 +13,7 @@ import {
   artifactKind,
   DIAGNOSTIC_REQUEST_LABEL,
   type DownloadStage,
+  downloadRequestName,
   isArtifactTarget,
 } from "../common/ipc";
 import { CredentialPluginError } from "./context-identity.ts";
@@ -313,7 +314,7 @@ export async function runDownload(
       | { caCert?: string; caCertRef?: { name: string; key: string } }
       | undefined;
     const ca = await api.certificate(input.namespace, objectStorage ?? {}, signal);
-    const requestName = `${input.name}-${input.requestId}`;
+    const requestName = downloadRequestName(input.name, input.requestId);
     let request: DiagnosticObject;
 
     // The target is read once more before the request is created for it: the step of the creation is the
@@ -384,7 +385,9 @@ export async function runDownload(
 
     step("download");
     const content = await untilStopped(
-      (options.download ?? downloadArtifact)(signedUrl, { ...routed.route, ca }, signal),
+      (options.download ?? downloadArtifact)(signedUrl, { ...routed.route, ca }, signal, undefined, (bytes) =>
+        step("download", bytes),
+      ),
       signal,
     );
 

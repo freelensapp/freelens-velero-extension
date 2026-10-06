@@ -14,6 +14,7 @@ import {
 import { PATHS } from "../../common/paths";
 import { emptyRead, failed, failedStatus, loading, succeeded } from "../../common/read-state";
 import { readWindow } from "../../common/window";
+import { ArtifactLoads } from "./artifact-loads";
 import { ServerStatus } from "./server-status";
 
 import type { Allowance, AllowanceFor } from "../../common/allowances";
@@ -40,7 +41,7 @@ import type {
   VolumeSnapshotLocationResource,
 } from "../../common/types";
 import type { Window } from "../../common/window";
-import type { AllowanceClient, GateClient, WriteClient } from "../api/ipc";
+import type { AllowanceClient, ArtifactClient, GateClient, WriteClient } from "../api/ipc";
 
 // What asks the cluster: one verb, and the status of the answer beside its body.
 export type Reader = (path: string, signal?: AbortSignal) => Promise<Answer>;
@@ -70,8 +71,9 @@ export interface InstallationDependencies {
   // The gate of the main process, when the views have a way to it. Without it writes are off, and the
   // views say that they cannot be turned on.
   gate?: GateClient;
-  // The writes of the main process, through the same way as the gate.
-  writer?: WriteClient;
+  // The writes of the main process, through the same way as the gate, and what it gives of the text of
+  // an artifact it downloaded.
+  writer?: WriteClient & ArtifactClient;
   // What keeps, in the main process, what the operator allowed the downloads to do.
   allowances?: AllowanceClient;
   // The identifier of a new request of a write. A random UUID when none is given.
@@ -107,6 +109,9 @@ export class Installation {
   allowanceFailure?: string;
   // The version of the server and its plugins, when the operator asked for them.
   readonly server: ServerStatus;
+  // What Velero wrote into its storage of the backup or the restore whose view is open, when the operator
+  // asked for it: the loads of its tabs.
+  readonly artifacts: ArtifactLoads;
   private readonly dependencies: InstallationDependencies;
   private watchers = 0;
   private timer?: ReturnType<typeof setInterval>;
@@ -115,13 +120,28 @@ export class Installation {
     this.dependencies = dependencies;
     this.preferences = dependencies.storage.read();
     this.generation = { cluster: dependencies.cluster.id, namespace: "", number: 0 };
+    const requestId = dependencies.requestId ?? (() => crypto.randomUUID());
+
     this.server = new ServerStatus({
       client: dependencies.writer,
       cluster: () => this.cluster.id,
       namespace: () => this.namespace,
       writesOn: () => this.writes.on,
       now: dependencies.now,
-      requestId: dependencies.requestId ?? (() => crypto.randomUUID()),
+      requestId,
+      refused: () => void this.openGate(),
+    });
+    this.artifacts = new ArtifactLoads({
+      client: dependencies.writer,
+      cluster: () => this.cluster.id,
+      namespace: () => this.namespace,
+      // The object as it was last read, of an earlier read as well: the main process reads it again by
+      // its name and its UID before anything is created for it.
+      object: (kind, name) =>
+        this.reads[kind === "Backup" ? "backups" : "restores"].items.find((item) => item.metadata.name === name),
+      writesOn: () => this.writes.on,
+      now: dependencies.now,
+      requestId,
       refused: () => void this.openGate(),
     });
     makeObservable(this, {
@@ -226,7 +246,10 @@ export class Installation {
         this.gate = undefined;
         this.gateFailure = answer.text;
       }
-      if (!this.writes.on) this.server.leave();
+      if (!this.writes.on) {
+        this.server.leave();
+        this.artifacts.leave();
+      }
     });
   }
 
@@ -460,6 +483,7 @@ export class Installation {
     this.reads = emptyReads();
     this.asked = undefined;
     this.server.drop();
+    this.artifacts.drop();
     this.dropWrites(left);
   }
 

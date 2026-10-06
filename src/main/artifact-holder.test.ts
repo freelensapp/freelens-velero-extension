@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PAGE_BOUND, readArtifactPage } from "../common/ipc";
-import { ArtifactHolder, HELD_BYTES, HELD_TEXTS, HOLD_MS, pageOffsets } from "./artifact-holder";
+import { ARTIFACT_HOLD_MS as HOLD_MS, PAGE_BOUND, readArtifactPage } from "../common/ipc";
+import { ArtifactHolder, HELD_BYTES, HELD_TEXTS, pageOffsets } from "./artifact-holder";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -91,6 +91,30 @@ describe("the text of an artifact, held by the main process", () => {
     expect(holder.size).toBe(0);
   });
 
+  it("gives the bytes of a text whole, with the name of a file for them, to the frame it is held for alone", () => {
+    const holder = new ArtifactHolder();
+
+    holder.hold("cluster-a", "frame-1", "request-1", Buffer.from("synthetic log"), "nightly-logs.txt");
+    expect(holder.content("cluster-a", "frame-1", "request-1")).toMatchObject({
+      content: Buffer.from("synthetic log"),
+      name: "nightly-logs.txt",
+      title: "",
+    });
+    // What is said of the text over the dialog it is saved through is held with it.
+    holder.hold("cluster-a", "frame-1", "request-4", Buffer.from("x"), "nightly-logs.txt", "Save the log");
+    expect(holder.content("cluster-a", "frame-1", "request-4")?.title).toBe("Save the log");
+    holder.release("cluster-a", "frame-1", "request-4");
+    // No other frame, no other cluster, no other request, and nothing once it is let go.
+    expect(holder.content("cluster-a", "frame-2", "request-1")).toBeUndefined();
+    expect(holder.content("cluster-b", "frame-1", "request-1")).toBeUndefined();
+    expect(holder.content("cluster-a", "frame-1", "request-2")).toBeUndefined();
+    holder.release("cluster-a", "frame-1", "request-1");
+    expect(holder.content("cluster-a", "frame-1", "request-1")).toBeUndefined();
+    // A text held without a name is given the one of any text.
+    holder.hold("cluster-a", "frame-1", "request-3", Buffer.from("x"));
+    expect(holder.content("cluster-a", "frame-1", "request-3")?.name).toBe("artifact.txt");
+  });
+
   it("holds a text of no byte, which has no page", () => {
     const holder = new ArtifactHolder();
 
@@ -110,6 +134,48 @@ describe("the text of an artifact, held by the main process", () => {
     expect(pages(holder, "request-1")).toEqual([]);
     expect(holder.size).toBe(0);
     expect(HOLD_MS).toBe(600_000);
+  });
+
+  it("says of a text that is being saved whether it was let go on purpose meanwhile, which its time passing is not", () => {
+    vi.useFakeTimers();
+    const holder = new ArtifactHolder(HOLD_MS, { texts: 2, bytes: 100 });
+    const held = (request: string, cluster = "cluster-a") => {
+      holder.hold(cluster, "frame-1", request, Buffer.from(request));
+      const text = holder.content(cluster, "frame-1", request);
+
+      if (!text) throw new Error("not held");
+      return text;
+    };
+    // The time of a text passes while its dialog is open: the bytes are the ones the operator asked to save.
+    const late = held("request-1");
+
+    expect(late.kept()).toBe(true);
+    vi.advanceTimersByTime(HOLD_MS);
+    expect(holder.content("cluster-a", "frame-1", "request-1")).toBeUndefined();
+    expect(late.kept()).toBe(true);
+    // And so are the ones of a text that gave its room to another.
+    const oldest = held("request-2");
+
+    held("request-3");
+    held("request-4");
+    expect(holder.content("cluster-a", "frame-1", "request-2")).toBeUndefined();
+    expect(oldest.kept()).toBe(true);
+    // The view lets its text go: its load was dropped, and nothing of it is to be written.
+    const released = held("request-5");
+
+    expect(holder.release("cluster-a", "frame-2", "request-5")).toBe(false);
+    expect(released.kept()).toBe(true);
+    holder.release("cluster-a", "frame-1", "request-5");
+    expect(released.kept()).toBe(false);
+    // The texts of a cluster go with it, and every text with the process.
+    const dropped = held("request-6");
+    const other = held("request-7", "cluster-b");
+
+    holder.drop("cluster-a");
+    expect([dropped.kept(), other.kept()]).toEqual([false, true]);
+    holder.dispose();
+    expect(other.kept()).toBe(false);
+    vi.useRealTimers();
   });
 
   it("lets every text of a cluster go with the cluster, and every text when it is disposed", () => {

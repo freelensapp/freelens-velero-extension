@@ -33,6 +33,7 @@ export const ACTIVATION_CALLS = {
     "Ipc.handle write.run",
     "Ipc.handle artifact.page",
     "Ipc.handle artifact.release",
+    "Ipc.handle artifact.save",
     "Ipc.handle allowance.grant",
     "Ipc.handle allowance.revoke",
   ],

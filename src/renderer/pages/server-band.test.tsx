@@ -12,7 +12,7 @@ import { OverviewPage } from "./overview-page";
 
 import type { Answer, Family } from "../../common/discovery";
 import type { Failure, GateState, Answer as IpcAnswer, ServerStatusValue, WriteConfirmAnswer } from "../../common/ipc";
-import type { GateClient, WriteClient } from "../api/ipc";
+import type { ArtifactClient, GateClient, WriteClient } from "../api/ipc";
 
 const DISCOVERY = "/apis/velero.io/v1";
 const LOCATIONS = "/apis/velero.io/v1/backupstoragelocations";
@@ -80,6 +80,15 @@ const DEADLINE: Failure = {
   text: "The server did not answer in ten seconds: it may be stopped, or busy. The request stays until the server processes it.",
 };
 
+// What stands for the answers about an artifact, which the band of the server never asks for.
+const NO_ARTIFACT: Failure = {
+  ok: false,
+  code: "request-failed",
+  stage: "request",
+  retry: false,
+  text: "The band of the server asks for no artifact.",
+};
+
 const RUNNING = "Creating the ServerStatusRequest, then waiting for the server to answer for ten seconds at most.";
 const STAYS =
   "The extension deletes no request: the server deletes one when it looks at it again, five minutes after it processed it, and one that no server processes stays until someone removes it.";
@@ -120,7 +129,7 @@ function mainProcess() {
     },
     onChanged: () => () => undefined,
   };
-  const writer: WriteClient = {
+  const writer: WriteClient & ArtifactClient = {
     confirm: (_cluster, namespace, kind, target) => {
       asked.push(`confirm ${namespace} ${kind}${target ? " with a target" : ""}`);
       if (!held) return Promise.resolve(confirmation());
@@ -132,6 +141,11 @@ function mainProcess() {
     },
     status: async () => ({ ok: true, value: { step: "waiting" } }),
     cancel: async () => ({ ok: true, value: null }),
+    // The band asks nothing of an artifact.
+    runDownload: async () => NO_ARTIFACT,
+    page: async () => NO_ARTIFACT,
+    release: async () => NO_ARTIFACT,
+    save: async () => NO_ARTIFACT,
   };
 
   return {

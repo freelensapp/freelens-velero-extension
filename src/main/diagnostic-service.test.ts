@@ -75,7 +75,15 @@ function fixture(options: Partial<DiagnosticOptions> = {}) {
     certificate: vi.fn(async () => undefined),
   };
   const close = vi.fn<() => void | Promise<void>>();
-  const download = vi.fn(async (_url: string, _route: unknown, _signal: AbortSignal) => Buffer.from("synthetic log"));
+  const download = vi.fn(
+    async (
+      _url: string,
+      _route: unknown,
+      _signal: AbortSignal,
+      _limits?: unknown,
+      _progress?: (bytes: number) => void,
+    ) => Buffer.from("synthetic log"),
+  );
   const created: { name: string; uid: string }[] = [];
   const given: DiagnosticOptions = {
     pollMs: 5,
@@ -259,6 +267,26 @@ describe("the way of a DownloadRequest", () => {
       expect(failure).toMatchObject({ code, stage: "download" });
       expect([code, (failure as DiagnosticError).verdict]).toEqual([code, undefined]);
     }
+  });
+
+  it("says how many bytes of the text arrived while the file is downloaded, at the step of the download", async () => {
+    const value = fixture();
+
+    value.download.mockImplementationOnce(async (_url, _route, _signal, limits, progress) => {
+      // The bounds of a download are the ones of the transport: none is given in their place.
+      expect(limits).toBeUndefined();
+      progress?.(4096);
+      progress?.(8192);
+      return Buffer.from("synthetic log");
+    });
+    await value.run();
+    expect(value.steps.filter(([stage]) => stage === "download")).toEqual([
+      ["download", undefined],
+      ["download", 4096],
+      ["download", 8192],
+    ]);
+    // The step after it is said once the bytes are all there.
+    expect(value.steps.at(-1)?.[0]).toBe("delivery");
   });
 
   it("reads the backup of a restore, and the storage location of that backup", async () => {

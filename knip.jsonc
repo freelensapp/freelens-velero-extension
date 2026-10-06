@@ -24,7 +24,10 @@
   "ignoreDependencies": [
     // Named by the paths of tsconfig.json only: the types of the host, which the resolution of the
     // bundler does not find through the exports of the package.
-    "@freelensapp/core"
+    "@freelensapp/core",
+    // The process the extension runs in, which the main process asks for the dialog of the host when a
+    // text is saved: it is of the host, is left out of the bundle, and is no dependency of the package.
+    "electron"
   ],
 
   "typescript": {

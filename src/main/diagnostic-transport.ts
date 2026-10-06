@@ -6,6 +6,7 @@ import { pipeline } from "node:stream/promises";
 import tls from "node:tls";
 import { createGunzip } from "node:zlib";
 import { canonicalAddress, classifyAddress, isMetadataName } from "../common/artifact-address";
+import { ARTIFACT_TEXT_BOUND } from "../common/ipc";
 
 import type { AllowanceFor } from "../common/allowances";
 import type { DownloadVerdict } from "../common/diagnostic-text";
@@ -56,7 +57,7 @@ export interface ArtifactRoute {
 
 export const DOWNLOAD_LIMITS = {
   compressed: 16 * 1024 ** 2,
-  decoded: 64 * 1024 ** 2,
+  decoded: ARTIFACT_TEXT_BOUND,
   connectMs: 10_000,
   idleMs: 15_000,
   totalMs: 120_000,
@@ -152,6 +153,8 @@ export function downloadArtifact(
   route: ArtifactRoute,
   signal: AbortSignal,
   limits: DownloadLimits = DOWNLOAD_LIMITS,
+  // Told how many bytes of the text arrived so far, as they arrive.
+  progress?: (decoded: number) => void,
 ): Promise<Buffer> {
   const validated = validateArtifactRoute(raw, route);
   for (const key of Object.keys(DOWNLOAD_LIMITS) as (keyof DownloadLimits)[]) {
@@ -259,6 +262,12 @@ export function downloadArtifact(
           if (decoded > limits.decoded) callback(new DiagnosticError("payload-too-large"));
           else {
             chunks.push(chunk);
+            // What hears of the bytes is not what downloads them: whatever it does, the download goes on.
+            try {
+              progress?.(decoded);
+            } catch {
+              // Nothing of it is of the download.
+            }
             callback();
           }
         },

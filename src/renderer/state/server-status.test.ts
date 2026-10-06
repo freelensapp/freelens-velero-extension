@@ -5,7 +5,7 @@ import { requestLeft, ServerStatus } from "./server-status";
 
 import type { Answer, Family } from "../../common/discovery";
 import type { Failure, GateState, Answer as IpcAnswer, ServerStatusValue, WriteConfirmAnswer } from "../../common/ipc";
-import type { GateClient, WriteClient } from "../api/ipc";
+import type { ArtifactClient, GateClient, WriteClient } from "../api/ipc";
 
 const DISCOVERY = "/apis/velero.io/v1";
 const LOCATIONS = "/apis/velero.io/v1/backupstoragelocations";
@@ -75,6 +75,15 @@ const CANCELLED: Failure = {
   text: "The wait was cancelled. The request stays until the server processes it.",
 };
 
+// What stands for the answers about an artifact, which the band of the server never asks for.
+const NO_ARTIFACT: Failure = {
+  ok: false,
+  code: "request-failed",
+  stage: "request",
+  retry: false,
+  text: "The band of the server asks for no artifact.",
+};
+
 // The main process, as the views see it: the gate, which turns writes on for what it is asked, and the
 // writes, whose confirmations and runs wait until the test lets them go when it holds them.
 function mainProcess() {
@@ -112,7 +121,7 @@ function mainProcess() {
     },
     onChanged: () => () => undefined,
   };
-  const writer: WriteClient = {
+  const writer: WriteClient & ArtifactClient = {
     confirm: (cluster, namespace, kind, target) => {
       asked.push(`confirm ${cluster} ${namespace} ${kind} ${target === undefined ? "no-target" : "target"}`);
       if (!holdConfirmations) return Promise.resolve(confirmation());
@@ -124,6 +133,11 @@ function mainProcess() {
     },
     status: async () => ({ ok: true, value: { step: "waiting" } }),
     cancel: async () => ({ ok: true, value: null }),
+    // The band asks nothing of an artifact.
+    runDownload: async () => NO_ARTIFACT,
+    page: async () => NO_ARTIFACT,
+    release: async () => NO_ARTIFACT,
+    save: async () => NO_ARTIFACT,
   };
   const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 

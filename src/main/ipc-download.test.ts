@@ -39,6 +39,7 @@ function fixture(
     urlTimeoutMs?: number;
     allowances?: Allowances;
     lookup?: (host: string) => Promise<string[]>;
+    save?: (suggested: { name: string; title: string }, content: Buffer, still: () => boolean) => Promise<boolean>;
   } = {},
 ) {
   const catalog: CatalogEntry[] = [
@@ -114,6 +115,7 @@ function fixture(
       ? { allowances: { read: () => options.allowances as Allowances, write: () => undefined } }
       : {}),
     ...(options.lookup ? { lookup: options.lookup } : {}),
+    ...(options.save ? { save: options.save } : {}),
     download: { download, pollMs: 5, urlTimeoutMs: options.urlTimeoutMs ?? 80 },
   });
   const call = (channel: string, event: IpcEvent, payload: unknown) => {
@@ -191,11 +193,280 @@ describe("the procedures of a DownloadRequest", () => {
         CHANNELS.writeCancel,
         CHANNELS.artifactPage,
         CHANNELS.artifactRelease,
+        CHANNELS.artifactSave,
         CHANNELS.allowanceGrant,
         CHANNELS.allowanceRevoke,
       ].sort(),
     );
     dispose();
+  });
+
+  it("saves the text it holds for a frame into the file the operator chooses, and nowhere else", async () => {
+    const saved: { name: string; title: string; content: string }[] = [];
+    let chosen = true;
+    const { enable, confirm, run, call, holder, dispose } = fixture({
+      save: async ({ name, title }, content) => {
+        saved.push({ name, title, content: content.toString() });
+        return chosen;
+      },
+    });
+
+    await enable();
+    const request = randomUUID();
+
+    await run(await confirm(), request);
+    // The file is named for the artifact, and the bytes are the ones of the text, whole.
+    await expect(call(CHANNELS.artifactSave, FRAME_A, { cluster: "cluster-a", request })).resolves.toEqual({
+      ok: true,
+      value: { saved: true },
+    });
+    // The dialog is told what is saved, of which installation and of which cluster, as the catalog of the
+    // host names it: one dialog is told from another by it.
+    expect(saved).toEqual([
+      {
+        name: "nightly-logs.txt",
+        title: "Save the log of the backup nightly, of velero in the cluster demo",
+        content: LOG,
+      },
+    ]);
+    // A dialog the operator closed saved nothing, and that is said.
+    chosen = false;
+    await expect(call(CHANNELS.artifactSave, FRAME_A, { cluster: "cluster-a", request })).resolves.toEqual({
+      ok: true,
+      value: { saved: false },
+    });
+    // The text stays held: saving it lets nothing go.
+    expect(holder.size).toBe(1);
+    // Another frame of the cluster, and the frame of another cluster, save nothing of it.
+    await expect(call(CHANNELS.artifactSave, FRAME_A2, { cluster: "cluster-a", request })).resolves.toMatchObject({
+      ok: false,
+      code: "not-found",
+      stage: "delivery",
+    });
+    await expect(call(CHANNELS.artifactSave, FRAME_B, { cluster: "cluster-a", request })).resolves.toMatchObject({
+      ok: false,
+      code: "forbidden",
+      stage: "frame",
+    });
+    expect(saved).toHaveLength(2);
+    // A text that was let go is not saved: the words say to load it again.
+    await call(CHANNELS.artifactRelease, FRAME_A, { cluster: "cluster-a", request });
+    const gone = await call(CHANNELS.artifactSave, FRAME_A, { cluster: "cluster-a", request });
+
+    expect(gone).toMatchObject({ ok: false, code: "not-found", stage: "delivery" });
+    expect(gone.text).toBe("The text of this artifact is not held any more: load it again to save it.");
+    expect(saved).toHaveLength(2);
+    // A request that is not one of the contract is refused before anything is looked for.
+    await expect(
+      call(CHANNELS.artifactSave, FRAME_A, { cluster: "cluster-a", request, path: "/tmp/x" }),
+    ).resolves.toMatchObject({
+      ok: false,
+      code: "validation",
+    });
+    dispose();
+  });
+
+  it("writes nothing of a text that was let go while its dialog was open, and says so", async () => {
+    // The dialog of each saving, which the test answers: it writes what it was given when the text is
+    // still to be saved, as the one of the host does.
+    const dialogs: (() => void)[] = [];
+    const written: string[] = [];
+    const save = async (_suggested: { name: string }, content: Buffer, still: () => boolean) => {
+      await new Promise<void>((answered) => dialogs.push(answered));
+      if (!still()) return false;
+      written.push(content.toString());
+      return true;
+    };
+    const gone = {
+      ok: false,
+      code: "not-found",
+      stage: "delivery",
+      retry: false,
+      text: "The text of this artifact was let go while the dialog was open: nothing was written.",
+    };
+    const opened = async (wait: number) => vi.waitFor(() => expect(dialogs).toHaveLength(wait));
+
+    // The view lets the text go: it closed, its installation changed, or its tab loads again.
+    const released = fixture({ save });
+
+    await released.enable();
+    const first = randomUUID();
+
+    await released.run(await released.confirm(), first);
+    const saving = released.call(CHANNELS.artifactSave, FRAME_A, { cluster: "cluster-a", request: first });
+
+    await opened(1);
+    await released.call(CHANNELS.artifactRelease, FRAME_A, { cluster: "cluster-a", request: first });
+    dialogs[0]();
+    await expect(saving).resolves.toEqual(gone);
+    // The texts of the cluster are let go with what the gate held of it: its entry or its connection
+    // changed, or the frame that turned writes on went.
+    const second = randomUUID();
+
+    await released.run(await released.confirm(), second);
+    const off = released.call(CHANNELS.artifactSave, FRAME_A, { cluster: "cluster-a", request: second });
+
+    await opened(2);
+    released.holder.drop("cluster-a");
+    dialogs[1]();
+    await expect(off).resolves.toEqual(gone);
+    // The extension is deactivated while a dialog is open.
+    const third = randomUUID();
+
+    await released.enable();
+    await released.run(await released.confirm(), third);
+    const deactivated = released.call(CHANNELS.artifactSave, FRAME_A, { cluster: "cluster-a", request: third });
+
+    await opened(3);
+    released.dispose();
+    dialogs[2]();
+    await expect(deactivated).resolves.toEqual(gone);
+    expect(written).toEqual([]);
+    // A text that only gave its room to others while its dialog was open is written: the bytes are the
+    // ones the operator asked to save, and nothing dropped its load.
+    const kept = fixture({ save });
+
+    await kept.enable();
+    const fourth = randomUUID();
+
+    await kept.run(await kept.confirm(), fourth);
+    const roomy = kept.call(CHANNELS.artifactSave, FRAME_A, { cluster: "cluster-a", request: fourth });
+
+    await opened(4);
+    for (let other = 0; other < 16; other += 1)
+      kept.holder.hold("cluster-a", "another-frame", `other-${other}`, Buffer.from("x"));
+    await expect(
+      kept.call(CHANNELS.artifactPage, FRAME_A, { cluster: "cluster-a", request: fourth, page: 0 }),
+    ).resolves.toMatchObject({ ok: false, code: "not-found" });
+    dialogs[3]();
+    await expect(roomy).resolves.toEqual({ ok: true, value: { saved: true } });
+    expect(written).toEqual([LOG]);
+    kept.dispose();
+    // The frame the text is held for goes while its dialog is open: its text is still held, until the
+    // gate finds the frame gone, and nothing of it is written for a frame that is not there.
+    const left = fixture({ save });
+    const frame = leaving();
+
+    await left.enable(frame);
+    const fifth = randomUUID();
+
+    await left.run(await left.confirm("BackupLog", frame), fifth, "BackupLog", frame);
+    const frameless = left.call(CHANNELS.artifactSave, frame, { cluster: "cluster-a", request: fifth });
+
+    await opened(5);
+    frame.senderFrame = GONE;
+    expect(left.holder.size).toBe(1);
+    dialogs[4]();
+    await expect(frameless).resolves.toEqual(gone);
+    expect(written).toEqual([LOG]);
+    left.dispose();
+  });
+
+  it("says that a file was written when it was, whatever becomes of its text once it is", async () => {
+    let written: () => Promise<unknown> = async () => undefined;
+    const { enable, confirm, run, call, holder, dispose } = fixture({
+      save: async () => {
+        await written();
+        return true;
+      },
+    });
+
+    await enable();
+    const request = randomUUID();
+
+    await run(await confirm(), request);
+    // The view lets the text go at the moment its file is written: its tab loads again, or it closes.
+    written = () => call(CHANNELS.artifactRelease, FRAME_A, { cluster: "cluster-a", request });
+    await expect(call(CHANNELS.artifactSave, FRAME_A, { cluster: "cluster-a", request })).resolves.toEqual({
+      ok: true,
+      value: { saved: true },
+    });
+    expect(holder.size).toBe(0);
+    dispose();
+  });
+
+  it("opens one dialog for a text at a time, whoever asks twice", async () => {
+    const dialogs: ((chosen: boolean) => void)[] = [];
+    const { enable, confirm, run, call, dispose } = fixture({
+      save: () => new Promise<boolean>((answered) => dialogs.push(answered)),
+    });
+
+    await enable();
+    const request = randomUUID();
+
+    await run(await confirm(), request);
+    const first = call(CHANNELS.artifactSave, FRAME_A, { cluster: "cluster-a", request });
+
+    await vi.waitFor(() => expect(dialogs).toHaveLength(1));
+    // The same text asked again while its dialog is open opens no second one, and is answered at once.
+    const twice = call(CHANNELS.artifactSave, FRAME_A, { cluster: "cluster-a", request });
+
+    expect(dialogs).toHaveLength(1);
+    await expect(twice).resolves.toEqual({
+      ok: false,
+      code: "conflict",
+      stage: "save",
+      retry: false,
+      text: "A dialog is open for this text already: choose its file there, or close it.",
+    });
+    expect(dialogs).toHaveLength(1);
+    // Another text of the frame has its own.
+    const other = randomUUID();
+
+    await run(await confirm("BackupResults"), other, "BackupResults");
+    const second = call(CHANNELS.artifactSave, FRAME_A, { cluster: "cluster-a", request: other });
+
+    await vi.waitFor(() => expect(dialogs).toHaveLength(2));
+    dialogs[0](false);
+    dialogs[1](true);
+    await expect(first).resolves.toEqual({ ok: true, value: { saved: false } });
+    await expect(second).resolves.toEqual({ ok: true, value: { saved: true } });
+    // Once its dialog was answered, a text can be saved again, and so it can after a write that failed.
+    const again = call(CHANNELS.artifactSave, FRAME_A, { cluster: "cluster-a", request });
+
+    await vi.waitFor(() => expect(dialogs).toHaveLength(3));
+    dialogs[2](true);
+    await expect(again).resolves.toEqual({ ok: true, value: { saved: true } });
+    dispose();
+  });
+
+  it("says that a file could not be written, and that this version cannot save where the host gives no dialog", async () => {
+    const failing = fixture({
+      save: async () => {
+        throw new Error("EACCES: /Users/operator/private/nightly-logs.txt");
+      },
+    });
+
+    await failing.enable();
+    const request = randomUUID();
+
+    await failing.run(await failing.confirm(), request);
+    const answer = await failing.call(CHANNELS.artifactSave, FRAME_A, { cluster: "cluster-a", request });
+
+    expect(answer).toEqual({
+      ok: false,
+      code: "request-failed",
+      stage: "save",
+      retry: true,
+      text: "The file could not be written. The text is still held: choose another file, or load it again.",
+    });
+    // Nothing of the path of a file is in the answer.
+    expect(JSON.stringify(answer)).not.toMatch(/Users|operator|EACCES/);
+    failing.dispose();
+    const none = fixture();
+
+    await none.enable();
+    const other = randomUUID();
+
+    await none.run(await none.confirm(), other);
+    await expect(none.call(CHANNELS.artifactSave, FRAME_A, { cluster: "cluster-a", request: other })).resolves.toEqual({
+      ok: false,
+      code: "request-failed",
+      stage: "save",
+      retry: false,
+      text: "This version cannot save a file: the host gave it no dialog.",
+    });
+    none.dispose();
   });
 
   it("finds the route by itself when it is given none, and asks the operator for what the storage location does not give", async () => {
@@ -381,7 +652,9 @@ describe("the procedures of a DownloadRequest", () => {
   });
 
   it("joins a request that is sent again while it runs, and creates one request for the two", async () => {
-    const { enable, confirm, run, adapter, state, call, dispose } = fixture();
+    // The request waits for its URL for as long as the test holds it there: the eighty milliseconds of the
+    // other tests end before the test does on a machine that is busy, and nothing runs to be joined.
+    const { enable, confirm, run, adapter, state, call, dispose } = fixture({ urlTimeoutMs: 30_000 });
 
     await enable();
     state.phase = "New";
