@@ -108,14 +108,19 @@ export interface WorkspaceProps {
   children?: ReactNode;
 }
 
+// What holds text that is typed: a field of text, and not a choice or a command drawn as an input.
+const TEXT_FIELD =
+  'textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="reset"])';
+
 // What every view of one object has around it: its name, the way back, and Escape that takes it from
-// wherever the focus is.
+// wherever the focus is, a text field apart: there the key is of what was typed, as it is in the search
+// field of the host, and the view is never left from inside one.
 export function Workspace({ kind, name, uid, deleting, back, onBack, children }: WorkspaceProps) {
   const way = React.useRef<HTMLButtonElement>(null);
   const view = `${kind}/${name}`;
   const [opened, setOpened] = React.useState<{ view: string; uid?: string }>({ view, uid });
   const leave = (event: React.KeyboardEvent) => {
-    if (event.key === "Escape") onBack();
+    if (event.key === "Escape" && !(event.target as Element).closest?.(TEXT_FIELD)) onBack();
   };
   const { noun } = VIEWS[kind];
 
@@ -132,7 +137,7 @@ export function Workspace({ kind, name, uid, deleting, back, onBack, children }:
   }, [kind, name]);
 
   return (
-    // Escape leaves the view from wherever the focus is in it.
+    // Escape leaves the view from wherever the focus is in it, a text field apart.
     <section
       className={styles.workspace}
       data-testid={`velero-${kind}-workspace`}

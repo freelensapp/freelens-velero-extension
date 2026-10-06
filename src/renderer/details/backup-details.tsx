@@ -1,5 +1,6 @@
 import { Renderer } from "@freelensapp/extensions";
 import { observer } from "mobx-react";
+import { inTheWorkspace } from "../../common/artifact-text";
 import { backupView } from "../../common/backup-view";
 import {
   countsNote,
@@ -28,7 +29,8 @@ export interface BackupDetailsProps extends Renderer.Component.KubeObjectDetails
 }
 
 // What the details of the host show of a Backup, where the host opens them: the same reading of the status
-// the views of the extension give, in short, and the way to the workspace. It asks nothing of the cluster.
+// the views of the extension give, in short, that its log, its results, its resources and its volumes are in
+// the workspace, and the way there. It asks nothing of the cluster, and loads none of them.
 export const BackupDetails = observer(({ object, extension, installation }: BackupDetailsProps) => {
   if (!object) return null;
   const view = backupView(object as unknown as BackupResource, Date.now());
@@ -54,6 +56,11 @@ export const BackupDetails = observer(({ object, extension, installation }: Back
       {view.evidence.validationErrors.length ? (
         <DrawerItem name="Validation errors">{view.evidence.validationErrors.join("; ")}</DrawerItem>
       ) : null}
+      {/* What Velero wrote of the backup into its storage is loaded in the workspace, by a command of each
+          tab: here it is said where it is, and nothing of it is loaded. */}
+      <DrawerItem name="Diagnostics">
+        <span data-testid="velero-backup-details-artifacts">{inTheWorkspace("Backup")}</span>
+      </DrawerItem>
       <WorkspaceLink
         extension={extension}
         installation={installation ?? currentInstallation()}
