@@ -121,30 +121,29 @@ before changing the client version. The main build replaces undici with
 extension never calls, and the real module installs a dispatcher for the whole
 process when it loads, which inside Freelens is the process of the host. Supported
 `WS_NO_*` build defines disable optional native accelerators without patching the
-library. The 2186 tests of the unit run, on the separate modules and on the
-production build, are 17 of the scaffold, 124 of the environment and its fixtures,
-168 of the diagnostic contracts, 152 of the operation states and of their stages,
-56 of the rules of the discovery, 206 of what the views show of a backup, of a
-restore and of a schedule, of what they refer to and of the views in the address,
-141 of what they show of a location, of its durations and of what uses it, 38 of
-what the Overview says of an installation and of the line of time, 33 of the state
-of an installation and of its reader, 225 of the components, 131 of the gate of
-the writes, of the way between the processes and of the credential of a context,
-96 of the version of the server: its comparison, its plugins, the state of its
-request, its band, the confirmation of one write and the object the cluster is sent,
-122 of the request for an artifact: its way, its words, its text in pages, its
-saving, its procedures and the object the cluster is sent, 244 of the addresses a
-download connects to: their written forms, their ranges and what an IPv6 address
-carries, 59 of the route to the store: the origin and the path of a signed URL, the
-Service of the cluster, the name of this machine, what the operator allows and the
-store that keeps it, and 374 of the tabs of an operation: 115 of the four parsers
-and of the words of the tabs, 40 of the load of an artifact and of the loads of a
-view, 7 of the tab in the address, 6 of the file a text is saved into, 179 of the
-strip, of the panel, of the lists of lines, of the four viewers and of Escape in a
-text field, and 27 of the two workspaces with their tabs. The
-integration test
-covers the installation in the host, the suites of the views what the views do
-in it.
+library. The 2291 tests of the unit run, on the separate modules and on the
+production build, are 17 of the scaffold, 215 of the environment and its fixtures,
+the fixtures of the tabs among them, 168 of the diagnostic contracts, 152 of the
+operation states and of their stages, 56 of the rules of the discovery, 206 of what
+the views show of a backup, of a restore and of a schedule, of what they refer to
+and of the views in the address, 141 of what they show of a location, of its
+durations and of what uses it, 38 of what the Overview says of an installation and
+of the line of time, 33 of the state of an installation and of its reader, 225 of
+the components, 131 of the gate of the writes, of the way between the processes and
+of the credential of a context, 96 of the version of the server: its comparison, its
+plugins, the state of its request, its band, the confirmation of one write and the
+object the cluster is sent, 122 of the request for an artifact: its way, its words,
+its text in pages, its saving, its procedures and the object the cluster is sent,
+244 of the addresses a download connects to: their written forms, their ranges and
+what an IPv6 address carries, 59 of the route to the store: the origin and the path
+of a signed URL, the Service of the cluster, the name of this machine, what the
+operator allows and the store that keeps it, and 388 of the tabs of an operation:
+129 of the four parsers and of the words of the tabs, 40 of the load of an artifact
+and of the loads of a view, 7 of the tab in the address, 6 of the file a text is
+saved into, 179 of the strip, of the panel, of the lists of lines, of the four
+viewers and of Escape in a text field, and 27 of the two workspaces with their tabs.
+The measure of the code of a log runs after them, alone. The integration test covers
+the installation in the host, the suites of the views what the views do in it.
 The electron-vite warning about a missing standalone renderer
 configuration is expected: this extension intentionally builds its renderer through
 the preload target, whose generated entry is covered by the bundle tests.
@@ -548,7 +547,11 @@ The [suite of the tabs](../../e2e/__tests__/velero-e2e-artifacts.tests.ts) drive
 them in a packaged Freelens, on the real backup and the real restore of the test
 environment: what it proves, and what it leaves to the fixtures of the tabs, is in
 the [evidence](../specs/SPEC-0011-artifact-viewers.md#evidence-and-deviations) of
-their spec.
+their spec. The fixtures of the tabs are in the installation of the test
+environment: two backups its server syncs from files its store is given, and three
+operations it refuses. The scripts of the environment place them and remove them,
+the backups through the server, as the
+[testing strategy](TESTING.md#the-fixtures-of-the-tabs) says.
 
 ### Create-Only Adapter Decision
 
@@ -934,8 +937,9 @@ coverage; not every negative is induced against the live controller/store.
 See [the evidence matrix](TESTING.md#t06-main-transport-proof). No feature gate or
 actual-host acceptance is closed merely by exporting these modules.
 
-The accepted [T0.4 local-storage selection](LOCAL-STORAGE.md) uses SeaweedFS 4.47 with
-explicit authentication, disabled telemetry and isolated internal services. The
+The accepted [T0.4 local-storage selection](LOCAL-STORAGE.md) used SeaweedFS 4.47 with
+explicit authentication, disabled telemetry and isolated internal services; the
+environment pins 4.48 since 2026-10-04. The
 [manifest generator](../../e2e/scripts/local-manifests.mts) encodes these settings;
 storage and Velero were installed and passed T0.4 readiness checks on 2026-09-24.
 The BSL is Available. T0.5 proves the synthetic ConfigMap backup/restore flow;

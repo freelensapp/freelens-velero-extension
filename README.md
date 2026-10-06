@@ -107,7 +107,7 @@ gates after every change:
 ```sh
 pnpm type:check
 pnpm lint:check     # biome (lint:fix to auto-format)
-pnpm test:unit      # builds first
+pnpm test:unit      # builds first, then the tests, then the measures alone
 pnpm knip:check
 pnpm trunk:check
 ```
