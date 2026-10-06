@@ -5,10 +5,11 @@
 
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:https";
+import Module from "node:module";
 import { join } from "node:path";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type HostExtensionStub,
   hostCatalog,
@@ -25,6 +26,7 @@ import { DiagnosticError } from "./diagnostic-transport";
 import VeleroMain from "./index";
 import { catalogEntries, VeleroIpc } from "./ipc";
 
+import type { SaveDialog } from "./artifact-save";
 import type { ArtifactRoute } from "./diagnostic-transport";
 
 const CLUSTER = "synthetic-cluster";
@@ -156,29 +158,45 @@ beforeAll(async () => {
   );
 });
 
+// The route and the download of the test, which stand in the place of the store.
+const STORE: NonNullable<Parameters<VeleroIpc["register"]>[1]> = {
+  route: async (url, input, storage) => {
+    routed.push({ url, target: input.target, location: storage.metadata.name });
+    return {
+      route: { origin: ORIGIN, pathname: new URL(url).pathname, address: "192.0.2.1", port: 443, mode: "tunnel" },
+      close: () => {
+        closed += 1;
+      },
+    };
+  },
+  download: {
+    pollMs: 5,
+    download: async (url, route) => {
+      downloaded.push({ url, route });
+      if (storeFails) throw storeFails;
+      return stored;
+    },
+  },
+};
+
 // The procedures as the extension registers them, with the route and the download of the test in place
 // of the store.
 function register(): void {
   main = VeleroIpc.createInstance({} as never);
-  main.register(catalogEntries, {
-    route: async (url, input, storage) => {
-      routed.push({ url, target: input.target, location: storage.metadata.name });
-      return {
-        route: { origin: ORIGIN, pathname: new URL(url).pathname, address: "192.0.2.1", port: 443, mode: "tunnel" },
-        close: () => {
-          closed += 1;
-        },
-      };
-    },
-    download: {
-      pollMs: 5,
-      download: async (url, route) => {
-        downloaded.push({ url, route });
-        if (storeFails) throw storeFails;
-        return stored;
-      },
-    },
-  });
+  main.register(catalogEntries, STORE);
+}
+
+// The module of Electron is not there where the tests run. What the main process requires of it at a
+// save is what a test puts in its place, as a suite does in the application: until what is returned is
+// called, the dialog of the host is the one the test answers.
+function withDialog(dialog: SaveDialog): () => void {
+  const loader = Module as unknown as { _load(request: string, ...more: unknown[]): unknown };
+  const load = loader._load;
+
+  loader._load = (request, ...more) => (request === "electron" ? { dialog } : load.call(loader, request, ...more));
+  return () => {
+    loader._load = load;
+  };
 }
 
 beforeEach(() => {
@@ -414,6 +432,97 @@ describe("the object of a DownloadRequest, as the cluster is sent it", () => {
       ok: true,
       value: answered,
     });
+  });
+
+  it("takes of a saving only whether a file was written: an answer that says more, or something else, is a failure of the way", async () => {
+    const answers = [
+      { saved: true, path: `/home/operator/${SENTINEL}.txt` },
+      { saved: "yes" },
+      { written: true },
+      null,
+    ];
+
+    for (const value of answers) {
+      // A main process that answers what the contract does not give.
+      ipcHandlers.set(CHANNELS.artifactSave, async () => ({ ok: true, value }));
+      const answer = await renderer.save(CLUSTER, randomUUID());
+
+      expect(answer).toMatchObject({ ok: false, code: "validation", stage: "answer" });
+      expect(JSON.stringify(answer)).not.toContain(SENTINEL);
+    }
+    for (const saved of [true, false]) {
+      ipcHandlers.set(CHANNELS.artifactSave, async () => ({ ok: true, value: { saved } }));
+      expect(await renderer.save(CLUSTER, randomUUID())).toEqual({ ok: true, value: { saved } });
+    }
+  });
+
+  it("saves a text into the file the operator chooses in the dialog of the host, as the extension is activated, and writes no other", async () => {
+    main.release();
+    resetIpc();
+    const folder = await mkdtemp(join(certificates.directory, "saved-"));
+    // The dialogs the host was asked for, with what each was told, which the test answers as the operator.
+    const dialogs: { told: unknown; answer: (chosen: { canceled: boolean; filePath?: string }) => void }[] = [];
+    const restoreDialog = withDialog({
+      showSaveDialog: (told) => new Promise((answer) => dialogs.push({ told, answer })),
+    });
+    const opened = (count: number) => vi.waitFor(() => expect(dialogs).toHaveLength(count));
+    // The extension as the host activates it, with the store of the test beside what it registers.
+    const registered = VeleroIpc.prototype.register;
+    const registering = vi.spyOn(VeleroIpc.prototype, "register").mockImplementation(function (
+      this: VeleroIpc,
+      catalog,
+      more,
+    ) {
+      registered.call(this, catalog, { ...more, ...STORE });
+    });
+    const extension = Reflect.construct(VeleroMain, []) as HostExtensionStub;
+
+    extension.activate();
+    try {
+      const token = await confirmed(BACKUP, "BackupLog");
+      const request = randomUUID();
+
+      expect(await renderer.runDownload(CLUSTER, NAMESPACE, BACKUP, "BackupLog", token, request)).toMatchObject({
+        ok: true,
+      });
+      // The command that saves names the text by its cluster and its request: the main process opens the
+      // dialog of the host, which is suggested a name and told what is saved.
+      const saving = renderer.save(CLUSTER, request);
+      const title = "Save the log of the backup nightly, of velero in the cluster synthetic";
+
+      await opened(1);
+      expect(dialogs[0].told).toEqual({ title, message: title, defaultPath: "nightly-logs.txt" });
+      expect(await readdir(folder)).toEqual([]);
+      // The operator chooses a file, under another name than the one that was suggested: the text is
+      // written there, whole, and nowhere else.
+      dialogs[0].answer({ canceled: false, filePath: join(folder, "chosen by the operator.log") });
+      expect(await saving).toEqual({ ok: true, value: { saved: true } });
+      expect(await readdir(folder)).toEqual(["chosen by the operator.log"]);
+      expect(await readFile(join(folder, "chosen by the operator.log"), "utf8")).toBe(LOG);
+      // Saving lets nothing go: the text is still held, and is saved again. A dialog the operator closes
+      // writes nothing, and that is what is answered.
+      expect(await renderer.page(CLUSTER, request, 0)).toMatchObject({ ok: true, value: { text: LOG } });
+      const left = renderer.save(CLUSTER, request);
+
+      await opened(2);
+      dialogs[1].answer({ canceled: true, filePath: join(folder, "not chosen.log") });
+      expect(await left).toEqual({ ok: true, value: { saved: false } });
+      // The view lets the text go while a dialog is open, and a file is chosen after: nothing is written.
+      const late = renderer.save(CLUSTER, request);
+
+      await opened(3);
+      expect(await renderer.release(CLUSTER, request)).toEqual({ ok: true, value: null });
+      dialogs[2].answer({ canceled: false, filePath: join(folder, "chosen too late.log") });
+      expect(await late).toMatchObject({ ok: false, code: "not-found", stage: "delivery" });
+      expect(await readdir(folder)).toEqual(["chosen by the operator.log"]);
+      // None of it asked the cluster for anything more than the download did.
+      expect(received.filter((entry) => entry.method === "POST")).toHaveLength(1);
+      expect([...new Set(received.map((entry) => entry.method))].sort()).toEqual(["GET", "POST"]);
+    } finally {
+      extension.disable();
+      registering.mockRestore();
+      restoreDialog();
+    }
   });
 
   it("asks the cluster for reads and one creation in every way a download ends, and never for a change or a removal", async () => {

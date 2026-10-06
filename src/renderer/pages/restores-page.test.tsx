@@ -16,6 +16,7 @@ import { RestoresPage } from "./restores-page";
 import type { Renderer } from "@freelensapp/extensions";
 
 import type { Answer, Family, Preferences } from "../../common/discovery";
+import type { ArtifactClient, GateClient, WriteClient } from "../api/ipc";
 
 const DISCOVERY = "/apis/velero.io/v1";
 const LOCATIONS = "/apis/velero.io/v1/backupstoragelocations";
@@ -1071,6 +1072,53 @@ describe("details of the host for a restore", () => {
       installation.configure(B);
     });
     expect(screen.queryByTestId("velero-restore-details-link")).toBeNull();
+  });
+
+  it("says that the log, the results, the resources and the volumes are in the workspace, leads there, and loads none", async () => {
+    // The main process, as the details could ask it: every procedure records that it was called.
+    const called: string[] = [];
+    const main = new Proxy(
+      {},
+      {
+        get: (_target, procedure) => () => {
+          called.push(String(procedure));
+          return () => undefined;
+        },
+      },
+    ) as GateClient & WriteClient & ArtifactClient;
+    const installation = new Installation({
+      cluster: { id: "cluster-a", name: "local-demo" },
+      read: async (address) => {
+        called.push(address);
+        return { status: 404 };
+      },
+      now: () => 0,
+      storage: heldPreferences(chosen(A)),
+      gate: main,
+      writer: main,
+    });
+
+    render(<RestoreDetails object={new Restore(waiting as never)} extension={extension} installation={installation} />);
+    expect(screen.getByTestId("velero-restore-details-artifacts").textContent).toBe(
+      "The log, the results, the resource list and the volume information of this restore are in its workspace, each loaded there when it is asked for. None of them is loaded here.",
+    );
+    expect(item("Diagnostics")).toBe(screen.getByTestId("velero-restore-details-artifacts").textContent);
+    // The way there is the one to the workspace, which follows what the details say of it.
+    const section = [...screen.getByTestId("velero-restore-details").querySelectorAll(".DrawerItem")].map((part) =>
+      part.getAttribute("data-name"),
+    );
+
+    expect(section.slice(-2)).toEqual(["Diagnostics", "Workspace"]);
+    expect(screen.getByTestId("velero-restore-details-link").getAttribute("href")).toBe(
+      "/extension/freelensapp--velero-extension/restores?view=restore%2Frestore-waiting",
+    );
+    // Nothing is offered that loads, and nothing was asked: of the cluster, or of the main process.
+    expect(screen.getByTestId("velero-restore-details").querySelectorAll("button")).toHaveLength(0);
+    expect(document.querySelector("[data-artifact-content]")).toBeNull();
+    await act(async () => {
+      await new Promise((done) => setTimeout(done, 0));
+    });
+    expect(called).toEqual([]);
   });
 
   it("says the counters and the times as the workspace does", () => {

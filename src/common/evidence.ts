@@ -48,6 +48,21 @@ export function counting(values: Record<string, Count>): boolean {
   return Object.values(values).some((value) => (value.reported ? value.value > 0 : value.raw !== undefined));
 }
 
+// The counters of the errors and of the warnings as the status writes them, and none for one it does not
+// write: the zero the release leaves out is counted by the views, and is not in the object. What is
+// compared with a count made elsewhere, as the one of the results of the operation is, is what the status
+// wrote and nothing the views read into it.
+export function writtenCounters(evidence: Pick<OperationEvidence, "errors" | "warnings">): {
+  errors?: number;
+  warnings?: number;
+} {
+  const written = (value: Count) => (value.reported && value.written ? value.value : undefined);
+  const errors = written(evidence.errors);
+  const warnings = written(evidence.warnings);
+
+  return { ...(errors === undefined ? {} : { errors }), ...(warnings === undefined ? {} : { warnings }) };
+}
+
 function texts(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((entry): entry is string => typeof entry === "string" && entry !== "")

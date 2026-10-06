@@ -4,12 +4,14 @@
 
 import { Main } from "@freelensapp/extensions";
 import { ALLOWANCES_BOUND, type Allowances, isAllowed, withAllowance, withoutAllowance } from "../common/allowances";
+import { saveTitle } from "../common/artifact-text";
 import { type DownloadContext, downloadFailure } from "../common/diagnostic-text";
 import { clusterOfAddress, senderKey } from "../common/frame";
 import {
   type AllowanceRequest,
   type Answer,
   type ArtifactPage,
+  type ArtifactSaved,
   type ArtifactTarget,
   type ArtifactValue,
   CHANNELS,
@@ -19,6 +21,7 @@ import {
   readAllowanceRequest,
   readArtifactPageRequest,
   readArtifactReleaseRequest,
+  readArtifactSaveRequest,
   readGateDisableRequest,
   readGateEnableRequest,
   readGateStateRequest,
@@ -27,6 +30,7 @@ import {
   readWriteRunRequest,
   readWriteStatusRequest,
   type ServerStatusValue,
+  savedFileName,
   type WriteRunRequest,
   type WriteTarget,
 } from "../common/ipc";
@@ -101,6 +105,10 @@ export interface HandlersDependencies {
   holder?: ArtifactHolder;
   // Where what the operator allowed is kept: the store of the preferences, as the main process holds it.
   allowances?: { read(): Allowances; write(allowances: Allowances): void };
+  // What saves a text into a file the operator chooses, under a name it is suggested and with what the
+  // dialog says is saved: whether it was written. It asks `still` when a file is chosen, and writes
+  // nothing of a text that is not to be saved any more.
+  save?(suggested: { name: string; title: string }, content: Buffer, still: () => boolean): Promise<boolean>;
   now?(): number;
 }
 
@@ -327,7 +335,22 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
       // And again before the text is held for it. A write the gate aborted, because writes went off or it
       // was cancelled, has no result: the way delivers nothing of an operation that was stopped.
       if (!still()) throw new SenderGone();
-      const held = holder.hold(request.cluster, sender.key, request.request, result.content);
+      // The text is held with the name of a file for it, and with what the dialog of a saving says of it:
+      // which artifact, of which operation, of which installation and of which cluster, by the name the
+      // catalog of the host gives the cluster.
+      const held = holder.hold(
+        request.cluster,
+        sender.key,
+        request.request,
+        result.content,
+        savedFileName(artifact, target.name),
+        saveTitle(
+          artifact,
+          target.name,
+          request.namespace,
+          dependencies.catalog().find((entry) => entry.id === request.cluster)?.name ?? request.cluster,
+        ),
+      );
 
       write.status = { step: "done" };
       return {
@@ -401,6 +424,67 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
     (sender, request) => {
       holder.release(request.cluster, sender.key, request.request);
       return { ok: true, value: null };
+    },
+  );
+
+  // The texts whose dialog is open, by their cluster and the identifier of their request: one dialog for
+  // a text at a time.
+  const saving = new Set<string>();
+
+  // The text a tab holds is saved into a file: the main process opens the dialog of the host, the operator
+  // chooses the file, and the bytes are written there and nowhere else. It is a write to this machine,
+  // outside the gate of the cluster, and the only file the extension writes. The views name the text by
+  // its request, and nothing of a file. The dialog is open for as long as the operator leaves it open,
+  // and the window stays usable meanwhile: when a file is chosen, nothing is written of a text whose load
+  // was dropped since, by its view, with its cluster or with the extension, nor for a frame that went.
+  procedure<{ cluster: string; request: string }, ArtifactSaved>(
+    CHANNELS.artifactSave,
+    readArtifactSaveRequest,
+    async (sender, request, still) => {
+      const held = holder.content(request.cluster, sender.key, request.request);
+      const key = `${request.cluster}/${request.request}`;
+
+      if (!held)
+        return failure(
+          "not-found",
+          "delivery",
+          false,
+          "The text of this artifact is not held any more: load it again to save it.",
+        );
+      if (!dependencies.save)
+        return failure("request-failed", "save", false, "This version cannot save a file: the host gave it no dialog.");
+      if (saving.has(key))
+        return failure(
+          "conflict",
+          "save",
+          false,
+          "A dialog is open for this text already: choose its file there, or close it.",
+        );
+      const wanted = () => held.kept() && still();
+
+      saving.add(key);
+      try {
+        const saved = await dependencies.save({ name: held.name, title: held.title }, held.content, wanted);
+
+        if (!saved && !wanted())
+          return failure(
+            "not-found",
+            "delivery",
+            false,
+            "The text of this artifact was let go while the dialog was open: nothing was written.",
+          );
+        return { ok: true, value: { saved } };
+      } catch {
+        // Nothing of what was raised is said: it carries the path of a file.
+        return failure(
+          "request-failed",
+          "save",
+          true,
+          "The file could not be written. The text is still held: choose another file, or load it again.",
+        );
+      } finally {
+        saving.delete(key);
+      }
     },
   );
 

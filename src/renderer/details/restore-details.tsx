@@ -1,5 +1,6 @@
 import { Renderer } from "@freelensapp/extensions";
 import { observer } from "mobx-react";
+import { inTheWorkspace } from "../../common/artifact-text";
 import {
   countsNote,
   countsText,
@@ -28,8 +29,8 @@ export interface RestoreDetailsProps extends Renderer.Component.KubeObjectDetail
 }
 
 // What the details of the host show of a Restore, where the host opens them: the same reading of the
-// object the views of the extension give, in short, and the way to the workspace. It asks nothing of the
-// cluster.
+// object the views of the extension give, in short, that its log, its results, its resources and its
+// volumes are in the workspace, and the way there. It asks nothing of the cluster, and loads none of them.
 export const RestoreDetails = observer(({ object, extension, installation }: RestoreDetailsProps) => {
   if (!object) return null;
   const view = restoreView(object as unknown as RestoreResource, Date.now());
@@ -57,6 +58,11 @@ export const RestoreDetails = observer(({ object, extension, installation }: Res
       {view.evidence.validationErrors.length ? (
         <DrawerItem name="Validation errors">{view.evidence.validationErrors.join("; ")}</DrawerItem>
       ) : null}
+      {/* What Velero wrote of the restore into its storage is loaded in the workspace, by a command of each
+          tab: here it is said where it is, and nothing of it is loaded. */}
+      <DrawerItem name="Diagnostics">
+        <span data-testid="velero-restore-details-artifacts">{inTheWorkspace("Restore")}</span>
+      </DrawerItem>
       <WorkspaceLink
         extension={extension}
         installation={installation ?? currentInstallation()}

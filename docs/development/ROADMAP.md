@@ -94,8 +94,8 @@ phase covered, missing data never shown as healthy, pre-review on both themes.
 | Write gate enforced in main: off by default, scoped to cluster and namespace, confirmation that names both | T4.1 | [SPEC-0009](../specs/SPEC-0009-write-gate.md) | Done |
 | `DownloadRequest` workflow owned by main: confirmation, allowlisted targets, URL, failure and timeout exits, cancellation, cleanup | T2.1 | [SPEC-0010](../specs/SPEC-0010-diagnostic-request-and-transport.md) | Done |
 | Streaming transport: destination and redirect policy, inline CA and `caCertRef`, size limits, URL redaction, preserved signed path, Host and SNI | T2.2 | [SPEC-0010](../specs/SPEC-0010-diagnostic-request-and-transport.md) | Done |
-| Log, results, resource list and volume info viewers, with search and clear unavailable, expired and forbidden states | T2.3 | [SPEC-0011](../specs/SPEC-0011-artifact-viewers.md) | Approved |
-| Direct access to the object store and the in-cluster strategy; a missing artifact is distinct from a failed storage | T2.4 | [SPEC-0010](../specs/SPEC-0010-diagnostic-request-and-transport.md) | In PR |
+| Log, results, resource list and volume info viewers, with search and clear unavailable, expired and forbidden states | T2.3 | [SPEC-0011](../specs/SPEC-0011-artifact-viewers.md) | In PR |
+| Direct access to the object store and the in-cluster strategy; a missing artifact is distinct from a failed storage | T2.4 | [SPEC-0010](../specs/SPEC-0010-diagnostic-request-and-transport.md) | Done |
 | Server version and installed plugins through `ServerStatusRequest` | T5.3 | [SPEC-0012](../specs/SPEC-0012-server-status.md) | Done |
 
 The write gate comes here and not with the actions of M5 because creating a
@@ -107,6 +107,15 @@ The four specs of the milestone were approved on 2026-09-30, as drafted. The
 order of the slices is the one of their dependencies: the gate, then the
 version of the server, which is the smallest write and proves the way between
 the processes end to end, then the request and its transport, then the viewers.
+
+The viewers, T2.3, are three pull requests, in this order: the tabs, with their
+unit and component tests and a first suite in the packaged application on the
+real backup and the real restore of the test environment; the fixtures of the
+tabs, which are the backups synced from the store, with artifacts made for the
+rules of the viewers, and the operations the server refuses; the rest of the
+packaged suites on those fixtures, the measures on the log of 200,000 lines and
+the pre-review with the tabs open. The row of T2.3 is In PR from the first of
+them and Done after the last.
 
 Exit of M3: real local artifacts displayed end to end without dependence on
 CORS, exposure of a signed URL, full backup downloads or requests of the main

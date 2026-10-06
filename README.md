@@ -24,8 +24,12 @@ is a from-scratch MIT implementation and it is not a Velero product.
 > discovery of the Velero installations of a cluster, the Overview of an
 > installation, the Backups, the Restores, the Schedules and the storage and
 > snapshot locations, read only. The write mode is in place too, off until it is
-> turned on, with its first write: the version of the server and its plugins, in
-> the Overview. The repository is developed spec-first: one spec
+> turned on, with its first writes: the version of the server and its plugins, in
+> the Overview, and the log, the results, the resource list and the volume
+> information of a backup and of a restore, each loaded when it is asked for, in
+> the tabs of its workspace, proven by their unit and component tests and by a
+> suite in a packaged Freelens on the real backup and the real restore of the
+> test environment. The repository is developed spec-first: one spec
 > per feature under [docs/specs](docs/specs/). See the
 > [roadmap](docs/development/ROADMAP.md).
 

@@ -542,3 +542,20 @@ What the rules do not do, and say:
 Still open, for the review of the milestone: the code of a Secret the identity may
 not read, above. The proof shows what the code gives, forbidden at the step of the
 certificate, which is what REQ-124 and REQ-137 say.
+
+### With The Tabs, T2.3
+
+The views that ask for an artifact are the tabs of
+[SPEC-0011](SPEC-0011-artifact-viewers.md#evidence-and-deviations), whose task is
+three pull requests. The first of them brings this, of what the slices above left to
+the tabs:
+
+| Check | Evidence with the first pull request of the tabs | Left |
+| --- | --- | --- |
+| DIAG-11 | Unit and component: what a tab says of the way a text came by, through a tunnel to the Pod of the store or directly from this machine, encrypted or not, and from which origin; a connection that was not encrypted said for what it was, inside the tunnel or allowed for that origin. Packaged, on the nine loads of the suite of the tabs: plain HTTP through the tunnel, said with the origin of the store of the test environment, and with its bytes inside the connection to the API server and inside the cluster | Nothing the check asks. A connection made directly from this machine is said in no packaged run: the store of the test environment is a Service of the cluster |
+| DIAG-13 | Component: an allowance asked in a tab, by a command in the name of what it allows, with the origin shown, and with a private address and a connection that is not encrypted named; the artifact asked again only when the main process kept what was allowed, and nothing asked again, with why, when it did not | Packaged: an allowance asked in a tab, which the route of the test environment, through the tunnel, never asks for |
+| DIAG-02, DIAG-06, DIAG-07, DIAG-10, DIAG-12, DIAG-15, DIAG-18 | Packaged, on the real backup and the real restore of the test environment, in the suite of the tabs: nothing of a DownloadRequest read or created when a tab opens or when a confirmation is left, one creation for each load, and beside them the reads of each request by its name, the writes of the server into it and its removal by the server, and nothing else (DIAG-02); the URL the server signed for the storage location of the demo, of the origin its `s3Url` gives, taken, and that origin named by the tab (DIAG-07); the store, a Service of the cluster, reached through a tunnel to its Pod on every load (DIAG-10); no part of a signed URL in the words of the view, in what the tab said at each moment of the first load of the log of the backup, in what the dialog of a saving was asked with, nor in a report of the suite, which is not written when it would carry one (DIAG-15); the four artifacts of the real backup and of the real restore downloaded through the tunnel (DIAG-18) | What that suite does not prove of them: the other reads of the way, of the operation, of its location and of the route, which it does not count (DIAG-02); a file the store does not have, for the backup and the restore that failed their validation (DIAG-06); a store over TLS, which the store of the test environment, over HTTP, is not (DIAG-12); a part of a signed URL in the lines of the console of the application, where the suite does not look for one, and in what a tab says during the loads it does not watch step by step (DIAG-15); the artifacts of a backup synced from the store, and the identities of the demo at the step each may not do (DIAG-18). Of DIAG-07 and DIAG-10 nothing waits for the fixtures |
+
+Since the tabs the main process has a second use for a text it holds, the command
+that saves it: what a saving writes, and when it writes nothing, is in the evidence
+of SPEC-0011.

@@ -14,6 +14,7 @@ import { BackupsPage } from "./backups-page";
 import type { Renderer } from "@freelensapp/extensions";
 
 import type { Answer, Family, Preferences } from "../../common/discovery";
+import type { ArtifactClient, GateClient, WriteClient } from "../api/ipc";
 
 const DISCOVERY = "/apis/velero.io/v1";
 const LOCATIONS = "/apis/velero.io/v1/backupstoragelocations";
@@ -296,7 +297,7 @@ describe("workspace of a backup", () => {
     expect(within(workspace).getByRole("progressbar").getAttribute("aria-valuenow")).toBe("100");
     expect(within(workspace).getByText("Finalizing", { selector: "[aria-current=step]" })).toBeTruthy();
     expect(within(workspace).getByTestId("velero-backup-counts-note").textContent).toContain(
-      "The status reports 1 error and 0 warnings and does not say what they are",
+      "The status reports 1 error and 0 warnings and does not say what they are: that is in the log and in the results of the backup, which the Log and Results tabs load when they are asked.",
     );
     // Opening a backup asks nothing: what it shows was read with the installation.
     expect(asked).toHaveLength(before);
@@ -490,6 +491,55 @@ describe("details of the host", () => {
     expect(screen.getByTestId("velero-backup-details-link").getAttribute("href")).toBe(
       "/extension/freelensapp--velero-extension/backups?view=backup%2Fnightly-1",
     );
+  });
+
+  it("says that the log, the results, the resources and the volumes are in the workspace, leads there, and loads none", async () => {
+    // The main process, as the details could ask it: every procedure records that it was called.
+    const called: string[] = [];
+    const main = new Proxy(
+      {},
+      {
+        get: (_target, procedure) => () => {
+          called.push(String(procedure));
+          return () => undefined;
+        },
+      },
+    ) as GateClient & WriteClient & ArtifactClient;
+    const installation = new Installation({
+      cluster: { id: "cluster-a", name: "local-demo" },
+      read: async (address) => {
+        called.push(address);
+        return { status: 404 };
+      },
+      now: () => 0,
+      storage: heldPreferences(chosen(A)),
+      gate: main,
+      writer: main,
+    });
+
+    render(
+      <BackupDetails object={new Backup(finalizing as never)} extension={extension} installation={installation} />,
+    );
+    expect(screen.getByTestId("velero-backup-details-artifacts").textContent).toBe(
+      "The log, the results, the resource list and the volume information of this backup are in its workspace, each loaded there when it is asked for. None of them is loaded here.",
+    );
+    expect(item("Diagnostics")).toBe(screen.getByTestId("velero-backup-details-artifacts").textContent);
+    // The way there is the one to the workspace, which follows what the details say of it.
+    const section = [...screen.getByTestId("velero-backup-details").querySelectorAll(".DrawerItem")].map((part) =>
+      part.getAttribute("data-name"),
+    );
+
+    expect(section.slice(-2)).toEqual(["Diagnostics", "Workspace"]);
+    expect(screen.getByTestId("velero-backup-details-link").getAttribute("href")).toBe(
+      "/extension/freelensapp--velero-extension/backups?view=backup%2Fnightly-1",
+    );
+    // Nothing is offered that loads, and nothing was asked: of the cluster, or of the main process.
+    expect(screen.getByTestId("velero-backup-details").querySelectorAll("button")).toHaveLength(0);
+    expect(document.querySelector("[data-artifact-content]")).toBeNull();
+    await act(async () => {
+      await new Promise((done) => setTimeout(done, 0));
+    });
+    expect(called).toEqual([]);
   });
 
   it("gives no link to a backup of a namespace that is not the one selected", () => {

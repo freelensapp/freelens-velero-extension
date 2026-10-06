@@ -1,12 +1,15 @@
 # Operator Experience
 
-Date: 2026-09-28
+Date: 2026-10-06
 
 Status: Proposed in T0.2. The target bar, the states before a view, the list of the
 Backups and the workspace of a backup are implemented as described here, with the
 first milestone, and so are the Restores, the Schedules with their history and the
-way between the views, with the second; their specs record what was decided while
-implementing. The rest is textual design, not a rendered or approved UI.
+way between the views, with the second, and the diagnostic tabs of a backup and of
+a restore, with the third, proven by their unit and component tests and by a suite
+in the packaged application on the real backup and the real restore of the test
+environment; their specs record what was decided while implementing. The rest is
+textual design, not a rendered or approved UI.
 
 See [directives](../../AGENTS.md), [architecture](ARCHITECTURE.md), and
 [roadmap](ROADMAP.md). Optimize for correct operational decisions and efficient repeated
@@ -60,7 +63,7 @@ Initial operation workspace sketch, containing operational labels only:
 Backups / sample-backup                 Context: local-demo    Install: velero-demo
 In progress       Errors: 0       Started: ...       Elapsed: ...
 
-Summary | Logs | Results | Resources | Volumes
+Summary | Log | Results | Resources | Volumes
 
 Current stage: Finalizing               Item progress: 240 / 240
 Source schedule: ...                    Storage: ...   Access: ReadWrite
@@ -69,10 +72,14 @@ Included namespaces: ...                Expires: ...
 Validation errors / operation errors    Related restores
 ```
 
-These example identifiers are synthetic. Diagnostic tabs are introduced when their
-milestone exists; no empty shell tabs or implicit downloads in the read-only slice.
-Opening a diagnostic tab is not consent to create a request: show its load command
-and write/permission state until the explicit confirmation occurs.
+These example identifiers are synthetic. The diagnostic tabs are in the workspace
+of a backup and of a restore since the third milestone: Summary, Log, Results,
+Resources and Volumes, a list of tabs moved among with the arrows, Home and End,
+each tab a stop of the Tab key, with the tab that is open in the address.
+Opening a diagnostic tab is not consent to create a request: it shows its load
+command and the state of the writes until the explicit confirmation occurs. What
+a tab loaded stays for as long as its view is the one shown, and is saved to a
+file the operator chooses in the dialog of the host.
 
 ## Status And Evidence
 
@@ -172,6 +179,21 @@ commands open the explicit Velero operation, not an unrestricted YAML editor.
 - Logs use bounded rendering, search and clear loading/error/cancel states. Results
   group warnings/errors without losing namespace/resource context. Resource and
   volume views show completeness and filters rather than unbounded JSON blobs.
+  A tab shows what it loaded first, under the words that say when it was loaded
+  and how much of it there is, with its commands beside them or under them; what
+  is said of the request and of the way the text came by is under it. A load that
+  ended without its text is marked as what it ended as: a fault, a file the store
+  does not have, or a cancellation, which is no fault. A list of a tab takes the
+  room its view leaves it, and is never counted on the window. A log is its lines
+  with their numbers, a hundred rows mounted at most, a search that counts the
+  lines it finds, marks the words where the lines show them and moves among them,
+  and a filter by level that hides nothing until a level is chosen, each level a
+  choice drawn as a checkbox. The results are the errors and then the warnings, by
+  Velero, cluster and namespace, with their counts, and with the counter of the
+  status beside them when it differs. The resources are one list with a filter,
+  and for a restore what was done with each item. The volumes are a table, with
+  the details of a row under it. A text that is not of the shape its viewer was
+  written for is shown as its lines, with a note.
 - The restore flow reviews a concrete source by default, deliberate namespace
   mappings, existing-resource policy none, and an explicit choice for cluster scope.
   Display known scope and uncertainty; never promise a full dry-run result.
@@ -208,6 +230,21 @@ complete feature for ornamental work.
 - Support keyboard activation, visible focus, labelled inputs, error associations,
   Escape/back behavior, and focus restoration after dialogs. Do not steal focus on
   refresh or reorder the user's selection under their cursor.
+- Escape in a text field of a view belongs to the field: it clears what was typed
+  and goes no further, as in the search field of the host, and a view of one
+  object is never left from inside a field. Inside the confirmation of a request
+  Escape leaves the confirmation, and the view stays. Anywhere else in the view
+  Escape is the way back. The two exceptions depart from what the Restores ask of
+  Escape: they are a
+  [deviation](../specs/SPEC-0011-artifact-viewers.md#evidence-and-deviations) of
+  the tabs, which awaits the review of the third milestone. A field whose Enter
+  is a command of its own keeps the focus at Enter.
+- After a gesture the focus goes to what took the place of the control that was
+  used: to the words that say what is being done while it is done, to the first
+  line of the content when a load ends, to the command that follows a failure,
+  or to the words of the failure when no command follows. It stays where the
+  operator moved it meanwhile. What changes several times a second is not read
+  aloud as it changes: a step of a load is said once.
 - Layout must work at 900x650 and 1440x900 desktop test windows in both themes,
   and remain coherent at 200% zoom. Use container-based constraints, not viewport
   font scaling or negative letter spacing. Long words must wrap or truncate safely.

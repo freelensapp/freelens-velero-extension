@@ -6,6 +6,7 @@ import { Renderer } from "@freelensapp/extensions";
 import {
   type Answer,
   type ArtifactPage,
+  type ArtifactSaved,
   type ArtifactTarget,
   type ArtifactValue,
   CHANNELS,
@@ -13,6 +14,7 @@ import {
   type GateState,
   readAnswer,
   readArtifactPage,
+  readArtifactSaved,
   readArtifactValue,
   readGateState,
   readServerStatusValue,
@@ -70,6 +72,8 @@ export interface ArtifactClient {
   ): Promise<Answer<ArtifactValue>>;
   page(cluster: string, request: string, page: number): Promise<Answer<ArtifactPage>>;
   release(cluster: string, request: string): Promise<Answer<null>>;
+  // The text the main process holds is saved into a file the operator chooses there.
+  save(cluster: string, request: string): Promise<Answer<ArtifactSaved>>;
 }
 
 // What the views ask of what the operator allows the downloads to do: to keep it, and to take it back.
@@ -174,6 +178,10 @@ export class VeleroIpcRenderer
 
   release(cluster: string, request: string): Promise<Answer<null>> {
     return this.ask(CHANNELS.artifactRelease, { cluster, request }, (value) => (value === null ? null : undefined));
+  }
+
+  save(cluster: string, request: string): Promise<Answer<ArtifactSaved>> {
+    return this.ask(CHANNELS.artifactSave, { cluster, request }, readArtifactSaved);
   }
 
   allow(cluster: string, allowed: AllowanceFor): Promise<Answer<null>> {

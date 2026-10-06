@@ -1,5 +1,6 @@
 import { observer } from "mobx-react";
-import { counting } from "../../common/evidence";
+import React from "react";
+import { counting, writtenCounters } from "../../common/evidence";
 import {
   countsNote,
   countsSentence,
@@ -20,10 +21,14 @@ import {
   sourceNote,
 } from "../../common/restore-view";
 import { stageStrip } from "../../common/stages";
+import { ArtifactPanel } from "../components/artifact-panel";
 import { Phase, Signal, time } from "../components/status";
 import styles from "../components/views.module.css";
 import { Fact, NotShown, Stale, Target, Workspace } from "../components/workspace";
+import { panelId, tabId, WorkspaceTabs } from "../components/workspace-tabs";
+import { openTab, showTab } from "../navigation";
 
+import type { RestoreResource } from "../../common/types";
 import type { Installation } from "../state/installation";
 
 export interface RestoreWorkspaceProps {
@@ -34,13 +39,20 @@ export interface RestoreWorkspaceProps {
   onBack: () => void;
 }
 
-// One restore, read only: where it is, what it says of a failure, where it comes from, what it restores and
-// into where. Nothing here asks Velero for a log or a result: that is a request, and a request is a write.
-// A restore that completed is said completed: whether what it restored works is not in the object.
+// One restore: its summary, and the tabs of what Velero wrote of it into its storage. The tab that is shown
+// is the one the address names, and choosing one writes it there. Opening the view, or a tab, asks Velero
+// for nothing: a log or a result is asked through a request, a request is a write, and each tab has the
+// command that asks for its own.
 export const RestoreWorkspace = observer(({ installation, name, now, back, onBack }: RestoreWorkspaceProps) => {
   const namespace = installation.namespace ?? "";
   const read = installation.read("restores");
   const restore = read.items.find((item) => item.metadata.name === name);
+  const uid = restore?.metadata.uid;
+
+  // The installation is told that the view of this restore is open, and that it closed: what the tabs
+  // loaded is kept for as long as it is open. It is of the object that was read: a restore created later
+  // under the same name is another one, and what was loaded of the first goes.
+  React.useEffect(() => installation.artifacts.open("Restore", name), [installation, name, uid]);
 
   if (!restore) {
     return (
@@ -49,6 +61,49 @@ export const RestoreWorkspace = observer(({ installation, name, now, back, onBac
       </Workspace>
     );
   }
+  const view = restoreView(restore, now);
+  const tab = openTab();
+
+  return (
+    <Workspace kind="restore" name={view.name} uid={view.uid} deleting={view.deleting} back={back} onBack={onBack}>
+      <div className={styles.tabStrip}>
+        <WorkspaceTabs kind="restore" current={tab} onChange={showTab} />
+      </div>
+      <div
+        role="tabpanel"
+        id={panelId("restore")}
+        aria-labelledby={tabId("restore", tab)}
+        data-testid={panelId("restore")}
+        data-tab={tab}
+      >
+        {tab === "summary" ? (
+          <Summary installation={installation} restore={restore} now={now} />
+        ) : (
+          <ArtifactPanel
+            installation={installation}
+            kind="Restore"
+            tab={tab}
+            object={restore}
+            // The counters of the errors and of the warnings the status writes, and none it does not.
+            counters={writtenCounters(view.evidence)}
+          />
+        )}
+      </div>
+    </Workspace>
+  );
+});
+
+interface SummaryProps {
+  installation: Installation;
+  restore: RestoreResource;
+  now: number;
+}
+
+// The summary of a restore, read only: where it is, what it says of a failure, where it comes from, what it
+// restores and into where. Nothing here asks Velero for a log or a result: they are in their tabs. A
+// restore that completed is said completed: whether what it restored works is not in the object.
+const Summary = observer(({ installation, restore, now }: SummaryProps) => {
+  const read = installation.read("restores");
   const view = restoreView(restore, now);
   const strip = stageStrip("Restore", view.state);
   const references = restoreReferences(restore, {
@@ -77,7 +132,7 @@ export const RestoreWorkspace = observer(({ installation, name, now, back, onBac
   const note = sourceNote(view);
 
   return (
-    <Workspace kind="restore" name={view.name} uid={view.uid} deleting={view.deleting} back={back} onBack={onBack}>
+    <>
       <div className={styles.band} data-testid="velero-restore-status">
         <Fact name="Phase" note={lifecycleText(view.state)}>
           <Phase state={view.state} />
@@ -170,7 +225,7 @@ export const RestoreWorkspace = observer(({ installation, name, now, back, onBac
           {counted ? (
             <p className={styles.factNote} data-testid="velero-restore-counts-note">
               The status reports {countsSentence(view.evidence)} and does not say what they are: that is in the log and
-              in the results of the restore, which this view does not ask Velero for.
+              in the results of the restore, which the Log and Results tabs load when they are asked.
             </p>
           ) : null}
         </>
@@ -269,6 +324,6 @@ export const RestoreWorkspace = observer(({ installation, name, now, back, onBac
           </Fact>
         ))}
       </div>
-    </Workspace>
+    </>
   );
 });

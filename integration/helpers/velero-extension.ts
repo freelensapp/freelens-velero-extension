@@ -242,6 +242,81 @@ export async function setZoom(app: ElectronApplication, factor: number): Promise
   }, factor);
 }
 
+/** What the dialog that asks where to save a file was asked with, each time the main process asked it. */
+export interface SaveDialogCall {
+  title: string;
+  message: string;
+  defaultPath: string;
+}
+
+interface SaveDialogStand {
+  /** The file the dialog answers, or nothing for a dialog that is left. */
+  answer: string;
+  calls: SaveDialogCall[];
+  /** What stands in the place of the dialog, to know it again. */
+  stand?: unknown;
+}
+
+/**
+ * Stands in the place of the dialog of the host that asks where to save a
+ * file, in the main process of the application: from now on no dialog is
+ * shown, and the one that is asked answers the file that is given here, or
+ * that it was left when none is given. The extension asks the module of
+ * Electron for its dialog each time it saves, which is what makes the one that
+ * stands there the one it asks. Called again, it changes the answer and keeps
+ * what the dialog was asked so far. A replacement the module did not keep is
+ * said here, and not found later as a dialog nobody answers.
+ */
+export async function replaceSaveDialog(app: ElectronApplication, file = ""): Promise<void> {
+  await app.evaluate(({ dialog }, chosen) => {
+    const main = globalThis as unknown as { veleroSaveDialog?: SaveDialogStand };
+    const kept: SaveDialogStand = main.veleroSaveDialog ?? { answer: "", calls: [] };
+
+    kept.answer = chosen;
+    if (main.veleroSaveDialog) return;
+    const stand = (...asked: unknown[]) => {
+      // The dialog is asked with its options, after the window it belongs to when it is given one.
+      const options = (asked[asked.length - 1] ?? {}) as Record<string, unknown>;
+
+      kept.calls.push({
+        title: String(options.title ?? ""),
+        message: String(options.message ?? ""),
+        defaultPath: String(options.defaultPath ?? ""),
+      });
+      return Promise.resolve(
+        kept.answer ? { canceled: false, filePath: kept.answer } : { canceled: true, filePath: "" },
+      );
+    };
+
+    kept.stand = stand;
+    main.veleroSaveDialog = kept;
+    dialog.showSaveDialog = stand as unknown as typeof dialog.showSaveDialog;
+  }, file);
+  // The module is asked again, as the extension asks it: what it gives now is what was put there.
+  const stands = await app.evaluate(({ dialog }) => {
+    const kept = (globalThis as unknown as { veleroSaveDialog?: SaveDialogStand }).veleroSaveDialog;
+
+    return kept !== undefined && (dialog.showSaveDialog as unknown) === kept.stand;
+  });
+
+  if (!stands) {
+    throw new Error(
+      "The dialog of the save was not replaced: the module of Electron does not give what was put in its place",
+    );
+  }
+}
+
+/** What the dialog of the save was asked with since it was replaced, from the first time. */
+export async function saveDialogCalls(app: ElectronApplication): Promise<SaveDialogCall[]> {
+  const calls = await app.evaluate(
+    () => (globalThis as unknown as { veleroSaveDialog?: SaveDialogStand }).veleroSaveDialog?.calls ?? null,
+  );
+
+  if (!calls) throw new Error("The dialog of the save is not replaced: replaceSaveDialog comes first");
+
+  return calls;
+}
+
 /**
  * What the extension keeps in the profile between two starts: every file of
  * its store, with what it holds. The files of the host are not among them.

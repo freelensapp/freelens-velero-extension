@@ -118,6 +118,13 @@ const AFTER_THE_CREATION = [
   "delivery",
   "release",
 ];
+
+// Whether a way that ended at a step left no request in the cluster: the steps before the creation. Of a
+// step this file does not know, and of the creation itself, nothing is claimed.
+export function createdNothing(stage: string): boolean {
+  return BEFORE_THE_CREATION.includes(stage);
+}
+
 // The reads of the route through the cluster, and what each asks of the identity: the tab says which was
 // refused, and what the tunnel needs.
 // A port-forward over a WebSocket is asked of the API server with the verb get, and the releases that

@@ -185,28 +185,52 @@ The build is the one of the
 | `velero-e2e-scale` | A thousand backups and a thousand restores: the rows that are mounted, the time of the interactions, the state of each list when an object is opened and closed |
 | `velero-e2e-gate` | The gate of the writes: off when the session starts, on every page of the group; on through the dialog of the host, which names the cluster, its context and the namespace, and not before the dialog is answered; off when another installation is selected, when the dialog is left, and when the application is started again; each frame of a cluster with a gate of its own; nothing of it in the store, and nothing written to the cluster |
 | `velero-e2e-server` | The band of the server in the Overview: nothing asked of the cluster when the page opens, nor for a command that is not confirmed; the object shown before it is created, reached with the keyboard alone and left with Escape; the version and the plugins of the real server of the environment, against what the server wrote into the request, each plugin once; kept through a read and a visit to another page, and dropped with the installation; the answer and the confirmation in both themes, at every size; a request no server answers, said not answered after ten seconds and left as it was created; the refusal of the cluster to the reader of a part, with writes left on; what the API server counted of the requests, by verb and by code; the request the server processed, removed by the server five minutes after |
-| `pre-review` | Every view in both themes, at 1440x900, at 900x650 and at twice the zoom, checked for what lies over something else, does not fit, or is cut by what holds the page; a page that stands still at the widths where its target bar goes to a second line; the journeys with the keyboard alone |
+| `velero-e2e-artifacts` | The tabs in the workspace of a backup and of a restore, on the real backup and the real restore of the installation: the five tabs in their order, as a list of tabs, with the tab in the address; nothing of a DownloadRequest created or read when a tab opens, by a click or by its address, nor for a confirmation that is left; the first state with writes off and on, and the confirmation with the object, reached and left with the keyboard alone; the four artifacts of each, loaded through a request of their own, which the cluster holds by the name the tab gave it, with the steps of a load, a load again as another request and a load cancelled as soon as its command is offered; the log in its lines, its levels, its search, its lines wrapped, a line copied and a hundred rows mounted at most, against the file the suite saved of it; the results against the counters of the status; the resource list, with the actions of a restore and the filter; the volume information of no volume; the log saved into a file through the dialog of the host, and nothing written when the dialog is left; the keys of the strip; the section in the details of the host; the tabs in both themes, at 900 by 650 and at twice the zoom, checked for what lies over something else, is wider than its room or is cut; what the API server counted of the requests, and each removed by the server before the suite ends. Nine cases are written as waiting: seven for the fixtures of the tabs, and two, of another installation and of the reader of a part, that need no fixture the environment does not have |
+| `pre-review` | Every view in both themes, at 1440x900, at 900x650 and at twice the zoom, checked for what lies over something else, does not fit, or is cut by what holds the page; a page that stands still at the widths where its target bar goes to a second line; the journeys with the keyboard alone, which go through the strip of the tabs of a workspace. It does not open the tabs yet: that is the last pull request of their task |
 
 The check of the layout, which every suite asks of the pages it shows, looks at
 the page and at what holds it, up to the frame of the cluster: what is wider
 than its room, what lies over something else, and what holds more than its
 height without being scrolled by who reads. The last is what the keyboard
 scrolls when it brings what it reaches into view, and what the host cuts in a
-room that is too short.
+room that is too short. The suite of the tabs asks as well a check of the parts of
+a tab, which the one of a page does not know: no tab of the strip, part or command
+of the panel, part of a viewer, part of the bar of a log or of the filter of a
+resource list over another, the panel and the viewer no wider than their room, a
+view with the room of a list at least, and a list no taller than the room it is
+read in.
 
 The suites read the application and the cluster, and write to neither, but for
-one: the suite of the band of the server asks the extension to create a
-ServerStatusRequest, which is what it proves, in the namespace of the
-installation, in a namespace of the fixtures and, refused, as the reader of a
-part. It leaves nothing behind. It waits for the server to remove the request it
-processed, which the release does when it looks at it again, five minutes after;
-and it removes the one no server looks at, with the one helper of the suites that
-deletes, which takes the ServerStatusRequests that carry the label of the
-extension in a namespace of the fixtures, and nothing else. The helper that runs
-`kubectl` for the suites refuses every verb but `get`. Each suite compares
-what the API server holds of Velero before and after: the version of every
-synthetic object, the identity of the objects of the real installation, and the
-absence of any request to Velero.
+two, each of which asks the extension for the write it proves. The suite of the
+band of the server asks the extension to create a ServerStatusRequest, in the
+namespace of the installation, in a namespace of the fixtures and, refused, as the
+reader of a part. It leaves nothing behind. It waits for the server to remove the
+request it processed, which the release does when it looks at it again, five
+minutes after; and it removes the one no server looks at, with the one helper of
+the suites that deletes, which takes the ServerStatusRequests that carry the label
+of the extension in a namespace of the fixtures, and nothing else. The suite of
+the tabs asks the extension to create DownloadRequests, of the artifacts of the
+real backup and of the real restore, in the namespace of the installation: nine,
+each after its confirmation, the four of the restore, the four of the backup and
+the log of the backup a second time; it cancels a tenth load, which in the local
+runs ended before it created one. It tells its guard the name the tab gave each
+request, and expects the API server to count as many creations and as many
+removals as the guard knows, the reads of each by its name and what the server
+writes into each, and no write of another kind of Velero. It deletes none, and
+neither does the extension: the server of the installation removes a request once
+the ten minutes it wrote into it have passed, as the
+[recon](RECON-T0.1.md#start-of-the-third-milestone-2026-09-30) records, and the
+suite waits for that before it ends, which makes it the longest of the suites:
+about twelve minutes in a run of them all, ten of them that wait. It saves the log
+of the backup into a folder of the profile of its run, which goes with the run,
+through the dialog of the host, which it replaces in the main process of the
+application with one that answers what the case asks. The helper that runs
+`kubectl` for the suites refuses every verb but `get`. Each suite compares what
+the API server holds of Velero before and after: the version of every synthetic
+object, the identity of the objects of the real installation, and the absence of
+any request to Velero. A request is listed by its namespace, its kind and its
+name, and never read whole: the status of a DownloadRequest the server processed
+carries the URL it signed.
 
 What is asked of the cluster is counted by the API server, not by the driver of
 the test: the requests of the host leave from its main process, where the driver
@@ -443,6 +467,24 @@ status codes and cancellation. Small local HTTP/TLS servers exercise streaming a
 backpressure independently of kind. The real kind tier then verifies that mocks
 match the pinned API, CRD schemas and controller artifacts. Do not use private host
 imports to make an unsupported public call appear valid.
+
+The components of the host the views draw with are stood in for by
+[doubles](../../test/host-components.tsx), and its address by one in the
+[stubs](../../test/freelens-extensions.ts), written from the source of the host at
+the version the tests build against: the
+[directives](../../AGENTS.md#host-facts-that-cost-a-run-to-find) record what was
+read there, and where. A double does what the host does wherever a view depends
+on it: the address is one search, changed once for each parameter
+that is set; the input leaves the focus at Enter unless it is told not to; the
+tabs give a tab its role and make it a stop of the Tab key; the table draws its
+head and its rows and drops what is not a row, and a cell shows its title in
+place of what it holds; the virtual list measures its room once it is mounted,
+and draws no row before that nor while it has no room. A double that is kinder
+than the host hides a defect from every test that uses it: a list that drew its
+rows at once hid that the first line of a text is not there with its viewer. The
+tests of a component replace the components beside it; the tests of the
+[tabs with their viewers](../../src/renderer/pages/operation-artifacts.test.tsx)
+mount the pages with nothing of the extension replaced.
 
 Each implementation slice starts with its focused failing/discriminating check and
 ends with passing targeted tests. Wire new cases into the canonical command and

@@ -195,23 +195,63 @@ class ExtensionStoreStub {
   }
 }
 
-// A parameter of the address of a page: a view that reads it follows it, as it does in the host. How many
-// times the address was changed is counted: one change of what is shown is one change of the address.
+// The address of a page, as the host keeps it: one search, of which every parameter of a page reads and
+// writes the values of its own name. A view that reads a parameter follows the address, as it does in the
+// host. How many times the address was changed is counted: one change of what is shown is one change of
+// the address.
 export const addressChanges = { count: 0 };
+const search = observable.box("", { deep: false });
 
-function param(init: { defaultValue?: unknown } = {}) {
-  const none = init.defaultValue ?? "";
-  const value = observable.box<unknown>(none, { deep: false });
-  const change = (next: unknown) => {
-    addressChanges.count += 1;
-    runInAction(() => value.set(next));
+// The search of the address as it is now, without its question mark.
+export function addressSearch(): string {
+  return search.get();
+}
+
+// The host goes to an address, which is one change of it, and leaves out of it every parameter that has
+// no value: it goes then to the address without them, which is a second change.
+function go(next: string): void {
+  const kept = new URLSearchParams([...new URLSearchParams(next)].filter(([, value]) => value !== "")).toString();
+
+  addressChanges.count += kept === new URLSearchParams(next).toString() ? 1 : 2;
+  runInAction(() => search.set(kept));
+}
+
+// A parameter of the address, with what the host gives of one: its value, set with the other parameters
+// kept, taken out, and the search the address would have with another value of it.
+function param(init: { name?: string; defaultValue?: unknown } = {}) {
+  const name = init.name ?? "";
+  const many = Array.isArray(init.defaultValue);
+  const get = () => {
+    const values = new URLSearchParams(search.get()).getAll(name);
+
+    return (many ? values : values[0]) ?? init.defaultValue;
+  };
+  const merged = (value: unknown) => {
+    const params = new URLSearchParams(search.get());
+
+    params.delete(name);
+    for (const one of [value].flat()) params.append(name, String(one));
+    return params.toString();
   };
 
   return {
-    get: () => value.get(),
-    set: (next: unknown) => change(next),
-    clear: () => change(none),
+    get,
+    set: (next: unknown) => go(merged(next)),
+    // A parameter that is not in the address is not taken out of it: nothing changes.
+    clear: () => {
+      if (new URLSearchParams(search.get()).has(name)) go(merged([]));
+    },
+    toString: ({ value }: { value?: unknown } = {}) => merged(value ?? get()),
   };
+}
+
+// The host is sent to an address, of which the views give the search alone. Sent to the address it is at,
+// it goes there and comes back: two changes for nothing.
+function navigate(location: { search: string }): void {
+  const next = new URLSearchParams(location.search).toString();
+
+  if (next === search.get()) addressChanges.count += 2;
+  else go(next);
 }
 
 // Every component of the host, by any name. The ones a view is read through have their markup; the others
@@ -256,7 +296,7 @@ export const Renderer = {
     KubeObjectStore: KubeObjectStoreStub,
   },
   Component: components,
-  Navigation: { createPageParam: param },
+  Navigation: { createPageParam: param, navigate },
   Catalog: { activeCluster: { get: () => ({ getId: () => "synthetic-cluster", getName: () => "synthetic-cluster" }) } },
   Ipc: IpcStub,
 };

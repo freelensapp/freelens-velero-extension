@@ -114,6 +114,7 @@ describe("the procedures of the main process", () => {
         CHANNELS.writeCancel,
         CHANNELS.artifactPage,
         CHANNELS.artifactRelease,
+        CHANNELS.artifactSave,
         CHANNELS.allowanceGrant,
         CHANNELS.allowanceRevoke,
       ].sort(),

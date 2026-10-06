@@ -243,13 +243,17 @@ export interface ClusterSnapshot {
   installed: string[];
   /** The requests to Velero, in every namespace of the fixtures. */
   requests: number;
+  /** The same requests, each by its namespace, its kind and its name: what a suite asked for, it knows by name. */
+  named: string[];
 }
 
 /**
  * What the API server holds of Velero. The synthetic namespaces are out of the
  * reach of the controllers: nothing but a write of what is under test could
  * change their objects. Of the namespace of the installation the objects are
- * listed by identity.
+ * listed by identity. A request to Velero is listed by its name and by nothing
+ * else: the status of a DownloadRequest the server processed carries the URL
+ * it signed, which no suite reads and no report holds.
  */
 export function clusterSnapshot(): ClusterSnapshot {
   const list = (resource: string, namespace: string) => {
@@ -273,9 +277,22 @@ export function clusterSnapshot(): ClusterSnapshot {
     E2E_OVERVIEW_NAMESPACE,
     E2E_SCALE_NAMESPACE,
   ];
+  const names = (resource: string, namespace: string) => {
+    const { status, stdout, stderr } = kubectlE2E(
+      "get",
+      `${resource}.velero.io`,
+      "--namespace",
+      namespace,
+      "-o",
+      'jsonpath={range .items[*]}{.metadata.name}{"\\n"}{end}',
+    );
+
+    if (status !== 0) throw new Error(`kubectl get ${resource} failed: ${stderr}`);
+    return stdout.split("\n").filter(Boolean);
+  };
   const versions: Record<string, string> = {};
   const installed: string[] = [];
-  let requests = 0;
+  const named: string[] = [];
 
   for (const kind of KINDS) {
     for (const namespace of synthetic) {
@@ -286,10 +303,26 @@ export function clusterSnapshot(): ClusterSnapshot {
     for (const item of list(kind, E2E_NAMESPACE)) installed.push(`${kind}/${item.metadata.name}/${item.metadata.uid}`);
   }
   for (const kind of REQUESTS) {
-    for (const namespace of [E2E_NAMESPACE, ...synthetic]) requests += list(kind, namespace).length;
+    for (const namespace of [E2E_NAMESPACE, ...synthetic]) {
+      for (const name of names(kind, namespace)) named.push(`${namespace}/${kind}/${name}`);
+    }
   }
 
-  return { versions, requests, installed: installed.sort() };
+  return { versions, requests: named.length, named: named.sort(), installed: installed.sort() };
+}
+
+/**
+ * One object of a family of Velero, as the API server holds it, or nothing
+ * when it is not there. A request to Velero is not read this way: the status
+ * of one the server processed carries the URL it signed.
+ */
+export function veleroObject<Read>(resource: string, name: string, namespace = E2E_NAMESPACE): Read | undefined {
+  if (!KINDS.includes(resource)) {
+    throw new Error(`"${resource}" is not a family of Velero: a request is read by its name, never whole`);
+  }
+  const { status, stdout } = kubectlE2E("get", `${resource}.velero.io`, name, "--namespace", namespace, "-o", "json");
+
+  return status === 0 && stdout ? (JSON.parse(stdout) as Read) : undefined;
 }
 
 /**
@@ -664,6 +697,25 @@ export async function selectInstallation(frame: Frame, namespace: string): Promi
     namespace,
     { timeout: ELEMENT_TIMEOUT },
   );
+}
+
+/** What the target bar says of the writes of the installation that is selected: `on`, `off` or `unknown`. */
+export async function writesState(frame: Frame): Promise<string> {
+  return (await frame.locator("[data-testid=velero-writes]").getAttribute("data-writes")) ?? "";
+}
+
+/**
+ * Turns writes on for the installation that is selected, through the dialog
+ * of the host, and waits for the target bar to say so. Another installation
+ * that is selected turns them off again.
+ */
+export async function turnWritesOn(frame: Frame): Promise<void> {
+  await frame.click("[data-testid=velero-writes-on]");
+  const dialog = frame.locator("[data-testid=confirmation-dialog]");
+
+  await dialog.waitFor({ state: "visible", timeout: ELEMENT_TIMEOUT });
+  await dialog.locator("[data-testid=confirm]").click();
+  await frame.waitForSelector("[data-testid=velero-writes][data-writes=on]", { timeout: ELEMENT_TIMEOUT });
 }
 
 /**
@@ -2081,6 +2133,105 @@ export function requestCodes(resource: string): Record<string, number> {
   }
 
   return counts;
+}
+
+/**
+ * A DownloadRequest as a suite reads it: what it is called, what it asks for
+ * and where the server is with it. Its status is never read whole: once the
+ * server processed the request it carries the URL the server signed.
+ */
+export interface DownloadRequestRead {
+  name: string;
+  uid: string;
+  created: string;
+  labels: Record<string, string>;
+  target: { kind: string; name: string };
+  /** The phase the server wrote, or nothing while it wrote none. */
+  phase: string;
+  /** When the server removes the request, or nothing while it did not look at it. */
+  expiration: string;
+}
+
+/**
+ * The DownloadRequests of a namespace, whoever created them, by the fields a
+ * suite compares: a suite that asked the extension for some knows each by its
+ * name, and one it does not know is a write it did not ask for.
+ */
+export function downloadRequests(namespace: string): DownloadRequestRead[] {
+  const fields = [
+    ".metadata.name",
+    ".metadata.uid",
+    ".metadata.creationTimestamp",
+    ".spec.target.kind",
+    ".spec.target.name",
+    ".status.phase",
+    ".status.expiration",
+    ".metadata.labels",
+  ];
+  const { status, stdout, stderr } = kubectlE2E(
+    "get",
+    "downloadrequests.velero.io",
+    "--namespace",
+    namespace,
+    "-o",
+    `jsonpath={range .items[*]}${fields.map((field) => `{${field}}`).join('{"\\t"}')}{"\\n"}{end}`,
+  );
+
+  if (status !== 0) throw new Error(`kubectl get downloadrequests failed: ${stderr}`);
+  return stdout
+    .split("\n")
+    .filter((line) => line.trim() !== "")
+    .map((line) => {
+      // A field the object does not have is written as nothing, and the last one of the output is cut with it.
+      const [name = "", uid = "", created = "", kind = "", target = "", phase = "", expiration = "", written = ""] =
+        line.split("\t");
+      let labels: Record<string, string> = {};
+
+      if (written.trim()) {
+        try {
+          labels = JSON.parse(written) as Record<string, string>;
+        } catch {
+          throw new Error(`The labels of the DownloadRequest ${name} of ${namespace} are not a map: ${written}`);
+        }
+      }
+      if (!name || !uid) throw new Error(`A DownloadRequest of ${namespace} was read without its name or its uid`);
+      return { name, uid, created, labels, target: { kind, name: target }, phase, expiration };
+    });
+}
+
+/**
+ * Waits for the server of an installation to remove the DownloadRequests of
+ * its namespace, and answers the ones that are left when the time is over:
+ * none, when the server removed them all. The release writes into a request
+ * when it will remove it, ten minutes after it signed, and removes it at its
+ * pass after that, every minute. A request that says no such time after a
+ * minute of this wait is one no server looked at, which nothing removes: the
+ * wait ends there, by its name. The minute is counted here, and not from the
+ * time the cluster says the request was created at, which is of another clock.
+ */
+export async function awaitRequestsGone(namespace: string, deadline: number): Promise<DownloadRequestRead[]> {
+  const unseenSince = new Map<string, number>();
+
+  for (;;) {
+    const left = downloadRequests(namespace);
+    const unseen = left.filter((request) => {
+      if (request.expiration) return false;
+      const since = unseenSince.get(request.uid) ?? Date.now();
+
+      unseenSince.set(request.uid, since);
+      return Date.now() - since > 60_000;
+    });
+
+    if (unseen.length > 0) {
+      throw new Error(
+        `The server of ${namespace} did not look at ${unseen.map((request) => request.name).join(", ")}: ` +
+          "a request it wrote nothing into for a minute is one it does not remove. " +
+          "The cleanup of the fixtures stops on it: `pnpm demo:down` removes it with the cluster.",
+      );
+    }
+    if (left.length === 0 || Date.now() >= deadline) return left;
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+  }
 }
 
 /**

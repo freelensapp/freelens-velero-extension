@@ -10,6 +10,7 @@ import { inspect } from "node:util";
 import zlib, { gzipSync } from "node:zlib";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createTlsFixture } from "../../test/tls-fixture";
+import { ARTIFACT_TEXT_BOUND } from "../common/ipc";
 import {
   type ArtifactRoute,
   type DiagnosticCode,
@@ -41,6 +42,8 @@ const signed = (request: IncomingMessage, response: ServerResponse) => {
   else response.end(gzipSync(JSON.stringify({ host: request.headers.host, path: request.url })));
   return true;
 };
+// What the decoder of the runtime gives at once, at most: a text longer than it arrives in parts.
+const DECODED_AT_ONCE = zlib.constants.Z_DEFAULT_CHUNK;
 const server = createServer((request, response) => {
   if (signed(request, response)) return;
   if (request.url?.startsWith("/missing")) {
@@ -63,6 +66,16 @@ const server = createServer((request, response) => {
   // What is not gzip, and has not ended when it is found not to be.
   if (request.url?.startsWith("/invalid-parts")) {
     response.write(Buffer.alloc(64 * 1024, "n"));
+    return;
+  }
+  // A text the decoder gives in more than one part: four times what it gives at once.
+  if (request.url?.startsWith("/long")) {
+    response.end(gzipSync("x".repeat(4 * DECODED_AT_ONCE)));
+    return;
+  }
+  // A text of as many bytes as its path says, of the bound of a text or beyond it.
+  if (request.url?.startsWith("/sized-")) {
+    response.end(gzipSync(Buffer.alloc(Number(request.url.slice("/sized-".length)), "x")));
     return;
   }
   // A file whose length is not declared, sent in parts.
@@ -246,6 +259,23 @@ describe("bounded main artifact transport", () => {
       downloadArtifact(url, route("/large"), new AbortController().signal, { ...DOWNLOAD_LIMITS, decoded: 128 }),
     ).rejects.toMatchObject({ code: "payload-too-large" });
   });
+
+  it("takes a text as large as the views take one, and not a byte more", async () => {
+    // How a download of so many bytes of text ends: with its size, or with the code of its failure. The
+    // text itself is not what is looked at.
+    const sized = (bytes: number) =>
+      downloadArtifact(`${route().origin}/sized-${bytes}`, route(`/sized-${bytes}`), new AbortController().signal).then(
+        (content) => content.length,
+        (error: DiagnosticError) => error.code,
+      );
+
+    // The bound of a download that is given none is the one of the text of an artifact, 64 MiB: what the
+    // main process decodes is what the views hold, and no file is decoded for nothing.
+    expect(ARTIFACT_TEXT_BOUND).toBe(64 * 1024 ** 2);
+    expect(await sized(ARTIFACT_TEXT_BOUND)).toBe(ARTIFACT_TEXT_BOUND);
+    expect(await sized(ARTIFACT_TEXT_BOUND + 1)).toBe("payload-too-large");
+    // Two texts of that size are compressed and read here: the time of a machine that is busy is given.
+  }, 60_000);
 
   it("rejects malformed gzip instead of returning partial content", async () => {
     await expect(
@@ -552,6 +582,69 @@ describe("the authorities a download trusts", () => {
     } finally {
       runtime.getCACertificates = lists;
     }
+  });
+});
+
+describe("the bytes of a download so far", () => {
+  it("says how much of the text it has while the file arrives, and its whole size at the end", async () => {
+    const seen: number[] = [];
+    const content = await downloadArtifact(
+      `${route().origin}/parts`,
+      route("/parts"),
+      new AbortController().signal,
+      DOWNLOAD_LIMITS,
+      (bytes) => seen.push(bytes),
+    );
+
+    expect(content.length).toBe(4096);
+    // What is counted is the text as it will be read, not the bytes of the file: it grows, and ends at
+    // the size of the text.
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen).toEqual([...seen].sort((one, other) => one - other));
+    expect(seen.at(-1)).toBe(4096);
+    expect(seen[0]).toBeGreaterThan(0);
+  });
+
+  it("counts the text from its beginning, and not the part that arrived last", async () => {
+    const seen: number[] = [];
+    const content = await downloadArtifact(
+      `${route().origin}/long`,
+      route("/long"),
+      new AbortController().signal,
+      DOWNLOAD_LIMITS,
+      (bytes) => seen.push(bytes),
+    );
+
+    // The text arrives in more parts than one, each as large as the decoder gives it: what is said after
+    // each is all that arrived until then.
+    expect(content.length).toBe(4 * DECODED_AT_ONCE);
+    expect(seen.length).toBeGreaterThan(1);
+    expect(seen.every((bytes, index) => index === 0 || bytes > seen[index - 1])).toBe(true);
+    expect(seen.at(-1)).toBe(4 * DECODED_AT_ONCE);
+  });
+
+  it("downloads the same whether or not anything hears of its bytes, and whatever what hears of them does", async () => {
+    const url = `${route().origin}/parts`;
+    const signal = new AbortController().signal;
+    const quiet = await downloadArtifact(url, route("/parts"), signal);
+    const noisy = await downloadArtifact(url, route("/parts"), signal, DOWNLOAD_LIMITS, () => {
+      throw new Error("what hears of the bytes fails");
+    });
+
+    expect(noisy.equals(quiet)).toBe(true);
+    // A file beyond its bound ends as such, and what was counted of it is never beyond what was taken.
+    const seen: number[] = [];
+
+    await expect(
+      downloadArtifact(
+        `${route().origin}/large`,
+        route("/large"),
+        signal,
+        { ...DOWNLOAD_LIMITS, decoded: 128 },
+        (bytes) => seen.push(bytes),
+      ),
+    ).rejects.toMatchObject({ code: "payload-too-large" });
+    expect(seen.every((bytes) => bytes <= 128)).toBe(true);
   });
 });
 

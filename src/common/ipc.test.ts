@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   ARTIFACT_TARGETS,
   artifactKind,
+  downloadRequestName,
   PAGE_BOUND,
   REQUEST_BOUND,
   readAllowanceRequest,
@@ -10,6 +11,7 @@ import {
   readArtifactPage,
   readArtifactPageRequest,
   readArtifactReleaseRequest,
+  readArtifactSaved,
   readArtifactValue,
   readGateDisableRequest,
   readGateEnableRequest,
@@ -22,6 +24,7 @@ import {
   readWriteRunRequest,
   readWriteStatus,
   readWriteStatusRequest,
+  savedFileName,
 } from "./ipc";
 
 const cluster = "86a008d2588de4178aa2ac8a245ac1f4";
@@ -117,6 +120,13 @@ describe("the requests between the processes", () => {
         readWriteRunRequest({ ...of(refused, "Backup"), token: randomUUID(), request: randomUUID() }),
       ]).toEqual([refused, undefined]);
     }
+  });
+
+  it("names a DownloadRequest after its target and the identifier of the request", () => {
+    const request = randomUUID();
+
+    expect(downloadRequestName("nightly", request)).toBe(`nightly-${request}`);
+    expect(downloadRequestName("restore.of-monday", "0e7c")).toBe("restore.of-monday-0e7c");
   });
 
   it("reads a run of a write, with its token and its identifier", () => {
@@ -391,6 +401,42 @@ describe("the answers between the processes", () => {
         true,
       ),
     ).toMatchObject({ ok: false, code: "validation", stage: "answer" });
+  });
+
+  it("reads whether a text was saved, and nothing else of what the main process answers of a saving", () => {
+    expect(readArtifactSaved({ saved: true })).toEqual({ saved: true });
+    // The operator closed the dialog: nothing was written, and that is what the views read.
+    expect(readArtifactSaved({ saved: false })).toEqual({ saved: false });
+    for (const saved of ["true", 1, 0, null, undefined, {}]) {
+      expect([saved, readArtifactSaved({ saved })]).toEqual([saved, undefined]);
+    }
+    expect(readArtifactSaved({})).toBeUndefined();
+    expect(readArtifactSaved(null)).toBeUndefined();
+    expect(readArtifactSaved(true)).toBeUndefined();
+    // Nothing of a file crosses the contract: an answer that says where the text went is not one.
+    expect(readArtifactSaved({ saved: true, path: "/home/operator/nightly-logs.txt" })).toBeUndefined();
+    expect(readAnswer({ ok: true, value: { saved: false } }, readArtifactSaved)).toEqual({
+      ok: true,
+      value: { saved: false },
+    });
+  });
+
+  it("suggests for the text of an artifact the name of its file in the store, as text, and nothing that is not of a name", () => {
+    expect(ARTIFACT_TARGETS.map((artifact) => [artifact, savedFileName(artifact, "nightly")])).toEqual([
+      ["BackupLog", "nightly-logs.txt"],
+      ["RestoreLog", "restore-nightly-logs.txt"],
+      ["BackupResults", "nightly-results.json"],
+      ["RestoreResults", "restore-nightly-results.json"],
+      ["BackupResourceList", "nightly-resource-list.json"],
+      ["RestoreResourceList", "restore-nightly-resource-list.json"],
+      ["BackupVolumeInfos", "nightly-volumeinfo.json"],
+      ["RestoreVolumeInfo", "restore-nightly-volumeinfo.json"],
+    ]);
+    // The name of an object is of letters, digits, dots and dashes, and is written as it is.
+    expect(savedFileName("BackupLog", "nightly.2026-09-30_a")).toBe("nightly.2026-09-30_a-logs.txt");
+    // What is not a letter, a digit, a dot, a dash or an underscore is not written into the name of a
+    // file: a name that is not the one of an object leads to no folder, and says nothing to a shell.
+    expect(savedFileName("RestoreResults", "../of monday/night:è")).toBe("restore-.._of_monday_night__-results.json");
   });
 
   it("reads the state of the gate, on and off, with the connection when it is there", () => {

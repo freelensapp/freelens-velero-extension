@@ -56,6 +56,19 @@ describe("the confirmation of one write", () => {
     expect(facts().labels).toEqual(["Labels", "one=a, two=b"]);
   });
 
+  it("shows in words a name the extension makes when the request is confirmed, as the words are given", () => {
+    render(
+      <WriteConfirmation
+        id="write"
+        object={{ ...OBJECT, name: { words: "backup-a-, followed by the identifier of the request" } }}
+        onCreate={() => undefined}
+        onBack={() => undefined}
+      />,
+    );
+    // No API server generates it: nothing is said of one.
+    expect(facts().name).toEqual(["Name", "backup-a-, followed by the identifier of the request"]);
+  });
+
   it("creates with its first command and is left with its second, each once", () => {
     const onCreate = vi.fn();
     const onBack = vi.fn();

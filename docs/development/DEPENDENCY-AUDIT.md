@@ -1,6 +1,6 @@
 # Dependencies
 
-Updated: 2026-09-27
+Updated: 2026-10-05
 
 What the extension ships, what it only builds with, and how both are kept
 current. The rule on third-party software is the
@@ -25,6 +25,13 @@ does not make a bundled library development-only.
   reasons are in [ARCHITECTURE.md](ARCHITECTURE.md#scaffold-progress).
 - The build defines `WS_NO_BUFFER_UTIL` and `WS_NO_UTF_8_VALIDATE`: they disable
   the optional native accelerators of `ws`; no library is patched.
+- The main process asks the host for one module it does not bundle: `electron`,
+  for the dialog in which the operator chooses the file the text of an artifact
+  is saved into. The build leaves the module out of the bundle, as it leaves the
+  modules of Node, and the module is asked when a text is saved, not when the
+  extension is loaded: the proofs of the test environment load the main bundle
+  where there is no host. It is the module of the process the extension runs in:
+  it is no dependency of the package, and the configuration of Knip says so.
 - The renderer bundles no library: its bundle is the code of the views. React,
   its DOM, its JSX runtime, MobX and its bindings for React are asked of the host
   by the globals it provides them under, and a build test fails when one of them
