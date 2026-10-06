@@ -255,8 +255,8 @@ describe("views of the first milestone", () => {
       expect(await frame.locator("[data-testid=velero-backup-counts-note]").innerText()).toContain(
         "The status reports 1 error and 0 warnings",
       );
-      // A workspace that only reads: the way back and the way to the location of the backup. Nothing in
-      // it asks Velero for a log, and nothing edits or deletes.
+      // A summary that only reads: the way back and the way to the location of the backup. Nothing in
+      // it asks Velero for a log, which is asked for in its tab, and nothing edits or deletes.
       expect(
         (await frame.locator("[data-testid=velero-backup-workspace] button").allInnerTexts()).map((text) =>
           text.replace(/\s+/g, " ").trim(),

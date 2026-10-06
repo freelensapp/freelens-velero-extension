@@ -295,8 +295,9 @@ describe("pre-review of the views", () => {
       await started.window.keyboard.press("Enter");
       await frame.waitForSelector(`[data-testid=velero-restore-name] >> text="${RESTORED}"`, { timeout: 60_000 });
       expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
-      // From the way back to the way to the backup, which is the next thing the keyboard reaches.
-      await cluster.tabTo(frame, (focus) => focus.startsWith("velero-open-backup-"), 5);
+      // From the way back the keyboard goes through the five tabs of the workspace, each one a stop as the
+      // tabs of the host are, and then reaches the way to the backup: six presses.
+      expect(await cluster.tabTo(frame, (focus) => focus.startsWith("velero-open-backup-"), 10)).toBe(6);
       await started.window.keyboard.press("Enter");
       await frame.waitForSelector("[data-testid=velero-backup-workspace]", { timeout: 60_000 });
       expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
