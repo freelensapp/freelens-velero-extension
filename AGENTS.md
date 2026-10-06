@@ -349,6 +349,57 @@ Build output goes to `out/`.
 - Every suite expects no request to Velero in the cluster when it starts. A suite
   that asks the extension to create one leaves none when it ends: it waits for
   the server to remove what the server processed, and removes the rest.
+- The source of the components of the host is in the package its types come
+  from: the source map `static/build/library/renderer.js.map` of
+  `@freelensapp/core` carries it. What follows of its address, its input, its
+  tabs and its table was read there, at v1.10.3, and so was that its list is
+  drawn inside the sizer of `react-virtualized-auto-sizer`, which the map does
+  not carry: what the sizer draws at first was read in that package, at 1.0.26,
+  and what the icon holds in `@freelensapp/icon`. These facts were read, and no
+  run found them. The doubles of `test/host-components.tsx` follow them for the
+  components, and the stub of `test/freelens-extensions.ts` for the address.
+- The host changes the address once for each parameter it is asked to set, and
+  sent to the address it is at it goes there and comes back, which is two
+  changes. What a view shows by more than one parameter, as the views that are
+  open and the tab of the last of them, is written into one search, and the host
+  is sent there once and only when something changes. `openView`, `closeView`,
+  `closeViews` and `showTab` of `src/renderer/navigation.ts` are the only
+  writers.
+- The virtual list of the host, given no `fixedHeight`, measures its room once it
+  is mounted: it draws no row at its first render, nor while its room has no
+  height. What waits for its first row, a focus or a measure, waits for the row
+  and not for the component that holds the list. The double of the tests does
+  the same: a double that drew its rows at once hid this from every test.
+- The `Input` of the host leaves the focus at Enter unless it is given
+  `blurOnEnter={false}`. Its `SearchInput` takes the focus when it is mounted,
+  takes Ctrl or Cmd with F for the whole window, and clears itself at Escape. A
+  field of a view whose Enter is a command of its own is the `Input`, told to
+  keep the focus and named by `aria-labelledby`.
+- `Tabs` and `Tab` of the host give a tab its role, a stop of the Tab key and its
+  choice by a click, Enter and Space. They give the strip no role, say of no tab
+  that it is selected, move nothing with the arrows, and do not prevent what the
+  browser does with Space by itself.
+  `src/renderer/components/workspace-tabs.tsx` adds what they lack, and prevents
+  that.
+- The `Table` of the host draws its head and the rows it holds: what is not a
+  `TableRow` is dropped, a fragment of rows as well, and its parts have no role.
+  A `TableCell` that is given a `title` shows the title in place of what it
+  holds.
+- The `Icon` of the host holds the name of its icon as its text, which a font
+  draws as the icon. Beside the words of a command it is given `aria-hidden`, or
+  the name of the command carries the name of the icon.
+- The `Checkbox` of the host is a label around its input, and the style of
+  `@freelensapp/core` at v1.10.3, `static/build/library/renderer.css`, gives the
+  input `display: none`: the Tab key does not reach it. A choice of a view that is
+  on or off by itself, as a level of a log, is a button that says with
+  `aria-pressed` whether it is made, drawn as the box of the host.
+- Escape leaves a view of one object from wherever the focus is in it, but for
+  two places. A text field of a view takes the key with `escapeOfField`, clears
+  what was typed and lets it go no further. The confirmation of a request takes
+  it as well: it leaves the confirmation, and the view does not hear the key.
+- The main process asks `require("electron")` for the dialog of the host at the
+  moment a file is saved, never when its modules are loaded: the proofs of the
+  test environment load the main bundle under Node, where there is no host.
 
 ## Architecture And UI
 

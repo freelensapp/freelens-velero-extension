@@ -302,3 +302,9 @@ the packaged application by the pre-review pass, with the keyboard alone where t
 criteria ask for it; the lead maintainer judged its report and its screenshots, in
 both themes, and approved. Verdict: approved, with what was decided while
 implementing accepted as it is and the deviation above approved. No finding was recorded.
+
+Since the tabs of an operation, with the third milestone, a view is not left with
+Escape from inside a text field, nor from inside the confirmation of a request:
+REQ-056 says that a view returns with Escape, and names neither. It is a deviation
+of the [tabs](SPEC-0011-artifact-viewers.md#evidence-and-deviations), recorded
+there, which awaits the review of that milestone.

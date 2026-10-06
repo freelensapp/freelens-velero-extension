@@ -160,7 +160,7 @@ are pure functions; the [state of the request](../../src/renderer/state/server-s
 is held for the installation; the [band](../../src/renderer/pages/server-band.tsx) is
 in the Overview after what was read; the
 [confirmation of one write](../../src/renderer/components/write-confirmation.tsx) is
-the one the tabs of the artifacts will show.
+the one the tabs of the artifacts show.
 
 | Check | Evidence |
 | --- | --- |

@@ -1,12 +1,15 @@
 # Architecture
 
-Date: 2026-09-30
+Date: 2026-10-06
 
 Status: the foundation is complete and the first views are in place: the discovery of
 the installation, the Backups, the Restores, the Schedules and the storage and
-snapshot locations, read only; and the gate of the writes, with the way between the
-processes. The diagnostics and the actions are not implemented: their sections below
-are the design their specs start from.
+snapshot locations, read only; the gate of the writes, with the way between the
+processes; the request for an artifact, with its transport and its route; and the
+tabs that show an artifact in the workspace of a backup and of a restore, proven by
+their unit and component tests and by a suite in the packaged application on the
+real backup and the real restore of the test environment. The actions are not
+implemented: their sections below are the design their specs start from.
 
 Authority: [directives](../../AGENTS.md), [roadmap](ROADMAP.md), and
 [versioned evidence](RECON-T0.1.md). The evidence report pins Velero v1.18.2,
@@ -118,23 +121,27 @@ before changing the client version. The main build replaces undici with
 extension never calls, and the real module installs a dispatcher for the whole
 process when it loads, which inside Freelens is the process of the host. Supported
 `WS_NO_*` build defines disable optional native accelerators without patching the
-library. The 1790 tests of the unit run, on the separate modules and on the
+library. The 2186 tests of the unit run, on the separate modules and on the
 production build, are 17 of the scaffold, 124 of the environment and its fixtures,
-164 of the diagnostic contracts, 151 of the operation states and of their stages,
+168 of the diagnostic contracts, 152 of the operation states and of their stages,
 56 of the rules of the discovery, 206 of what the views show of a backup, of a
 restore and of a schedule, of what they refer to and of the views in the address,
 141 of what they show of a location, of its durations and of what uses it, 38 of
 what the Overview says of an installation and of the line of time, 33 of the state
-of an installation and of its reader, 223 of the components, 128 of the gate of
+of an installation and of its reader, 225 of the components, 131 of the gate of
 the writes, of the way between the processes and of the credential of a context,
-95 of the version of the server: its comparison, its plugins, the state of its
+96 of the version of the server: its comparison, its plugins, the state of its
 request, its band, the confirmation of one write and the object the cluster is sent,
-111 of the request for an artifact: its way, its words, its text in pages, its
-procedures and the object the cluster is sent, 244 of the addresses a download
-connects to: their written forms, their ranges and what an IPv6 address carries, and
-59 of the route to the store: the origin and the path of a signed URL, the Service
-of the cluster, the name of this machine, what the operator allows and the store
-that keeps it. The
+122 of the request for an artifact: its way, its words, its text in pages, its
+saving, its procedures and the object the cluster is sent, 244 of the addresses a
+download connects to: their written forms, their ranges and what an IPv6 address
+carries, 59 of the route to the store: the origin and the path of a signed URL, the
+Service of the cluster, the name of this machine, what the operator allows and the
+store that keeps it, and 374 of the tabs of an operation: 115 of the four parsers
+and of the words of the tabs, 40 of the load of an artifact and of the loads of a
+view, 7 of the tab in the address, 6 of the file a text is saved into, 179 of the
+strip, of the panel, of the lists of lines, of the four viewers and of Escape in a
+text field, and 27 of the two workspaces with their tabs. The
 integration test
 covers the installation in the host, the suites of the views what the views do
 in it.
@@ -284,10 +291,14 @@ columns, its order, what its search looks into and what a row shows; the
 [store](../../src/renderer/state/list-store.ts) the host asks the rows of answers
 from what the installation read of the family. A
 [frame](../../src/renderer/components/workspace.tsx) gives every view its name, its
-way back and Escape. The layout around a page is the one of the host, which gives
-every page of the group the tabs of the group: the entries of the lists are
-registered before the entry of the group, which is how the host knows a page of a
-group, and no page has a layout of the host of its own.
+way back and Escape, which a text field of the view keeps for itself: there the key
+clears what was typed, and a view is never left from inside a field. The
+confirmation of a request keeps it as well: there the key leaves the confirmation,
+and the frame does not hear it. The layout
+around a page is the one of the host, which gives every page of the group the tabs
+of the group: the entries of the lists are registered before the entry of the group,
+which is how the host knows a page of a group, and no page has a layout of the host
+of its own.
 
 What is around a page is written once as well. The
 [frame of a page](../../src/renderer/components/views-frame.tsx) has the target
@@ -442,6 +453,103 @@ installation of a thousand operations is not drawn whole to say what is first.
 What was asked of a band stays shown when the installation is read again, and
 the page stays where it was scrolled.
 
+### The Tabs Of An Operation
+
+The workspace of a backup and the one of a restore show one of five things: the
+summary, or one of the four artifacts Velero wrote of the operation into its
+storage, the log, the results, the resource list and the volume information. The
+[strip](../../src/renderer/components/workspace-tabs.tsx) is the `Tabs` and the
+`Tab` of the host, with what they lack for a list of tabs: the role of the list,
+whether a tab is selected, the panel it shows, and the arrows, Home and End. The
+tab that is open is a second parameter of the address, `tab`, beside the views.
+The host changes the address once for each parameter it is asked to set, and a
+view would be drawn between the two at the tab of another: the
+[navigation](../../src/renderer/navigation.ts) writes the views and the tab into
+one search and sends the host there once, and not at all when nothing changes,
+since the host, sent to the address it is at, goes there and comes back. The tab
+is of the view that is shown: the summary is no tab in the address, and a view
+that becomes the one shown is at its summary.
+
+What the tabs loaded is held by the
+[installation](../../src/renderer/state/installation.ts), as the
+[loads](../../src/renderer/state/artifact-loads.ts) of the view that is shown: one
+[load](../../src/renderer/state/artifact-load.ts) for each tab, made when the tab
+first asks for it, four at most. A load is at one of six states: nothing asked;
+the confirmation asked of the main process; the confirmation shown, with its
+token; the request running, with the step the main process is at; the text
+loaded, with how it came; or ended without it, with the words of the main
+process. It is asked in the two gestures of a write, as the version of the server
+is. While the request runs the main process is asked for its step every 250
+milliseconds; when the run answers, the pages of the text are taken one by one
+into the one copy the views hold, and a page that is not the one that was asked,
+a page of another count and a text beyond the bound of an artifact are refused.
+A step takes an answer only while it is still the step of the tab: what arrives
+after the load was dropped, left or begun again is not taken, and what the main
+process held for it is let go. A text that is shown stays, under the confirmation
+of the next request, until that request is created. The loads are dropped, with
+what the main process holds for them, when the view closes, when another view is
+shown over it, when the installation changes, and when another object took the
+place of the operation under its name; a confirmation that waits is left when
+writes go off, and a request that runs is not.
+
+The [panel](../../src/renderer/components/artifact-panel.tsx) of a tab draws where
+its load is, each state with its [words](../../src/common/artifact-text.ts): what
+the tab would create, with the state of the gate first where writes are not on;
+the confirmation of one write, with the object; the step, beside the mark of the
+host that moves, with the way to cancel; the text, with when it was loaded and its
+size over it, and its two commands, the one that loads it again and the one that
+saves it, beside those words or under them, and under the text the request it came
+through, the way it came by, what loading again does and until when the text can
+be saved; or how the load ended, marked as a fault, as a file the store does not
+have or as a cancellation, with the one command that follows it. What Velero signs
+no URL for is said from what the installation read, before anything is asked. A
+file the store did not have is said by the [phase](../../src/common/phases.ts) the
+operation had then. The command that saves asks the main process, which writes the
+copy it holds: the panel says until when it holds it. What the panel and the
+viewers say in numbers and in names they write as attributes as well, which the
+suites read beside the words.
+
+A viewer is given the text of its tab and nothing else of the load. The parsers of
+the [log](../../src/common/artifact-log.ts), of the
+[results](../../src/common/artifact-results.ts), of the
+[resources](../../src/common/artifact-resources.ts) and of the
+[volumes](../../src/common/artifact-volumes.ts) are pure functions, read a text
+once, and answer nothing for a text that is not of the shape of the release,
+which is then shown as its [lines](../../src/renderer/components/artifact-lines.tsx)
+under a note. The log keeps the text as it was given and, beside it, two numbers
+for each line, where it begins and its level: the lines a filter leaves and the
+ones a search finds are found when they are asked for, and a line is made of the
+text for a row that is mounted and for no other. The lines are in the virtual
+list of the host, which is given the height of every row and measures none: a row
+is as tall as the lines it takes, counted from the characters of the line and
+the columns of the room, and a hundred rows are mounted at most. The words a
+search found are marked in the rows that are mounted, and take no room. The
+resources are in the virtual list of the host as well, under the head of its
+tables; the volumes are a table of the host; the results are headed lists that
+show two hundred messages at a time. The view that shows a tab is a column: its
+panel takes what the title and the tabs leave of the room of the view, and the
+list of lines, or the rows of the resources, take what the panel leaves, between
+a least and a most of their own, so that a list is whole in the room it is read
+in. Nothing is counted on the window: where the target bar leaves the view less
+than the room of a list, the page is scrolled.
+
+The tabs rest on three facts of the host, which the
+[directives](../../AGENTS.md#host-facts-that-cost-a-run-to-find) record with where
+each was read. Its virtual list, given no height, draws no row at its first
+render: the first line of a text is there a moment after its viewer, and the
+panel, which gives it the focus, waits for it. Its input leaves the focus at
+Enter unless it is told not to, and its search input takes the focus when it is
+mounted and a shortcut of the whole window: the fields of the viewers are the
+input, told to keep the focus. Its checkbox hides its input, which the Tab key
+then does not reach: the levels of a log and the wrap of its lines are commands
+that say whether they are chosen, drawn as its box.
+
+The [suite of the tabs](../../e2e/__tests__/velero-e2e-artifacts.tests.ts) drives
+them in a packaged Freelens, on the real backup and the real restore of the test
+environment: what it proves, and what it leaves to the fixtures of the tabs, is in
+the [evidence](../specs/SPEC-0011-artifact-viewers.md#evidence-and-deviations) of
+their spec.
+
 ### Create-Only Adapter Decision
 
 The pinned public `Main.K8s` does not export generic execute/create. Its apply helper
@@ -593,9 +701,33 @@ own, the entry of the catalog, the connection or the frame that turned writes on
 when the extension is deactivated, and, the oldest first, when the process would hold
 more than sixteen texts or 128 MiB of them. Writes turned off by the operator leave
 the texts that were read where they are: they were asked for while writes were on. The [words](../../src/common/diagnostic-text.ts) of every
-way a download ends are written once, by code and by step. The main process has no
-route to the store yet: until the slice of the route gives it one, the run of a
-DownloadRequest is refused before its token is taken, and nothing is created.
+way a download ends are written once, by code and by step. The main process finds
+the route to the store by itself, as the [service](#artifact-service) says, and the
+views that ask for an artifact are the [tabs](#the-tabs-of-an-operation) of an
+operation. While the file arrives, the step of the download carries the bytes of
+the text that arrived so far.
+
+The text the main process holds is what it saves as well. The procedure
+`artifact.save` is asked by the frame the text is held for, by its cluster and
+the identifier of its request, and by nothing of a file. The main process asks the
+[dialog of the host](../../src/main/artifact-save.ts) for a file, with a title and a
+message that say which artifact is saved, of which operation, namespace and cluster,
+and with a name for the file; it writes the bytes it holds into the file the operator
+chose, and into no other. It is a write to this machine, outside the gate of the
+cluster, and the only file the extension writes. The dialog is the one of the module
+of Electron, which is of the host and is not bundled, asked at each save and not when
+the extension is loaded. One dialog is open for a text at a time. When a file is
+chosen, nothing is written of a text that was let go on purpose while the dialog was
+open, by its view, with its cluster or with the extension, nor for a frame that went;
+a text that only outlived its ten minutes, or gave its room to another, meanwhile is
+written, which is a decision the
+[spec of the tabs](../specs/SPEC-0011-artifact-viewers.md#evidence-and-deviations)
+records. The answer is whether a file was written: what a write raises carries the
+path of a file, and nothing of it is said. The ten minutes, the bound of a text, 64
+MiB, and the name a file is suggested are written once, in the contract, for both
+processes: the views say until when a text can be saved by the number the holder
+counts with. The name a DownloadRequest is created with, and the one the views say
+of it, are one function of the contract.
 
 In the renderer a write is asked in two gestures, where it is offered. The
 [state of the request](../../src/renderer/state/server-status.ts) of the version of
