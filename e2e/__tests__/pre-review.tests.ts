@@ -78,7 +78,7 @@ describe("pre-review of the views", () => {
 
   beforeAll(async () => {
     if (!cluster.fixturesReady()) {
-      throw new Error(`The fixtures are missing from ${cluster.E2E_CLUSTER_NAME}. Run \`pnpm demo:up\` first.`);
+      throw new Error(cluster.fixturesMissing());
     }
     before = cluster.clusterSnapshot();
     let kubeconfig = "";
@@ -668,15 +668,16 @@ describe("pre-review of the views", () => {
         OVERVIEW,
       );
       await cluster.scrollOverview(frame, 0);
+      // The installation of the demo as it is: what its controllers ran, nothing in flight, and what the
+      // server refused, which needs attention for as long as it is inside the window.
       await cluster.selectInstallation(frame, cluster.E2E_NAMESPACE);
+      await frame.waitForSelector(`[data-testid="velero-open-backup-fixture-backup-${cluster.E2E_FIXTURE_RUN}"]`, {
+        timeout: 60_000,
+      });
       await frame.waitForSelector("[data-testid=velero-overview-in-flight-none]", { timeout: 60_000 });
-      await everyLayout("overview-nothing-to-report", undefined, OVERVIEW);
-      for (const view of [
-        "overview",
-        "overview-recent",
-        "overview-schedules-and-storage",
-        "overview-nothing-to-report",
-      ]) {
+      await cluster.overview(frame);
+      await everyLayout("overview-demo", undefined, OVERVIEW);
+      for (const view of ["overview", "overview-recent", "overview-schedules-and-storage", "overview-demo"]) {
         expect([view, found(view)]).toEqual([view, {}]);
       }
     },

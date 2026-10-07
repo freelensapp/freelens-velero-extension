@@ -10,6 +10,7 @@
 // reads the application and the cluster, and writes to neither.
 
 import { expect } from "@jest/globals";
+import * as artifacts from "../helpers/velero-artifacts";
 import * as cluster from "../helpers/velero-cluster";
 import * as velero from "../helpers/velero-extension";
 
@@ -112,7 +113,7 @@ describe("views of the restores", () => {
 
   beforeAll(async () => {
     if (!cluster.fixturesReady()) {
-      throw new Error(`The fixtures are missing from ${cluster.E2E_CLUSTER_NAME}. Run \`pnpm demo:up\` first.`);
+      throw new Error(cluster.fixturesMissing());
     }
     before = cluster.clusterSnapshot();
     errors.start();
@@ -317,8 +318,16 @@ describe("views of the restores", () => {
       expect(await workspace.locator("[data-testid=velero-restore-source-note]").innerText()).toContain(
         "the object does not say which of the two was submitted",
       );
-      // A view that only reads: the way back, and the ways to the views of the backup, of the schedule and
-      // of the location the backup is in.
+      // The view opens at the first of its five tabs, the summary, which only reads: the ways to the views of
+      // the backup, of the schedule and of the location the backup is in, beside the way back of the view,
+      // and no field.
+      const tabs = await artifacts.tabsOf(frame, "restore");
+
+      expect(tabs.tabs.map(({ title }) => title)).toEqual(artifacts.TABS.map(({ title }) => title));
+      expect([tabs.open, tabs.selected]).toEqual(["summary", [artifacts.PARTS.tab("restore", "summary")]]);
+      expect(
+        (await workspace.locator(`[data-testid=${artifacts.PARTS.shown("restore")}] button`).allInnerTexts()).map(text),
+      ).toEqual([SCHEDULED, "views-daily", "views-available"]);
       expect((await workspace.locator("button").allInnerTexts()).map(text)).toEqual([
         "arrow_back Restores",
         SCHEDULED,
@@ -383,7 +392,15 @@ describe("views of the restores", () => {
         "names no backup",
       );
       expect(await workspace.locator("[role=progressbar]").count()).toBe(0);
+      // It opens at its summary, under the tabs of every restore, and the summary leads nowhere: the way back
+      // of the view is its one command, and it has no field.
+      const tabs = await artifacts.tabsOf(frame, "restore");
+
+      expect(tabs.tabs.map(({ title }) => title)).toEqual(artifacts.TABS.map(({ title }) => title));
+      expect([tabs.open, tabs.selected]).toEqual(["summary", [artifacts.PARTS.tab("restore", "summary")]]);
+      expect(await workspace.locator(`[data-testid=${artifacts.PARTS.shown("restore")}] button`).count()).toBe(0);
       expect((await workspace.locator("button").allInnerTexts()).map(text)).toEqual(["arrow_back Restores"]);
+      expect(await workspace.locator("a, input, select, textarea").count()).toBe(0);
       await cluster.captureScreenshot(frame, "dark-restore-failed-validation");
       await cluster.closeWorkspace(frame);
     },

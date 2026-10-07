@@ -160,7 +160,7 @@ describe("long list of backups", () => {
 
   beforeAll(async () => {
     if (!cluster.fixturesReady()) {
-      throw new Error(`The fixtures are missing from ${cluster.E2E_CLUSTER_NAME}. Run \`pnpm demo:up\` first.`);
+      throw new Error(cluster.fixturesMissing());
     }
     before = cluster.clusterSnapshot();
     let kubeconfig = "";

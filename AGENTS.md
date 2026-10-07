@@ -212,7 +212,7 @@ pnpm lint:fix             # Alias for biome:fix
 pnpm knip:check           # Run after a build with separate modules
 
 # Tests
-pnpm test:unit            # Builds first, then vitest
+pnpm test:unit            # Builds first, then vitest, then the measures alone
 pnpm e2e:cluster:up       # Disposable kind cluster with Velero and S3 (needs Docker)
 pnpm e2e                  # Fixtures and transport proof against that cluster
 pnpm e2e:cluster:down     # Removes the cluster, its network and its state
@@ -349,6 +349,21 @@ Build output goes to `out/`.
 - Every suite expects no request to Velero in the cluster when it starts. A suite
   that asks the extension to create one leaves none when it ends: it waits for
   the server to remove what the server processed, and removes the rest.
+- Nothing but the suite reads the cluster while a packaged suite runs, a read of
+  the whole cluster least of all: the guard of a suite counts on the API server
+  the reads of the kinds of Velero, whoever sends them. A read of the requests of
+  every namespace, once a minute, made beside the suites to watch them, failed
+  the guard of one.
+- The sync of the reviewed release looks at a storage location once a minute, and
+  passes over it until its period, a minute by default, went by since its last
+  pass ended: a backup made from files given to the store comes at the first pass
+  after them, within a minute or two. A wait for it counts the passes by the time
+  the location says its last one ended at, and is bounded by the time that went
+  by, not by a count of reads.
+- The store of the test environment, SeaweedFS 4.48, takes a body in each of the
+  three ways the client of the fixtures sends one, and holds its whole length. A
+  way is tried only when the ones before it failed: the files are sent in the
+  first.
 - The source of the components of the host is in the package its types come
   from: the source map `static/build/library/renderer.js.map` of
   `@freelensapp/core` carries it. What follows of its address, its input, its

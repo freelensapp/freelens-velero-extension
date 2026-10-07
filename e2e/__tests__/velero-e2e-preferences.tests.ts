@@ -60,7 +60,7 @@ describe("preferences of the views", () => {
 
   beforeAll(async () => {
     if (!cluster.fixturesReady()) {
-      throw new Error(`The fixtures are missing from ${cluster.E2E_CLUSTER_NAME}. Run \`pnpm demo:up\` first.`);
+      throw new Error(cluster.fixturesMissing());
     }
     before = cluster.clusterSnapshot();
     // The kubeconfig is in the profile before the install is asked, for each start of the application.

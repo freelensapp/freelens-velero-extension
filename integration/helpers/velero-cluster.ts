@@ -33,6 +33,8 @@ export const E2E_DEFAULTS_NAMESPACE = process.env.E2E_DEFAULTS_NAMESPACE || "";
 export const E2E_OVERVIEW_NAMESPACE = process.env.E2E_OVERVIEW_NAMESPACE || "";
 /** Where the long list is: a thousand backups and no storage location. */
 export const E2E_SCALE_NAMESPACE = process.env.E2E_SCALE_NAMESPACE || "";
+/** The run of the fixtures, from the record of the environment: the names of its operations end with it. */
+export const E2E_FIXTURE_RUN = process.env.E2E_FIXTURE_RUN || "";
 
 /** The namespaces a discovery finds: the ones that hold a backup storage location. */
 export const SUGGESTED_NAMESPACES = [
@@ -201,6 +203,20 @@ export function kubectlE2E(...args: string[]): { status: number; stdout: string;
 }
 
 /**
+ * What a suite says when the fixtures are not on the cluster: where each part
+ * of them comes from. The environment and the fixtures of the phases come from
+ * `pnpm demo:up`; what the views and their tabs need beside them from
+ * `pnpm demo:views`, which `pnpm e2e:views` runs before the suites.
+ */
+export function fixturesMissing(): string {
+  return (
+    `The fixtures are missing from ${E2E_CLUSTER_NAME}: \`pnpm demo:up\` brings the environment up with the ` +
+    "fixtures of the phases, and `pnpm demo:views` places the ones of the views and of their tabs, which " +
+    "`pnpm e2e:views` places before it runs the suites."
+  );
+}
+
+/**
  * True when the cluster is up and the fixtures are on it. A cluster without
  * them is reported as not ready instead of failing later as a page full of
  * missing rows.
@@ -208,6 +224,13 @@ export function kubectlE2E(...args: string[]): { status: number; stdout: string;
 export function fixturesReady(): boolean {
   const probes: [namespace: string, resource: string, name: string][] = [
     [E2E_NAMESPACE, "backupstoragelocations.velero.io", "default"],
+    // What the fixtures of the tabs place in the installation, by the names of the run: the two backups the
+    // server synced from the store, and the three operations it refused.
+    [E2E_NAMESPACE, "backups.velero.io", `fixture-synced-backup-${E2E_FIXTURE_RUN}`],
+    [E2E_NAMESPACE, "backups.velero.io", `fixture-synced-backup-no-log-${E2E_FIXTURE_RUN}`],
+    [E2E_NAMESPACE, "backups.velero.io", `fixture-invalid-backup-${E2E_FIXTURE_RUN}`],
+    [E2E_NAMESPACE, "restores.velero.io", `fixture-invalid-restore-${E2E_FIXTURE_RUN}`],
+    [E2E_NAMESPACE, "restores.velero.io", `fixture-orphan-restore-${E2E_FIXTURE_RUN}`],
     [E2E_STATIC_NAMESPACE, "backups.velero.io", "backup-completed"],
     [E2E_STATIC_NAMESPACE, "backups.velero.io", "backup-finalizingpartiallyfailed"],
     [E2E_STATIC_NAMESPACE, "restores.velero.io", "restore-completed"],
@@ -226,9 +249,13 @@ export function fixturesReady(): boolean {
     [E2E_SCALE_NAMESPACE, "restores.velero.io", "restore-1000"],
   ];
 
-  return probes.every(
-    ([namespace, resource, name]) =>
-      namespace !== "" && kubectlE2E("get", resource, name, "--namespace", namespace, "-o", "name").status === 0,
+  // A run is eight hexadecimal characters: without one, no name of the run is probed.
+  return (
+    /^[a-f0-9]{8}$/.test(E2E_FIXTURE_RUN) &&
+    probes.every(
+      ([namespace, resource, name]) =>
+        namespace !== "" && kubectlE2E("get", resource, name, "--namespace", namespace, "-o", "name").status === 0,
+    )
   );
 }
 

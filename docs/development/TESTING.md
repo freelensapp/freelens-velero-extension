@@ -1,6 +1,6 @@
 # Testing Strategy
 
-Date: 2026-09-29
+Date: 2026-10-06
 
 Status: T0.3-T0.6 scaffold, environment, fixture and compiled-main transport checks
 pass. The [integration test](#integration-tests) covers the activation in Freelens.
@@ -67,7 +67,10 @@ else works in.
 | Pre-review | Same local app plus deterministic DOM checks and synthetic screenshots | Both-theme layout, links, focus, menu safety and regressions before manual judgment |
 
 Unit/component and main-contract tests are reachable through the canonical
-`pnpm test:unit` planned script. Do not add a second runner that bypasses that gate.
+`pnpm test:unit` script. It builds, runs the tests, and once they ended runs the
+measures, the files `test/**/*.measure.ts`, by a configuration of their own, one
+file at a time, so that nothing of the tests runs beside what is timed. Do not add
+another runner that bypasses that gate.
 The host packaged integration runner remains a separate documented runtime gate;
 Vitest alone is not a packaged-app result.
 
@@ -167,25 +170,25 @@ The build is the one of the
 | Command | What it does |
 | --- | --- |
 | `pnpm demo:up` | The environment with the fixtures left in place, once |
-| `pnpm demo:views` | The fixtures of the views, and the kubeconfigs of the two readers of the demo for who looks at it by hand: see [TRY-IT.md](TRY-IT.md) |
-| `pnpm e2e:views` | Builds and packs the extension, puts the fixtures of the views in place, runs the suites |
+| `pnpm demo:views` | The fixtures of the views and of their tabs, and for who looks at the demo by hand the kubeconfigs of its two readers and what each artifact of the tabs holds: see [TRY-IT.md](TRY-IT.md) |
+| `pnpm e2e:views` | Builds and packs the extension, puts the fixtures of the views and of their tabs in place, waits for the server to remove the requests to Velero it removes, tells the suites what the artifacts of the tabs hold, runs the suites |
 | `E2E_TEST_PATTERN=velero-e2e-journey pnpm e2e:views` | The same for one suite |
 | `pnpm pre-review` | The pass before the review of a milestone |
 
 | Suite | What it proves |
 | --- | --- |
-| `velero-e2e-journey` | Nothing is asked before a view opens; the choice among the installations; the list of every phase; the workspace; the references that lead somewhere and the ones that do not; equal names in two installations; no way to select, edit or delete; the section in the details of the host |
-| `velero-e2e-overview` | The Overview as the first entry under Velero, with what the API server counted when it opens; what was read of the five families; what needs attention by its rules, in its order, with the reason of each; what is in flight; the newest completed backup; the three windows, on the line of time and in the list; ten lines of twelve schedules; every way of the page followed, and the way back; an installation where no rule finds anything; no value of the whole in any installation; two thousand operations within the budget, and the scroll after a read |
+| `velero-e2e-journey` | Nothing is asked before a view opens; the choice among the installations; the list of every phase; the workspace, which opens at its summary, the first of five tabs, with the ways of the summary and no field; the references that lead somewhere and the ones that do not; equal names in two installations; no way to select, edit or delete; the section in the details of the host |
+| `velero-e2e-overview` | The Overview as the first entry under Velero, with what the API server counted when it opens; what was read of the five families; what needs attention by its rules, in its order, with the reason of each; what is in flight; the newest completed backup; the three windows, on the line of time and in the list; ten lines of twelve schedules; every way of the page followed, and the way back; the installation of the demo as the fixtures of the tabs leave it, with what ended with a failure inside the window computed from the times the cluster holds, the backups synced from the store at their start, the count of the items and the newest completed backup by the time each completed; no value of the whole in any installation; two thousand operations within the budget, and the scroll after a read |
 | `velero-e2e-preferences` | What is kept between two starts of the application, which is the two maps of the namespaces, the window of the recent operations and what the operator allowed the downloads to do, and nothing else; a namespace that is not there any more stays selected; what the file says was allowed is shown in the target bar, one is taken back through the main process, the one that is left is found at the next start, and once the last is taken back nothing is allowed at the start after it |
-| `velero-e2e-restores` | The list of every phase of a restore; a restore as Velero keeps it, with where it restores into and the scope it carries; one that failed its validation, with no time and no backup made up; a source that is not there; the way between a restore and its backup in both directions, over the list the first view was opened from; no way to select, edit or delete; the section in the details of the host |
+| `velero-e2e-restores` | The list of every phase of a restore; a restore as Velero keeps it, with where it restores into and the scope it carries, which opens at its summary under the five tabs, with the ways of the summary and no field; one that failed its validation, with no time and no backup made up; a source that is not there; the way between a restore and its backup in both directions, over the list the first view was opened from; no way to select, edit or delete; the section in the details of the host |
 | `velero-e2e-restricted` | The views for an identity that reads three kinds of one namespace: what is denied is said, and is neither absent nor empty; a location shown with the Secrets it names, to an identity the API server refuses the Secrets to; the Overview, which says what the rules did not look at |
 | `velero-e2e-restricted-restores` | The views for an identity that reads the restores and the schedules and not the backups: the source of a restore, the history of a schedule, the backups that name a location and the newest completed backup of the Overview are said denied or not known, and are neither absent nor empty |
 | `velero-e2e-schedules` | The schedules Velero took, refused and has not read, with paused and validation as two facts; the last submission beside the newest backup; the history of a schedule, from the newest, on its line of time and in its list, with the backup that never started at the time it was created; the template and where its backups go; the way between a schedule and its backups in both directions; no way to edit, pause or run; the section in the details of the host |
-| `velero-e2e-locations` | The storage locations with availability, access mode and default as three facts; the location the controller validates, which is not late, and the synthetic ones, which are; none and two marked default; a message of many lines; where a location points and the Secrets it names, by their names; what uses a location, and the way to it and back; the way from a backup, a restore and a schedule to their locations; the snapshot locations, with a phase that has the mark of what is not known; no way to select, edit, delete or set as default; the sections in the details of the host |
+| `velero-e2e-locations` | The storage locations with availability, access mode and default as three facts; the location the controller validates, which is not late, and the backups that name it, by how each ended; the synthetic ones, which are late; none and two marked default; a message of many lines; where a location points and the Secrets it names, by their names; what uses a location, and the way to it and back; the way from a backup, a restore and a schedule to their locations; the snapshot locations, with a phase that has the mark of what is not known, and one a synced backup names that the installation does not have, said absent by the list and by the workspace of the backup; no way to select, edit, delete or set as default; the sections in the details of the host |
 | `velero-e2e-scale` | A thousand backups and a thousand restores: the rows that are mounted, the time of the interactions, the state of each list when an object is opened and closed |
 | `velero-e2e-gate` | The gate of the writes: off when the session starts, on every page of the group; on through the dialog of the host, which names the cluster, its context and the namespace, and not before the dialog is answered; off when another installation is selected, when the dialog is left, and when the application is started again; each frame of a cluster with a gate of its own; nothing of it in the store, and nothing written to the cluster |
 | `velero-e2e-server` | The band of the server in the Overview: nothing asked of the cluster when the page opens, nor for a command that is not confirmed; the object shown before it is created, reached with the keyboard alone and left with Escape; the version and the plugins of the real server of the environment, against what the server wrote into the request, each plugin once; kept through a read and a visit to another page, and dropped with the installation; the answer and the confirmation in both themes, at every size; a request no server answers, said not answered after ten seconds and left as it was created; the refusal of the cluster to the reader of a part, with writes left on; what the API server counted of the requests, by verb and by code; the request the server processed, removed by the server five minutes after |
-| `velero-e2e-artifacts` | The tabs in the workspace of a backup and of a restore, on the real backup and the real restore of the installation: the five tabs in their order, as a list of tabs, with the tab in the address; nothing of a DownloadRequest created or read when a tab opens, by a click or by its address, nor for a confirmation that is left; the first state with writes off and on, and the confirmation with the object, reached and left with the keyboard alone; the four artifacts of each, loaded through a request of their own, which the cluster holds by the name the tab gave it, with the steps of a load, a load again as another request and a load cancelled as soon as its command is offered; the log in its lines, its levels, its search, its lines wrapped, a line copied and a hundred rows mounted at most, against the file the suite saved of it; the results against the counters of the status; the resource list, with the actions of a restore and the filter; the volume information of no volume; the log saved into a file through the dialog of the host, and nothing written when the dialog is left; the keys of the strip; the section in the details of the host; the tabs in both themes, at 900 by 650 and at twice the zoom, checked for what lies over something else, is wider than its room or is cut; what the API server counted of the requests, and each removed by the server before the suite ends. Nine cases are written as waiting: seven for the fixtures of the tabs, and two, of another installation and of the reader of a part, that need no fixture the environment does not have |
+| `velero-e2e-artifacts` | The tabs in the workspace of a backup and of a restore, on the real backup and the real restore of the installation: the five tabs in their order, as a list of tabs, with the tab in the address; nothing of a DownloadRequest created or read when a tab opens, by a click or by its address, nor for a confirmation that is left; the first state with writes off and on, and the confirmation with the object, reached and left with the keyboard alone; the four artifacts of each, loaded through a request of their own, which the cluster holds by the name the tab gave it, with the steps of a load, a load again as another request and a load cancelled as soon as its command is offered; the log in its lines, its levels, its search, its lines wrapped, a line copied and a hundred rows mounted at most, against the file the suite saved of it; the results against the counters of the status; the resource list, with the actions of a restore and the filter; the volume information of no volume; the log saved into a file through the dialog of the host, and nothing written when the dialog is left; the keys of the strip; the section in the details of the host; the tabs in both themes, at 900 by 650 and at twice the zoom, checked for what lies over something else, is wider than its room or is cut; what the API server counted of the requests, and each removed by the server before the suite ends. Nine cases are written as waiting, for the next pull request of the task: seven on the fixtures of the tabs, and two, of another installation and of the reader of a part, that need no fixture the environment does not have |
 | `pre-review` | Every view in both themes, at 1440x900, at 900x650 and at twice the zoom, checked for what lies over something else, does not fit, or is cut by what holds the page; a page that stands still at the widths where its target bar goes to a second line; the journeys with the keyboard alone, which go through the strip of the tabs of a workspace. It does not open the tabs yet: that is the last pull request of their task |
 
 The check of the layout, which every suite asks of the pages it shows, looks at
@@ -291,12 +294,14 @@ up, and the suite passes on its second start. The file goes when it is read.
 | Defaults | `velero-defaults-<run>` | Two storage locations marked default, the one that is read-only created first. The one the release would keep is the one created last; of two created in the same second it is not settled which. The suite reads when each was created, and expects what the view says of that |
 | Overview | `velero-overview-<run>` | An installation no controller reads, placed by the clock: a default storage location validated two days before, one that is unavailable, one that reports nothing; twelve schedules, of which one was refused, one was not read and names the location that is unavailable, one is paused, and two carry the time of the last backup the release asked for them; backups and restores that ended one hour to forty days before, some with a failure; operations in flight, at work, waiting with its place in the queue, and with a failure; a backup a client asked from the schedule that was refused, and a restore, which failed their validation and never started |
 | Long lists | `velero-scale-<run>` | A thousand backups and a thousand restores in every phase, spread over the thirty days before they were placed, each restore of one of the backups, and no storage location: nothing suggests the namespace, the operator names it |
+| Tabs | `velero-demo` | Two backups the server syncs from files the store is given: one that failed in part, with the four artifacts made for the tabs, and one that completed with no log. A backup and a restore the server refuses for naming both kinds of selector, and a restore asked from a schedule that has no backup. See [the fixtures of the tabs](#the-fixtures-of-the-tabs) |
 
 They are put in place by `pnpm e2e:views`, once: a second run finds them. The
 times of the history of a schedule are counted back from when the fixtures were
 started, which the environment keeps: a second run asks for the same objects. No
-controller of Velero watches these namespaces. They go with
-`pnpm e2e:cluster:down`, or with the cleanup of the fixtures.
+controller of Velero watches these namespaces, but `velero-demo`, where the
+fixtures of the tabs are. They go with `pnpm e2e:cluster:down`, or with the
+cleanup of the fixtures.
 
 The fixtures of the Overview and of the long lists are placed by the clock: their
 times are counted back from the moment they are put in place, which each object
@@ -372,6 +377,167 @@ the pre-review on the hosted runner for every pull request. It uploads the
 directory of their screenshots and reports, `e2e-artifacts/`, and nothing else:
 the private state of the environment is elsewhere, and a test of the workflow
 fails if a path of it is ever named there.
+
+### The Fixtures Of The Tabs
+
+The tabs of an operation read what Velero wrote of it into the store. Their
+fixtures are in the namespace of the installation, `velero-demo`, which its server
+reads: the files of two backups the store is given, from which the sync of the
+server creates the backups, and three operations the server refuses. They go with
+the fixtures of the views: `pnpm demo:views` and `pnpm e2e:views` give the store
+the files first, place the objects of the views and the refused operations
+meanwhile, and wait for the server last, at most a minute or two, once for an
+environment. A second placement finds what the first did: it gives the store
+nothing, applies no refused operation again and waits for no sync. What each
+holds, and where the synced backups are not what the release writes, is in the
+[evidence](../specs/SPEC-0011-artifact-viewers.md#the-fixtures-of-the-tabs-the-second-pull-request-of-t23)
+of their spec.
+
+| Key of a synced backup, under `backups/<name>/` in the bucket | First | Second |
+| --- | --- | --- |
+| `<name>.tar.gz`, the contents: an empty archive, in gzip | Yes | Yes |
+| `<name>-logs.gz` | Yes | No |
+| `<name>-results.gz` | Yes | The empty form |
+| `<name>-resource-list.json.gz` | Yes | The empty form |
+| `<name>-volumeinfo.json.gz` | Yes | The empty form |
+| `velero-backup.json`, the metadata, written last | Yes | Yes |
+
+A folder holds none of the three lists the release writes beside these keys, of
+the native snapshots, of the operations of its plugins and of the pod volume
+backups: from the list of the pod volume backups the sync creates objects, and for
+each native snapshot listed the deletion calls a plugin.
+
+The client of the fixtures reaches the store through the client of the node, as
+the identity that writes to the bucket of the environment alone. It may ask
+whether a key of the run is there; read the artifacts the server wrote for the
+real operations, and never the contents of the real backup; and write the eleven
+keys above, and never read them back. It deletes nothing. A body goes with a key
+of the tabs and with nothing else, while the placement is recorded as storing, or
+while a removal puts back the contents it recorded; any other request with a body
+is refused before the cluster is asked where the store is. The node keeps a body
+in one file, which is read back by its digest before it is sent and removed
+whatever happens, and sends it in one of three ways, tried in their order only
+while none has passed: the file as an upload, the file as the data of the request,
+and a request signed in the scripts over the digest of the body. The way that
+passed is recorded, and is the way of every file after it: the store the
+environment pins takes all three, and the files are sent in the first. The log of
+the operations tells each request by one line, `store <verb> <key>: <code>`, with
+the length and the way of a body and the length the store holds of a key it was
+asked for, or with `no answer` when the client gave none of the store, and nothing
+of a body and no setting of the client. An answer to whether the store holds a key
+that says neither that it does nor that it does not stops the step that asked,
+with what is not known: run the command again.
+
+What the placement reached is recorded in the journal of the environment before
+anything is written: `storing` while the files are written, `stored` once the
+store holds every one of them with its length, and `synced` once the server
+created the two backups as they were stored, which the journal then holds with the
+identity the cluster gave them. Their removal is recorded as `clearing`, then
+`cleared`, and no placement goes on from either. The metadata as it was stored is
+in `fixture-tab-metadata.json` of the private state, written whole at mode 0600,
+and ends with the record. What each artifact of the tabs holds, counted outside
+the extension, is in `tab-fixtures.json`: `pnpm demo:views` writes it into the
+private state, whole at mode 0600, where it ends with the record, for who looks at
+the tabs by hand; `pnpm e2e:views` writes it beside the reports of the suites
+instead, for the suites on the fixtures, which are the next pull request of the
+task, to read what a tab is to show: synthetic facts of a disposable cluster, with
+no credential and no URL. A placement that was stopped goes on at the next one,
+which writes the files the store does not hold whole.
+
+The wait for the sync reads the installation every two seconds, and counts the
+passes of the sync by the time the location says its last one ended at. It stops,
+with words of its own, after two passes that ended with a backup missing, which is
+a server that read the store and created nothing, and after five minutes with no
+pass, saying whether the location is available: the sync passes over one that is
+not. A backup that is missing, and whose metadata the store does not hold any
+more, was deleted through the server, which removes the files of a backup with it:
+the way on is to clean the run and to make a new one. What the server created is
+read back against what was stored.
+
+The cleanup of the fixtures,
+`node e2e/scripts/local-demo.mts fixtures-cleanup --context kind-freelens-velero-dev`,
+removes the fixtures of the tabs first, through the server: it has the server
+delete each synced backup through a DeleteBackupRequest of the run, one at a time,
+the removal recorded before the first, and waits for a pass of the sync after
+them. A request the server ended is replaced; one it has not ended is waited for,
+three minutes, with nothing applied over it; one it began and left is replaced,
+once for a backup. When the server ended a deletion and left the backup in it,
+contents the store holds that are not the empty archive the fixtures make are
+replaced by it, recorded before it is written. While the placement is recorded as
+storing, a folder a stopped placement left without its metadata is given its
+contents, when the store does not hold them whole, and its metadata, before
+anything is asked to be deleted, so that the server makes the backup it deletes
+the folder with. The real backup and the refused one are deleted by the same
+rules, the restore without a backup by its identity. Before the namespaces of the
+run are removed, one check: none of the eleven operations of the run is in the
+installation, each looked for by its name, and the store holds none of the twenty
+keys the client may ask of the run, nine of the fourteen the server wrote for the
+real backup and the real restore and the eleven of the tabs. A cleanup stopped at
+any point is taken up by the next from what that one finds. Nothing in the scripts
+removes a key of the store: when files of the tabs are in the store and no backup
+comes of them, or a key is left, the cleanup stops and names them, and the way out
+is `pnpm demo:down`. The hosted job of the views places the fixtures of the tabs
+on every run and takes the environment down after the pre-review, with no cleanup
+of them.
+
+The runner says of a placement what it did, a line each: the files of the tabs
+written by this run, with the way they were sent, or none; the time the wait for
+the two backups took once the fixtures of the views and the refused operations
+were placed, which is none when a pass of the sync came meanwhile, with the passes
+that ended without both; the refused operations placed by this run, or each found
+refused; and, only when the fixtures placed by the clock were there before, that
+they were put in place again. A second placement says that none was written and
+that each was found refused. Of a removal of the tabs it says the backups the
+server deleted, the deletions it waited for, the files it gave the store first, or
+none, and the time it took.
+
+Before a cleanup removes anything, and before the suites start, the requests to
+Velero are read by their kind, their namespace, their name and their expiration,
+with the output withheld: the status of a request for a download that was
+processed holds a signed URL. A suite that was stopped, or a review by hand, may
+have left some, and nothing in the scripts removes one:
+
+- In `velero-demo` the server removes a request for a download at its pass after
+  the ten minutes the request lasts, and one for its status sooner: the runner
+  waits for them, twelve minutes at most. One that tells no expiration a minute
+  after it was first read is one the server did not look at, which it never
+  removes: the runner stops on it.
+- A request to delete a backup that the server ended with an error stays a day.
+  Such a request holds no URL: when `velero-demo` holds requests to delete a
+  backup, the wait before the suites reads them whole, as the removal of a backup
+  and the end check of a cleanup read them, and the private log of the operations
+  keeps that read; it stops at once, by its name, on one the server ended with an
+  error. The cleanup leaves the requests to delete a backup to the removal of the
+  backups.
+- One in a namespace no server reads stays for good: before the suites it is named
+  in a warning, since the suites that expect no request fail in their last case
+  while it is there, and it stops a cleanup before anything is removed.
+
+The way out of each is `pnpm demo:down`.
+
+Nothing but the suite reads the cluster while a suite of the views runs: the guard
+of a suite counts on the API server the reads of the kinds of Velero in the whole
+cluster, whoever sends them. A read of the requests of every namespace once a
+minute, made beside the suites to watch them, failed the guard of the suite of the
+schedules.
+
+Every suite starts only when the cluster holds the fixtures it needs, each probed
+by its name, the five of the tabs among them by the names of the run, which
+`pnpm e2e:views` gives the suites. A suite that does not find them stops before it
+starts the application, and says where each part of the fixtures comes from.
+
+`fixtures-artifacts`, a command of the runner for the fixtures of the foundation,
+moves a run out of the phase the placement of the views asks for, which then
+refuses it: it is not for a demo.
+
+In the local runs of 2026-10-06 that first placed them, on the code before the
+review of the whole pull request, a first placement took 130 to 132 seconds in
+all, a placement after it 75 to 93, and a cleanup after a placement 99 to 158, of
+which about sixty went to the namespaces of the views after a whole placement. On
+the final code, the same evening, `pnpm e2e:views` placed them on an environment
+just brought up in 119 seconds, with a wait for the two backups of no time, since
+a pass of the sync came while the views were placed, and the cleanup after the
+suites took 104 seconds, 26 of them for the fixtures of the tabs.
 
 ## Critical Journeys
 
@@ -499,6 +665,25 @@ Established T0.3 commands, executed locally:
   `pnpm pack:dev` bumps a prerelease so that Freelens takes the rebuild.
 - `VITE_PRESERVE_MODULES=false pnpm test:unit` checks the production bundle form;
   `pnpm exec vitest run src/entrypoints.test.ts` is the focused source check.
+
+The measure of the unit tests,
+[`artifact-log.measure.ts`](../../test/artifact-log.measure.ts), times the code of
+a log on 500,000 lines of the brief form of the log of the fixtures of the tabs:
+the parser, the search, the filter by level, the search among the lines a filter
+leaves, the rows of a list of the lines and the lines of a text read without its
+levels, each twenty calls after five, within 250 milliseconds at the 95th
+percentile, every answer checked. It prints its times as one line, `VIEW-10 unit`,
+before anything is asserted, and it imports the source, which both forms of the
+unit run time alike; the hosted unit job asserts the same budget in both. Of 34
+changes made on purpose, one at a time, while the measure was written, to the
+parsers, to the generators, to the keys and the counters of the fixtures and to
+the measure, 32 made a test fail: a search made to read its text twice, or three
+times, stays within the budget, which a search four times as slow, and a parser
+that copies every line, exceed. The 10 changes made once the measure took the
+filter, the rows and the lines of a text, 8 to the code it times and 2 to the
+choices it makes, each made it fail. On the final code, on 2026-10-06, every
+series stayed within the budget in both forms, with three workers of the runner of
+the tests and with the ones it chooses on a busier machine.
 
 The [local runner](../../e2e/scripts/local-demo.mts) and
 [image helper](../../e2e/scripts/local-images.mts) provide official-image setup and

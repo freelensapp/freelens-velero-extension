@@ -472,7 +472,7 @@ describe("the log, the results, the resources and the volumes of an operation", 
       );
     }
     if (!cluster.fixturesReady()) {
-      throw new Error(`The fixtures are missing from ${cluster.E2E_CLUSTER_NAME}. Run \`pnpm demo:up\` first.`);
+      throw new Error(cluster.fixturesMissing());
     }
     // The two operations of the controller are there, and the location the backup names says where it signs.
     read("restore");

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { syntheticVolumeInfo } from "../../e2e/scripts/local-artifacts.mts";
 import {
   bytesText,
   claimNamespace,
@@ -478,5 +479,81 @@ describe("the words of the volumes", () => {
       "not selected",
       "not selected",
     ]);
+  });
+});
+
+// The volume information the fixtures give the store for the two backups its sync creates, made as the fixtures
+// make it for the moment they were started, which the times of the volumes are counted from.
+describe("the volume information of the backups the store is given for the tabs", () => {
+  const started = Date.parse("2026-10-05T10:00:00.000Z");
+  const full = syntheticVolumeInfo(started);
+  // A field of a detail as the tab shows it: a text as it is, a map of texts as its pairs, anything else as the
+  // JSON it is written as.
+  const shown = (value: unknown) => {
+    if (typeof value === "string") return value;
+    if (value !== null && typeof value === "object")
+      return Object.entries(value)
+        .map(([key, entry]) => `${key}=${entry}`)
+        .join(", ");
+    return JSON.stringify(value);
+  };
+
+  it("reads one row for each volume of the first, with what its entry says and the size of the detail that has one", () => {
+    const rows = parseVolumes(full.text, "Backup");
+
+    if (!rows) throw new Error("The volume information the fixtures give the store is not read");
+    expect(
+      rows.map((row) => [
+        row.claim,
+        row.namespace,
+        row.volume,
+        row.method,
+        row.result,
+        row.moved,
+        row.kept,
+        row.skipped,
+        row.reason,
+        row.start,
+        row.end,
+        row.size,
+      ]),
+    ).toEqual(
+      full.value.map((volume) => [
+        volume.pvcName,
+        volume.pvcNamespace,
+        volume.pvName,
+        volume.backupMethod && { text: volume.backupMethod, known: true },
+        volume.result && { text: volume.result, known: true },
+        volume.snapshotDataMoved,
+        volume.preserveLocalSnapshot,
+        volume.skipped,
+        volume.skippedReason,
+        volume.startTimestamp,
+        volume.completionTimestamp,
+        // A native snapshot has no size, and a volume that was skipped no detail of one.
+        volume.csiSnapshotInfo?.size ?? volume.pvbInfo?.size,
+      ]),
+    );
+    // The details of each entry, each field by the name it is written with and in its order, `ReadyToUse` and
+    // `Phase` among them, and no field the tab does not know.
+    expect(rows.map((row) => [row.details.map((detail) => [detail.key, detail.fields]), row.others])).toEqual(
+      full.value.map((volume) => [
+        Object.entries(volume)
+          .filter(([key]) => key.endsWith("Info"))
+          .map(([key, detail]) => [
+            key,
+            Object.entries(detail as object).map(([name, value]) => ({ name, value: shown(value) })),
+          ]),
+        [],
+      ]),
+    );
+    expect(volumesCount(rows.length, "Backup")).toBe(`Velero recorded ${full.value.length} volumes for this backup.`);
+  });
+
+  it("reads the volume information of the second as no volume", () => {
+    const rows = parseVolumes(syntheticVolumeInfo(started, "empty").text, "Backup");
+
+    expect(rows).toEqual([]);
+    expect(volumesCount(rows?.length ?? -1, "Backup")).toBe("Velero recorded no volume for this backup.");
   });
 });

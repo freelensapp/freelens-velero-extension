@@ -26,6 +26,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { gunzipSync } from "node:zlib";
 import { createTlsFixture } from "../../test/tls-fixture.ts";
+import { tabArtifacts, tabExpectations } from "./local-artifacts.mts";
 import {
   compiledDiagnostics,
   DIRECT_PROOF_ORIGIN,
@@ -34,22 +35,31 @@ import {
   tlsProofResources,
 } from "./local-download-proof.mts";
 import {
-  allowsFixtureArtifact,
   assertFixtureNamespaceContents,
+  assertFixtureOperationsRemoved,
+  awaitRequestsBeforeCleanup,
+  awaitRequestsRemoved,
+  clearTabFixtures,
   createStaticFixtures,
-  createViewFixtures,
   FIXTURE_LABEL,
+  type FixtureRuntime,
   fixtureArtifactPaths,
-  fixtureDeletionRequest,
   fixtureNames,
   fixtureNamespaces,
   liveBackup,
+  placementWords,
+  placeRefusedFixtures,
+  placeViewAndTabFixtures,
   proofIdentities,
+  REAL_ARTIFACT_BOUND,
   readerKubeconfig,
   readFixture,
+  recordSyncedBackups,
+  removeFixtureBackup,
   restrictedFixtures,
   runLiveFixtures,
-  runRefusedFixtures,
+  tabFixtureFacts,
+  tabRemovalWords,
   VIEW_READER,
   VIEW_READER_OF_RESTORES,
   verifyStaticFixtures,
@@ -118,7 +128,10 @@ import {
   platformManifest,
   withhold,
 } from "./local-platform.mts";
+import { type RunJournal, type StoreReach, storeRequest, tabRecord } from "./local-runtime.mts";
 import { assertOfficialImages } from "./local-security.mts";
+
+import type { StoreBody } from "./local-store.mts";
 
 const STATE = join(homedir(), ".local", "state", DEMO_CLUSTER);
 const CONFIG = join(STATE, "kubeconfig");
@@ -126,6 +139,9 @@ const CONFIG = join(STATE, "kubeconfig");
 const NODE_CONFIG = join(STATE, "kubeconfig-node");
 const JOURNAL = join(STATE, "ownership.json");
 const LOG = join(STATE, "operations.log");
+// The metadata the store was given for the tabs, as it was stored, and what the tabs are to show of each
+// artifact, for who looks at them by hand: both end with the record of the tabs.
+const TABS = { metadata: join(STATE, "fixture-tab-metadata.json"), facts: join(STATE, "tab-fixtures.json") };
 const BIN = join(STATE, "bin");
 const KIND = join(BIN, "kind");
 const KUBECTL = join(BIN, "kubectl");
@@ -178,7 +194,9 @@ interface Journal {
   retiredNodeIds?: string[];
   bucket?: { name: string; created: boolean };
   temporaryChecks?: (ResourceIdentity & { owner: string })[];
-  fixtureRun?: { id: string; started: string; phase: string };
+  // `tabs` is what the placement of the fixtures of the tabs has reached, recorded before the store is
+  // given anything: the metadata it stored is in a file of its own.
+  fixtureRun?: { id: string; started: string; phase: string } & NonNullable<RunJournal["fixtureRun"]>;
 }
 
 let journal: Journal;
@@ -911,82 +929,44 @@ function applyOwned(resource: KubeResource): void {
   save();
 }
 
+// How a request to the store reaches the node and the cluster, and the log it is told in. What is run inside
+// the node for a body leaves nothing of it in the log: a command that is given the body answers with it, and
+// its answer is not read. The client of the node is given its settings on its standard input.
+const storeReach: StoreReach = {
+  kubectl: (args) => kubectl(args),
+  inNode(args, input) {
+    const output = execFileSync("docker", ["exec", ...(input ? ["-i"] : []), journal.nodeId, ...args], {
+      env: environment,
+      cwd: environment.HOME,
+      input,
+      timeout: 30_000,
+      maxBuffer: 1024 ** 2,
+      stdio: ["pipe", input ? "ignore" : "pipe", "pipe"],
+    });
+
+    return output ? output.toString("utf8") : "";
+  },
+  client: (settings, timeout) =>
+    execFileSync("docker", ["exec", "-i", journal.nodeId, "curl", "--config", "-"], {
+      env: environment,
+      cwd: environment.HOME,
+      input: settings,
+      timeout,
+      maxBuffer: 17 * 1024 ** 2,
+      stdio: ["pipe", "pipe", "pipe"],
+    }),
+  log: (text) => appendFileSync(LOG, text, { mode: 0o600 }),
+  now: () => new Date(),
+};
+
+// A request to the store of the environment, as the journal of this run allows it.
 function storageRequest(
   method: "GET" | "PUT" | "HEAD",
   path: string,
   credentials?: Credentials,
-): { code: number; body: string; bytes: Buffer; headers: Record<string, string[]> } {
-  requireCondition(
-    path === `/${BUCKET}` ||
-      path === "/velero-denied" ||
-      (journal.fixtureRun && allowsFixtureArtifact(method, path, journal.fixtureRun.id)),
-    "Unexpected local bucket target",
-  );
-  const service = JSON.parse(
-    kubectl(["get", "service", "seaweedfs", "--namespace", DEMO_NAMESPACE, "-o", "json"]),
-  ) as KubeResource & { spec: { clusterIP: string } };
-
-  assertOwnedResource(
-    journal.owner,
-    service,
-    journal.resources.find((item) => item.kind === "Service" && item.name === "seaweedfs")?.uid,
-  );
-  requireCondition(
-    subnetsOverlap(SUBNETS.services, service.spec.clusterIP),
-    "Storage service is outside the dedicated service subnet",
-  );
-  const endpoint = new URL(STORAGE_ENDPOINT);
-  const settings = [
-    "silent",
-    "show-error",
-    "connect-timeout = 3",
-    "max-time = 10",
-    'proto = "=http"',
-    `url = ${JSON.stringify(`${STORAGE_ENDPOINT}${path}`)}`,
-    `resolve = ${JSON.stringify(`${endpoint.hostname}:${endpoint.port}:${service.spec.clusterIP}`)}`,
-    ...(method === "HEAD" ? [] : ["max-filesize = 16777216"]),
-    `write-out = ${JSON.stringify('\nFV_HTTP_META:{"code":%{response_code},"headers":%{header_json}}')}`,
-    method === "HEAD" ? "head" : `request = ${JSON.stringify(method)}`,
-  ];
-
-  if (credentials)
-    settings.push(
-      'aws-sigv4 = "aws:amz:us-east-1:s3"',
-      `user = ${JSON.stringify(`${credentials.accessKey}:${credentials.secretKey}`)}`,
-    );
-  let output: Buffer;
-
-  try {
-    output = execFileSync("docker", ["exec", "-i", journal.nodeId, "curl", "--config", "-"], {
-      env: environment,
-      cwd: environment.HOME,
-      input: `${settings.join("\n")}\n`,
-      timeout: 15_000,
-      maxBuffer: 17 * 1024 ** 2,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-  } catch (error) {
-    appendFileSync(LOG, `Local storage request failed\n${String((error as { stderr?: Buffer }).stderr ?? "")}\n`, {
-      mode: 0o600,
-    });
-    throw new Error("Local storage request failed; details retained in the private operations log");
-  }
-  const marker = "\nFV_HTTP_META:";
-  const separator = output.lastIndexOf(marker);
-
-  requireCondition(separator >= 0, "Missing local storage response metadata");
-  const metadata = JSON.parse(output.subarray(separator + marker.length).toString("utf8")) as {
-    code: number;
-    headers: Record<string, string[]>;
-  };
-
-  requireCondition(
-    Number.isInteger(metadata.code) && metadata.code >= 100 && metadata.code <= 599,
-    "Invalid local storage response",
-  );
-  const bytes = output.subarray(0, separator);
-
-  return { code: metadata.code, headers: metadata.headers, bytes, body: bytes.toString("utf8") };
+  sent?: StoreBody,
+): ReturnType<typeof storeRequest> {
+  return storeRequest(storeReach, journal, method, path, credentials, sent);
 }
 
 function prepareBucket(): void {
@@ -1674,7 +1654,7 @@ function verifyFixtureArtifacts(): void {
     const response = storageRequest("GET", path, credentials.velero);
 
     requireCondition(response.code === 200, `Expected fixture artifact is unavailable: ${name}`);
-    const content = gunzipSync(response.bytes, { maxOutputLength: 4 * 1024 ** 2 });
+    const content = gunzipSync(response.bytes, { maxOutputLength: REAL_ARTIFACT_BOUND });
 
     requireCondition(content.length > 0, "Fixture artifact is unexpectedly empty");
     if (name.endsWith("Results")) JSON.parse(content.toString("utf8"));
@@ -1819,10 +1799,16 @@ function verifyFixturePermissions(): void {
 }
 
 async function cleanupFixtures(): Promise<void> {
-  verifyPreloadedImages();
   requireCondition(journal.fixtureRun, "No fixture run is recorded");
+  verifyPreloadedImages();
   const run = journal.fixtureRun.id;
   const names = fixtureNames(run);
+  const runtime = fixtureRuntime();
+
+  // What a suite that was stopped, or a review by hand, asked the extension for is not of the run, and is
+  // not removed here: the server is waited for, and a request it never removes stops the cleanup before
+  // anything of the run is removed, with the run as it was.
+  awaitRequestsBeforeCleanup(runtime, run, (line) => console.log(line));
   const identity = (kind: string, name: string, namespace?: string) =>
     journal.resources.find((entry) => entry.kind === kind && entry.name === name && entry.namespace === namespace);
   const existing = (entry: ResourceIdentity) => {
@@ -1840,86 +1826,21 @@ async function cleanupFixtures(): Promise<void> {
   };
   journal.fixtureRun.phase = "cleanup";
   save();
-  // A backup of the fixtures is deleted by the controller, through a request of its own: the real one with
-  // the restores that name it, and the one that failed its validation, of which the store holds nothing.
-  // One a cleanup that was interrupted left while it was deleted is waited for, with the same request.
-  const removeBackup = async (backupName: string) => {
-    const backupEntry = identity("Backup", backupName, DEMO_NAMESPACE);
-
-    if (!backupEntry || !existing(backupEntry)) return;
-    const backup = existing(backupEntry);
-
-    requireCondition(
-      backup &&
-        ["Completed", "PartiallyFailed", "Failed", "FailedValidation", "Deleting"].includes(
-          (backup.status as { phase: string }).phase,
-        ),
-      "Cannot clean an in-progress fixture backup",
-    );
-    const restores = JSON.parse(
-      kubectl(["get", "restores.velero.io", "--namespace", DEMO_NAMESPACE, "-o", "json"]),
-    ) as { items: (KubeResource & { spec: { backupName?: string } })[] };
-
-    for (const restore of restores.items.filter((item) => item.spec.backupName === backupName)) {
-      assertOwnedResource(journal.owner, restore, identity("Restore", restore.metadata.name, DEMO_NAMESPACE)?.uid);
-      requireCondition(
-        restore.metadata.labels?.[FIXTURE_LABEL] === run,
-        "An unrelated Restore references this backup; deletion refused",
+  // The fixtures of the tabs go first, when the store was given any: the two backups the server created
+  // from it, each deleted by the server through a request, with the files of its folder.
+  if (journal.fixtureRun.tabs) {
+    // The removal says nothing until it ends.
+    if (journal.fixtureRun.tabs.state !== "cleared") {
+      console.log(
+        "NOTE: the server is asked to delete the backups it created for the tabs, with the files the store was given, and a pass of its sync is waited for after them: some minutes.",
       );
     }
-    kubectl(
-      [
-        "wait",
-        "--for=jsonpath={.status.phase}=Available",
-        "backupstoragelocation/default",
-        "--namespace",
-        DEMO_NAMESPACE,
-        "--timeout=180s",
-      ],
-      undefined,
-      210_000,
-    );
-    const priorDeletion = identity("DeleteBackupRequest", `${backupName}-delete`, DEMO_NAMESPACE);
-
-    if (priorDeletion) {
-      const prior = existing(priorDeletion);
-      const priorStatus = prior?.status as { phase?: string; errors?: string[] } | undefined;
-
-      if (prior && priorStatus?.phase === "Processed" && priorStatus.errors?.length) {
-        kubectl(
-          [
-            "delete",
-            "--raw",
-            `/apis/velero.io/v1/namespaces/${DEMO_NAMESPACE}/deletebackuprequests/${priorDeletion.name}`,
-            "-f",
-            "-",
-          ],
-          JSON.stringify({ apiVersion: "v1", kind: "DeleteOptions", preconditions: { uid: prior.metadata.uid } }),
-          undefined,
-          false,
-        );
-        journal.resources = journal.resources.filter((item) => item !== priorDeletion);
-        save();
-      }
-    }
-    applyOwned(fixtureDeletionRequest(journal.owner, run, backup.metadata.uid ?? "", backupName));
-    const deletion = identity("DeleteBackupRequest", `${backupName}-delete`, DEMO_NAMESPACE);
-
-    requireCondition(deletion, "Deletion request ownership was not recorded");
-    const deadline = Date.now() + 180_000;
-
-    while (existing(backupEntry)) {
-      const request = existing(deletion);
-      const errors = (request?.status as { errors?: string[] } | undefined)?.errors;
-
-      requireCondition(!errors?.length, "The controller reported a fixture backup-deletion error");
-      requireCondition(Date.now() < deadline, "Fixture backup deletion timed out");
-      await delay(1000);
-    }
-  };
-
-  await removeBackup(names.backup);
-  await removeBackup(names.invalidBackup);
+    console.log(tabRemovalWords(clearTabFixtures(runtime, run)));
+  }
+  // A backup the scripts created is deleted by the controller, through a request of its own: the real one
+  // with the restores that name it, and the one that failed its validation, of which the store holds nothing.
+  // One a cleanup that was interrupted left while it was deleted is taken up from the request that is there.
+  for (const name of [names.backup, names.invalidBackup]) removeFixtureBackup(runtime, run, name);
   // The restore without a backup is of no backup the controller deletes: it is removed by its identity,
   // the one the cluster gives of the object that was just read as owned by this run. An apply that was
   // interrupted recorded the object without it.
@@ -1944,30 +1865,9 @@ async function cleanupFixtures(): Promise<void> {
       await delay(1000);
     }
   }
-  for (const [kind, name] of [
-    ["Backup", names.backup],
-    ["Restore", names.restore],
-    ["DeleteBackupRequest", `${names.backup}-delete`],
-    ["Backup", names.invalidBackup],
-    ["Restore", names.invalidRestore],
-    ["Restore", names.orphanRestore],
-    ["DeleteBackupRequest", `${names.invalidBackup}-delete`],
-  ]) {
-    const entry = identity(kind, name, DEMO_NAMESPACE);
-
-    if (entry) {
-      requireCondition(!existing(entry), "Controller cleanup has not removed all fixture operation resources");
-      journal.resources = journal.resources.filter((item) => item !== entry);
-      save();
-    }
-  }
-  const credentials = JSON.parse(readFileSync(join(STATE, "credentials.json"), "utf8")) as { velero: Credentials };
-
-  for (const path of Object.values(fixtureArtifactPaths(run)))
-    requireCondition(
-      storageRequest("HEAD", path, credentials.velero).code === 404,
-      "A fixture backup/restore artifact remains after controller cleanup",
-    );
+  // Nothing of the operations of the run is left: in the installation, each looked for by its name, and in
+  // the store, by every key of the run, the ones the server wrote and the ones the store was given.
+  const { keys } = assertFixtureOperationsRemoved(runtime, run);
   const resources = kubectl(["api-resources", "--namespaced=true", "--verbs=list", "-o", "name"])
     .trim()
     .split("\n")
@@ -1999,6 +1899,8 @@ async function cleanupFixtures(): Promise<void> {
     );
     save();
   }
+  // The record of the tabs ends with the run, and what was kept beside it.
+  tabRecord(journal, TABS, save).end();
   journal.fixtureRun.phase = "cleaned";
   save();
   writeFileSync(
@@ -2006,7 +1908,7 @@ async function cleanupFixtures(): Promise<void> {
     JSON.stringify({
       run,
       controllerDeletion: true,
-      expectedArtifactsAbsent: 5,
+      expectedArtifactsAbsent: keys,
       namespacesRemoved: removed,
       unrelatedResourcesPreserved: true,
     }),
@@ -2128,7 +2030,7 @@ async function runTransportProof(): Promise<void> {
     const active = journal.fixtureRun as { id: string };
     // The operations the server refuses, for the artifacts the store does not have and for the restore
     // without a backup. They are of this run, and are removed with it.
-    const refusedObjects = await runRefusedFixtures({ owner: journal.owner, kubectl, apply: applyOwned }, active.id);
+    const refusedObjects = placeRefusedFixtures(fixtureRuntime(), active.id);
     const identityOf = (resource: KubeResource) => {
       requireCondition(resource.metadata.uid, "A refused fixture has no identity");
       return { name: resource.metadata.name, uid: resource.metadata.uid };
@@ -2705,33 +2607,70 @@ function takeDown(): void {
   console.log("PASS: removed the owned node, network and private state; the installed tools stay.");
 }
 
+// What the fixtures of the views and of the tabs reach the environment through: the cluster; the store, as
+// the identity that writes to the bucket of the environment alone; the time since it was made; the journal
+// of the objects of the run; and the record of what the store was given for the tabs.
+function fixtureRuntime(): FixtureRuntime {
+  const made = performance.now();
+
+  return {
+    owner: journal.owner,
+    kubectl,
+    apply: applyOwned,
+    store: (method, path, body) => {
+      const credentials = JSON.parse(readFileSync(join(STATE, "credentials.json"), "utf8")) as { velero: Credentials };
+
+      return storageRequest(method, path, credentials.velero, body);
+    },
+    elapsed: () => performance.now() - made,
+    // The objects of the run as the journal names them now: what forgets one or learns one changes that
+    // list where it is, and saves it.
+    journal: {
+      get entries() {
+        return journal.resources;
+      },
+      save,
+    },
+    tabs: tabRecord(journal, TABS, save),
+  };
+}
+
 // The suites of the views run inside a checkout of Freelens, by its integration harness, against this
 // environment and its fixtures. They read the cluster and the application: they write to neither.
-// The fixtures the views need beside the ones of the phases, put in place once.
-function placeViewFixtures(): ReturnType<typeof fixtureNames> {
+// The fixtures the views and their tabs need beside the ones of the phases, put in place once: the objects of
+// the views, the files the store is given for the tabs, the operations the server refuses, and the wait for
+// the two backups the server creates from the files. The two backups are entered in the journal with the
+// identity the cluster gave them. What is answered beside the names is what the fixtures reach the
+// environment through, and what the suites are told of the artifacts the store was given.
+function placeViewsAndTabs(): {
+  names: ReturnType<typeof fixtureNames>;
+  runtime: FixtureRuntime;
+  told: ReturnType<typeof tabExpectations>;
+} {
   verifyTarget();
   requireCondition(
     journal.fixtureRun?.phase === "live-verified",
     "The fixtures of the demo are not in place: run pnpm demo:up",
   );
-  const names = fixtureNames(journal.fixtureRun.id);
+  const run = journal.fixtureRun.id;
+  const names = fixtureNames(run);
   // The times of the fixtures are taken from when the run was started: a second call asks for the same objects.
-  const placed = createViewFixtures(
-    { owner: journal.owner, kubectl, apply: applyOwned },
-    journal.fixtureRun.id,
-    Date.parse(journal.fixtureRun.started),
-    Date.now(),
-  );
+  const started = Date.parse(journal.fixtureRun.started);
+  const runtime = fixtureRuntime();
+  // The artifacts of the tabs are made once, for the store and for what the suites are told of them.
+  const artifacts = tabArtifacts({ backup: names.syncedBackup, namespace: DEMO_NAMESPACE, started });
 
-  console.log(
-    `PASS: ${placed.views} objects of the views in ${names.views} and ${names.defaults}, ${placed.overview} of the Overview in ${names.overview}, and ${placed.scale} backups and ${placed.restores} restores of the long lists in ${names.scale}, are in place, outside the reach of the controllers.`,
-  );
-  if (placed.again.length) {
+  if (journal.fixtureRun.tabs?.state !== "synced") {
     console.log(
-      `NOTE: the fixtures that are placed by the clock were put in place again in ${placed.again.join(" and ")}.`,
+      "NOTE: the store is given the files of the tabs, and the server is waited for until it created its backups of them: some minutes, once for an environment.",
     );
   }
-  return names;
+  const placed = placeViewAndTabFixtures(runtime, run, started, Date.now(), artifacts);
+  const recreated = recordSyncedBackups(journal.resources, run, placed.synced);
+
+  save();
+  for (const line of placementWords(names, placed, recreated)) console.log(line);
+  return { names, runtime, told: tabExpectations(artifacts) };
 }
 
 // The kubeconfig of the identity that reads a part of one namespace, with a credential that lasts as long
@@ -2751,14 +2690,24 @@ function writeReaderKubeconfig(file: string, namespace: string, duration: string
   );
 }
 
-// For who looks at the views by hand: where the kubeconfig of the environment is, and the one of the reader.
+// What each artifact of the tabs holds: the runner made the files the store was given and reads the ones the
+// server wrote, and counts both itself.
+function tabFacts(placed: ReturnType<typeof placeViewsAndTabs>): ReturnType<typeof tabFixtureFacts> {
+  return tabFixtureFacts(placed.runtime, journal.fixtureRun?.id ?? "", placed.told);
+}
+
+// For who looks at the views by hand: where the kubeconfig of the environment is, and the one of the reader,
+// and what the tabs are to show of each artifact.
 function prepareDemo(): void {
-  const names = placeViewFixtures();
+  const placed = placeViewsAndTabs();
+  const { names } = placed;
   const reader = join(STATE, "views-reader.json");
   const second = join(STATE, "views-reader-of-restores.json");
 
   writeReaderKubeconfig(reader, names.views, "8h");
   writeReaderKubeconfig(second, names.views, "8h", VIEW_READER_OF_RESTORES);
+  // In the private state, where it ends with the record of the tabs.
+  tabRecord(journal, TABS, save).tell(tabFacts(placed));
   console.log(
     [
       "The demo is ready to be looked at in Freelens. The kubeconfigs name this cluster alone:",
@@ -2766,6 +2715,7 @@ function prepareDemo(): void {
       `  the reader of a part:   ${reader} (backups, schedules, storage locations; its credential lasts eight hours)`,
       `  the second reader:      ${second} (restores, schedules, locations and no backup; eight hours)`,
       `The namespaces of Velero: ${DEMO_NAMESPACE}, ${names.static}, ${names.views}, ${names.defaults}, ${names.overview}; to be named: ${names.scale}.`,
+      `What each artifact of the tabs holds, counted outside the extension: ${TABS.facts}`,
     ].join("\n"),
   );
 }
@@ -2795,13 +2745,19 @@ function runViews(): void {
   }
   const artifacts = join(process.cwd(), "e2e-artifacts", pattern);
   const headless = process.platform === "linux" && !process.env.DISPLAY;
-  const names = placeViewFixtures();
+  const placed = placeViewsAndTabs();
+  const { names } = placed;
+  const run = journal.fixtureRun?.id ?? "";
 
   rmSync(artifacts, { recursive: true, force: true });
   mkdirSync(artifacts, { recursive: true });
+  // Every suite expects no request to Velero when it starts: the ones the server removes are waited for.
+  awaitRequestsRemoved(placed.runtime, run, (line) => console.log(line));
+  // What the suites of the tabs expect of each artifact they load is told by the runner, and not copied
+  // from the extension: they find it beside their reports.
+  writeFileSync(join(artifacts, "tab-fixtures.json"), `${JSON.stringify(tabFacts(placed), null, 2)}\n`);
   // The identity that reads a part of the views lasts as long as the suite: its kubeconfig is in the private
   // state, and goes when the suite ends.
-  const run = journal.fixtureRun?.id ?? "";
   const readerFile = join(STATE, `views-reader-${run}.json`);
   const secondFile = join(STATE, `views-reader-of-restores-${run}.json`);
   let status: number | null;

@@ -10,6 +10,7 @@
 // cluster, and writes to neither.
 
 import { expect } from "@jest/globals";
+import * as artifacts from "../helpers/velero-artifacts";
 import * as cluster from "../helpers/velero-cluster";
 import * as velero from "../helpers/velero-extension";
 
@@ -76,7 +77,7 @@ describe("views of the first milestone", () => {
 
   beforeAll(async () => {
     if (!cluster.fixturesReady()) {
-      throw new Error(`The fixtures are missing from ${cluster.E2E_CLUSTER_NAME}. Run \`pnpm demo:up\` first.`);
+      throw new Error(cluster.fixturesMissing());
     }
     before = cluster.clusterSnapshot();
     errors.start();
@@ -255,13 +256,23 @@ describe("views of the first milestone", () => {
       expect(await frame.locator("[data-testid=velero-backup-counts-note]").innerText()).toContain(
         "The status reports 1 error and 0 warnings",
       );
-      // A summary that only reads: the way back and the way to the location of the backup. Nothing in
-      // it asks Velero for a log, which is asked for in its tab, and nothing edits or deletes.
+      // The workspace opens at the first of its five tabs, the summary, which only reads: the way to the
+      // location of the backup, beside the way back of the workspace, and no field. What Velero wrote of the
+      // backup is asked for by a command of another tab, and nothing edits or deletes.
+      const tabs = await artifacts.tabsOf(frame, "backup");
+      const buttons = async (selector: string) =>
+        (await frame.locator(`${selector} button`).allInnerTexts()).map((text) => text.replace(/\s+/g, " ").trim());
+
+      expect(tabs.tabs.map(({ title }) => title)).toEqual(artifacts.TABS.map(({ title }) => title));
+      expect([tabs.open, tabs.selected]).toEqual(["summary", [artifacts.PARTS.tab("backup", "summary")]]);
+      expect(await buttons(`[data-testid=${artifacts.PARTS.shown("backup")}]`)).toEqual(["fixture-unavailable"]);
+      expect(await buttons("[data-testid=velero-backup-workspace]")).toEqual([
+        "arrow_back Backups",
+        "fixture-unavailable",
+      ]);
       expect(
-        (await frame.locator("[data-testid=velero-backup-workspace] button").allInnerTexts()).map((text) =>
-          text.replace(/\s+/g, " ").trim(),
-        ),
-      ).toEqual(["arrow_back Backups", "fixture-unavailable"]);
+        await frame.locator("[data-testid=velero-backup-workspace]").locator("a, input, select, textarea").count(),
+      ).toBe(0);
       expect(await cluster.layoutProblems(frame)).toEqual([]);
       await cluster.captureScreenshot(frame, "dark-backup-workspace");
       await cluster.closeWorkspace(frame);

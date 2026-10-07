@@ -29,8 +29,12 @@ pnpm demo:views
 
 The first command takes about ten minutes the first time: the images are pulled,
 the cluster is created, the storage and Velero are installed, a backup and a
-restore are run. The second adds what the views need and ends by saying where
-the three kubeconfigs are, all under `~/.local/state/freelens-velero-dev`:
+restore are run. The second adds what the views and their tabs need: for the
+tabs it gives the store the files of two backups and waits for the server to
+sync them, at most a minute or two, once for an environment. It ends by saying
+where the three kubeconfigs are, all under `~/.local/state/freelens-velero-dev`,
+and where what each artifact of the tabs holds is written, counted outside the
+extension, in `tab-fixtures.json` of the same place:
 
 | Kubeconfig | Identity | What it reads |
 | --- | --- | --- |
@@ -45,7 +49,7 @@ wrote. Take the environment down first, with `pnpm demo:down`.
 
 | Namespace | What is in it |
 | --- | --- |
-| `velero-demo` | The installation: Velero, its storage location, the real backup and its restore |
+| `velero-demo` | The installation: Velero, its storage location, the real backup and its restore; and for the tabs, two backups the server synced from its store, which began four hundred days before the environment, and three operations it refused: a backup and a restore that name both kinds of selector, and a restore asked from a schedule that has no backup |
 | `velero-static-<run>` | A backup and a restore for every phase, three schedules, storage locations that are available and not |
 | `velero-views-<run>` | A backup with every reference in place, backups that name what is not there, a name of 63 characters, a backup that reports nothing; a restore into two namespaces, one that failed its validation, one of a backup that is not there; a schedule with the history of a week, and the schedules Velero has not read; storage locations that are late, unavailable, silent, and one that names its Secrets |
 | `velero-defaults-<run>` | Two storage locations marked default, and nothing else |
@@ -80,7 +84,7 @@ of the host have.
 | Recent operations | The line of time of the last seven days, the backups over the restores, and the same operations in the list under it, ten at a time. Choose 24 hours and 30 days: what ended with a failure before the window is no item of it. A mark with a number holds the operations that are close to each other: a click shows them alone in the list |
 | Schedules, Storage | Ten of the twelve schedules, the ones a rule names first, with the newest completed backup of each; the two others are in the list, which the line under them leads to. `overview-schedule-05` is paused, and no item is of it |
 | Open an item, a mark, a line | The view of the object opens over the Overview, which is the way back. Escape returns to the page where it was, with the focus on what was opened |
-| Select `velero-demo` | Nothing in what was read needs attention, which is what the page says: it does not say that all is well |
+| Select `velero-demo` | Four backups and three restores. For seven days after the fixtures were placed, three items: the operations the server refused, each with its validation errors. The backups the server synced from its store are no item, since they began four hundred days back, and the newest completed backup is the one the controllers ran. After those seven days nothing in what was read needs attention, which is what the page says then: it does not say that all is well |
 | Writes, in the target bar | Off. Turn them on: the dialog names the installation, the cluster and its context, and what the extension may create. After it, on for `velero-demo`, on every page of the group; select another namespace and they are off |
 | Server, with writes on for `velero-demo` | The version is not read when the page opens. Create a ServerStatusRequest: the band shows the object it would create, and creates it at the second command. Then the version of the server, that it is the release the extension was reviewed against, when the server processed the request, and its plugins by kind, each once: the request lists some twice, and the band says how many. Beside the object store plugins, the provider of the storage location and the plugin it needs |
 | Select `velero-overview-<run>`, turn writes on, Server | No server looks at this namespace: after ten seconds the band says that the server did not answer, which is not that it is down, and where the request stays. The extension deletes no request: this one goes with the demo |
@@ -109,7 +113,7 @@ Then the Restores:
 | Step | What to look at |
 | --- | --- |
 | Select `velero-static-<run>` | Ten restores, one for each phase. `restore-failedvalidation` never started: its start is not reported, and no time is made up for it |
-| Select `velero-demo`, open the restore | The restore the controller ran. Its object carries no counter: Velero writes none when it counts none, and the view says whose zero its zero is |
+| Select `velero-demo`, open `fixture-restore-<run>` | The restore the controller ran. Its object carries no counter: Velero writes none when it counts none, and the view says whose zero its zero is |
 | Select `velero-views-<run>`, open `restore-mapped` | A restore as Velero keeps one it took. It waits for an operation of a plugin with an error: all its items are done, it is in flight, and it failed in part. Under Into, each namespace of the backup beside the one it is restored into |
 | Open `restore-of-daily-partiallyfailed` | It was finalized: its hooks were counted, two of which one failed |
 | Its source | The backup and the schedule, both named by the object: Velero wrote one of the two, and the view says that the object does not tell which |
@@ -127,7 +131,7 @@ and of its restore, in `velero-demo`:
 
 | Step | What to look at |
 | --- | --- |
-| Open the backup, with writes off | Five tabs under its name: Summary, Log, Results, Resources and Volumes. The summary is open, and is what the workspace was |
+| Open `fixture-backup-<run>`, with writes off | Five tabs under its name: Summary, Log, Results, Resources and Volumes. The summary is open, and is what the workspace was |
 | Log, with writes off | That writes are off, first and apart, the way to the target bar, then what loading the log would create: a DownloadRequest of the kind BackupLog for this backup in `velero-demo`, and that nothing is created before the request is shown and confirmed. Opening the tab created nothing |
 | Turn writes on, then the command of the tab | The tab shows the object it would create, with its name in words: the name of the backup and a dash, followed by an identifier that is made when the request is confirmed. It creates the request at the second command. Then the steps of the load, with the way to cancel, and the log |
 | Over the log, and under it | Over it, when it was loaded and its size, with the command that loads it again and the one that saves it. Under it, the request it came through and the way it came by: through a tunnel to the Pod of the store, opened through the API server. The connection to the store of the demo is not encrypted, and the tab says so: its bytes travel inside the connection to the API server, and inside the cluster |
@@ -138,8 +142,12 @@ and of its restore, in `velero-demo`:
 | Results | The errors, then the warnings, each by Velero, cluster and namespace, with the counts; or, as for this backup, that Velero recorded neither |
 | Resources | The resources by their API version and kind, as `v1/ConfigMap`, each with its items, and a filter by resource, namespace and name |
 | Volumes | The backup of the demo has no volume: the tab says that Velero recorded none |
-| Open the restore, and its tabs | The same four, each a request of the kind of a restore. Its log has lines at info and at warning: search it for `restore completed`. In the resources, what the restore did with each item, the count of each action, and the choice that leaves the items of one |
-| Escape, outside a field and outside a confirmation | The view closes, and what its tabs loaded goes with it: opened again, each tab is at its first state. In a confirmation Escape leaves the confirmation, and the view stays. Every load left a DownloadRequest in `velero-demo`: the extension deletes none, and Velero removes each about ten minutes after it signed its URL |
+| Open `fixture-restore-<run>`, and its tabs | The same four, each a request of the kind of a restore. Its log has lines at info and at warning: search it for `restore completed`. In the resources, what the restore did with each item, the count of each action, and the choice that leaves the items of one |
+| Open `fixture-synced-backup-<run>`, and its tabs | A backup the server synced from its store: it began four hundred days before the environment, and failed in part. It names a snapshot location this installation does not have, and the summary says so. Its log is the long one: 200,000 lines in twelve pages, of every level, with lines that are no entry, and three long lines, of 20,000, 10,000 and 10,001 characters: a row shows 10,000 characters of a line, and says how many it left out of the first and of the last. Its results hold errors and warnings, its resources many resources, its volumes one of each case. What each holds is in `tab-fixtures.json` |
+| Open `fixture-synced-backup-no-log-<run>`, Log | The store has no log of it: the tab says that the log of a backup is uploaded as best it can |
+| Open `fixture-invalid-backup-<run>`, Log | It failed its validation, and the store has no file of it: the tab says that Velero writes nothing for an operation that failed its validation |
+| Open `fixture-orphan-restore-<run>`, Log | It was asked from a schedule that has no backup, and names none: the tab says that Velero signs no URL for such a restore, and offers no command |
+| Escape, outside a field and outside a confirmation | The view closes, and what its tabs loaded goes with it: opened again, each tab is at its first state. In a confirmation Escape leaves the confirmation, and the view stays. Every load left a DownloadRequest in `velero-demo`: the extension deletes none, and Velero removes each about ten minutes after it signed its URL, which `pnpm e2e:views` and the cleanup of the fixtures wait for |
 | Select `velero-views-<run>`, open `restore-of-schedule`, Log | The restore names no backup: the tab says that Velero signs no URL for such a restore, and offers no command, with writes on or off |
 | Open `backup-missing-location`, Log | The storage location it names is not in the namespace: the tab says that Velero signs no URL without it, and offers no command |
 
@@ -150,12 +158,15 @@ criteria name "completed" as what to search the log of the backup for, and the
 warnings as what to filter, where the walk searches for the line Velero writes
 at the end of a backup and chooses a level by its count. The
 [evidence](../specs/SPEC-0011-artifact-viewers.md#evidence-and-deviations) of
-the spec says why, among what is open. A backup that failed its validation in an
-installation that has a server, and a backup synced from the store with a log of
-200,000 lines, are fixtures of the next pull request of the task, as the
-[roadmap](ROADMAP.md#m3---logs-and-diagnostics) says. The
-[suite of the tabs](TESTING.md#suites-of-the-views) goes through these steps in
-the packaged application, on the real backup and the real restore, with three
+the spec says why, among what is open. The backups the server synced from its
+store and the operations it refused are the
+[fixtures of the tabs](TESTING.md#the-fixtures-of-the-tabs), in `velero-demo` once
+`pnpm demo:views` has run. The suite of the tabs goes through them with the next
+pull request of the task, as the [roadmap](ROADMAP.md#m3---logs-and-diagnostics)
+says: until then what their tabs show is what the tests of the parsers prove on
+their artifacts, and the tests of the components on the words of each. The
+[suite of the tabs](TESTING.md#suites-of-the-views) goes through the steps of the
+real backup and of the real restore in the packaged application, with three
 differences: it searches the log of the backup for the name of the backup and for
 `BACKED UP A TOTAL OF`, and not the log of the restore; it answers in the place of
 the dialog of Freelens, which is not shown; and it closes the view by its way
@@ -181,7 +192,7 @@ Then the locations, from Backup Storage Locations in the sidebar:
 
 | Step | What to look at |
 | --- | --- |
-| Select `velero-demo` | The location of the installation, which Velero validates every minute: available, validated seconds ago. It names no access mode, and the view says what the release does then |
+| Select `velero-demo` | The location of the installation, which Velero validates every minute: available, validated seconds ago. It names no access mode, and the view says what the release does then. It is used by the four backups of the installation, two that completed and two that ended with a failure. Under Volume Snapshot Locations the installation has none, and the workspace of a synced backup says that the one it names is not there |
 | Select `velero-views-<run>` | Six locations. Availability, access mode and default are three columns. No controller validates these: each validation is days old, and has the mark of one that is late; the tip of the cell says when it was and what it means. `views-unreported` reports nothing, and has the mark of what is not known. One has a name as long as a name can be |
 | Open `views-archive` | Available and read-only, side by side: it does not take new backups. It names no frequency: the one of the server is not read, and the validation is late by the hour |
 | Open `views-unavailable` | What Velero says of the location, in the lines it says it in, and what the release refuses of a location it does not report available |

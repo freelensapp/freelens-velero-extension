@@ -1,4 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
+import {
+  syntheticLog,
+  syntheticResourceList,
+  syntheticResults,
+  syntheticVolumeInfo,
+  tabExpectations,
+} from "../../e2e/scripts/local-artifacts.mts";
+import { fixtureNames, liveBackup, syncedBackups } from "../../e2e/scripts/local-fixtures.mts";
+import { DEMO_NAMESPACE } from "../../e2e/scripts/local-kind.mts";
 import {
   countDifferences,
   groupTitle,
@@ -488,5 +497,110 @@ describe("the count of the results beside the counter of the status", () => {
           `The status of the backup reports 2 errors, and its results hold 3. The status of the backup reports 1 warning, and its results hold 2. ${UNNAMED}`,
         ],
       ]);
+  });
+});
+
+// The results the fixtures give the store for the two backups its sync creates, made as the fixtures make
+// them, beside the status the fixtures write into the metadata of each. The generator counted the messages of
+// the results while it wrote the log, where each is an entry at error or at warning, with its fields.
+describe("the results of the backups the store is given for the tabs", () => {
+  const run = "a1b2c3d4";
+  const owner = "synthetic-owner";
+  const started = Date.parse("2026-10-05T10:00:00.000Z");
+  // The artifacts the fixtures give the store, with a log of a thousand lines in the place of the one of two
+  // hundred thousand: the generator writes the same entries at error and at warning, each with its fields,
+  // into a log of any length, and nothing else the store is given depends on that length.
+  const make = () => {
+    const options = { backup: fixtureNames(run).syncedBackup, namespace: DEMO_NAMESPACE, started };
+    const artifacts = {
+      ...options,
+      log: syntheticLog({ ...options, lines: 1000 }),
+      results: syntheticResults(),
+      resourceList: syntheticResourceList(),
+      volumeInfo: syntheticVolumeInfo(started),
+      empty: {
+        results: syntheticResults("empty"),
+        resourceList: syntheticResourceList("empty"),
+        volumeInfo: syntheticVolumeInfo(started, "empty"),
+      },
+    };
+    // The two are made like the backup the server completed for the run.
+    const like = { ...liveBackup(owner, run), status: { phase: "Completed" } };
+
+    return {
+      artifacts,
+      ...artifacts.log.facts,
+      made: syncedBackups(owner, run, started, like, tabExpectations(artifacts)),
+    };
+  };
+  let fixture: ReturnType<typeof make>;
+  const statusOf = (backup: ReturnType<typeof make>["made"]["synced"]) =>
+    backup.status as { phase?: string; errors?: number; warnings?: number };
+  const parsed = (text: string) => {
+    const results = parseResults(text);
+
+    if (!results) throw new Error("The results the fixtures give the store are not read");
+    return results;
+  };
+
+  // Made once, when the cases of this part begin.
+  beforeAll(() => {
+    fixture = make();
+  });
+
+  it("reads the errors and the warnings of the first where the log filed them, each in the parts of its entry", () => {
+    const { artifacts, entries } = fixture;
+    const results = parsed(artifacts.results.text);
+    const places = resultPlaces(results);
+    // Each place with the entries the generator filed there, in the order of the log, and the parts of each.
+    const told = new Map<string, { text: string; parts: Record<string, string> }[]>();
+
+    for (const { level, place, namespace, resource, name, message, error, text } of entries) {
+      const key = `${level === "error" ? "errors" : "warnings"} ${place} ${namespace ?? ""}`;
+      const parts = {
+        ...(resource === undefined ? {} : { resource }),
+        ...(name === undefined ? {} : { name }),
+        message,
+        ...(error === undefined ? {} : { error }),
+      };
+
+      told.set(key, [...(told.get(key) ?? []), { text, parts }]);
+    }
+    expect(
+      new Map(places.map((place) => [`${place.kind} ${place.where} ${place.namespace ?? ""}`, place.messages])),
+    ).toEqual(told);
+    // The errors first, then the warnings, each by Velero, the cluster and the namespaces by their name.
+    expect(places.map((place) => [place.kind, place.where, place.namespace])).toEqual([
+      ["errors", "velero", undefined],
+      ["errors", "namespace", "synthetic-ns-17"],
+      ["errors", "namespace", "synthetic-ns-3"],
+      ["warnings", "velero", undefined],
+      ["warnings", "cluster", undefined],
+    ]);
+  });
+
+  it("counts in the first the entries of the log at each level, as its status does, and says no difference", () => {
+    const { artifacts, entries, levels, made } = fixture;
+    const results = parsed(artifacts.results.text);
+    const status = statusOf(made.synced);
+
+    expect([results.errors.count, results.warnings.count]).toEqual([levels.error, levels.warning]);
+    expect([status.errors, status.warnings]).toEqual([levels.error, levels.warning]);
+    expect(countDifferences(results, "Backup", status, status.phase)).toEqual([]);
+    expect(resultsSummary(results, "Backup")).toBe(
+      `Velero recorded ${entries.length} messages for this backup: ${levels.error} errors and ${levels.warning} warnings.`,
+    );
+  });
+
+  it("reads the results of the second as neither errors nor warnings, of a status that counts neither", () => {
+    const { artifacts, made } = fixture;
+    const results = parsed(artifacts.empty.results.text);
+    const status = statusOf(made.withoutLog);
+
+    expect([results.count, resultPlaces(results)]).toEqual([0, []]);
+    // The release writes no counter of zero: there is nothing to compare, and nothing is said of it.
+    expect([status.errors, status.warnings]).toEqual([undefined, undefined]);
+    expect(countDifferences(results, "Backup", status, status.phase)).toEqual([]);
+    expect(resultsSummary(results, "Backup")).toBe("Velero recorded no error and no warning for this backup.");
   });
 });

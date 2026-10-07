@@ -1,8 +1,12 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import { entryFields, tabArtifacts, tabExpectations } from "../../e2e/scripts/local-artifacts.mts";
+import { fixtureNames, liveBackup, syncedBackups, tabArtifactPaths } from "../../e2e/scripts/local-fixtures.mts";
+import { DEMO_NAMESPACE } from "../../e2e/scripts/local-kind.mts";
 import {
   cutLine,
   foundPlaces,
   LINE_BOUND,
+  LOG_LEVELS,
   lineLength,
   linePieces,
   lineRows,
@@ -14,6 +18,10 @@ import {
   shownLines,
   textLines,
 } from "./artifact-log";
+import { missingFile } from "./artifact-text";
+import { operationState } from "./phases";
+
+import type { LogLevel } from "./artifact-log";
 
 // Entries as the server of the reviewed release writes them, in its two formats.
 const text = (level: string, message: string, fields = 'backup=velero/nightly logSource="pkg/backup/backup.go:1"') =>
@@ -545,57 +553,54 @@ describe("the row of a line", () => {
   });
 });
 
-describe("a log of five hundred thousand lines", () => {
-  // Entries of every level and of several lengths, a long one among them.
-  const lines: string[] = [];
+// What the code answers of a long log, a long line among its entries. Its times are not taken here: the
+// measure of the unit tests takes them, in test/artifact-log.measure.ts, once the other tests ended and alone.
+describe("a log of five hundred thousand lines", { timeout: 60_000 }, () => {
+  // The level of the entry of each place: entries of every level, and of several lengths.
+  const levelAt = (index: number) =>
+    index % 97 === 0 ? "error" : index % 13 === 0 ? "warning" : index % 5 === 0 ? "debug" : "info";
+  const make = () => {
+    const lines: string[] = [];
 
-  for (let index = 0; index < 500_000; index += 1) {
-    const level = index % 97 === 0 ? "error" : index % 13 === 0 ? "warning" : index % 5 === 0 ? "debug" : "info";
-
-    lines.push(
-      text(
-        level,
-        index % 50_000 === 0 ? `a long entry ${"z".repeat(12_000)}` : `Backed up item ${index} of the namespace`,
-        `backup=velero/large name=item-${index} namespace=ns-${index % 40} logSource="pkg/backup/item_backupper.go:${index % 900}"`,
-      ),
-    );
-  }
-  const large = lines.join("\n");
-  // The time of the best of a few runs: what the code takes, apart from what else the machine is doing.
-  const best = (run: () => unknown) => {
-    let least = Number.POSITIVE_INFINITY;
-
-    for (let turn = 0; turn < 5; turn += 1) {
-      const start = performance.now();
-
-      run();
-      least = Math.min(least, performance.now() - start);
+    for (let index = 0; index < 500_000; index += 1) {
+      lines.push(
+        text(
+          levelAt(index),
+          index % 50_000 === 0 ? `a long entry ${"z".repeat(12_000)}` : `Backed up item ${index} of the namespace`,
+          `backup=velero/large name=item-${index} namespace=ns-${index % 40} logSource="pkg/backup/item_backupper.go:${index % 900}"`,
+        ),
+      );
     }
-    return least;
+    return lines.join("\n");
   };
+  let large: string;
 
-  // The times are of this code alone when the machine is free. A run of every suite at once is not: the
-  // measure is taken again then, and the budget is met by one of the turns or by none.
-  it("is read, filtered and searched within the budget of an interaction", { retry: 4 }, () => {
+  // Made once, when the cases of this part begin and not when the file is read.
+  beforeAll(() => {
+    large = make();
+  }, 60_000);
+
+  it("is read, filtered and searched: each line at its level, the lines of the levels chosen, and of the words", () => {
     const log = parseLog(large);
+    const chosen = Array.from({ length: 500_000 }, (_, index) => index).filter((index) =>
+      ["error", "warning"].includes(levelAt(index)),
+    );
 
     expect(log.starts.length).toBe(500_000);
     expect(log.counts.error).toBe(Math.ceil(500_000 / 97));
     expect(log.counts.error + log.counts.warning + log.counts.info + log.counts.debug).toBe(500_000);
-    expect(best(() => parseLog(large))).toBeLessThan(250);
-    expect(best(() => shownLines(log, new Set(["error", "warning"])))).toBeLessThan(250);
-    // Words every line carries, words few carry, and words none does.
+    expect([...(shownLines(log, new Set(["error", "warning"])) ?? [])]).toEqual(chosen);
+    // Words every line carries but the ten long ones, words one line carries, and words none does; and words
+    // among the errors, which every error carries but the long entry of the first line.
     expect(searchLog(log, "backed up item").length).toBe(500_000 - 10);
-    expect(best(() => searchLog(log, "backed up item"))).toBeLessThan(250);
     expect(searchLog(log, "ITEM-499999").length).toBe(1);
-    expect(best(() => searchLog(log, "item-499999"))).toBeLessThan(250);
-    expect(best(() => searchLog(log, "words that are in no line"))).toBeLessThan(250);
-    expect(best(() => searchLog(log, "backed up item", new Set(["error"])))).toBeLessThan(250);
+    expect(searchLog(log, "words that are in no line").length).toBe(0);
+    expect(searchLog(log, "backed up item", new Set(["error"])).length).toBe(Math.ceil(500_000 / 97) - 1);
   });
 
   // What a list of its lines is built from: the rows of every line, wrapped and not, and the lines of a
   // text that is read without its levels.
-  it("has the rows of its lines counted within the budget of an interaction", { retry: 4 }, () => {
+  it("has the rows of its lines counted, wrapped and not, and its lines read as a text without levels", () => {
     const log = parseLog(large);
     const rows = (columns?: number) => {
       let sum = 0;
@@ -603,14 +608,159 @@ describe("a log of five hundred thousand lines", () => {
       for (let line = 0; line < log.starts.length; line += 1) sum += lineRows(log, line, columns);
       return sum;
     };
+    // The rows a plain reading of the lines counts: a row for each piece of what a row shows of a line, and
+    // one more for a line that is cut.
+    const plain = (columns: number) =>
+      large
+        .split("\n")
+        .reduce(
+          (sum, line) =>
+            sum +
+            Math.max(1, Math.ceil(Math.min(line.length, LINE_BOUND) / columns)) +
+            (line.length > LINE_BOUND ? 1 : 0),
+          0,
+        );
 
     // Ten lines are cut, and have the row that says so.
     expect(rows()).toBe(500_000 + 10);
     expect(rows(120)).toBeGreaterThan(500_000 * 2);
-    expect(best(() => rows())).toBeLessThan(250);
-    expect(best(() => rows(120))).toBeLessThan(250);
-    expect(best(() => rows(40))).toBeLessThan(250);
+    expect([rows(120), rows(40)]).toEqual([plain(120), plain(40)]);
     expect(textLines(large).starts.length).toBe(500_000);
-    expect(best(() => textLines(large))).toBeLessThan(250);
+  });
+});
+
+// The log the fixtures give the store for the first of the two backups its sync creates, made as the fixtures
+// make it. The generator counted its facts while it wrote it, by a reading of its own: the parser finds them in
+// the text.
+describe("the log of the backup the store is given for the tabs", { timeout: 60_000 }, () => {
+  const run = "a1b2c3d4";
+  const started = Date.parse("2026-10-05T10:00:00.000Z");
+  const make = () => {
+    const artifacts = tabArtifacts({ backup: fixtureNames(run).syncedBackup, namespace: DEMO_NAMESPACE, started });
+
+    return { artifacts, content: artifacts.log.text, facts: artifacts.log.facts, log: parseLog(artifacts.log.text) };
+  };
+  let fixture: ReturnType<typeof make>;
+  // The numbers of the lines the parser read at a level, and of the entries the generator wrote at it, from one.
+  const read = (level: LogLevel) =>
+    [...fixture.log.levels].flatMap((place, index) => (LOG_LEVELS[place] === level ? [index + 1] : []));
+  const written = (level: "error" | "warning") =>
+    fixture.facts.entries.filter((entry) => entry.level === level).map((entry) => entry.line);
+
+  // Made once, when the cases of this part begin and not when the file is read: the cases before them, some of
+  // which are timed, run with nothing of a log of two hundred thousand lines held.
+  beforeAll(() => {
+    fixture = make();
+  }, 60_000);
+
+  it("has the lines and the levels the generator counted, the errors and the warnings at the lines of their entries", () => {
+    const { facts, log } = fixture;
+
+    expect(log.starts.length).toBe(facts.lines);
+    expect(log.counts).toEqual(facts.levels);
+    expect([read("error"), read("warning")]).toEqual([written("error"), written("warning")]);
+    // The two levels, chosen, leave those lines and no other.
+    expect([...(shownLines(log, new Set(["error", "warning"])) ?? [])].map((line) => line + 1)).toEqual(
+      facts.entries.map((entry) => entry.line),
+    );
+    // Each line and its break are the text, to the character.
+    let characters = 0;
+
+    for (let line = 0; line < log.starts.length; line += 1) characters += lineLength(log, line) + 1;
+    expect(characters).toBe(facts.characters);
+  });
+
+  it("reads no level from the words of a line, where the generator wrote the words of one", () => {
+    const { facts, log } = fixture;
+    const within = (words: string, level: LogLevel) => searchLog(log, words, new Set([level])).length;
+
+    // Entries at info whose message says `level=error`, and lines that are no entry and say `level=error` or
+    // `level=warning`: the first are read at info, the others at no level.
+    expect(
+      [facts.levelInMessage.line, facts.levelInFreeText.line].map((number) => LOG_LEVELS[log.levels[number - 1]]),
+    ).toEqual(["info", "other"]);
+    expect(within("level=error", "info")).toBe(facts.levelInMessage.lines);
+    expect(within("level=error", "other") + within("level=warning", "other")).toBe(facts.levelInFreeText.lines);
+    expect([within("level=error", "error"), within("level=warning", "warning")]).toEqual([
+      facts.levels.error,
+      facts.levels.warning,
+    ]);
+  });
+
+  it("finds the texts the suites search for in as many lines as the generator counted, whatever their capitals", () => {
+    const { facts, log } = fixture;
+
+    expect(facts.searches.map((search) => [search.text, searchLog(log, search.text).length])).toEqual(
+      facts.searches.map((search) => [search.text, search.matches]),
+    );
+  });
+
+  it("cuts in their rows the long lines the generator wrote, and keeps each whole for a copy", () => {
+    const { facts, log } = fixture;
+    const long = [facts.long.twentyThousand, facts.long.tenThousand, facts.long.tenThousandAndOne].map(
+      (number) => number - 1,
+    );
+
+    expect(long.map((line) => lineLength(log, line))).toEqual([20_000, 10_000, 10_001]);
+    expect(long.map((line) => cutLine(logLine(log, line)).left)).toEqual([20_000 - LINE_BOUND, 0, 1]);
+    // A row for what is shown of each, and one more for the words that say how much of it was left out.
+    expect(long.map((line) => lineRows(log, line))).toEqual([2, 1, 2]);
+    // The line the first page of the text ends inside is one line, with its character whole.
+    expect(logLine(log, facts.boundaryLine - 1)).toMatch(
+      /\u2192 is a character of three bytes, across the end of the first page$/,
+    );
+  });
+
+  it("reads the levels of its entries written in the JSON format of the server, the error under error.message", () => {
+    const { content, facts } = fixture;
+    const lines = content.split("\n");
+    // The first lines of the log, its entries at error and at warning, an entry at info that says another level
+    // in its message and a line that is no entry, written as the server writes them when it is started with the
+    // JSON format: one object a line, of the fields of the entry, the text of an error under `error.message`.
+    // Where the logging library puts each key was not read: here they are in the order of their names, as Go
+    // writes a map in JSON, which puts the backup and the error before the level. A line that is no entry is
+    // kept as it is.
+    const numbers = [
+      ...Array.from({ length: 200 }, (_, index) => index + 1),
+      ...facts.entries.map((entry) => entry.line),
+      facts.levelInMessage.line,
+      facts.levelInFreeText.line,
+    ];
+    const json = numbers.map((number) => {
+      const line = lines[number - 1];
+      const fields = entryFields(line);
+
+      if (fields[0]?.[0] !== "time") return { line, level: "other" };
+      const named = fields.map(([key, value]): [string, string] => [key === "error" ? "error.message" : key, value]);
+
+      named.sort(([one], [other]) => (one < other ? -1 : one > other ? 1 : 0));
+      return { line: JSON.stringify(Object.fromEntries(named)), level: new Map(fields).get("level") };
+    });
+    const parsed = parseLog(`${json.map((entry) => entry.line).join("\n")}\n`);
+
+    expect([...parsed.levels].map((place) => LOG_LEVELS[place])).toEqual(json.map((entry) => entry.level));
+    expect(parsed.counts.error + parsed.counts.warning).toBe(facts.entries.length);
+    // The entries that carry an error carry it there, and under no key of the text format.
+    expect(json.filter((entry) => entry.line.includes('"error.message":"')).length).toBe(
+      facts.entries.filter((entry) => entry.error !== undefined).length,
+    );
+    expect(json.filter((entry) => entry.line.includes('"error":')).length).toBe(0);
+  });
+
+  it("has none for the second backup the store is given, which the tab says by the phase the fixtures give it", () => {
+    const owner = "synthetic-owner";
+    const like = { ...liveBackup(owner, run), status: { phase: "Completed" } };
+    const { withoutLog } = syncedBackups(owner, run, started, like, tabExpectations(fixture.artifacts));
+    const { phase } = withoutLog.status as { phase?: string };
+    const paths = tabArtifactPaths(run);
+
+    expect([Object.keys(paths.synced).includes("log"), Object.keys(paths.withoutLog).includes("log")]).toEqual([
+      true,
+      false,
+    ]);
+    expect(phase).toBe("Completed");
+    expect(missingFile("log", "Backup", operationState("Backup", phase))).toContain(
+      "Velero uploads the log of a backup as best it can, and a backup ends without it when the upload fails.",
+    );
   });
 });

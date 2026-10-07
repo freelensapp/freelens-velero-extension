@@ -9,6 +9,10 @@ verified on 2026-09-24. T0.5 ConfigMap backup/restore, multipart integrity and
 artifact/cleanup checks passed on 2026-09-25. T0.6 signed-download compatibility
 passed on the same day for the four log/results artifact kinds and explicit routes.
 Actual Freelens activation, all S3 features and PV/CSI recovery remain unverified.
+The environment pins SeaweedFS 4.48 since 2026-10-04, in
+[local-manifests.mts](../../e2e/scripts/local-manifests.mts): the distribution
+reviewed below is 4.47. On 2026-10-06 the store of 4.48 took a body in each of the
+three ways the client of the fixtures sends one, and held its whole length.
 
 ## Purpose And Scope
 
@@ -107,8 +111,11 @@ The reviewed AWS plugin defaults to CRC32 checksums and uses its SDK uploader.
 T0.5 retained that behavior, restored 13 ConfigMaps with 9 MiB matching payload,
 and verified a four-part object through HEAD metadata. Four gzip log/results
 objects were retrieved and parsed; no backup archive was downloaded by the fixture
-client. Do not silently disable checksums, authentication or
-signature validation merely to obtain a successful backup.
+client. Since the fixtures of the tabs the client also writes, and only the eleven
+keys of the two backups the sync of the server creates from the store; it deletes
+nothing, and the server removes those keys with their backups. Do not silently
+disable checksums, authentication or signature validation merely to obtain a
+successful backup.
 
 For the unreachable-store case, preserve a cluster-internal hostname in generated
 URLs. Do not rewrite BSL publicUrl to localhost, configure `s3.externalUrl` to mask

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { syntheticResourceList } from "../../e2e/scripts/local-artifacts.mts";
 import {
   actionChoice,
   filterResources,
@@ -282,5 +283,67 @@ describe("the words of a resource list", () => {
       "The resource list of this backup is not of the shape the extension was written for, a map from each resource to the list of its items: it is shown as the text it is.",
     );
     expect(otherShape("Restore")).toContain("The resource list of this restore is not of the shape");
+  });
+});
+
+// The resource lists the fixtures give the store for the two backups its sync creates, as the fixtures make
+// them: the same lists for every run and every moment.
+describe("the resource lists of the backups the store is given for the tabs", () => {
+  const full = syntheticResourceList();
+  const written = Object.entries(full.value);
+  const list = parseResources(full.text, "Backup");
+
+  if (!list) throw new Error("The resource list the fixtures give the store is not read");
+
+  it("reads every resource of the first with its items, in the order of the code units, and no action", () => {
+    const items = list.resources.flatMap((resource) => resource.items);
+
+    expect(list.resources.map(({ resource, items }) => [resource, items.map((item) => item.text)])).toEqual(written);
+    expect([list.resources.length, list.count]).toEqual([written.length, written.flatMap(([, names]) => names).length]);
+    expect(list).not.toHaveProperty("actions");
+    // An item is its namespace and its name, or its name alone for an item of the cluster, and the namespaces
+    // of the items are the ones the list holds.
+    expect(
+      items.filter(
+        (item) =>
+          item.action !== undefined ||
+          (item.namespace === undefined ? item.name : `${item.namespace}/${item.name}`) !== item.text,
+      ),
+    ).toEqual([]);
+    expect([...new Set(items.flatMap((item) => item.namespace ?? []))].sort()).toEqual(
+      [...full.value["v1/Namespace"]].sort(),
+    );
+    expect(
+      list.resources
+        .filter((resource) => resource.items.every((item) => !item.namespace))
+        .map(({ resource }) => resource),
+    ).toEqual(written.filter(([, names]) => names.every((name) => !name.includes("/"))).map(([resource]) => resource));
+    expect(resourcesCount(list, list, "")).toBe(
+      `${written.flatMap(([, names]) => names).length} items of ${written.length} resources.`,
+    );
+  });
+
+  it("leaves of the first, for the words of a namespace or of a name in any capitals, what a plain search of it finds", () => {
+    for (const words of ["synthetic-ns-9", "SYNTHETIC-CLUSTER-ROLE", "Synthetic:Cluster-Binding"]) {
+      const found = written
+        .map(([resource, names]): [string, string[]] => [
+          resource,
+          names.filter((name) => `${resource} ${name}`.toLowerCase().includes(words.toLowerCase())),
+        ])
+        .filter(([, names]) => names.length > 0);
+
+      expect(found.length).toBeGreaterThan(0);
+      expect([
+        words,
+        filterResources(list, words).resources.map(({ resource, items }) => [resource, items.map((item) => item.text)]),
+      ]).toEqual([words, found]);
+    }
+  });
+
+  it("reads the list of the second as a list of no item", () => {
+    const empty = parseResources(syntheticResourceList("empty").text, "Backup");
+
+    expect(empty).toEqual({ resources: [], count: 0 });
+    expect(empty && resourcesCount(empty, empty, "")).toBe("The resource list holds no item.");
   });
 });

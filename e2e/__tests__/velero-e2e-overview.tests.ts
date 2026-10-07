@@ -24,6 +24,14 @@ const BUDGET = 250;
 const NOTHING = 1500;
 // The backup the controllers of the installation made, which completed.
 const LIVE = `fixture-backup-${process.env.E2E_FIXTURE_RUN}`;
+const HOUR = 3_600_000;
+// How far back each window of the page goes.
+const WINDOWS: Record<string, number> = { "24h": 24 * HOUR, "7d": 7 * 24 * HOUR, "30d": 30 * 24 * HOUR };
+// How far from the edge of the window an operation is expected on one side of it: the page reads the clock
+// when it draws, and the suite when it reads what was drawn.
+const MARGIN = 5 * 60_000;
+// The phases of an operation that ended with a failure.
+const FAILED = ["PartiallyFailed", "Failed", "FailedValidation"];
 const text = (value: string) => value.replace(/\s+/g, " ").trim();
 // The operations that did not start are at the time they were created, which is the same for the three
 // of them to the second or not: their order among themselves is the one of their names, or of a second.
@@ -160,10 +168,50 @@ describe("overview of an installation", () => {
       .filter(Boolean)
       .map((name) => name.split("/")[1]);
   };
+  // The operations of an installation as the cluster holds them, each at the time the views place it at: its
+  // start, or its creation when it did not start; and when it completed, when it says so.
+  const operationsOf = (namespace: string) =>
+    (["backup", "restore"] as const).flatMap((kind) => {
+      const read = cluster.kubectlE2E("get", `${kind}s.velero.io`, "--namespace", namespace, "-o", "json");
+
+      if (read.status !== 0) throw new Error(`The ${kind}s of ${namespace} could not be read`);
+      return (
+        JSON.parse(read.stdout) as {
+          items: {
+            metadata: { name: string; creationTimestamp: string };
+            status?: {
+              phase?: string;
+              startTimestamp?: string;
+              completionTimestamp?: string;
+              validationErrors?: string[];
+            };
+          }[];
+        }
+      ).items.map(({ metadata, status }) => ({
+        kind,
+        name: metadata.name,
+        phase: status?.phase ?? "",
+        time: Date.parse(status?.startTimestamp ?? metadata.creationTimestamp),
+        completed: status?.completionTimestamp === undefined ? undefined : Date.parse(status.completionTimestamp),
+        validation: status?.validationErrors?.length ?? 0,
+      }));
+    });
+  type Operation = ReturnType<typeof operationsOf>[number];
+  const byName = (one: Operation, other: Operation) => (one.name < other.name ? -1 : one.name > other.name ? 1 : 0);
+  // The order the page finds the newest completed backup by: when each completed, the newest first, and of
+  // two that completed at the same time the first by its name; one that does not say when it completed goes
+  // after the ones that say it, and of two that do not, the newest by the time the views place it at.
+  const completedFirst = (one: Operation, other: Operation) => {
+    if (one.completed === undefined || other.completed === undefined) {
+      if (one.completed !== other.completed) return one.completed === undefined ? 1 : -1;
+      return other.time - one.time || byName(one, other);
+    }
+    return other.completed - one.completed || byName(one, other);
+  };
 
   beforeAll(async () => {
     if (!cluster.fixturesReady()) {
-      throw new Error(`The fixtures are missing from ${cluster.E2E_CLUSTER_NAME}. Run \`pnpm demo:up\` first.`);
+      throw new Error(cluster.fixturesMissing());
     }
     before = cluster.clusterSnapshot();
     errors.start();
@@ -743,28 +791,81 @@ describe("overview of an installation", () => {
   );
 
   it(
-    "says that nothing in what was read needs attention where no rule finds anything, and not that all is well",
+    "lists and counts what ended with a failure inside the window, with the backups synced from the store at the time they started",
     async () => {
+      const run = cluster.E2E_FIXTURE_RUN;
+
       await cluster.selectInstallation(frame, cluster.E2E_NAMESPACE);
       await frame.waitForSelector(`[data-testid="velero-open-backup-${LIVE}"]`, {
         timeout: 60_000,
       });
       const shown = await cluster.overview(frame);
 
+      expect(Object.keys(WINDOWS)).toContain(shown.window);
+      // The edge of the window the page shows, by the clock of the suite.
+      const from = Date.now() - WINDOWS[shown.window];
+      const operations = operationsOf(cluster.E2E_NAMESPACE);
+      const of = (kind: string) => operations.filter((operation) => operation.kind === kind);
+
+      // The installation holds the backup its controllers ran and its restore, the two backups the server
+      // synced from the store, and the three operations it refused, all of this run: what was read is what
+      // the cluster holds, counted by the suite and not by the application.
+      expect(operations.map(({ kind, name }) => `${kind}/${name}`).sort()).toEqual(
+        [
+          `backup/${LIVE}`,
+          `backup/fixture-synced-backup-${run}`,
+          `backup/fixture-synced-backup-no-log-${run}`,
+          `backup/fixture-invalid-backup-${run}`,
+          `restore/fixture-restore-${run}`,
+          `restore/fixture-invalid-restore-${run}`,
+          `restore/fixture-orphan-restore-${run}`,
+        ].sort(),
+      );
       expect(shown.read).toEqual({
-        backups: { text: "Backups 1", state: "read" },
-        restores: { text: "Restores 1", state: "read" },
+        backups: { text: `Backups ${of("backup").length}`, state: "read" },
+        restores: { text: `Restores ${of("restore").length}`, state: "read" },
         schedules: { text: "Schedules 0", state: "read" },
         storageLocations: { text: "Backup Storage Locations 1", state: "read" },
         snapshotLocations: { text: "Volume Snapshot Locations 0", state: "read" },
       });
-      expect(shown.summary).toBe("Nothing in what was read needs attention.");
-      expect(shown.items).toEqual([]);
+      // What ended with a failure is an item while its time is inside the window: the creation of what the
+      // server refused, which did not start, and the start of the backups synced from the store, four hundred
+      // days back. The installation has no schedule: each one is an item of its own. Within five minutes of
+      // the edge the page and the suite may see it on two sides: what is there is expected neither way.
+      const failed = operations.filter((operation) => FAILED.includes(operation.phase));
+      const edge = failed.filter((operation) => Math.abs(operation.time - from) <= MARGIN).map(({ name }) => name);
+      const inside = failed
+        .filter((operation) => operation.time > from + MARGIN)
+        .sort((one, other) => other.time - one.time || (one.name < other.name ? -1 : 1));
+
+      expect(shown.items.filter(([, name]) => !edge.includes(name))).toEqual(inside.map(({ name }) => ["A10", name]));
+      expect(shown.summary).toBe(
+        shown.items.length
+          ? `${shown.items.length} item${shown.items.length === 1 ? "" : "s"} in what was read.`
+          : "Nothing in what was read needs attention.",
+      );
+      // Each says that its operation ended, and why: a validation that failed, with as many errors as the
+      // cluster holds of it.
+      for (const operation of inside.filter(({ phase }) => phase === "FailedValidation")) {
+        const errors = `${operation.validation} validation error${operation.validation === 1 ? "" : "s"}`;
+
+        expect(await item("A10", operation.kind, operation.name)).toMatch(
+          new RegExp(`^Ended: ${operation.name} .+ Failed validation: ${errors}\\.$`),
+        );
+      }
       expect(shown.unchecked).toEqual([]);
       expect(shown.inFlight).toEqual([]);
       expect(text(await frame.locator("[data-testid=velero-overview-in-flight-none]").innerText())).toBe(
         "No backup and no restore is in flight.",
       );
+      // The newest completed backup is the one the controllers ran, by the time each one completed, as the page
+      // orders them: the synced backup that completed was created after it, and completed four hundred days
+      // back.
+      expect(
+        of("backup")
+          .filter(({ phase }) => phase === "Completed")
+          .sort(completedFirst)[0]?.name,
+      ).toBe(LIVE);
       expect(shown.completed).toMatch(new RegExp(`^${LIVE} completed \\S`));
       expect(await words("[data-testid=velero-overview-schedules]")).toBe(
         "Schedules No schedule is in this installation.",
@@ -776,7 +877,7 @@ describe("overview of an installation", () => {
       );
       expect(await cluster.valuesOfTheWhole(frame)).toEqual([]);
       expect(await cluster.layoutProblems(frame, OVERVIEW)).toEqual([]);
-      await cluster.captureScreenshot(frame, "dark-overview-nothing-to-report");
+      await cluster.captureScreenshot(frame, "dark-overview-demo");
     },
     TIMEOUT,
   );

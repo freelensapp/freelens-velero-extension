@@ -99,7 +99,7 @@ details the host shows of a kind, which get no tab and lead to the workspace.
 | REQ-148 | The tabs write nothing to the cluster but the request. The command that saves an artifact asks the main process, which opens the dialog of the host for a file the operator chooses and writes there the text it holds for the view, and nowhere else: a write to this machine, outside the gate of the cluster, and the only file the extension writes | VIEW-11 |
 | REQ-149 | Both themes, a window of 900 by 650 and twice the zoom; the tabs a list of tabs, moved among with the arrows, Home and End, each tab saying whether it is selected; the search field labelled, its count told to who does not see, Enter and Shift with Enter for the next and the previous match; the focus on the first line of the content after a load, and back on the command after a failure | VIEW-12 |
 | REQ-150 | The section the host shows in the details of a backup and of a restore does not load an artifact: it says that the log, the results, the resources and the volumes are in the workspace, and leads there | VIEW-13 |
-| REQ-151 | The packaged application loads the four artifacts of the real backup and of the real restore of the demo, and the four of the backup synced from the store, whose artifacts are made for the tabs: a log of 200,000 lines of many levels and long lines, results with errors of two namespaces in the form of the hook, a resource list of many resources, volumes of every method; and the operations that failed their validation | VIEW-14 |
+| REQ-151 | The packaged application loads the four artifacts of the real backup and of the real restore of the demo, and the four of the backup synced from the store, whose artifacts are made for the tabs: a log of 200,000 lines of many levels and long lines, results with errors of two namespaces in the form of the hook, a resource list of many resources, volumes of every method of a backup and one that was skipped; and the operations that failed their validation | VIEW-14 |
 
 ## Design
 
@@ -145,26 +145,30 @@ The words of a file the store does not have come from the phase of the target
 as the [states](../../src/common/phases.ts) read it: the tab reads the object it
 is of, which the view already has.
 
-The fixtures of the tabs are a backup synced from the store. The fixtures of
+The fixtures of the tabs are two backups synced from the store. The fixtures of
 the views write into the bucket of the demo, with the credentials of the
-environment, what the sync of the release needs to create a backup it does not
-have: the metadata `velero-backup.json` of a backup in a phase that ended,
-Completed, with an expiration far ahead, and its four artifacts made for the
-rules above; and an empty, valid archive of its contents, because the deletion
-of a backup downloads the archive before it removes anything and treats a
-missing one as permanent only by its error. The sync of the release creates
-the backup in the namespace of the installation at its next pass, within a
-minute, when the location is available: it writes the namespace and the label
-of the location and keeps the other labels of the metadata, which carry the
-run. A second synced backup has no log, for the case of a best-effort upload
-that was lost. A backup and a restore that fail their validation are created in
-the namespace of the installation, for naming both kinds of selector, so that
-their backup and their location stay valid and a URL is signed for them; a
-restore asked from a schedule that has no backup is created there too, and is
-refused without a backup name. These are the first fixtures in the namespace
-of the installation: they are labelled with the run and removed by the cleanup
-of the fixtures, the synced backups through their DeleteBackupRequest, which
-removes their files from the store with them.
+environment, what the sync of the release creates a backup from, and what its
+deletion and the tabs read: for each backup an empty, valid archive of its
+contents, its artifacts, and last the metadata `velero-backup.json` of a backup in
+a phase that ended, with an expiration far ahead. The archive is there because the
+deletion of a backup downloads it before it removes anything, treats a missing one
+as permanent only by its error, and stops on one it cannot read. The first backup
+failed in part, as a backup whose results hold errors does, and its four artifacts
+are made for the rules above. The second completed, is the backup of no item, and
+has no log, for the case of a best-effort upload that was lost. The sync of the
+release creates each backup in the namespace of the installation at the first of
+its passes, which are a minute or two apart, that comes after the files, when the
+location is available: it writes the namespace and the location, into the spec
+and into a label, and keeps the other labels of the metadata, which carry the run.
+A backup and a restore that fail their validation are created in the namespace of
+the installation, for naming both kinds of selector, so that their backup and
+their location stay valid and a URL is signed for them; a restore asked from a
+schedule that has no backup is created there too, and is refused without a backup
+name. These are the first fixtures of the views in the namespace of the
+installation, where the transport proof creates and removes its own: they are
+labelled with the run and removed by the cleanup of the fixtures, the synced
+backups through their DeleteBackupRequest, which removes their files from the
+store with them.
 
 ## Tests
 
@@ -319,7 +323,7 @@ said below by what they wait for.
 | VIEW-07 | Unit: the resources by their API version and kind, sorted, each with its items sorted and counted; the action of a restore after each item, the four of them, and an item without one, or with one the release does not write, counted as not stated with its text kept; an item of the cluster; the filter by the words that are typed, in the resource, the namespace and the name, and by action, with the counts of what is left. Component: the rows of a backup and of a restore in the virtual list of the host under the head of its tables, the action as a column of a restore alone, `cluster` in the namespace column of an item of the cluster, the labelled filter, the choices by action with what each would leave, the rows given the room the view leaves, six at least and twenty at most, with nothing counted on the window, and the rows of the room and ten on each side mounted of fifty thousand items. Packaged, on the real backup and the real restore: the namespace and the name as columns, and the action as well for the restore alone; each resource written as its API version and its kind, with the count of its items; the items of the backup as many as its status counted; the four actions of the restore counting every item and none not stated, each choice saying what it would leave and leaving the items of its action, and one that leaves none saying so with no row; the list of the backup filtered by the resource of its first row and by words no item carries, which leave none and say so, and Escape in the filter clearing it with the view still open. Each list is of one resource, so a filter by the resource leaves every item | Packaged: a resource list of many resources, on the synced backup of the fixtures |
 | VIEW-08 | Unit: one row for each volume in the order it is written, with the claim and its namespace, the volume, the method, the result, whether the data was moved, the local snapshot kept and the volume skipped, the reason and the times; the size read from the detail that carries one, and none for a native snapshot, whose detail has none in the release; the details each field by its name, `ReadyToUse` and `Phase` among them; the volumes of a restore, with the way each was restored and no result; a method and a result the release does not write kept as their text and marked; a field the tab does not know by its name and its value; an empty list; a text that is not of the shape, with nothing raised for any text. Component: a table of the host with a row for each volume and the details of a row under it, no cell left empty, the mark of what is not known in words, and the sentence that Velero recorded no volume, for a backup and for a restore. Packaged, on the real backup and the real restore, which have no volume: the sentence that Velero recorded none, with no table and no row, and, after the load of the backup, the focus on that sentence | Packaged: the volumes of the synced backup of the fixtures, with their methods and their details |
 | VIEW-09 | Unit and component: each of the three parsers answers nothing for a text that is not of the shape of the release, a JSON of another shape and a text that is no JSON among them, and raises nothing; the parser of the volumes answers nothing as well for a value the runtime reads and cannot write back; the viewer shows such a text as its lines, under the note, with the real list of lines in the tests of the pages; the pages assembled into the one text the tab holds, and a page that is not the one that was asked, one of another count and a text beyond 64 MiB refused with nothing shown; a text parsed once however many times its viewer is drawn, and a line made of the text for a row that is mounted and for no other; in the main process, a text of 64 MiB taken and one of a byte more refused | Nothing. How "no other copy" is read is below |
-| VIEW-10 | Unit: on 500,000 lines made for the test, entries of every level with long lines among them, the parser, the filter by level, the search for words every line carries, few carry and none carries, and the count of the rows of a list, wrapped and not, each within 250 milliseconds | Packaged: the times of the search, of the filter and of the scroll on the synced log of 200,000 lines, with the third pull request |
+| VIEW-10 | Unit: on 500,000 lines made for the test, entries of every level with long lines among them, what the parser, the filter by level, the search for words every line but the long ones carries, one line carries and none carries, the search among the lines of a level, the count of the rows of a list, wrapped and not, and the lines of a text read without its levels answer. Their times are taken by the unit measure, with the second pull request, below | Packaged: the times of the search, of the filter and of the scroll on the synced log of 200,000 lines, with the third pull request |
 | VIEW-11 | Unit, in the main process and through both processes: the dialog of the host asked of the module of Electron at each save, with a title and a message that say what is saved and a name for the file; the text written into the file that was chosen and into no other; nothing written when the dialog is closed, when it gives no file, and for a text that was let go on purpose, or a frame that went, while it was open; one dialog for a text at a time; the answer of a saving nothing but whether a file was written, and nothing of a path in a failure; the procedure registered when the extension is activated. State and component: the command offered for a text that is loaded and held, one saving at a time, what became of it said beside the command, and no command for a text the main process holds no more. Packaged, with the dialog of the host replaced in the main process by the suite, which answers as the dialog would: left, nothing written and the words that nothing was saved, with the command still offered; chosen, one file, where the suite chose, with the bytes the tab says the text has and the lines it counts, its first and its last line the ones the list shows at Home and at End; for each of those two savings the dialog asked once, with a title that is its message and names what is saved, and a name for the file with no folder in it, and nothing asked of the cluster; the log saved once more, into a file of the same bytes, after Escape cleared its search. Over the whole suite the API server counted, in both runs, nine creations and nine removals of DownloadRequests, as many as the requests the guard was told, eighteen reads of them by their names and nine writes of the server into them, and no write of another kind of Velero; nothing was left in the cluster, and the objects of Velero were as they were before the suite. The dialog itself is shown in no run | Nothing that waits for the fixtures |
 | VIEW-12 | The pre-review, which is the layer of the check, is not run with the tabs open: the one that existed passes with the tabs in the two workspaces, its journey with the keyboard going through the five tabs. Component, where nothing is laid out: the strip as a list of tabs, each tab saying whether it is selected, the arrows, Home and End around the ends, Enter and Space; the labelled search, its count told to who does not see, Enter and Shift with Enter; the focus on the first line of the content after a load, and on the command that follows a failure. Packaged, in the suite of the tabs: the tabs in both themes at 1440 by 900, at their first state, under a confirmation and loaded, and the four loaded tabs of the backup and a confirmation at 900 by 650 and at twice the zoom in both themes, each looked at by the checks of the layout, which found nothing that lies over something else, is wider than its room or holds more than its height with no scroll that reaches it: what the limits below say is out of sight at those sizes is reached by a scroll, and a name cut in its cell is shown whole to who points at it; at those two sizes a view with the room of a list at least, no list taller than the room it is read in, a list whole in that room once it is brought into it, and the two commands of a confirmation in it; at 1440 by 900 the view of the log and of the resources holding no more than its room; the arrows, Home and End around both ends, Enter and Space on the strip, and Space scrolling nothing at 900 by 650, where the view of a log holds more than its room; the focus on the first line of a log and on the sentence of an empty list after a load, and on the command after a cancel. What a view of a tab is at those two sizes is among the limits below | The whole check, with the third pull request: the tabs and the viewers in the pre-review, in both themes, at the two sizes and at twice the zoom, and the journeys with the keyboard alone |
 | VIEW-13 | Component: the section the host shows in the details of a backup and of a restore says that the log, the results, the resource list and the volume information are in the workspace, leads there by the way that was there, and asks the main process nothing. Packaged, on the real backup and the real restore: the section in the details the host shows of each, with its sentence, no command and one way, which opens the view at its summary, with no tab in the address and the namespace of the installation as the target, and its four tabs at their first state; nothing of a DownloadRequest counted, and writes still on after the pages of the host | Nothing that waits for the fixtures |
@@ -491,10 +495,24 @@ What was decided while implementing, inside the requirements:
 - **The parsers are bounded in time as well** (REQ-146): the parser of the volumes
   raises nothing for any text, and a message of the results is read in a time
   that grows with its length, whatever a file Velero did not write repeats in it.
-- **The unit measure is the best of five turns** (REQ-147): each function within
-  250 milliseconds on 500,000 lines, taken again up to four times when the
-  machine is busy. The percentile of twenty warm interactions is the measure of
-  the packaged application.
+- **The unit measure is the 95th percentile of twenty calls after five** (REQ-147),
+  since the second pull request, as the measures of the packaged application take
+  theirs. It is one file, [`artifact-log.measure.ts`](../../test/artifact-log.measure.ts),
+  which `pnpm test:unit` runs by a configuration of its own once the other tests
+  ended, one file at a time; it imports the source, which both forms of the unit
+  run time alike. On 500,000 lines of the log of the fixtures in its brief form,
+  within the 64 MiB of an artifact and with its long lines, it times the parser,
+  the search, the filter by level, the search among the lines a filter leaves, the
+  rows of a list of the lines, not wrapped and wrapped at 120 and at 40 columns,
+  and the lines of a text read without its levels: each series within 250
+  milliseconds, every answer checked against what the generator counted or against
+  a plain reading of the text. The rows are counted when a filter, the wrap or the
+  room of a list changes, and not while it is scrolled: their budget is the one of
+  an interaction, and the 50 milliseconds of a frame are of the packaged
+  application. No other unit test holds this code to that budget: the case of
+  500,000 lines of the other tests asserts what the same functions answer and
+  takes no time, and a text made to be slow to read is given there a bound of its
+  own, as the parsers are bounded in time.
 - **A text can be saved for as long as the main process holds it** (REQ-148, with
   REQ-133 of SPEC-0010): ten minutes from the load, or less when the process needs
   the room. The tab says until when under the text, the time first, in the words
@@ -700,3 +718,462 @@ Open, for the review of the milestone:
   demo lasts long enough for its picture to show a step but its first. The
   pre-review with the tabs open, and the journeys with the keyboard alone through
   them, are the third pull request.
+
+### The Fixtures Of The Tabs, The Second Pull Request Of T2.3
+
+Implemented by 2026-10-06. This pull request brings the fixtures REQ-151 and the
+Design ask for, placed, synced and removed on the cluster of the test environment;
+VIEW-14, which loads them in the packaged application, is left to the third. The
+artifacts the tabs read are made by
+[generators](../../e2e/scripts/local-artifacts.mts) that are functions of their
+arguments alone; what is written into the bucket of the demo, and how, by the
+[client of the store](../../e2e/scripts/local-store.mts) through
+[one request](../../e2e/scripts/local-runtime.mts); the operations the server
+refuses, the wait for its sync and the cleanup, in the
+[fixtures](../../e2e/scripts/local-fixtures.mts) and the
+[runner](../../e2e/scripts/local-demo.mts). Beside them, the parsers are tested on
+what the fixtures give the store, with a measure of REQ-147 at the unit layer, and
+the suites of the views that expected the installation of the demo to hold its
+real operations alone expect it as the fixtures leave it. The code had independent
+reviews before it ran on a cluster and after, and one of the whole pull request:
+what was applied of their findings is in the code and in its tests, and what was
+left is among the decisions, the limits and the open points below. The spec stays
+Approved: it is Implemented with the last of the three pull requests.
+
+What the generators make for the backup synced from the store, each artifact in
+the form the release writes, but for the departures listed after, with the facts
+of the release they rest on in the recon,
+[with the tabs](../development/RECON-T0.1.md#with-the-tabs-of-an-operation-2026-10-05)
+and
+[with their fixtures](../development/RECON-T0.1.md#with-the-fixtures-of-the-tabs-2026-10-06):
+
+- **The log**: 200,000 lines of the text format of the server, fifteen
+  milliseconds apart over the fifty minutes of the work. 4 are at error, 2 at
+  warning, 169,231 at info and 30,217 at debug, and 546 are no entry, of which 24
+  name a level in their words, beside 40 entries at info whose message names
+  `level=error`. Three lines have 20,000, 10,000 and 10,001 characters. The text
+  is 49,143,988 bytes in twelve pages, and the first page ends inside a character
+  of three bytes. The progress of the backup is a field written with nothing in
+  it, where the release writes it so. Sixteen texts the suites search for are
+  counted while the log is written. Its digests are pinned in
+  [`tab-pins.ts`](../../test/tab-pins.ts), for the run and the moment the tests
+  make it for.
+- **The results**: four errors, two under Velero, where the release files the
+  error of an item that was not backed up and the failure of a pod volume, and two
+  under two namespaces, one in the four parts of the hook and one a message alone;
+  and two warnings, one of Velero and one of the cluster.
+- **The resource list**: 48 resources and 6,000 items, in 24 namespaces and in the
+  cluster, with the one snapshot and its content the CSI volume names.
+- **The volume information**: five volumes, in the order of the release: one it
+  skipped, with its reason and no method; a native snapshot, with no size and no
+  times; a CSI snapshot kept where it was taken, with the end and the result its
+  operation gave it once the backup was finalized; a pod volume that was backed up
+  and one that failed.
+
+The metadata of that backup is the one of a backup of every namespace that failed
+in part, made like the real backup of the run, from which what the server fills is
+copied: errors 4 and warnings 2, the progress of its 6,000 items, and a native
+snapshot, a CSI snapshot and an operation of a plugin, each attempted and
+completed. The second synced backup completed: it selects by a label nothing
+carried and excludes no namespace, which makes it the backup of no item the
+release writes; it has no log, and its results, resource list and volume
+information are the empty forms. Both began four hundred days before the run,
+worked fifty minutes and are kept for ten years, so that no window of the views
+holds them and no expiration removes them. Both name the snapshot location of the
+installation that took them, which this one does not have, as the release writes
+into every backup it takes the snapshot location of each provider its installation
+has one of. An annotation carries a digest of the two and of their artifacts,
+which a placement compares with the backups it finds in place. The three
+operations the server refuses are the ones the transport proof asked for: a backup
+and a restore that name both kinds of selector, and a restore asked from a
+schedule that has no backup, refused without a backup name.
+
+Where the synced backups are not what the release writes, on purpose, each beside
+the fact of the release it departs from:
+
+- Lines that are no entry, and characters of two and of three bytes in them. A log
+  the release wrote has one writer, its logger, and no such line, as the
+  [recon](../development/RECON-T0.1.md#with-the-tabs-of-an-operation-2026-10-05)
+  records: they are there for the lines the tabs count apart, with no level.
+- The two errors of the namespaces and the two warnings carry messages no logger
+  of the release gives: the approved scenario asks for errors of two namespaces,
+  where the hook of the release files an entry by its namespace, and the error of
+  an item and the failure of a pod volume under Velero, as the
+  [recon](../development/RECON-T0.1.md#with-the-tabs-of-an-operation-2026-10-05)
+  records.
+- The contents are an empty tar in gzip, which the release never writes for a
+  backup, whose contents begin with the version of their format: an archive with
+  nothing in it is what the deletion takes as a backup with nothing for its
+  actions, as the
+  [recon](../development/RECON-T0.1.md#with-the-fixtures-of-the-tabs-2026-10-06)
+  records.
+- The folder of a backup holds six keys, five for the second, and not the three
+  lists the release writes beside them, of the pod volume backups, of the native
+  snapshots and of the operations of its plugins, though the status counts a
+  native snapshot, a CSI snapshot and an operation: from the list of the pod
+  volume backups the sync creates objects, and for each native snapshot listed the
+  deletion calls the plugin of the snapshots. The release writes no list of CSI
+  snapshots into the folder of a backup, as the
+  [recon](../development/RECON-T0.1.md#with-the-fixtures-of-the-tabs-2026-10-06)
+  records.
+- A backup of every namespace whose resource list holds 24 namespaces made for it
+  and none of the namespaces a cluster has, where the release takes every active
+  namespace that such a backup does not exclude, as the
+  [recon](../development/RECON-T0.1.md#with-the-fixtures-of-the-tabs-2026-10-06)
+  records.
+- A backup that completed with no log, which the release leaves only when the
+  upload of the log, which is best effort, failed, as the
+  [recon](../development/RECON-T0.1.md#start-of-the-third-milestone-2026-09-30)
+  records.
+
+None of them makes a tab pass on what a real backup would fail: each is what a
+requirement or the Design asks of the fixture, or what keeps the deletion away
+from the plugin of the snapshots and from the repository of the pod volumes.
+
+What is written into the bucket, and how. The placement gives the store the eleven
+keys of the two backups before it places anything else, each folder with its
+metadata last, since a pass of the sync takes a folder as it is once it finds the
+metadata there; then the objects of the views, then the three refused operations,
+and last it waits for the server. It reads before it writes: the real backup,
+which the two are made like and without which nothing is stored; the head of its
+log, which must have the keys the log of the fixtures is written with; and the
+keys of its spec and of its status, which the metadata must have. Then it records
+the placement, in the journal of the environment and, with the metadata as it is
+stored, in a file of the private state written whole, and only then writes. A body
+is given the store in one of three ways, tried in their order only while none has
+passed: a file the client of the node uploads, the same file as the data of the
+request, and a request signed in the scripts over the digest of the body, which
+the client sends as it is. The way that passed is recorded, and is the way of
+every file after it, and the store is asked after each file how much of it it
+holds. The store the environment pins, SeaweedFS 4.48, took all three ways on
+2026-10-06, each with the whole length it was sent: the placements sent their
+files in the first, and two placements, by a temporary change of the order of the
+ways, in the two others. A second placement sent the store no file and asked it of
+none, applied no refused operation again, and found the same identities and
+versions; what the suites are told of the real artifacts is read again each time.
+A request the record of the placement does not allow is refused before anything is
+sent: the write of a key of the tabs, asked first thing by a temporary change
+while the placement was recorded as synced, stopped in a second, with nothing
+added to the log of the operations and nothing kept in the node.
+
+The sync of the server created both backups at the first of its passes that came
+after the files: at least seven seconds after the last of them in the first
+placement of the day, and fifty-two in the last. Its passes were two minutes apart
+in the first runs of the day and a minute apart in the later ones. The wait counts
+the passes by the time the location says its last one ended at, and stops after
+two passes that ended with a backup missing, or after five minutes with no pass,
+which is what a location that is not available gives. What the server created is
+read back against what was stored: the labels of the run, which it keeps; the
+storage location, which it writes into the spec and into a label; every key of the
+spec that was stored; and the whole status, the empty progress of the second
+backup and the empty status of its hooks among it. The server added an empty
+`hooks` and an empty `metadata` to the spec of both, which the real backup does
+not carry. The two backups are entered in the journal with the identity the
+cluster gave them.
+
+The cleanup of the fixtures has the server delete the two synced backups: a
+DeleteBackupRequest of the run for each, one backup at a time, the removal
+recorded before the first request, and a pass of the sync waited for after them,
+so that a backup that comes back is asked for again. The real backup and the
+refused one are removed by the same rules. It ends when the cluster and the store
+hold nothing of the run: the eleven operations of the run looked for by their
+names, whatever the journal knows, and the twenty keys the client may ask of the
+run, nine of the fourteen the server wrote for the real backup and the real
+restore, which the
+[recon](../development/RECON-T0.1.md#with-the-fixtures-of-the-tabs-2026-10-06)
+lists, and the eleven the store was given, each answering that it is not there. On
+the cluster of the test environment, on 2026-10-06, the cleanup removed the
+fixtures of the tabs from each of these states, and ended from each but the
+fourth, which was stopped on purpose after its end check and left the fifth:
+
+- after a whole placement, with nothing back in two more passes of the sync, and
+  run again on the run it had cleaned;
+- stopped right after it created its first request;
+- after a placement stopped between two files, with no metadata stored: it gave
+  the store the metadata, and the server made the backup it then deleted;
+- after a placement stopped once the first metadata was stored, started before the
+  sync passed;
+- stopped once the tabs were removed and before the record of their removal ended;
+- after a placement of one backup of two, made in the second way;
+- with the contents of the first backup cut to ten bytes, by a temporary change:
+  the server ended the request with one error,
+  `error invoking delete item actions`, and left the backup in deletion with every
+  file; the cleanup stopped on it, and the next one put back the empty archive the
+  fixtures make, recorded before it was written, replaced the request and had the
+  server delete the backup.
+
+A placement stopped between two files went on as well with the next placement,
+which wrote the files the store did not hold whole. A cleanup after a placement
+took 99 to 158 seconds in those runs, of which about sixty went to the namespaces
+of the views after a whole placement, and a first placement 130 to 132 seconds in
+all. `pnpm e2e`, whose cleanup removes the real backup and the refused one by the
+same rules, passed end to end.
+
+What no run on a cluster reached, and the tests of the environment prove on the
+pretend cluster alone: a request the server began and left, which a server stopped
+inside the second a deletion takes would leave; a synced backup deleted from
+outside the scripts, followed by a placement; the waits for the requests a review
+by hand or a suite that was stopped left; and contents that unpack to a part of a
+block, which the pretend server takes as cut. What no run reached and no test
+proves: the type the store keeps of a body sent in each way, and an environment
+brought up before this pull request. Two facts were seen only in their end state.
+The server deleted a synced backup within one to three seconds of its request: its
+object was seen gone and the keys of its folder not there, and nothing came back
+in the two passes after the first cleanup, nor at the pass each later removal
+waited for; the steps of the deletion were not seen, and their order, the files
+before the object, is read in the source. The refused backup had failed its
+validation by the first read of each placement, so that its queue was not seen. No
+hosted runner has run the placement, the wait for the sync or the cleanup.
+
+Those runs were made on the code before the review of the whole pull request,
+whose fixes changed the words of the runner; made the placement stop on an answer
+of the store that says neither that it holds a key nor that it does not, which no
+run met; made a request for which the client of the node gave no answer of the
+store leave its line in the log of the operations, and refused an answer with no
+headers; printed the note that the fixtures placed by the clock were put in place
+again only when they were there before; and made the wait before the suites stop
+at once on a request to delete a backup that the server ended with an error. On
+the final code the closing runs below placed the fixtures again, ran the suites on
+them and removed them.
+
+When files of the tabs are in the store and no backup comes of them, or a key of
+the run is left once its operations are gone, nothing in the scripts removes a
+key: the cleanup stops and names the keys, and the way out is to take the
+environment down, with `pnpm demo:down`, which removes the store with the node.
+
+What the suites are told of the artifacts is counted outside the extension: of the
+synced backups, what the generators counted; of the real backup and the real
+restore, what a plain count finds in the files the server wrote for them, read at
+each placement. `pnpm e2e:views` writes it, `tab-fixtures.json`, beside the
+reports of the suites, for the suites on the fixtures, and `pnpm demo:views` into
+the private state, for who looks at the tabs by hand. The suites start only when
+the installation holds the two synced backups and the three refused operations,
+probed by the names of the run.
+
+The unit evidence. The parsers of the four tabs are tested on what the fixtures
+give the store, in fourteen cases: the log read at the lines and the levels its
+generator counted, with no level taken from the words of a line, the texts the
+suites search for found in as many lines, the long lines cut in their rows and
+whole for a copy, the line across the first page whole, and its entries in the
+JSON format of the server, the error under `error.message`; the results where the
+log filed each entry, in its parts, counted as the status counts them; the
+resource list with every item in its order; the volumes with what each entry says
+and the size of the detail that has one; and the second backup, with no log, which
+the tab says by the phase the fixtures give it, and with its empty artifacts. The
+generator counts while it writes, and a test of the generator checks its counts
+against a plain reading of the text: the parsers are compared with what was
+counted another way. The unit measure of REQ-147, as decided above, on 2026-10-06,
+on a machine of a developer that ran the test environment beside it, with three
+workers of the runner of the tests:
+
+| Series, 95th percentile | Separate modules | Production build |
+| --- | --- | --- |
+| The parser | 122.4 ms | 134.2 ms |
+| The search, twenty texts not searched before | 78.3 ms | 85.0 ms |
+| The filter, twenty choices of levels not chosen before, each level alone among them | 3.6 ms | 3.2 ms |
+| The search among the lines a choice of levels leaves | 83.2 ms | 80.8 ms |
+| The rows, not wrapped, at 120 and at 40 columns | 46.9, 40.1 and 31.8 ms | 48.4, 40.1 and 30.7 ms |
+| The lines of a text read without its levels | 47.4 ms | 47.6 ms |
+
+The budget is 250 milliseconds for each, and the text is 65,529,500 bytes. In the
+closing runs of the same evening, below, with the workers the runner chooses and
+the machine busier, every series passed the same budget on both build forms: the
+slowest at its 95th percentile was the parser on the separate modules, at 159.6
+milliseconds. The unit run of that day is 73 files and 2,291 tests on both build
+forms, and the measure 1 file and 1 test after them; 105 of the tests are of this
+pull request: 16 of the artifacts the generators make, 75 of the environment that
+places the fixtures, waits for the server and removes them, and 14 of the parsers
+on what the fixtures give the store.
+
+The tests were seen failing by changes made on purpose to the code, one at a time,
+each step on the code of its day. On 2026-10-05, as the fixtures were written: 50
+changes of the generators, by which every test of the generators was seen failing;
+81 of the names and the keys of the fixtures, of what the client of the store may
+ask, of the metadata of the two backups and of the request that deletes one, by
+which every new test of them was seen failing; and 138 of the rules the review of
+the placement, of the waits and of the removal changed or added, each seen failing
+in the end. On 2026-10-06, while the measure was written, 34 changes of the
+parsers, of the generators, of the keys and the counters of the fixtures and of
+the measure, of which 32 made a test fail: a search made to read its text twice,
+or three times, stays within the budget, which a search four times as slow, and a
+parser that copies every line, exceed. After the review of the whole pull request,
+21 more, each of which made a test fail: 8 of the code of a log the measure times
+and 2 of the choices the measure makes, 5 of the same code against the case of
+500,000 lines that takes no time, 2 of the parser of the results and 2 of the
+counters of the metadata of the fixtures, and 2 of the order of the end check of a
+cleanup.
+
+The packaged evidence. The suites of the journey and of the restores see as well
+that a workspace of a backup and of a restore opens at its summary, the first of
+its five tabs, with the ways the summary had and no field (REQ-138), on a backup
+and on two restores of the fixtures of the phases and of the views. The cases that
+expected the installation of the demo with its real operations alone are restated
+on what it holds, as the lead maintainer decided on 2026-10-06, and the
+[Overview](SPEC-0008-overview.md#evidence-and-deviations) records what that
+changes of it: the Overview and the locations of the installation, and the picture
+the pre-review takes of its Overview. In local runs of 2026-10-06, on the code
+before the fixes of the review of the whole pull request, each restated case
+passed alone, and each old expectation the fixtures broke, put back alone, failed
+its case at its line; the new expectations of the journey and of the restores were
+not seen failing by a change made on purpose. A first run of the twelve suites
+failed one case, the guard of the suite of the schedules, which counted the reads
+of the requests of every namespace that a watch made beside the suites once a
+minute: nothing but a suite reads the cluster while it runs, and the run without
+the watch passed. The fixes of the review changed the words of the runner and of
+the suites, the wait before the suites, what the placement concludes from an
+answer of the store that says neither that it holds a key nor that it does not,
+and the order of the newest completed backup in the case of the Overview; the
+suite of the Overview passed alone after them, 15 of 15.
+
+The closing runs, on the final code of this pull request, on the evening of
+2026-10-06, one after the other: the checks of the repository and `pnpm test:unit`
+on both build forms, as said above; then, on an environment brought up from
+nothing by `pnpm demo:up` in 243 seconds, which places nothing of the tabs:
+
+- `pnpm e2e:views` placed the fixtures of the views and of the tabs in 119
+  seconds, the eleven files sent in the first way, and its wait for the two
+  backups took no time, since a pass of the sync came while the views were placed;
+  the twelve suites passed, 150 cases beside 9 that wait, in 1,713 seconds of the
+  runner of the suites, within the hour a run of them is given, and the host gave
+  up on none of their starts, where in the earlier runs of the twelve it gave up
+  on the first start of some, each of which passed on its second;
+- `pnpm pre-review` passed, 20 of 20, in 357 seconds of the runner of the suites,
+  after a placement that wrote nothing and found the refused operations refused;
+- the cleanup of the fixtures took 104 seconds, 26 of them to have the server
+  delete the two synced backups, none of which came back after a pass of its sync;
+- `pnpm e2e`, on the installation the cleanup left with nothing, passed in 11
+  minutes and 37 seconds: its fixtures, the transport proof, and its cleanup
+  through the one way the cleanup deletes a backup of the fixtures, after which no
+  backup, restore or request to Velero was left.
+
+What this pull request leaves to the third:
+
+- VIEW-14, the four artifacts of each of the three operations loaded in the
+  packaged application and checked against what the fixtures wrote, and the
+  packaged layer of VIEW-04 to VIEW-08 on these fixtures;
+- the nine cases of the suite of the tabs that wait: seven on these fixtures, and
+  two that need none the environment does not have;
+- the packaged measures of REQ-147, the search, the filter and the scroll on the
+  synced log;
+- the pre-review with the tabs open, which is VIEW-12;
+- the cleanup of the fixtures in the hosted job of the views, which places them on
+  every run and takes the environment down with them;
+- the evidence that makes the spec Implemented.
+
+Decided by the lead maintainer on 2026-10-06:
+
+- **Nobody deletes a DownloadRequest the extension created**: the suites wait for
+  the server to remove the ones they asked for, and no rule changes. Nor does a
+  cleanup remove the ones a suite that was stopped, or a review by hand, left:
+  before it removes anything it waits for the server to remove the requests for a
+  download and for the status of the server in the namespace of the installation,
+  twelve minutes at most, and it stops by name on a request for a download the
+  server did not look at in a minute, or on one in a namespace of the fixtures,
+  which no server reads. The way out is `pnpm demo:down`. What it costs is the
+  time of the hosted job of the views, and of a run of the suites, which the
+  runner gives an hour.
+- **The installation of the demo is restated as the fixtures leave it**, and
+  REQ-098 stays proven at the unit and component layers, which are the ones of its
+  check, as the evidence of
+  [SPEC-0008](SPEC-0008-overview.md#evidence-and-deviations) records.
+
+Decided while implementing, each awaiting the review of the milestone:
+
+- **The measures take the 95th percentile of twenty after five**, the form the
+  check gives the search and the filter.
+- **The budget of the unit measure is asserted wherever the unit tests run**, the
+  hosted runners included, in both forms of the unit job. The hosted runner has
+  not run it: its margin there is not known.
+- **No key of the store is deleted by the scripts.** The way out of files from
+  which no backup comes is `pnpm demo:down`.
+- **The hosted job of the views has no cleanup step yet**: the cleanup of the
+  synced backups has the local evidence above, and its step is the third pull
+  request.
+- **The runner waits for the server before the suites as well**: for the requests
+  of the namespace of the installation, twelve minutes at most, and it stops on a
+  request for a download the server did not look at in a minute. A request to
+  delete a backup that the server ended with an error stops it at once, by its
+  name, since the server removes such a request a day after it was made. A request
+  in a namespace of the fixtures, which no server reads, is named in a warning,
+  and the run goes on.
+- **A request to delete a backup that the server ended is replaced, whatever it
+  ended it with; one it began and left is replaced after three minutes, once for a
+  backup in a removal; one left with no backup is removed at the end.** Each is a
+  request of the run, removed by the identity it was read with: the server looks
+  at a request once, and passes over one it ended or began until it is a day old.
+- **The cleanup has one way to delete a backup of the fixtures**, for the synced
+  ones and for the real and the refused one, so that `pnpm e2e` and its hosted job
+  clean through it, and it ends on one check of the operations and of the keys of
+  the run.
+- **The third way of a body is a request signed in the scripts**, which the client
+  of the node sends: no container is started to send it.
+- **A storage location that is not available is waited for**, five minutes while
+  the sync is waited for and three in a removal, since the sync passes over such a
+  location and takes it up again once it is validated.
+- **The requests to Velero are read, by the waits, by their kind, their namespace,
+  their name and their expiration**, with the output withheld: the status of a
+  request for a download that was processed holds a signed URL. A request to
+  delete a backup holds none: in the namespace of the installation it is read
+  whole, by the removal of a backup, by the end check of a cleanup and by the wait
+  before the suites when one is there, and the private log of the operations keeps
+  that read.
+
+What changed in the text of a requirement and of the Design, from what the release
+does:
+
+- **REQ-151, the volumes.** It said volumes of every method. A backup writes three
+  methods and entries with none for the volumes it skipped, and the method of a
+  restore is in the volume information of a restore alone: the synced backup has a
+  volume of each method of a backup and one that was skipped, and the method of a
+  restore and a volume whose data was moved stay at the unit and component layers.
+  The requirement says so since this pull request.
+- **The Design, the fixtures of the tabs.** It said that they are a backup synced
+  from the store, with a second one that has no log: they are two backups. It said
+  that the synced backup completed, where a backup whose results hold an error
+  failed in part: the first failed in part, and the second completed. It said
+  nothing of what the second holds: it is the backup of no item, which selects by
+  a label nothing carries. It said that the files are what the sync needs to
+  create a backup: the sync creates a backup from its metadata alone, and the
+  archive and the artifacts are what the deletion and the tabs read. It said
+  nothing of the order of the files: the metadata of each folder is written last,
+  since a pass of the sync takes a folder as it is once it finds the metadata
+  there. It said that the sync creates a backup within a minute, where two of its
+  passes are a minute or two apart. It said that the sync writes the label of the
+  location: it writes the location into the spec and into a label. It said that
+  the deletion takes a missing archive as permanent only by its error: it stops as
+  well on one it cannot read. It said that the fixtures are the first in the
+  namespace of the installation, where the transport proof creates and removes
+  operations of its own: they are the first fixtures of the views there. The facts
+  of the release are in the
+  [recon](../development/RECON-T0.1.md#with-the-fixtures-of-the-tabs-2026-10-06),
+  and the Design says so since this pull request.
+
+Open, for the review of the milestone:
+
+- **What changed in the text of REQ-151 and of the Design, and the decisions
+  above.**
+- **The frames of the scroll** (REQ-147). The requirement asks that a scroll draws
+  each frame within 50 milliseconds. The packaged measure of the third pull
+  request would take the longest frame of each of twenty gestures, at the 95th
+  percentile, the form the check gives the search and the filter, where a strict
+  maximum over every frame fails on one pause of the collector. That would change
+  the words of the requirement, and is for the lead maintainer: nothing of it is
+  built yet.
+- **The words of VIEW-08.** Its check asks for the four methods with their details
+  and the size read from each. A backup writes three methods, the method of a
+  restore is in the volume information of a restore alone, and the release writes
+  no size for a native snapshot: on the synced backup the packaged layer of the
+  third pull request can show three methods and a volume that was skipped, and the
+  size of the ones that carry one. Whether the check is reworded with the third
+  pull request, or the difference is recorded there as a deviation, is for the
+  lead maintainer.
+- **The results of the synced backup** hold, beside the errors of two namespaces
+  REQ-151 names and the warning of Velero the second scenario names, two errors of
+  Velero and a warning of the cluster: whether the words name them is for the lead
+  maintainer.
+- **The cases that pin the installation of the demo** to the seven operations of
+  the run, by name, as the old ones pinned one backup and one restore: a backup
+  made by hand in that namespace during a review fails them, with a difference
+  that names it. Their branches for an operation within five minutes of the edge
+  of the window, for an environment older than its window and for backups in
+  flight have not run: the environments of the runs were hours old.
