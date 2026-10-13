@@ -87,8 +87,13 @@ const LISTS: Record<Operation, ListOf> = { backup: BACKUPS, restore: RESTORES };
 const PART_TIMEOUT = 30_000;
 /** How long a load is given: the main process gives a request two minutes, and the pages of its text follow. */
 const LOAD_TIMEOUT = 150_000;
-/** The height of a line of a list of lines, in pixels: a row is as tall as the lines it takes. */
-const LINE_HEIGHT = 20;
+/**
+ * The height of a line of a list of lines, in pixels: a row is as tall as the lines it takes. It mirrors
+ * LINE of src/renderer/components/artifact-lines.tsx, which the suites do not import: the case of the
+ * measures reads the height of one mounted row and checks it against this, so that a line height the
+ * product changed fails there, by its name, and not by the rows every gesture then misses.
+ */
+export const LINE_HEIGHT = 20;
 
 /** When a load is cancelled: as soon as it begins, or once its request is in the cluster. */
 export type CancelAt = boolean | "created";
@@ -1211,6 +1216,367 @@ export async function scrollLogTo(frame: Frame, kind: Operation, line: number): 
   if (!found) throw new Error(`The list ${id} has nothing to scroll`);
 
   return logLike(frame, kind, `mounts the row of its line ${line}`, (shown) => shown.mounted.includes(line));
+}
+
+/**
+ * The height of the row of a line of the log, in pixels, as the page lays it out, or nothing while the row
+ * is not mounted: the row of a line that is not cut is as tall as LINE_HEIGHT.
+ */
+export async function logRowHeight(frame: Frame, kind: Operation, line: number): Promise<number | undefined> {
+  const id = PARTS.line(kind, "log", line);
+
+  return frame.evaluate((id) => {
+    const row = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+
+    return row ? Math.round(row.getBoundingClientRect().height) : undefined;
+  }, id);
+}
+
+// How long a measure of the log waits for what it expects before it gives up and says what it last saw.
+const MEASURE_TIMEOUT = 10_000;
+
+/** What a measure of an answer of the log gives: its time in milliseconds, and the rows the list had mounted when it ended. */
+export interface LogAnswer {
+  ms: number;
+  mounted: number;
+}
+
+/** What a scroll gesture of the log gives: each frame, in milliseconds, until the rows were the ones of the position, and the rows mounted then. */
+export interface LogGesture {
+  frames: number[];
+  mounted: number;
+}
+
+/**
+ * The pixels from the top of the list of the lines of a log to the row of a
+ * line, by its number, given the lines whose rows are cut, which take two rows.
+ */
+export function logRowTop(line: number, tall: readonly number[]): number {
+  return (line - 1) * LINE_HEIGHT + LINE_HEIGHT * tall.filter((cut) => cut < line).length;
+}
+
+/**
+ * The last line whose row begins inside the room of the list, of so many
+ * pixels, when the row of a line is at the top of the room: the lines from the
+ * one to the other are the ones the room shows at that position.
+ */
+export function logRoomEnd(line: number, tall: readonly number[], room: number, lines: number): number {
+  const top = logRowTop(line, tall);
+  let last = line;
+
+  while (last < lines && logRowTop(last + 1, tall) < top + room) last += 1;
+  return last;
+}
+
+/** The room of the list of the lines of a log, in pixels: how much of it is shown at once. */
+export async function logRoom(frame: Frame, kind: Operation): Promise<number> {
+  const id = PARTS.viewer(kind, "log", "text");
+
+  await part(frame, id);
+  const room = await frame.evaluate(
+    (id) => document.querySelector<HTMLElement>(`[data-testid="${id}"] .VirtualList .list`)?.clientHeight ?? 0,
+    id,
+  );
+
+  if (!room) throw new Error(`The list ${id} has no room`);
+  return room;
+}
+
+/**
+ * Times idle frames of the window inside the page: the time from one frame to
+ * the next, as many frames as asked, with nothing asked of the viewer. A
+ * window that draws no frame to count, as a hidden one, is said so after ten
+ * seconds, with the frames it drew.
+ */
+export async function frameBaseline(frame: Frame, kind: Operation, count: number): Promise<number[]> {
+  await part(frame, PARTS.viewer(kind, "log", "text"));
+  return frame.evaluate(
+    ({ count, timeout }) =>
+      new Promise<number[]>((resolve, reject) => {
+        const frames: number[] = [];
+        let last = performance.now();
+        let over = false;
+        const deadline = setTimeout(() => {
+          over = true;
+          reject(
+            new Error(
+              `The window drew ${frames.length} idle frames in ${timeout / 1000} s, and ${count} were asked: ` +
+                JSON.stringify(frames.map((ms) => Math.round(ms))),
+            ),
+          );
+        }, timeout);
+        const look = () => {
+          const now = performance.now();
+
+          if (over) return;
+          frames.push(now - last);
+          last = now;
+          if (frames.length < count) {
+            requestAnimationFrame(look);
+            return;
+          }
+          clearTimeout(deadline);
+          resolve(frames);
+        };
+
+        requestAnimationFrame(look);
+      }),
+    { count, timeout: MEASURE_TIMEOUT },
+  );
+}
+
+/**
+ * Types words into the search of a log as the keys do, in one event, and
+ * times inside the page what the viewer takes to answer: from the event to
+ * the frame after the one where the words the matches are of, the number of
+ * matches and the number of lines shown are all three the ones expected. A
+ * viewer that writes the words before its matches, or a count that is not the
+ * one expected, does not end the measure: after ten seconds it is said what
+ * the viewer last showed. A wait of the viewer for the keys to stop, when it
+ * has one, is in the time; the driver of the test is not.
+ */
+export async function measureLogSearch(
+  frame: Frame,
+  kind: Operation,
+  words: string,
+  expected: { matches: number; shown: number },
+): Promise<LogAnswer> {
+  const id = PARTS.viewer(kind, "log");
+
+  await part(frame, id);
+  return frame.evaluate(
+    ({ id, words, expected, timeout }) =>
+      new Promise<{ ms: number; mounted: number }>((resolve, reject) => {
+        const root = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+        const field = root?.querySelector<HTMLInputElement>(`[data-testid="${id}-search"]`);
+        const status = root?.querySelector<HTMLElement>(`[data-testid="${id}-search-status"]`);
+        const count = root?.querySelector<HTMLElement>(`[data-testid="${id}-count"]`);
+        const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+
+        if (!root || !field || !status || !count || !set) {
+          reject(new Error(`The log ${id} has no search, no status of it or no count of its lines to measure`));
+          return;
+        }
+        // A search of what is searched already changes nothing: it has no time, and is not a sample.
+        if (field.value === words) {
+          reject(new Error(`The log is searched by "${words}" already: nothing to measure`));
+          return;
+        }
+        const seen = () => ({
+          words: status.getAttribute("data-words") ?? "",
+          matches: Number(status.getAttribute("data-matches")),
+          shown: Number(count.getAttribute("data-shown")),
+        });
+        const answered = () => {
+          const now = seen();
+
+          return now.words === words && now.matches === expected.matches && now.shown === expected.shown;
+        };
+        let over = false;
+        let start = 0;
+        const deadline = setTimeout(() => {
+          const last = seen();
+
+          over = true;
+          reject(
+            new Error(
+              `The search of "${words}" did not show ${expected.matches} matches of ${expected.shown} lines in ` +
+                `${timeout / 1000} s: the viewer last showed the words "${last.words}", ${last.matches} matches and ` +
+                `${last.shown} lines`,
+            ),
+          );
+        }, timeout);
+        const look = () => {
+          if (over) return;
+          if (!answered()) {
+            requestAnimationFrame(look);
+            return;
+          }
+          requestAnimationFrame(() => {
+            const ms = performance.now() - start;
+
+            clearTimeout(deadline);
+            resolve({ ms, mounted: root.querySelectorAll("[data-text-line]").length });
+          });
+        };
+
+        start = performance.now();
+        set.call(field, words);
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+        requestAnimationFrame(look);
+      }),
+    { id, words, expected, timeout: MEASURE_TIMEOUT },
+  );
+}
+
+/**
+ * Clicks the choice of a level of a log, and times inside the page what the
+ * viewer takes to answer: from the click to the frame after the one where the
+ * levels chosen are the ones expected and the number of lines shown is the
+ * one expected, which is the sum of the counts of those levels. After ten
+ * seconds it is said what the viewer last showed.
+ */
+export async function measureLogFilter(
+  frame: Frame,
+  kind: Operation,
+  level: LogLevel,
+  expected: { levels: readonly LogLevel[]; shown: number },
+): Promise<LogAnswer> {
+  const id = PARTS.viewer(kind, "log");
+
+  await part(frame, id);
+  return frame.evaluate(
+    ({ id, level, levels, expected, timeout }) =>
+      new Promise<{ ms: number; mounted: number }>((resolve, reject) => {
+        const root = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+        const choices = levels.map(
+          (each) => root?.querySelector<HTMLElement>(`[data-testid="${id}-level-${each}"]`) ?? null,
+        );
+        const choice = choices[levels.indexOf(level)];
+        const count = root?.querySelector<HTMLElement>(`[data-testid="${id}-count"]`);
+
+        if (!root || !count || !choice || choices.some((each) => each === null)) {
+          reject(new Error(`The log ${id} has no choice of the level ${level}, or no count of its lines, to measure`));
+          return;
+        }
+        const seen = () => ({
+          chosen: levels.filter((_, at) => choices[at]?.getAttribute("aria-pressed") === "true"),
+          shown: Number(count.getAttribute("data-shown")),
+        });
+        const wanted = levels.filter((each) => expected.levels.includes(each)).join("+");
+        const answered = () => {
+          const now = seen();
+
+          return now.chosen.join("+") === wanted && now.shown === expected.shown;
+        };
+        let over = false;
+        let start = 0;
+        const deadline = setTimeout(() => {
+          const last = seen();
+
+          over = true;
+          reject(
+            new Error(
+              `The choice of the level ${level} did not show the levels ${wanted || "none"} with ${expected.shown} ` +
+                `lines in ${timeout / 1000} s: the viewer last showed the levels ${last.chosen.join("+") || "none"} ` +
+                `and ${last.shown} lines`,
+            ),
+          );
+        }, timeout);
+        const look = () => {
+          if (over) return;
+          if (!answered()) {
+            requestAnimationFrame(look);
+            return;
+          }
+          requestAnimationFrame(() => {
+            const ms = performance.now() - start;
+
+            clearTimeout(deadline);
+            resolve({ ms, mounted: root.querySelectorAll("[data-text-line]").length });
+          });
+        };
+
+        start = performance.now();
+        choice.click();
+        requestAnimationFrame(look);
+      }),
+    { id, level, levels: [...LOG_LEVELS], expected, timeout: MEASURE_TIMEOUT },
+  );
+}
+
+/**
+ * Scrolls the list of the lines of a log to a position, in pixels from its
+ * top, and times each frame inside the page until the rows mounted are the
+ * ones of that position: the list has moved, at both of its ends, and every
+ * row the room shows there is mounted, by the numbers of the lines expected.
+ * The frame after that one is timed as well, which draws them; the longest
+ * of the frames is the measure of the gesture. The rows the list keeps ready
+ * around its room come with the move, whatever their number. A gesture that
+ * leaves an end of the rows mounted where it was is not one the measure takes,
+ * unless that end is at an edge of the list, its first line or its last of so
+ * many, and stays there: a list that keeps many rows ready has an end at the
+ * edge long before a gesture reaches it. After ten seconds it is said which
+ * rows were mounted last.
+ */
+export async function measureLogScroll(
+  frame: Frame,
+  kind: Operation,
+  top: number,
+  shows: { first: number; last: number },
+  lines: number,
+): Promise<LogGesture> {
+  const id = PARTS.viewer(kind, "log", "text");
+
+  await part(frame, id);
+  return frame.evaluate(
+    ({ id, top, shows, lines, timeout }) =>
+      new Promise<{ frames: number[]; mounted: number }>((resolve, reject) => {
+        const root = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+        const scrolled = root?.querySelector<HTMLElement>(".VirtualList .list");
+
+        if (!root || !scrolled) {
+          reject(new Error(`The list ${id} has nothing to scroll`));
+          return;
+        }
+        const mounted = () =>
+          [...root.querySelectorAll<HTMLElement>("[data-text-line]")].map((row) =>
+            Number(row.getAttribute("data-text-line")),
+          );
+        const ends = (rows: number[]) => ({ first: Math.min(...rows), last: Math.max(...rows) });
+        const before = ends(mounted());
+        // An end has moved when it is not where it was, or when it is at the edge of the list and was there.
+        const moved = (now: number, was: number, edge: number) => now !== was || (now === edge && was === edge);
+        const arrived = () => {
+          const rows = mounted();
+          const now = ends(rows);
+
+          if (rows.length === 0 || !moved(now.first, before.first, 1) || !moved(now.last, before.last, lines)) {
+            return false;
+          }
+          const has = new Set(rows);
+
+          for (let line = shows.first; line <= shows.last; line += 1) if (!has.has(line)) return false;
+          return true;
+        };
+        const frames: number[] = [];
+        let last = 0;
+        let over = false;
+        const deadline = setTimeout(() => {
+          const now = ends(mounted());
+
+          over = true;
+          reject(
+            new Error(
+              `The list did not mount the rows of the lines ${shows.first} to ${shows.last} in ${timeout / 1000} s ` +
+                `after the scroll to ${top} px: the rows mounted were ${now.first} to ${now.last}, ` +
+                `${before.first} to ${before.last} before, in ${frames.length} frames`,
+            ),
+          );
+        }, timeout);
+        const look = () => {
+          const now = performance.now();
+
+          if (over) return;
+          frames.push(now - last);
+          last = now;
+          if (!arrived()) {
+            requestAnimationFrame(look);
+            return;
+          }
+          requestAnimationFrame(() => {
+            frames.push(performance.now() - last);
+            clearTimeout(deadline);
+            resolve({ frames, mounted: mounted().length });
+          });
+        };
+
+        last = performance.now();
+        scrolled.scrollTop = top;
+        requestAnimationFrame(look);
+      }),
+    { id, top, shows, lines, timeout: MEASURE_TIMEOUT },
+  );
 }
 
 /**

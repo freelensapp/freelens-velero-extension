@@ -120,6 +120,30 @@ const LINE_BOUND = 10_000;
 // load while it runs is beside these, and is taken when a load lasts long enough to be pictured.
 const PICTURED = ["first", "confirmation", "log", "results", "resources", "volumes"];
 const LOADING = "loading";
+// The measures of the log of 200,000 lines: an answer of the search or of the filter within this many milliseconds,
+// and the longest frame of a scroll gesture within this many, both at the 95th percentile of twenty after five
+// that warm the viewer; and the idle frame of the window at the median of sixty, over which no frame can be timed.
+const ANSWER_BUDGET = 250;
+const FRAME_BUDGET = 50;
+const IDLE_FRAME = 25;
+const IDLE_FRAMES = 60;
+const MEASURED = 20;
+// The scroll: a notch is three lines; the gesture that warms the list goes to one line; the far gestures go to
+// these lines, the first three each followed by two notches and two pages, forward, backward and forward again.
+const NOTCH = 3;
+const WARM_SCROLL = 100_000;
+const FAR = [50_000, 150_000, 199_000, 25_000, 175_000, 75_000, 125_000, 2];
+// The choices of the levels of the log, each one click from the one before, from none chosen: two that warm the
+// filter, the clicks that choose none again, ten that are measured, each a combination never chosen before in the
+// view, and the clicks that choose none again at the end.
+const TOGGLES: [use: string, levels: artifacts.LogLevel[]][] = [
+  ["warm", ["warning", "other"]],
+  ["none", ["warning", "other"]],
+  ["measured", ["debug", "error", "other", "debug", "warning", "info", "error", "other", "debug", "error"]],
+  ["none", ["info", "warning", "debug", "error"]],
+];
+// The levels the case of the log chose before the measures, each alone.
+const CHOSEN_BEFORE: artifacts.LogLevel[][] = [["info"], ["error"]];
 
 interface OperationRead {
   spec?: { storageLocation?: string; backupName?: string };
@@ -130,6 +154,16 @@ interface OperationRead {
     progress?: { totalItems?: number; itemsBackedUp?: number; itemsRestored?: number };
   };
 }
+
+// The percentile of the measures, as the suite of the long lists and the measure of the unit tests take it: of
+// twenty times, the 95th leaves the slowest out, and no other.
+function percentile(values: number[], fraction: number): number {
+  const sorted = [...values].sort((one, other) => one - other);
+
+  return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * fraction) - 1)];
+}
+
+const tenths = (ms: number) => Math.round(ms * 10) / 10;
 
 describe("the log, the results, the resources and the volumes of an operation", () => {
   let started: velero.StartedApplication | undefined;
@@ -3010,8 +3044,270 @@ describe("the log, the results, the resources and the volumes of an operation", 
     TIMEOUT,
   );
 
-  it.todo(
-    "answers a search and a filter of the log of 200,000 lines within 250 milliseconds, and draws each frame of a scroll within 50",
+  it(
+    "answers ten searches and ten filters of the log of 200,000 lines within 250 milliseconds at the 95th percentile, after five interactions that warm the viewer, and draws the longest frame of each of twenty scroll gestures within 50 at the same percentile, with a hundred rows mounted at most, once sixty idle frames of the window say that a frame can be timed",
+    async () => {
+      const began = Date.now();
+      const synced = facts.synced.log;
+      const { file } = savedInto("the-log-of-the-synced-backup");
+      // The dataset is the file the case of the save wrote, read again and counted: no save is repeated. What is
+      // expected of a search is what the runner counted of the fixtures, and the suite counts it in the file as
+      // well, before anything is timed: no count comes from what the view showed.
+      const bytes = await readFile(file);
+      const digest = createHash("sha256").update(bytes).digest("hex");
+      const lines = artifacts.linesOf(bytes.toString("utf8"));
+      // The lines whose rows take two rows: the ones a row cuts.
+      const tall = lines.flatMap((line, index) => (line.length > LINE_BOUND ? [index + 1] : []));
+      const of = (use: string) => synced.searches.filter((search) => search.use === use);
+      const texts = { warm: of("warm"), measured: of("measured") };
+      // The texts the case of the log searched before this one, whatever their capitals.
+      const searchedBefore = of("content").map((search) => search.text.toLowerCase());
+      const inTheFile = new Map(
+        [...texts.warm, ...texts.measured].map((search) => [
+          search.text,
+          artifacts.matchingLines(lines, search.text).length,
+        ]),
+      );
+      const disagree = [...texts.warm, ...texts.measured].filter(
+        (search) => inTheFile.get(search.text) !== search.matches,
+      );
+
+      if (disagree.length > 0) {
+        throw new Error(
+          "The file does not carry the texts as the fixtures counted them: " +
+            disagree
+              .map((search) => `"${search.text}" in ${inTheFile.get(search.text)} lines for ${search.matches}`)
+              .join(", "),
+        );
+      }
+      // The choices of the levels, in the groups of TOGGLES, each one click from the one before: the levels each
+      // leaves chosen, and how many lines it leaves, which is the sum of the counts of those levels while one is
+      // chosen at least, and every line while none is: no level chosen hides no line.
+      const key = (levels: readonly artifacts.LogLevel[]) => levels.join("+") || "none";
+      let chosen: artifacts.LogLevel[] = [];
+      const [warmChoices, noneAgain, measuredChoices, noneAtLast] = TOGGLES.map(([, levels]) =>
+        levels.map((level) => {
+          chosen = chosen.includes(level) ? chosen.filter((each) => each !== level) : [...chosen, level];
+          const sorted = artifacts.LOG_LEVELS.filter((each) => chosen.includes(each));
+
+          return {
+            level,
+            levels: sorted,
+            shown: sorted.length ? sorted.reduce((sum, each) => sum + synced.levels[each], 0) : synced.lines,
+          };
+        }),
+      );
+      const first = await freshLog(SYNCED);
+      const room = await artifacts.logRoom(frame, "backup");
+      // The height of a row of one line, read once from the page: LINE_HEIGHT of the helpers mirrors LINE of
+      // the product, and a line height the product changed fails here, by its name, before a gesture misses
+      // its rows.
+      const oneLine = first.mounted.find((line) => !tall.includes(line));
+
+      expect(oneLine).toBeDefined();
+      expect(await artifacts.logRowHeight(frame, "backup", oneLine ?? 1)).toBe(artifacts.LINE_HEIGHT);
+      // A page of the scroll: the lines the room shows, less one, as the keys page; a notch, three lines. The
+      // gestures go to fixed lines: the first three far ones are each followed by two notches and two pages,
+      // forward, backward and forward again.
+      const page = Math.floor(room / artifacts.LINE_HEIGHT) - 1;
+      const places: { kind: string; line: number }[] = [];
+      let at = 1;
+      const go = (kind: string, line: number) => {
+        places.push({ kind, line });
+        at = line;
+      };
+
+      for (const [far, by] of [
+        [FAR[0], 1],
+        [FAR[1], -1],
+        [FAR[2], 1],
+      ]) {
+        go("far", far);
+        go("notch", at + by * NOTCH);
+        go("notch", at + by * NOTCH);
+        go("page", at + by * page);
+        go("page", at + by * page);
+      }
+      for (const far of FAR.slice(3)) go("far", far);
+      // What is measured, as it is taken: the time of each answer and the frames of each gesture, with the rows
+      // the list had mounted when each ended, and the most of them at once.
+      const warmAnswers: { interaction: string; ms: number; mounted: number }[] = [];
+      const answers: typeof warmAnswers = [];
+      const warmGestures: { interaction: string; longest: number; frames: number[]; mounted: number }[] = [];
+      const gestures: typeof warmGestures = [];
+      let baseline: number[] = [];
+      let mounted = first.mounted.length;
+      let stopped: unknown;
+      const search = async (text: artifacts.FixtureSearch, into: typeof answers) => {
+        const answer = await artifacts.measureLogSearch(frame, "backup", text.text, {
+          matches: text.matches,
+          shown: synced.lines,
+        });
+
+        into.push({ interaction: `search ${text.text}`, ms: answer.ms, mounted: answer.mounted });
+        mounted = Math.max(mounted, answer.mounted);
+      };
+      const choose = async (choice: (typeof warmChoices)[number], into?: typeof answers) => {
+        const answer = await artifacts.measureLogFilter(frame, "backup", choice.level, {
+          levels: choice.levels,
+          shown: choice.shown,
+        });
+
+        into?.push({ interaction: `levels ${key(choice.levels)}`, ms: answer.ms, mounted: answer.mounted });
+        mounted = Math.max(mounted, answer.mounted);
+      };
+      // The search is cleared between the series, which is not measured: the rows mounted after it count.
+      const clear = async () => {
+        mounted = Math.max(mounted, (await artifacts.searchLog(frame, "backup", "")).mounted.length);
+      };
+      const scroll = async (place: { kind: string; line: number }, into: typeof gestures) => {
+        const gesture = await artifacts.measureLogScroll(
+          frame,
+          "backup",
+          artifacts.logRowTop(place.line, tall),
+          { first: place.line, last: artifacts.logRoomEnd(place.line, tall, room, lines.length) },
+          lines.length,
+        );
+
+        into.push({
+          interaction: `${place.kind} to ${place.line}`,
+          longest: Math.max(...gesture.frames),
+          frames: gesture.frames,
+          mounted: gesture.mounted,
+        });
+        mounted = Math.max(mounted, gesture.mounted);
+      };
+
+      try {
+        // The window first: sixty idle frames. One that draws them slower than a frame can be timed by says so,
+        // and nothing is measured on it.
+        baseline = await artifacts.frameBaseline(frame, "backup", IDLE_FRAMES);
+        const idle = percentile(baseline, 0.5);
+
+        if (idle > IDLE_FRAME) {
+          throw new Error(
+            `The window draws an idle frame in ${tenths(idle)} ms at the median of ${IDLE_FRAMES}: it is not ` +
+              "drawing fast enough to time a frame by, and the measures are not taken",
+          );
+        }
+        // Five interactions that warm the viewer: two searches, two choices of levels and one scroll. The search
+        // and the levels are cleared again after them, which is not measured.
+        for (const text of texts.warm) await search(text, warmAnswers);
+        await clear();
+        for (const choice of warmChoices) await choose(choice, warmAnswers);
+        for (const choice of noneAgain) await choose(choice);
+        await scroll({ kind: "far", line: WARM_SCROLL }, warmGestures);
+        // Twenty answers: ten searches, each of a text never searched in the view, then ten choices of levels,
+        // each a combination never chosen in it.
+        for (const text of texts.measured) await search(text, answers);
+        await clear();
+        for (const choice of measuredChoices) await choose(choice, answers);
+        for (const choice of noneAtLast) await choose(choice);
+        // Twenty gestures of the scroll: eight far, six of a notch and six of a page, to fixed lines. They begin
+        // at the first line, where the list began: the searches brought their matches into the room, and the
+        // choices of the levels kept the place they found the list at, which is no place a gesture is timed from.
+        mounted = Math.max(mounted, (await artifacts.scrollLogTo(frame, "backup", 1)).mounted.length);
+        for (const place of places) await scroll(place, gestures);
+      } catch (error) {
+        stopped = error;
+      }
+      const summary = (values: number[]) => ({
+        p95: tenths(percentile(values, 0.95)),
+        median: tenths(percentile(values, 0.5)),
+        slowest: tenths(Math.max(...values)),
+      });
+      const rounded = (answer: (typeof answers)[number]) => ({ ...answer, ms: tenths(answer.ms) });
+      const roundedFrames = (gesture: (typeof gestures)[number]) => ({
+        ...gesture,
+        longest: tenths(gesture.longest),
+        frames: gesture.frames.map(tenths),
+      });
+      const measured = {
+        lines: lines.length,
+        bytes: bytes.length,
+        budgets: { answer: ANSWER_BUDGET, frame: FRAME_BUDGET, rows: ROWS_BOUND, idleFrame: IDLE_FRAME },
+        baseline: { ...summary(baseline), frames: baseline.map(tenths) },
+        rows: { mounted },
+        scroll: { room, page, notch: NOTCH },
+        // How long the case took, from its start to its report, in milliseconds: the counts in the file included.
+        took: Date.now() - began,
+        answers: {
+          ...summary(answers.map((answer) => answer.ms)),
+          searches: summary(answers.filter((answer) => answer.interaction.startsWith("search ")).map((a) => a.ms)),
+          filters: summary(answers.filter((answer) => answer.interaction.startsWith("levels ")).map((a) => a.ms)),
+          warm: warmAnswers.map(rounded),
+          times: answers.map(rounded),
+        },
+        frames: {
+          ...summary(gestures.map((gesture) => gesture.longest)),
+          warm: warmGestures.map(roundedFrames),
+          gestures: gestures.map(roundedFrames),
+        },
+        ...(stopped === undefined ? {} : { stopped: String(stopped) }),
+      };
+
+      // Written before anything is asserted, so that a run that fails leaves its numbers.
+      console.log(`VIEW-10 ${JSON.stringify(measured)}`);
+      await report("view-10-log-performance", measured);
+      if (stopped !== undefined) throw stopped;
+      // The dataset: the log of the fixtures, as the case of the save wrote it and as the viewer counts it, with
+      // its two lines that are cut.
+      expect([lines.length, digest, first.lines, first.shown]).toEqual([
+        synced.lines,
+        synced.sha256,
+        synced.lines,
+        synced.lines,
+      ]);
+      expect(tall).toEqual(
+        [synced.long.twentyThousand, synced.long.tenThousandAndOne].sort((one, other) => one - other),
+      );
+      // What the measures broke, each by name, so that one run says all of it: twenty answers of twenty different
+      // interactions, none of a text or of a choice the view was given before; twenty gestures to twenty lines; a
+      // time for each; the rows mounted at once; the two budgets.
+      const lower = (text: string) => text.toLowerCase();
+      const seenTexts = [...searchedBefore, ...texts.warm.map((search) => lower(search.text))];
+      const seenLevels = [
+        ...CHOSEN_BEFORE.map(key),
+        ...[...warmChoices, ...noneAgain].map((choice) => key(choice.levels)),
+      ];
+      const repeatedTexts = texts.measured.filter(
+        (search, index) =>
+          seenTexts.includes(lower(search.text)) ||
+          texts.measured.slice(0, index).some((other) => lower(other.text) === lower(search.text)),
+      );
+      const repeatedLevels = measuredChoices.filter(
+        (choice, index) =>
+          seenLevels.includes(key(choice.levels)) ||
+          measuredChoices.slice(0, index).some((other) => key(other.levels) === key(choice.levels)),
+      );
+      const broken: string[] = [];
+
+      if (answers.length !== MEASURED) broken.push(`${answers.length} answers were measured, not ${MEASURED}`);
+      for (const search of repeatedTexts) broken.push(`the text "${search.text}" was searched before in the view`);
+      for (const choice of repeatedLevels)
+        broken.push(`the levels ${key(choice.levels)} were chosen before in the view`);
+      if (gestures.length !== MEASURED) broken.push(`${gestures.length} gestures were measured, not ${MEASURED}`);
+      if (new Set(places.map((place) => place.line)).size !== places.length) broken.push("two gestures go to one line");
+      if (
+        [...warmAnswers, ...answers].some((answer) => !(answer.ms > 0)) ||
+        [...warmGestures, ...gestures].some((gesture) => gesture.frames.some((ms) => !(ms > 0)))
+      ) {
+        broken.push("an interaction took no time");
+      }
+      if (mounted > ROWS_BOUND) broken.push(`${mounted} rows were mounted at once, over the bound of ${ROWS_BOUND}`);
+      if (!(measured.answers.p95 < ANSWER_BUDGET)) {
+        broken.push(
+          `the answers take ${measured.answers.p95} ms at the 95th percentile, over the budget of ${ANSWER_BUDGET}`,
+        );
+      }
+      if (!(measured.frames.p95 < FRAME_BUDGET)) {
+        broken.push(
+          `the longest frame of a gesture takes ${measured.frames.p95} ms at the 95th percentile, over the budget of ${FRAME_BUDGET}`,
+        );
+      }
+      expect(broken).toEqual([]);
+    },
+    TIMEOUT,
   );
 
   it(
