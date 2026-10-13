@@ -645,16 +645,21 @@ export async function loadSeen(frame: Frame, kind: Operation, tab: ArtifactTab):
 /**
  * The second gesture of a load: the panel is watched, then the command of the
  * confirmation creates the request. With `cancel`, the load is cancelled as
- * soon as it begins, or once its request is created.
+ * soon as it begins, or once its request is created. With `keyboard`, the
+ * command is given with Enter on it, and not with a click: the journeys with
+ * the keyboard alone give it so.
  */
 export async function confirm(
   frame: Frame,
   kind: Operation,
   tab: ArtifactTab,
-  options: { cancel?: CancelAt } = {},
+  options: { cancel?: CancelAt; keyboard?: boolean } = {},
 ): Promise<void> {
-  await watchLoad(frame, kind, tab, options);
-  await (await part(frame, PARTS.panel(kind, tab, "confirmCreate"))).click();
+  await watchLoad(frame, kind, tab, { cancel: options.cancel });
+  const command = await part(frame, PARTS.panel(kind, tab, "confirmCreate"));
+
+  if (options.keyboard) await command.press("Enter");
+  else await command.click();
 }
 
 /**
@@ -752,16 +757,17 @@ export function requestOf(moments: readonly LoadMoment[]): string {
  * given to `named` before this answers or fails, whatever became of the load: a request can be in the
  * cluster after a load that ended without its text, or that did not end, and who asked for it has to know
  * it by its name. With `cancel`, the load is cancelled as soon as it begins, or once its request is
- * created. What is done right after the gesture, to look at a step of the load, is given as `loading`.
+ * created. With `keyboard`, the command of the confirmation is given with Enter. What is done right after
+ * the gesture, to look at a step of the load, is given as `loading`.
  */
 export async function runLoad(
   frame: Frame,
   kind: Operation,
   tab: ArtifactTab,
   named: (request: string) => void,
-  options: { cancel?: CancelAt; loading?: () => Promise<void> } = {},
+  options: { cancel?: CancelAt; keyboard?: boolean; loading?: () => Promise<void> } = {},
 ): Promise<{ ended: "loaded" | "failed"; moments: LoadMoment[]; request: string }> {
-  await confirm(frame, kind, tab, { cancel: options.cancel ?? false });
+  await confirm(frame, kind, tab, { cancel: options.cancel ?? false, keyboard: options.keyboard === true });
   let ended: "loaded" | "failed" | undefined;
   let moments: LoadMoment[] = [];
   let failed: unknown;
@@ -1951,21 +1957,25 @@ export async function volumeDetails(
 
 /** The height a list of a viewer has at least, in pixels: ten lines of a text. */
 export const LIST_LEAST = 200;
+/** How many rows of a viewer the check of the layout looks at, from the first: as many as the check of a page does. */
+const ROWS_LOOKED = 20;
 
 /**
  * What is wrong with the layout of a tab of the view that is shown, which the check of the layout of a page
- * does not look at: the tabs of the strip, the parts of the panel and its commands, the parts of its
- * viewer, the bar of the log with its search and its levels, the filter of the resources with its choices
- * by action, and the head of its table. Of each group, the parts that lie over one another; of the panel
- * and of its viewer, whether it is wider than its room. And the room of the view, which is what scrolls a
- * tab: whether it is shorter than a list needs, and whether a list that is scrolled inside itself, the
- * lines of a text and the rows of a resource list, is taller than the room it is read in, where no scroll
- * of the view brings it whole into sight. An empty answer is a tab with none of these. A strip or a panel
- * that is not in the page is answered as a problem, by its name.
+ * does not look at: the tabs of the strip, and the strip inside its room; the parts of the panel and its
+ * commands, the parts of its viewer, the bar of the log with its search and its levels, the filter of the
+ * resources with its choices by action, and the head of its table; the rows of the results, of the
+ * resources and of the volumes, each cell after the one before it and no part of a message over another.
+ * Of each group, the parts that lie over one another; of the panel and of its viewer, whether it is wider
+ * than its room. And the room of the view, which is what scrolls a tab: whether it is shorter than a list
+ * needs, and whether a list that is scrolled inside itself, the lines of a text and the rows of a resource
+ * list, is taller than the room it is read in, where no scroll of the view brings it whole into sight. An
+ * empty answer is a tab with none of these. A strip or a panel that is not in the page is answered as a
+ * problem, by its name.
  */
 export async function tabLayoutProblems(frame: Frame, kind: Operation, tab: WorkspaceTab): Promise<string[]> {
   return frame.evaluate(
-    ({ strip, panel, workspace, least }) => {
+    ({ strip, panel, workspace, least, rowsLooked }) => {
       const problems: string[] = [];
       const shown = (element: Element) => {
         const box = element.getBoundingClientRect();
@@ -1993,10 +2003,31 @@ export async function tabLayoutProblems(frame: Frame, kind: Operation, tab: Work
           }
         }
       };
-      const tabs = document.querySelector(`[data-testid="${strip}"]`);
+      // The cells of a row, each beginning where the one before it ended, or after it: a row of a table of
+      // the host lays its cells side by side, and one that is wider than its room pushes the next under it
+      // or over it.
+      const cellsInOrder = (group: string, rows: Element[], cells: string) => {
+        for (const row of rows.slice(0, rowsLooked)) {
+          const drawn = [...row.querySelectorAll(cells)].filter(shown);
+
+          for (let index = 1; index < drawn.length; index += 1) {
+            if (drawn[index].getBoundingClientRect().left < drawn[index - 1].getBoundingClientRect().right - 1) {
+              problems.push(`${group}: a cell of ${name(row)} lies over the one before it`);
+              break;
+            }
+          }
+        }
+      };
+      const tabs = document.querySelector<HTMLElement>(`[data-testid="${strip}"]`);
 
       if (!tabs) return [`The strip ${strip} is not in the page`];
       overlaps("The tabs", [...tabs.children]);
+      // What the rule finds: a strip wider than its room, which overflows sideways, cut or pushing the view.
+      // What it does not: the strip of the host wraps its tabs to a second line when they do not fit, which
+      // leaves it no wider than its room, and is left to human judgment, with the pictures of the pre-review.
+      if (tabs.scrollWidth > tabs.clientWidth + 1) {
+        problems.push(`The strip ${strip} is wider than its room: ${tabs.scrollWidth} in ${tabs.clientWidth}`);
+      }
       // The summary has no panel of an artifact: its layout is the one the check of the page looks at.
       if (!panel) return problems;
       const root = document.querySelector<HTMLElement>(`[data-testid="${panel}"]`);
@@ -2051,6 +2082,45 @@ export async function tabLayoutProblems(frame: Frame, kind: Operation, tab: Work
       overlaps("The filter of the resources", beside(within("actions")));
       overlaps("The choices by action", [...(within("actions")?.querySelectorAll("button") ?? [])]);
       overlaps("The head of the resources", [...(within("table")?.querySelectorAll(".TableHead .TableCell") ?? [])]);
+      // The rows of the resources that are mounted: a resource with its count, an item with its cells.
+      cellsInOrder(
+        "The rows of the resources",
+        [
+          ...(within("table")?.querySelectorAll(
+            `[data-testid="${panel}-viewer-kind"], [data-testid="${panel}-viewer-item"]`,
+          ) ?? []),
+        ],
+        ".TableCell",
+      );
+      // The rows of the volumes under their head, and the fields of a detail that is open.
+      const volumes = viewer.querySelector(`[data-testid="${panel}-viewer-table"]`);
+
+      overlaps("The head of the volumes", [...(volumes?.querySelectorAll("[role=columnheader]") ?? [])]);
+      cellsInOrder(
+        "The rows of the volumes",
+        [...(volumes?.querySelectorAll("[data-volume-row]") ?? [])],
+        "[role=cell]",
+      );
+      for (const details of [...(volumes?.querySelectorAll("[data-volume-details]") ?? [])].slice(0, rowsLooked)) {
+        for (const detail of details.querySelectorAll("[data-detail]")) {
+          overlaps(`The fields of the detail ${detail.getAttribute("data-detail")}`, [
+            ...detail.querySelectorAll("[data-field]"),
+          ]);
+        }
+      }
+      // The rows of the results: the messages of each place, none wider than its room, and in each message
+      // the name of a part beside its value, and no part over another.
+      const messages = [...viewer.querySelectorAll("[data-place] li")].slice(0, rowsLooked);
+
+      for (const message of messages) {
+        if (!shown(message)) continue;
+        if (message.scrollWidth > message.clientWidth + 1) {
+          problems.push(
+            `A message of the results is wider than its room: ${message.scrollWidth} in ${message.clientWidth}`,
+          );
+        }
+        overlaps("The parts of a message of the results", [...(message.querySelector("dl")?.children ?? [])]);
+      }
 
       return problems;
     },
@@ -2059,6 +2129,7 @@ export async function tabLayoutProblems(frame: Frame, kind: Operation, tab: Work
       panel: tab === "summary" ? "" : PARTS.panel(kind, tab),
       workspace: PARTS.workspace(kind),
       least: LIST_LEAST,
+      rowsLooked: ROWS_LOOKED,
     },
   );
 }
@@ -2234,6 +2305,14 @@ export interface TabFixtureFacts {
     volumeInfo: FixtureFile;
     status: { phase?: string };
   };
+  /** The real backup and the real restore of the demo: what a plain count found in the files the server wrote of them. */
+  real: {
+    backup: { name: string; log: { lines: number; levels: Record<LogLevel, number> } };
+    restore: {
+      name: string;
+      resourceList: { resources: number; items: number; actions: Record<string, number> };
+    };
+  };
   refused: { backup: { name: string }; restore: { name: string }; orphan: { name: string } };
 }
 
@@ -2337,6 +2416,8 @@ export const WORDS = {
   cancelling: "Cancelling: the load is stopped at the step it is at, and the tab says how it ended.",
   /** How a load that was cancelled before anything was created is said to have ended. */
   cancelledBefore: "The request was cancelled before anything was created.",
+  /** What the search field of the log is called, for who does not see it. */
+  searchLabel: "Search the log",
   /**
    * What is said over a text that was loaded, around the time it was loaded
    * at, which is written as the language of the machine writes a time.

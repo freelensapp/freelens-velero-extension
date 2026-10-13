@@ -1585,14 +1585,20 @@ export async function layoutProblems(frame: Frame, of: ListOf = BACKUPS): Promis
  * the list or its first row changed their place or their size. A page that
  * stands still changes nothing; one that was read meanwhile may change once.
  * With it, how tall the target bar is and whether the page is scrolled.
+ *
+ * Parts of a view are watched beside these, each by a selector: the bar of a
+ * viewer, the list it scrolls, the strip of the tabs. A watched part that is
+ * not in the page is seen as nothing, and its height answered as 0. The
+ * heights of the watched parts come in the order they were asked.
  */
 export async function movesOf(
   frame: Frame,
   of: ListOf = BACKUPS,
   frames = 60,
-): Promise<{ changes: number; bar: number; scrolled: boolean }> {
+  watched: string[] = [],
+): Promise<{ changes: number; bar: number; scrolled: boolean; heights: number[] }> {
   return frame.evaluate(
-    async ({ id, kind, frames }) => {
+    async ({ id, kind, frames, watched }) => {
       const page = document.querySelector<HTMLElement>(`[data-testid=velero-${id}-page]`);
       const bar = document.querySelector<HTMLElement>("[data-testid=velero-target]");
 
@@ -1602,6 +1608,7 @@ export async function movesOf(
 
         return found ? [found.x, found.y, found.width, found.height].map((value) => Math.round(value * 10) / 10) : [];
       };
+      const parts = () => watched.map((selector) => document.querySelector(selector));
       const seen = () =>
         JSON.stringify([
           page.offsetWidth,
@@ -1611,6 +1618,8 @@ export async function movesOf(
           box(bar),
           box(document.querySelector(`[data-testid=velero-${id}] .TableHead`)),
           box(document.querySelector(`[data-${kind}-row]`)),
+          // What holds a watched part may scroll: where it is scrolled to is seen with its box.
+          ...parts().map((part) => [box(part), part?.parentElement?.scrollTop ?? 0]),
         ]);
       let before = seen();
       let changes = 0;
@@ -1626,9 +1635,10 @@ export async function movesOf(
         changes,
         bar: Math.round(bar.getBoundingClientRect().height),
         scrolled: page.scrollHeight > page.clientHeight,
+        heights: parts().map((part) => Math.round(part?.getBoundingClientRect().height ?? 0)),
       };
     },
-    { ...of, frames },
+    { ...of, frames, watched },
   );
 }
 
