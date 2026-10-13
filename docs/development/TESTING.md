@@ -188,8 +188,8 @@ The build is the one of the
 | `velero-e2e-scale` | A thousand backups and a thousand restores: the rows that are mounted, the time of the interactions, the state of each list when an object is opened and closed |
 | `velero-e2e-gate` | The gate of the writes: off when the session starts, on every page of the group; on through the dialog of the host, which names the cluster, its context and the namespace, and not before the dialog is answered; off when another installation is selected, when the dialog is left, and when the application is started again; each frame of a cluster with a gate of its own; nothing of it in the store, and nothing written to the cluster |
 | `velero-e2e-server` | The band of the server in the Overview: nothing asked of the cluster when the page opens, nor for a command that is not confirmed; the object shown before it is created, reached with the keyboard alone and left with Escape; the version and the plugins of the real server of the environment, against what the server wrote into the request, each plugin once; kept through a read and a visit to another page, and dropped with the installation; the answer and the confirmation in both themes, at every size; a request no server answers, said not answered after ten seconds and left as it was created; the refusal of the cluster to the reader of a part, with writes left on; what the API server counted of the requests, by verb and by code; the request the server processed, removed by the server five minutes after |
-| `velero-e2e-artifacts` | The tabs in the workspace of a backup and of a restore, on the real backup and the real restore of the installation: the five tabs in their order, as a list of tabs, with the tab in the address; nothing of a DownloadRequest created or read when a tab opens, by a click or by its address, nor for a confirmation that is left; the first state with writes off and on, and the confirmation with the object, reached and left with the keyboard alone; the four artifacts of each, loaded through a request of their own, which the cluster holds by the name the tab gave it, with the steps of a load, a load again as another request and a load cancelled as soon as its command is offered; the log in its lines, its levels, its search, its lines wrapped, a line copied and a hundred rows mounted at most, against the file the suite saved of it; the results against the counters of the status; the resource list, with the actions of a restore and the filter; the volume information of no volume; the log saved into a file through the dialog of the host, and nothing written when the dialog is left; the keys of the strip; the section in the details of the host; the tabs in both themes, at 900 by 650 and at twice the zoom, checked for what lies over something else, is wider than its room or is cut; what the API server counted of the requests, and each removed by the server before the suite ends. Nine cases are written as waiting, for the next pull request of the task: seven on the fixtures of the tabs, and two, of another installation and of the reader of a part, that need no fixture the environment does not have |
-| `pre-review` | Every view in both themes, at 1440x900, at 900x650 and at twice the zoom, checked for what lies over something else, does not fit, or is cut by what holds the page; a page that stands still at the widths where its target bar goes to a second line; the journeys with the keyboard alone, which go through the strip of the tabs of a workspace. It does not open the tabs yet: that is the last pull request of their task |
+| `velero-e2e-artifacts` | The tabs in the workspace of a backup and of a restore, on the real backup and the real restore of the installation and on the fixtures of the tabs. On the real operations: the five tabs in their order, as a list of tabs, with the tab in the address; nothing of a DownloadRequest created or read when a tab opens, by a click or by its address, nor for a confirmation that is left; the first state with writes off and on, and the confirmation with the object, reached and left with the keyboard alone; the four artifacts of each, loaded through a request of their own, which the cluster holds by the name the tab gave it, with the steps of a load, a load again as another request and a load cancelled as soon as its command is offered; the log in its lines, its levels, its search, its lines wrapped, a line copied and a hundred rows mounted at most, against the file the suite saved of it; the results against the counters of the status; the resource list, with the actions of a restore and the filter; the volume information of no volume; the log saved into a file through the dialog of the host, and nothing written when the dialog is left; the keys of the strip; the section in the details of the host; the tabs in both themes, at 900 by 650 and at twice the zoom, checked for what lies over something else, is wider than its room or is cut; what the API server counted of the requests, and each removed by the server before the suite ends. On the fixtures of the tabs: the log of the backup synced without one, a file the store does not have, said by the phase of a backup that ended, with no command to try again, and its results, resource list and volume information, which are the empty forms, said in the words of each viewer; the logs of the backup and of the restore that failed their validation, nothing written, through a request each; the results, the resources and the volumes of the backup synced with the artifacts made for the tabs, each message in its parts, the resources sorted with their counts and the filter, each volume with its details by the names the release writes; the load of its log cancelled once its request is in the cluster and asked again, with the steps in their order and the pages rising to the last; the log of 200,000 lines saved with the digest the fixtures counted, its levels, its searches, its long lines and the one across two pages, a hundred rows mounted at most; the measures of ten searches, ten filters and twenty scroll gestures on it, within their budgets, once sixty idle frames of the window say that a frame can be timed; another installation, where writes are off and nothing of the tabs is held, and in the installation of the views, with writes on for it, the backup whose storage location is not there, said before any request; the restore asked from a schedule that has no backup, nothing to ask for; and the reader of a part, as a second entry of the catalog, refused the creation. Twenty requests over the suite, each told to the guard by its name, written into once by the server and removed by it before the suite ends, and at the end what a failed case left in the installation of the views, which no server reads, removed with the one helper of the suites that deletes; what each tab is to show the suite reads in `tab-fixtures.json`, beside the reports. 47 cases |
+| `pre-review` | Every view, 35 of them, in both themes, at 1440x900, at 900x650 and at twice the zoom, checked for what lies over something else, does not fit, or is cut by what holds the page, and the eight views of the tabs by the check of a tab as well: a diagnostic tab with writes off, its confirmation, the log of the backup that failed its validation, which the store does not have, the resources of the real restore with their actions, the log of the synced backup loaded, searched and with a level chosen, the same with its lines wrapped, its results, and its volumes with a detail open; a page that stands still at the widths where its target bar goes to a second line, and at the ones where the bar of the log does; the journeys with the keyboard alone: the tabs from the way back, with the arrows, Home and End, Enter and the address, the command, the confirmation and the command that creates, the focus after a load, after a cancelled load and after a failure with no command to ask again, and the search by its label, with its count told to who does not see, against `tab-fixtures.json`, which it reads beside its reports. It tells its guard the requests it asks for, five, or six when its cancel lands after the creation, and waits for the server to remove them before its last case. Its reports are `pre-review-layout.json`, every layout with what the two checks found, and `pre-review-tabs.json`, the views with their requests, the facts of the journeys, the ledger and the items left to human judgment. 33 cases |
 
 The check of the layout, which every suite asks of the pages it shows, looks at
 the page and at what holds it, up to the frame of the cluster: what is wider
@@ -201,7 +201,15 @@ a tab, which the one of a page does not know: no tab of the strip, part or comma
 of the panel, part of a viewer, part of the bar of a log or of the filter of a
 resource list over another, the panel and the viewer no wider than their room, a
 view with the room of a list at least, and a list no taller than the room it is
-read in.
+read in; the strip of the tabs no wider than its room, a rule that finds a strip
+that overflows sideways, cut or pushing the view, and not one the host wrapped to
+a second line, which is no wider than its room and is left to human judgment, as
+the pre-review saw it at twice the zoom, and the one rule of the check this pull
+request adds that was not seen failing, no change being made for it; and the rows
+of the results, of the resources and of the volumes, twenty each, as the check of
+a page looks at the rows of a list: no cell over the one before it, no message
+wider than its room, no part of a detail over another. The pre-review asks the
+check of a tab of the eight views of the tabs, beside the check of the page.
 
 The suites read the application and the cluster, and write to neither, but for
 two, each of which asks the extension for the write it proves. The suite of the
@@ -210,24 +218,41 @@ namespace of the installation, in a namespace of the fixtures and, refused, as t
 reader of a part. It leaves nothing behind. It waits for the server to remove the
 request it processed, which the release does when it looks at it again, five
 minutes after; and it removes the one no server looks at, with the one helper of
-the suites that deletes, which takes the ServerStatusRequests that carry the label
-of the extension in a namespace of the fixtures, and nothing else. The suite of
+the suites that deletes, which takes the requests of one kind, ServerStatusRequests
+or DownloadRequests, that carry the label of the extension in a namespace of the
+fixtures, and nothing else. The suite of
 the tabs asks the extension to create DownloadRequests, of the artifacts of the
-real backup and of the real restore, in the namespace of the installation: nine,
-each after its confirmation, the four of the restore, the four of the backup and
-the log of the backup a second time; it cancels a tenth load, which in the local
-runs ended before it created one. It tells its guard the name the tab gave each
-request, and expects the API server to count as many creations and as many
-removals as the guard knows, the reads of each by its name and what the server
-writes into each, and no write of another kind of Velero. It deletes none, and
-neither does the extension: the server of the installation removes a request once
-the ten minutes it wrote into it have passed, as the
+real backup and of the real restore and of the fixtures of the tabs, in the
+namespace of the installation: twenty, each after its confirmation, the four of
+the restore, the four of the backup and the log of the backup a second time, the
+four of the backup synced without a log, one each for the backup and the restore
+that failed their validation, the three of the synced backup and the two of its
+log, the first of them cancelled once its request is in the cluster; and it
+cancels one load of the real backup as soon as its command is offered, which in
+the local runs ended before it created one. The pre-review asks for five, or six
+when its cancel lands after the creation, and tells them to its guard the same
+way. Each tells its guard the name the tab gave each request, and expects the API
+server to count as many creations and as many removals as the guard knows, the
+reads of each by its name, at least as many, the writes of the server into them,
+one for each request, and no write of another kind of Velero. In the installation
+it deletes none, and neither does the extension: the server of the installation
+removes a request once the ten minutes it wrote into it have passed, as the
 [recon](RECON-T0.1.md#start-of-the-third-milestone-2026-09-30) records, and the
-suite waits for that before it ends, which makes it the longest of the suites:
-about twelve minutes in a run of them all, ten of them that wait. It saves the log
-of the backup into a folder of the profile of its run, which goes with the run,
-through the dialog of the host, which it replaces in the main process of the
-application with one that answers what the case asks. The helper that runs
+suite waits for that before it ends, which makes it the longest of the suites: 769
+to 828 seconds alone in the nine runs of 2026-10-07 with the case of the
+measures, 777.9 in the last of them on the final code of the measures and 796.4 in
+the one on the final head, of which 568 to 624 the wait of its last case for the
+server, which ended 600 to 657 seconds after its last load; in the run of
+the twelve suites of the final runs of the same day, 789.8 seconds of the 1,862.7
+of the run, with a wait of 588 seconds, 617 after its last load, and the
+pre-review 714.5 seconds alone in those runs. After that wait, the suite removes
+with the one helper of the suites that deletes the DownloadRequests of the
+extension a failed case left in the installation of the views, which no server
+reads, and says what it removed: nothing, in a run where every case passed. It
+saves the log of the backup and the one of 200,000 lines into a
+folder of the profile of its run, which goes with the run, through the dialog of
+the host, which it replaces in the main process of the application with one that
+answers what the case asks. The helper that runs
 `kubectl` for the suites refuses every verb but `get`. Each suite compares what
 the API server holds of Velero before and after: the version of every synthetic
 object, the identity of the objects of the real installation, and the absence of
@@ -372,9 +397,35 @@ comes 250 ms after the last key. The budget of 250 ms is for what the list takes
 to answer, the second; the first is in the report beside it, and is what the
 operator waits from the key.
 
+The measures of the tabs, in the suite of the tabs, time a search, a filter and a
+scroll of the log of 200,000 lines the same way, from the event to the frame after
+the one that shows what the fixtures counted. The search of a log has no wait of
+its own: the field of the viewer gives the list its words at each key, so that one
+time is recorded for it, from the key. Their report, `view-10-log-performance`, is
+written beside the reports of the suite before anything is asserted, with the
+budgets, the baseline of sixty idle frames of the window, the rows mounted and
+every time with its interaction, and once more as one line of the output,
+`VIEW-10 <json>`. The case reads the file of the log the case before it saved
+under the profile of the run and `tab-fixtures.json`, counts the texts it searches
+in the file before anything is timed, and reads the height of one mounted row
+against the one the helpers assume, so that a line height the product changed
+fails by its name, which passed in the run of the suite alone on the final head on
+2026-10-07. The budgets are asserted wherever the suite runs, the hosted
+runner included: when the baseline says that the window cannot time a frame, its
+median over 25 ms, the case fails by name and never passes for that reason, and a
+second run of the job is a decision of a person, with both reports kept. The
+numbers of a run go into the evidence of SPEC-0011 with the machine and the run
+they are of, and a hosted number is copied from its run, never assumed: on the
+machine of the runs of 2026-10-07 the case took about 4.6 s, the answers 51.1 ms
+at the 95th percentile of 250, the longest frame of a gesture 15.9 and 15.4 of 50
+in the two runs of the final code, 32 rows mounted of 100, an idle frame of 16.6
+ms at the median.
+
 Their [workflow](../../.github/workflows/views-tests.yaml) runs the suites and
-the pre-review on the hosted runner for every pull request. It uploads the
-directory of their screenshots and reports, `e2e-artifacts/`, and nothing else:
+the pre-review on the hosted runner for every pull request, then removes the
+fixtures of the tabs with the cleanup of the fixtures and verifies the installation
+they leave. It uploads the directory of their screenshots and reports,
+`e2e-artifacts/`, and nothing else:
 the private state of the environment is elsewhere, and a test of the workflow
 fails if a path of it is ever named there.
 
@@ -439,10 +490,10 @@ and ends with the record. What each artifact of the tabs holds, counted outside
 the extension, is in `tab-fixtures.json`: `pnpm demo:views` writes it into the
 private state, whole at mode 0600, where it ends with the record, for who looks at
 the tabs by hand; `pnpm e2e:views` writes it beside the reports of the suites
-instead, for the suites on the fixtures, which are the next pull request of the
-task, to read what a tab is to show: synthetic facts of a disposable cluster, with
-no credential and no URL. A placement that was stopped goes on at the next one,
-which writes the files the store does not hold whole.
+instead, where the suite of the tabs and the pre-review read what a tab is to
+show: synthetic facts of a disposable cluster, with no credential and no URL. A
+placement that was stopped goes on at the next one, which writes the files the
+store does not hold whole.
 
 The wait for the sync reads the installation every two seconds, and counts the
 passes of the sync by the time the location says its last one ended at. It stops,
@@ -477,8 +528,14 @@ any point is taken up by the next from what that one finds. Nothing in the scrip
 removes a key of the store: when files of the tabs are in the store and no backup
 comes of them, or a key is left, the cleanup stops and names them, and the way out
 is `pnpm demo:down`. The hosted job of the views places the fixtures of the tabs
-on every run and takes the environment down after the pre-review, with no cleanup
-of them.
+on every run and, after the pre-review, runs this cleanup and then the
+verification of the installation it leaves, before it uploads the reports and
+takes the environment down: the removal of the namespaces of the views runs on the
+hosted runner for the first time with the pull request that added the step. In
+the final runs of that pull request, on 2026-10-07, after the twelve suites and
+the pre-review, the cleanup took 118 seconds, 42 of them the two deletions the
+server carried out, and the verification 22; the time of the step on the hosted
+runner is read in the CI of that pull request when it runs.
 
 The runner says of a placement what it did, a line each: the files of the tabs
 written by this run, with the way they were sent, or none; the time the wait for
@@ -537,7 +594,14 @@ which about sixty went to the namespaces of the views after a whole placement. O
 the final code, the same evening, `pnpm e2e:views` placed them on an environment
 just brought up in 119 seconds, with a wait for the two backups of no time, since
 a pass of the sync came while the views were placed, and the cleanup after the
-suites took 104 seconds, 26 of them for the fixtures of the tabs.
+suites took 104 seconds, 26 of them for the fixtures of the tabs. In the final
+runs of the third pull request, on 2026-10-07, on an environment brought up in 228
+seconds, `pnpm e2e:views` sent the eleven files in the first way, waited no time
+for the two backups and placed the three refused operations, the build, the pack
+and the placement taking about two minutes and a half before the first suite; the
+cleanup after the twelve suites and the pre-review took 118 seconds, 42 of them
+the two deletions the server carried out, with the seven namespaces of the run
+removed, and the verification after it 22 seconds.
 
 ## Critical Journeys
 
@@ -683,7 +747,15 @@ that copies every line, exceed. The 10 changes made once the measure took the
 filter, the rows and the lines of a text, 8 to the code it times and 2 to the
 choices it makes, each made it fail. On the final code, on 2026-10-06, every
 series stayed within the budget in both forms, with three workers of the runner of
-the tests and with the ones it chooses on a busier machine.
+the tests and with the ones it chooses on a busier machine; the hosted unit job of
+the pull request of the fixtures of the tabs, run 37520156275 of the workflow of
+the unit tests on the image ubuntu-24.04-arm, on 2026-10-06, ran it in both forms
+after the 73 files of the tests, and its slowest series was the parser, 79.4 ms at
+the 95th percentile on the separate modules and 82.6 on the production build, of
+250, as the evidence of SPEC-0011 records whole. On the final head of the third
+pull request, on 2026-10-07, under the load the unit run itself raised, the parser
+took 142.1 ms at the 95th percentile on the separate modules and 124.2 on the
+production build, every series within the budget in both forms.
 
 The [local runner](../../e2e/scripts/local-demo.mts) and
 [image helper](../../e2e/scripts/local-images.mts) provide official-image setup and

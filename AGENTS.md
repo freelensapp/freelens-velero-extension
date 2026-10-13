@@ -415,6 +415,44 @@ Build output goes to `out/`.
 - The main process asks `require("electron")` for the dialog of the host at the
   moment a file is saved, never when its modules are loaded: the proofs of the
   test environment load the main bundle under Node, where there is no host.
+- The panel of a tab names the request of a load from its confirmation on, and
+  the main process reads the target and its storage location before it creates
+  anything: a cancel clicked as soon as the panel names the request lands before
+  the creation, at the step of the target, and creates nothing. To see a cancel
+  after the creation, a suite clicks once the panel is at a step after it: the
+  cancel then lands at the wait for the URL, and the request stays in the cluster
+  until the server removes it.
+- The `Input` of the host takes `keyboard.type` with a delay of 20 milliseconds
+  between the keys and holds every character: the pre-review typed
+  `level=warning` into the search of a log so, and read it whole with its count.
+  For a controlled value it calls `onChange` at each key, and its one delay, of
+  500 milliseconds, sets a mark for the style: a measure that starts at the key
+  has nothing to split. The second fact was read in the source of the host, at
+  v1.10.3, and no run found it.
+- A confirmation that is open, and the search, the level and the wrap of a loaded
+  log, survive a change of theme through the preferences of the host: the
+  pre-review carries them through its six layouts, two themes at three sizes,
+  without asking for them again.
+- The pages and the bytes of a load are read from the digits in the words of the
+  step, which the extension writes from its own template and not in the language
+  of the machine: no attribute carries them.
+- The widths at which the bar of a log goes to a second line depend on what the
+  bar shows: seven between 1440 and 720 pixels with a search and its count in it,
+  five without. A scan of them expects at least one, and pins none.
+- The window of the packaged host at 1440 by 900 gives the list of a log a room of
+  208 pixels, ten lines and a part of one, where the viewer allows up to 1,560: 23
+  rows are mounted while it scrolls and 32 at its first lines, far under the bound
+  of 100. A measure of the frames of a scroll there is of a short list, and its
+  report says the room.
+- The display of the machine of the runs draws at 60 Hz: an idle frame is 16.7
+  milliseconds, and no frame can be timed finer. A budget of 50 milliseconds for a
+  frame is three refreshes; the gestures of the green runs drew within one or two.
+- The end of a scroll gesture is read from the rows mounted, both ends moved and
+  every line of the place mounted, never from the count the host keeps ready
+  around its room, and an end at an edge of the list that stays there has moved.
+  A viewer made to keep two thousand rows ready on each side showed why: the last
+  row kept ready was the last line before and after a notch near the end of the
+  list, and the gesture never ended by the rule before that one.
 
 ## Architecture And UI
 

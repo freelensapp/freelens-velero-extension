@@ -27,9 +27,10 @@ is a from-scratch MIT implementation and it is not a Velero product.
 > turned on, with its first writes: the version of the server and its plugins, in
 > the Overview, and the log, the results, the resource list and the volume
 > information of a backup and of a restore, each loaded when it is asked for, in
-> the tabs of its workspace, proven by their unit and component tests and by a
+> the tabs of its workspace, proven by their unit and component tests, by a
 > suite in a packaged Freelens on the real backup and the real restore of the
-> test environment. The repository is developed spec-first: one spec
+> test environment and on backups synced from its store, and by the pre-review
+> with the tabs open. The repository is developed spec-first: one spec
 > per feature under [docs/specs](docs/specs/). See the
 > [roadmap](docs/development/ROADMAP.md).
 

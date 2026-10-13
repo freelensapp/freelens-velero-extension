@@ -1,6 +1,6 @@
 # SPEC-0011: The Log, The Results, The Resources And The Volumes Of An Operation
 
-- **Status:** Approved
+- **Status:** Implemented
 - **Date:** 2026-09-30
 - **Milestone / tasks:** M3 / T2.3, in three pull requests
 - **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`; compared with v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`
@@ -312,22 +312,22 @@ prove: what needs the artifacts made for the tabs is left to the fixtures of the
 second pull request and to the suites of the third, and the cases that wait are
 said below by what they wait for.
 
-| Check | Evidence of this pull request | Left |
+| Check | Evidence of the first pull request | Evidence of the third pull request |
 | --- | --- | --- |
-| VIEW-01 | Component: the five tabs in their order, as a list of tabs that says which one is selected, the summary first and open, with everything the workspace showed before under it; the tab that is chosen written into the address with one change of it, the summary as no tab in the address, a view that becomes the one shown at its summary, and the tab an address names shown with nothing of it loaded; a tab opened with writes off and with writes on asks the main process nothing and creates nothing; one load for each tab, the same one while the view is shown, dropped in both processes when the view closes, when another view is shown, when the installation changes, when another object took the place of the operation under its name, and when the tab creates its next request. Packaged, on the real backup and the real restore: the five tabs in their order, in a list of tabs named for the operation, each saying whether it is selected and which part it shows, the summary open and no tab in the address; each tab, once it is chosen, the one that is selected, the one the part is named by and the one the address names beside the view; a tab opened by its address, a page opened again at the tab it was at with nothing of it loaded, and a name that is no tab shown as the summary; every tab opened with writes on, by a click and by its address, and the view closed and opened again, with nothing of a DownloadRequest counted by the API server, created or read, and no read of a family for the tabs opened by a click; what each tab loaded kept while the other tabs were shown, and nothing of it held once the view was closed and opened again; a tab that loads again showing the text of its new request | Packaged: what a tab holds when the installation changes, in a case of the suite that waits and needs no fixture the environment does not have |
-| VIEW-02 | Unit: what a tab would create, in words, with the kind of the request, its target, named once, its namespace and its cluster, and that nothing is created before the request is shown and confirmed. Component: the first state with writes off, with writes whose state is not known, with no way to the main process and when the main process refused to turn them on, each saying the state of the gate first and apart, then giving the way to the target bar and no other command, or none, then what the tab would create; with writes on, one command in the name of the kind of the request and of the artifact, which asks nothing until it is given; the inline confirmation with the object as it will be submitted, its name in words, its labels, its spec and its target, and nothing created before the second gesture; the confirmation left with its second command, with Escape, when writes go off and when its tab is left. Packaged, on the eight tabs of the real backup and the real restore: with writes off, the state of the gate, then the way to the target bar, which is the one command of the tab and leads to the command that turns writes on, then what the tab would create; with writes on, the one command in the name of the kind. On the Log tab of each: the confirmation reached with the keyboard alone and given the focus, with the object as it will be submitted, one press of the Tab key to the command that creates and one more to the one that leaves, and left with that command and with Escape, the focus back on the command of the tab and the view at its tab; nothing of a DownloadRequest counted for any of it | Nothing that waits for the fixtures |
-| VIEW-03 | Unit, in the main process: the bytes of the text that arrived so far said at the step of the download, counted from the beginning of the text, and a download that goes on whatever hears of them. State and component: the request run with the token of its confirmation, a confirmation that expired asked again once at the second gesture, the step the main process is at asked every 250 milliseconds and said in words, beside the mark of the host that moves, the first step in words that claim no wait, the request named from its creation on, the seconds of the wait, the bytes of the download and the pages as they are taken; the load cancelled at every step it is offered at; nothing taken of an answer that arrives after the load was dropped, left or begun again; the text with, over it, when it was loaded and its size and the two commands, the one that loads it again and the one that saves it, and under it the request it came through, the way it came by, through the cluster or directly, encrypted or not, and from which origin, what loading again does and until when the text can be saved; a load again as another request, through its confirmation, with the text shown until that request is created and what that takes away said under it meanwhile. Packaged, on the nine loads of the suite: each a request of its own, created at the second gesture, which the cluster holds by the name the tab gave it, with the text, when it was loaded, its size, the request it came through and the way it came by, through the tunnel; on the two loads of the log of the backup, the confirmation, then the load, then the text, no text while the load runs, and the request known by the name it has in the cluster from the first step of the load; on the first of them, the wait for a place first and the pages last, and between them what the main process told, in its order; the wait for the URL, which only the main process tells, shown in every load of the suite, as its report of the steps says; the log loaded again as another request, the text of before shown under the confirmation and gone at the second gesture; a load cancelled as soon as the command was offered, ended as cancelled in the words of the step it was stopped at. No load was shown for a second, 353 to 445 milliseconds in the two runs, and in the last every load showed the wait for a place, the wait for its URL and the pages, and no other step: the creation with its name and the bytes of a download were not seen. The cancel landed at the step of the target in both runs, two milliseconds after the load began, before anything was created: the words of a cancel at the creation or after it did not run there | Packaged: the steps of a load long enough to be watched, and a cancel once the panel names the request, on the large log of the fixtures of the second pull request |
-| VIEW-04 | Unit: the words of a file the store does not have for every phase of the release, of a backup and of a restore, each naming the file that was asked, and nothing claimed of a phase that is not known or of an object that reports none; what is said before any request of a restore that names no backup, of a backup whose storage location is not there and of a backup that did not start and names none yet, and nothing said from a list that was denied, that failed or that is of an earlier read; the steps a way ends at before anything is created. Component: the words of the main process for the way a load ended, a fault said as an alert and marked as one, a file the store does not have said as an alert with the mark of information, and a cancellation said as a status with a mark of its own, neither marked as a fault; with the command that asks again, through the confirmation, where that is safe and writes are on, which asks for a request after a load that ended before anything was created and for another one after any other, the command that allows what the download needs where it said so, and one command that takes the tab back where asking again is not safe; a file the store did not have said by the phase the operation had then, in the past and with that time, and of an operation with a time of deletion that its files are being removed. The words of each code are the ones of [SPEC-0010](SPEC-0010-diagnostic-request-and-transport.md#evidence-and-deviations), with their tests there. Packaged, on the results of the real backup: a load cancelled before anything was created, said in the words of that step, with no request in the cluster and none counted, marked as a cancellation and not as a fault, and with the command that asks for a request and not for another one, which has the focus | Packaged: the backup and the restore that failed their validation and the restore without a backup name, which are fixtures of the second pull request, in the suites of the third |
-| VIEW-05 | Unit: the lines numbered whatever ends them; the level of an entry of the text format read at its start, with `warning` read as a warning and nothing read from a message that carries `level=` in its words; the level of an entry of the JSON format read from its own key; a line that is no entry, and an entry at another level, counted as other; no line hidden until a level is chosen; the search whatever the capitals, with the words taken as they are typed, among the lines a filter leaves, each line once; where the words it found are in what a row shows of a line, each place of them, and the parts they cut a piece of a wrapped line in; a line of twenty thousand characters cut at ten thousand in its row, with how much of it was left out, and whole where it is copied. Component: the lines with their numbers and the count of each level, the levels a command each that says whether it is chosen, after two words that say what choosing one does; the labelled search with its count, the words it found marked in every row that is mounted as the line writes them, the match it is at marked and brought into the room of the list, the next and the previous with Enter, with Shift and Enter and with the two commands, around the ends; the choice to wrap; the copy of a line; a hundred rows mounted at most of a log of two hundred thousand lines, whatever is searched, filtered and scrolled to, in the double of the list of the host. Packaged, on the two real logs: the lines numbered from one and every line shown, the counts of the levels adding up to the lines, and every line of the two logs read at a level from its start and none as other. On the log of the backup: no search, no level chosen and the lines not wrapped at first; the counts of the levels the ones the suite reads itself in the file it saved; a level that is chosen leaving its lines by their numbers, with its count, and a level no line is of leaving none, which is said in the place of the list; the search by the name of the backup, which more than one line carries, moved with Enter and with Shift and Enter around both ends, the row of the match marked and the field keeping the keyboard; its matches the lines of the saved file that carry the words, whatever the capitals typed, the words marked in every mounted row that carries them as the file writes them, and words no line carries said with no match and both arrows disabled; the lines wrapped at the columns of the room and on one line again, and pictures in which the levels and the wrap are drawn as checkboxes; a line copied whole to the clipboard of the machine; and a hundred rows mounted at most at the first line, at the last and wrapped. The log of the backup is all at info: a level that is chosen there leaves every line, and only a level no line is of shows a filter that leaves lines out. The bound of a hundred rows is not approached in a list that has the room of a dozen lines | Packaged, on the synced log of 200,000 lines, which is a fixture of the second pull request: a hundred rows mounted at most, the counts of many levels, the searches with their counts, the lines that are cut and the one across two pages |
-| VIEW-06 | Unit: the errors and the warnings of the three places with their counts, the namespaces by name; a message in the form of the hook in its parts, each part ending where the next begins, read in a time that grows with its length; a message of another form, as the ones of a restore are, kept as the text it is; results with neither, as the release writes them and with a key left out; the count of the results beside a counter the status writes, with the reason of each case and none where the release explains none. Component: the two groups as headed lists with the counts of each group, of each place and of the whole; the sentence of results that hold neither; both counts and their reason when they differ, and nothing said of a counter the status does not write; the first two hundred messages of results of thousands, and the ones after them where they are asked for. Packaged, on the real results of the backup and of the restore: the errors and the warnings of the file equal to the counters of the status, a counter the status does not write being none, the sentence of results that hold neither, no group and nothing said of a difference. Both hold no error and no warning: no group, no place and no message is shown, and no difference is said | Packaged: errors of two namespaces and a warning of Velero in the form of the hook, on the synced backup of the fixtures |
-| VIEW-07 | Unit: the resources by their API version and kind, sorted, each with its items sorted and counted; the action of a restore after each item, the four of them, and an item without one, or with one the release does not write, counted as not stated with its text kept; an item of the cluster; the filter by the words that are typed, in the resource, the namespace and the name, and by action, with the counts of what is left. Component: the rows of a backup and of a restore in the virtual list of the host under the head of its tables, the action as a column of a restore alone, `cluster` in the namespace column of an item of the cluster, the labelled filter, the choices by action with what each would leave, the rows given the room the view leaves, six at least and twenty at most, with nothing counted on the window, and the rows of the room and ten on each side mounted of fifty thousand items. Packaged, on the real backup and the real restore: the namespace and the name as columns, and the action as well for the restore alone; each resource written as its API version and its kind, with the count of its items; the items of the backup as many as its status counted; the four actions of the restore counting every item and none not stated, each choice saying what it would leave and leaving the items of its action, and one that leaves none saying so with no row; the list of the backup filtered by the resource of its first row and by words no item carries, which leave none and say so, and Escape in the filter clearing it with the view still open. Each list is of one resource, so a filter by the resource leaves every item | Packaged: a resource list of many resources, on the synced backup of the fixtures |
-| VIEW-08 | Unit: one row for each volume in the order it is written, with the claim and its namespace, the volume, the method, the result, whether the data was moved, the local snapshot kept and the volume skipped, the reason and the times; the size read from the detail that carries one, and none for a native snapshot, whose detail has none in the release; the details each field by its name, `ReadyToUse` and `Phase` among them; the volumes of a restore, with the way each was restored and no result; a method and a result the release does not write kept as their text and marked; a field the tab does not know by its name and its value; an empty list; a text that is not of the shape, with nothing raised for any text. Component: a table of the host with a row for each volume and the details of a row under it, no cell left empty, the mark of what is not known in words, and the sentence that Velero recorded no volume, for a backup and for a restore. Packaged, on the real backup and the real restore, which have no volume: the sentence that Velero recorded none, with no table and no row, and, after the load of the backup, the focus on that sentence | Packaged: the volumes of the synced backup of the fixtures, with their methods and their details |
-| VIEW-09 | Unit and component: each of the three parsers answers nothing for a text that is not of the shape of the release, a JSON of another shape and a text that is no JSON among them, and raises nothing; the parser of the volumes answers nothing as well for a value the runtime reads and cannot write back; the viewer shows such a text as its lines, under the note, with the real list of lines in the tests of the pages; the pages assembled into the one text the tab holds, and a page that is not the one that was asked, one of another count and a text beyond 64 MiB refused with nothing shown; a text parsed once however many times its viewer is drawn, and a line made of the text for a row that is mounted and for no other; in the main process, a text of 64 MiB taken and one of a byte more refused | Nothing. How "no other copy" is read is below |
-| VIEW-10 | Unit: on 500,000 lines made for the test, entries of every level with long lines among them, what the parser, the filter by level, the search for words every line but the long ones carries, one line carries and none carries, the search among the lines of a level, the count of the rows of a list, wrapped and not, and the lines of a text read without its levels answer. Their times are taken by the unit measure, with the second pull request, below | Packaged: the times of the search, of the filter and of the scroll on the synced log of 200,000 lines, with the third pull request |
-| VIEW-11 | Unit, in the main process and through both processes: the dialog of the host asked of the module of Electron at each save, with a title and a message that say what is saved and a name for the file; the text written into the file that was chosen and into no other; nothing written when the dialog is closed, when it gives no file, and for a text that was let go on purpose, or a frame that went, while it was open; one dialog for a text at a time; the answer of a saving nothing but whether a file was written, and nothing of a path in a failure; the procedure registered when the extension is activated. State and component: the command offered for a text that is loaded and held, one saving at a time, what became of it said beside the command, and no command for a text the main process holds no more. Packaged, with the dialog of the host replaced in the main process by the suite, which answers as the dialog would: left, nothing written and the words that nothing was saved, with the command still offered; chosen, one file, where the suite chose, with the bytes the tab says the text has and the lines it counts, its first and its last line the ones the list shows at Home and at End; for each of those two savings the dialog asked once, with a title that is its message and names what is saved, and a name for the file with no folder in it, and nothing asked of the cluster; the log saved once more, into a file of the same bytes, after Escape cleared its search. Over the whole suite the API server counted, in both runs, nine creations and nine removals of DownloadRequests, as many as the requests the guard was told, eighteen reads of them by their names and nine writes of the server into them, and no write of another kind of Velero; nothing was left in the cluster, and the objects of Velero were as they were before the suite. The dialog itself is shown in no run | Nothing that waits for the fixtures |
-| VIEW-12 | The pre-review, which is the layer of the check, is not run with the tabs open: the one that existed passes with the tabs in the two workspaces, its journey with the keyboard going through the five tabs. Component, where nothing is laid out: the strip as a list of tabs, each tab saying whether it is selected, the arrows, Home and End around the ends, Enter and Space; the labelled search, its count told to who does not see, Enter and Shift with Enter; the focus on the first line of the content after a load, and on the command that follows a failure. Packaged, in the suite of the tabs: the tabs in both themes at 1440 by 900, at their first state, under a confirmation and loaded, and the four loaded tabs of the backup and a confirmation at 900 by 650 and at twice the zoom in both themes, each looked at by the checks of the layout, which found nothing that lies over something else, is wider than its room or holds more than its height with no scroll that reaches it: what the limits below say is out of sight at those sizes is reached by a scroll, and a name cut in its cell is shown whole to who points at it; at those two sizes a view with the room of a list at least, no list taller than the room it is read in, a list whole in that room once it is brought into it, and the two commands of a confirmation in it; at 1440 by 900 the view of the log and of the resources holding no more than its room; the arrows, Home and End around both ends, Enter and Space on the strip, and Space scrolling nothing at 900 by 650, where the view of a log holds more than its room; the focus on the first line of a log and on the sentence of an empty list after a load, and on the command after a cancel. What a view of a tab is at those two sizes is among the limits below | The whole check, with the third pull request: the tabs and the viewers in the pre-review, in both themes, at the two sizes and at twice the zoom, and the journeys with the keyboard alone |
-| VIEW-13 | Component: the section the host shows in the details of a backup and of a restore says that the log, the results, the resource list and the volume information are in the workspace, leads there by the way that was there, and asks the main process nothing. Packaged, on the real backup and the real restore: the section in the details the host shows of each, with its sentence, no command and one way, which opens the view at its summary, with no tab in the address and the namespace of the installation as the target, and its four tabs at their first state; nothing of a DownloadRequest counted, and writes still on after the pages of the host | Nothing that waits for the fixtures |
-| VIEW-14 | Packaged: the four artifacts of the real backup and of the real restore of the test environment loaded, each through a request of its own, and checked against what the operation and the suite know of them: the log of the backup against the file the suite saved of it, its bytes, its lines, its levels and the lines that carry some words, which the suite reads there itself; the results against the counters of the status; the resource list of the backup against the items its status counted, and the one of the restore with one of the four actions for each item; the volume information as a list of no volume | The four artifacts of the backup synced from the store, checked against what the fixtures wrote, and the operations that failed their validation: the second and the third pull request |
+| VIEW-01 | Component: the five tabs in their order, as a list of tabs that says which one is selected, the summary first and open, with everything the workspace showed before under it; the tab that is chosen written into the address with one change of it, the summary as no tab in the address, a view that becomes the one shown at its summary, and the tab an address names shown with nothing of it loaded; a tab opened with writes off and with writes on asks the main process nothing and creates nothing; one load for each tab, the same one while the view is shown, dropped in both processes when the view closes, when another view is shown, when the installation changes, when another object took the place of the operation under its name, and when the tab creates its next request. Packaged, on the real backup and the real restore: the five tabs in their order, in a list of tabs named for the operation, each saying whether it is selected and which part it shows, the summary open and no tab in the address; each tab, once it is chosen, the one that is selected, the one the part is named by and the one the address names beside the view; a tab opened by its address, a page opened again at the tab it was at with nothing of it loaded, and a name that is no tab shown as the summary; every tab opened with writes on, by a click and by its address, and the view closed and opened again, with nothing of a DownloadRequest counted by the API server, created or read, and no read of a family for the tabs opened by a click; what each tab loaded kept while the other tabs were shown, and nothing of it held once the view was closed and opened again; a tab that loads again showing the text of its new request | Packaged, on the fixtures: writes are off when another installation is selected, and back in the installation of the demo no tab holds what it loaded, the log of 200,000 lines among it, which was shown when the installation changed |
+| VIEW-02 | Unit: what a tab would create, in words, with the kind of the request, its target, named once, its namespace and its cluster, and that nothing is created before the request is shown and confirmed. Component: the first state with writes off, with writes whose state is not known, with no way to the main process and when the main process refused to turn them on, each saying the state of the gate first and apart, then giving the way to the target bar and no other command, or none, then what the tab would create; with writes on, one command in the name of the kind of the request and of the artifact, which asks nothing until it is given; the inline confirmation with the object as it will be submitted, its name in words, its labels, its spec and its target, and nothing created before the second gesture; the confirmation left with its second command, with Escape, when writes go off and when its tab is left. Packaged, on the eight tabs of the real backup and the real restore: with writes off, the state of the gate, then the way to the target bar, which is the one command of the tab and leads to the command that turns writes on, then what the tab would create; with writes on, the one command in the name of the kind. On the Log tab of each: the confirmation reached with the keyboard alone and given the focus, with the object as it will be submitted, one press of the Tab key to the command that creates and one more to the one that leaves, and left with that command and with Escape, the focus back on the command of the tab and the view at its tab; nothing of a DownloadRequest counted for any of it | Nothing was left to it |
+| VIEW-03 | Unit, in the main process: the bytes of the text that arrived so far said at the step of the download, counted from the beginning of the text, and a download that goes on whatever hears of them. State and component: the request run with the token of its confirmation, a confirmation that expired asked again once at the second gesture, the step the main process is at asked every 250 milliseconds and said in words, beside the mark of the host that moves, the first step in words that claim no wait, the request named from its creation on, the seconds of the wait, the bytes of the download and the pages as they are taken; the load cancelled at every step it is offered at; nothing taken of an answer that arrives after the load was dropped, left or begun again; the text with, over it, when it was loaded and its size and the two commands, the one that loads it again and the one that saves it, and under it the request it came through, the way it came by, through the cluster or directly, encrypted or not, and from which origin, what loading again does and until when the text can be saved; a load again as another request, through its confirmation, with the text shown until that request is created and what that takes away said under it meanwhile. Packaged, on the nine loads of the suite: each a request of its own, created at the second gesture, which the cluster holds by the name the tab gave it, with the text, when it was loaded, its size, the request it came through and the way it came by, through the tunnel; on the two loads of the log of the backup, the confirmation, then the load, then the text, no text while the load runs, and the request known by the name it has in the cluster from the first step of the load; on the first of them, the wait for a place first and the pages last, and between them what the main process told, in its order; the wait for the URL, which only the main process tells, shown in every load of the suite, as its report of the steps says; the log loaded again as another request, the text of before shown under the confirmation and gone at the second gesture; a load cancelled as soon as the command was offered, ended as cancelled in the words of the step it was stopped at. No load was shown for a second, 353 to 445 milliseconds in the two runs, and in the last every load showed the wait for a place, the wait for its URL and the pages, and no other step: the creation with its name and the bytes of a download were not seen. The cancel landed at the step of the target in both runs, two milliseconds after the load began, before anything was created: the words of a cancel at the creation or after it did not run there | Packaged, on the log of the synced backup, the one load long enough to be watched: cancelled once its request is in the cluster, at the wait for its URL, said as cancelled with the request that stays in the namespace until Velero removes it, with no text and with the command that asks again, which has the focus; then asked again, as a new request, named in every moment of the load, with the steps in the order the main process tells them, two of them at least, the twelve pages rising to the last and the bytes of the download, seen once at 9.8 MiB, never going down. In the first run the main process took 784 milliseconds from the queue to the pages |
+| VIEW-04 | Unit: the words of a file the store does not have for every phase of the release, of a backup and of a restore, each naming the file that was asked, and nothing claimed of a phase that is not known or of an object that reports none; what is said before any request of a restore that names no backup, of a backup whose storage location is not there and of a backup that did not start and names none yet, and nothing said from a list that was denied, that failed or that is of an earlier read; the steps a way ends at before anything is created. Component: the words of the main process for the way a load ended, a fault said as an alert and marked as one, a file the store does not have said as an alert with the mark of information, and a cancellation said as a status with a mark of its own, neither marked as a fault; with the command that asks again, through the confirmation, where that is safe and writes are on, which asks for a request after a load that ended before anything was created and for another one after any other, the command that allows what the download needs where it said so, and one command that takes the tab back where asking again is not safe; a file the store did not have said by the phase the operation had then, in the past and with that time, and of an operation with a time of deletion that its files are being removed. The words of each code are the ones of [SPEC-0010](SPEC-0010-diagnostic-request-and-transport.md#evidence-and-deviations), with their tests there. Packaged, on the results of the real backup: a load cancelled before anything was created, said in the words of that step, with no request in the cluster and none counted, marked as a cancellation and not as a fault, and with the command that asks for a request and not for another one, which has the focus | Packaged, on the fixtures: the log of the backup synced without one, a file the store does not have, said by the phase of a backup that ended, in the past, with no command to try again; the logs of the backup and of the restore that failed their validation, said as nothing Velero writes for an operation that failed its validation, through a request each, which the server processed; the restore asked from a schedule that has no backup, said as nothing to ask for before any request, with no command with writes on and nothing counted; and the backup whose storage location is not there, in the installation of the views with writes on for it, said before any request on every tab, with no command, nothing counted and no request in the namespace |
+| VIEW-05 | Unit: the lines numbered whatever ends them; the level of an entry of the text format read at its start, with `warning` read as a warning and nothing read from a message that carries `level=` in its words; the level of an entry of the JSON format read from its own key; a line that is no entry, and an entry at another level, counted as other; no line hidden until a level is chosen; the search whatever the capitals, with the words taken as they are typed, among the lines a filter leaves, each line once; where the words it found are in what a row shows of a line, each place of them, and the parts they cut a piece of a wrapped line in; a line of twenty thousand characters cut at ten thousand in its row, with how much of it was left out, and whole where it is copied. Component: the lines with their numbers and the count of each level, the levels a command each that says whether it is chosen, after two words that say what choosing one does; the labelled search with its count, the words it found marked in every row that is mounted as the line writes them, the match it is at marked and brought into the room of the list, the next and the previous with Enter, with Shift and Enter and with the two commands, around the ends; the choice to wrap; the copy of a line; a hundred rows mounted at most of a log of two hundred thousand lines, whatever is searched, filtered and scrolled to, in the double of the list of the host. Packaged, on the two real logs: the lines numbered from one and every line shown, the counts of the levels adding up to the lines, and every line of the two logs read at a level from its start and none as other. On the log of the backup: no search, no level chosen and the lines not wrapped at first; the counts of the levels the ones the suite reads itself in the file it saved; a level that is chosen leaving its lines by their numbers, with its count, and a level no line is of leaving none, which is said in the place of the list; the search by the name of the backup, which more than one line carries, moved with Enter and with Shift and Enter around both ends, the row of the match marked and the field keeping the keyboard; its matches the lines of the saved file that carry the words, whatever the capitals typed, the words marked in every mounted row that carries them as the file writes them, and words no line carries said with no match and both arrows disabled; the lines wrapped at the columns of the room and on one line again, and pictures in which the levels and the wrap are drawn as checkboxes; a line copied whole to the clipboard of the machine; and a hundred rows mounted at most at the first line, at the last and wrapped. The log of the backup is all at info: a level that is chosen there leaves every line, and only a level no line is of shows a filter that leaves lines out. The bound of a hundred rows is not approached in a list that has the room of a dozen lines | Packaged, on the synced log of 200,000 lines: the lines and the levels as the fixtures counted them, 4 at error, 2 at warning, 169,231 at info, 30,217 at debug and 546 other, in the viewer and in the file the suite saved, read there with the same rule; a hundred rows mounted at most at five places, and wrapped; the four searches the fixtures counted, with their counts in the viewer and in the file, one in small letters and one with no match; Enter and Shift with Enter among the 56 matches of `level=error`; with info chosen, the 40 lines that carry `level=error` in their words, the first of them line 2508, read at info in the file; the four lines at error by their numbers; the line of 10,000 characters whole, the one of 10,001 cut with the words of the cut, the one of 20,000 cut; and the line across the first page, line 16,987, whole with its character of three bytes |
+| VIEW-06 | Unit: the errors and the warnings of the three places with their counts, the namespaces by name; a message in the form of the hook in its parts, each part ending where the next begins, read in a time that grows with its length; a message of another form, as the ones of a restore are, kept as the text it is; results with neither, as the release writes them and with a key left out; the count of the results beside a counter the status writes, with the reason of each case and none where the release explains none. Component: the two groups as headed lists with the counts of each group, of each place and of the whole; the sentence of results that hold neither; both counts and their reason when they differ, and nothing said of a counter the status does not write; the first two hundred messages of results of thousands, and the ones after them where they are asked for. Packaged, on the real results of the backup and of the restore: the errors and the warnings of the file equal to the counters of the status, a counter the status does not write being none, the sentence of results that hold neither, no group and nothing said of a difference. Both hold no error and no warning: no group, no place and no message is shown, and no difference is said | Packaged, on the synced backup: four errors, two under Velero and one under each of two namespaces, and two warnings, one of Velero and one of the cluster, each message in its parts where the hook wrote them and as it is written, with the counts, equal to the counters of the status, errors 4 and warnings 2; and on the backup synced without a log, results with neither, in the words of the viewer. Unit, since the hardening of this pull request: the time a message is read in is measured as the least of hundreds of single readings of a text of 128 KiB and of a text of 256 KiB, the one after the other, the least of the large under three times the least of the small, 1.99 on the parser and 4.12 on a reading made quadratic on purpose |
+| VIEW-07 | Unit: the resources by their API version and kind, sorted, each with its items sorted and counted; the action of a restore after each item, the four of them, and an item without one, or with one the release does not write, counted as not stated with its text kept; an item of the cluster; the filter by the words that are typed, in the resource, the namespace and the name, and by action, with the counts of what is left. Component: the rows of a backup and of a restore in the virtual list of the host under the head of its tables, the action as a column of a restore alone, `cluster` in the namespace column of an item of the cluster, the labelled filter, the choices by action with what each would leave, the rows given the room the view leaves, six at least and twenty at most, with nothing counted on the window, and the rows of the room and ten on each side mounted of fifty thousand items. Packaged, on the real backup and the real restore: the namespace and the name as columns, and the action as well for the restore alone; each resource written as its API version and its kind, with the count of its items; the items of the backup as many as its status counted; the four actions of the restore counting every item and none not stated, each choice saying what it would leave and leaving the items of its action, and one that leaves none saying so with no row; the list of the backup filtered by the resource of its first row and by words no item carries, which leave none and say so, and Escape in the filter clearing it with the view still open. Each list is of one resource, so a filter by the resource leaves every item | Packaged, on the synced backup: 48 resources and 6,000 items, as many as its status counted, sorted as the suite sorts what the fixtures wrote, with the count of each resource, the items of the cluster in their column and the filter by the words of a resource, of a namespace and of a name; and the empty resource list of the backup synced without a log |
+| VIEW-08 | Unit: one row for each volume in the order it is written, with the claim and its namespace, the volume, the method, the result, whether the data was moved, the local snapshot kept and the volume skipped, the reason and the times; the size read from the detail that carries one, and none for a native snapshot, whose detail has none in the release; the details each field by its name, `ReadyToUse` and `Phase` among them; the volumes of a restore, with the way each was restored and no result; a method and a result the release does not write kept as their text and marked; a field the tab does not know by its name and its value; an empty list; a text that is not of the shape, with nothing raised for any text. Component: a table of the host with a row for each volume and the details of a row under it, no cell left empty, the mark of what is not known in words, and the sentence that Velero recorded no volume, for a backup and for a restore. Packaged, on the real backup and the real restore, which have no volume: the sentence that Velero recorded none, with no table and no row, and, after the load of the backup, the focus on that sentence | Packaged, on the synced backup: five rows in the order of the release, one skipped with its reason and no method, a native snapshot with no size, a CSI snapshot with the end and the result its operation gave it, a pod volume that was backed up and one that failed, each with its details by the names the release writes them with, `ReadyToUse` and `Phase` among them, the times read as the release writes them; and the empty list of the backup synced without a log, said as no volume recorded. The four methods the check names are three on a backup and a volume that was skipped, as the open point of the second pull request says: the method of a restore stays at the unit and component layers |
+| VIEW-09 | Unit and component: each of the three parsers answers nothing for a text that is not of the shape of the release, a JSON of another shape and a text that is no JSON among them, and raises nothing; the parser of the volumes answers nothing as well for a value the runtime reads and cannot write back; the viewer shows such a text as its lines, under the note, with the real list of lines in the tests of the pages; the pages assembled into the one text the tab holds, and a page that is not the one that was asked, one of another count and a text beyond 64 MiB refused with nothing shown; a text parsed once however many times its viewer is drawn, and a line made of the text for a row that is mounted and for no other; in the main process, a text of 64 MiB taken and one of a byte more refused | Nothing was left to it |
+| VIEW-10 | Unit: on 500,000 lines made for the test, entries of every level with long lines among them, what the parser, the filter by level, the search for words every line but the long ones carries, one line carries and none carries, the search among the lines of a level, the count of the rows of a list, wrapped and not, and the lines of a text read without its levels answer. Their times are taken by the unit measure, with the second pull request, below | Packaged: the case of the measures, on the synced log of 200,000 lines, as the third pull request builds it: ten searches of texts never searched before in the view and ten choices of levels never chosen before, after two and two that warm the viewer, each timed inside the page from the key or the click to the frame after the one that shows the words, the matches and the lines of the fixtures; twenty scroll gestures after one that warms, six of a notch, six of a page and eight far, each the longest frame until the rows of the position are mounted; the 95th percentile of the twenty answers under 250 milliseconds and of the twenty longest frames under 50, a hundred rows mounted at most throughout, and before them sixty idle frames of the window, which fail the case by name when their median is over 25 milliseconds. Local, the run of the suite alone on the final code of the measures on 2026-10-07, on a machine of a developer running macOS beside other work, with a load between 2 and 3.5 over the last one, five and fifteen minutes, Freelens 1.10.3 in a window of 1440 by 900 where the list of the log has a room of 208 pixels: an idle frame of 16.6 milliseconds at the median of sixty; the twenty answers in 51.1 milliseconds at the 95th percentile, the searches 51.1 and the filters 38.0, of 250; the longest frame of the twenty gestures 15.9 at the 95th percentile and 18.3 the slowest, of 50; 32 rows mounted at most, of 100; the case 4,635 milliseconds. In the run of the twelve suites of the final runs, the same evening: the answers 51.1, the searches 51.5 and the filters 37.9; the frames 15.4 at the 95th percentile and 15.8 the slowest; an idle frame of 16.6; 32 rows; 4,656 milliseconds. Hosted: the CI of this pull request proves it on its runner when it runs; its numbers are read there and never assumed, and when the window of the runner cannot time a frame the case fails by name there |
+| VIEW-11 | Unit, in the main process and through both processes: the dialog of the host asked of the module of Electron at each save, with a title and a message that say what is saved and a name for the file; the text written into the file that was chosen and into no other; nothing written when the dialog is closed, when it gives no file, and for a text that was let go on purpose, or a frame that went, while it was open; one dialog for a text at a time; the answer of a saving nothing but whether a file was written, and nothing of a path in a failure; the procedure registered when the extension is activated. State and component: the command offered for a text that is loaded and held, one saving at a time, what became of it said beside the command, and no command for a text the main process holds no more. Packaged, with the dialog of the host replaced in the main process by the suite, which answers as the dialog would: left, nothing written and the words that nothing was saved, with the command still offered; chosen, one file, where the suite chose, with the bytes the tab says the text has and the lines it counts, its first and its last line the ones the list shows at Home and at End; for each of those two savings the dialog asked once, with a title that is its message and names what is saved, and a name for the file with no folder in it, and nothing asked of the cluster; the log saved once more, into a file of the same bytes, after Escape cleared its search. Over the whole suite the API server counted, in both runs, nine creations and nine removals of DownloadRequests, as many as the requests the guard was told, eighteen reads of them by their names and nine writes of the server into them, and no write of another kind of Velero; nothing was left in the cluster, and the objects of Velero were as they were before the suite. The dialog itself is shown in no run | Packaged, on the synced log: saved first, within the ten minutes the main process holds it, into a file of 49,143,988 bytes and 200,000 lines whose digest is the one the fixtures counted while they wrote it, with nothing written to the cluster |
+| VIEW-12 | The pre-review, which is the layer of the check, is not run with the tabs open: the one that existed passes with the tabs in the two workspaces, its journey with the keyboard going through the five tabs. Component, where nothing is laid out: the strip as a list of tabs, each tab saying whether it is selected, the arrows, Home and End around the ends, Enter and Space; the labelled search, its count told to who does not see, Enter and Shift with Enter; the focus on the first line of the content after a load, and on the command that follows a failure. Packaged, in the suite of the tabs: the tabs in both themes at 1440 by 900, at their first state, under a confirmation and loaded, and the four loaded tabs of the backup and a confirmation at 900 by 650 and at twice the zoom in both themes, each looked at by the checks of the layout, which found nothing that lies over something else, is wider than its room or holds more than its height with no scroll that reaches it: what the limits below say is out of sight at those sizes is reached by a scroll, and a name cut in its cell is shown whole to who points at it; at those two sizes a view with the room of a list at least, no list taller than the room it is read in, a list whole in that room once it is brought into it, and the two commands of a confirmation in it; at 1440 by 900 the view of the log and of the resources holding no more than its room; the arrows, Home and End around both ends, Enter and Space on the strip, and Space scrolling nothing at 900 by 650, where the view of a log holds more than its room; the focus on the first line of a log and on the sentence of an empty list after a load, and on the command after a cancel. What a view of a tab is at those two sizes is among the limits below | The pre-review, with the tabs open, on 2026-10-07: eight views of the tabs in both themes at 1440 by 900, at 900 by 650 and at twice the zoom, 48 layouts, each by the check of the page and the check of a tab, which found nothing; the journeys with the keyboard alone: the tabs from the way back, with the arrows, Home and End around both ends, each saying whether it is selected, Enter opening one and the address naming it; the roles read as attributes, one list of tabs named for the backup, five tabs each naming the part it shows, one selected, the panel named by its tab; four presses from the Log tab to the command, Enter, the confirmation with the focus on it, one press to the command that creates, nothing created; the focus on the first line after a load, on the command that asks again after a cancelled load, which landed before anything was created, and on the command that takes the tab back to its first state after a file the store does not have; the search by its label, `level=warning` typed key by key and held, its 14 matches told to who does not see as the fixtures counted them, Enter and Shift with Enter among them; the page that stands still at the seven widths where the bar of the log goes to a second line, between 1440 and 720; the five requests told to the guard by their names, read in the cluster by name, and none left once the server removed them. The three items left to human judgment are in its report, and below |
+| VIEW-13 | Component: the section the host shows in the details of a backup and of a restore says that the log, the results, the resource list and the volume information are in the workspace, leads there by the way that was there, and asks the main process nothing. Packaged, on the real backup and the real restore: the section in the details the host shows of each, with its sentence, no command and one way, which opens the view at its summary, with no tab in the address and the namespace of the installation as the target, and its four tabs at their first state; nothing of a DownloadRequest counted, and writes still on after the pages of the host | Nothing was left to it |
+| VIEW-14 | Packaged: the four artifacts of the real backup and of the real restore of the test environment loaded, each through a request of its own, and checked against what the operation and the suite know of them: the log of the backup against the file the suite saved of it, its bytes, its lines, its levels and the lines that carry some words, which the suite reads there itself; the results against the counters of the status; the resource list of the backup against the items its status counted, and the one of the restore with one of the four actions for each item; the volume information as a list of no volume | Packaged: the four artifacts of the backup synced from the store, each through a request of its own, checked against what the fixtures wrote, as the rows of VIEW-05 to VIEW-08 say; the four of the backup synced without a log, its log a file the store does not have and the three others the empty forms, of 28, 3 and 3 bytes as the fixtures counted them; and the log of the backup and of the restore that failed their validation, nothing written, through a request each |
 
 The unit run, a local run of 2026-10-06 on the head that carries the suite of the
 tabs, is 72 files and 2186 tests, green on the build with separate modules and on
@@ -1046,19 +1046,23 @@ nothing by `pnpm demo:up` in 243 seconds, which places nothing of the tabs:
   through the one way the cleanup deletes a backup of the fixtures, after which no
   backup, restore or request to Velero was left.
 
-What this pull request leaves to the third:
+What this pull request left to the third, and what the
+[third](#the-tabs-on-the-fixtures-the-third-pull-request-of-t23) brings of each:
 
 - VIEW-14, the four artifacts of each of the three operations loaded in the
   packaged application and checked against what the fixtures wrote, and the
-  packaged layer of VIEW-04 to VIEW-08 on these fixtures;
-- the nine cases of the suite of the tabs that wait: seven on these fixtures, and
-  two that need none the environment does not have;
+  packaged layer of VIEW-04 to VIEW-08 on these fixtures: the suite of the tabs,
+  in the rows of the checks above;
+- the nine cases of the suite of the tabs that wait: eight written and run on these
+  fixtures and on what the environment has, and the ninth, the measures, written as
+  the case of the measures;
 - the packaged measures of REQ-147, the search, the filter and the scroll on the
-  synced log;
-- the pre-review with the tabs open, which is VIEW-12;
+  synced log: the case of the measures, whose evidence is written there;
+- the pre-review with the tabs open, which is VIEW-12: run, 33 of 33;
 - the cleanup of the fixtures in the hosted job of the views, which places them on
-  every run and takes the environment down with them;
-- the evidence that makes the spec Implemented.
+  every run: one step after the pre-review, as decided below;
+- the evidence that makes the spec Implemented: written there, where the status
+  follows the case of the measures.
 
 Decided by the lead maintainer on 2026-10-06:
 
@@ -1082,13 +1086,27 @@ Decided while implementing, each awaiting the review of the milestone:
 - **The measures take the 95th percentile of twenty after five**, the form the
   check gives the search and the filter.
 - **The budget of the unit measure is asserted wherever the unit tests run**, the
-  hosted runners included, in both forms of the unit job. The hosted runner has
-  not run it: its margin there is not known.
+  hosted runners included, in both forms of the unit job. The hosted unit job of
+  this pull request, run 37520156275 of the workflow of the unit tests, on the
+  image ubuntu-24.04-arm, on 2026-10-06 from 19:35 to 19:37 UTC, ran it in both
+  forms after the 73 files of the tests, within the budget, as its log says: the
+  slowest series was the parser, 79.4 milliseconds at the 95th percentile on the
+  separate modules and 82.6 on the production build, of 250; the search 48.1 and
+  48.7; the filter 1.9 in both; the search among the lines a choice of levels
+  leaves 50.0 and 49.2; the rows, not wrapped, at 120 and at 40 columns, 21.6,
+  22.1 and 17.5, and 26.2, 22.9 and 17.2; the lines of a text read without its
+  levels 29.3 and 30.0.
 - **No key of the store is deleted by the scripts.** The way out of files from
   which no backup comes is `pnpm demo:down`.
-- **The hosted job of the views has no cleanup step yet**: the cleanup of the
-  synced backups has the local evidence above, and its step is the third pull
-  request.
+- **The hosted job of the views removes the fixtures of the tabs since the third
+  pull request**, in one step after the pre-review that runs the cleanup of the
+  fixtures, then the verification of the installation it leaves: the cleanup of the
+  synced backups has the local evidence above, 104 seconds after the suites on
+  2026-10-06, and 118 seconds after the twelve suites and the pre-review in the
+  final runs of the third pull request on 2026-10-07, 42 of them the two deletions
+  the server carried out, with the verification after it in 22; on the hosted
+  runner the step is proven by the CI of the third pull request when it runs,
+  which is read and not assumed.
 - **The runner waits for the server before the suites as well**: for the requests
   of the namespace of the installation, twelve minutes at most, and it stops on a
   request for a download the server did not look at in a minute. A request to
@@ -1177,3 +1195,666 @@ Open, for the review of the milestone:
   that names it. Their branches for an operation within five minutes of the edge
   of the window, for an environment older than its window and for backups in
   flight have not run: the environments of the runs were hours old.
+
+### The Tabs On The Fixtures, The Third Pull Request Of T2.3
+
+Written on 2026-10-07. This pull request brings the suites on the fixtures of the
+second: the eight cases of the suite of the tabs that waited, which load the
+artifacts of the backups synced from the store and the logs of the operations the
+server refused, and the two that needed no fixture the environment did not have;
+the case of the measures of REQ-147 in the packaged application; the pre-review
+with the tabs open, which is the layer of VIEW-12; the step of the hosted job of
+the views that removes the fixtures of the tabs after the pre-review and verifies
+the installation they leave; and the words of a storage location that is not
+there, which named the backup twice, said once. Each was run on the cluster of the
+test environment and seen failing by changes made on purpose, as the runs and the
+mutations below say. Implemented by 2026-10-07: every check of the Tests table has
+its evidence at the layer it names, VIEW-10 in the packaged application with the
+case of the measures, which passed alone on the final code of the measures and in
+the run of the twelve suites of the final runs, with its numbers in its row above
+and under the measures below, and VIEW-12 with the pre-review. The runs of the
+final code, three unit tests hardened under the load of the whole unit run, the
+four changes of an independent review of the pull request and what that review
+found are below. The CI of this pull request proves on the hosted runner what the
+runs proved here, when it runs: nothing of it is written ahead of it.
+
+**What the suite of the tabs proves on the fixtures.** The
+[suite](../../e2e/__tests__/velero-e2e-artifacts.tests.ts) is 47 cases since this
+pull request, and none is written as waiting. Its cases on the fixtures come after
+the ones on the real backup and the real restore, each request created as early as
+it can be, so that the wait for the server overlaps the work that creates none,
+and what each tab is to show is read in `tab-fixtures.json`, which the runner
+writes beside the reports before the suites start, counted outside the extension:
+
+- the backup synced without a log: its Log tab ends as a file the store does not
+  have, said by the phase of a backup that ended, in the past, with no command to
+  try again, and its Results, Resources and Volumes tabs load the empty forms, of
+  28, 3 and 3 bytes as the fixtures counted them, each said in the words of its
+  viewer (VIEW-04, VIEW-06, VIEW-07, VIEW-08, VIEW-14; DIAG-06);
+- the backup and the restore that failed their validation: the Log tab of each
+  ends as nothing Velero writes for an operation that failed its validation, with
+  a request each, which the server processed with its labels and its target
+  (VIEW-04, VIEW-14, scenario 5; DIAG-06);
+- the backup synced with the artifacts made for the tabs: four errors, two under
+  Velero and one under each of two namespaces, and two warnings, one of Velero and
+  one of the cluster, each message in its parts where the hook wrote them and as
+  it is written, with the counts, equal to the counters of the status; 48
+  resources and 6,000 items, as many as the status counted, sorted as the suite
+  sorts what the fixtures wrote, with the count of each resource, the items of the
+  cluster in their column and the filter; and five volumes, each in its row with
+  its details by the names the release writes them with, `ReadyToUse` and `Phase`
+  among them, the times read as the release writes them (VIEW-06, VIEW-07,
+  VIEW-08, VIEW-14; scenarios 2 and 4);
+- the load of its log, the one load long enough to be watched: cancelled once its
+  request is in the cluster, at the wait for its URL, said as cancelled with the
+  request that stays in the namespace until Velero removes it, with no text and
+  with the command that asks again, which has the focus; then asked again, as a
+  new request, named in every moment of the load, with the steps in the order the
+  main process tells them, two of them at least, the twelve pages rising to the
+  last and the bytes of the download, seen once at 9.8 MiB, never going down. In
+  the first run the main process took 784 milliseconds from the queue to the
+  pages, and the cancel landed at the wait (VIEW-03; REQ-140);
+- the log of 200,000 lines: saved first, within the ten minutes the main process
+  holds it, into a file of 49,143,988 bytes and 200,000 lines whose digest is the
+  one the fixtures counted while they wrote it, with nothing written to the
+  cluster; then its lines and its levels as the fixtures counted them, 4 at error,
+  2 at warning, 169,231 at info, 30,217 at debug and 546 other, in the viewer and
+  in the file, read there with the same rule; a hundred rows mounted at most at
+  five places, and wrapped; the four searches the fixtures counted, with their
+  counts in the viewer and in the file, one in small letters and one with no
+  match; Enter and Shift with Enter among the 56 matches of `level=error`; with
+  info chosen, the 40 lines that carry `level=error` in their words, the first of
+  them line 2508, read at info in the file; the four lines at error by their
+  numbers; the line of 10,000 characters whole, the one of 10,001 cut with the
+  words of the cut, the one of 20,000 cut; and the line across the first page,
+  line 16,987, whole with its character of three bytes (VIEW-05, VIEW-11,
+  VIEW-14; scenario 1);
+- the measures, on the same log (VIEW-10; scenario 7), below;
+- another installation: writes are off when it is selected, and back in the
+  installation of the demo no tab holds what it loaded, the log of 200,000 lines
+  among it, which was shown when the installation changed; then, in the
+  installation of the views with writes on for it, the backup whose storage
+  location is not there, said before any request on every tab, with no command,
+  nothing counted and no request in the namespace (VIEW-01, VIEW-04; REQ-138,
+  REQ-141);
+- the restore asked from a schedule that has no backup, which names none: nothing
+  to ask for, said before any request, with no command with writes on and nothing
+  counted (VIEW-04; scenario 5);
+- the reader of a part, as a second entry of the catalog, through its kubeconfig
+  with the context renamed for the suite, on a backup of the installation of the
+  views: the cluster refused the creation, said forbidden at the creation in the
+  words of SPEC-0010, with every step before the creation seen, writes left on,
+  nothing in the namespace and nothing counted, since the API server does not
+  count a refusal to the identity; the first entry is opened again for the last
+  cases (DIAG-18, one identity).
+
+The case of another installation comes right after the log of 200,000 lines, so
+that the drop on a change of installation is proven on a text that is held; the
+case of the restore without a backup name turns writes on again in the demo after
+it.
+
+Over the suite the API server counted what the guard was told: twenty requests
+asked, twenty created with 201 and twenty removed by the server with 200, 39 reads
+of them by their names and twenty writes of the server into them, no other code
+and nothing of another kind of Velero; nothing left in the cluster, the objects of
+Velero as they were, and no line in the errors of the application: a download that
+ends as a file the store does not have writes none, nor does the refusal to the
+identity. Of the twenty, sixteen delivered a text through the tunnel, three ended
+as a file the store does not have and one was cancelled after its creation. The
+writes of the server are pinned to the requests since the review of the pull
+request, one for each, where the last case asserted at least as many before, and
+every run counted one for one. At its end, after the wait for the server, the
+suite removes with the one helper of the suites that deletes the DownloadRequests
+of the extension a case left in the installation of the views, which no server
+reads, and says what it removed: nothing, in every run that passed.
+
+The scenarios: 1, the log, is the case of the real backup, as the scenario says,
+and the one of the log of 200,000 lines for what the real log does not hold; 2,
+the results, the case of the synced backup, which failed in part; 3, the
+resources, the case of the real restore; 4, the volumes, the synced backup, and
+the restore with no volume; 5, nothing written, the two refused operations and the
+restore without a backup name, with a backup at work at the component layer; 6,
+before and during, the cases with writes off and on, the real log and the large
+log; 7, a large log, the measures; 8, keyboard and themes, the pre-review. Of the
+Success Criteria, the log of the real backup read with the search and the filters
+is the case of the real backup since the first pull request, and that no artifact
+is fetched that was not asked for is the guard: nothing counted when a tab opens,
+one creation for each load, and nothing else.
+
+**The checks of SPEC-0010 the suite proves in the packaged application**, as
+decided while implementing: DIAG-02, the reads and the creations counted over the
+twenty requests, none before a confirmation; DIAG-06, the three logs the store does
+not have, ended as a missing file at the download, on a 404 of the store, for the
+synced backup without a log and the two operations that failed their validation;
+DIAG-10 and DIAG-11, the sixteen loads through the tunnel to the Pod of the store,
+with plain HTTP inside it said for what it is; DIAG-15, no signed URL in any new
+report, nor in the words of the views; DIAG-18, the artifacts of a backup synced
+from the store, and one identity, the reader of a part, refused at the creation.
+The three other identities of DIAG-18, and DIAG-07, DIAG-12 and DIAG-13 in a tab,
+stay with the proof and with the evidence of
+[SPEC-0010](SPEC-0010-diagnostic-request-and-transport.md#with-the-tabs-t23): they
+need accounts in the installation of the demo, or its storage location changed,
+and whether they come in a slice after this one or stay proven by the proof is for
+the review of the milestone.
+
+**The pre-review with the tabs open** (VIEW-12, REQ-149, scenario 8). The
+[pre-review](../../e2e/__tests__/pre-review.tests.ts) looks at 35 views since this
+pull request, in 33 cases, and the eight of the tabs come right after its first
+two: they select the installation of the demo and turn writes on, and end by
+selecting the installation the second case chose, with writes off, so that the 27
+views after them start where they did. Each of the eight is pictured in both
+themes at 1440 by 900, at 900 by 650 and at twice the zoom, and checked by the
+check of the page and by the one of a tab, which learned with this pull request
+the strip inside its room and the rows of the results, of the resources and of the
+volumes, twenty each: a diagnostic tab with writes off; its confirmation, kept
+open through the six layouts; the log of the backup that failed its validation,
+which the store does not have; the resources of the real restore with their
+actions; the log of the synced backup loaded, searched and with a level chosen;
+the same with the lines wrapped; its results; and its volumes with a detail open.
+The loads come first, the refused backup, the real restore and then the synced
+backup, its cancel and its three loads, so that the ten minutes of the server
+overlap the views after the last load: the order of the cases is not the one of
+the eight above. With the keyboard alone: the tabs from the way back, the arrows,
+Home and End around both ends, each tab saying whether it is selected, Enter
+opening one and the address naming it; the roles read as attributes, one list of
+tabs named for the backup, five tabs each naming the part it shows, one of them
+selected, the panel named by its tab; from the Log tab four presses to the
+command, Enter, the confirmation with the focus on it, one press to the command
+that creates, and nothing created through the six layouts; after the load of the
+synced log the focus on its first line; after a cancelled load on the command that
+asks again; after the file the store does not have, which has no command to ask
+again, on the command that takes the tab back to its first state; the search field
+by its label, "Search the log", `level=warning` typed key by key and held whole,
+its 14 matches told to who does not see, as the fixtures counted them, Enter to
+the next match on a later line and Shift with Enter back to the first, with the
+focus kept in the field. The page stands still at the widths where the bar of the
+log goes to a second line, scanned from 1440 to 720 pixels: seven in the run that
+passed, and nothing moved around any of them. Each request the pre-review asks for
+is told to the guard by its name and read in the cluster by name, five in the run
+that passed, since the cancel landed before anything was created, and six when it
+lands after; the last case waits for the server to remove them, where before this
+pull request it expected none without waiting. Its reports are
+`pre-review-layout.json`, every layout with what the two checks found, and
+`pre-review-tabs.json`, the views with their requests, the facts of each journey,
+the ledger and the items left to human judgment, and it reads `tab-fixtures.json`
+beside them.
+
+**The runs**, all on 2026-10-07, on the cluster of the test environment, on a
+machine of a developer that ran other work beside them:
+
+- The suite of the tabs alone, four times. The first run, before the commit of the
+  cases, passed every one of the eight new cases at the first try and failed two
+  cases of the volumes of the demo, whose expectation lacked a field the helper had
+  gained: 44 passed, 2 failed, 1 waiting, 878.7 seconds of the runner of the
+  suites, after the host gave up on the first start, with a load of about 8 from
+  other work, and passed on the second. The expectation was made whole before the
+  commit, and the two cases passed in every run after. Three runs with the
+  mutations of batches 1 to 3 applied, 814.7, 826.5 and 801.7 seconds, 40, 40 and
+  41 passed, each failure the one its mutation was made for, below. The last case
+  waited 553 to 640 seconds for the server, 629 to 658 after the last load.
+- The words of a storage location that is not there: the two unit files of the
+  words, 51 tests, 5 of them seen failing on the words of before and all 51
+  passing on the words of now; then two runs of the suite with the mutations of
+  batches 4 and 5, 813.5 and 779.3 seconds, 40 passed and 6 failed each, with the
+  case of another installation passing on the new words.
+- The case of the measures, in eight runs of the suite alone, 769.0 to 828.1
+  seconds of the runner of the suites each. The first, 786.0 seconds, failed the
+  case at a choice that left no level chosen, where the case expected no line and
+  the viewer shows every line until a level is chosen: 46 passed, 1 failed. The
+  case then counted every line for that choice, counted the rows mounted after the
+  clears of the search and at the start of the gestures as well, began its
+  gestures from line 1, brought there without timing, so that the end of a
+  gesture is never met by chance from a line near a far place, and wrote the room,
+  the page, the notch and its own time into its report; the second run passed, 47
+  of 47, in 799.5 seconds. Five runs with its mutations, below, one of which asked
+  for one more change of the measure, the rule of an end of the list; and the
+  last, on the final code of the measures, passed, 47 of 47, in 777.9 seconds,
+  with a wait of 578 seconds in the last case, 607 after the last load: it is the
+  run of the numbers of VIEW-10. The last case waited 568 to 624 seconds in the
+  eight runs, 600 to 657 after the last load, and the load of the machine stayed
+  between 2 and 4, with other work beside the runs.
+- The pre-review, twice, with a run of its mutations between. The first run, 702
+  seconds, 31 passed and 2 failed: the case of the search read the texts of the
+  fixtures under a name the file does not have, and the last case counted 204
+  layouts of 210, the six of the search case not written. With the pre-review
+  reading the facts of the tabs through the helper of the suite of the tabs, and
+  searching by a text the runner counted, the second run passed, 33 of 33, in
+  750.2 seconds: 210 pictures, 210 layouts with nothing found, five requests
+  asked and none left.
+- The final runs, the same evening, one after the other, on the head of this pull
+  request before the hardening of three unit tests and the four changes of the
+  review, which change nothing of the product: the checks of the repository, the
+  lint with nothing to fix, the types, Trunk over 273 files with one note that is
+  not of this branch, the build and Knip, in 24 seconds from the first to the
+  last; `pnpm test:unit` in its first form twice, red both times on tests that
+  time under the load of its 73 workers, which rose to 16 on twelve cores, 3 of
+  2,291 tests in 73 files and then 1, the one left a ratio of two readings of the
+  parser of the results that passes alone, 26 of 26 in a second, none of them of
+  this branch: the hardening below; `pnpm demo:down` in 6 seconds and
+  `pnpm demo:up` in 228, a new environment; `pnpm e2e:views`, the twelve suites,
+  159 cases passed, 1,862.7 seconds of the runner of the suites and 2,003 from the
+  command, the suite of the tabs 789.8 of them, with a wait of 588 seconds for the
+  server, 617 after its last load, the host given up on one start, of the suite
+  of the journey, and started again in a new profile, and 1,737 seconds left of
+  the hour the invocation of the suites is given, at 51.7 percent of it;
+  `pnpm pre-review`, 33 of 33, 714.5 seconds of the runner and 795 from the
+  command, 210 pictures and 210 layouts with nothing found, five requests asked
+  and none left, no start given up; the cleanup of the fixtures in 118 seconds,
+  42 of them the two deletions the server carried out, with the seven namespaces
+  of the run removed, then `verify` in 22 seconds, its four checks passed;
+  `pnpm e2e` in 688 seconds, its fixtures and the transport proof with its sixteen
+  artifacts, on the installation the cleanup left with nothing; and the cluster
+  read after it, read only: no request of any kind, no backup, no restore and no
+  schedule, the installation alone with its storage location available.
+- `pnpm test:unit` on both build forms on the final head, with the hardened tests
+  and the four changes of the review, later the same evening, with a load of
+  about 3 before each and other work beside them: 73 files and 2,291 tests passed
+  in both, in 61.4 seconds on the separate modules and 46.0 on the production
+  build, and the unit measure after each, 1 file and 1 test, in 15.9 seconds: on
+  500,000 lines the parser at 142.1 and 124.2 milliseconds at the 95th
+  percentile, the search 80.1 and 80.3, the filter 3.3 in both, the search among
+  the lines a choice of levels leaves 77.4 and 78.4, the rows not wrapped, at 120
+  and at 40 columns 62.4, 39.9 and 32.6, and 49.8, 72.8 and 51.0, and the lines
+  of a text read without its levels 47.0 and 48.4, each within its 250, with the
+  load the runs themselves raised to 16 and to 10. The three hardened tests
+  passed under that load, and alone after it in 296, 1,237 and 3,031
+  milliseconds.
+- The suite of the tabs alone on the final head, with the four changes of the
+  review, later the same evening, on the environment of the final runs with the
+  fixtures of the demo placed again after the cleanup, in 97 seconds, and the
+  fixtures of the tabs placed by the run itself, the eleven files sent in the
+  first way and the two synced backups created by the server: 47 of 47 passed, in
+  796.4 seconds of the runner of the suites and 930 from the command, with a wait
+  of 594 seconds in the last case, 622 after its last load. The last case pinned
+  the writes of the server to the requests the ledger holds, one for each, and
+  passed; the case of the measures read the height of one mounted row and found
+  the one the helpers assume; the end of the suite found nothing to remove in the
+  installation of the views, and said nothing. The measures: an idle frame of
+  16.7 milliseconds at the median of sixty and 17.9 at the 95th percentile; the
+  answers 51.0 at the 95th percentile, the searches 59.5 and the filters 39.3, of
+  250; the longest frame of the twenty gestures 15.5 at the 95th percentile and
+  15.6 the slowest, of 50, each gesture in two frames; 32 rows mounted at most;
+  the case 4,509 milliseconds.
+- The hosted run of the views job of this pull request has not run as this is
+  written: the CI of the pull request proves on its runner what the runs above
+  proved here, the suites, the pre-review and the cleanup step, with the baseline
+  of the frames, and its result is read there and never assumed.
+
+**Seen failing**, each by a change made on purpose to the code, a few at a time,
+run in the packaged application and reverted after; each case failed at its own
+expectation, and the last case only as a consequence of the gestures the cases
+before it did not make, after the server had removed every request:
+
+- the words of a missing file chosen by whether a load was counted and not by the
+  failure of the validation: the backup synced without a log got the words of a
+  failed validation, and the refused operations the ones of a backup that ended;
+- the name of a message written under its resource: the parts of the three
+  messages that have a name;
+- a warning read as an error at the start of a line: the counts of the levels, 6
+  at error and none at warning;
+- a restore that names no backup given nothing to say: the command to create
+  offered where none may be;
+- an item without a slash given the namespace `default`: the first mounted rows of
+  the resources, with a namespace where the cluster is;
+- the wait and the download swapped in what the panel says of its step: the case
+  of the real log at the words of the step, and the large log at the order of its
+  steps;
+- the first `level=` anywhere in the line taken as the level: 16 at error, 14 at
+  warning and 522 other;
+- a backup whose location is not there never said missing: the command offered in
+  the installation of the views;
+- the fields of a detail written with a small first letter: `readyToUse` where the
+  release writes `ReadyToUse`;
+- a long line cut at ten thousand bytes: 9,760 characters where 10,000 are
+  expected, since the long lines carry wide characters;
+- the refusal of the cluster said as a store that refused the download: the words
+  of the failure;
+- an identifier of a part of the panel that matches nothing: the cases of the
+  restore without a backup and of another installation failed by the name of the
+  part, after thirty seconds, and never read it as empty;
+- the native snapshot given a size of 1024 bytes: 1.0 KiB where "Not stated" is;
+- the file written without its last line: 49,143,716 bytes where 49,143,988 are,
+  and the digest with them; on the real log, its save, its save after Escape, the
+  counts of its levels and its matches, as consequences;
+- a text with nothing in it shown after a cancellation, with its viewer drawn: the
+  cancel of the demo and the cancel of the large log, and the cases after them, the
+  log never loading, as consequences;
+- for the case of the measures, five changes in five runs of the suite alone, each
+  reverted after. The viewer made to keep two thousand rows ready on each side of
+  its room, about four thousand mounted at any place of the log, ended the case in
+  its first run by the ten seconds of a gesture near the end of the list and not
+  by its rules, the last row kept ready being the last line before and after a
+  notch near it: the measure learned that an end of the mounted rows at an edge
+  of the list that stays there has moved, and in its second run the case failed
+  by its three rules by name, 4,012 rows mounted over the bound of 100, the
+  answers at 1,619.2 milliseconds at the 95th percentile and the longest frame at
+  334.1, every gesture measured, with the two cases of the bound of the rows, on
+  the real log and on the synced one, failing beside it in both runs. A search
+  made to wait 300 milliseconds before the viewer is given the words: the answers
+  at 358.1 milliseconds at the 95th percentile, every search 338 to 361. A viewer
+  that writes the words of a search at once and its matches 400 milliseconds
+  later: the answers at 471.8, every search 440 to 669, since the measure does not
+  end at the words, and three cases that read the count beside the words failing
+  by the same defect, the two of the real log and the one of the synced log. A
+  text given twice among the ten measured: the rule of the twenty different
+  interactions, by its words, in the same list as the budgets. And the frames of
+  the window held 40 milliseconds each for two hundred frames before the baseline:
+  the case by name at the baseline, 40.3 milliseconds at the median of sixty,
+  nothing measured after it and the report saying so;
+- for the pre-review, the role of the list removed from the strip: the case of the
+  keyboard at the role, empty where `tablist` is; the focus left on the command
+  after a load: the case of the cancel and the load, on the command that loads
+  again where the first line is; the bar of the log given a fixed width of 900
+  pixels: the two cases of the log at 900 by 650 and at twice the zoom, the
+  workspace 924 pixels wide in a room of 561 and of 381 and the panel and the
+  viewer 900 in 513 and in 333, and the case that stands still, which found no
+  width at which the bar grows; these three in one run, 712.1 seconds, 5 failed
+  and 28 passed; and the focus left where the cancel went after a cancelled load:
+  the case of the cancel and the load, at the part that has the focus after the
+  cancel, where the command that asks again is expected, in one run of 834.3
+  seconds, 6 failed and 27 passed, the five others as consequences of the log that
+  case never loaded.
+
+**Three unit tests hardened under the load of the whole unit run.** The first form
+of `pnpm test:unit` of the final runs, 73 workers on a machine of twelve cores with
+a load that rose to 16, failed three tests of earlier pull requests, none of this
+branch, and then one, each of which passes alone: the time a message of the results
+is read in, measured as the least of five runs of tens of milliseconds, 5.60 and
+then 3.16 against a bound of 3 where the parser measures about 2; the render of
+thousands of results asked for two hundred at a time, 5,166 milliseconds against
+the 5,000 a case is given; and the command of a credential plugin that ignores the
+request to end, which its test killed at a bound of 500 milliseconds before the
+process had started under the load, and then found no process number to check.
+Nothing of the product changed. The first test times single readings of a text of
+128 KiB and of a text of 256 KiB, hundreds of each the one after the other, fifty
+at least, and holds the least of the large under three times the least of the
+small: 1.99 on the parser, over 398 readings of a fraction of a millisecond each,
+and 4.12 on a reading made quadratic on purpose, which fails it. The second has a
+time of its own of twenty seconds, with no assertion changed, and passed in 1.2 to
+1.5 seconds alone. The third runs the command within a bound of three seconds that
+is the test's own, the bound the product gives an operator untouched, checks its
+process once the command ran, and ends long before the command would end by
+itself, which it now does at twenty seconds; its neighbour, the command cancelled,
+is cancelled once the command runs and not after a fixed wait. With the kill of the
+product removed, both fail at the check of the process. Each file ran green twice
+alone, the second time with one worker, and the three held in the run of both
+forms on the final head, 2,291 of 2,291 in each, among the runs above.
+
+**An independent review of the pull request**, on 2026-10-07, found no blocker and
+nothing major, and eight minor points. Five are of these documents and are applied
+in this writing: five failures of a draft of the unit tests of the words were
+counted as failures the fix cured; the hosted unit run of the second pull request
+was written ahead of the run it is read from; the waits of the suite of the tabs
+were labelled as the time after its last load; the pixels of a mutation of the
+pre-review were paired with the wrong rooms; and the strip of the host was said
+never to wrap, where the pre-review saw it wrap at twice the zoom. Four are
+changes of the code, in one commit after the hardening, with nothing of the
+product changed: the writes of the server into the requests are pinned to the
+ledger of the suite of the tabs, one for each request, where the case asserted at
+least as many; the end of the suite removes, with the helper of the suites that
+deletes, which takes the kind of the requests since, the DownloadRequests of the
+extension a case left in the installation of the views, after the wait for the
+server, and says what it removed; the height of a line in the helpers says that it
+mirrors the one of the product, which the suites do not import, and the case of
+the measures reads the height of one mounted row and checks it against it, so that
+a line height the product changed fails by its name and not by the rows every
+gesture would then miss, which passed in the run of the suite alone on the final
+head, the row of a line as tall as the helpers assume; and the comment of the rule
+of the strip says what the
+rule finds, a strip wider than its room, and what it leaves to human judgment, a
+strip that wrapped, the rule unchanged. The review verified beside them that the
+suites create requests through the confirmation of the extension alone and delete
+none in the installation, read every request by name with the safe fields only,
+keep no signed URL in any report, line or name, take every expectation from the
+facts of the fixtures, from the status read on the cluster or from the file the
+suite saved and counted itself, time the measures inside the page as the design
+says, and that every claim of the release checked in its source holds. The four
+changes of the code ran in the suite of the tabs alone on the final head, among
+the runs above, 47 of 47: the pin of the writes held, one for each request, the
+row of a line measured as the helpers assume, and the end of the suite found
+nothing to remove in the installation of the views.
+
+Decided while implementing, each awaiting the review of the milestone:
+
+- **The frames of a scroll are measured as the answers are** (REQ-147): twenty
+  gestures after one that warms the viewer, for each the longest frame until the
+  rows of its position are mounted, and the 95th percentile of the twenty under 50
+  milliseconds, the slowest reported. A strict maximum over every frame would fail
+  a run on one pause of the collector of the renderer. The requirement says "each
+  frame": whether its words follow is for the lead maintainer.
+- **The checks of SPEC-0010 that are of this slice** are the ones above, at no
+  fixture beyond the ones of the second pull request; the ones that need more are
+  named with what they need.
+- **The words of the manual review stay**, and the
+  [walk](../development/TRY-IT.md) of the demo says what to expect of them: the
+  real backup has no warning, and the synced backup is the one that looks like a
+  failed backup. What the log of the real backup holds of the word "completed" no
+  run counted.
+- **No new authority of the scripts over the store**, as the second pull request
+  decided: the way out of files from which no backup comes is `pnpm demo:down`.
+- **The budgets of REQ-147 are asserted wherever the suites run**, the hosted
+  runner included: the case of the measures asserts them in the packaged
+  application as the unit measure asserts its own, and when the sixty idle frames
+  before the series say that the window cannot time a frame, their median over 25
+  milliseconds, the case fails by name and never passes for that reason. No series
+  is measured again inside the suite, and no budget is larger on the runner: a
+  second run of the job is a decision of a person, with both reports kept.
+- **The hosted job of the views removes the fixtures of the tabs**, in one step
+  after the pre-review and before it uploads the reports: the cleanup of the
+  fixtures, then the verification of the installation it leaves. Locally the
+  cleanup after the suites took 104 seconds on 2026-10-06, as the second pull
+  request records, and in the final runs of this one, after the twelve suites and
+  the pre-review, 118 seconds, 42 of them the two deletions the server carried
+  out, with the verification after it in 22; on the hosted runner the removal of
+  the namespaces of the views runs for the first time with this pull request, and
+  the time of the step there is read in its CI when it runs.
+- **The views of the tabs in the pre-review are ordered by their loads**, and not
+  as the list above numbers them, so that the wait for the server overlaps the
+  views that come after the last load; in the order of the list each run would
+  wait about four minutes more.
+- **The cancel of the pre-review may land before or after the creation**, and the
+  case allows both: it clicks as soon as the panel names the request, which the
+  panel does from the confirmation on, and in the run that passed the cancel came
+  before anything was created. The cancel after the creation is the one of the
+  suite of the tabs, whose watch waits for a step after the creation.
+- **The last case of the pre-review waits for the server** to remove what the
+  suite asked for, twelve minutes at most, before it expects no request.
+- **The end of the suite of the tabs removes what a failed case left in the
+  installation of the views**, with the one helper of the suites that deletes, as
+  the suite of the band of the server removes its requests there: a request in a
+  namespace no server reads would stay for ever and fail every suite after it. The
+  decision of the lead maintainer on the requests forbids a deletion in the
+  installation, where the server removes its own; whether its words, that nobody
+  deletes a DownloadRequest the extension created, cover a namespace of the
+  fixtures is for the review of the milestone. In every run that passed the end
+  removed nothing.
+
+**The measures of VIEW-10 in the packaged application** (REQ-147, REQ-142;
+scenario 7). The case of the measures runs on the log of 200,000 lines, after the
+case that saved and read it, in the same application. The clock is inside the
+page, in one evaluation that returns a promise, as the measures of the other
+suites take theirs: `performance.now()` at the event, a look at each frame, and a
+timer of ten seconds that rejects with what the viewer last showed, so that a run
+that fails says where the viewer was. A search is timed from the input event to
+the frame after the one where the words, the number of matches and the number of
+lines shown are all three the ones of `tab-fixtures.json` for that text: a viewer
+that writes the words before its matches, or a partial count, does not end the
+measure. The field of the viewer has no wait of its own: the input of the host
+calls what listens to it at each key, and its one delay, of half a second, is a
+mark for the style, so that nothing is subtracted and nothing is split. A filter is
+timed from the click on a level to the frame after the one where the levels chosen
+are the ones asked and the lines shown are the sum of their counts. A scroll
+gesture sets the position and times each frame until both ends of the mounted rows
+changed and every line the room shows at that position is mounted, read from the
+heights of the rows, the two lines that are cut taking two rows each; the measure
+is the longest frame, and does not depend on how many rows the list of the host
+keeps around its room. Two searches, two filters and one scroll warm the viewer;
+then ten searches, each of a text of the fixtures never searched before in the
+view, counted again in the saved file before it is timed, ten filters, each a set
+of levels the view was never given, and twenty gestures, six of a notch, six of a
+page and eight far, to fixed places. The budgets: the 95th percentile of the twenty
+answers under 250 milliseconds and of the twenty longest frames under 50; a hundred
+rows mounted at most throughout; twenty different interactions; and sixty idle
+frames before the series, whose median over 25 milliseconds fails the case by
+name. The report, `view-10-log-performance`, is written beside the reports of the
+suite before anything is asserted, with the budgets, the lines, the rows mounted,
+the baseline, and for each series its percentile, its median, its slowest and
+every time with its interaction, and the same as one line of the output,
+`VIEW-10 <json>`; a measure that threw leaves what stopped it in the report. The
+rules and the budgets are asserted as one list, so that one run names every rule
+it broke.
+
+The numbers, of a machine of a developer running macOS beside other work, with a
+load between 2 and 3.5 over the last one, five and fifteen minutes, Freelens 1.10.3
+in a window of 1440 by 900, where the list of the log has a room of 208 pixels, ten
+lines and a part of one, so that 23 rows are mounted while it scrolls and 32 at
+the first lines, and a display that draws at 60 Hz, where an idle frame is 16.7
+milliseconds and no frame can be timed finer:
+
+| Series, the run of the suite alone and the run of the twelve suites | 95th percentile | Median | Slowest |
+| --- | --- | --- | --- |
+| Sixty idle frames of the window, in milliseconds | 18.1 and 18.3 | 16.6 and 16.6 | 18.7 and 18.8 |
+| The twenty answers, of 250 | 51.1 and 51.1 | 36.8 and 36.1 | 51.1 and 51.5 |
+| The ten searches among them | 51.1 and 51.5 | 48.8 and 47.8 | 51.1 and 51.5 |
+| The ten filters among them | 38.0 and 37.9 | 28.5 and 31.3 | 38.0 and 37.9 |
+| The longest frame of the twenty gestures, of 50 | 15.9 and 15.4 | 14.4 and 14.3 | 18.3 and 15.8 |
+
+Thirty-two rows mounted at most in both, of 100; the case 4,635 and 4,656
+milliseconds from its start to its report, the read of the file of 49 MB, its
+digest, the counts of twelve texts in 200,000 lines, the sixty idle frames and the
+45 interactions included, where two minutes were estimated. Every gesture drew in
+two frames, within one or two refreshes of the display; a search takes about 50
+milliseconds where a choice of levels takes 25 to 40, since it renders the rows
+with the words marked and brings the first match into the room; the warm searches
+took 47.6 and 59.1 milliseconds, and the two green runs before the final one gave
+the same numbers within four milliseconds. The run of the suite alone on the final
+head, with the four changes of the review, gave an idle frame of 16.7 at the median
+and 17.9 at the 95th percentile, the answers 51.0 at the 95th percentile with the
+searches 59.5 and the filters 39.3, the longest frame 15.5 at the 95th percentile
+and 15.6 the slowest, 32 rows and 4,509 milliseconds. The measures are of a short list: a
+taller window mounts more rows, up to the bound, and its frames may differ, which
+is why the report says the room. The hosted runner: the CI of this pull request
+proves the case there when it runs, and its numbers are copied from its report and
+never assumed; when the window of the runner cannot time a frame, the case fails by
+name there, and a second run of the job is a decision of a person.
+
+**The clarification of REQ-149, the focus after a failure.** The requirement says
+"back on the command after a failure", and a failure that is not safe to ask again
+offers no such command. After a load that ended without its text, the focus goes
+to the first command the tab offers, in this order: the confirmation, the command
+that asks again, the command that allows, the command that takes the tab back to
+its first state, the way to the target bar; the words of the failure get the focus
+only when the tab offers none of these. So after a failure with no command to ask
+again, as for a file the store does not have, the focus is on the command that
+takes the tab back to its first state, and it is on the words of the failure only
+when writes are off with no way to the target bar. The pre-review asserts it as
+the code does, on the log of the backup that failed its validation, and the suite
+of the tabs on the backup synced without a log.
+
+**The words of a storage location that is not there.** Since the request and its
+transport, the words of a load that ends before anything is created, for a backup
+whose storage location is not in the namespace, read
+`The storage location of the backup of the backup <name> is not in <namespace>: Velero signs no URL without it, and no request was created.`,
+and the ones of a read the cluster refused
+`The cluster refused to read the storage location of the backup of the backup <name>. No request was created.`:
+the words made for the backup of a restore were given to a backup as well. The
+suite of the tabs read them on the backup whose location is not there and recorded
+them as a phrasing and not a fault, since SPEC-0010 gives no exact sentence. Since
+this pull request the words of a backup say
+`The storage location of the backup <name> is not in <namespace>: Velero signs no URL without it, and no request was created.`
+and `The cluster refused to read the storage location of the backup <name>. No request was created.`,
+and the ones of a restore
+`The storage location of the backup of the restore <name> is not in <namespace>: Velero signs no URL without it, and no request was created.`,
+as before, in the two places of the one function of the words of SPEC-0010 and in
+what the views say before any request; in its unit tests, of which four, as
+committed, fail on the words of before, by a run of the two files against the
+words as they were, on 2026-10-07, the run final-20-diagnostic-old-words-red of
+the final runs: 4 failed and 47 passed of 51, the two of a backup among the tests
+of the words of the tabs, the one of a backup whose storage location is not there
+and the one of a backup that did not start and names none yet, and the two of a
+backup among the tests of the words of SPEC-0010, the object that is not there
+before the creation and the read the cluster refused, and the same two files 51 of
+51 with the words of now, the run final-21-diagnostic-restored-green right after
+it; a draft of them, with an expectation of a restore the fix does not make, had
+failed five times in the run of the morning; and in what the suite of the tabs
+reads of them. No requirement changes: SPEC-0010 asks that a backup whose storage
+location is not there is said before any creation, with which object is not
+there.
+
+The limits, what no run reached:
+
+- The cancel landed at the wait for the URL in the suite of the tabs and before the
+  creation in the pre-review: a cancel at the creation itself, during the download
+  and while the pages are taken was not run in the packaged application, and stays
+  at the component layer.
+- The steps of a load were seen as a subsequence, two or more, of the ones the
+  main process tells: the large log took 784 milliseconds in the main process in
+  the first run, and the loads of the demo 350 to 450. Each step in isolation stays
+  at the unit and component layers.
+- The phases no fixture of the installation has, at work, failed at work and being
+  deleted, stay at the unit and component layers: a request in a namespace no
+  server reads is never signed, so the store is never asked.
+- A log in the JSON format, the actions updated, failed and skipped, a count of the
+  results that differs from the status, a volume of a restore, a moved volume, a
+  method and a field that are not known: the unit and component layers, as the
+  second pull request says.
+- The log of 500,000 lines is the unit measure alone.
+- The dialog of the host is shown in no run, and no screen reader was part of one.
+- What the hosted runner reaches is not known as this is written: the suite of the
+  tabs, the pre-review, the cleanup step and the baseline of the frames run there
+  with the CI of this pull request, which is read and never assumed.
+
+Open, for the review of the milestone, as they stand:
+
+- **The frames of the scroll** (REQ-147): built as the 95th percentile of twenty
+  longest frames, above, which the words of the requirement do not say.
+- **The words of VIEW-08.** The check asks for the four methods with their details
+  and the size read from each; on the synced backup the suite shows three methods
+  and a volume that was skipped, and the size of the ones that carry one, since a
+  backup writes three methods and no size for a native snapshot, and the method of
+  a restore is in the volume information of a restore alone. Recorded as a
+  deviation of the check since this pull request, for the lead maintainer to
+  reword or to keep.
+- **The results of the synced backup** hold, beside the errors of two namespaces
+  REQ-151 names and the warning of Velero the second scenario names, two errors of
+  Velero and a warning of the cluster: the suite asserts all six, and whether the
+  words name them is for the lead maintainer.
+- **The cases that pin the installation of the demo** to the seven operations of
+  the run, by name: a backup made by hand in that namespace during a review fails
+  them with a difference that names it; their branches for an operation within
+  five minutes of the edge of the window, for an environment older than its window
+  and for backups in flight have not run, the environments of the runs being hours
+  old.
+- **The view of a tab at 900 by 650 and at twice the zoom**, as the limits of the
+  first pull request say: the view scrolls with a list in it. The pre-review found
+  nothing that lies over something else, is wider than its room or is cut at those
+  sizes, and leaves to human judgment what its pictures show there: at twice the
+  zoom the strip goes to two lines, Volumes under Summary; at 900 by 650 the two
+  commands of a confirmation, held at the lower edge of the room, cover the object
+  scrolled under them, by design; and the first row of the volumes is tall where a
+  cell is scrolled out of sight sideways. Beside them, in its report: the contrast
+  of the parts of the tabs in both themes, which no suite checks, the choices of
+  the bar drawn as checkboxes, the match the search is at beside the other
+  matches, the words of a failure beside its mark and its line, and the row of a
+  resource over the rows of its items; what Escape does in the search field, which
+  clears the words and keeps the keyboard in the field without leaving the view,
+  as the suite asserts, and whether that is what an operator expects of the key;
+  and whether a long line reads well when it is cut, its row showing its first
+  characters and then how many more are not shown. The
+  [walk](../development/TRY-IT.md) of the demo names each as a thing to look at.
+- **The name of the command of a tab**, the request it creates and not what the
+  operator gets, as the first pull request left it.
+- **The main process in the words**, as the first pull request left it.
+- **Two looks for the choices of a filter**, as the first pull request left it.
+- **The pages and the bytes of a load are read from the digits in the words of the
+  step.** No attribute carries them, where the other numbers of the tabs are
+  written as attributes beside their words: the suite reads the digits the
+  extension writes from its own template, which are not the ones of the language
+  of the machine. An attribute for both is one change of the panel, with its
+  component test.
+- **What changed in the words of SPEC-0010**, above, and the decisions above.
+
+What this pull request leaves of the spec: nothing of its checks at the layer each
+names; what the review of the milestone decides of the deviations and the open
+points of the three pull requests; and what the CI of this pull request says of
+the hosted runner, read when it ran.
