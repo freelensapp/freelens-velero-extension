@@ -20,7 +20,7 @@ function location(name: string, provider?: string): BackupStorageLocationResourc
 
 describe("the version of the server against the reviewed release", () => {
   it("knows the reviewed release, which is the one the specs name", () => {
-    expect(REVIEWED_RELEASE).toBe("v1.18.2");
+    expect(REVIEWED_RELEASE).toBe("v1.18.4");
   });
 
   it("says that the same version is the reviewed release", () => {

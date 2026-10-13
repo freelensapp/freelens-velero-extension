@@ -48,7 +48,7 @@ function fixture(options: { processed?: boolean } = {}) {
           ? { ...created, status: {} }
           : {
               ...created,
-              status: { phase: "Processed", serverVersion: "v1.18.2", processedTimestamp: "t", plugins: [] },
+              status: { phase: "Processed", serverVersion: "v1.18.4", processedTimestamp: "t", plugins: [] },
             },
     ),
   };
@@ -177,7 +177,7 @@ describe("the procedures of the main process", () => {
 
     await expect(call(CHANNELS.writeRun, FRAME_A, run)).resolves.toEqual({
       ok: true,
-      value: { version: "v1.18.2", processed: "t", plugins: [], request: { name: "freelens-velero-x", uid: "uid" } },
+      value: { version: "v1.18.4", processed: "t", plugins: [], request: { name: "freelens-velero-x", uid: "uid" } },
     });
     expect(adapter.createGenerated).toHaveBeenCalledOnce();
     await expect(call(CHANNELS.writeStatus, FRAME_A, { cluster: "cluster-a", request })).resolves.toEqual({
@@ -394,7 +394,7 @@ describe("the frame of a write, checked again", () => {
       return {
         metadata: { name: "freelens-velero-x", namespace: "velero", uid: "uid" },
         spec: {},
-        status: { phase: "Processed", serverVersion: "v1.18.2", processedTimestamp: "t", plugins: [] },
+        status: { phase: "Processed", serverVersion: "v1.18.4", processedTimestamp: "t", plugins: [] },
       };
     });
     expect(await call(CHANNELS.writeRun, event, run(token))).toMatchObject({

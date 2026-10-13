@@ -4658,7 +4658,7 @@ describe("foundation fixture boundaries", () => {
     asks(target, "ServerStatusRequest", "velero-demo", status, {
       phase: "Processed",
       processedTimestamp: "2026-10-05T10:04:10Z",
-      serverVersion: "v1.18.2",
+      serverVersion: "v1.18.4",
     });
     const began = target.runtime.elapsed();
 

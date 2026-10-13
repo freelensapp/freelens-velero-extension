@@ -585,16 +585,16 @@ describe("the band of the server", () => {
 
   it.each([
     [
-      "v1.18.4",
+      "v1.18.6",
       "series",
-      "This server runs v1.18.4, of the series v1.18 the extension was reviewed against, in v1.18.2.",
+      "This server runs v1.18.6, of the series v1.18 the extension was reviewed against, in v1.18.4.",
     ],
     ["v1.19.0", "other", "a newer series than the release the extension was reviewed against"],
     ["v1.17.1", "other", "an older series"],
     [
-      "v1.18.2-rc.1",
+      "v1.18.4-rc.1",
       "series",
-      "This server runs v1.18.2-rc.1, of the series v1.18 the extension was reviewed against, in v1.18.2.",
+      "This server runs v1.18.4-rc.1, of the series v1.18 the extension was reviewed against, in v1.18.4.",
     ],
     ["main-build", "unknown", "it is shown as the server wrote it, with no comparison"],
   ])("says of the version %s how it stands against the reviewed release", async (version, relation, text) => {

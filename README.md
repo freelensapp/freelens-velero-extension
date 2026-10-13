@@ -53,7 +53,7 @@ the [roadmap](docs/development/ROADMAP.md).
 - **Freelens >= 1.10.3.** The extension is built and tested against Freelens
   1.10.3. Freelens v2 is not a target of this phase.
 - **A Kubernetes cluster with Velero.** The reviewed versions are Velero
-  v1.18.2 and its AWS plugin v1.14.2; the API is `velero.io/v1`, with
+  v1.18.4 and its AWS plugin v1.14.4; the API is `velero.io/v1`, with
   `velero.io/v2alpha1` for the data movement kinds.
 - **Node.js** is required only when building the extension from source. The
   package is a self-contained bundle: its runtime libraries are compiled into

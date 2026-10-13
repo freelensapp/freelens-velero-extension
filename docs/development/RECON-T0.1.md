@@ -12,13 +12,16 @@ contacted, no environment data were collected, and no upstream code was executed
 
 | Component | Reviewed revision | Evidence |
 | --- | --- | --- |
-| Velero release | `v1.18.2`, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8` | [Release](https://github.com/velero-io/velero/releases/tag/v1.18.2), [source](https://github.com/velero-io/velero/tree/c253c7fe37d78c9b7e55c68544f7c5b2608712d8) |
+| Velero release | `v1.18.4`, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, since the drift watch of 2026-10-13; the types were written from `v1.18.2`, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8` | [Release](https://github.com/velero-io/velero/releases/tag/v1.18.4), [source](https://github.com/velero-io/velero/tree/4ee1e79a7aed367fd9b767b8219ec65bd0c96892) |
 | Velero main comparison | `60163e0827e72658bb6546165a727300170e628b` | [Immutable comparison source](https://github.com/velero-io/velero/tree/60163e0827e72658bb6546165a727300170e628b) |
-| AWS object-store plugin | `v1.14.2`, `5463822fd77bc1c2a1151ee76c830ad979ff2781` | [Release](https://github.com/velero-io/velero-plugin-for-aws/releases/tag/v1.14.2), [compatibility](https://github.com/velero-io/velero-plugin-for-aws/blob/5463822fd77bc1c2a1151ee76c830ad979ff2781/README.md) |
+| AWS object-store plugin | `v1.14.4`, `7373ae03525ce743a4f95f13a8fa9f56c7b8f551`, since the drift watch of 2026-10-13; reviewed first as `v1.14.2`, `5463822fd77bc1c2a1151ee76c830ad979ff2781` | [Release](https://github.com/velero-io/velero-plugin-for-aws/releases/tag/v1.14.4), [compatibility](https://github.com/velero-io/velero-plugin-for-aws/blob/5463822fd77bc1c2a1151ee76c830ad979ff2781/README.md) |
 | Freelens host | `v1.10.3`, `3da74415bff57a77c6e08cb5f538191ce87bac17` | Local Git tag inspection; [versioned source](https://github.com/freelensapp/freelens/tree/3da74415bff57a77c6e08cb5f538191ce87bac17) |
 
 The release endpoints reported Velero v1.18.2 and the AWS plugin v1.14.2 as the
-latest stable releases at inspection time; both were published on 2026-06-26.
+latest stable releases at inspection time; both were published on 2026-06-26. On
+2026-10-13 the reviewed pair moved to v1.18.4 and v1.14.4, both published on
+2026-09-28 and the latest on that date: see the start of the fourth milestone under
+the drift watch below.
 The plugin's versioned compatibility table pairs v1.14.x with Velero v1.18.x.
 
 The [Velero release compatibility table](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/README.md)
@@ -193,8 +196,10 @@ not a promise of immediate cleanup. Treat creation and any client cleanup as wri
 | Delete backup | [CLI](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/cmd/cli/backup/delete.go#L124) creates DeleteBackupRequest with generateName, backupName, normalized backup-name label and backup-uid label | Double confirmation, one backup at a time, no direct Backup deletion; Processed does not replace checking request errors |
 
 The [schedule controller](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/schedule_controller.go)
-uses robfig/cron v3.0.1
-[ParseStandard](https://github.com/robfig/cron/blob/v3.0.1/parser.go): five fields,
+used robfig/cron v3.0.1 at v1.18.2 and uses netresearch/go-cron v0.15.0 at v1.18.4
+(the go.mod of each release), a replacement with the same
+[ParseStandard](https://github.com/netresearch/go-cron/blob/v0.15.0/parser.go) and
+its own rules at a change of daylight saving time: five fields,
 descriptors including `@every`, and TZ/CRON_TZ prefixes. Without an explicit timezone
 the parser uses the server's local timezone, not the desktop's timezone.
 
@@ -478,6 +483,42 @@ server wrote.
 | A backup of every namespace that excludes none and selects by a label takes the namespaces that carry it alone: with a label nothing carries it is a backup of no item. With a namespace excluded, by the spec or by the label that excludes it from backups, which the controller adds, it holds the namespaces it does not exclude. Without a selector it holds every active namespace it does not exclude. A volume whose data was moved is written with the method of a CSI snapshot and as moved, and no CSI snapshot is counted for a backup that moves the data of its volumes | [The namespaces taken](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/backup/item_collector.go#L102-L165), [by a selector](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/backup/item_collector.go#L150-L157), [with nothing excluded](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/util/collections/includes_excludes.go#L150-L157), [the namespaces not excluded](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/backup/item_collector.go#L159-L164), [the label the controller adds](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/backup_controller.go#L506-L512), [a moved volume](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/internal/volume/volumes_information.go#L619-L630), [no snapshot kept](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/backup/snapshots.go#L45-L46) |
 | The controller of the download requests looks every minute at the requests that expired and at the ones that tell no expiration, and writes an expiration into a new request before it looks at anything else: one of the namespace of a server that runs tells when it expires a minute after its creation at the latest | [The minute](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/download_request_controller.go#L41), [what is looked at](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/download_request_controller.go#L222-L232), [the expiration](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/download_request_controller.go#L132-L133) |
 | Seen: the log the server of the test environment wrote for its backup has 271 lines, every one at info, and the one of its restore 108 lines, 13 of them at warning, while the results of both hold no warning and no error; every line of both begins as an entry. The backup and the restores the fixtures ask the server to refuse had failed their validation by the first read after their creation, so that the queue of the backup was not seen | The runs of the test environment, 2026-10-06 |
+
+### Start Of The Fourth Milestone, 2026-10-13
+
+| Component | Latest release | Compared with |
+| --- | --- | --- |
+| Velero | `v1.18.4`, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, released 2026-09-28; no newer release on this date | `v1.18.2`, the reviewed one until this date |
+| AWS object-store plugin | `v1.14.4`, `7373ae03525ce743a4f95f13a8fa9f56c7b8f551`, released 2026-09-28; no newer release on this date | `v1.14.2`, the reviewed one until this date |
+
+The reviewed pair moves to `v1.18.4` and `v1.14.4` on this date, by the rule of the
+process above: the pins of the test environment, the release the extension compares
+the server with, the suite of the band of the server, the specs and the documents
+say so since.
+
+What was compared, in the sources of the two tags of Velero:
+
+| Where | Change | Effect on the extension |
+| --- | --- | --- |
+| The schemas of the CRDs | One: the Restore gains `spec.resourcePolicy`, a reference to a ConfigMap of fine-grained filters, since `v1.18.3` | None: the field is typed since the start of the third milestone and never read; the phases of every kind are the same |
+| The types of the API | The field above in `restore_types.go`, and two annotation keys in `labels_annotations.go`: the ConfigMap of the global backup volume policies a backup used, and the one a restore item action sets to include its additional items | None: neither is shown |
+| The release notes of `v1.18.3` | Among 22 changes: the sync of the backups from the store takes only the finished ones; the error messages in the statuses carry the context of the operation | None seen: the synced backups of the fixtures are finished, and the twelve suites of the views assert the words they always did |
+| The release notes of `v1.18.4` | One: a backup queue that stayed stuck | None |
+| The schedule controller | Its cron library: `robfig/cron` v3.0.1 at `v1.18.2`, `netresearch/go-cron` v0.15.0 at `v1.18.4`, in the go.mod of each release; a replacement with the same parser calls and its own rules at a change of daylight saving time | None on what is shown today, which is the expression as written; the adherence spec of the fourth milestone reproduces the grammar of go-cron, not of robfig |
+
+The whole local pattern ran on 2026-10-13 against an environment brought up with the
+new pins, on the head of main before this change: `pnpm demo:up` in 227 seconds; the
+twelve suites of the views, 158 of 159, the one failure the version of the server,
+`v1.18.4` where the suite and the extension said `v1.18.2`, which this watch moves;
+the pre-review 33 of 33 in 711 seconds; the cleanup of the fixtures in 127 seconds,
+with the two deletions the server carried out and the seven namespaces removed, and
+the verification in 22, its four checks passed; the end-to-end proof in 699 seconds,
+with its sixteen real artifacts. The suite of the band of the server, run alone on
+this head against that environment once the fixture steps of the demo were put back,
+passed, 8 of 8, in 344 seconds: the demo runs the reviewed release again, and the
+server still lists every BackupItemAction and RestoreItemAction twice, so the
+deviation of REQ-154 of SPEC-0012 stands. No issue to file: no phase is new, no
+field the extension shows is deprecated, and nothing breaks.
 
 ## Verification And Remaining Work
 

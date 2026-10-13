@@ -638,7 +638,7 @@ and synthetic-status outcomes supplement, not replace, real-controller proof.
 - Never change global Docker/Kubernetes contexts or use a remote daemon. Match the
   exact expected context and verify local kind ownership before every test session;
   an unknown or mismatched target stops the run before any Kubernetes request.
-- Install pinned Velero v1.18.2 and the compatible AWS plugin v1.14.2 with the accepted
+- Install pinned Velero v1.18.4 and the compatible AWS plugin v1.14.4 with the accepted
   local S3 backend. The proposed SeaweedFS release and digest are recorded in
   [LOCAL-STORAGE.md](LOCAL-STORAGE.md); installation passed on 2026-09-24.
   Test volumes use only disposable synthetic data, with no external storage fallback.

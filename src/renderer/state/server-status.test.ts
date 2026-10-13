@@ -37,7 +37,7 @@ const answers: Record<string, Answer> = {
 };
 
 const VALUE: ServerStatusValue = {
-  version: "v1.18.2",
+  version: "v1.18.4",
   processed: "2026-09-30T10:00:00Z",
   plugins: [{ name: "velero.io/aws", kind: "ObjectStore" }],
   request: { name: "freelens-velero-abcde", uid: "request-uid" },
