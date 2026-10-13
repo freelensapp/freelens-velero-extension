@@ -142,11 +142,11 @@ human judgment is recorded and their tests have run green in CI on main.
 
 | Feature | Task | Spec | Status |
 | --- | --- | --- | --- |
-| Expected runs from the cron expression, `status.lastBackup` and the newest matching Backup | T3.1 | | Planned |
-| Grace periods, paused, new and invalid schedules, timezone and daylight saving, skipped runs, clock skew, incomplete history, limited RBAC | T3.2 | | Planned |
-| Next expected run, last observed run and overdue state in list, detail and overview, with the reason | T3.3 | | Planned |
-| BackupRepository, PodVolumeBackup and PodVolumeRestore views | T5.1 | | Planned |
-| DataUpload and DataDownload views with progress and relationships | T5.2 | | Planned |
+| Expected runs from the cron expression, `status.lastBackup` and the newest matching Backup | T3.1 | [SPEC-0013](../specs/SPEC-0013-schedule-adherence.md) | Draft |
+| Grace periods, paused, new and invalid schedules, timezone and daylight saving, skipped runs, clock skew, incomplete history, limited RBAC | T3.2 | [SPEC-0013](../specs/SPEC-0013-schedule-adherence.md) | Draft |
+| Next expected run, last observed run and overdue state in list, detail and overview, with the reason | T3.3 | [SPEC-0013](../specs/SPEC-0013-schedule-adherence.md) | Draft |
+| BackupRepository, PodVolumeBackup and PodVolumeRestore views | T5.1 | [SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md) | Draft |
+| DataUpload and DataDownload views with progress and relationships | T5.2 | [SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md) | Draft |
 
 Exit of M4: tests with a controlled clock and packaged UI scenarios establish
 the accuracy of the adherence signal, including its uncertainty states.
