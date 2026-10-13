@@ -131,10 +131,12 @@ application, through a tunnel to the store opened through the API server, with n
 signed URL in any report, no download of the contents of a backup, and no request
 the gate did not confirm, which the guard of the suites counts on the API server.
 Every row of the milestone is Done with the third pull request of T2.3.
-What is left of the milestone is its review gate, in
-[PROCESS.md](PROCESS.md#milestone-manual-review-gate): the deviations and the
-decisions each of its four specs records await it, and the specs become Verified
-with it, once their tests ran green in CI on main.
+The review gate of the milestone, in
+[PROCESS.md](PROCESS.md#milestone-manual-review-gate), was held on 2026-10-13: the
+lead maintainer kept the decisions each of its four specs records, with the frames
+of a scroll as a percentile, VIEW-08 reworded and the deviation of REQ-154
+confirmed. The specs become Verified once what the pre-review of the tabs leaves to
+human judgment is recorded and their tests have run green in CI on main.
 
 ### M4 - Schedule adherence and secondary kinds (read-only)
 

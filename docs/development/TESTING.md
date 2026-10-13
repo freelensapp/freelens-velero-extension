@@ -534,8 +534,12 @@ takes the environment down: the removal of the namespaces of the views runs on t
 hosted runner for the first time with the pull request that added the step. In
 the final runs of that pull request, on 2026-10-07, after the twelve suites and
 the pre-review, the cleanup took 118 seconds, 42 of them the two deletions the
-server carried out, and the verification 22; the time of the step on the hosted
-runner is read in the CI of that pull request when it runs.
+server carried out, and the verification 22; on the hosted runner, on 2026-10-13,
+the step took 112 seconds for the cleanup and 9 for the verification. After this
+cleanup, or after `pnpm e2e`, the fixtures of the demo are gone with the fixtures
+of the tabs: `pnpm e2e:views` refuses by name, in a few seconds, until the two
+fixture steps of `pnpm demo:up` put them back, which takes about a hundred
+seconds.
 
 The runner says of a placement what it did, a line each: the files of the tabs
 written by this run, with the way they were sent, or none; the time the wait for
