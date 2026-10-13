@@ -94,7 +94,7 @@ phase covered, missing data never shown as healthy, pre-review on both themes.
 | Write gate enforced in main: off by default, scoped to cluster and namespace, confirmation that names both | T4.1 | [SPEC-0009](../specs/SPEC-0009-write-gate.md) | Done |
 | `DownloadRequest` workflow owned by main: confirmation, allowlisted targets, URL, failure and timeout exits, cancellation, cleanup | T2.1 | [SPEC-0010](../specs/SPEC-0010-diagnostic-request-and-transport.md) | Done |
 | Streaming transport: destination and redirect policy, inline CA and `caCertRef`, size limits, URL redaction, preserved signed path, Host and SNI | T2.2 | [SPEC-0010](../specs/SPEC-0010-diagnostic-request-and-transport.md) | Done |
-| Log, results, resource list and volume info viewers, with search and clear unavailable, expired and forbidden states | T2.3 | [SPEC-0011](../specs/SPEC-0011-artifact-viewers.md) | In PR |
+| Log, results, resource list and volume info viewers, with search and clear unavailable, expired and forbidden states | T2.3 | [SPEC-0011](../specs/SPEC-0011-artifact-viewers.md) | Done |
 | Direct access to the object store and the in-cluster strategy; a missing artifact is distinct from a failed storage | T2.4 | [SPEC-0010](../specs/SPEC-0010-diagnostic-request-and-transport.md) | Done |
 | Server version and installed plugins through `ServerStatusRequest` | T5.3 | [SPEC-0012](../specs/SPEC-0012-server-status.md) | Done |
 
@@ -112,14 +112,29 @@ The viewers, T2.3, are three pull requests, in this order: the tabs, with their
 unit and component tests and a first suite in the packaged application on the
 real backup and the real restore of the test environment; the fixtures of the
 tabs, which are the backups synced from the store, with artifacts made for the
-rules of the viewers, and the operations the server refuses; the rest of the
-packaged suites on those fixtures, the measures on the log of 200,000 lines and
-the pre-review with the tabs open. The row of T2.3 is In PR from the first of
-them and Done after the last.
+rules of the viewers, and the operations the server refuses; and the suites on
+those fixtures, the measures on the log of 200,000 lines in the packaged
+application, the pre-review with the tabs open and the cleanup of the fixtures in
+the hosted job of the views, with the evidence that makes SPEC-0011 Implemented.
+The row of T2.3 was In PR from the first of them and is Done with the last, the
+pull request that carries this text, whose evidence made SPEC-0011 Implemented on
+2026-10-07.
 
 Exit of M3: real local artifacts displayed end to end without dependence on
 CORS, exposure of a signed URL, full backup downloads or requests of the main
 process that nothing controls.
+
+Where the milestone stands with the third pull request of T2.3: the artifacts of
+the real backup and of the real restore of the test environment, and the ones of
+the backups synced from its store, are read end to end in the packaged
+application, through a tunnel to the store opened through the API server, with no
+signed URL in any report, no download of the contents of a backup, and no request
+the gate did not confirm, which the guard of the suites counts on the API server.
+Every row of the milestone is Done with the third pull request of T2.3.
+What is left of the milestone is its review gate, in
+[PROCESS.md](PROCESS.md#milestone-manual-review-gate): the deviations and the
+decisions each of its four specs records await it, and the specs become Verified
+with it, once their tests ran green in CI on main.
 
 ### M4 - Schedule adherence and secondary kinds (read-only)
 

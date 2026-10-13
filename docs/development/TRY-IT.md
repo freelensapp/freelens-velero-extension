@@ -135,15 +135,15 @@ and of its restore, in `velero-demo`:
 | Log, with writes off | That writes are off, first and apart, the way to the target bar, then what loading the log would create: a DownloadRequest of the kind BackupLog for this backup in `velero-demo`, and that nothing is created before the request is shown and confirmed. Opening the tab created nothing |
 | Turn writes on, then the command of the tab | The tab shows the object it would create, with its name in words: the name of the backup and a dash, followed by an identifier that is made when the request is confirmed. It creates the request at the second command. Then the steps of the load, with the way to cancel, and the log |
 | Over the log, and under it | Over it, when it was loaded and its size, with the command that loads it again and the one that saves it. Under it, the request it came through and the way it came by: through a tunnel to the Pod of the store, opened through the API server. The connection to the store of the demo is not encrypted, and the tab says so: its bytes travel inside the connection to the API server, and inside the cluster |
-| Search the log | Type `Backed up a total`: the line Velero writes when the work of a backup ends, with its number. The search says which match it is at and of how many, and marks the words in the lines it shows, with a frame in the line it is at; Enter goes to the next and Shift with Enter to the one before. Escape clears what was typed, and does not leave the view |
-| The levels | The count of each beside its name, after the words Show only; a level is a box that is ticked when it is chosen. Every line of the log of this backup is at info. Choose one: the lines of the other levels go, and each line keeps its number. A level no line is of says so in the place of the list. Wrap the lines, and copy one with the command of its row |
+| Search the log | The criteria of the spec say to search for `completed`: what the log of this backup holds of that word no run counted. Type `Backed up a total`: the line Velero writes when the work of a backup ends, one match, with its number. The search says which match it is at and of how many, and marks the words in the lines it shows, with a frame in the line it is at; Enter goes to the next and Shift with Enter to the one before. Escape clears what was typed, and does not leave the view |
+| The levels | The count of each beside its name, after the words Show only; a level is a box that is ticked when it is chosen. The criteria say to filter the warnings: every line of the log of this backup is at info, and the count of warning is none, so that choosing it leaves no line, which is said in the place of the list. Choose info: every line stays, and each keeps its number. Wrap the lines, and copy one with the command of its row |
 | Save the log to a file | The dialog of Freelens, with a name for the file. The file is written on this machine and nothing is written to the cluster. Under the log, until when the text can be saved: the main process keeps its copy for ten minutes |
 | The command of the tab again | Another DownloadRequest: the log stays shown under the confirmation, with what goes when that request is created said under it, until the request is created |
 | Results | The errors, then the warnings, each by Velero, cluster and namespace, with the counts; or, as for this backup, that Velero recorded neither |
 | Resources | The resources by their API version and kind, as `v1/ConfigMap`, each with its items, and a filter by resource, namespace and name |
 | Volumes | The backup of the demo has no volume: the tab says that Velero recorded none |
 | Open `fixture-restore-<run>`, and its tabs | The same four, each a request of the kind of a restore. Its log has lines at info and at warning: search it for `restore completed`. In the resources, what the restore did with each item, the count of each action, and the choice that leaves the items of one |
-| Open `fixture-synced-backup-<run>`, and its tabs | A backup the server synced from its store: it began four hundred days before the environment, and failed in part. It names a snapshot location this installation does not have, and the summary says so. Its log is the long one: 200,000 lines in twelve pages, of every level, with lines that are no entry, and three long lines, of 20,000, 10,000 and 10,001 characters: a row shows 10,000 characters of a line, and says how many it left out of the first and of the last. Its results hold errors and warnings, its resources many resources, its volumes one of each case. What each holds is in `tab-fixtures.json` |
+| Open `fixture-synced-backup-<run>`, and its tabs | A backup the server synced from its store: it began four hundred days before the environment, and failed in part. It names a snapshot location this installation does not have, and the summary says so. Its log is the long one: 200,000 lines in twelve pages, of every level, with lines that are no entry, and three long lines, of 20,000, 10,000 and 10,001 characters: a row shows 10,000 characters of a line, and says how many it left out of the first and of the last. Its results hold errors and warnings, its resources many resources, its volumes one of each case. What each holds is in `tab-fixtures.json`. This is the backup that looks like a failed backup, for the words of the criteria: search its log, and filter its warnings, two lines, and its errors, four |
 | Open `fixture-synced-backup-no-log-<run>`, Log | The store has no log of it: the tab says that the log of a backup is uploaded as best it can |
 | Open `fixture-invalid-backup-<run>`, Log | It failed its validation, and the store has no file of it: the tab says that Velero writes nothing for an operation that failed its validation |
 | Open `fixture-orphan-restore-<run>`, Log | It was asked from a schedule that has no backup, and names none: the tab says that Velero signs no URL for such a restore, and offers no command |
@@ -151,27 +151,41 @@ and of its restore, in `velero-demo`:
 | Select `velero-views-<run>`, open `restore-of-schedule`, Log | The restore names no backup: the tab says that Velero signs no URL for such a restore, and offers no command, with writes on or off |
 | Open `backup-missing-location`, Log | The storage location it names is not in the namespace: the tab says that Velero signs no URL without it, and offers no command |
 
-These steps follow the manual review of
-[SPEC-0011](../specs/SPEC-0011-artifact-viewers.md#success-criteria) as far as
-the real backup and the real restore can show it, and not in its words: the
-criteria name "completed" as what to search the log of the backup for, and the
-warnings as what to filter, where the walk searches for the line Velero writes
-at the end of a backup and chooses a level by its count. The
+What the pre-review leaves to human judgment of the tabs, in `pre-review-tabs.json`
+of its run and in its pictures, each a thing to look at here:
+
+| Look at | What no suite judges |
+| --- | --- |
+| The parts of the tabs in both themes | Their contrast: the choices of the bar drawn as checkboxes, the match the search is at beside the other matches, the words of a failure beside its mark and its line, and the row of a resource over the rows of its items |
+| Escape in the search field | It clears the words and keeps the keyboard in the field, and the view is not left. The suite asserts that; whether it is what an operator expects of the key is for the review |
+| A long line, cut, at 900 by 650 and at twice the zoom | Its row shows its first characters, and after them the words that say how many more are not shown: whether it reads well |
+| The strip at twice the zoom | The five tabs go to two lines, Volumes under Summary |
+| A confirmation at 900 by 650 | Its two commands are held at the lower edge of the room of the view, and the object is scrolled under them, which they cover, by design |
+| The volumes at 900 by 650 | The first row is tall where a cell is scrolled out of sight sideways |
+
+These steps are the manual review of
+[SPEC-0011](../specs/SPEC-0011-artifact-viewers.md#success-criteria), in its
+words, with what to expect of each: the criteria name "completed" as what to
+search the log of the backup for, and the warnings as what to filter, and the log
+of the real backup is 271 lines at info, so that the walk searches as well for the
+line Velero writes at the end of a backup and names the synced backup, which is
+the one that looks like a failed backup. The
 [evidence](../specs/SPEC-0011-artifact-viewers.md#evidence-and-deviations) of
-the spec says why, among what is open. The backups the server synced from its
-store and the operations it refused are the
+the spec records the choice, among what is open. The backups the server synced
+from its store and the operations it refused are the
 [fixtures of the tabs](TESTING.md#the-fixtures-of-the-tabs), in `velero-demo` once
-`pnpm demo:views` has run. The suite of the tabs goes through them with the next
-pull request of the task, as the [roadmap](ROADMAP.md#m3---logs-and-diagnostics)
-says: until then what their tabs show is what the tests of the parsers prove on
-their artifacts, and the tests of the components on the words of each. The
+`pnpm demo:views` has run. The
 [suite of the tabs](TESTING.md#suites-of-the-views) goes through the steps of the
-real backup and of the real restore in the packaged application, with three
-differences: it searches the log of the backup for the name of the backup and for
-`BACKED UP A TOTAL OF`, and not the log of the restore; it answers in the place of
-the dialog of Freelens, which is not shown; and it closes the view by its way
-back, not with Escape. The two last steps, on `velero-views-<run>`, are what the
-tests of the components prove: no suite opens those two tabs.
+real backup, of the real restore and of the fixtures in the packaged application,
+with three differences: it searches the log of the backup for the name of the
+backup and for `BACKED UP A TOTAL OF`, and not the log of the restore; it answers
+in the place of the dialog of Freelens, which is not shown; and it closes the view
+by its way back, not with Escape. Of the two last steps, on `velero-views-<run>`,
+the suite opens the backup whose location is not there, with writes on for that
+installation, and the restore asked from a schedule is what the tests of the
+components prove, as the restore of `velero-demo` that names no backup is the one
+the suite opens. The pre-review opens the tabs as well, in eight of its views, and
+walks them with the keyboard alone.
 
 Then the Schedules:
 
@@ -211,10 +225,11 @@ Home and End move among them, Enter or Space opens one, and in the list of the
 lines of a log the arrows, Page Up, Page Down, Home and End move among the lines
 (the suite of the tabs presses the keys of the strip in the packaged application,
 and Home and End in the list of a log; the arrows and the pages of the list are
-proven by the tests of the components, and the pre-review goes through the five
-tabs with Tab, and no more of them). In the band of the server, Enter on the
-command shows the object, Tab reaches the command that creates and the one that
-leaves, and Escape leaves.
+proven by the tests of the components; the pre-review moves among the five tabs
+with the arrows, Home and End, opens one with Enter, reaches the command and its
+confirmation, and searches the log with the keyboard alone). In the band of the
+server, Enter on the command shows the object, Tab reaches the command that
+creates and the one that leaves, and Escape leaves.
 
 For the restricted access, add `views-reader.json` in the same way. It has the
 same name as the first in the catalog: it is the one whose Velero asks for a
@@ -235,9 +250,11 @@ pnpm pre-review
 
 They need a Freelens that was built: see
 [TESTING.md](TESTING.md#suites-of-the-views). The first runs the suites of the
-views, the second every view in both themes, at two sizes of the window and at
-twice the zoom, and the journey with the keyboard. Their screenshots and their
-measures are in `e2e-artifacts/`.
+views, the second every view, the tabs of an operation among them, in both themes,
+at two sizes of the window and at twice the zoom, and the journeys with the
+keyboard, through the tabs as well. Their screenshots and their measures are in
+`e2e-artifacts/`, with what the pre-review leaves to human judgment in
+`pre-review-tabs.json`.
 
 ## 5. Take it down
 

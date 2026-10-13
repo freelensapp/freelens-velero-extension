@@ -16,7 +16,10 @@
 // See `velero-extension.ts` for why these files live next to the Freelens
 // integration helpers at run time.
 
+import { readFile } from "node:fs/promises";
+import * as path from "node:path";
 import {
+  ARTIFACTS_DIR,
   BACKUPS,
   captureScreenshot,
   navigate,
@@ -84,6 +87,16 @@ const LISTS: Record<Operation, ListOf> = { backup: BACKUPS, restore: RESTORES };
 const PART_TIMEOUT = 30_000;
 /** How long a load is given: the main process gives a request two minutes, and the pages of its text follow. */
 const LOAD_TIMEOUT = 150_000;
+/**
+ * The height of a line of a list of lines, in pixels: a row is as tall as the lines it takes. It mirrors
+ * LINE of src/renderer/components/artifact-lines.tsx, which the suites do not import: the case of the
+ * measures reads the height of one mounted row and checks it against this, so that a line height the
+ * product changed fails there, by its name, and not by the rows every gesture then misses.
+ */
+export const LINE_HEIGHT = 20;
+
+/** When a load is cancelled: as soon as it begins, or once its request is in the cluster. */
+export type CancelAt = boolean | "created";
 
 // The parts of the panel of a diagnostic tab, by what each is, with the end of its identifier.
 const OF_THE_PANEL = {
@@ -543,19 +556,21 @@ interface LoadWatch {
  * shows, with the step, the request and the words of each, is kept with its
  * time, so that what is expected of a load does not depend on when the driver
  * of the suite looked. Asked to cancel, it gives the command that cancels as
- * soon as the panel offers it, which is when the load begins.
+ * soon as the panel offers it, which is when the load begins, or, asked to
+ * cancel once the request is created, as soon as the panel is at a step after
+ * the creation: the request is then in the cluster, whatever the cancel ends.
  */
 export async function watchLoad(
   frame: Frame,
   kind: Operation,
   tab: ArtifactTab,
-  options: { cancel?: boolean } = {},
+  options: { cancel?: CancelAt } = {},
 ): Promise<void> {
   const id = PARTS.panel(kind, tab);
 
   await part(frame, id);
   await frame.evaluate(
-    ({ id, cancel }) => {
+    ({ id, cancel, created }) => {
       const page = window as unknown as { veleroLoads?: Record<string, LoadWatch> };
 
       if (!page.veleroLoads) page.veleroLoads = {};
@@ -589,8 +604,10 @@ export async function watchLoad(
         }
         if (cancel && !watch.cancelled) {
           const command = within("cancel");
+          // Once the request is created, the panel is at a step after the creation.
+          const ready = cancel === "created" ? created.includes(moment.at) : true;
 
-          if (command) {
+          if (command && ready) {
             watch.cancelled = true;
             command.click();
           }
@@ -602,7 +619,7 @@ export async function watchLoad(
       watch.observer.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
       look();
     },
-    { id, cancel: options.cancel === true },
+    { id, cancel: options.cancel ?? false, created: [...AFTER_THE_CREATION, "pages"] },
   );
 }
 
@@ -628,16 +645,21 @@ export async function loadSeen(frame: Frame, kind: Operation, tab: ArtifactTab):
 /**
  * The second gesture of a load: the panel is watched, then the command of the
  * confirmation creates the request. With `cancel`, the load is cancelled as
- * soon as it begins.
+ * soon as it begins, or once its request is created. With `keyboard`, the
+ * command is given with Enter on it, and not with a click: the journeys with
+ * the keyboard alone give it so.
  */
 export async function confirm(
   frame: Frame,
   kind: Operation,
   tab: ArtifactTab,
-  options: { cancel?: boolean } = {},
+  options: { cancel?: CancelAt; keyboard?: boolean } = {},
 ): Promise<void> {
-  await watchLoad(frame, kind, tab, options);
-  await (await part(frame, PARTS.panel(kind, tab, "confirmCreate"))).click();
+  await watchLoad(frame, kind, tab, { cancel: options.cancel });
+  const command = await part(frame, PARTS.panel(kind, tab, "confirmCreate"));
+
+  if (options.keyboard) await command.press("Enter");
+  else await command.click();
 }
 
 /**
@@ -734,17 +756,18 @@ export function requestOf(moments: readonly LoadMoment[]): string {
  * confirmation creates the request, and the load is waited for. The name the panel gave the request is
  * given to `named` before this answers or fails, whatever became of the load: a request can be in the
  * cluster after a load that ended without its text, or that did not end, and who asked for it has to know
- * it by its name. With `cancel`, the load is cancelled as soon as it begins. What is done right after the
- * gesture, to look at a step of the load, is given as `loading`.
+ * it by its name. With `cancel`, the load is cancelled as soon as it begins, or once its request is
+ * created. With `keyboard`, the command of the confirmation is given with Enter. What is done right after
+ * the gesture, to look at a step of the load, is given as `loading`.
  */
 export async function runLoad(
   frame: Frame,
   kind: Operation,
   tab: ArtifactTab,
   named: (request: string) => void,
-  options: { cancel?: boolean; loading?: () => Promise<void> } = {},
+  options: { cancel?: CancelAt; keyboard?: boolean; loading?: () => Promise<void> } = {},
 ): Promise<{ ended: "loaded" | "failed"; moments: LoadMoment[]; request: string }> {
-  await confirm(frame, kind, tab, { cancel: options.cancel === true });
+  await confirm(frame, kind, tab, { cancel: options.cancel ?? false, keyboard: options.keyboard === true });
   let ended: "loaded" | "failed" | undefined;
   let moments: LoadMoment[] = [];
   let failed: unknown;
@@ -913,6 +936,36 @@ export function toldByTheMainProcess(moments: readonly LoadMoment[]): { lasted: 
     lasted: ended.time - moments[began].time,
     told: [...new Set(run.map((moment) => moment.at).filter((step) => TOLD_BY_THE_MAIN_PROCESS.includes(step)))],
   };
+}
+
+/**
+ * The pages of the text the panel said it was taking, in the order they were seen: each with the count of
+ * the pages there are. The views count the pages themselves, and write the two numbers into the words of
+ * the step as they are.
+ */
+export function pagesSeen(moments: readonly LoadMoment[]): { page: number; of: number }[] {
+  return moments.flatMap((moment) => {
+    if (moment.step !== "loading" || moment.at !== "pages") return [];
+    const found = /: page (\d+) of (\d+)\.$/.exec(moment.status);
+
+    return found ? [{ page: Number(found[1]), of: Number(found[2]) }] : [];
+  });
+}
+
+const UNITS: Record<string, number> = { B: 1, KiB: 1024, MiB: 1024 ** 2, GiB: 1024 ** 3 };
+
+/**
+ * The bytes the panel said had come so far while the file was downloaded, in the order they were seen,
+ * as the words of the step round them: in the unit that reads best, to a tenth of it. Nothing for a
+ * download whose words told no bytes.
+ */
+export function bytesSeen(moments: readonly LoadMoment[]): number[] {
+  return moments.flatMap((moment) => {
+    if (moment.step !== "loading" || moment.at !== "download") return [];
+    const found = /: (\d+(?:\.\d)?) (B|KiB|MiB|GiB) so far\.$/.exec(moment.status);
+
+    return found ? [Number(found[1]) * UNITS[found[2]]] : [];
+  });
 }
 
 function pattern(text: string): string {
@@ -1147,6 +1200,392 @@ export async function searchLog(frame: Frame, kind: Operation, words: string): P
 }
 
 /**
+ * Scrolls the list of the lines of a log to where a line is, by its number, as far as the rows before it
+ * are as tall as a line, and answers what the viewer shows once the row of that line is mounted. A row
+ * that is taller, which a line that is cut is, puts the line a little further down: the row of the line
+ * is still among the ones the list keeps ready around its room.
+ */
+export async function scrollLogTo(frame: Frame, kind: Operation, line: number): Promise<LogShown> {
+  const id = PARTS.viewer(kind, "log", "text");
+
+  await part(frame, id);
+  const found = await frame.evaluate(
+    ({ id, top }) => {
+      const scrolled = document.querySelector(`[data-testid="${id}"] .VirtualList .list`);
+
+      if (scrolled) scrolled.scrollTop = top;
+      return scrolled !== null;
+    },
+    { id, top: (line - 1) * LINE_HEIGHT },
+  );
+
+  if (!found) throw new Error(`The list ${id} has nothing to scroll`);
+
+  return logLike(frame, kind, `mounts the row of its line ${line}`, (shown) => shown.mounted.includes(line));
+}
+
+/**
+ * The height of the row of a line of the log, in pixels, as the page lays it out, or nothing while the row
+ * is not mounted: the row of a line that is not cut is as tall as LINE_HEIGHT.
+ */
+export async function logRowHeight(frame: Frame, kind: Operation, line: number): Promise<number | undefined> {
+  const id = PARTS.line(kind, "log", line);
+
+  return frame.evaluate((id) => {
+    const row = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+
+    return row ? Math.round(row.getBoundingClientRect().height) : undefined;
+  }, id);
+}
+
+// How long a measure of the log waits for what it expects before it gives up and says what it last saw.
+const MEASURE_TIMEOUT = 10_000;
+
+/** What a measure of an answer of the log gives: its time in milliseconds, and the rows the list had mounted when it ended. */
+export interface LogAnswer {
+  ms: number;
+  mounted: number;
+}
+
+/** What a scroll gesture of the log gives: each frame, in milliseconds, until the rows were the ones of the position, and the rows mounted then. */
+export interface LogGesture {
+  frames: number[];
+  mounted: number;
+}
+
+/**
+ * The pixels from the top of the list of the lines of a log to the row of a
+ * line, by its number, given the lines whose rows are cut, which take two rows.
+ */
+export function logRowTop(line: number, tall: readonly number[]): number {
+  return (line - 1) * LINE_HEIGHT + LINE_HEIGHT * tall.filter((cut) => cut < line).length;
+}
+
+/**
+ * The last line whose row begins inside the room of the list, of so many
+ * pixels, when the row of a line is at the top of the room: the lines from the
+ * one to the other are the ones the room shows at that position.
+ */
+export function logRoomEnd(line: number, tall: readonly number[], room: number, lines: number): number {
+  const top = logRowTop(line, tall);
+  let last = line;
+
+  while (last < lines && logRowTop(last + 1, tall) < top + room) last += 1;
+  return last;
+}
+
+/** The room of the list of the lines of a log, in pixels: how much of it is shown at once. */
+export async function logRoom(frame: Frame, kind: Operation): Promise<number> {
+  const id = PARTS.viewer(kind, "log", "text");
+
+  await part(frame, id);
+  const room = await frame.evaluate(
+    (id) => document.querySelector<HTMLElement>(`[data-testid="${id}"] .VirtualList .list`)?.clientHeight ?? 0,
+    id,
+  );
+
+  if (!room) throw new Error(`The list ${id} has no room`);
+  return room;
+}
+
+/**
+ * Times idle frames of the window inside the page: the time from one frame to
+ * the next, as many frames as asked, with nothing asked of the viewer. A
+ * window that draws no frame to count, as a hidden one, is said so after ten
+ * seconds, with the frames it drew.
+ */
+export async function frameBaseline(frame: Frame, kind: Operation, count: number): Promise<number[]> {
+  await part(frame, PARTS.viewer(kind, "log", "text"));
+  return frame.evaluate(
+    ({ count, timeout }) =>
+      new Promise<number[]>((resolve, reject) => {
+        const frames: number[] = [];
+        let last = performance.now();
+        let over = false;
+        const deadline = setTimeout(() => {
+          over = true;
+          reject(
+            new Error(
+              `The window drew ${frames.length} idle frames in ${timeout / 1000} s, and ${count} were asked: ` +
+                JSON.stringify(frames.map((ms) => Math.round(ms))),
+            ),
+          );
+        }, timeout);
+        const look = () => {
+          const now = performance.now();
+
+          if (over) return;
+          frames.push(now - last);
+          last = now;
+          if (frames.length < count) {
+            requestAnimationFrame(look);
+            return;
+          }
+          clearTimeout(deadline);
+          resolve(frames);
+        };
+
+        requestAnimationFrame(look);
+      }),
+    { count, timeout: MEASURE_TIMEOUT },
+  );
+}
+
+/**
+ * Types words into the search of a log as the keys do, in one event, and
+ * times inside the page what the viewer takes to answer: from the event to
+ * the frame after the one where the words the matches are of, the number of
+ * matches and the number of lines shown are all three the ones expected. A
+ * viewer that writes the words before its matches, or a count that is not the
+ * one expected, does not end the measure: after ten seconds it is said what
+ * the viewer last showed. A wait of the viewer for the keys to stop, when it
+ * has one, is in the time; the driver of the test is not.
+ */
+export async function measureLogSearch(
+  frame: Frame,
+  kind: Operation,
+  words: string,
+  expected: { matches: number; shown: number },
+): Promise<LogAnswer> {
+  const id = PARTS.viewer(kind, "log");
+
+  await part(frame, id);
+  return frame.evaluate(
+    ({ id, words, expected, timeout }) =>
+      new Promise<{ ms: number; mounted: number }>((resolve, reject) => {
+        const root = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+        const field = root?.querySelector<HTMLInputElement>(`[data-testid="${id}-search"]`);
+        const status = root?.querySelector<HTMLElement>(`[data-testid="${id}-search-status"]`);
+        const count = root?.querySelector<HTMLElement>(`[data-testid="${id}-count"]`);
+        const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+
+        if (!root || !field || !status || !count || !set) {
+          reject(new Error(`The log ${id} has no search, no status of it or no count of its lines to measure`));
+          return;
+        }
+        // A search of what is searched already changes nothing: it has no time, and is not a sample.
+        if (field.value === words) {
+          reject(new Error(`The log is searched by "${words}" already: nothing to measure`));
+          return;
+        }
+        const seen = () => ({
+          words: status.getAttribute("data-words") ?? "",
+          matches: Number(status.getAttribute("data-matches")),
+          shown: Number(count.getAttribute("data-shown")),
+        });
+        const answered = () => {
+          const now = seen();
+
+          return now.words === words && now.matches === expected.matches && now.shown === expected.shown;
+        };
+        let over = false;
+        let start = 0;
+        const deadline = setTimeout(() => {
+          const last = seen();
+
+          over = true;
+          reject(
+            new Error(
+              `The search of "${words}" did not show ${expected.matches} matches of ${expected.shown} lines in ` +
+                `${timeout / 1000} s: the viewer last showed the words "${last.words}", ${last.matches} matches and ` +
+                `${last.shown} lines`,
+            ),
+          );
+        }, timeout);
+        const look = () => {
+          if (over) return;
+          if (!answered()) {
+            requestAnimationFrame(look);
+            return;
+          }
+          requestAnimationFrame(() => {
+            const ms = performance.now() - start;
+
+            clearTimeout(deadline);
+            resolve({ ms, mounted: root.querySelectorAll("[data-text-line]").length });
+          });
+        };
+
+        start = performance.now();
+        set.call(field, words);
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+        requestAnimationFrame(look);
+      }),
+    { id, words, expected, timeout: MEASURE_TIMEOUT },
+  );
+}
+
+/**
+ * Clicks the choice of a level of a log, and times inside the page what the
+ * viewer takes to answer: from the click to the frame after the one where the
+ * levels chosen are the ones expected and the number of lines shown is the
+ * one expected, which is the sum of the counts of those levels. After ten
+ * seconds it is said what the viewer last showed.
+ */
+export async function measureLogFilter(
+  frame: Frame,
+  kind: Operation,
+  level: LogLevel,
+  expected: { levels: readonly LogLevel[]; shown: number },
+): Promise<LogAnswer> {
+  const id = PARTS.viewer(kind, "log");
+
+  await part(frame, id);
+  return frame.evaluate(
+    ({ id, level, levels, expected, timeout }) =>
+      new Promise<{ ms: number; mounted: number }>((resolve, reject) => {
+        const root = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+        const choices = levels.map(
+          (each) => root?.querySelector<HTMLElement>(`[data-testid="${id}-level-${each}"]`) ?? null,
+        );
+        const choice = choices[levels.indexOf(level)];
+        const count = root?.querySelector<HTMLElement>(`[data-testid="${id}-count"]`);
+
+        if (!root || !count || !choice || choices.some((each) => each === null)) {
+          reject(new Error(`The log ${id} has no choice of the level ${level}, or no count of its lines, to measure`));
+          return;
+        }
+        const seen = () => ({
+          chosen: levels.filter((_, at) => choices[at]?.getAttribute("aria-pressed") === "true"),
+          shown: Number(count.getAttribute("data-shown")),
+        });
+        const wanted = levels.filter((each) => expected.levels.includes(each)).join("+");
+        const answered = () => {
+          const now = seen();
+
+          return now.chosen.join("+") === wanted && now.shown === expected.shown;
+        };
+        let over = false;
+        let start = 0;
+        const deadline = setTimeout(() => {
+          const last = seen();
+
+          over = true;
+          reject(
+            new Error(
+              `The choice of the level ${level} did not show the levels ${wanted || "none"} with ${expected.shown} ` +
+                `lines in ${timeout / 1000} s: the viewer last showed the levels ${last.chosen.join("+") || "none"} ` +
+                `and ${last.shown} lines`,
+            ),
+          );
+        }, timeout);
+        const look = () => {
+          if (over) return;
+          if (!answered()) {
+            requestAnimationFrame(look);
+            return;
+          }
+          requestAnimationFrame(() => {
+            const ms = performance.now() - start;
+
+            clearTimeout(deadline);
+            resolve({ ms, mounted: root.querySelectorAll("[data-text-line]").length });
+          });
+        };
+
+        start = performance.now();
+        choice.click();
+        requestAnimationFrame(look);
+      }),
+    { id, level, levels: [...LOG_LEVELS], expected, timeout: MEASURE_TIMEOUT },
+  );
+}
+
+/**
+ * Scrolls the list of the lines of a log to a position, in pixels from its
+ * top, and times each frame inside the page until the rows mounted are the
+ * ones of that position: the list has moved, at both of its ends, and every
+ * row the room shows there is mounted, by the numbers of the lines expected.
+ * The frame after that one is timed as well, which draws them; the longest
+ * of the frames is the measure of the gesture. The rows the list keeps ready
+ * around its room come with the move, whatever their number. A gesture that
+ * leaves an end of the rows mounted where it was is not one the measure takes,
+ * unless that end is at an edge of the list, its first line or its last of so
+ * many, and stays there: a list that keeps many rows ready has an end at the
+ * edge long before a gesture reaches it. After ten seconds it is said which
+ * rows were mounted last.
+ */
+export async function measureLogScroll(
+  frame: Frame,
+  kind: Operation,
+  top: number,
+  shows: { first: number; last: number },
+  lines: number,
+): Promise<LogGesture> {
+  const id = PARTS.viewer(kind, "log", "text");
+
+  await part(frame, id);
+  return frame.evaluate(
+    ({ id, top, shows, lines, timeout }) =>
+      new Promise<{ frames: number[]; mounted: number }>((resolve, reject) => {
+        const root = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+        const scrolled = root?.querySelector<HTMLElement>(".VirtualList .list");
+
+        if (!root || !scrolled) {
+          reject(new Error(`The list ${id} has nothing to scroll`));
+          return;
+        }
+        const mounted = () =>
+          [...root.querySelectorAll<HTMLElement>("[data-text-line]")].map((row) =>
+            Number(row.getAttribute("data-text-line")),
+          );
+        const ends = (rows: number[]) => ({ first: Math.min(...rows), last: Math.max(...rows) });
+        const before = ends(mounted());
+        // An end has moved when it is not where it was, or when it is at the edge of the list and was there.
+        const moved = (now: number, was: number, edge: number) => now !== was || (now === edge && was === edge);
+        const arrived = () => {
+          const rows = mounted();
+          const now = ends(rows);
+
+          if (rows.length === 0 || !moved(now.first, before.first, 1) || !moved(now.last, before.last, lines)) {
+            return false;
+          }
+          const has = new Set(rows);
+
+          for (let line = shows.first; line <= shows.last; line += 1) if (!has.has(line)) return false;
+          return true;
+        };
+        const frames: number[] = [];
+        let last = 0;
+        let over = false;
+        const deadline = setTimeout(() => {
+          const now = ends(mounted());
+
+          over = true;
+          reject(
+            new Error(
+              `The list did not mount the rows of the lines ${shows.first} to ${shows.last} in ${timeout / 1000} s ` +
+                `after the scroll to ${top} px: the rows mounted were ${now.first} to ${now.last}, ` +
+                `${before.first} to ${before.last} before, in ${frames.length} frames`,
+            ),
+          );
+        }, timeout);
+        const look = () => {
+          const now = performance.now();
+
+          if (over) return;
+          frames.push(now - last);
+          last = now;
+          if (!arrived()) {
+            requestAnimationFrame(look);
+            return;
+          }
+          requestAnimationFrame(() => {
+            frames.push(performance.now() - last);
+            clearTimeout(deadline);
+            resolve({ frames, mounted: mounted().length });
+          });
+        };
+
+        last = performance.now();
+        scrolled.scrollTop = top;
+        requestAnimationFrame(look);
+      }),
+    { id, top, shows, lines, timeout: MEASURE_TIMEOUT },
+  );
+}
+
+/**
  * A line of a text as its row shows it, without what says that it was cut, and
  * whether it was. It is read as it is written, every space of it: a line is
  * compared with the line of a file, and is not words of the page.
@@ -1240,6 +1679,51 @@ export async function resultsShown(frame: Frame, kind: Operation): Promise<Resul
         })),
       })),
     };
+  }, id);
+}
+
+/** A message of the results as its place shows it: as it is written, and in its parts when it has them. */
+export interface ResultMessageShown {
+  text: string;
+  parts?: Record<string, string>;
+}
+
+/**
+ * The messages of each place of the results that is drawn, in the order of the page: the text of each as it
+ * is written, read as it is written, and the parts of one in the form the hook of the server gives, each by
+ * the name of its part. A message of another form has no parts.
+ */
+export async function resultMessages(
+  frame: Frame,
+  kind: Operation,
+): Promise<{ where: string; namespace: string; messages: ResultMessageShown[] }[]> {
+  const id = PARTS.viewer(kind, "results");
+
+  await inItsForm(frame, kind, "results");
+
+  return frame.evaluate((id) => {
+    const root = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+
+    if (!root) throw new Error(`The part ${id} went while it was read`);
+
+    return [...root.querySelectorAll<HTMLElement>("[data-place]")].map((place) => ({
+      where: place.getAttribute("data-place") ?? "",
+      namespace: place.getAttribute("data-namespace") ?? "",
+      messages: [...place.querySelectorAll<HTMLElement>("li")].map((item) => {
+        const written = item.querySelector<HTMLElement>("[data-written]");
+
+        if (!written) return { text: item.textContent ?? "" };
+        return {
+          text: written.textContent ?? "",
+          parts: Object.fromEntries(
+            [...item.querySelectorAll<HTMLElement>("dd[data-part]")].map((part) => [
+              part.getAttribute("data-part") ?? "",
+              part.textContent ?? "",
+            ]),
+          ),
+        };
+      }),
+    }));
   }, id);
 }
 
@@ -1368,6 +1852,8 @@ export interface VolumesShown {
   columns: string[];
   /** One row for a volume: what each of its cells says, by the name of its column. */
   rows: Record<string, string>[];
+  /** For each row, what a cell writes for who points at it, by the name of its column: a time or a count as it is. */
+  titles: Record<string, string>[];
 }
 
 /** What the viewer of the volume information shows: how many volumes, and a row for each. */
@@ -1413,29 +1899,83 @@ export async function volumesShown(frame: Frame, kind: Operation): Promise<Volum
             ]),
           ),
         ),
+        titles: [...(table?.querySelectorAll<HTMLElement>("[data-volume-row]") ?? [])].map((row) =>
+          Object.fromEntries(
+            [...row.querySelectorAll<HTMLElement>("[data-column]")].map((cell) => [
+              cell.getAttribute("data-column") ?? "",
+              cell.querySelector("[title]")?.getAttribute("title") ?? "",
+            ]),
+          ),
+        ),
       };
     },
     { id, count },
   );
 }
 
+/** A detail of a volume as its row shows it: the key it is under, what the tab calls it, and its fields. */
+export interface VolumeDetailShown {
+  name: string;
+  title: string;
+  fields: { name: string; value: string }[];
+  /** What the detail says when it is written with no field, or nothing. */
+  none: string;
+}
+
+/**
+ * The details of a volume, by the place of its row, once they are open: each detail with its fields by the
+ * names they are written with, and the words that say that the entry carries none.
+ */
+export async function volumeDetails(
+  frame: Frame,
+  kind: Operation,
+  row: number,
+): Promise<{ none: string; details: VolumeDetailShown[] }> {
+  const id = PARTS.volumeDetails(kind, row);
+
+  await part(frame, id);
+
+  return frame.evaluate((id) => {
+    const root = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+
+    if (!root) throw new Error(`The part ${id} went while it was read`);
+
+    return {
+      none: root.querySelector<HTMLElement>(":scope > p")?.textContent ?? "",
+      details: [...root.querySelectorAll<HTMLElement>("[data-detail]")].map((detail) => ({
+        name: detail.getAttribute("data-detail") ?? "",
+        title: detail.querySelector<HTMLElement>("h4")?.textContent ?? "",
+        fields: [...detail.querySelectorAll<HTMLElement>("[data-field]")].map((field) => ({
+          name: field.getAttribute("data-field") ?? "",
+          value: field.querySelector<HTMLElement>("dd")?.textContent ?? "",
+        })),
+        none: detail.querySelector<HTMLElement>("p")?.textContent ?? "",
+      })),
+    };
+  }, id);
+}
+
 /** The height a list of a viewer has at least, in pixels: ten lines of a text. */
 export const LIST_LEAST = 200;
+/** How many rows of a viewer the check of the layout looks at, from the first: as many as the check of a page does. */
+const ROWS_LOOKED = 20;
 
 /**
  * What is wrong with the layout of a tab of the view that is shown, which the check of the layout of a page
- * does not look at: the tabs of the strip, the parts of the panel and its commands, the parts of its
- * viewer, the bar of the log with its search and its levels, the filter of the resources with its choices
- * by action, and the head of its table. Of each group, the parts that lie over one another; of the panel
- * and of its viewer, whether it is wider than its room. And the room of the view, which is what scrolls a
- * tab: whether it is shorter than a list needs, and whether a list that is scrolled inside itself, the
- * lines of a text and the rows of a resource list, is taller than the room it is read in, where no scroll
- * of the view brings it whole into sight. An empty answer is a tab with none of these. A strip or a panel
- * that is not in the page is answered as a problem, by its name.
+ * does not look at: the tabs of the strip, and the strip inside its room; the parts of the panel and its
+ * commands, the parts of its viewer, the bar of the log with its search and its levels, the filter of the
+ * resources with its choices by action, and the head of its table; the rows of the results, of the
+ * resources and of the volumes, each cell after the one before it and no part of a message over another.
+ * Of each group, the parts that lie over one another; of the panel and of its viewer, whether it is wider
+ * than its room. And the room of the view, which is what scrolls a tab: whether it is shorter than a list
+ * needs, and whether a list that is scrolled inside itself, the lines of a text and the rows of a resource
+ * list, is taller than the room it is read in, where no scroll of the view brings it whole into sight. An
+ * empty answer is a tab with none of these. A strip or a panel that is not in the page is answered as a
+ * problem, by its name.
  */
 export async function tabLayoutProblems(frame: Frame, kind: Operation, tab: WorkspaceTab): Promise<string[]> {
   return frame.evaluate(
-    ({ strip, panel, workspace, least }) => {
+    ({ strip, panel, workspace, least, rowsLooked }) => {
       const problems: string[] = [];
       const shown = (element: Element) => {
         const box = element.getBoundingClientRect();
@@ -1463,10 +2003,31 @@ export async function tabLayoutProblems(frame: Frame, kind: Operation, tab: Work
           }
         }
       };
-      const tabs = document.querySelector(`[data-testid="${strip}"]`);
+      // The cells of a row, each beginning where the one before it ended, or after it: a row of a table of
+      // the host lays its cells side by side, and one that is wider than its room pushes the next under it
+      // or over it.
+      const cellsInOrder = (group: string, rows: Element[], cells: string) => {
+        for (const row of rows.slice(0, rowsLooked)) {
+          const drawn = [...row.querySelectorAll(cells)].filter(shown);
+
+          for (let index = 1; index < drawn.length; index += 1) {
+            if (drawn[index].getBoundingClientRect().left < drawn[index - 1].getBoundingClientRect().right - 1) {
+              problems.push(`${group}: a cell of ${name(row)} lies over the one before it`);
+              break;
+            }
+          }
+        }
+      };
+      const tabs = document.querySelector<HTMLElement>(`[data-testid="${strip}"]`);
 
       if (!tabs) return [`The strip ${strip} is not in the page`];
       overlaps("The tabs", [...tabs.children]);
+      // What the rule finds: a strip wider than its room, which overflows sideways, cut or pushing the view.
+      // What it does not: the strip of the host wraps its tabs to a second line when they do not fit, which
+      // leaves it no wider than its room, and is left to human judgment, with the pictures of the pre-review.
+      if (tabs.scrollWidth > tabs.clientWidth + 1) {
+        problems.push(`The strip ${strip} is wider than its room: ${tabs.scrollWidth} in ${tabs.clientWidth}`);
+      }
       // The summary has no panel of an artifact: its layout is the one the check of the page looks at.
       if (!panel) return problems;
       const root = document.querySelector<HTMLElement>(`[data-testid="${panel}"]`);
@@ -1521,6 +2082,45 @@ export async function tabLayoutProblems(frame: Frame, kind: Operation, tab: Work
       overlaps("The filter of the resources", beside(within("actions")));
       overlaps("The choices by action", [...(within("actions")?.querySelectorAll("button") ?? [])]);
       overlaps("The head of the resources", [...(within("table")?.querySelectorAll(".TableHead .TableCell") ?? [])]);
+      // The rows of the resources that are mounted: a resource with its count, an item with its cells.
+      cellsInOrder(
+        "The rows of the resources",
+        [
+          ...(within("table")?.querySelectorAll(
+            `[data-testid="${panel}-viewer-kind"], [data-testid="${panel}-viewer-item"]`,
+          ) ?? []),
+        ],
+        ".TableCell",
+      );
+      // The rows of the volumes under their head, and the fields of a detail that is open.
+      const volumes = viewer.querySelector(`[data-testid="${panel}-viewer-table"]`);
+
+      overlaps("The head of the volumes", [...(volumes?.querySelectorAll("[role=columnheader]") ?? [])]);
+      cellsInOrder(
+        "The rows of the volumes",
+        [...(volumes?.querySelectorAll("[data-volume-row]") ?? [])],
+        "[role=cell]",
+      );
+      for (const details of [...(volumes?.querySelectorAll("[data-volume-details]") ?? [])].slice(0, rowsLooked)) {
+        for (const detail of details.querySelectorAll("[data-detail]")) {
+          overlaps(`The fields of the detail ${detail.getAttribute("data-detail")}`, [
+            ...detail.querySelectorAll("[data-field]"),
+          ]);
+        }
+      }
+      // The rows of the results: the messages of each place, none wider than its room, and in each message
+      // the name of a part beside its value, and no part over another.
+      const messages = [...viewer.querySelectorAll("[data-place] li")].slice(0, rowsLooked);
+
+      for (const message of messages) {
+        if (!shown(message)) continue;
+        if (message.scrollWidth > message.clientWidth + 1) {
+          problems.push(
+            `A message of the results is wider than its room: ${message.scrollWidth} in ${message.clientWidth}`,
+          );
+        }
+        overlaps("The parts of a message of the results", [...(message.querySelector("dl")?.children ?? [])]);
+      }
 
       return problems;
     },
@@ -1529,6 +2129,7 @@ export async function tabLayoutProblems(frame: Frame, kind: Operation, tab: Work
       panel: tab === "summary" ? "" : PARTS.panel(kind, tab),
       workspace: PARTS.workspace(kind),
       least: LIST_LEAST,
+      rowsLooked: ROWS_LOOKED,
     },
   );
 }
@@ -1637,6 +2238,104 @@ export async function outOfTheRoom(frame: Frame, kind: Operation, ids: string[])
   );
 }
 
+/** A text the suites search the log of the fixtures for, with how many of its lines carry it. */
+export interface FixtureSearch {
+  text: string;
+  matches: number;
+  use: string;
+}
+
+/** An error or a warning the log of the fixtures filed into the results: where, and in which parts. */
+export interface FixtureEntry {
+  line: number;
+  level: string;
+  place: string;
+  namespace?: string;
+  resource?: string;
+  name?: string;
+  message: string;
+  error?: string;
+  /** The message as the results write it. */
+  text: string;
+}
+
+/** What the fixtures wrote of an artifact into the store: its bytes and its digest. */
+export interface FixtureFile {
+  bytes: number;
+  sha256: string;
+}
+
+/**
+ * What the runner of the suites counted of the fixtures of the tabs, outside the extension: what the
+ * generators counted of the artifacts of the backup synced from the store, and the empty artifacts of the
+ * one synced without its log. The fields a suite reads.
+ */
+export interface TabFixtureFacts {
+  run: string;
+  namespace: string;
+  synced: {
+    backup: string;
+    log: FixtureFile & {
+      lines: number;
+      pages: number;
+      levels: Record<LogLevel, number>;
+      entries: FixtureEntry[];
+      long: { twentyThousand: number; tenThousand: number; tenThousandAndOne: number };
+      /** The entries at info whose message names the level of an error: how many, and the first of them. */
+      levelInMessage: { lines: number; line: number };
+      /** The lines with no level whose words name one: how many, and the first of them. */
+      levelInFreeText: { lines: number; line: number };
+      /** The line the first page of the text ends inside. */
+      boundaryLine: number;
+      searches: FixtureSearch[];
+    };
+    results: FixtureFile & {
+      errors: number;
+      warnings: number;
+      value: Record<string, { velero?: string[]; cluster?: string[]; namespaces?: Record<string, string[]> }>;
+    };
+    resourceList: FixtureFile & { resources: number; items: number; value: Record<string, string[]> };
+    volumeInfo: FixtureFile & { volumes: number; value: Record<string, unknown>[] };
+    status: { phase?: string; errors?: number; warnings?: number };
+  };
+  withoutLog: {
+    backup: string;
+    results: FixtureFile;
+    resourceList: FixtureFile;
+    volumeInfo: FixtureFile;
+    status: { phase?: string };
+  };
+  /** The real backup and the real restore of the demo: what a plain count found in the files the server wrote of them. */
+  real: {
+    backup: { name: string; log: { lines: number; levels: Record<LogLevel, number> } };
+    restore: {
+      name: string;
+      resourceList: { resources: number; items: number; actions: Record<string, number> };
+    };
+  };
+  refused: { backup: { name: string }; restore: { name: string }; orphan: { name: string } };
+}
+
+/**
+ * What the runner of the suites wrote of the fixtures of the tabs, beside the reports of the suites, before
+ * it started them: what each artifact of the tabs holds, counted outside the extension. A suite that does
+ * not find it was not started by the runner.
+ */
+export async function tabFixtureFacts(): Promise<TabFixtureFacts> {
+  const file = path.join(ARTIFACTS_DIR, "tab-fixtures.json");
+  let text: string;
+
+  try {
+    text = await readFile(file, "utf8");
+  } catch {
+    throw new Error(
+      `What the fixtures of the tabs hold is not in ${file}: run the suite through \`pnpm e2e:views\`, which writes it there.`,
+    );
+  }
+
+  return JSON.parse(text) as TabFixtureFacts;
+}
+
 function many(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
@@ -1717,6 +2416,8 @@ export const WORDS = {
   cancelling: "Cancelling: the load is stopped at the step it is at, and the tab says how it ended.",
   /** How a load that was cancelled before anything was created is said to have ended. */
   cancelledBefore: "The request was cancelled before anything was created.",
+  /** What the search field of the log is called, for who does not see it. */
+  searchLabel: "Search the log",
   /**
    * What is said over a text that was loaded, around the time it was loaded
    * at, which is written as the language of the machine writes a time.
@@ -1801,4 +2502,80 @@ export const WORDS = {
     count === 0
       ? `Velero recorded no volume for this ${kind}.`
       : `Velero recorded ${count} ${count === 1 ? "volume" : "volumes"} for this ${kind}.`,
+  /** The columns of the table of the volumes, by the kind of the operation, after the one of the details. */
+  volumeColumns: {
+    backup: [
+      "Details",
+      "Claim",
+      "Volume",
+      "Method",
+      "Result",
+      "Data moved",
+      "Local snapshot kept",
+      "Skipped",
+      "Started",
+      "Ended",
+      "Size",
+    ],
+    restore: ["Details", "Claim", "Volume", "Method", "Data moved", "Size"],
+  } as Record<Operation, string[]>,
+  /** What a cell of the volumes says: of what an entry does not say, of a mark, of a namespace and of a size. */
+  notStated: "Not stated",
+  mark: (mark: boolean) => (mark ? "Yes" : "No"),
+  inNamespace: (namespace: string) => `in ${namespace}`,
+  size: (count: number) => sizeWords(count),
+  bytesOf: (count: number) => `${count} ${count === 1 ? "byte" : "bytes"}`,
+  /** What the tab calls each detail of a volume of a backup, by the key it is under. */
+  volumeDetail: {
+    csiSnapshotInfo: "CSI snapshot",
+    snapshotDataMovementInfo: "Data movement",
+    nativeSnapshotInfo: "Native snapshot",
+    pvbInfo: "Pod volume backup",
+    pvInfo: "Volume",
+  } as Record<string, string>,
+  /** A resource of the list with a filter on: how many of its items the filter leaves. */
+  itemsLeft: (left: number, all: number) => `${left} of ${many(all, "item")}`,
+  /** A line a row cuts: how much of it is not shown. */
+  cutLine: (left: number) =>
+    `${many(left, "more character")} of this line ${left === 1 ? "is" : "are"} not shown: the copy of the line takes it whole.`,
+  /** How a load that ended at a store without the file is said, and what a missing file means for the phase. */
+  storeHasNoFile: (kind: Operation, name: string, request: string, namespace: string) =>
+    `The store has no such file: Velero wrote none for the ${kind} ${name}, or it is not there any more. The ${REQUEST} ${request} stays in ${namespace} until Velero removes it.`,
+  nothingForValidation: (tab: ArtifactTab, kind: Operation) =>
+    `Velero writes nothing into the storage for a ${kind} that failed its validation: there ${ARTIFACTS[tab].plural ? `are no ${ARTIFACTS[tab].noun}` : `is no ${ARTIFACTS[tab].noun}`} to read. What it refused is in the summary.`,
+  /** The log of a backup that ended, which the store does not have: said in the past, with when it was asked for. */
+  lostLogOfABackup:
+    /^The log of this backup was not in the storage when it was asked for, at .+: it was removed from it, or it was never written there\. Velero uploads the log of a backup as best it can, and a backup ends without it when the upload fails\.$/,
+  /** What is offered after a load that is not to be asked again: one command that asks nothing. */
+  notAgain:
+    "The main process says that asking again as it was asked is not safe after this. The command takes the tab back to where it was before the request, and asks nothing.",
+  beginAgain: "Take the tab back to its first state",
+  /** What is said before any request, of an operation Velero signs no URL for. */
+  noBackupOfTheRestore: (name: string, namespace: string) =>
+    `The backup of the restore ${name} is not there: the restore names none, or the one it names is not in ${namespace}. Velero signs no URL for such a restore, and no request was created.`,
+  /** The location of a backup is said of the backup once; the one of a restore is of the backup of the restore. */
+  noLocationOfTheBackup: (kind: Operation, name: string, namespace: string) =>
+    `The storage location of ${kind === "restore" ? `the backup of the restore ${name}` : `the backup ${name}`} is not in ${namespace}: Velero signs no URL without it, and no request was created.`,
+  /** How a creation the cluster refused to the identity is said. */
+  forbiddenCreation:
+    "The cluster refused the creation of a DownloadRequest: the identity needs the verb create on downloadrequests of the namespace.",
+  /** How a load cancelled once its request was in the cluster is said to have ended. */
+  cancelledAfter: (request: string, namespace: string) =>
+    `The download was cancelled. The ${REQUEST} ${request} stays in ${namespace} until Velero removes it.`,
 };
+
+// A size of a volume in the unit that reads best, as the tab of the volumes writes it: a size that would be
+// written as 1024.0 of a unit is one of the unit above.
+function sizeWords(size: number): string {
+  if (size < 1024) return `${size} B`;
+  const units = ["KiB", "MiB", "GiB", "TiB", "PiB"];
+  let value = size / 1024;
+  let unit = 0;
+
+  while (Math.round(value * 10) >= 10240 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+
+  return `${value.toFixed(1)} ${units[unit]}`;
+}

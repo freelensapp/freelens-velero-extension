@@ -324,8 +324,12 @@ describe("the words of a DownloadRequest that did not end with its file", () => 
     expect(downloadFailure("not-found", "backup", { ...context, artifact: "RestoreLog" }).text).toBe(
       "The backup of the restore nightly is not there: the restore names none, or the one it names is not in velero-a. Velero signs no URL for such a restore, and no request was created.",
     );
+    // The location of a backup is said of the backup once, and the one of a restore of the backup of the restore.
     expect(downloadFailure("not-found", "location", context).text).toBe(
-      "The storage location of the backup of the backup nightly is not in velero-a: Velero signs no URL without it, and no request was created.",
+      "The storage location of the backup nightly is not in velero-a: Velero signs no URL without it, and no request was created.",
+    );
+    expect(downloadFailure("not-found", "location", { ...context, artifact: "RestoreLog" }).text).toBe(
+      "The storage location of the backup of the restore nightly is not in velero-a: Velero signs no URL without it, and no request was created.",
     );
     expect(downloadFailure("not-found", "wait", created).text).toContain("was removed before Velero signed a URL");
   });
@@ -338,7 +342,12 @@ describe("the words of a DownloadRequest that did not end with its file", () => 
     expect(downloadFailure("forbidden", "target", context).text).toBe(
       "The cluster refused to read the backup nightly. No request was created.",
     );
-    expect(downloadFailure("forbidden", "location", context).text).toContain("the storage location");
+    expect(downloadFailure("forbidden", "location", context).text).toBe(
+      "The cluster refused to read the storage location of the backup nightly. No request was created.",
+    );
+    expect(downloadFailure("forbidden", "location", { ...context, artifact: "RestoreLog" }).text).toBe(
+      "The cluster refused to read the storage location of the backup of the restore nightly. No request was created.",
+    );
     expect(downloadFailure("forbidden", "wait", created).text).toContain("refused to read the request");
   });
 

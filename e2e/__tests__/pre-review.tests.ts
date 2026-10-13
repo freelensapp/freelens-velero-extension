@@ -4,11 +4,23 @@
  */
 
 // The pass before the review of a milestone: the views in both themes, at
-// the two sizes of the window and at twice the zoom, and the journey with the
+// the two sizes of the window and at twice the zoom, and the journeys with the
 // keyboard alone. Every view is checked for what lies over something else or
 // does not fit, and is left as a screenshot of the frame of the test cluster.
+//
+// The tabs of a workspace are among the views, open: a diagnostic tab with
+// writes off, the confirmation of a request, the log of the backup that
+// failed its validation, the resource list of the restore of the demo, and
+// the log, the results and the volume information of the backup synced from
+// the store. They load what the fixtures of the tabs wrote, each load a
+// DownloadRequest in the namespace of the installation, told to the guard by
+// its name and read in the cluster by it. Nothing deletes a request: the
+// server removes one ten minutes after it signed it, and the last case waits
+// for that. So the loads come as early as the views allow, and the views of
+// the other pages are looked at while the server counts its minutes.
 
 import { expect } from "@jest/globals";
+import * as artifacts from "../helpers/velero-artifacts";
 import * as cluster from "../helpers/velero-cluster";
 import * as velero from "../helpers/velero-extension";
 
@@ -25,25 +37,76 @@ const OPENED = "backup-finalizingpartiallyfailed";
 const RESTORES = cluster.RESTORES;
 const RESTORED = "restore-mapped";
 const LONG_RESTORE = cluster.LONG_RESTORE_NAME;
-// The views that are checked, each in both themes at every size.
-const VIEWS = 27;
+// The views that are checked, each in both themes at every size: eight of the tabs, then the twenty-seven
+// of the pages.
+const VIEWS = 35;
 const OVERVIEW = cluster.OVERVIEW;
 const SCHEDULES = cluster.SCHEDULES;
 const SCHEDULED = "views-history";
 const STORAGE = cluster.STORAGE_LOCATIONS;
 const SNAPSHOT = cluster.SNAPSHOT_LOCATIONS;
+// The installation of the demo, where the tabs load what the fixtures of the tabs wrote into its store,
+// and the cluster as the catalog of the host names it, which is by its context.
+const NAMESPACE = cluster.E2E_NAMESPACE;
+const CLUSTER = cluster.E2E_KUBE_CONTEXT;
+// The operations of the tabs, named by the run of the fixtures: the backup synced from the store, with
+// the large log; the backup the server refused, whose log the store does not have; the restore of the demo.
+const SYNCED = `fixture-synced-backup-${cluster.E2E_FIXTURE_RUN}`;
+const REFUSED = `fixture-invalid-backup-${cluster.E2E_FIXTURE_RUN}`;
+const DEMO_RESTORE = `fixture-restore-${cluster.E2E_FIXTURE_RUN}`;
+// How long after its last load the suite waits for the server: the ten minutes a request lives after it is
+// signed, the minute between two passes of the server, and a margin.
+const REMOVED_WITHIN = 12 * 60 * 1000;
+// The narrowest window the bar of the log is looked at in: the width of the window at twice the zoom.
+const NARROWEST = 720;
+// A tab of the view that is shown: the operation the view is of, and the tab.
+interface Tab {
+  kind: artifacts.Operation;
+  tab: artifacts.WorkspaceTab;
+}
 
 describe("pre-review of the views", () => {
   let started: velero.StartedApplication;
   let frame: Frame;
   let before: cluster.ClusterSnapshot;
+  // What the runner counted of the artifacts of the tabs, outside the extension.
+  let facts: artifacts.TabFixtureFacts;
+  // When the suite last gave the second gesture of a load, which is what creates a request: nothing while
+  // it gave none.
+  let lastLoad = 0;
   const problems: Record<string, string[]> = {};
   const screenshots: string[] = [];
+  // What the suite asked the extension to create, by the names the tabs gave.
+  const ledger = artifacts.requestLedger();
+  // What each tab loaded, by its operation and its tab.
+  const loads: Record<string, artifacts.Loaded> = {};
+  // What is written for who reads the run of the tabs: each view with what it shows and the requests it
+  // created, what the journeys with the keyboard read, the requests of the suite, and what no suite
+  // checks, which is left to the review.
+  const tabs: {
+    views: Record<string, { shows: string; requests: string[] }>;
+    journeys: Record<string, unknown>;
+    requests: Record<string, unknown>;
+    humanJudgment: string[];
+  } = {
+    views: {},
+    journeys: {},
+    requests: {},
+    humanJudgment: [
+      "The contrast of the parts of the tabs in both themes, which no suite checks: the choices of the bar drawn as checkboxes, the match the search is at beside the other matches, the words of a failure beside its mark and its line, and the row of a resource over the rows of its items.",
+      "What Escape does in the search field: it clears the words and keeps the keyboard in the field, and the view is not left. The suite of the tabs asserts that; whether it is what an operator expects of the key is for the review.",
+      "Whether a long line reads well when it is cut: its row shows its first characters, and after them the words that say how many more are not shown, in the pictures of the log at 900 by 650 and at twice the zoom.",
+    ],
+  };
 
   // Every theme at every size: the view is set by the caller, and is what is checked and captured. A
   // layout is checked once the theme, the size and the zoom are the ones that were set: one that was
-  // not applied would be the layout before it, checked twice.
-  const everyLayout = async (view: string, prepare?: () => Promise<void>, of = cluster.BACKUPS) => {
+  // not applied would be the layout before it, checked twice. A tab of a view is looked at as the suite
+  // of the tabs looks at one: the pointer is parked in a corner, since what it rests on is drawn as
+  // pointed at and is no state of the tab; a page that is scrolled, as one with a tab is at twice the
+  // zoom, is looked at from its top, where its target bar is, by the check of the page, and from its end,
+  // where the view is whole, by the check of the tab, which is where it is left for the picture.
+  const everyLayout = async (view: string, prepare?: () => Promise<void>, of = cluster.BACKUPS, tab?: Tab) => {
     for (const theme of THEMES) {
       await velero.setColorTheme(started.app, started.window, theme);
       for (const size of SIZES) {
@@ -60,7 +123,17 @@ describe("pre-review of the views", () => {
         await prepare?.();
         const name = `${theme.toLowerCase()}-${size.name}-${view}`;
 
-        problems[name] = await cluster.layoutProblems(frame, of);
+        if (tab) {
+          await started.window.mouse.move(1, 1);
+          await artifacts.scrollPage(frame, tab.kind, "top");
+          await frame.waitForTimeout(300);
+          const page = await cluster.layoutProblems(frame, of);
+
+          await artifacts.scrollPage(frame, tab.kind, "end");
+          problems[name] = [...page, ...(await artifacts.tabLayoutProblems(frame, tab.kind, tab.tab))];
+        } else {
+          problems[name] = await cluster.layoutProblems(frame, of);
+        }
         screenshots.push(await cluster.requiredScreenshot(frame, name, size.zoom));
       }
     }
@@ -75,12 +148,94 @@ describe("pre-review of the views", () => {
         ([name, list]) => SIZES.some((size) => name.endsWith(`-${size.name}-${view}`)) && list.length > 0,
       ),
     );
+  // What the guard is told of a load when its second gesture was given, whatever became of the load: the
+  // request the panel named is one of the suite when the cluster holds it. A load that ended without its
+  // text may have created its request all the same.
+  const told = (request: string) => {
+    lastLoad = Date.now();
+    if (request !== "" && cluster.downloadRequests(NAMESPACE).some((held) => held.name === request)) {
+      ledger.add(request);
+    }
+  };
+  // The request of a load: in the cluster under the name the tab gave it, known to the guard, of the
+  // target that was asked, created by the extension; and nothing the guard was not told is in the
+  // namespace, which is expected last: what it finds is of another load, and hides nothing of this one.
+  const expectRequest = (kind: artifacts.Operation, tab: artifacts.ArtifactTab, name: string, request: string) => {
+    const held = cluster.downloadRequests(NAMESPACE);
+    const mine = held.find((entry) => entry.name === request);
+
+    expect([kind, tab, request, request.startsWith(`${name}-`), mine !== undefined]).toEqual([
+      kind,
+      tab,
+      request,
+      true,
+      true,
+    ]);
+    expect([kind, tab, ledger.asked().includes(request)]).toEqual([kind, tab, true]);
+    expect([kind, tab, mine?.target]).toEqual([kind, tab, { kind: artifacts.ARTIFACTS[tab].targets[kind], name }]);
+    expect([kind, tab, mine?.labels["app.kubernetes.io/managed-by"]]).toEqual([kind, tab, "freelens-velero-extension"]);
+    expect([kind, tab, held.map((entry) => entry.name).filter((held) => !ledger.asked().includes(held))]).toEqual([
+      kind,
+      tab,
+      [],
+    ]);
+  };
+  // One load with the pointer, from the command of its tab to its text, told to the guard.
+  const loadOf = async (kind: artifacts.Operation, tab: artifacts.ArtifactTab, name: string) => {
+    const loaded = await artifacts.load(frame, kind, tab, told);
+
+    loads[`${kind}/${tab}`] = loaded;
+    expectRequest(kind, tab, name, loaded.request);
+    return loaded;
+  };
+  // The view of an operation at a tab, as the case before left it: a case that finds another view fails by
+  // its name, since a view that is opened again holds nothing of what its tabs loaded.
+  const stay = async (kind: artifacts.Operation, name: string, tab: artifacts.WorkspaceTab) => {
+    if (!(await artifacts.viewOf(frame, kind, name))) {
+      throw new Error(
+        `The view of the ${kind} ${name} is not the one that is shown: the case that opens it comes first`,
+      );
+    }
+    await artifacts.openTab(frame, kind, tab);
+  };
+  // The tab of the strip that has the focus, and whether it says it is selected, read as attributes.
+  const focusedTab = () =>
+    frame.evaluate(() => ({
+      id: document.activeElement?.getAttribute("data-testid") ?? "",
+      selected: document.activeElement?.getAttribute("aria-selected") ?? "",
+    }));
+  // Where the keyboard is after a key, among the tabs.
+  const after = async (key: string) => {
+    await started.window.keyboard.press(key);
+    return focusedTab();
+  };
+  // A report is written beside the pictures. One that would carry a part of a URL the server signed is not
+  // written, and the case fails by the name of the report and of nothing in it.
+  const report = async (name: string, value: unknown) => {
+    if (artifacts.signedUrlIn({ [name]: JSON.stringify(value) }).length > 0) {
+      throw new Error(`The report ${name} would carry a part of a signed URL: it is not written`);
+    }
+    await cluster.writeReport(name, value);
+  };
 
   beforeAll(async () => {
     if (!cluster.fixturesReady()) {
       throw new Error(cluster.fixturesMissing());
     }
+    facts = await artifacts.tabFixtureFacts();
+    if (facts.synced.backup !== SYNCED) {
+      throw new Error(
+        `The facts of the fixtures are of the backup ${facts.synced.backup}, and the suite expects ${SYNCED}`,
+      );
+    }
     before = cluster.clusterSnapshot();
+    // A request an earlier run left would be counted with the ones of this one, and removed while it runs.
+    if (before.named.length > 0) {
+      throw new Error(
+        `Requests to Velero are in the cluster before the suite starts: ${before.named.join(", ")}. ` +
+          "The server removes a DownloadRequest ten minutes after it signed it: wait for it, then run again.",
+      );
+    }
     let kubeconfig = "";
 
     // The kubeconfig is in the profile before the install is asked, for each start of the application.
@@ -119,6 +274,524 @@ describe("pre-review of the views", () => {
       await started.window.keyboard.press("Enter");
       await cluster.waitForBackups(frame);
       expect((await cluster.target(frame)).namespace).toBe(cluster.E2E_STATIC_NAMESPACE);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows a diagnostic tab of the installation of the demo with writes off in both themes, at every size",
+    async () => {
+      const id = (part?: artifacts.PanelPart) => artifacts.PARTS.panel("backup", "log", part);
+
+      await cluster.showList(frame);
+      await cluster.selectInstallation(frame, NAMESPACE);
+      await cluster.waitForBackups(frame);
+      // The main process said where the gate is: the command that turns writes on is offered, and they are off.
+      await frame.waitForSelector("[data-testid=velero-writes-on]", { timeout: 60_000 });
+      expect(await cluster.writesState(frame)).toBe("off");
+      await artifacts.openWorkspaceOf(frame, "backup", REFUSED);
+      await artifacts.openTab(frame, "backup", "log");
+      const state = await artifacts.panelState(frame, "backup", "log");
+
+      // The way to the target bar is the one command of the tab, and the state of the gate is said first.
+      expect([state.step, state.commands, state.viewer]).toEqual(["first", [id("toTarget")], false]);
+      expect(await artifacts.said(frame, id("writesOff"))).toBe(artifacts.WORDS.writesOff);
+      await everyLayout("tab-writes-off", undefined, cluster.BACKUPS, { kind: "backup", tab: "log" });
+      tabs.views["tab-writes-off"] = { shows: `the Log tab of the backup ${REFUSED}, with writes off`, requests: [] };
+      expect(found("tab-writes-off")).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "moves among the tabs with the keyboard alone, from the way back: the arrows, Home and End, each tab saying whether it is selected, Enter opening one and the address naming it; and reads the roles of the list",
+    async () => {
+      const tab = (name: artifacts.WorkspaceTab) => artifacts.PARTS.tab("backup", name);
+      const shown = artifacts.PARTS.shown("backup");
+      const reached: { key: string; id: string; selected: string }[] = [];
+      // Where the keyboard is after a key, kept for the report.
+      const moved = async (key: string) => {
+        const at = await after(key);
+
+        reached.push({ key, ...at });
+        return at;
+      };
+
+      await stay("backup", REFUSED, "log");
+      await frame.locator("[data-testid=velero-back]").focus();
+      expect(await cluster.focused(frame)).toBe("velero-back");
+      // One press from the way back reaches the strip, at its first tab. The log is the tab that is open:
+      // each tab the keyboard reaches says whether it is the selected one.
+      expect(await moved("Tab")).toEqual({ id: tab("summary"), selected: "false" });
+      expect(await moved("ArrowRight")).toEqual({ id: tab("log"), selected: "true" });
+      expect(await moved("End")).toEqual({ id: tab("volumes"), selected: "false" });
+      expect(await moved("ArrowRight")).toEqual({ id: tab("summary"), selected: "false" });
+      expect(await moved("ArrowLeft")).toEqual({ id: tab("volumes"), selected: "false" });
+      expect(await moved("Home")).toEqual({ id: tab("summary"), selected: "false" });
+      // Moving chose nothing: the log is still the tab that is open.
+      expect((await artifacts.tabsOf(frame, "backup")).open).toBe("log");
+      // Enter opens the tab the keyboard is on, which then says it is selected, and the address names it:
+      // the summary by naming none.
+      await started.window.keyboard.press("Enter");
+      await artifacts.attributeLike(frame, shown, "data-tab", "summary");
+      expect(await focusedTab()).toEqual({ id: tab("summary"), selected: "true" });
+      expect((await artifacts.tabsOf(frame, "backup")).address).toBe("");
+      expect(await moved("ArrowRight")).toEqual({ id: tab("log"), selected: "false" });
+      await started.window.keyboard.press("Enter");
+      await artifacts.attributeLike(frame, shown, "data-tab", "log");
+      expect(await focusedTab()).toEqual({ id: tab("log"), selected: "true" });
+      const strip = await artifacts.tabsOf(frame, "backup");
+
+      expect([strip.address, await cluster.addressViews(frame)]).toEqual(["log", [`backup/${REFUSED}`]]);
+      // The roles, read as attributes: one list of tabs with its name, five tabs each with its role and the
+      // part it shows, one of them selected, and the part named by the tab that is open.
+      expect([strip.role, strip.name]).toEqual(["tablist", "What is shown of the backup"]);
+      expect(strip.tabs.map((each) => [each.id, each.role, each.controls])).toEqual(
+        artifacts.TABS.map((each) => [tab(each.id), "tab", shown]),
+      );
+      expect(strip.tabs).toHaveLength(5);
+      expect(strip.selected).toEqual([tab("log")]);
+      expect(strip.panel).toEqual({ role: "tabpanel", id: shown, labelled: tab("log") });
+      tabs.journeys["the tabs with the keyboard"] = { reached, roles: strip };
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "turns writes on, reaches the command of the tab with the keyboard alone, and shows the confirmation of the request in both themes, at every size",
+    async () => {
+      const id = (part?: artifacts.PanelPart) => artifacts.PARTS.panel("backup", "log", part);
+
+      await stay("backup", REFUSED, "log");
+      await cluster.turnWritesOn(frame);
+      await artifacts.part(frame, id("create"));
+      // From the tab that is open the keyboard goes through the three tabs after it, each one a stop, and
+      // reaches the command of the tab: four presses. The command with the keyboard: what takes its place
+      // has the focus, and it is not the command that creates, which is one press away.
+      await (await artifacts.part(frame, artifacts.PARTS.tab("backup", "log"))).focus();
+      const presses = await cluster.tabTo(frame, (focus) => focus === id("create"), 8);
+
+      expect(presses).toBe(4);
+      await started.window.keyboard.press("Enter");
+      await artifacts.part(frame, id("confirm"));
+      expect(await cluster.focusOn(frame, id("confirm"))).toBe(id("confirm"));
+      expect(await artifacts.confirmationOf(frame, "backup", "log")).toEqual(
+        artifacts.WORDS.confirmation("backup", "log", REFUSED, NAMESPACE, CLUSTER, CLUSTER),
+      );
+      expect(await cluster.tabTo(frame, (focus) => focus === id("confirmCreate"), 2)).toBe(1);
+      expect((await artifacts.panelState(frame, "backup", "log")).step).toBe("confirming");
+      await everyLayout("tab-confirmation", undefined, cluster.BACKUPS, { kind: "backup", tab: "log" });
+      // The confirmation is still shown, and nothing was created for it.
+      expect((await artifacts.panelState(frame, "backup", "log")).step).toBe("confirming");
+      expect(cluster.downloadRequests(NAMESPACE)).toEqual([]);
+      tabs.views["tab-confirmation"] = { shows: `the confirmation of the log of the backup ${REFUSED}`, requests: [] };
+      tabs.journeys["the command and its confirmation with the keyboard"] = { presses, toTheCommandThatCreates: 1 };
+      expect(found("tab-confirmation")).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "loads the log of the backup that failed its validation from its confirmation, with the keyboard alone: the store has no such file, said by the phase, the one command takes the tab back and has the focus; in both themes, at every size",
+    async () => {
+      const id = (part?: artifacts.PanelPart) => artifacts.PARTS.panel("backup", "log", part);
+
+      await stay("backup", REFUSED, "log");
+      if ((await artifacts.panelState(frame, "backup", "log")).step !== "confirming") {
+        throw new Error("The confirmation of the log is not shown: the case that reaches it comes first");
+      }
+      await (await artifacts.part(frame, id("confirmCreate"))).focus();
+      const { ended, request } = await artifacts.runLoad(frame, "backup", "log", told, { keyboard: true });
+      const failure = await artifacts.failureOf(frame, "backup", "log");
+      const state = await artifacts.panelState(frame, "backup", "log");
+
+      tabs.views["tab-log-missing"] = {
+        shows: `the Log tab of the backup ${REFUSED}, whose file the store does not have`,
+        requests: [request],
+      };
+      tabs.journeys["the focus after a failure that has no command to ask again"] = {
+        ended,
+        failure,
+        commands: state.commands,
+        focus: await cluster.focused(frame),
+      };
+      expect(ended).toBe("failed");
+      expectRequest("backup", "log", REFUSED, request);
+      // The server signed a URL for a file the store does not have: the load ended at the store, after the
+      // request was created, which stays until the server removes it.
+      expect([failure.code, artifacts.AFTER_THE_CREATION.includes(failure.stage)]).toEqual(["artifact-missing", true]);
+      expect(failure.text).toBe(artifacts.WORDS.storeHasNoFile("backup", REFUSED, request, NAMESPACE));
+      expect(await artifacts.attribute(frame, id("failure"), "data-ended")).toBe("missing");
+      // What the missing file means is said by the phase: the backup failed its validation.
+      expect(await artifacts.said(frame, id("missing"))).toBe(artifacts.WORDS.nothingForValidation("log", "backup"));
+      // Asking again as it was asked is not offered: the one command takes the tab back to its first state,
+      // and the focus is on it, which is where the code leaves it after a failure that has no command to
+      // ask again.
+      expect([state.step, state.viewer, state.commands]).toEqual(["failed", false, [id("begin")]]);
+      expect(await artifacts.said(frame, id("notAgain"))).toBe(artifacts.WORDS.notAgain);
+      expect(await artifacts.said(frame, id("begin"))).toBe(artifacts.WORDS.beginAgain);
+      expect(await cluster.focusOn(frame, id("begin"))).toBe(id("begin"));
+      await everyLayout("tab-log-missing", undefined, cluster.BACKUPS, { kind: "backup", tab: "log" });
+      expect(found("tab-log-missing")).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "loads the resource list of the restore of the demo, with what the restore did with each item, and shows it in both themes, at every size",
+    async () => {
+      await artifacts.openWorkspaceOf(frame, "restore", DEMO_RESTORE);
+      await artifacts.openTab(frame, "restore", "resources");
+      expect(await cluster.writesState(frame)).toBe("on");
+      const loaded = await loadOf("restore", "resources", DEMO_RESTORE);
+      const list = await artifacts.resourcesLike(
+        frame,
+        "restore",
+        "shows its first rows",
+        (shown) => shown.rows.length > 0,
+      );
+      const counted = facts.real.restore.resourceList;
+
+      tabs.views["tab-restore-resources"] = {
+        shows: `the Resources tab of the restore ${DEMO_RESTORE}, with its actions`,
+        requests: [loaded.request],
+      };
+      // The list is the one the fixtures wrote: as many items and resources as the runner counted in the
+      // file, and as many of each action.
+      expect([list.items, list.resources]).toEqual([counted.items, counted.resources]);
+      expect(list.columns).toEqual(["namespace", "name", "action"]);
+      if (!list.actions) throw new Error("The resource list of the restore offers no choice by action");
+      expect(list.actions.all.count).toBe(counted.items);
+      for (const action of ["created", "updated", "failed", "skipped"] as const) {
+        expect([action, list.actions[action].count]).toEqual([action, counted.actions[action] ?? 0]);
+      }
+      await everyLayout("tab-restore-resources", undefined, RESTORES, { kind: "restore", tab: "resources" });
+      expect(found("tab-restore-resources")).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "cancels the load of the log of the synced backup as soon as the panel names its request, with the keyboard alone, and finds the focus on the command that asks again; then loads it, and finds the focus on its first line",
+    async () => {
+      const id = (part?: artifacts.PanelPart) => artifacts.PARTS.panel("backup", "log", part);
+      const keyboard = started.window.keyboard;
+      // The second gesture, from the command the focus is on: Enter, the confirmation with the focus on it,
+      // one press to the command that creates.
+      const toTheCreation = async () => {
+        await keyboard.press("Enter");
+        await artifacts.part(frame, id("confirm"));
+        expect(await cluster.focusOn(frame, id("confirm"))).toBe(id("confirm"));
+        expect(await cluster.tabTo(frame, (focus) => focus === id("confirmCreate"), 2)).toBe(1);
+      };
+
+      await artifacts.openWorkspaceOf(frame, "backup", SYNCED);
+      await artifacts.openTab(frame, "backup", "log");
+      expect(await cluster.writesState(frame)).toBe("on");
+      await (await artifacts.part(frame, id("create"))).focus();
+      await toTheCreation();
+      // The command that cancels is given inside the page, the moment the panel offers it, which is when it
+      // names the request. The request the load ran is in the cluster when it was created before the
+      // cancel reached it, and the guard was told.
+      const cancelled = await artifacts.runLoad(frame, "backup", "log", told, { cancel: true, keyboard: true });
+
+      if (cancelled.ended === "loaded") {
+        throw new Error("The load ended with its text before the cancel reached it: nothing was cancelled");
+      }
+      const failure = await artifacts.failureOf(frame, "backup", "log");
+      const created = ledger.asked().includes(cancelled.request);
+      const afterTheCancel = await artifacts.panelState(frame, "backup", "log");
+
+      tabs.journeys["the focus after a cancelled load"] = {
+        request: cancelled.request,
+        created,
+        failure,
+        commands: afterTheCancel.commands,
+        focus: await cluster.focused(frame),
+      };
+      expect(cancelled.request.startsWith(`${SYNCED}-`)).toBe(true);
+      expect(failure.code).toBe("cancelled");
+      expect(cancelled.moments.some((moment) => moment.status === artifacts.WORDS.cancelling)).toBe(true);
+      if (created) expectRequest("backup", "log", SYNCED, cancelled.request);
+      // The code is safe to ask again: the command that asks again is there, and the focus is on it.
+      expect([afterTheCancel.step, afterTheCancel.viewer, afterTheCancel.commands]).toEqual([
+        "failed",
+        false,
+        [id("create")],
+      ]);
+      expect(await cluster.focusOn(frame, id("create"))).toBe(id("create"));
+      // The load, from the command the focus is on.
+      await toTheCreation();
+      const { ended, request } = await artifacts.runLoad(frame, "backup", "log", told, { keyboard: true });
+
+      expect(ended).toBe("loaded");
+      const loaded = await artifacts.loadedFacts(frame, "backup", "log");
+
+      loads["backup/log"] = loaded;
+      tabs.views["tab-log-searched"] = {
+        shows: `the Log tab of the backup ${SYNCED}, loaded, searched, with a level chosen`,
+        requests: [...(created ? [cancelled.request] : []), loaded.request],
+      };
+      expect(loaded.request).toBe(request);
+      expectRequest("backup", "log", SYNCED, loaded.request);
+      // The keyboard is on the first line of what arrived.
+      const first = artifacts.PARTS.line("backup", "log", 1);
+
+      await artifacts.part(frame, first);
+      expect(await cluster.focusOn(frame, first)).toBe(first);
+      tabs.journeys["the focus after a load"] = { request: loaded.request, focus: await cluster.focused(frame) };
+      // The log is the one the fixtures wrote: its lines, and the lines of each level, as the runner
+      // counted them in the file.
+      const log = await artifacts.logLike(
+        frame,
+        "backup",
+        "shows its first lines",
+        (shown) => shown.mounted.length > 0,
+      );
+
+      expect(log.lines).toBe(facts.synced.log.lines);
+      expect(Object.fromEntries(artifacts.LOG_LEVELS.map((level) => [level, log.levels[level].count]))).toEqual(
+        facts.synced.log.levels,
+      );
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "loads the results and the volume information of the synced backup, each through a request of its own, and keeps the log it loaded",
+    async () => {
+      await stay("backup", SYNCED, "results");
+      const results = await loadOf("backup", "results", SYNCED);
+      const shown = await artifacts.resultsShown(frame, "backup");
+
+      tabs.views["tab-results"] = { shows: `the Results tab of the backup ${SYNCED}`, requests: [results.request] };
+      expect([shown.errors, shown.warnings]).toEqual([facts.synced.results.errors, facts.synced.results.warnings]);
+      await artifacts.openTab(frame, "backup", "volumes");
+      const volumes = await loadOf("backup", "volumes", SYNCED);
+
+      tabs.views["tab-volumes-detail"] = {
+        shows: `the Volumes tab of the backup ${SYNCED}, with the details of its first volume open`,
+        requests: [volumes.request],
+      };
+      expect((await artifacts.volumesShown(frame, "backup")).count).toBe(facts.synced.volumeInfo.volumes);
+      // The log is still shown as it was loaded.
+      await artifacts.openTab(frame, "backup", "log");
+      expect((await artifacts.panelState(frame, "backup", "log")).shown).toBe(loads["backup/log"]?.request);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "searches the log of the synced backup with the keyboard alone: the field by its label, what is typed, the count told to who does not see against the facts of the fixtures, Enter and Shift with Enter; and shows it with a level chosen in both themes, at every size",
+    async () => {
+      const keyboard = started.window.keyboard;
+      const search = artifacts.PARTS.viewer("backup", "log", "search");
+      const status = artifacts.PARTS.viewer("backup", "log", "searchStatus");
+      // Of the texts the runner searched the log for, the one the fewest lines hold, of those more than one
+      // line holds: its matches are few enough to move among. The fixtures hold a text once in a line at
+      // most, so what the runner counted as its matches is its lines, which is what the viewer counts.
+      const searched = [...facts.synced.log.searches]
+        .filter((search) => search.matches > 1)
+        .sort((one, other) => one.matches - other.matches)[0];
+
+      if (!searched) throw new Error("No text the runner searched for is in more than one line of the synced log");
+      await stay("backup", SYNCED, "log");
+      // The field by its label, which names it to who does not see.
+      const label = await artifacts.attribute(frame, search, "aria-labelledby");
+
+      expect(label).not.toBe("");
+      expect((await frame.locator(`#${label}`).innerText()).trim()).toBe(artifacts.WORDS.searchLabel);
+      await (await artifacts.part(frame, search)).focus();
+      await keyboard.type(searched.text, { delay: 20 });
+      const typed = await artifacts.logLike(
+        frame,
+        "backup",
+        `is searched by "${searched.text}"`,
+        (shown) => shown.search.words === searched.text && shown.search.field === searched.text,
+      );
+
+      // The count, told to who does not see by the part that has the role of a status, is read as an
+      // attribute: as many matches as the runner counted for the text. The search is at the first of them,
+      // and says so.
+      expect(await artifacts.attribute(frame, status, "role")).toBe("status");
+      expect([typed.search.matches, typed.search.match, typed.search.line !== undefined]).toEqual([
+        searched.matches,
+        0,
+        true,
+      ]);
+      expect(typed.search.said).toBe(artifacts.WORDS.match(0, searched.matches, typed.search.line ?? 0));
+      // Enter moves to the next match, and Shift with Enter back to the one before, with the keyboard in
+      // the field.
+      await keyboard.press("Enter");
+      const next = await artifacts.logLike(
+        frame,
+        "backup",
+        "is at its second match",
+        (shown) => shown.search.match === 1,
+      );
+
+      expect(next.search.said).toBe(artifacts.WORDS.match(1, searched.matches, next.search.line ?? 0));
+      expect((next.search.line ?? 0) > (typed.search.line ?? 0)).toBe(true);
+      await keyboard.press("Shift+Enter");
+      const back = await artifacts.logLike(
+        frame,
+        "backup",
+        "is at its first match again",
+        (shown) => shown.search.match === 0,
+      );
+
+      expect(back.search.line).toBe(typed.search.line);
+      expect(await cluster.focusOn(frame, search)).toBe(search);
+      tabs.journeys["the search with the keyboard"] = {
+        label,
+        typed: searched.text,
+        matches: typed.search.matches,
+        counted: searched.matches,
+        lines: [typed.search.line, next.search.line, back.search.line],
+      };
+      // A level chosen: the one most lines are of, as the runner counted them.
+      const level = [...artifacts.LOG_LEVELS].sort(
+        (one, other) => facts.synced.log.levels[other] - facts.synced.log.levels[one],
+      )[0];
+
+      await artifacts.clickOn(frame, artifacts.PARTS.level("backup", level));
+      await artifacts.logLike(
+        frame,
+        "backup",
+        `shows the lines of the level ${level}`,
+        (shown) => shown.levels[level].chosen && shown.shown === facts.synced.log.levels[level],
+      );
+      await everyLayout("tab-log-searched", undefined, cluster.BACKUPS, { kind: "backup", tab: "log" });
+      expect(found("tab-log-searched")).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "stands still at the widths where the bar of the log goes to a second line",
+    async () => {
+      const viewer = artifacts.PARTS.viewer("backup", "log");
+      // The bar of the viewer is its first part; the list it scrolls and the strip of the tabs are watched
+      // with it.
+      const watched = [
+        `[data-testid="${viewer}"] > :first-child`,
+        `[data-testid="${artifacts.PARTS.viewer("backup", "log", "text")}"]`,
+        `[data-testid="${artifacts.PARTS.strip("backup")}"]`,
+      ];
+      const tall = async (width: number) => {
+        await velero.setWindowSize(started.app, width, 900);
+        await frame.waitForTimeout(300);
+        return (await cluster.movesOf(frame, cluster.BACKUPS, 1, watched)).heights[0];
+      };
+      // The widths at which the bar is taller than it was eight pixels wider: where its levels, its count or
+      // what its search says go to another line. They are of the words the bar holds and of the font they
+      // are written in, and are found from the widest window to the narrowest a view is looked at in.
+      const transitions: number[] = [];
+      const moved: Record<number, unknown> = {};
+
+      await stay("backup", SYNCED, "log");
+      try {
+        let before = await tall(1440);
+
+        for (let width = 1440 - 8; width >= NARROWEST; width -= 8) {
+          const now = await tall(width);
+
+          if (now > before) transitions.push(width);
+          before = now;
+        }
+        expect(transitions.length).toBeGreaterThan(0);
+        // A scrollbar that comes and goes makes the view narrower and wider by what it is wide: around the
+        // width the bar goes to another line at, the view with it would not be the view without it.
+        for (const transition of transitions) {
+          for (let at = transition + 16; at >= transition - 8; at -= 2) {
+            await velero.setWindowSize(started.app, at, 900);
+            await frame.waitForTimeout(500);
+            let found = await cluster.movesOf(frame, cluster.BACKUPS, 60, watched);
+
+            // A page that was given another width takes a moment to be still, and the installation may be
+            // read while it is looked at, once: what comes and goes is never still.
+            for (let again = 0; again < 3 && found.changes > 1; again += 1) {
+              found = await cluster.movesOf(frame, cluster.BACKUPS, 60, watched);
+            }
+            if (found.changes > 1 || found.scrolled) moved[at] = found;
+          }
+        }
+      } finally {
+        // The views after this one are looked at in the window they expect.
+        await velero.setWindowSize(started.app, 1440, 900);
+        await frame.waitForTimeout(1000);
+      }
+      tabs.journeys["the widths where the bar of the log goes to a second line"] = { transitions, moved };
+      expect(moved).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows the log of the synced backup with its lines wrapped in both themes, at every size",
+    async () => {
+      await stay("backup", SYNCED, "log");
+      await artifacts.clickOn(frame, artifacts.PARTS.viewer("backup", "log", "wrap"));
+      const wrapped = await artifacts.logLike(
+        frame,
+        "backup",
+        "wraps its lines",
+        (shown) => shown.wrap && shown.columns !== undefined && shown.mounted.length > 0,
+      );
+
+      expect(wrapped.columns).toBeGreaterThanOrEqual(20);
+      tabs.views["tab-log-wrapped"] = { shows: `the same log, with its lines wrapped`, requests: [] };
+      await everyLayout("tab-log-wrapped", undefined, cluster.BACKUPS, { kind: "backup", tab: "log" });
+      expect(found("tab-log-wrapped")).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows the results of the synced backup in both themes, at every size",
+    async () => {
+      await stay("backup", SYNCED, "results");
+      expect((await artifacts.panelState(frame, "backup", "results")).shown).toBe(loads["backup/results"]?.request);
+      await everyLayout("tab-results", undefined, cluster.BACKUPS, { kind: "backup", tab: "results" });
+      expect(found("tab-results")).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows the volume information of the synced backup with the details of a volume open in both themes, at every size",
+    async () => {
+      const toggle = artifacts.PARTS.volumeToggle("backup", 0);
+      const details = artifacts.PARTS.volumeDetails("backup", 0);
+
+      await stay("backup", SYNCED, "volumes");
+      expect((await artifacts.panelState(frame, "backup", "volumes")).shown).toBe(loads["backup/volumes"]?.request);
+      await artifacts.clickOn(frame, toggle);
+      await artifacts.attributeLike(frame, toggle, "aria-expanded", "true");
+      await artifacts.part(frame, details);
+      await everyLayout(
+        "tab-volumes-detail",
+        async () => {
+          // The details are under the rows: they are brought into the room of the view for the picture.
+          await (await artifacts.part(frame, details)).scrollIntoViewIfNeeded();
+        },
+        cluster.BACKUPS,
+        { kind: "backup", tab: "volumes" },
+      );
+      expect(found("tab-volumes-detail")).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "comes back to the installation the second case chose, which turns writes off, and leaves the view",
+    async () => {
+      await cluster.showList(frame);
+      await cluster.selectInstallation(frame, cluster.E2E_STATIC_NAMESPACE);
+      await cluster.waitForBackups(frame);
+      expect((await cluster.target(frame)).namespace).toBe(cluster.E2E_STATIC_NAMESPACE);
+      await frame.waitForSelector("[data-testid=velero-writes][data-writes=off]", { timeout: 60_000 });
+      expect(await cluster.writesState(frame)).toBe("off");
     },
     TIMEOUT,
   );
@@ -732,11 +1405,21 @@ describe("pre-review of the views", () => {
   );
 
   it(
-    "leaves the objects of Velero as they were",
+    "leaves the objects of Velero as they were: the server removes each request ten minutes after it signed it",
     async () => {
+      // The wait for the server is counted from the last load of the suite, and needs nothing of the
+      // application. A request no server looked at is said by the wait, by its name.
+      const left = lastLoad > 0 ? await cluster.awaitRequestsGone(NAMESPACE, lastLoad + REMOVED_WITHIN) : [];
       const after = cluster.clusterSnapshot();
 
+      tabs.requests = { asked: ledger.asked(), left: left.map((request) => request.name), lastLoad };
       await cluster.writeReport("pre-review-layout", problems);
+      await report("pre-review-tabs", tabs);
+      expect(left.map((request) => request.name)).toEqual([]);
+      // Five loads ended, with their text or without it, and one was cancelled, which created a request or
+      // none: five or six requests, each told to the guard by its name.
+      expect(ledger.asked().length).toBeGreaterThanOrEqual(5);
+      expect(ledger.asked().length).toBeLessThanOrEqual(6);
       expect(Object.keys(problems)).toHaveLength(THEMES.length * SIZES.length * VIEWS);
       // A picture of every view was written, each under a name of its own.
       expect(new Set(screenshots).size).toBe(THEMES.length * SIZES.length * VIEWS);

@@ -268,6 +268,16 @@ jobs:
         env:
           E2E_TEST_PATTERN: pre-review
 
+      # The cleanup of the fixtures of the tabs, which has the server delete the
+      # backups it synced from the store and removes the namespaces of the run,
+      # then the readiness of the installation it leaves: proven here on the
+      # hosted runner, after the suites and the pre-review, and before the
+      # environment is taken down.
+      - name: Remove the fixtures and verify the environment they leave
+        run: |
+          node e2e/scripts/local-demo.mts fixtures-cleanup --context kind-freelens-velero-dev
+          node e2e/scripts/local-demo.mts verify --context kind-freelens-velero-dev
+
       # Screenshots of the frame of the test cluster and the measures of the
       # suites: synthetic data. The state of the environment is not among them.
       - name: Upload the screenshots and the reports of the suites

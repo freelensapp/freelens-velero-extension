@@ -142,6 +142,13 @@ operator allows and the store that keeps it, and 388 of the tabs of an operation
 and of the loads of a view, 7 of the tab in the address, 6 of the file a text is
 saved into, 179 of the strip, of the panel, of the lists of lines, of the four
 viewers and of Escape in a text field, and 27 of the two workspaces with their tabs.
+The third pull request of the tabs adds no test to that count, 73 files and 2,291
+tests in the unit run of its final runs of 2026-10-07: the words of a storage
+location that is not there changed assertions in two files, and the hardening of
+three tests of earlier pull requests under the load of the whole run changed their
+measures and their times and none in count; the run of both build forms on the
+final head, later that evening, gave the same count, 73 files and 2,291 tests
+passed in each, and the measure after them.
 The measure of the code of a log runs after them, alone. The integration test covers
 the installation in the host, the suites of the views what the views do in it.
 The electron-vite warning about a missing standalone renderer
@@ -545,8 +552,9 @@ that say whether they are chosen, drawn as its box.
 
 The [suite of the tabs](../../e2e/__tests__/velero-e2e-artifacts.tests.ts) drives
 them in a packaged Freelens, on the real backup and the real restore of the test
-environment: what it proves, and what it leaves to the fixtures of the tabs, is in
-the [evidence](../specs/SPEC-0011-artifact-viewers.md#evidence-and-deviations) of
+environment and on the fixtures of the tabs, and the pre-review opens them in eight
+of its views: what each proves is in the
+[evidence](../specs/SPEC-0011-artifact-viewers.md#evidence-and-deviations) of
 their spec. The fixtures of the tabs are in the installation of the test
 environment: two backups its server syncs from files its store is given, and three
 operations it refuses. The scripts of the environment place them and remove them,

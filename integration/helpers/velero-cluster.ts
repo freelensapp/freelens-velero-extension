@@ -52,8 +52,11 @@ const KUBECTL_TIMEOUT = 2 * 60 * 1000;
 /** What Escape gets before `closeDetails` reaches for the close icon of the drawer. */
 const DRAWER_ESCAPE_TIMEOUT = 5 * 1000;
 
-/** Where the screenshots go. The runner of the suite names the directory. */
-const ARTIFACTS_DIR = process.env.E2E_ARTIFACTS_DIR || path.join(process.cwd(), "e2e-artifacts");
+/**
+ * Where the screenshots and the reports go, and where the runner of the suites writes what it counted of
+ * the fixtures of the tabs before the suites. The runner names the directory.
+ */
+export const ARTIFACTS_DIR = process.env.E2E_ARTIFACTS_DIR || path.join(process.cwd(), "e2e-artifacts");
 
 /**
  * Screenshots the frame of the cluster, and not the window around it. Never
@@ -1582,14 +1585,20 @@ export async function layoutProblems(frame: Frame, of: ListOf = BACKUPS): Promis
  * the list or its first row changed their place or their size. A page that
  * stands still changes nothing; one that was read meanwhile may change once.
  * With it, how tall the target bar is and whether the page is scrolled.
+ *
+ * Parts of a view are watched beside these, each by a selector: the bar of a
+ * viewer, the list it scrolls, the strip of the tabs. A watched part that is
+ * not in the page is seen as nothing, and its height answered as 0. The
+ * heights of the watched parts come in the order they were asked.
  */
 export async function movesOf(
   frame: Frame,
   of: ListOf = BACKUPS,
   frames = 60,
-): Promise<{ changes: number; bar: number; scrolled: boolean }> {
+  watched: string[] = [],
+): Promise<{ changes: number; bar: number; scrolled: boolean; heights: number[] }> {
   return frame.evaluate(
-    async ({ id, kind, frames }) => {
+    async ({ id, kind, frames, watched }) => {
       const page = document.querySelector<HTMLElement>(`[data-testid=velero-${id}-page]`);
       const bar = document.querySelector<HTMLElement>("[data-testid=velero-target]");
 
@@ -1599,6 +1608,7 @@ export async function movesOf(
 
         return found ? [found.x, found.y, found.width, found.height].map((value) => Math.round(value * 10) / 10) : [];
       };
+      const parts = () => watched.map((selector) => document.querySelector(selector));
       const seen = () =>
         JSON.stringify([
           page.offsetWidth,
@@ -1608,6 +1618,8 @@ export async function movesOf(
           box(bar),
           box(document.querySelector(`[data-testid=velero-${id}] .TableHead`)),
           box(document.querySelector(`[data-${kind}-row]`)),
+          // What holds a watched part may scroll: where it is scrolled to is seen with its box.
+          ...parts().map((part) => [box(part), part?.parentElement?.scrollTop ?? 0]),
         ]);
       let before = seen();
       let changes = 0;
@@ -1623,9 +1635,10 @@ export async function movesOf(
         changes,
         bar: Math.round(bar.getBoundingClientRect().height),
         scrolled: page.scrollHeight > page.clientHeight,
+        heights: parts().map((part) => Math.round(part?.getBoundingClientRect().height ?? 0)),
       };
     },
-    { ...of, frames },
+    { ...of, frames, watched },
   );
 }
 
@@ -2261,15 +2274,30 @@ export async function awaitRequestsGone(namespace: string, deadline: number): Pr
   }
 }
 
+/** The kinds of requests the extension creates, each by the resource the API server holds it under. */
+const REQUEST_RESOURCES = {
+  ServerStatusRequest: "serverstatusrequests.velero.io",
+  DownloadRequest: "downloadrequests.velero.io",
+} as const;
+export type RequestKind = keyof typeof REQUEST_RESOURCES;
+
+/** How many requests of a kind in a namespace carry the label of the extension. */
+function requestsOfTheExtension(namespace: string, kind: RequestKind): number {
+  if (kind === "ServerStatusRequest") return serverStatusRequests(namespace).length;
+  const [key, value] = REQUEST_LABEL.split("=");
+
+  return downloadRequests(namespace).filter((request) => request.labels[key] === value).length;
+}
+
 /**
- * Removes what the suite of the writes left in a namespace no server looks at:
- * the ServerStatusRequests that carry the label of the extension, and nothing
- * else, and answers how many they were. It is the one write of the suites, of
- * what one of them asked the extension to create, in the disposable cluster of
- * the test environment. The namespace of the installation is refused: there
- * the server removes its requests itself.
+ * Removes what a suite left in a namespace no server looks at: the requests of
+ * one kind that carry the label of the extension, the ServerStatusRequests
+ * unless another is named, and nothing else, and answers how many they were.
+ * It is the one write of the suites, of what one of them asked the extension
+ * to create, in the disposable cluster of the test environment. The namespace
+ * of the installation is refused: there the server removes its requests itself.
  */
-export function removeRequestsOfTheExtension(namespace: string): number {
+export function removeRequestsOfTheExtension(namespace: string, kind: RequestKind = "ServerStatusRequest"): number {
   const synthetic = [
     E2E_STATIC_NAMESPACE,
     E2E_VIEWS_NAMESPACE,
@@ -2281,7 +2309,7 @@ export function removeRequestsOfTheExtension(namespace: string): number {
   if (namespace === "" || !synthetic.includes(namespace)) {
     throw new Error(`The suites remove the requests of a namespace of the fixtures, and "${namespace}" is not one`);
   }
-  const found = serverStatusRequests(namespace).length;
+  const found = requestsOfTheExtension(namespace, kind);
 
   if (found === 0) return 0;
   const { status, stderr } = spawnSync(
@@ -2292,7 +2320,7 @@ export function removeRequestsOfTheExtension(namespace: string): number {
       "--context",
       E2E_KUBE_CONTEXT,
       "delete",
-      "serverstatusrequests.velero.io",
+      REQUEST_RESOURCES[kind],
       "--namespace",
       namespace,
       "--selector",
@@ -2304,11 +2332,13 @@ export function removeRequestsOfTheExtension(namespace: string): number {
 
   if (status !== 0) throw new Error(`The requests of the extension could not be removed: ${(stderr ?? "").trim()}`);
   // Removed without waiting for each one: the namespace is read until nothing is left.
-  for (let tries = 0; tries < 60 && serverStatusRequests(namespace).length > 0; tries += 1) {
+  for (let tries = 0; tries < 60 && requestsOfTheExtension(namespace, kind) > 0; tries += 1) {
     // Half a second, on every platform, without leaving the step that asked.
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
   }
-  if (serverStatusRequests(namespace).length > 0) throw new Error(`Requests of the extension are left in ${namespace}`);
+  if (requestsOfTheExtension(namespace, kind) > 0) {
+    throw new Error(`${kind}s of the extension are left in ${namespace}`);
+  }
 
   return found;
 }

@@ -268,7 +268,7 @@ describe("what is said before any request, of an operation Velero signs no URL f
   const NO_BACKUP =
     "The backup of the restore monday is not there: the restore names none, or the one it names is not in velero-a. Velero signs no URL for such a restore, and no request was created.";
   const NO_LOCATION = (target: string) =>
-    `The storage location of the backup of ${target} is not in velero-a: Velero signs no URL without it, and no request was created.`;
+    `The storage location of ${target} is not in velero-a: Velero signs no URL without it, and no request was created.`;
 
   it("says of a restore that names no backup that Velero signs no URL for it, in the words the main process ends with", () => {
     // Velero refused the restore before it chose a backup: asked from a schedule that has none.
@@ -355,7 +355,9 @@ describe("what is said before any request, of an operation Velero signs no URL f
   });
 
   it("says the same of a restore whose backup is at a storage location that is not there", () => {
-    expect(nothingToAsk("log", "Restore", restore("monday", "moved"), read())).toBe(NO_LOCATION("the restore monday"));
+    expect(nothingToAsk("log", "Restore", restore("monday", "moved"), read())).toBe(
+      NO_LOCATION("the backup of the restore monday"),
+    );
     // The backup was read before its family stopped answering: what it names is still what it names.
     expect(
       nothingToAsk(
@@ -364,7 +366,7 @@ describe("what is said before any request, of an operation Velero signs no URL f
         restore("monday", "unplaced"),
         read(undefined, failed(succeeded([backup("unplaced")], 1_000), "failed")),
       ),
-    ).toBe(NO_LOCATION("the restore monday"));
+    ).toBe(NO_LOCATION("the backup of the restore monday"));
   });
 
   it("says nothing when the request has what it needs, as far as the view read", () => {

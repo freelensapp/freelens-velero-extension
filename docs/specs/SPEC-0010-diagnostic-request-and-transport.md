@@ -556,6 +556,51 @@ the tabs:
 | DIAG-13 | Component: an allowance asked in a tab, by a command in the name of what it allows, with the origin shown, and with a private address and a connection that is not encrypted named; the artifact asked again only when the main process kept what was allowed, and nothing asked again, with why, when it did not | Packaged: an allowance asked in a tab, which the route of the test environment, through the tunnel, never asks for |
 | DIAG-02, DIAG-06, DIAG-07, DIAG-10, DIAG-12, DIAG-15, DIAG-18 | Packaged, on the real backup and the real restore of the test environment, in the suite of the tabs: nothing of a DownloadRequest read or created when a tab opens or when a confirmation is left, one creation for each load, and beside them the reads of each request by its name, the writes of the server into it and its removal by the server, and nothing else (DIAG-02); the URL the server signed for the storage location of the demo, of the origin its `s3Url` gives, taken, and that origin named by the tab (DIAG-07); the store, a Service of the cluster, reached through a tunnel to its Pod on every load (DIAG-10); no part of a signed URL in the words of the view, in what the tab said at each moment of the first load of the log of the backup, in what the dialog of a saving was asked with, nor in a report of the suite, which is not written when it would carry one (DIAG-15); the four artifacts of the real backup and of the real restore downloaded through the tunnel (DIAG-18) | What that suite does not prove of them: the other reads of the way, of the operation, of its location and of the route, which it does not count (DIAG-02); a file the store does not have, for the backup and the restore that failed their validation (DIAG-06); a store over TLS, which the store of the test environment, over HTTP, is not (DIAG-12); a part of a signed URL in the lines of the console of the application, where the suite does not look for one, and in what a tab says during the loads it does not watch step by step (DIAG-15); the artifacts of a backup synced from the store, and the identities of the demo at the step each may not do (DIAG-18). Of DIAG-07 and DIAG-10 nothing waits for the fixtures |
 
+The third pull request of the tabs, the suites on the fixtures of the second,
+brings of what the first left, as the
+[evidence of SPEC-0011](SPEC-0011-artifact-viewers.md#the-tabs-on-the-fixtures-the-third-pull-request-of-t23)
+records with its runs: the three logs the store does not have, of the backup synced
+without a log and of the backup and the restore that failed their validation, ended
+as a missing file at the download on a 404 of the store, with the request of each
+in the cluster, processed by the server (DIAG-06); the reads and the creations
+counted over twenty requests, none before a confirmation, one creation for each
+load, 39 reads of the requests by their names, the twenty writes of the server into
+them and their twenty removals, and nothing else (DIAG-02); sixteen loads through
+the tunnel to the Pod of the store, with plain HTTP inside it said for what it is,
+the artifacts of the backup synced from the store among them (DIAG-10, DIAG-11,
+DIAG-18); no part of a signed URL in the reports of the suite of the tabs and of
+the pre-review, nor in the words of the views (DIAG-15); and the reader of a part,
+as a second entry of the catalog, refused the creation of its request, said
+forbidden at the creation (DIAG-18, one identity). What stays with the evidence of
+the proof: the three other identities of DIAG-18, at the read of the Service, at
+the read of the Secret and at the port-forward, which are accounts in the
+installation of the demo as fixtures; and a store over TLS, a Secret the identity
+may not read, an allowance asked in a tab and the forms of a URL beyond the one of
+the demo, DIAG-12, DIAG-13 and DIAG-07 in a tab, which need the storage location of
+the installation changed, as the proof changes it. Whether they come in a slice
+after the tabs or stay proven by the proof is for the review of the milestone.
+
+With that pull request the words of a load that ends before anything is created,
+for a backup whose storage location is not in the namespace, changed. They read
+`The storage location of the backup of the backup <name> is not in <namespace>: Velero signs no URL without it, and no request was created.`,
+and for a read the cluster refused
+`The cluster refused to read the storage location of the backup of the backup <name>. No request was created.`:
+the words made for the backup of a restore were given to a backup as well, which
+the suite of the tabs read on a backup whose location is not there. They say
+`the backup <name>` once since then, and `the backup of the restore <name>` of a
+restore as before, in the one function of the words of this spec and in its unit
+tests: of the tests as committed, four fail on the words of before, by a run of
+the two files against the words as they were, on 2026-10-07, the run
+final-20-diagnostic-old-words-red of the final runs of that pull request, 4 failed
+and 47 passed of 51, the two of a backup in the tests of this spec's words, the
+object that is not there before the creation and the read the cluster refused, and
+the two of a backup in the tests of the words of the tabs; the same two files
+passed, 51 of 51, with the words of now, the run final-21-diagnostic-restored-green
+right after it. A draft of them, with an expectation of a restore the change does
+not make, had failed five times in the run of the morning. No requirement changes
+with it: REQ-121 asks that such a backup ends as not-found before any creation,
+with which object is not there.
+
 Since the tabs the main process has a second use for a text it holds, the command
 that saves it: what a saving writes, and when it writes nothing, is in the evidence
 of SPEC-0011.
