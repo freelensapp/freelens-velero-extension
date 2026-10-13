@@ -196,8 +196,10 @@ not a promise of immediate cleanup. Treat creation and any client cleanup as wri
 | Delete backup | [CLI](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/cmd/cli/backup/delete.go#L124) creates DeleteBackupRequest with generateName, backupName, normalized backup-name label and backup-uid label | Double confirmation, one backup at a time, no direct Backup deletion; Processed does not replace checking request errors |
 
 The [schedule controller](https://github.com/velero-io/velero/blob/c253c7fe37d78c9b7e55c68544f7c5b2608712d8/pkg/controller/schedule_controller.go)
-uses robfig/cron v3.0.1
-[ParseStandard](https://github.com/robfig/cron/blob/v3.0.1/parser.go): five fields,
+used robfig/cron v3.0.1 at v1.18.2 and uses netresearch/go-cron v0.15.0 at v1.18.4
+(the go.mod of each release), a replacement with the same
+[ParseStandard](https://github.com/netresearch/go-cron/blob/v0.15.0/parser.go) and
+its own rules at a change of daylight saving time: five fields,
 descriptors including `@every`, and TZ/CRON_TZ prefixes. Without an explicit timezone
 the parser uses the server's local timezone, not the desktop's timezone.
 
@@ -502,6 +504,7 @@ What was compared, in the sources of the two tags of Velero:
 | The types of the API | The field above in `restore_types.go`, and two annotation keys in `labels_annotations.go`: the ConfigMap of the global backup volume policies a backup used, and the one a restore item action sets to include its additional items | None: neither is shown |
 | The release notes of `v1.18.3` | Among 22 changes: the sync of the backups from the store takes only the finished ones; the error messages in the statuses carry the context of the operation | None seen: the synced backups of the fixtures are finished, and the twelve suites of the views assert the words they always did |
 | The release notes of `v1.18.4` | One: a backup queue that stayed stuck | None |
+| The schedule controller | Its cron library: `robfig/cron` v3.0.1 at `v1.18.2`, `netresearch/go-cron` v0.15.0 at `v1.18.4`, in the go.mod of each release; a replacement with the same parser calls and its own rules at a change of daylight saving time | None on what is shown today, which is the expression as written; the adherence spec of the fourth milestone reproduces the grammar of go-cron, not of robfig |
 
 The whole local pattern ran on 2026-10-13 against an environment brought up with the
 new pins, on the head of main before this change: `pnpm demo:up` in 227 seconds; the
