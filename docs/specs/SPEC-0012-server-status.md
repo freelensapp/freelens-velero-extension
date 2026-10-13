@@ -223,8 +223,8 @@ What changed in a requirement, from what the release does:
   [recon](../development/RECON-T0.1.md#while-the-third-milestone-was-implemented-2026-10-04)
   records with its source. A plugin is one kind and one name: the band shows and
   counts each once, and says how many entries of the request repeat one. The
-  requirement and its check say so since this slice; the deviation is for the
-  review of the milestone.
+  requirement and its check say so since this slice; the lead maintainer
+  confirmed the deviation at the review of the milestone, on 2026-10-13.
 
 What is not proven in the packaged application:
 

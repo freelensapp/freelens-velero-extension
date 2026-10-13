@@ -1,10 +1,10 @@
 # Specifications
 
-Date: 2026-10-07
+Date: 2026-10-13
 
 Status: SPEC-0001 is Approved; SPEC-0002 to SPEC-0008 are Verified; SPEC-0009 to
 SPEC-0012 are Implemented, SPEC-0011 since 2026-10-07, with the third pull request
-of its task.
+of its task; the review of the third milestone was held on 2026-10-13.
 
 The [roadmap](../development/ROADMAP.md) owns scope and progress; the
 [process](../development/PROCESS.md) owns approvals and review gates.
@@ -95,6 +95,14 @@ as drafted, with the one open question of SPEC-0009 decided: the adapter runs th
 plugin a context names for its credential. They are the third milestone: T4.1, then
 T5.3, then T2.1, T2.2 and T2.4, each its own pull request, then T2.3, which is three:
 the tabs, their fixtures, and the suites on those fixtures.
+
+The review of the third milestone was held on 2026-10-13: the lead maintainer kept
+the decisions taken while implementing, chose the percentile for the frames of a
+scroll, which REQ-147 and VIEW-10 of SPEC-0011 say since, reworded VIEW-08 to the
+methods a backup writes, and confirmed the deviation of REQ-154 of SPEC-0012 and
+what the decision on the requests covers. The four specs stay Implemented until
+what the pre-review of the tabs leaves to human judgment is recorded; then they
+are Verified.
 
 ## Document Review
 
