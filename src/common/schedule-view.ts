@@ -2,7 +2,7 @@ import { timestamp } from "./duration";
 
 import type { ScheduleResource } from "./types";
 
-// The phases of a schedule in Velero v1.18.2. The controller writes Enabled or FailedValidation into a
+// The phases of a schedule in Velero v1.18.4. The controller writes Enabled or FailedValidation into a
 // schedule it reads, and nothing into one it does not read: a schedule that is paused.
 export const SCHEDULE_PHASES = ["New", "Enabled", "FailedValidation"] as const;
 

@@ -1,4 +1,4 @@
-// The phases of Velero v1.18.2 on two axes: where the operation is, and what it says of a failure.
+// The phases of Velero v1.18.4 on two axes: where the operation is, and what it says of a failure.
 // One badge for both would show a backup that is still finalizing with errors as finished, or as healthy.
 
 export const BACKUP_PHASES = [

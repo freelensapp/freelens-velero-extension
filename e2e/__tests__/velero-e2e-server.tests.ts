@@ -31,7 +31,7 @@ const RESOURCE = "serverstatusrequests";
 const PREFIX = "freelens-velero-";
 const LABELS = { "app.kubernetes.io/managed-by": "freelens-velero-extension" };
 // The release the extension was reviewed against, which is the one of the test environment.
-const REVIEWED = "v1.18.2";
+const REVIEWED = "v1.18.4";
 // The kinds of plugins the reviewed release lists, in its order.
 const KINDS = [
   "ObjectStore",

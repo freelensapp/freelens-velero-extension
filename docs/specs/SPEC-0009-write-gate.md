@@ -3,7 +3,7 @@
 - **Status:** Implemented
 - **Date:** 2026-09-30
 - **Milestone / tasks:** M3 / T4.1
-- **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`; compared with v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`
+- **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, since the drift watch of 2026-10-13; written against v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
 - **Reviewed main:** `e5d9354ddf7607e0bad3ebc7744a4964c24b489a`, for the phase Failed of a DownloadRequest, which no release has
 - **Freelens validation target:** v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`
 - **Dependencies:** [local foundation](SPEC-0001-local-foundation.md), whose T0.6 is the create-only adapter and the service this gate is enforced in; [target discovery](SPEC-0002-installation-discovery.md); the [architecture](../development/ARCHITECTURE.md#ipc-errors-and-write-policy)

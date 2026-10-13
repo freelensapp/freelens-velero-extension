@@ -25,7 +25,7 @@ function fixture(options: { processedAfterReads?: number; created?: Partial<Diag
           ...created,
           status: {
             phase: "Processed",
-            serverVersion: "v1.18.2",
+            serverVersion: "v1.18.4",
             processedTimestamp: "2026-09-30T10:00:00Z",
             plugins: [
               { name: "velero.io/aws", kind: "ObjectStore" },
@@ -60,7 +60,7 @@ describe("the version of the server", () => {
     const { api, options, steps } = fixture({ processedAfterReads: 2 });
 
     await expect(readServerStatus(api, "velero", options)).resolves.toEqual({
-      version: "v1.18.2",
+      version: "v1.18.4",
       processed: "2026-09-30T10:00:00Z",
       plugins: [
         { name: "velero.io/aws", kind: "ObjectStore" },
@@ -76,7 +76,7 @@ describe("the version of the server", () => {
   it("answers a failure, with words, when the processed request lacks the version or the time, and not empty text", async () => {
     for (const status of [
       { phase: "Processed", processedTimestamp: "2026-09-30T10:00:00Z", plugins: [] },
-      { phase: "Processed", serverVersion: "v1.18.2", plugins: [] },
+      { phase: "Processed", serverVersion: "v1.18.4", plugins: [] },
       { phase: "Processed", serverVersion: "", processedTimestamp: "2026-09-30T10:00:00Z" },
       { phase: "Processed", serverVersion: "v".repeat(300), processedTimestamp: "2026-09-30T10:00:00Z" },
     ]) {
@@ -103,7 +103,7 @@ describe("the version of the server", () => {
       metadata: { name: "freelens-velero-abcde", namespace: "velero", uid: "request-uid" },
       status: {
         phase: "Processed",
-        serverVersion: "v1.18.2",
+        serverVersion: "v1.18.4",
         processedTimestamp: "2026-09-30T10:00:00Z",
         plugins: [
           { name: "", kind: "ObjectStore" },

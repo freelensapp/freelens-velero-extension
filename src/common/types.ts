@@ -1,4 +1,4 @@
-// The fields of the Velero kinds the extension reads, written from the CRD schemas of Velero v1.18.2.
+// The fields of the Velero kinds the extension reads, written from the CRD schemas of Velero v1.18.2 and compared with the ones of v1.18.4, the reviewed release.
 // Every field is optional: a schema admits an object without it, and a missing field is not a default.
 
 export interface ObjectMetadata {
@@ -104,7 +104,7 @@ export interface RestoreSpec {
   orLabelSelectors?: LabelSelector[] | null;
   preserveNodePorts?: boolean | null;
   resourceModifier?: TypedLocalObjectReference | null;
-  // Of the release after the reviewed one: read when the object carries it, never asked for.
+  // Since v1.18.3 of the reviewed series: read when the object carries it, never asked for.
   resourcePolicy?: TypedLocalObjectReference | null;
   restorePVs?: boolean | null;
   restoreStatus?: { excludedResources?: string[] | null; includedResources?: string[] | null } | null;
@@ -193,7 +193,7 @@ export type BackupStorageLocationResource = VeleroResource<BackupStorageLocation
 export type VolumeSnapshotLocationResource = VeleroResource<VolumeSnapshotLocationSpec, VolumeSnapshotLocationStatus>;
 
 // The release of Velero the specs were reviewed against, whose CRD schemas these types are written from.
-export const REVIEWED_RELEASE = "v1.18.2";
+export const REVIEWED_RELEASE = "v1.18.4";
 
 // The labels Velero writes on the objects it creates for another one.
 export const LABELS = {

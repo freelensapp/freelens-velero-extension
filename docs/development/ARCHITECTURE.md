@@ -12,8 +12,8 @@ real backup and the real restore of the test environment. The actions are not
 implemented: their sections below are the design their specs start from.
 
 Authority: [directives](../../AGENTS.md), [roadmap](ROADMAP.md), and
-[versioned evidence](RECON-T0.1.md). The evidence report pins Velero v1.18.2,
-AWS plugin v1.14.2, and Freelens v1.10.3. A reviewed version is not a compatibility
+[versioned evidence](RECON-T0.1.md). The evidence report pins Velero v1.18.4,
+AWS plugin v1.14.4, and Freelens v1.10.3. A reviewed version is not a compatibility
 claim for untested releases. Product behavior below requires spec approval.
 
 ## Boundaries

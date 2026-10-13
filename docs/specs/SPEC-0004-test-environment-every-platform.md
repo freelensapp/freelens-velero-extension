@@ -3,7 +3,7 @@
 - **Status:** Verified
 - **Date:** 2026-09-27
 - **Milestone / tasks:** Foundation
-- **Reviewed Velero:** v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
+- **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, since the drift watch of 2026-10-13; written against v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
 - **Reviewed main:** not relevant: the environment installs the reviewed release only
 - **Freelens validation target:** v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`
 - **Dependencies:** [foundation](SPEC-0001-local-foundation.md)

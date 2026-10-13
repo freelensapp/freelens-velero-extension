@@ -20,7 +20,7 @@ const NAMESPACE = "velero";
 const REQUESTS = `/apis/velero.io/v1/namespaces/${NAMESPACE}/serverstatusrequests`;
 const PROCESSED = {
   phase: "Processed",
-  serverVersion: "v1.18.2",
+  serverVersion: "v1.18.4",
   processedTimestamp: "2026-09-30T10:00:00Z",
   plugins: [
     { name: "velero.io/pod", kind: "BackupItemAction" },
@@ -157,7 +157,7 @@ describe("the object of a request, as the cluster is sent it", () => {
     expect(answer).toEqual({
       ok: true,
       value: {
-        version: "v1.18.2",
+        version: "v1.18.4",
         processed: "2026-09-30T10:00:00Z",
         plugins: PROCESSED.plugins,
         request: { name: `${REQUEST_PREFIX}abcde`, uid: "request-uid" },

@@ -12,7 +12,7 @@ every PR that starts, completes, or re-scopes a feature. The process is in
 the end of each milestone.
 
 The compatibility reference is Freelens v1.10.3 with SDK v1.10.3, and Velero
-v1.18.2 with the AWS plugin v1.14.2 (see [RECON-T0.1.md](RECON-T0.1.md)).
+v1.18.4 with the AWS plugin v1.14.4 (see [RECON-T0.1.md](RECON-T0.1.md)).
 
 ## Releases
 

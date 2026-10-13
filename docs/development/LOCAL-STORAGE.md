@@ -19,8 +19,8 @@ three ways the client of the fixtures sends one, and held its whole length.
 Provide an authenticated S3 service inside the dedicated local kind environment for
 Velero backups and artifact downloads. The test backend is not a runtime dependency
 of the extension and does not constrain an operator's existing storage provider.
-Freelens and SDK compatibility remain exactly v1.10.3. Velero v1.18.2 and AWS plugin
-v1.14.2 remain the reviewed test pair; provider `aws` means use the S3 plugin, not
+Freelens and SDK compatibility remain exactly v1.10.3. Velero v1.18.4 and AWS plugin
+v1.14.4 remain the reviewed test pair; provider `aws` means use the S3 plugin, not
 permission to contact an AWS account.
 
 The lead maintainer accepted the backend choice and T0.4 resumed on 2026-09-24. T0.4
