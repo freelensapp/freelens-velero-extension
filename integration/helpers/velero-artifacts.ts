@@ -16,7 +16,10 @@
 // See `velero-extension.ts` for why these files live next to the Freelens
 // integration helpers at run time.
 
+import { readFile } from "node:fs/promises";
+import * as path from "node:path";
 import {
+  ARTIFACTS_DIR,
   BACKUPS,
   captureScreenshot,
   navigate,
@@ -84,6 +87,11 @@ const LISTS: Record<Operation, ListOf> = { backup: BACKUPS, restore: RESTORES };
 const PART_TIMEOUT = 30_000;
 /** How long a load is given: the main process gives a request two minutes, and the pages of its text follow. */
 const LOAD_TIMEOUT = 150_000;
+/** The height of a line of a list of lines, in pixels: a row is as tall as the lines it takes. */
+const LINE_HEIGHT = 20;
+
+/** When a load is cancelled: as soon as it begins, or once its request is in the cluster. */
+export type CancelAt = boolean | "created";
 
 // The parts of the panel of a diagnostic tab, by what each is, with the end of its identifier.
 const OF_THE_PANEL = {
@@ -543,19 +551,21 @@ interface LoadWatch {
  * shows, with the step, the request and the words of each, is kept with its
  * time, so that what is expected of a load does not depend on when the driver
  * of the suite looked. Asked to cancel, it gives the command that cancels as
- * soon as the panel offers it, which is when the load begins.
+ * soon as the panel offers it, which is when the load begins, or, asked to
+ * cancel once the request is created, as soon as the panel is at a step after
+ * the creation: the request is then in the cluster, whatever the cancel ends.
  */
 export async function watchLoad(
   frame: Frame,
   kind: Operation,
   tab: ArtifactTab,
-  options: { cancel?: boolean } = {},
+  options: { cancel?: CancelAt } = {},
 ): Promise<void> {
   const id = PARTS.panel(kind, tab);
 
   await part(frame, id);
   await frame.evaluate(
-    ({ id, cancel }) => {
+    ({ id, cancel, created }) => {
       const page = window as unknown as { veleroLoads?: Record<string, LoadWatch> };
 
       if (!page.veleroLoads) page.veleroLoads = {};
@@ -589,8 +599,10 @@ export async function watchLoad(
         }
         if (cancel && !watch.cancelled) {
           const command = within("cancel");
+          // Once the request is created, the panel is at a step after the creation.
+          const ready = cancel === "created" ? created.includes(moment.at) : true;
 
-          if (command) {
+          if (command && ready) {
             watch.cancelled = true;
             command.click();
           }
@@ -602,7 +614,7 @@ export async function watchLoad(
       watch.observer.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
       look();
     },
-    { id, cancel: options.cancel === true },
+    { id, cancel: options.cancel ?? false, created: [...AFTER_THE_CREATION, "pages"] },
   );
 }
 
@@ -628,13 +640,13 @@ export async function loadSeen(frame: Frame, kind: Operation, tab: ArtifactTab):
 /**
  * The second gesture of a load: the panel is watched, then the command of the
  * confirmation creates the request. With `cancel`, the load is cancelled as
- * soon as it begins.
+ * soon as it begins, or once its request is created.
  */
 export async function confirm(
   frame: Frame,
   kind: Operation,
   tab: ArtifactTab,
-  options: { cancel?: boolean } = {},
+  options: { cancel?: CancelAt } = {},
 ): Promise<void> {
   await watchLoad(frame, kind, tab, options);
   await (await part(frame, PARTS.panel(kind, tab, "confirmCreate"))).click();
@@ -734,17 +746,17 @@ export function requestOf(moments: readonly LoadMoment[]): string {
  * confirmation creates the request, and the load is waited for. The name the panel gave the request is
  * given to `named` before this answers or fails, whatever became of the load: a request can be in the
  * cluster after a load that ended without its text, or that did not end, and who asked for it has to know
- * it by its name. With `cancel`, the load is cancelled as soon as it begins. What is done right after the
- * gesture, to look at a step of the load, is given as `loading`.
+ * it by its name. With `cancel`, the load is cancelled as soon as it begins, or once its request is
+ * created. What is done right after the gesture, to look at a step of the load, is given as `loading`.
  */
 export async function runLoad(
   frame: Frame,
   kind: Operation,
   tab: ArtifactTab,
   named: (request: string) => void,
-  options: { cancel?: boolean; loading?: () => Promise<void> } = {},
+  options: { cancel?: CancelAt; loading?: () => Promise<void> } = {},
 ): Promise<{ ended: "loaded" | "failed"; moments: LoadMoment[]; request: string }> {
-  await confirm(frame, kind, tab, { cancel: options.cancel === true });
+  await confirm(frame, kind, tab, { cancel: options.cancel ?? false });
   let ended: "loaded" | "failed" | undefined;
   let moments: LoadMoment[] = [];
   let failed: unknown;
@@ -913,6 +925,36 @@ export function toldByTheMainProcess(moments: readonly LoadMoment[]): { lasted: 
     lasted: ended.time - moments[began].time,
     told: [...new Set(run.map((moment) => moment.at).filter((step) => TOLD_BY_THE_MAIN_PROCESS.includes(step)))],
   };
+}
+
+/**
+ * The pages of the text the panel said it was taking, in the order they were seen: each with the count of
+ * the pages there are. The views count the pages themselves, and write the two numbers into the words of
+ * the step as they are.
+ */
+export function pagesSeen(moments: readonly LoadMoment[]): { page: number; of: number }[] {
+  return moments.flatMap((moment) => {
+    if (moment.step !== "loading" || moment.at !== "pages") return [];
+    const found = /: page (\d+) of (\d+)\.$/.exec(moment.status);
+
+    return found ? [{ page: Number(found[1]), of: Number(found[2]) }] : [];
+  });
+}
+
+const UNITS: Record<string, number> = { B: 1, KiB: 1024, MiB: 1024 ** 2, GiB: 1024 ** 3 };
+
+/**
+ * The bytes the panel said had come so far while the file was downloaded, in the order they were seen,
+ * as the words of the step round them: in the unit that reads best, to a tenth of it. Nothing for a
+ * download whose words told no bytes.
+ */
+export function bytesSeen(moments: readonly LoadMoment[]): number[] {
+  return moments.flatMap((moment) => {
+    if (moment.step !== "loading" || moment.at !== "download") return [];
+    const found = /: (\d+(?:\.\d)?) (B|KiB|MiB|GiB) so far\.$/.exec(moment.status);
+
+    return found ? [Number(found[1]) * UNITS[found[2]]] : [];
+  });
 }
 
 function pattern(text: string): string {
@@ -1147,6 +1189,31 @@ export async function searchLog(frame: Frame, kind: Operation, words: string): P
 }
 
 /**
+ * Scrolls the list of the lines of a log to where a line is, by its number, as far as the rows before it
+ * are as tall as a line, and answers what the viewer shows once the row of that line is mounted. A row
+ * that is taller, which a line that is cut is, puts the line a little further down: the row of the line
+ * is still among the ones the list keeps ready around its room.
+ */
+export async function scrollLogTo(frame: Frame, kind: Operation, line: number): Promise<LogShown> {
+  const id = PARTS.viewer(kind, "log", "text");
+
+  await part(frame, id);
+  const found = await frame.evaluate(
+    ({ id, top }) => {
+      const scrolled = document.querySelector(`[data-testid="${id}"] .VirtualList .list`);
+
+      if (scrolled) scrolled.scrollTop = top;
+      return scrolled !== null;
+    },
+    { id, top: (line - 1) * LINE_HEIGHT },
+  );
+
+  if (!found) throw new Error(`The list ${id} has nothing to scroll`);
+
+  return logLike(frame, kind, `mounts the row of its line ${line}`, (shown) => shown.mounted.includes(line));
+}
+
+/**
  * A line of a text as its row shows it, without what says that it was cut, and
  * whether it was. It is read as it is written, every space of it: a line is
  * compared with the line of a file, and is not words of the page.
@@ -1240,6 +1307,51 @@ export async function resultsShown(frame: Frame, kind: Operation): Promise<Resul
         })),
       })),
     };
+  }, id);
+}
+
+/** A message of the results as its place shows it: as it is written, and in its parts when it has them. */
+export interface ResultMessageShown {
+  text: string;
+  parts?: Record<string, string>;
+}
+
+/**
+ * The messages of each place of the results that is drawn, in the order of the page: the text of each as it
+ * is written, read as it is written, and the parts of one in the form the hook of the server gives, each by
+ * the name of its part. A message of another form has no parts.
+ */
+export async function resultMessages(
+  frame: Frame,
+  kind: Operation,
+): Promise<{ where: string; namespace: string; messages: ResultMessageShown[] }[]> {
+  const id = PARTS.viewer(kind, "results");
+
+  await inItsForm(frame, kind, "results");
+
+  return frame.evaluate((id) => {
+    const root = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+
+    if (!root) throw new Error(`The part ${id} went while it was read`);
+
+    return [...root.querySelectorAll<HTMLElement>("[data-place]")].map((place) => ({
+      where: place.getAttribute("data-place") ?? "",
+      namespace: place.getAttribute("data-namespace") ?? "",
+      messages: [...place.querySelectorAll<HTMLElement>("li")].map((item) => {
+        const written = item.querySelector<HTMLElement>("[data-written]");
+
+        if (!written) return { text: item.textContent ?? "" };
+        return {
+          text: written.textContent ?? "",
+          parts: Object.fromEntries(
+            [...item.querySelectorAll<HTMLElement>("dd[data-part]")].map((part) => [
+              part.getAttribute("data-part") ?? "",
+              part.textContent ?? "",
+            ]),
+          ),
+        };
+      }),
+    }));
   }, id);
 }
 
@@ -1368,6 +1480,8 @@ export interface VolumesShown {
   columns: string[];
   /** One row for a volume: what each of its cells says, by the name of its column. */
   rows: Record<string, string>[];
+  /** For each row, what a cell writes for who points at it, by the name of its column: a time or a count as it is. */
+  titles: Record<string, string>[];
 }
 
 /** What the viewer of the volume information shows: how many volumes, and a row for each. */
@@ -1413,10 +1527,60 @@ export async function volumesShown(frame: Frame, kind: Operation): Promise<Volum
             ]),
           ),
         ),
+        titles: [...(table?.querySelectorAll<HTMLElement>("[data-volume-row]") ?? [])].map((row) =>
+          Object.fromEntries(
+            [...row.querySelectorAll<HTMLElement>("[data-column]")].map((cell) => [
+              cell.getAttribute("data-column") ?? "",
+              cell.querySelector("[title]")?.getAttribute("title") ?? "",
+            ]),
+          ),
+        ),
       };
     },
     { id, count },
   );
+}
+
+/** A detail of a volume as its row shows it: the key it is under, what the tab calls it, and its fields. */
+export interface VolumeDetailShown {
+  name: string;
+  title: string;
+  fields: { name: string; value: string }[];
+  /** What the detail says when it is written with no field, or nothing. */
+  none: string;
+}
+
+/**
+ * The details of a volume, by the place of its row, once they are open: each detail with its fields by the
+ * names they are written with, and the words that say that the entry carries none.
+ */
+export async function volumeDetails(
+  frame: Frame,
+  kind: Operation,
+  row: number,
+): Promise<{ none: string; details: VolumeDetailShown[] }> {
+  const id = PARTS.volumeDetails(kind, row);
+
+  await part(frame, id);
+
+  return frame.evaluate((id) => {
+    const root = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+
+    if (!root) throw new Error(`The part ${id} went while it was read`);
+
+    return {
+      none: root.querySelector<HTMLElement>(":scope > p")?.textContent ?? "",
+      details: [...root.querySelectorAll<HTMLElement>("[data-detail]")].map((detail) => ({
+        name: detail.getAttribute("data-detail") ?? "",
+        title: detail.querySelector<HTMLElement>("h4")?.textContent ?? "",
+        fields: [...detail.querySelectorAll<HTMLElement>("[data-field]")].map((field) => ({
+          name: field.getAttribute("data-field") ?? "",
+          value: field.querySelector<HTMLElement>("dd")?.textContent ?? "",
+        })),
+        none: detail.querySelector<HTMLElement>("p")?.textContent ?? "",
+      })),
+    };
+  }, id);
 }
 
 /** The height a list of a viewer has at least, in pixels: ten lines of a text. */
@@ -1637,6 +1801,96 @@ export async function outOfTheRoom(frame: Frame, kind: Operation, ids: string[])
   );
 }
 
+/** A text the suites search the log of the fixtures for, with how many of its lines carry it. */
+export interface FixtureSearch {
+  text: string;
+  matches: number;
+  use: string;
+}
+
+/** An error or a warning the log of the fixtures filed into the results: where, and in which parts. */
+export interface FixtureEntry {
+  line: number;
+  level: string;
+  place: string;
+  namespace?: string;
+  resource?: string;
+  name?: string;
+  message: string;
+  error?: string;
+  /** The message as the results write it. */
+  text: string;
+}
+
+/** What the fixtures wrote of an artifact into the store: its bytes and its digest. */
+export interface FixtureFile {
+  bytes: number;
+  sha256: string;
+}
+
+/**
+ * What the runner of the suites counted of the fixtures of the tabs, outside the extension: what the
+ * generators counted of the artifacts of the backup synced from the store, and the empty artifacts of the
+ * one synced without its log. The fields a suite reads.
+ */
+export interface TabFixtureFacts {
+  run: string;
+  namespace: string;
+  synced: {
+    backup: string;
+    log: FixtureFile & {
+      lines: number;
+      pages: number;
+      levels: Record<LogLevel, number>;
+      entries: FixtureEntry[];
+      long: { twentyThousand: number; tenThousand: number; tenThousandAndOne: number };
+      /** The entries at info whose message names the level of an error: how many, and the first of them. */
+      levelInMessage: { lines: number; line: number };
+      /** The lines with no level whose words name one: how many, and the first of them. */
+      levelInFreeText: { lines: number; line: number };
+      /** The line the first page of the text ends inside. */
+      boundaryLine: number;
+      searches: FixtureSearch[];
+    };
+    results: FixtureFile & {
+      errors: number;
+      warnings: number;
+      value: Record<string, { velero?: string[]; cluster?: string[]; namespaces?: Record<string, string[]> }>;
+    };
+    resourceList: FixtureFile & { resources: number; items: number; value: Record<string, string[]> };
+    volumeInfo: FixtureFile & { volumes: number; value: Record<string, unknown>[] };
+    status: { phase?: string; errors?: number; warnings?: number };
+  };
+  withoutLog: {
+    backup: string;
+    results: FixtureFile;
+    resourceList: FixtureFile;
+    volumeInfo: FixtureFile;
+    status: { phase?: string };
+  };
+  refused: { backup: { name: string }; restore: { name: string }; orphan: { name: string } };
+}
+
+/**
+ * What the runner of the suites wrote of the fixtures of the tabs, beside the reports of the suites, before
+ * it started them: what each artifact of the tabs holds, counted outside the extension. A suite that does
+ * not find it was not started by the runner.
+ */
+export async function tabFixtureFacts(): Promise<TabFixtureFacts> {
+  const file = path.join(ARTIFACTS_DIR, "tab-fixtures.json");
+  let text: string;
+
+  try {
+    text = await readFile(file, "utf8");
+  } catch {
+    throw new Error(
+      `What the fixtures of the tabs hold is not in ${file}: run the suite through \`pnpm e2e:views\`, which writes it there.`,
+    );
+  }
+
+  return JSON.parse(text) as TabFixtureFacts;
+}
+
 function many(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
@@ -1801,4 +2055,79 @@ export const WORDS = {
     count === 0
       ? `Velero recorded no volume for this ${kind}.`
       : `Velero recorded ${count} ${count === 1 ? "volume" : "volumes"} for this ${kind}.`,
+  /** The columns of the table of the volumes, by the kind of the operation, after the one of the details. */
+  volumeColumns: {
+    backup: [
+      "Details",
+      "Claim",
+      "Volume",
+      "Method",
+      "Result",
+      "Data moved",
+      "Local snapshot kept",
+      "Skipped",
+      "Started",
+      "Ended",
+      "Size",
+    ],
+    restore: ["Details", "Claim", "Volume", "Method", "Data moved", "Size"],
+  } as Record<Operation, string[]>,
+  /** What a cell of the volumes says: of what an entry does not say, of a mark, of a namespace and of a size. */
+  notStated: "Not stated",
+  mark: (mark: boolean) => (mark ? "Yes" : "No"),
+  inNamespace: (namespace: string) => `in ${namespace}`,
+  size: (count: number) => sizeWords(count),
+  bytesOf: (count: number) => `${count} ${count === 1 ? "byte" : "bytes"}`,
+  /** What the tab calls each detail of a volume of a backup, by the key it is under. */
+  volumeDetail: {
+    csiSnapshotInfo: "CSI snapshot",
+    snapshotDataMovementInfo: "Data movement",
+    nativeSnapshotInfo: "Native snapshot",
+    pvbInfo: "Pod volume backup",
+    pvInfo: "Volume",
+  } as Record<string, string>,
+  /** A resource of the list with a filter on: how many of its items the filter leaves. */
+  itemsLeft: (left: number, all: number) => `${left} of ${many(all, "item")}`,
+  /** A line a row cuts: how much of it is not shown. */
+  cutLine: (left: number) =>
+    `${many(left, "more character")} of this line ${left === 1 ? "is" : "are"} not shown: the copy of the line takes it whole.`,
+  /** How a load that ended at a store without the file is said, and what a missing file means for the phase. */
+  storeHasNoFile: (kind: Operation, name: string, request: string, namespace: string) =>
+    `The store has no such file: Velero wrote none for the ${kind} ${name}, or it is not there any more. The ${REQUEST} ${request} stays in ${namespace} until Velero removes it.`,
+  nothingForValidation: (tab: ArtifactTab, kind: Operation) =>
+    `Velero writes nothing into the storage for a ${kind} that failed its validation: there ${ARTIFACTS[tab].plural ? `are no ${ARTIFACTS[tab].noun}` : `is no ${ARTIFACTS[tab].noun}`} to read. What it refused is in the summary.`,
+  /** The log of a backup that ended, which the store does not have: said in the past, with when it was asked for. */
+  lostLogOfABackup:
+    /^The log of this backup was not in the storage when it was asked for, at .+: it was removed from it, or it was never written there\. Velero uploads the log of a backup as best it can, and a backup ends without it when the upload fails\.$/,
+  /** What is offered after a load that is not to be asked again: one command that asks nothing. */
+  notAgain:
+    "The main process says that asking again as it was asked is not safe after this. The command takes the tab back to where it was before the request, and asks nothing.",
+  beginAgain: "Take the tab back to its first state",
+  /** What is said before any request, of an operation Velero signs no URL for. */
+  noBackupOfTheRestore: (name: string, namespace: string) =>
+    `The backup of the restore ${name} is not there: the restore names none, or the one it names is not in ${namespace}. Velero signs no URL for such a restore, and no request was created.`,
+  noLocationOfTheBackup: (kind: Operation, name: string, namespace: string) =>
+    `The storage location of the backup of the ${kind} ${name} is not in ${namespace}: Velero signs no URL without it, and no request was created.`,
+  /** How a creation the cluster refused to the identity is said. */
+  forbiddenCreation:
+    "The cluster refused the creation of a DownloadRequest: the identity needs the verb create on downloadrequests of the namespace.",
+  /** How a load cancelled once its request was in the cluster is said to have ended. */
+  cancelledAfter: (request: string, namespace: string) =>
+    `The download was cancelled. The ${REQUEST} ${request} stays in ${namespace} until Velero removes it.`,
 };
+
+// A size of a volume in the unit that reads best, as the tab of the volumes writes it: a size that would be
+// written as 1024.0 of a unit is one of the unit above.
+function sizeWords(size: number): string {
+  if (size < 1024) return `${size} B`;
+  const units = ["KiB", "MiB", "GiB", "TiB", "PiB"];
+  let value = size / 1024;
+  let unit = 0;
+
+  while (Math.round(value * 10) >= 10240 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+
+  return `${value.toFixed(1)} ${units[unit]}`;
+}

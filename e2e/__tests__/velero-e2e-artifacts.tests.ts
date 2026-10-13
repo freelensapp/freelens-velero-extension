@@ -5,9 +5,15 @@
 
 // The tabs Log, Results, Resources and Volumes of the workspace of a backup and
 // of a restore, in a packaged Freelens, against the test environment: the
-// backup the controller of the demo took, and the restore it ran of it. A tab
-// asks nothing when it opens; it shows the request before it creates it; and
-// what it loads is what the release wrote of the operation into the store.
+// backup the controller of the demo took, and the restore it ran of it; then
+// the fixtures of the tabs, the backup synced from the store with artifacts
+// made for the rules of the tabs, the one synced without its log, the backup
+// and the restore the server refused, and the restore asked from a schedule
+// that has no backup; and a backup whose storage location is not there, in
+// another installation, and the reader of a part, to whom the cluster refuses
+// the creation. A tab asks nothing when it opens; it shows the request before
+// it creates it; and what it loads is what the release wrote of the operation
+// into the store, or what the fixtures wrote there in its place.
 //
 // The suite asks the extension to write: each load is a DownloadRequest in the
 // namespace of the installation, created through the gate. It tells its guard
@@ -16,9 +22,14 @@
 // the server removes a request ten minutes after it signed it, and the suite
 // waits for that. So what creates a request comes first, the restore before
 // the backup, and what creates none comes after it, while the server counts
-// its ten minutes: the tabs of the backup hold their texts until the end. The
-// one thing that does not wait is the saving of the log, which follows its
-// load: the main process holds a text for ten minutes and no longer.
+// its ten minutes: the tabs of the backup hold their texts until the end of
+// the cases of the demo. One view is shown at a time, and a view opened over
+// another takes its loads: the fixtures of the tabs come after every case of
+// the demo, each operation with its loads first and what creates none after,
+// and the last request of the suite is the large log, whose cases that create
+// none overlap the wait. The one thing that does not wait is the saving of a
+// log, which follows its load: the main process holds a text for ten minutes
+// and no longer.
 //
 // A case looks at one thing, and starts from the view the case before it left
 // without asking anything of that case but the text it needs: a load that
@@ -26,13 +37,16 @@
 //
 // Nothing here is a number copied from a run: what is expected of an artifact
 // is what the release writes of any operation, what the status of the object
-// says, and what the suite counts in the file it saved.
+// says, what the suite counts in the file it saved, and, of the fixtures of the
+// tabs, what the runner of the suites counted of them outside the extension,
+// which it writes beside the reports of the suite before it starts it.
 //
-// The suite takes about twelve minutes, ten of them the wait for the
-// server: a request it left behind would fail the last case of every suite
-// after it.
+// The suite takes about twenty minutes, five to seven of them the wait for
+// the server: a request it left behind would fail the last case of every
+// suite after it.
 
-import { mkdir, readdir, readFile, rename, rm, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { expect } from "@jest/globals";
 import * as artifacts from "../helpers/velero-artifacts";
@@ -54,6 +68,24 @@ const NAMES: Record<artifacts.Operation, string> = {
   backup: `fixture-backup-${RUN}`,
   restore: `fixture-restore-${RUN}`,
 };
+// What the fixtures of the tabs placed in the installation, by the names of the run: the backup the server
+// synced from the store, whose artifacts are made for the rules of the tabs; the one it synced without its
+// log, whose other artifacts are empty; the backup and the restore it refused at their validation; and the
+// restore asked from a schedule that has no backup, refused without a backup name.
+const SYNCED = `fixture-synced-backup-${RUN}`;
+const WITHOUT_LOG = `fixture-synced-backup-no-log-${RUN}`;
+const REFUSED: Record<artifacts.Operation, string> = {
+  backup: `fixture-invalid-backup-${RUN}`,
+  restore: `fixture-invalid-restore-${RUN}`,
+};
+const ORPHAN = `fixture-orphan-restore-${RUN}`;
+// The installation of the views, where a backup names a storage location that is not there, and where the
+// reader of a part reads the backups, the schedules and the storage locations, and may create nothing.
+const VIEWS = cluster.E2E_VIEWS_NAMESPACE;
+const MISSING_LOCATION = "backup-missing-location";
+const OF_THE_READER = "views-daily-20260901030000";
+// The cluster as the catalog names it when it is opened through the kubeconfig of the reader of a part.
+const SECOND_CONTEXT = "velero-e2e-reader";
 const FAMILIES: Record<artifacts.Operation, string> = { backup: "backups", restore: "restores" };
 const LISTS: Record<artifacts.Operation, cluster.ListOf> = { backup: cluster.BACKUPS, restore: cluster.RESTORES };
 // The labels the extension gives a DownloadRequest: who created it, and the identifier of the request of the views.
@@ -72,18 +104,25 @@ const REMOVED_WITHIN = 12 * 60 * 1000;
 // How long the panel has to show the part of a load the main process runs for a step of that part to be
 // expected among the ones it showed: the views ask the main process where a load is four times a second.
 const WATCHABLE = 1000;
-// The second gestures the cases of the suite give: nine loads that end with their text, which are the four
-// tabs of the restore, the log of the backup twice and its other three tabs, and the one that is cancelled.
-const GESTURES = 10;
+// The second gestures the cases of the suite give, twenty-one: sixteen loads that end with their text, which
+// are the four tabs of the restore, the log of the backup twice and its other three tabs, the three empty
+// artifacts of the backup synced without its log, the results, the resources and the volumes of the backup
+// synced with its artifacts, and its log; three that end as a file the store does not have, the log of the
+// backup synced without one and the logs of the two operations that failed their validation; and two that
+// are cancelled, the results of the backup as soon as their load begins, and the large log once its request
+// is in the cluster.
+const GESTURES = 21;
 // The rows a list of lines mounts at most.
 const ROWS_BOUND = 100;
+// The characters a row shows of a line at most: a longer line is cut in its row, and whole in its copy.
+const LINE_BOUND = 10_000;
 // What is pictured of the tabs for the review, in both themes, whenever the suite runs: the picture of a
 // load while it runs is beside these, and is taken when a load lasts long enough to be pictured.
 const PICTURED = ["first", "confirmation", "log", "results", "resources", "volumes"];
 const LOADING = "loading";
 
 interface OperationRead {
-  spec?: { storageLocation?: string };
+  spec?: { storageLocation?: string; backupName?: string };
   status?: {
     phase?: string;
     errors?: number;
@@ -95,7 +134,11 @@ interface OperationRead {
 describe("the log, the results, the resources and the volumes of an operation", () => {
   let started: velero.StartedApplication | undefined;
   let frame: Frame;
+  // The kubeconfig of the environment, as it is published in the profile: the catalog names the cluster by it.
+  let kubeconfig = "";
   let before: cluster.ClusterSnapshot;
+  // What the runner counted of the fixtures of the tabs, outside the extension.
+  let facts: artifacts.TabFixtureFacts;
   // What the API server counted of the requests, and of every kind of Velero, before the application started.
   let counted: Record<string, number>;
   let written: Record<string, number>;
@@ -113,6 +156,9 @@ describe("the log, the results, the resources and the volumes of an operation", 
   const ledger = artifacts.requestLedger();
   // What each tab loaded, by its operation and its tab: nothing for a tab whose text went.
   const loads: Record<string, (artifacts.Loaded & { moments: artifacts.LoadMoment[] }) | undefined> = {};
+  // The name a load is kept by: its kind, its operation and its tab. The operations of the demo are the
+  // ones a kind names by itself.
+  const of = (kind: artifacts.Operation, tab: artifacts.ArtifactTab, name = NAMES[kind]) => `${kind}/${name}/${tab}`;
   // What was seen, of each load that ended with its text, of the part the main process runs: for how long,
   // the steps only the main process tells, and every step, in the order the loads were made.
   const watched: { load: string; lasted: number; told: string[]; steps: string[] }[] = [];
@@ -136,15 +182,15 @@ describe("the log, the results, the resources and the volumes of an operation", 
     return rest;
   };
   // The view of an operation at a tab, from the list of its kind: whatever view was open is closed.
-  const open = async (kind: artifacts.Operation, tab: artifacts.WorkspaceTab) => {
-    await artifacts.openWorkspaceOf(frame, kind, NAMES[kind]);
+  const open = async (kind: artifacts.Operation, tab: artifacts.WorkspaceTab, name = NAMES[kind]) => {
+    await artifacts.openWorkspaceOf(frame, kind, name);
     if (tab !== "summary") await artifacts.openTab(frame, kind, tab);
   };
   // The view of an operation at a tab, as the case before left it: it is opened from its list only when it
   // is not the one that is shown, since a view that is opened again holds nothing of what its tabs loaded.
-  const stay = async (kind: artifacts.Operation, tab: artifacts.WorkspaceTab) => {
-    if (await artifacts.viewOf(frame, kind, NAMES[kind])) await artifacts.openTab(frame, kind, tab);
-    else await open(kind, tab);
+  const stay = async (kind: artifacts.Operation, tab: artifacts.WorkspaceTab, name = NAMES[kind]) => {
+    if (await artifacts.viewOf(frame, kind, name)) await artifacts.openTab(frame, kind, tab);
+    else await open(kind, tab, name);
   };
   const writesOn = async () => {
     if ((await cluster.writesState(frame)) !== "on") await cluster.turnWritesOn(frame);
@@ -165,21 +211,22 @@ describe("the log, the results, the resources and the volumes of an operation", 
       ),
     ).toEqual([]);
   };
-  // Where the suite has the log of the backup saved: under the profile of the run, which goes with it.
-  const savedInto = () => {
+  // Where the suite has a log saved: under the profile of the run, which goes with it.
+  const savedInto = (what = "the-log-of-the-backup") => {
     const directory = path.join(application().directory, "saved-by-the-suite");
 
-    return { directory, file: path.join(directory, "the-log-of-the-backup.txt") };
+    return { directory, file: path.join(directory, `${what}.txt`) };
   };
-  // The log of the backup, shown with the command that saves it. The main process holds a text for ten
+  // The log of a backup, shown with the command that saves it. The main process holds a text for ten
   // minutes after its load, and the command goes when that time has passed: a case that comes to it later
   // says so by name, with what the tab says of until when, and not as a command that was not found.
-  const toTheSave = async () => {
+  const toTheSave = async (name = NAMES.backup) => {
     const id = (part: artifacts.PanelPart) => artifacts.PARTS.panel("backup", "log", part);
-    const loaded = loads["backup/log"];
+    const loaded = loads[of("backup", "log", name)];
 
-    if (!loaded) throw new Error("The log of the backup is not loaded: the case that loads it comes before this one");
-    await stay("backup", "log");
+    if (!loaded)
+      throw new Error(`The log of the backup ${name} is not loaded: the case that loads it comes before this one`);
+    await stay("backup", "log", name);
     const state = await artifacts.panelState(frame, "backup", "log");
 
     if (!state.commands.includes(id("save"))) {
@@ -199,8 +246,8 @@ describe("the log, the results, the resources and the volumes of an operation", 
   };
   // What the dialog of the save was asked with, the one time a saving asks it: what is saved, and the name
   // of a file with no folder. Where a part of a signed URL would be is looked at first, and said by name.
-  const expectAsked = (calls: velero.SaveDialogCall[]) => {
-    const title = artifacts.WORDS.saveTitle("backup", "log", NAMES.backup, NAMESPACE, CLUSTER);
+  const expectAsked = (calls: velero.SaveDialogCall[], name = NAMES.backup) => {
+    const title = artifacts.WORDS.saveTitle("backup", "log", name, NAMESPACE, CLUSTER);
 
     expect(
       artifacts.signedUrlIn({
@@ -209,9 +256,7 @@ describe("the log, the results, the resources and the volumes of an operation", 
         "the file the dialog suggests": calls.map((call) => call.defaultPath).join("\n"),
       }),
     ).toEqual([]);
-    expect(calls).toEqual([
-      { title, message: title, defaultPath: artifacts.WORDS.savedFile("backup", "log", NAMES.backup) },
-    ]);
+    expect(calls).toEqual([{ title, message: title, defaultPath: artifacts.WORDS.savedFile("backup", "log", name) }]);
   };
   // A part of the viewer of the log of the backup.
   const logPart = (part?: artifacts.ViewerPart) => artifacts.PARTS.viewer("backup", "log", part);
@@ -219,20 +264,21 @@ describe("the log, the results, the resources and the volumes of an operation", 
   const toTheList = async () => {
     await (await artifacts.part(frame, logPart("text"))).focus();
   };
-  // The log of the backup in a viewer that starts anew, at its first line, with no search, no level chosen
+  // The log of a backup in a viewer that starts anew, at its first line, with no search, no level chosen
   // and its lines not wrapped: a viewer keeps what was chosen in it for as long as its tab is shown, and
   // each case of the log starts from none of it. The text is the one that was loaded: nothing is asked.
-  const freshLog = async () => {
-    const loaded = loads["backup/log"];
+  const freshLog = async (name = NAMES.backup) => {
+    const loaded = loads[of("backup", "log", name)];
 
-    if (!loaded) throw new Error("The log of the backup is not loaded: the case that loads it comes before this one");
-    await stay("backup", "results");
+    if (!loaded)
+      throw new Error(`The log of the backup ${name} is not loaded: the case that loads it comes before this one`);
+    await stay("backup", "results", name);
     await artifacts.openTab(frame, "backup", "log");
     const state = await artifacts.panelState(frame, "backup", "log");
 
     if (state.step !== "loaded" || !state.viewer || state.shown !== loaded.request) {
       throw new Error(
-        `The log of the backup is not shown as it was loaded: its tab is at ${state.step}, ` +
+        `The log of the backup ${name} is not shown as it was loaded: its tab is at ${state.step}, ` +
           `with ${state.shown === "" ? "no text" : `the text of ${state.shown}`}`,
       );
     }
@@ -247,13 +293,14 @@ describe("the log, the results, the resources and the volumes of an operation", 
     return saved.lines;
   };
   // What the cluster holds of an operation: its spec and its status, as its controller wrote them.
-  const read = (kind: artifacts.Operation): OperationRead => {
-    const found = cluster.veleroObject<OperationRead>(FAMILIES[kind], NAMES[kind]);
+  const read = (kind: artifacts.Operation, name = NAMES[kind]): OperationRead => {
+    const found = cluster.veleroObject<OperationRead>(FAMILIES[kind], name);
 
     if (!found) {
       throw new Error(
-        `The ${kind} ${NAMES[kind]} is not in ${NAMESPACE}: the environment is older than its backup lasts. ` +
-          "Create it again with `pnpm demo:down` and `pnpm demo:up`.",
+        `The ${kind} ${name} is not in ${NAMESPACE}: the environment does not hold it, or is older than its ` +
+          "backup lasts. `pnpm demo:up` creates the operations of the demo again, and `pnpm e2e:views` places " +
+          "the fixtures of the tabs.",
       );
     }
     return found;
@@ -322,18 +369,29 @@ describe("the log, the results, the resources and the volumes of an operation", 
     }
   };
   // What was seen of a load is kept, for the case that looks at the steps of every load of the suite.
-  const watch = (kind: artifacts.Operation, tab: artifacts.ArtifactTab, moments: artifacts.LoadMoment[]) => {
+  const watch = (
+    kind: artifacts.Operation,
+    tab: artifacts.ArtifactTab,
+    moments: artifacts.LoadMoment[],
+    name = NAMES[kind],
+  ) => {
     watched.push({
-      load: `${kind}/${tab}`,
+      load: of(kind, tab, name),
       ...artifacts.toldByTheMainProcess(moments),
       steps: artifacts.stepsSeen(moments),
     });
   };
-  // The request of a load that ended with its text: it is in the cluster under the name the tab gives it,
-  // as the confirmation showed it and processed by the server. And nothing the guard was not told is in the
-  // namespace, which is expected last: what it finds is of another load, and hides nothing of this one.
-  const expectRequest = (kind: artifacts.Operation, tab: artifacts.ArtifactTab, request: string) => {
-    const identifier = request.slice(NAMES[kind].length + 1);
+  // The request of a load that ended, with its text or at a store that does not have the file: it is in
+  // the cluster under the name the tab gives it, as the confirmation showed it and processed by the server.
+  // And nothing the guard was not told is in the namespace, which is expected last: what it finds is of
+  // another load, and hides nothing of this one.
+  const expectRequest = (
+    kind: artifacts.Operation,
+    tab: artifacts.ArtifactTab,
+    request: string,
+    name = NAMES[kind],
+  ) => {
+    const identifier = request.slice(name.length + 1);
     const held = cluster.downloadRequests(NAMESPACE);
     const mine = held.find((entry) => entry.name === request);
 
@@ -344,17 +402,8 @@ describe("the log, the results, the resources and the volumes of an operation", 
       true,
       true,
     ]);
-    expect([kind, tab, request.startsWith(`${NAMES[kind]}-`), IDENTIFIER.test(identifier)]).toEqual([
-      kind,
-      tab,
-      true,
-      true,
-    ]);
-    expect([kind, tab, mine?.target]).toEqual([
-      kind,
-      tab,
-      { kind: artifacts.ARTIFACTS[tab].targets[kind], name: NAMES[kind] },
-    ]);
+    expect([kind, tab, request.startsWith(`${name}-`), IDENTIFIER.test(identifier)]).toEqual([kind, tab, true, true]);
+    expect([kind, tab, mine?.target]).toEqual([kind, tab, { kind: artifacts.ARTIFACTS[tab].targets[kind], name }]);
     expect([kind, tab, mine?.labels]).toEqual([kind, tab, { ...LABELS, [REQUEST_LABEL]: identifier }]);
     expect([kind, tab, mine?.phase, (mine?.expiration ?? "") !== ""]).toEqual([kind, tab, "Processed", true]);
     expect([kind, tab, held.map((entry) => entry.name).filter((name) => !ledger.asked().includes(name))]).toEqual([
@@ -387,25 +436,47 @@ describe("the log, the results, the resources and the volumes of an operation", 
   // One load, from the command of its tab to its text, with one creation counted for it. The guard is told
   // the request of the load before anything is expected of it, and when the load ended without its text.
   // A picture of the load is asked while it runs.
-  const loadOf = async (kind: artifacts.Operation, tab: artifacts.ArtifactTab) => {
+  const loadOf = async (kind: artifacts.Operation, tab: artifacts.ArtifactTab, name = NAMES[kind]) => {
     const earlier = cluster.requestCodes(RESOURCE);
     const loaded = await artifacts.load(frame, kind, tab, told, { loading: () => loadingPicture(kind, tab) });
 
     // What the tab loaded is kept first: the cases after this one start from it, whatever is found of it here.
-    loads[`${kind}/${tab}`] = loaded;
-    watch(kind, tab, loaded.moments);
-    expectRequest(kind, tab, loaded.request);
+    loads[of(kind, tab, name)] = loaded;
+    watch(kind, tab, loaded.moments, name);
+    expectRequest(kind, tab, loaded.request, name);
     expect([kind, tab, since(earlier)["POST 201"]]).toEqual([kind, tab, 1]);
     expectLoaded(kind, tab, loaded);
 
     return loaded;
   };
+  // One load that ends without its text, from the command of its tab to how it ended, with one creation
+  // counted for it: the request was created, and the server processed it, as for any other load. The
+  // guard is told the request as `loadOf` tells it. A load that ends with its text fails by name.
+  const endedWithout = async (kind: artifacts.Operation, tab: artifacts.ArtifactTab, name: string) => {
+    const earlier = cluster.requestCodes(RESOURCE);
+
+    await artifacts.ask(frame, kind, tab);
+    const { ended, moments, request } = await artifacts.runLoad(frame, kind, tab, told, {
+      loading: () => loadingPicture(kind, tab),
+    });
+
+    watch(kind, tab, moments, name);
+    if (ended === "loaded") {
+      throw new Error(
+        `The ${artifacts.ARTIFACTS[tab].noun} of the ${kind} ${name} was loaded: the store has a file for it`,
+      );
+    }
+    expectRequest(kind, tab, request, name);
+    expect([kind, tab, since(earlier)["POST 201"]]).toEqual([kind, tab, 1]);
+
+    return { failure: await artifacts.failureOf(frame, kind, tab), request, moments };
+  };
   // What holds of the results of an operation whose plugins ran no operation of their own: the file counts
   // what the status counts, a counter the status does not write being a count of none, and the tab has
   // nothing to say of a difference. The errors come first, then the warnings, each by Velero, the cluster
   // and the namespaces by their names.
-  const expectResults = async (kind: artifacts.Operation) => {
-    const status = read(kind).status ?? {};
+  const expectResults = async (kind: artifacts.Operation, name = NAMES[kind]) => {
+    const status = read(kind, name).status ?? {};
     const results = await artifacts.resultsShown(frame, kind);
 
     expect([kind, results.errors, results.warnings]).toEqual([kind, status.errors ?? 0, status.warnings ?? 0]);
@@ -474,6 +545,20 @@ describe("the log, the results, the resources and the volumes of an operation", 
     if (!cluster.fixturesReady()) {
       throw new Error(cluster.fixturesMissing());
     }
+    // What the runner counted of the fixtures of the tabs is of this run, and names the operations the suite
+    // names: facts of another run would be compared with what the cluster holds of this one.
+    facts = await artifacts.tabFixtureFacts();
+    expect([facts.run, facts.namespace, facts.synced.backup, facts.withoutLog.backup]).toEqual([
+      RUN,
+      NAMESPACE,
+      SYNCED,
+      WITHOUT_LOG,
+    ]);
+    expect([facts.refused.backup.name, facts.refused.restore.name, facts.refused.orphan.name]).toEqual([
+      REFUSED.backup,
+      REFUSED.restore,
+      ORPHAN,
+    ]);
     // The two operations of the controller are there, and the location the backup names says where it signs.
     read("restore");
     const location = cluster.veleroObject<{ spec?: { config?: Record<string, string> } }>(
@@ -497,8 +582,6 @@ describe("the log, the results, the resources and the volumes of an operation", 
     counted = cluster.requestCodes(RESOURCE);
     written = cluster.apiRequests();
     errors.start();
-    let kubeconfig = "";
-
     // The kubeconfig is in the profile before the install is asked, for each start of the application.
     started = await velero.startWithExtension(async () => {
       kubeconfig = await cluster.publishKubeconfig();
@@ -517,7 +600,9 @@ describe("the log, the results, the resources and the volumes of an operation", 
   // Whatever happened, the suites after this one find no request of this one: the server removes the ones
   // of its installation, and the application is closed before the wait, which needs nothing of it. A suite
   // that gave no second gesture created nothing, and waits for nothing: what it found in the cluster when
-  // it started is of another run, and is said at once.
+  // it started is of another run, and is said at once. What a case left in the installation of the views,
+  // which no server reads, is removed with the helper after the wait: nothing, in a run where every case
+  // passed.
   afterAll(async () => {
     try {
       if (started) errors.stop(started.window);
@@ -541,6 +626,16 @@ describe("the log, the results, the resources and the volumes of an operation", 
         } catch (error) {
           console.log(String(error));
         }
+      }
+      // A request a case created in the installation of the views would stay for ever, and fail every suite
+      // after this one: the one removal the suites make, of what one of them asked the extension to create,
+      // outside the installation of the demo, where the server removes its own.
+      try {
+        const removed = cluster.removeRequestsOfTheExtension(VIEWS, "DownloadRequest");
+
+        if (removed > 0) console.log(`Removed ${removed} DownloadRequests of the extension left in ${VIEWS}`);
+      } catch (error) {
+        console.log(String(error));
       }
     }
   }, TIMEOUT);
@@ -989,6 +1084,7 @@ describe("the log, the results, the resources and the volumes of an operation", 
         of: "",
         columns: [],
         rows: [],
+        titles: [],
       });
     },
     TIMEOUT,
@@ -1011,8 +1107,8 @@ describe("the log, the results, the resources and the volumes of an operation", 
       expect(kept).toEqual(
         artifacts.ARTIFACT_TABS.map((tab) => [
           tab,
-          loads[`restore/${tab}`] ? "loaded" : "the tab loaded nothing in the case before this one",
-          loads[`restore/${tab}`]?.request,
+          loads[of("restore", tab)] ? "loaded" : "the tab loaded nothing in the case before this one",
+          loads[of("restore", tab)]?.request,
         ]),
       );
     },
@@ -1036,7 +1132,7 @@ describe("the log, the results, the resources and the volumes of an operation", 
       });
       const loaded = await artifacts.loadedFacts(frame, "backup", "log");
 
-      loads["backup/log"] = { ...loaded, moments };
+      loads[of("backup", "log")] = { ...loaded, moments };
       watch("backup", "log", moments);
       // What the panel showed, with the steps, the words of each and the names, and what the API server
       // counted for the load are kept for who reads the run, before anything is expected of either. No URL.
@@ -1110,7 +1206,7 @@ describe("the log, the results, the resources and the volumes of an operation", 
     "loads the log again as a new request, with the text of before shown until the new request is created",
     async () => {
       const id = (part?: artifacts.PanelPart) => artifacts.PARTS.panel("backup", "log", part);
-      const first = loads["backup/log"];
+      const first = loads[of("backup", "log")];
 
       if (!first) throw new Error("The log of the backup is not loaded: the case that loads it comes before this one");
       await stay("backup", "log");
@@ -1131,13 +1227,13 @@ describe("the log, the results, the resources and the volumes of an operation", 
           .filter((name) => !ledger.asked().includes(name)),
       ).toEqual([]);
       // The second gesture lets go of the text of the first load, whatever becomes of the second.
-      loads["backup/log"] = undefined;
+      loads[of("backup", "log")] = undefined;
       const { moments } = await artifacts.runLoad(frame, "backup", "log", told, {
         loading: () => loadingPicture("backup", "log"),
       });
       const second = await artifacts.loadedFacts(frame, "backup", "log");
 
-      loads["backup/log"] = { ...second, moments };
+      loads[of("backup", "log")] = { ...second, moments };
       watch("backup", "log", moments);
       expectRequest("backup", "log", second.request);
       expect(second.request).not.toBe(first.request);
@@ -1467,6 +1563,7 @@ describe("the log, the results, the resources and the volumes of an operation", 
         of: "",
         columns: [],
         rows: [],
+        titles: [],
       });
       // The words that say so are where the keyboard is after the load.
       const none = artifacts.PARTS.viewer("backup", "volumes", "none");
@@ -1495,7 +1592,7 @@ describe("the log, the results, the resources and the volumes of an operation", 
           const state = await artifacts.panelState(frame, "backup", tab);
 
           // A tab that does not show what it loaded is said after the pictures of the others were taken.
-          if (state.step !== "loaded" || !state.viewer || state.shown !== loads[`backup/${tab}`]?.request) {
+          if (state.step !== "loaded" || !state.viewer || state.shown !== loads[of("backup", tab)]?.request) {
             unloaded.push(`${expected.theme}: the tab ${tab} is at ${state.step}`);
             continue;
           }
@@ -1577,7 +1674,7 @@ describe("the log, the results, the resources and the volumes of an operation", 
         await artifacts.openTab(frame, "backup", tab);
         const state = await artifacts.panelState(frame, "backup", tab);
 
-        if (state.step !== "loaded" || !state.viewer || state.shown !== loads[`backup/${tab}`]?.request) {
+        if (state.step !== "loaded" || !state.viewer || state.shown !== loads[of("backup", tab)]?.request) {
           unloaded.push(`${name}: the tab ${tab} is at ${state.step}`);
           return false;
         }
@@ -2017,7 +2114,7 @@ describe("the log, the results, the resources and the volumes of an operation", 
       const running = application();
       const keyboard = running.window.keyboard;
       const earlier = cluster.requestCodes(RESOURCE);
-      const loaded = loads["backup/log"];
+      const loaded = loads[of("backup", "log")];
       const tab = (name: artifacts.WorkspaceTab) => artifacts.PARTS.tab("backup", name);
       // Where the keyboard is after a key.
       const after = async (key: string) => {
@@ -2107,9 +2204,9 @@ describe("the log, the results, the resources and the volumes of an operation", 
       expect(kept).toEqual(
         artifacts.ARTIFACT_TABS.map((tab) => [
           tab,
-          loads[`backup/${tab}`] ? "loaded" : "the tab loaded nothing in the cases before this one",
-          loads[`backup/${tab}`] !== undefined,
-          loads[`backup/${tab}`]?.request,
+          loads[of("backup", tab)] ? "loaded" : "the tab loaded nothing in the cases before this one",
+          loads[of("backup", tab)] !== undefined,
+          loads[of("backup", tab)]?.request,
         ]),
       );
       // The view is closed and opened again: every tab is at its first state, and its command creates a
@@ -2136,6 +2233,982 @@ describe("the log, the results, the resources and the volumes of an operation", 
     TIMEOUT,
   );
 
+  // What follows is of the fixtures of the tabs, each opened from its list: the view of an operation of the
+  // demo that was open went, with the texts its tabs held, and every case of the demo is before this one.
+  // Each operation comes with the loads that create a request, and what creates none comes after them.
+
+  it(
+    "says of the synced backup without a log that the store does not have the file, by the phase of a backup that ended, with no command to try again, and loads its results, its resource list and its volume information, which are empty in the words of each viewer",
+    async () => {
+      const id = (part?: artifacts.PanelPart) => artifacts.PARTS.panel("backup", "log", part);
+      const empty = facts.withoutLog;
+
+      await open("backup", "log", WITHOUT_LOG);
+      await writesOn();
+      // The words of a file the store does not have are the ones of a backup that ended: the phase of the
+      // backup says so, read from the cluster before the load, and it is the one the fixtures stored.
+      expect([read("backup", WITHOUT_LOG).status?.phase, empty.status.phase]).toEqual(["Completed", "Completed"]);
+      const { failure, request } = await endedWithout("backup", "log", WITHOUT_LOG);
+
+      // The request was created and processed, and the store had no file for it: the load ended at the
+      // download, as a file the store does not have.
+      expect([failure.code, failure.stage]).toEqual(["artifact-missing", "download"]);
+      expect(failure.text).toBe(artifacts.WORDS.storeHasNoFile("backup", WITHOUT_LOG, request, NAMESPACE));
+      // What a missing file means for a backup that ended: the log was removed, or never written, and the
+      // upload of the log of a backup is best effort. It is said in the past, with when the store was asked.
+      expect(await artifacts.said(frame, id("missing"))).toMatch(artifacts.WORDS.lostLogOfABackup);
+      // No command asks again: the one command takes the tab back to its first state, and has the focus.
+      const state = await artifacts.panelState(frame, "backup", "log");
+
+      expect([state.step, state.viewer, state.shown, state.commands]).toEqual(["failed", false, "", [id("begin")]]);
+      expect(await artifacts.said(frame, id("notAgain"))).toBe(artifacts.WORDS.notAgain);
+      expect(await artifacts.said(frame, id("begin"))).toBe(artifacts.WORDS.beginAgain);
+      // A file the phase accounts for is drawn as information, and not as a fault.
+      expect(await artifacts.attribute(frame, id("failure"), "data-ended")).toBe("missing");
+      expect(await cluster.focusOn(frame, id("begin"))).toBe(id("begin"));
+      expect(await cluster.layoutProblems(frame)).toEqual([]);
+      await cluster.captureScreenshot(frame, "dark-artifact-lost-log");
+      // The three other artifacts are in the store, and empty: each is loaded through a request of its own,
+      // holds as many bytes as the fixtures gave the store, and says so in the words of its viewer.
+      await artifacts.openTab(frame, "backup", "results");
+      expect((await loadOf("backup", "results", WITHOUT_LOG)).size).toBe(empty.results.bytes);
+      await expectResults("backup", WITHOUT_LOG);
+      expect(await artifacts.resultsShown(frame, "backup")).toMatchObject({
+        errors: 0,
+        warnings: 0,
+        summary: artifacts.WORDS.results("backup", 0, 0),
+        groups: [],
+      });
+      await artifacts.openTab(frame, "backup", "resources");
+      expect((await loadOf("backup", "resources", WITHOUT_LOG)).size).toBe(empty.resourceList.bytes);
+      expect(await artifacts.resourcesShown(frame, "backup")).toEqual({
+        items: 0,
+        resources: 0,
+        leftItems: 0,
+        leftResources: 0,
+        said: artifacts.WORDS.resources(0, 0),
+        filter: undefined,
+        columns: [],
+        actions: undefined,
+        rows: [],
+      });
+      await artifacts.openTab(frame, "backup", "volumes");
+      expect((await loadOf("backup", "volumes", WITHOUT_LOG)).size).toBe(empty.volumeInfo.bytes);
+      expect(await artifacts.volumesShown(frame, "backup")).toEqual({
+        count: 0,
+        said: artifacts.WORDS.volumes("backup", 0),
+        of: "",
+        columns: [],
+        rows: [],
+        titles: [],
+      });
+      expect(await cluster.layoutProblems(frame)).toEqual([]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "says of the log of the backup and of the restore that failed their validation that Velero writes nothing for an operation that failed its validation, with a request each",
+    async () => {
+      for (const kind of OPERATIONS) {
+        const id = (part?: artifacts.PanelPart) => artifacts.PARTS.panel(kind, "log", part);
+
+        await open(kind, "log", REFUSED[kind]);
+        await writesOn();
+        expect([kind, read(kind, REFUSED[kind]).status?.phase]).toEqual([kind, "FailedValidation"]);
+        const { failure, request } = await endedWithout(kind, "log", REFUSED[kind]);
+
+        // Velero signed a URL for the request all the same: the store was asked, and had no file.
+        expect([kind, failure.code, failure.stage]).toEqual([kind, "artifact-missing", "download"]);
+        expect([kind, failure.text]).toEqual([
+          kind,
+          artifacts.WORDS.storeHasNoFile(kind, REFUSED[kind], request, NAMESPACE),
+        ]);
+        expect([kind, await artifacts.said(frame, id("missing"))]).toEqual([
+          kind,
+          artifacts.WORDS.nothingForValidation("log", kind),
+        ]);
+        const state = await artifacts.panelState(frame, kind, "log");
+
+        expect([kind, state.step, state.viewer, state.commands]).toEqual([kind, "failed", false, [id("begin")]]);
+        expect([kind, await artifacts.attribute(frame, id("failure"), "data-ended")]).toEqual([kind, "missing"]);
+        expect([kind, await cluster.focusOn(frame, id("begin"))]).toEqual([kind, id("begin")]);
+        expect([kind, await cluster.layoutProblems(frame, LISTS[kind])]).toEqual([kind, []]);
+        if (kind === "backup") await cluster.captureScreenshot(frame, "dark-artifact-failed-validation");
+      }
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows the results, the resources and the volumes of the backup synced from the store as the fixtures wrote them: four errors, two of Velero and one of each of two namespaces, and two warnings, one of Velero and one of the cluster, each message in its parts and as it is written; the resources sorted, with their counts, the items of the cluster and the filters; and each volume in its row, with its details by the names the release writes them with",
+    async () => {
+      const synced = facts.synced;
+      const status = read("backup", SYNCED).status ?? {};
+
+      await open("backup", "results", SYNCED);
+      await writesOn();
+      // The status of the backup is the one the fixtures stored, synced by the server: the counts the
+      // results are compared with are read from the cluster, and are the ones the fixtures counted.
+      expect([status.phase, status.errors, status.warnings, status.progress?.itemsBackedUp]).toEqual([
+        "PartiallyFailed",
+        synced.results.errors,
+        synced.results.warnings,
+        synced.resourceList.items,
+      ]);
+      // The results: the counts of the status, the places in their order with their counts, and each
+      // message in its parts, as the hook of the server writes an entry, and as it is written.
+      expect((await loadOf("backup", "results", SYNCED)).size).toBe(synced.results.bytes);
+      await expectResults("backup", SYNCED);
+      const results = await artifacts.resultsShown(frame, "backup");
+      const written = synced.results.value;
+      const placesOf = (group: "errors" | "warnings"): [string, string, number][] => {
+        const value = written[group] ?? {};
+        const namespaces = value.namespaces ?? {};
+
+        return (
+          [
+            ["velero", "", value.velero?.length ?? 0],
+            ["cluster", "", value.cluster?.length ?? 0],
+            ...Object.keys(namespaces)
+              .sort()
+              .map((namespace): [string, string, number] => ["namespace", namespace, namespaces[namespace].length]),
+          ] as [string, string, number][]
+        ).filter((place) => place[2] > 0);
+      };
+
+      expect([results.errors, results.warnings]).toEqual([synced.results.errors, synced.results.warnings]);
+      expect(
+        results.groups.map((group) => [
+          group.kind,
+          group.places.map((place) => [place.where, place.namespace, place.count]),
+        ]),
+      ).toEqual([
+        ["errors", placesOf("errors")],
+        ["warnings", placesOf("warnings")],
+      ]);
+      // Every message as the fixtures filed it: the text the results write is the one of an entry of the
+      // log, which the fixtures counted with its parts.
+      const partsOf = (text: string) => {
+        const entry = synced.log.entries.find((candidate) => candidate.text === text);
+
+        if (!entry) throw new Error(`The results carry a message the log of the fixtures did not file: ${text}`);
+        return Object.fromEntries(
+          (["resource", "name", "message", "error"] as const).flatMap((part) =>
+            entry[part] === undefined ? [] : [[part, entry[part]]],
+          ),
+        );
+      };
+      const expected = (["errors", "warnings"] as const).flatMap((group) =>
+        placesOf(group).map(([where, namespace]) => {
+          const value = written[group] ?? {};
+          const texts =
+            where === "namespace"
+              ? (value.namespaces?.[namespace] ?? [])
+              : (value[where as "velero" | "cluster"] ?? []);
+
+          return { where, namespace, messages: texts.map((text) => ({ text, parts: partsOf(text) })) };
+        }),
+      );
+
+      expect(synced.log.entries.length).toBe(synced.results.errors + synced.results.warnings);
+      expect(await artifacts.resultMessages(frame, "backup")).toEqual(expected);
+      expect(await cluster.layoutProblems(frame)).toEqual([]);
+      await application().window.mouse.move(1, 1);
+      await cluster.captureScreenshot(frame, "dark-artifact-results-synced");
+      // The resources: as many items and resources as the fixtures wrote, and the items the status counted;
+      // sorted by their API version and kind, each with its items sorted, the ones of the cluster said so.
+      await artifacts.openTab(frame, "backup", "resources");
+      expect((await loadOf("backup", "resources", SYNCED)).size).toBe(synced.resourceList.bytes);
+      const list = await artifacts.resourcesLike(
+        frame,
+        "backup",
+        "shows its first rows",
+        (shown) => shown.rows.length > 0,
+      );
+      const items = synced.resourceList.value;
+      const sorted = Object.keys(items).sort();
+      const itemRow = (item: string): Extract<artifacts.ResourceRow, { item: string }> => {
+        const slash = item.indexOf("/");
+
+        return slash < 0
+          ? { item, namespace: "cluster", scope: "cluster", name: item, action: undefined }
+          : { item, namespace: item.slice(0, slash), scope: "", name: item.slice(slash + 1), action: undefined };
+      };
+      const rows = sorted.flatMap((resource): artifacts.ResourceRow[] => [
+        { resource, count: items[resource].length, said: artifacts.WORDS.itemsOf(items[resource].length) },
+        ...[...items[resource]].sort().map(itemRow),
+      ]);
+
+      expect([list.items, list.resources, list.columns, list.actions]).toEqual([
+        synced.resourceList.items,
+        synced.resourceList.resources,
+        ["namespace", "name"],
+        undefined,
+      ]);
+      expect([list.leftItems, list.leftResources, list.said]).toEqual([
+        list.items,
+        list.resources,
+        artifacts.WORDS.resources(list.items, list.resources),
+      ]);
+      expect(rows.length).toBe(synced.resourceList.items + synced.resourceList.resources);
+      expectRows("backup", list.rows);
+      expect(list.rows.length).toBeGreaterThan(1);
+      expect(list.rows).toEqual(rows.slice(0, list.rows.length));
+      // The filter: by a namespace, by two words of which one is a resource, and by the kind of a resource
+      // whose one item is of the cluster. What each leaves is counted on what the fixtures wrote, by the
+      // rule of the filter: every word in the resource, the namespace or the name, whatever its capitals.
+      const leftBy = (words: string) => {
+        const asked = words.toLowerCase().split(/\s+/).filter(Boolean);
+        let left = 0;
+        let resources = 0;
+
+        for (const resource of sorted) {
+          const kept = items[resource].filter((item) => {
+            const row = itemRow(item);
+            const namespace = row.scope === "cluster" ? "" : row.namespace.toLowerCase();
+
+            return asked.every(
+              (word) =>
+                resource.toLowerCase().includes(word) ||
+                namespace.includes(word) ||
+                row.name.toLowerCase().includes(word),
+            );
+          }).length;
+
+          if (kept > 0) {
+            left += kept;
+            resources += 1;
+          }
+        }
+        return { items: left, resources };
+      };
+      const namespaced = rows.find((row) => "item" in row && row.scope === "");
+      const ofTheCluster = sorted.find((resource) => items[resource].length === 1 && !items[resource][0].includes("/"));
+
+      if (!namespaced || !("item" in namespaced)) throw new Error("No item of the fixtures is in a namespace");
+      if (!ofTheCluster) throw new Error("No resource of the fixtures has one item, of the cluster");
+      const alone = ofTheCluster.slice(ofTheCluster.lastIndexOf("/") + 1);
+      const filter = await artifacts.part(frame, artifacts.PARTS.viewer("backup", "resources", "filter"));
+
+      expect([alone, leftBy(alone).items]).toEqual([alone, 1]);
+      for (const words of [namespaced.namespace, `Role ${namespaced.namespace}`, alone]) {
+        const counted = leftBy(words);
+
+        expect([words, counted.items > 0, counted.items < list.items]).toEqual([words, true, true]);
+        await filter.fill(words);
+        const narrowed = await artifacts.resourcesLike(
+          frame,
+          "backup",
+          `is filtered by ${words}`,
+          (shown) => shown.filter === words && shown.leftItems === counted.items && shown.rows.length > 0,
+        );
+
+        expect([words, narrowed.leftResources, narrowed.said]).toEqual([
+          words,
+          counted.resources,
+          artifacts.WORDS.resourcesLeft(counted.items, list.items, counted.resources, list.resources),
+        ]);
+      }
+      // The last words left one item, of the cluster: its resource with what the filter left of it, and
+      // the item with the word that says it is of no namespace.
+      expect((await artifacts.resourcesShown(frame, "backup")).rows).toEqual([
+        { resource: ofTheCluster, count: 1, said: artifacts.WORDS.itemsLeft(1, 1) },
+        itemRow(items[ofTheCluster][0]),
+      ]);
+      await application().window.mouse.move(1, 1);
+      await cluster.captureScreenshot(frame, "dark-artifact-resources-synced");
+      await filter.fill("");
+      await artifacts.resourcesLike(
+        frame,
+        "backup",
+        "has its filter cleared",
+        (shown) => shown.filter === "" && shown.leftItems === list.items,
+      );
+      expect(await cluster.layoutProblems(frame)).toEqual([]);
+      // The volumes: one row for each, in the order of the release, with the columns of a backup; what each
+      // cell says of its entry, and what it writes for who points at it, a time or a count as it is.
+      await artifacts.openTab(frame, "backup", "volumes");
+      expect((await loadOf("backup", "volumes", SYNCED)).size).toBe(synced.volumeInfo.bytes);
+      const volumes = await artifacts.volumesShown(frame, "backup");
+      const entries = synced.volumeInfo.value;
+      const text = (entry: Record<string, unknown>, key: string) =>
+        typeof entry[key] === "string" ? (entry[key] as string) : undefined;
+      const mark = (entry: Record<string, unknown>, key: string) =>
+        typeof entry[key] === "boolean" ? artifacts.WORDS.mark(entry[key] as boolean) : artifacts.WORDS.notStated;
+      // The size is read from the detail that carries one: what was moved, then the snapshot, then the pod volume.
+      const sizeOf = (entry: Record<string, unknown>) => {
+        for (const key of ["snapshotDataMovementInfo", "csiSnapshotInfo", "pvbInfo"]) {
+          const size = (entry[key] as { size?: unknown } | undefined)?.size;
+
+          if (typeof size === "number" && size > 0) return size;
+        }
+        return undefined;
+      };
+      const rowOf = (entry: Record<string, unknown>) => {
+        const size = sizeOf(entry);
+        const reason = text(entry, "skippedReason");
+
+        return {
+          claim: `${text(entry, "pvcName") ?? artifacts.WORDS.notStated} ${artifacts.WORDS.inNamespace(text(entry, "pvcNamespace") ?? "")}`,
+          volume: text(entry, "pvName") ?? artifacts.WORDS.notStated,
+          method: text(entry, "backupMethod") ?? artifacts.WORDS.notStated,
+          result: text(entry, "result") ?? artifacts.WORDS.notStated,
+          moved: mark(entry, "snapshotDataMoved"),
+          kept: mark(entry, "preserveLocalSnapshot"),
+          skipped: `${mark(entry, "skipped")}${reason ? ` ${reason}` : ""}`,
+          // A time is written as the views write one: what it is written for who points at it is compared.
+          started: text(entry, "startTimestamp") ? expect.stringMatching(/\d/) : artifacts.WORDS.notStated,
+          ended: text(entry, "completionTimestamp") ? expect.stringMatching(/\d/) : artifacts.WORDS.notStated,
+          size: size === undefined ? artifacts.WORDS.notStated : artifacts.WORDS.size(size),
+        };
+      };
+      const titlesOf = (entry: Record<string, unknown>) => {
+        const size = sizeOf(entry);
+
+        return {
+          claim: "",
+          volume: "",
+          method: "",
+          result: "",
+          moved: "",
+          kept: "",
+          skipped: "",
+          started: text(entry, "startTimestamp") ?? "",
+          ended: text(entry, "completionTimestamp") ?? "",
+          size: size === undefined ? "" : artifacts.WORDS.bytesOf(size),
+        };
+      };
+
+      expect([volumes.count, volumes.said, volumes.of]).toEqual([
+        synced.volumeInfo.volumes,
+        artifacts.WORDS.volumes("backup", synced.volumeInfo.volumes),
+        "Backup",
+      ]);
+      expect(volumes.columns).toEqual(artifacts.WORDS.volumeColumns.backup);
+      expect(volumes.rows).toEqual(entries.map(rowOf));
+      expect(volumes.titles).toEqual(entries.map(titlesOf));
+      // By name: the native snapshot has no size, and the CSI snapshot has its end and its result.
+      const native = entries.findIndex((entry) => text(entry, "backupMethod") === "NativeSnapshot");
+      const csi = entries.findIndex((entry) => text(entry, "backupMethod") === "CSISnapshot");
+
+      expect([native >= 0, csi >= 0]).toEqual([true, true]);
+      expect(volumes.rows[native].size).toBe(artifacts.WORDS.notStated);
+      expect([volumes.rows[csi].result, volumes.titles[csi].ended]).toEqual([
+        "succeeded",
+        text(entries[csi], "completionTimestamp"),
+      ]);
+      // The details of a row, opened by its command: each detail the entry carries, by the name the tab
+      // gives it, with its fields by the names they are written with, the ones the release writes without
+      // a JSON name among them, and the value of each as it is written.
+      const shownValue = (value: unknown): string => {
+        if (typeof value === "string") return value;
+        if (
+          typeof value === "object" &&
+          value !== null &&
+          !Array.isArray(value) &&
+          Object.values(value).every((entry) => typeof entry === "string")
+        ) {
+          return Object.entries(value)
+            .map(([key, entry]) => `${key}=${entry}`)
+            .join(", ");
+        }
+        return JSON.stringify(value);
+      };
+      const detailsOf = (entry: Record<string, unknown>) =>
+        Object.keys(artifacts.WORDS.volumeDetail)
+          .filter((key) => entry[key] !== undefined)
+          .map((key) => {
+            const detail = entry[key] as Record<string, unknown>;
+
+            return {
+              name: key,
+              title: artifacts.WORDS.volumeDetail[key],
+              fields: Object.keys(detail).map((name) => ({ name, value: shownValue(detail[name]) })),
+              none: "",
+            };
+          });
+
+      for (const [row, field] of [
+        [csi, "ReadyToUse"],
+        [native, "Phase"],
+      ] as const) {
+        const toggle = artifacts.PARTS.volumeToggle("backup", row);
+
+        await artifacts.clickOn(frame, toggle);
+        expect([row, await artifacts.attribute(frame, toggle, "aria-expanded")]).toEqual([row, "true"]);
+        const details = await artifacts.volumeDetails(frame, "backup", row);
+
+        expect([row, details]).toEqual([row, { none: "", details: detailsOf(entries[row]) }]);
+        expect([row, details.details.flatMap((detail) => detail.fields.map((found) => found.name))]).toEqual([
+          row,
+          expect.arrayContaining([field]),
+        ]);
+        if (row === csi) {
+          expect(await cluster.layoutProblems(frame)).toEqual([]);
+          await application().window.mouse.move(1, 1);
+          await cluster.captureScreenshot(frame, "dark-artifact-volumes-detail");
+        }
+        await artifacts.clickOn(frame, toggle);
+        await artifacts.gone(frame, artifacts.PARTS.volumeDetails("backup", row));
+      }
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "cancels the load of the log of the backup synced from the store once its request is in the cluster, and says how it ended, with the command that asks again and no text; then asks again: a new request, the steps of the load in the order the main process tells them, the pages of the text rising to the last, and the bytes of the download that do not go down",
+    async () => {
+      const id = (part?: artifacts.PanelPart) => artifacts.PARTS.panel("backup", "log", part);
+      const synced = facts.synced.log;
+
+      await stay("backup", "log", SYNCED);
+      await writesOn();
+      const earlier = cluster.requestCodes(RESOURCE);
+
+      await artifacts.ask(frame, "backup", "log");
+      // The command that cancels is given inside the page, as soon as the panel is at a step after the
+      // creation: the request is in the cluster then, and the guard is told its name.
+      const {
+        ended,
+        moments,
+        request: named,
+      } = await artifacts.runLoad(frame, "backup", "log", told, { cancel: "created" });
+
+      if (ended === "loaded") {
+        throw new Error(
+          "The load of the large log ended with its text before the cancel reached it: nothing was cancelled",
+        );
+      }
+      const failure = await artifacts.failureOf(frame, "backup", "log");
+
+      await report("artifact-large-log-cancelled", { failure, moments });
+      expect(named.startsWith(`${SYNCED}-`)).toBe(true);
+      expect(ledger.asked()).toContain(named);
+      expect([failure.code, failure.stage, artifacts.AFTER_THE_CREATION.includes(failure.stage)]).toEqual([
+        "cancelled",
+        failure.stage,
+        true,
+      ]);
+      expect(failure.text).toBe(artifacts.WORDS.cancelledAfter(named, NAMESPACE));
+      expect(moments.some((moment) => moment.status === artifacts.WORDS.cancelling)).toBe(true);
+      expect(since(earlier)["POST 201"]).toBe(1);
+      // The request is in the cluster, as the extension created it: the server removes it, not the cancel.
+      const held = cluster.downloadRequests(NAMESPACE).find((entry) => entry.name === named);
+
+      expect(held?.target).toEqual({ kind: "BackupLog", name: SYNCED });
+      expect(held?.labels).toEqual({ ...LABELS, [REQUEST_LABEL]: named.slice(SYNCED.length + 1) });
+      // The tab holds no text, and offers the command that asks again, which is another request.
+      const state = await artifacts.panelState(frame, "backup", "log");
+
+      expect([state.step, state.viewer, state.shown, state.commands]).toEqual(["failed", false, "", [id("create")]]);
+      expect(await artifacts.said(frame, id("what"))).toBe(artifacts.WORDS.askAgain(NAMESPACE, true));
+      expect(await artifacts.said(frame, id("create"))).toBe(artifacts.WORDS.command("backup", "log", true));
+      expect(await artifacts.attribute(frame, id("failure"), "data-ended")).toBe("cancelled");
+      expect(await cluster.focusOn(frame, id("create"))).toBe(id("create"));
+      expect(await cluster.layoutProblems(frame)).toEqual([]);
+      await cluster.captureScreenshot(frame, "dark-artifact-cancelled-after-creation");
+      // Then the command asks again: a new request, and the load is watched to its text. A picture of the
+      // load is asked while it runs: this is the one load of the suite long enough to be pictured.
+      const again = cluster.requestCodes(RESOURCE);
+
+      await artifacts.ask(frame, "backup", "log");
+      const second = await artifacts.runLoad(frame, "backup", "log", told, {
+        loading: () => loadingPicture("backup", "log"),
+      });
+      const loaded = await artifacts.loadedFacts(frame, "backup", "log");
+
+      loads[of("backup", "log", SYNCED)] = { ...loaded, moments: second.moments };
+      watch("backup", "log", second.moments, SYNCED);
+      await report("artifact-load-of-the-large-log", second.moments);
+      expectRequest("backup", "log", loaded.request, SYNCED);
+      expect(loaded.request).not.toBe(named);
+      expect(since(again)["POST 201"]).toBe(1);
+      expectLoaded("backup", "log", loaded);
+      expect(loaded.size).toBe(synced.bytes);
+      // The confirmation, then the load, then the text, in that order; the request named while it loaded,
+      // and no text shown before it arrived.
+      const running = second.moments.filter((moment) => moment.step === "loading");
+
+      expect(second.moments.map((moment) => moment.step).filter((step, at, steps) => step !== steps[at - 1])).toEqual([
+        "confirming",
+        "loading",
+        "loaded",
+      ]);
+      expect(running.length).toBeGreaterThan(0);
+      expect(running.filter((moment) => moment.request !== loaded.request || moment.viewer || moment.shown)).toEqual(
+        [],
+      );
+      // Two different steps at least, in the order the main process tells them, and the pages last; each
+      // step in its words.
+      const steps = artifacts.stepsSeen(second.moments);
+
+      expect([steps, new Set(steps).size >= 2, artifacts.inTheOrder(steps, artifacts.STEPS.backup)]).toEqual([
+        steps,
+        true,
+        true,
+      ]);
+      expect(steps[steps.length - 1]).toBe("pages");
+      for (const moment of running) {
+        expect([moment.at, moment.status]).toEqual([
+          moment.at,
+          expect.stringMatching(artifacts.stepWords(moment.at, loaded.request)),
+        ]);
+      }
+      // The pages of the text rise, never fall, and reach the last of as many as the fixtures counted.
+      const pages = artifacts.pagesSeen(second.moments);
+
+      expect(pages.length).toBeGreaterThan(0);
+      expect(pages.map((page) => page.of)).toEqual(pages.map(() => synced.pages));
+      expect(pages.map((page) => page.page)).toEqual(
+        [...pages.map((page) => page.page)].sort((one, other) => one - other),
+      );
+      expect(pages[pages.length - 1].page).toBe(synced.pages);
+      // The bytes the download tells, where it tells them, do not go down.
+      const bytes = artifacts.bytesSeen(second.moments);
+
+      if (bytes.length === 0) console.log("The download of the large log showed no count of its bytes");
+      expect(bytes).toEqual([...bytes].sort((one, other) => one - other));
+      // The keyboard is on the first line of what arrived, and the commands are the ones of a text.
+      const first = artifacts.PARTS.line("backup", "log", 1);
+
+      await artifacts.part(frame, first);
+      expect(await cluster.focusOn(frame, first)).toBe(first);
+      expect((await artifacts.panelState(frame, "backup", "log")).commands).toEqual([id("create"), id("save")]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows the log of 200,000 lines: saved as it was stored, with the digest the fixtures counted; its lines and its levels as the fixtures counted them, a hundred rows mounted at most at five places, the searches with their counts, the next and the previous match, the line that names a level in its message, the lines that are cut and the one across two pages, and the lines wrapped",
+    async () => {
+      const running = application();
+      const keyboard = running.window.keyboard;
+      const synced = facts.synced.log;
+      const id = (part?: artifacts.PanelPart) => artifacts.PARTS.panel("backup", "log", part);
+      const { directory, file } = savedInto("the-log-of-the-synced-backup");
+
+      // The save comes first, within the ten minutes the main process holds the text: the dialog of the
+      // host answers the file of the suite. The file is the one the fixtures gave the store, byte for byte.
+      await mkdir(directory, { recursive: true });
+      await velero.replaceSaveDialog(running.app, file);
+      const loaded = await toTheSave(SYNCED);
+      const asked = (await velero.saveDialogCalls(running.app)).length;
+      const earlier = cluster.requestCodes(RESOURCE);
+      const writesBefore = cluster.writes(cluster.apiRequests());
+
+      await artifacts.clickOn(frame, id("save"));
+      await artifacts.attributeLike(frame, id("saving"), "data-saving", "saved");
+      expect(await artifacts.said(frame, id("saving"))).toBe(artifacts.WORDS.saved("log"));
+      expectAsked((await velero.saveDialogCalls(running.app)).slice(asked), SYNCED);
+      const saved = await readFile(file);
+      const lines = artifacts.linesOf(saved.toString("utf8"));
+
+      expect([saved.length, loaded.size]).toEqual([synced.bytes, synced.bytes]);
+      expect(createHash("sha256").update(saved).digest("hex")).toBe(synced.sha256);
+      expect(lines.length).toBe(synced.lines);
+      await expectNoWrite(earlier, writesBefore);
+      // The viewer: every line, with the count of each level as the fixtures counted it, and as the suite
+      // reads the level of each line of the file, as an operator would.
+      const first = await freshLog(SYNCED);
+
+      expect([first.lines, first.shown, first.rows, first.count]).toEqual([
+        synced.lines,
+        synced.lines,
+        synced.lines,
+        artifacts.WORDS.lines(synced.lines, synced.lines),
+      ]);
+      expect(Object.fromEntries(artifacts.LOG_LEVELS.map((level) => [level, first.levels[level].count]))).toEqual(
+        synced.levels,
+      );
+      expect(
+        Object.fromEntries(
+          artifacts.LOG_LEVELS.map((level) => [
+            level,
+            lines.filter((line) => artifacts.levelOf(line) === level).length,
+          ]),
+        ),
+      ).toEqual(synced.levels);
+      // A hundred rows mounted at most, at five places of the log: its first line, its last, a quarter of
+      // the way, the line of twenty thousand characters, and fifty lines before the end.
+      expect([first.mounted[0], first.mounted.length <= ROWS_BOUND]).toEqual([1, true]);
+      await toTheList();
+      await keyboard.press("End");
+      const last = await artifacts.logLike(frame, "backup", "is at its last line", (shown) =>
+        shown.mounted.includes(synced.lines),
+      );
+
+      expect(last.mounted.length).toBeLessThanOrEqual(ROWS_BOUND);
+      for (const line of [Math.floor(synced.lines / 4), synced.long.twentyThousand, synced.lines - 50]) {
+        const at = await artifacts.scrollLogTo(frame, "backup", line);
+
+        expect([line, at.mounted.length <= ROWS_BOUND]).toEqual([line, true]);
+      }
+      // The searches the fixtures counted the lines of: each with its count, which the suite counts in the
+      // file as well, and the first of its lines; one in other capitals than the file writes it, and one no
+      // line carries.
+      const searches = synced.searches.filter((search) => search.use === "content");
+      const field = await artifacts.part(frame, logPart("search"));
+
+      expect(searches.length).toBe(4);
+      for (const search of searches) {
+        const found = artifacts.matchingLines(lines, search.text);
+        const shown = await artifacts.searchLog(frame, "backup", search.text);
+
+        expect([search.text, found.length, shown.search.matches, shown.search.line]).toEqual([
+          search.text,
+          search.matches,
+          search.matches,
+          found[0],
+        ]);
+        if (search.matches === 0)
+          expect([search.text, shown.search.said]).toEqual([search.text, artifacts.WORDS.noMatch()]);
+      }
+      const capitals = searches.find((search) => search.text !== search.text.toLowerCase() && search.matches > 1);
+
+      if (!capitals) throw new Error("No search of the fixtures is in capitals with more than one line");
+      expect((await artifacts.searchLog(frame, "backup", capitals.text.toLowerCase())).search.matches).toBe(
+        capitals.matches,
+      );
+      // The next and the previous match, with the row of the match marked, among the lines that carry the
+      // words of an error: the match the search is at is the line, in the order of the lines.
+      const errors = searches.find((search) => search.text === "level=error");
+
+      if (!errors) throw new Error("No search of the fixtures is for the words of an error");
+      const errorLines = artifacts.matchingLines(lines, errors.text);
+      const at = async (match: number, after: string) => {
+        const shown = await artifacts.logLike(
+          frame,
+          "backup",
+          `is at match ${match + 1} of ${errorLines.length}, with the row of its line marked, ${after}`,
+          (log) =>
+            log.search.words === errors.text &&
+            log.search.match === match &&
+            log.marked.length === 1 &&
+            log.marked[0] === log.search.line,
+        );
+
+        expect([after, shown.search.line, shown.search.said]).toEqual([
+          after,
+          errorLines[match],
+          artifacts.WORDS.match(match, errorLines.length, errorLines[match]),
+        ]);
+      };
+
+      await artifacts.searchLog(frame, "backup", errors.text);
+      await at(0, "after the words were typed");
+      await field.press("Enter");
+      await at(1, "after Enter on the first match");
+      await field.press("Shift+Enter");
+      await at(0, "after Shift with Enter on the second match");
+      await field.press("Shift+Enter");
+      await at(errorLines.length - 1, "after Shift with Enter on the first match");
+      // The entry at info whose message names the level of an error is at info: with that level chosen,
+      // the words of the error are found in as many lines as the fixtures wrote them into a message, and
+      // the first of them is the one the fixtures counted. The file says the same of that line.
+      await artifacts.clickOn(frame, artifacts.PARTS.level("backup", "info"));
+      const trapped = await artifacts.logLike(
+        frame,
+        "backup",
+        "shows the lines of the level info that carry the words of an error",
+        (shown) => shown.levels.info.chosen && shown.shown === synced.levels.info && shown.search.words === errors.text,
+      );
+
+      expect([trapped.search.matches, trapped.search.line]).toEqual([
+        synced.levelInMessage.lines,
+        synced.levelInMessage.line,
+      ]);
+      expect(artifacts.levelOf(lines[synced.levelInMessage.line - 1])).toBe("info");
+      expect(lines[synced.levelInMessage.line - 1]).toContain(errors.text);
+      await artifacts.clickOn(frame, artifacts.PARTS.level("backup", "info"));
+      await field.fill("");
+      // The lines of the level error alone: as many as the fixtures wrote, by their numbers in the log,
+      // which are the ones of the entries the fixtures filed as errors and the ones the file has.
+      await artifacts.clickOn(frame, artifacts.PARTS.level("backup", "error"));
+      const errorsOnly = await artifacts.logLike(
+        frame,
+        "backup",
+        "shows the lines of the level error",
+        (shown) =>
+          shown.levels.error.chosen &&
+          !shown.levels.info.chosen &&
+          shown.search.words === "" &&
+          shown.shown === synced.levels.error,
+      );
+
+      expect(errorsOnly.mounted).toEqual(
+        lines.flatMap((line, index) => (artifacts.levelOf(line) === "error" ? [index + 1] : [])),
+      );
+      expect(errorsOnly.mounted).toEqual(
+        synced.entries
+          .filter((entry) => entry.level === "error")
+          .map((entry) => entry.line)
+          .sort((one, other) => one - other),
+      );
+      expect(errorsOnly.count).toBe(artifacts.WORDS.lines(synced.levels.error, synced.lines));
+      await running.window.mouse.move(1, 1);
+      await cluster.captureScreenshot(frame, "dark-artifact-log-errors");
+      await artifacts.clickOn(frame, artifacts.PARTS.level("backup", "error"));
+      await artifacts.logLike(frame, "backup", "hides no line again", (shown) => shown.shown === synced.lines);
+      // The line of ten thousand characters is whole in its row, the next, of one more, is cut, and the
+      // one of twenty thousand is cut in its row and says how much of it is not shown.
+      const { tenThousand, tenThousandAndOne, twentyThousand } = synced.long;
+
+      expect([
+        lines[tenThousand - 1].length,
+        lines[tenThousandAndOne - 1].length,
+        lines[twentyThousand - 1].length,
+      ]).toEqual([LINE_BOUND, LINE_BOUND + 1, 2 * LINE_BOUND]);
+      await artifacts.scrollLogTo(frame, "backup", tenThousand);
+      expect(await artifacts.lineShown(frame, "backup", "log", tenThousand)).toEqual({
+        text: lines[tenThousand - 1],
+        cut: false,
+      });
+      const oneMore = await artifacts.lineShown(frame, "backup", "log", tenThousandAndOne);
+
+      expect([oneMore.cut, oneMore.text.length, lines[tenThousandAndOne - 1].startsWith(oneMore.text)]).toEqual([
+        true,
+        LINE_BOUND,
+        true,
+      ]);
+      await artifacts.scrollLogTo(frame, "backup", twentyThousand);
+      const long = await artifacts.lineShown(frame, "backup", "log", twentyThousand);
+
+      expect([long.cut, long.text.length, lines[twentyThousand - 1].startsWith(long.text)]).toEqual([
+        true,
+        LINE_BOUND,
+        true,
+      ]);
+      expect(await artifacts.said(frame, artifacts.PARTS.line("backup", "log", twentyThousand, "cut"))).toBe(
+        artifacts.WORDS.cutLine(lines[twentyThousand - 1].length - long.text.length),
+      );
+      await running.window.mouse.move(1, 1);
+      await cluster.captureScreenshot(frame, "dark-artifact-log-cut-line");
+      // The line the first page of the text ended inside, in a character of more than one byte, is whole.
+      const across = lines[synced.boundaryLine - 1];
+
+      expect(Buffer.byteLength(across) > across.length).toBe(true);
+      await artifacts.scrollLogTo(frame, "backup", synced.boundaryLine);
+      expect(await artifacts.lineShown(frame, "backup", "log", synced.boundaryLine)).toEqual({
+        text: across,
+        cut: false,
+      });
+      // The lines wrapped, a hundred rows mounted at most, and on one line each again.
+      await artifacts.clickOn(frame, logPart("wrap"));
+      const wrapped = await artifacts.logLike(
+        frame,
+        "backup",
+        "wraps its lines",
+        (shown) => shown.wrap && shown.columns !== undefined && shown.mounted.length > 0,
+      );
+
+      expect([wrapped.shown, wrapped.mounted.length <= ROWS_BOUND]).toEqual([synced.lines, true]);
+      await artifacts.clickOn(frame, logPart("wrap"));
+      await artifacts.logLike(frame, "backup", "does not wrap its lines again", (shown) => !shown.wrap);
+      expect(await cluster.layoutProblems(frame)).toEqual([]);
+    },
+    TIMEOUT,
+  );
+
+  it.todo(
+    "answers a search and a filter of the log of 200,000 lines within 250 milliseconds, and draws each frame of a scroll within 50",
+  );
+
+  it(
+    "turns writes off when another installation is selected, and holds nothing of the tabs back in the installation of the demo; and says in the installation of the views, with writes on for it, that the storage location of a backup is not there, before any request, with no command and nothing counted",
+    async () => {
+      const held = loads[of("backup", "log", SYNCED)];
+
+      if (!held)
+        throw new Error(`The log of the backup ${SYNCED} is not loaded: the case that loads it comes before this one`);
+      await stay("backup", "log", SYNCED);
+      expect((await artifacts.panelState(frame, "backup", "log")).shown).toBe(held.request);
+      const earlier = cluster.requestCodes(RESOURCE);
+      const writesBefore = cluster.writes(cluster.apiRequests());
+
+      // Another installation: writes are off there, as a change of installation turns them off.
+      await cluster.selectInstallation(frame, VIEWS);
+      await frame.waitForSelector("[data-testid=velero-writes][data-writes=off]", { timeout: 60_000 });
+      expect((await cluster.target(frame)).namespace.startsWith(VIEWS)).toBe(true);
+      // Back in the installation of the demo: writes are off, and the tabs of the backup hold nothing.
+      await cluster.selectInstallation(frame, NAMESPACE);
+      await frame.waitForSelector("[data-testid=velero-writes][data-writes=off]", { timeout: 60_000 });
+      await open("backup", "summary", SYNCED);
+      for (const tab of artifacts.ARTIFACT_TABS) {
+        await artifacts.openTab(frame, "backup", tab);
+        const state = await artifacts.panelState(frame, "backup", tab);
+
+        expect([tab, state.step, state.viewer, state.shown]).toEqual([tab, "first", false, ""]);
+      }
+      loads[of("backup", "log", SYNCED)] = undefined;
+      // In the installation of the views, with writes turned on for it: the backup whose storage location is
+      // not there is said so before any request, in every tab, with no command.
+      await cluster.selectInstallation(frame, VIEWS);
+      await frame.waitForSelector("[data-testid=velero-writes-on]", { timeout: 60_000 });
+      await cluster.turnWritesOn(frame);
+      await open("backup", "summary", MISSING_LOCATION);
+      for (const tab of artifacts.ARTIFACT_TABS) {
+        const id = (part?: artifacts.PanelPart) => artifacts.PARTS.panel("backup", tab, part);
+
+        await artifacts.openTab(frame, "backup", tab);
+        const state = await artifacts.panelState(frame, "backup", tab);
+
+        expect([tab, state.step, state.viewer, state.commands]).toEqual([tab, "first", false, []]);
+        expect([tab, await artifacts.said(frame, id("nothing"))]).toEqual([
+          tab,
+          artifacts.WORDS.noLocationOfTheBackup("backup", MISSING_LOCATION, VIEWS),
+        ]);
+        expect([
+          tab,
+          await artifacts.present(frame, id("create")),
+          await artifacts.present(frame, id("what")),
+          await artifacts.present(frame, id("toTarget")),
+        ]).toEqual([tab, false, false, false]);
+      }
+      await expectNoWrite(earlier, writesBefore);
+      expect(cluster.downloadRequests(VIEWS)).toEqual([]);
+      expect(await cluster.writesState(frame)).toBe("on");
+      expect(await cluster.layoutProblems(frame)).toEqual([]);
+      await cluster.captureScreenshot(frame, "dark-artifact-no-location");
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "says of the restore without a backup name that there is nothing to ask for, before any request, with no command with writes on and nothing counted",
+    async () => {
+      // Back in the installation of the demo, where the restore is: a change of installation turned writes
+      // off, and they are turned on again for it.
+      await cluster.selectInstallation(frame, NAMESPACE);
+      await frame.waitForSelector("[data-testid=velero-writes-on]", { timeout: 60_000 });
+      await cluster.turnWritesOn(frame);
+      const earlier = cluster.requestCodes(RESOURCE);
+      const writesBefore = cluster.writes(cluster.apiRequests());
+      const restore = read("restore", ORPHAN);
+
+      // The restore was refused without a backup name: it names none, and Velero signs no URL for it.
+      expect([restore.status?.phase, restore.spec?.backupName ?? ""]).toEqual(["FailedValidation", ""]);
+      await open("restore", "summary", ORPHAN);
+      for (const tab of artifacts.ARTIFACT_TABS) {
+        const id = (part?: artifacts.PanelPart) => artifacts.PARTS.panel("restore", tab, part);
+
+        await artifacts.openTab(frame, "restore", tab);
+        const state = await artifacts.panelState(frame, "restore", tab);
+
+        expect([tab, state.step, state.viewer, state.commands]).toEqual([tab, "first", false, []]);
+        expect([tab, await artifacts.said(frame, id("nothing"))]).toEqual([
+          tab,
+          artifacts.WORDS.noBackupOfTheRestore(ORPHAN, NAMESPACE),
+        ]);
+        expect([
+          tab,
+          await artifacts.present(frame, id("create")),
+          await artifacts.present(frame, id("what")),
+          await artifacts.present(frame, id("toTarget")),
+        ]).toEqual([tab, false, false, false]);
+      }
+      await expectNoWrite(earlier, writesBefore);
+      expect(
+        cluster
+          .downloadRequests(NAMESPACE)
+          .map((request) => request.name)
+          .filter((name) => !ledger.asked().includes(name)),
+      ).toEqual([]);
+      expect(await cluster.writesState(frame)).toBe("on");
+      expect(await cluster.layoutProblems(frame, cluster.RESTORES)).toEqual([]);
+      await cluster.captureScreenshot(frame, "dark-artifact-nothing-to-ask");
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "says that the cluster refused the creation to the reader of a part, at the creation, with writes left on and nothing in the namespace",
+    async () => {
+      const running = application();
+      const id = (part?: artifacts.PanelPart) => artifacts.PARTS.panel("backup", "log", part);
+      // A second entry of the catalog: the same cluster through the kubeconfig of the reader of a part,
+      // which may read the backups, the schedules and the storage locations of the namespace of the views,
+      // and create nothing. Its context is renamed: the catalog tells the two entries apart by it.
+      const source = JSON.parse(await readFile(cluster.readerKubeconfigPath(), "utf8")) as {
+        contexts?: { name: string }[];
+        "current-context"?: string;
+      };
+
+      for (const context of source.contexts ?? []) context.name = SECOND_CONTEXT;
+      source["current-context"] = SECOND_CONTEXT;
+      const renamed = path.join(running.directory, "reader-kubeconfig.json");
+
+      await writeFile(renamed, JSON.stringify(source), { mode: 0o600 });
+      const second = await cluster.publishKubeconfig(renamed, "velero-e2e-reader");
+      let refused = "";
+
+      try {
+        await velero.navigateToCatalog(running.app);
+        await running.window.waitForSelector(`div.TableCell >> text='${SECOND_CONTEXT}'`, { timeout: 60_000 });
+        const other = await cluster.openClusterFromCatalog(running.window, second, SECOND_CONTEXT);
+
+        await cluster.openPage(other, cluster.BACKUPS);
+        await cluster.configureInstallation(other, VIEWS);
+        await cluster.waitForList(other, cluster.BACKUPS);
+        await cluster.openWorkspace(other, OF_THE_READER, cluster.BACKUPS);
+        await artifacts.shownAt(other, "backup", OF_THE_READER, "summary");
+        await artifacts.openTab(other, "backup", "log");
+        await other.waitForSelector("[data-testid=velero-writes-on]", { timeout: 60_000 });
+        await cluster.turnWritesOn(other);
+        const earlier = cluster.requestCodes(RESOURCE);
+
+        expect((await artifacts.panelState(other, "backup", "log")).commands).toEqual([id("create")]);
+        await artifacts.ask(other, "backup", "log");
+        expect(await artifacts.confirmationOf(other, "backup", "log")).toMatchObject({
+          namespace: VIEWS,
+          cluster: `${SECOND_CONTEXT} (context ${SECOND_CONTEXT})`,
+        });
+        // The guard is told nothing: the request is one the cluster refuses, in a namespace that is not
+        // the one of the installation. Its name is kept, to look for it where it is not.
+        const { ended, moments } = await artifacts.runLoad(other, "backup", "log", (request) => {
+          refused = request;
+        });
+
+        expect(ended).toBe("failed");
+        expect(await artifacts.failureOf(other, "backup", "log")).toEqual({
+          code: "forbidden",
+          stage: "creation",
+          text: artifacts.WORDS.forbiddenCreation,
+        });
+        // The reads before the creation were allowed: no step after it was seen.
+        const steps = artifacts.stepsSeen(moments);
+
+        expect([
+          steps,
+          artifacts.inTheOrder(steps, artifacts.STEPS.backup),
+          steps.some((step) => artifacts.AFTER_THE_CREATION.includes(step) || step === "pages"),
+        ]).toEqual([steps, true, false]);
+        // No request was created: the one command takes the tab back to its first state, and has the focus.
+        const state = await artifacts.panelState(other, "backup", "log");
+
+        expect([state.step, state.viewer, state.commands]).toEqual(["failed", false, [id("begin")]]);
+        expect(await artifacts.said(other, id("notAgain"))).toBe(artifacts.WORDS.notAgain);
+        expect(await artifacts.attribute(other, id("failure"), "data-ended")).toBe("fault");
+        expect(await cluster.focusOn(other, id("begin"))).toBe(id("begin"));
+        // The refusal is of the cluster, not of the gate: writes stay on.
+        await other.waitForTimeout(NOTHING);
+        expect(await cluster.writesState(other)).toBe("on");
+        // Nothing is in the namespace, not the request by its name. The API server counts what reaches
+        // the kind: a creation it refuses to the identity is not among what it counts, with any code.
+        expect(refused.startsWith(`${OF_THE_READER}-`)).toBe(true);
+        expect(since(earlier)).toEqual({});
+        expect(cluster.downloadRequests(VIEWS)).toEqual([]);
+        expect(await cluster.layoutProblems(other)).toEqual([]);
+        await cluster.captureScreenshot(other, "dark-artifact-forbidden");
+      } finally {
+        // The cases after this one look at the first entry of the catalog, which is shown again.
+        await velero.navigateToCatalog(running.app);
+        frame = await cluster.openClusterFromCatalog(running.window, kubeconfig);
+      }
+    },
+    TIMEOUT,
+  );
+
   it(
     "shows a step that only the main process tells in one load of the suite at least, and in every load whose part in the main process was shown for a second or longer",
     async () => {
@@ -2144,9 +3217,9 @@ describe("the log, the results, the resources and the volumes of an operation", 
       // One whose part in the main process the panel showed for a second or longer was asked several
       // times, and showed a step of it. A shorter one proves nothing by itself, and is said in the report:
       // the order of the steps of a load long enough to be watched is of the case of the large log. The
-      // loads of the suite are nine, though, and the main process waits a quarter of a second between two
+      // loads of the suite are many, though, and the main process waits a quarter of a second between two
       // reads of a request Velero has not signed yet: one of them at least was asked meanwhile, and showed
-      // what was answered. A suite whose loads all showed the wait for a place and the pages alone never
+      // what was answered; and the load of the large log lasts seconds, and shows its steps. A suite whose loads all showed the wait for a place and the pages alone never
       // drew a step the main process told.
       const shownLong = watched.filter((load) => load.lasted >= WATCHABLE);
       const asked = "the loads that showed a step only the main process tells";
@@ -2177,11 +3250,18 @@ describe("the log, the results, the resources and the volumes of an operation", 
       // First what is wanted of every run, whatever failed in it, and needs nothing of the application: the
       // wait for the server, then what the API server counted, written beside the pictures. A suite that
       // gave no second gesture waits for nothing.
+      const waited = Date.now();
+
       try {
         left = await cluster.awaitRequestsGone(NAMESPACE, lastLoad > 0 ? lastLoad + REMOVED_WITHIN : Date.now());
       } catch (error) {
         unseen = error;
       }
+      // How long the wait took, for who reads the run: it is most of what the suite takes after its last load.
+      console.log(
+        `The server removed the requests of the suite after ${Math.round((Date.now() - waited) / 1000)} seconds of waiting, ` +
+          `${Math.round((Date.now() - lastLoad) / 1000)} seconds after the last load`,
+      );
       const {
         "GET 200": reads = 0,
         "PATCH 200": patched = 0,
@@ -2211,7 +3291,10 @@ describe("the log, the results, the resources and the volumes of an operation", 
       // among what it counts, with any code, and the counters say nothing of one.
       expect(rest).toEqual({ "POST 201": asked.length, "DELETE 200": asked.length });
       expect(reads).toBeGreaterThanOrEqual(asked.length);
-      expect(patched).toBeGreaterThanOrEqual(asked.length);
+      // The server writes into a request once, when it signs it: as many writes as requests the ledger
+      // holds, which every run recorded and this case pins. A server that writes a request twice, or never,
+      // fails it. The reads are more: the main process reads a request by its name until it is signed.
+      expect(patched).toBe(asked.length);
       // No request of another kind of Velero that is not a read, by whoever.
       expect(others).toEqual([]);
       expect(before.requests).toBe(0);
@@ -2223,9 +3306,10 @@ describe("the log, the results, the resources and the volumes of an operation", 
         await frame.waitForSelector("[data-testid=velero-writes][data-writes=off]", { timeout: 60_000 });
       }
       expect(await cluster.writesState(frame)).toBe("off");
-      // Last, what says that every case before this one gave its gesture: nine loads that end with their
-      // text and one that is cancelled, each a request of its own but for the cancelled one, which created
-      // one or none. A case that failed before its gesture is found here, after everything else was read.
+      // Last, what says that every case before this one gave its gesture: sixteen loads that end with their
+      // text, three that end as a file the store does not have and two that are cancelled, each a request
+      // of its own but for the first cancelled one, which created one or none. A case that failed before
+      // its gesture is found here, after everything else was read.
       expect(["the second gestures of the suite", gestures]).toEqual(["the second gestures of the suite", GESTURES]);
       expect(asked.length).toBeGreaterThanOrEqual(GESTURES - 1);
       expect(asked.length).toBeLessThanOrEqual(GESTURES);
@@ -2239,37 +3323,5 @@ describe("the log, the results, the resources and the volumes of an operation", 
       expect(errors.errors()).toEqual([]);
     },
     TIMEOUT,
-  );
-
-  // What follows needs the fixtures of the tabs, which are not in the environment yet: two backups synced
-  // from the store, one of them without its log, with artifacts made for the tabs; a backup and a restore
-  // the server refuses; and a restore asked from a schedule that has no backup.
-  it.todo(
-    "says of the synced backup without a log that the store does not have the file, by the phase of a backup that ended, and shows its empty results, resource list and volume information",
-  );
-  it.todo(
-    "says of the log of the backup and of the restore that failed their validation that Velero writes nothing for an operation that failed its validation, with a request each",
-  );
-  it.todo(
-    "shows the results, the resources and the volumes of the synced backup as the fixtures wrote them: errors of two namespaces and warnings of Velero and of the cluster, the counts and the filters, each volume with its details",
-  );
-  it.todo(
-    "cancels the load of the large log once the panel names its request, then loads it again and sees its steps in their order and its pages rise",
-  );
-  it.todo(
-    "shows the log of 200,000 lines: saved as it was stored, a hundred rows mounted at most, the count of each level, the searches with their counts, the lines that are cut and the one across two pages",
-  );
-  it.todo(
-    "answers a search and a filter of the log of 200,000 lines within 250 milliseconds, and draws each frame of a scroll within 50",
-  );
-  it.todo(
-    "says of the restore without a backup name that there is nothing to ask for, with no command with writes on and nothing counted",
-  );
-  // These two need no fixture that is not there: they are of another installation and of another identity.
-  it.todo(
-    "turns writes off for another installation and holds no text of the one before, and says before any request that the storage location of a backup is not there",
-  );
-  it.todo(
-    "says that the cluster refused the creation to the reader of a part, with writes left on and nothing in the namespace",
   );
 });
