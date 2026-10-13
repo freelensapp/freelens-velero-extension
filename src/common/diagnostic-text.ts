@@ -162,6 +162,8 @@ const OF_THE_TARGET = ["target", "delivery"];
 export function downloadFailure(code: FailureCode, stage: string, context: DownloadContext): Failure {
   const kind = artifactKind(context.artifact).toLowerCase();
   const target = `the ${kind} ${context.name}`;
+  // The backup whose storage location is read: the target itself, or the backup of a restore.
+  const ofTheBackup = kind === "restore" ? `the backup of ${target}` : target;
   const named = context.request ? `the DownloadRequest ${context.request}` : "a DownloadRequest";
   const request = context.request ? `The DownloadRequest ${context.request}` : "The DownloadRequest";
   const before = BEFORE_THE_CREATION.includes(stage);
@@ -252,7 +254,7 @@ export function downloadFailure(code: FailureCode, stage: string, context: Downl
       if (stage === "location")
         return say(
           false,
-          `The storage location of the backup of ${target} is not in ${context.namespace}: Velero signs no URL without it, and no request was created.`,
+          `The storage location of ${ofTheBackup} is not in ${context.namespace}: Velero signs no URL without it, and no request was created.`,
         );
       if (stage === "certificate")
         return say(
@@ -314,7 +316,7 @@ export function downloadFailure(code: FailureCode, stage: string, context: Downl
       if (stage === "wait") return say(false, `The cluster refused to read the request that was created. ${stays}`);
       if (stage === "backup") return say(false, `The cluster refused to read the backup of ${target}. ${none}`);
       if (stage === "location")
-        return say(false, `The cluster refused to read the storage location of the backup of ${target}. ${none}`);
+        return say(false, `The cluster refused to read the storage location of ${ofTheBackup}. ${none}`);
       if (ROUTE_READS[stage])
         return say(
           false,

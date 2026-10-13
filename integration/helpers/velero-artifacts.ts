@@ -2106,8 +2106,9 @@ export const WORDS = {
   /** What is said before any request, of an operation Velero signs no URL for. */
   noBackupOfTheRestore: (name: string, namespace: string) =>
     `The backup of the restore ${name} is not there: the restore names none, or the one it names is not in ${namespace}. Velero signs no URL for such a restore, and no request was created.`,
+  /** The location of a backup is said of the backup once; the one of a restore is of the backup of the restore. */
   noLocationOfTheBackup: (kind: Operation, name: string, namespace: string) =>
-    `The storage location of the backup of the ${kind} ${name} is not in ${namespace}: Velero signs no URL without it, and no request was created.`,
+    `The storage location of ${kind === "restore" ? `the backup of the restore ${name}` : `the backup ${name}`} is not in ${namespace}: Velero signs no URL without it, and no request was created.`,
   /** How a creation the cluster refused to the identity is said. */
   forbiddenCreation:
     "The cluster refused the creation of a DownloadRequest: the identity needs the verb create on downloadrequests of the namespace.",
