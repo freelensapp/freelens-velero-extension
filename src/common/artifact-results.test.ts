@@ -156,33 +156,40 @@ describe("the results of an operation", () => {
     // What a broken file may hold, and the hook of the server does not write: a message that begins as
     // one of the hook does, repeats the beginning of a name, and never comes to its message.
     const repeated = (length: number) => ` resource: /${" name: /".repeat(Math.ceil(length / 8))}`;
-    const read = (text: string, times: number) => {
-      const message = JSON.stringify({ errors: { velero: [text] }, warnings: {} });
+    const results = (text: string) => JSON.stringify({ errors: { velero: [text] }, warnings: {} });
+    // One reading, timed alone.
+    const read = (text: string) => {
       const before = performance.now();
 
-      for (let time = 0; time < times; time += 1) parseResults(message);
+      parseResults(text);
       return performance.now() - before;
     };
     // Two lengths the runtime reads the JSON of in the same way: it takes a text of this size and over
     // by another way than a shorter one, which is no matter of the message.
-    const small = repeated(128 * 1024);
-    const large = repeated(256 * 1024);
+    const small = results(repeated(128 * 1024));
+    const large = results(repeated(256 * 1024));
 
-    // Both are read once before anything is timed, and then as many times as make the small one take a
-    // time that can be told from none.
-    read(large, 1);
-    const times = Math.max(1, Math.min(500, Math.ceil(40 / Math.max(read(small, 1), 0.02))));
-    const taken = { small: [] as number[], large: [] as number[] };
-
-    for (let run = 0; run < 5; run += 1) {
-      taken.small.push(read(small, times));
-      taken.large.push(read(large, times));
+    // Both are read a few times before anything is timed. Then each is read alone, the one after the
+    // other, as many times as fit in a quarter of a second, fifty at least and a thousand at most, and
+    // the time of a reading is the least of its times, not their median: what the machine does beside
+    // the test, a wait for a processor or a collection of the garbage, only adds to a reading, and among
+    // hundreds that each last a fraction of a millisecond the least is one that was left alone, on a
+    // machine that does other things, where none of a few runs of tens of milliseconds may be.
+    for (let warm = 0; warm < 10; warm += 1) {
+      read(small);
+      read(large);
     }
-    // The least of a few runs, on a machine that does other things: twice the length is about twice the
-    // time, and far from four times.
-    expect(Math.min(...taken.large) / Math.min(...taken.small)).toBeLessThan(3);
+    const readings = Math.max(50, Math.min(1000, Math.ceil(250 / Math.max(read(small) + read(large), 0.05))));
+    const least = { small: Infinity, large: Infinity };
+
+    for (let reading = 0; reading < readings; reading += 1) {
+      least.small = Math.min(least.small, read(small));
+      least.large = Math.min(least.large, read(large));
+    }
+    // Twice the length is about twice the time, and far from four times.
+    expect(least.large / least.small).toBeLessThan(3);
     // The message is one of no form of the hook: it is the text it is.
-    expect(parseResults(JSON.stringify({ errors: { velero: [small] } }))?.errors.velero[0].parts).toBeUndefined();
+    expect(parseResults(small)?.errors.velero[0].parts).toBeUndefined();
   }, 120_000);
 
   it("keeps as text a message that is not in the form of the hook, as the ones of a restore are", () => {

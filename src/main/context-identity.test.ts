@@ -1,4 +1,5 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -368,18 +369,26 @@ describe("the plugin of a context", () => {
     }
   });
 
-  // A command that writes its process number, ignores SIGTERM and gives a credential after a wait.
-  async function stubborn(name: string): Promise<{ plugin: ContextEntry; pid: () => Promise<number> }> {
+  // A command that writes its process number as soon as it runs, ignores SIGTERM and gives a credential
+  // after a wait that is longer than any wait of these tests: a command that was not killed is still there.
+  async function stubborn(name: string): Promise<{ plugin: ContextEntry; pid: () => number | undefined }> {
     const script = join(directory, `${name}.mjs`);
     const pidFile = join(directory, `${name}.pid`);
 
     await writeFile(
       script,
-      `import { writeFileSync } from "node:fs"; writeFileSync(process.argv[2], String(process.pid)); process.on("SIGTERM", () => {}); setTimeout(() => process.stdout.write(JSON.stringify({ apiVersion: "client.authentication.k8s.io/v1", kind: "ExecCredential", status: { token: "late-token" } })), 2500);`,
+      `import { writeFileSync } from "node:fs"; writeFileSync(process.argv[2], String(process.pid)); process.on("SIGTERM", () => {}); setTimeout(() => process.stdout.write(JSON.stringify({ apiVersion: "client.authentication.k8s.io/v1", kind: "ExecCredential", status: { token: "late-token" } })), 20_000);`,
     );
     return {
       plugin: { ...entry, user: { name: "p", exec: { command: process.execPath, args: [script, pidFile] } } },
-      pid: async () => Number(await readFile(pidFile, "utf8")),
+      // The number the command wrote, or none while it did not run yet.
+      pid: () => {
+        try {
+          return Number(readFileSync(pidFile, "utf8")) || undefined;
+        } catch {
+          return undefined;
+        }
+      },
     };
   }
   const alive = (pid: number) => {
@@ -397,36 +406,51 @@ describe("the plugin of a context", () => {
     return condition();
   };
 
+  // The bound of the command that ignores the request to end: a bound of this test, and not the one the
+  // product gives an operator. It leaves the command the time to run on a machine that does other things,
+  // where a process can take a second to start, and the case ends soon after it.
+  const BOUND = 3000;
+
   it("ends at its bound, and kills, a command that ignores the request to end", async () => {
     const { plugin, pid } = await stubborn("stubborn");
     const started = Date.now();
-    const error = await runCredentialPlugin(plugin, { timeoutMs: 500 }).catch((caught: unknown) => caught);
+    const error = await runCredentialPlugin(plugin, { timeoutMs: BOUND }).catch((caught: unknown) => caught);
 
-    expect(Date.now() - started).toBeLessThan(2000);
+    // At its bound, and not when the command ends by itself, long after it.
+    expect(Date.now() - started).toBeLessThan(BOUND + 2000);
     expect(error).toMatchObject({ code: "request-failed", reason: "deadline" });
-    const child = await pid();
+    // The command ran within its bound: what is checked of its process is of a process that was there.
+    const child = pid();
 
+    expect(child).toBeDefined();
+    if (child === undefined) return;
     expect(await waitFor(() => !alive(child))).toBe(true);
-  });
+  }, 10_000);
 
   it("ends as cancelled, and kills the command, when the write is cancelled", async () => {
     const { plugin, pid } = await stubborn("cancelled");
     const controller = new AbortController();
-    const started = Date.now();
     const pending = runCredentialPlugin(plugin, { signal: controller.signal }).catch((caught: unknown) => caught);
 
-    await delay(400);
+    // Cancelled once the command runs, however long it takes to start: what is killed is a process that
+    // was there.
+    expect(await waitFor(() => pid() !== undefined, 5000)).toBe(true);
+    const cancelled = Date.now();
+
     controller.abort();
     const error = await pending;
 
-    expect(Date.now() - started).toBeLessThan(2000);
+    // At the cancel, and not when the command ends by itself, long after it.
+    expect(Date.now() - cancelled).toBeLessThan(2000);
     expect(error).toMatchObject({ code: "cancelled" });
-    const child = await pid();
+    const child = pid();
 
+    expect(child).toBeDefined();
+    if (child === undefined) return;
     expect(await waitFor(() => !alive(child))).toBe(true);
     // Already cancelled: the command is not run at all.
     await expect(runCredentialPlugin(plugin, { signal: controller.signal })).rejects.toMatchObject({
       code: "cancelled",
     });
-  });
+  }, 10_000);
 });

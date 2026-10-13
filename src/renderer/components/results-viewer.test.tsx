@@ -474,6 +474,9 @@ describe("the results of thousands of messages", () => {
     ]);
   });
 
+  // With a time of its own: the time of a case is a guard against one that never ends, and this one draws
+  // hundreds of messages of thousands in the document of the tests, and reads them by their roles several
+  // times, which takes seconds while the whole unit run loads the machine.
   it("shows the ones after them where it is asked, two hundred at a time, and gives the focus to the first", () => {
     render(<ResultsViewer id="results" text={THOUSANDS} of="Backup" />);
     const focused = () => document.activeElement?.textContent;
@@ -503,7 +506,7 @@ describe("the results of thousands of messages", () => {
     expect(screen.getByTestId("results-shown").textContent).toContain("677 of the 3277 messages are shown.");
     // A message that has the focus is not in the order of the keys.
     expect(document.activeElement?.getAttribute("tabindex")).toBe("-1");
-  });
+  }, 20_000);
 
   it("starts from the first ones again for another text", () => {
     const { rerender } = render(<ResultsViewer id="results" text={THOUSANDS} of="Backup" />);
