@@ -1,10 +1,11 @@
 # Specifications
 
-Date: 2026-10-13
+Date: 2026-10-14
 
 Status: SPEC-0001 is Approved; SPEC-0002 to SPEC-0008 are Verified; SPEC-0009 to
 SPEC-0012 are Implemented, SPEC-0011 since 2026-10-07, with the third pull request
-of its task; the review of the third milestone was held on 2026-10-13.
+of its task; the review of the third milestone was held on 2026-10-13; SPEC-0013 and
+SPEC-0014 are Approved since 2026-10-14.
 
 The [roadmap](../development/ROADMAP.md) owns scope and progress; the
 [process](../development/PROCESS.md) owns approvals and review gates.
@@ -28,8 +29,10 @@ slice per task even when a spec covers several closely related tasks.
 | [SPEC-0010: The diagnostic request and its transport](SPEC-0010-diagnostic-request-and-transport.md) | T2.1, T2.2, T2.4 separately | REQ-120 through REQ-137 | Implemented | T2.1, the request through the gate: 127 tests, 103 of the way of a request, of its words, of its text in pages, of its procedures and of the object the cluster is sent through both processes, 15 of the adapter, 8 of the contract and of the gate, 1 of the words the band shares; the transport proof of T0.6, which calls the procedures as a frame does. T2.2, the transport: 360 tests, 244 of the rules on the addresses, 108 of the transport and of its tunnel, 1 of the adapter, 3 of the words and of the way of a request, 4 of the fixtures of the proof; the transport proof, which asks the server and the store for what is not there as well. T2.4, the route: 71 tests, 59 of the origin and of the path of a signed URL, of the route, of what the operator allows and of the store that keeps it, 5 of the words and of the way of a request, 3 of the adapter and of the tunnel, 3 of the contract and of the preferences, 1 of the identities of the proof; the transport proof by the route the main process finds, with the allowance of its direct mode and its four identities; the suite of the preferences in a packaged Freelens, with an allowance taken back and two starts after it. The tabs of SPEC-0011 bring the rest of the packaged checks |
 | [SPEC-0011: The log, the results, the resources and the volumes of an operation](SPEC-0011-artifact-viewers.md) | T2.3 | REQ-138 through REQ-151 | Implemented | The first of the three pull requests of the task, the tabs: 396 tests, 115 of the four parsers and of the words of the tabs, 1 of the steps a request ends at before it is created, 40 of the load of an artifact and of the loads of the view that is shown, 7 of the tab in the address, 180 of the strip, of the panel, of the lists of lines, of the four viewers, of Escape in a text field and of the name a confirmation shows in words, 29 of the two workspaces with their tabs and of the section in the details of the host, 20 of the saving, of the bytes of a download and of its bound in the main process, 3 of the contract, 1 of the counters the status writes; the suite of the tabs in a packaged Freelens, on the real backup and the real restore of the test environment, with what the API server counted of their requests, in both themes and at the sizes of the window and the zoom of the pre-review. The second, the fixtures of the tabs: 105 tests, 16 of the artifacts the generators make, 75 of the environment that places the fixtures, waits for the server and removes them, 14 of the four parsers on what the fixtures give the store; the measure of the code of a log, alone after the tests; the fixtures placed, synced and removed on the cluster of the test environment, and the suites of the views restated on what its installation holds with them. The third, the suites on the fixtures: the suite of the tabs on the backups synced from the store and on the operations the server refused, 47 cases, twenty requests each removed by the server, with the measures of a search, a filter and a scroll on the log of 200,000 lines in the packaged application; the pre-review with the tabs open, 35 views in 33 cases, with the journeys with the keyboard alone; the cleanup of the fixtures in the hosted job of the views; and the words of a storage location that is not there, said once, with their unit tests. The third adds no test to the count of the unit run, 73 files and 2,291 tests and the measure after them: the words changed assertions in two files, and three tests of earlier pull requests were hardened under the load of the whole run. Its measures in the packaged application answered in 51.1 ms at the 95th percentile and drew the longest frame of a gesture in 15.9, of 250 and of 50, on the machine of the runs |
 | [SPEC-0012: The version of the server and its plugins](SPEC-0012-server-status.md) | T5.3 | REQ-152 through REQ-159 | Implemented | 95 tests: 12 of the comparison of the version, of the plugins and of the providers, 32 of the state of the request and of what a write that failed left, 47 of the band and of the confirmation of one write, 4 of the object the cluster is sent, through both processes; the suite of the band in a packaged Freelens, on the real server of the test environment, on a synthetic installation and with the reader of a part |
+| [SPEC-0013: The adherence of a schedule](SPEC-0013-schedule-adherence.md) | T3.1, T3.2, T3.3 | REQ-160 through REQ-176 | Approved | None yet |
+| [SPEC-0014: Read-only repositories, pod volume operations and data movement](SPEC-0014-repositories-and-data-movement.md) | T5.1, T5.2 | REQ-177 through REQ-195 | Approved | None yet |
 
-Next unallocated requirement ID: REQ-160. IDs are unique across this project;
+Next unallocated requirement ID: REQ-196. IDs are unique across this project;
 references in test tables do not redefine a requirement. Do not allocate IDs to
 unwritten future specs or reuse an ID for a different requirement after approval.
 
@@ -40,9 +43,9 @@ specifications. Draft each at its next design gate, informed by the local proof.
 
 | Scope | Roadmap owner | Dependency |
 | --- | --- | --- |
-| Schedule adherence | T3.1 through T3.3 | Cron/timezone contract and observed backup history |
+| Schedule adherence | T3.1 through T3.3 | SPEC-0013, approved: the grammar of the cron library of the reviewed release and the observed history |
 | Individual actions | T4.2 through T4.6 | The write gate of SPEC-0009, exact previews and per-action tests |
-| Secondary kinds | T5.1, T5.2 | Same evidence/permission contracts |
+| Secondary kinds | T5.1, T5.2 | SPEC-0014, approved: the same evidence and permission contracts, read only |
 | Release readiness, docs and media | T6.1 through T6.5 | All agreed features Verified; release on the lead maintainer's go |
 
 ## Shared Design
@@ -104,6 +107,14 @@ what the decision on the requests covers. The four specs stay Implemented until
 what the pre-review of the tabs leaves to human judgment is recorded; then they
 are Verified.
 
+SPEC-0013 and SPEC-0014 are drafted on 2026-10-13 for the fourth milestone, against
+Velero v1.18.4, with an independent review of the drafts applied: T3.1, T3.2 and T3.3,
+the adherence of a schedule, and T5.1 and T5.2, the repositories, the pod volume
+operations and the data movement, each read only. Their approval was recorded on
+2026-10-14, as drafted, with the one disagreement of the review decided: two offsets
+of one installation are a change of daylight saving time. They are the fourth
+milestone: T3.1, then T3.2 and T3.3, then T5.1, then T5.2, each its own pull request.
+
 ## Document Review
 
 This is document coverage, not test execution:
@@ -112,12 +123,12 @@ This is document coverage, not test execution:
 | --- | --- |
 | Scope and exclusions | Each spec names its roadmap tasks and deferred owners |
 | User outcomes | Prioritized Given/When/Then journeys and observable success criteria |
-| Requirement identity | 37 unique sequential IDs across the three drafts; the four drafts of the second milestone add 58, REQ-050 to REQ-107, and the four of the third 52, REQ-108 to REQ-159, each with one check |
+| Requirement identity | 37 unique sequential IDs across the three drafts; the four drafts of the second milestone add 58, REQ-050 to REQ-107, and the four of the third 52, REQ-108 to REQ-159, and the two of the fourth 36, REQ-160 to REQ-195, each with one check |
 | Test traceability | Every requirement has a named acceptance check and test layer |
 | Safety and privacy | Local-only writes, exact targets, no implicit requests, synthetic evidence |
 | UI decisions | Native lists plus dedicated operation workspace, with non-happy and accessible states |
 | Source grounding | Every draft carries exact reviewed revisions and recon dependencies |
-| Honest status | SPEC-0001 is Approved with setup, fixture and compiled-main transport evidence; SPEC-0002 to SPEC-0008 are Verified; SPEC-0009 to SPEC-0012 are Implemented, SPEC-0011 with the three pull requests of its task |
+| Honest status | SPEC-0001 is Approved with setup, fixture and compiled-main transport evidence; SPEC-0002 to SPEC-0008 are Verified; SPEC-0009 to SPEC-0012 are Implemented, SPEC-0011 with the three pull requests of its task; SPEC-0013 and SPEC-0014 are Approved since 2026-10-14 |
 
 No blocking product preference is required to review these drafts. Fixture isolation
 and main transport have scoped local evidence. Actual-host authentication, IPC
