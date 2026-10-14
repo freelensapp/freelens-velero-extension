@@ -520,6 +520,38 @@ server still lists every BackupItemAction and RestoreItemAction twice, so the
 deviation of REQ-154 of SPEC-0012 stands. No issue to file: no phase is new, no
 field the extension shows is deprecated, and nothing breaks.
 
+### With The Grammar Of The Cron Library, 2026-10-14
+
+The first slice of the adherence of a schedule (SPEC-0013, T3.1) writes the grammar
+of `netresearch/go-cron` at `v0.15.0` in the repository, from the rules of its
+`ParseStandard` and `Next`, and records here the rules that changed between the
+library of `v1.18.2`, `robfig/cron` at `v3.0.1`, and the one of `v1.18.4`, each with
+its file and line in go-cron. The changelogs of the release do not record the change
+of library. What the earlier library did is as the facts of the parser of
+[SPEC-0013](../specs/SPEC-0013-schedule-adherence.md#what-the-parser-does) record it,
+from its source.
+
+| Rule of go-cron v0.15.0 | Source | The library of v1.18.2 | Effect on the extension |
+| --- | --- | --- | --- |
+| A day of the month and a day of the week that are both restricted must both match | [spec.go L470-L506](https://github.com/netresearch/go-cron/blob/v0.15.0/spec.go#L470-L506), [the change](https://github.com/netresearch/go-cron/blob/v0.15.0/CHANGELOG.md#L280-L286) | Matched either when both were restricted | `0 3 1 * 1` is the first of a month that is a Monday; the table of ADH-01 marks the rows |
+| In the hour a change of daylight saving time skips, the run of that hour is at the first instant after the change | [spec.go L336-L345](https://github.com/netresearch/go-cron/blob/v0.15.0/spec.go#L336-L345), [L439-L454](https://github.com/netresearch/go-cron/blob/v0.15.0/spec.go#L439-L454), [the change](https://github.com/netresearch/go-cron/blob/v0.15.0/CHANGELOG.md#L516) | No rule for the skipped hour: the run of that hour was not run that day | The computation gives the instant after the change; the documentation of the release [still says](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/site/content/docs/main/backup-reference.md#L74) that such a run is not run, a sentence of the earlier library |
+| In the hour a change repeats, both occurrences are instants, and the controller submits at each, since it calls `Next` alone | [spec.go L367-L468](https://github.com/netresearch/go-cron/blob/v0.15.0/spec.go#L367-L468), [the tests](https://github.com/netresearch/go-cron/blob/v0.15.0/spec_test.go#L146-L155), [the guard of the runner](https://github.com/netresearch/go-cron/blob/v0.15.0/cron.go#L1033-L1037), which the controller does not run | The same loop | Both occurrences are expected runs, both counted |
+| An empty zone name is refused | [parser.go L1398-L1402](https://github.com/netresearch/go-cron/blob/v0.15.0/parser.go#L1398-L1402), [the change](https://github.com/netresearch/go-cron/blob/v0.15.0/CHANGELOG.md#L522) | Loaded as UTC | `TZ= 0 3 * * *` is FailedValidation on the reviewed release; the words of SPEC-0006 on an empty name change with the slices of the views |
+| A prefix with nothing after it is an error, and so is a name followed by spaces alone | [parser.go L333-L336](https://github.com/netresearch/go-cron/blob/v0.15.0/parser.go#L333-L336), [L360-L363](https://github.com/netresearch/go-cron/blob/v0.15.0/parser.go#L360-L363), [the change](https://github.com/netresearch/go-cron/blob/v0.15.0/CHANGELOG.md#L523) | A panic for a prefix with no space, recovered by the controller into its own words; no field for spaces alone | The texts of the validation errors differ between the two releases |
+| The name of a zone is validated before it is loaded: 64 bytes at most, letters, digits and `/ _ - + :`; matching quotes around it are taken off | [parser.go L1384-L1412](https://github.com/netresearch/go-cron/blob/v0.15.0/parser.go#L1384-L1412), [L341-L349](https://github.com/netresearch/go-cron/blob/v0.15.0/parser.go#L341-L349), [the change](https://github.com/netresearch/go-cron/blob/v0.15.0/CHANGELOG.md#L505) | The name was given to the library of the zones as written | The grammar refuses the same names with the same words; `TZ="Europe/Rome" 0 3 * * *` is accepted |
+| Sunday is `7` as well as `0` | [spec.go L109-L117](https://github.com/netresearch/go-cron/blob/v0.15.0/spec.go#L109-L117), [L138-L146](https://github.com/netresearch/go-cron/blob/v0.15.0/spec.go#L138-L146), [the change](https://github.com/netresearch/go-cron/blob/v0.15.0/CHANGELOG.md#L366) | Refused, above the maximum of 6 | `0 0 * * 7` has its Sundays |
+| A range whose start is after its end wraps, in every field | [parser.go L1219-L1222](https://github.com/netresearch/go-cron/blob/v0.15.0/parser.go#L1219-L1222), [L1449-L1465](https://github.com/netresearch/go-cron/blob/v0.15.0/parser.go#L1449-L1465), [the change](https://github.com/netresearch/go-cron/blob/v0.15.0/CHANGELOG.md#L289-L293) | Refused, beyond the end of the range | `0 22-2 * * *` and `0 0 1 NOV-FEB *` have their instants |
+| A step must be smaller than the size of its range | [parser.go L1179-L1181](https://github.com/netresearch/go-cron/blob/v0.15.0/parser.go#L1179-L1181), [the change](https://github.com/netresearch/go-cron/blob/v0.15.0/CHANGELOG.md#L514) | Accepted | `*/60 * * * *` is FailedValidation |
+| `@every` below a second is refused; the duration is truncated to the second | [parser.go L141](https://github.com/netresearch/go-cron/blob/v0.15.0/parser.go#L141), [L1530-L1532](https://github.com/netresearch/go-cron/blob/v0.15.0/parser.go#L1530-L1532), [constantdelay.go L42-L55](https://github.com/netresearch/go-cron/blob/v0.15.0/constantdelay.go#L42-L55), [the change](https://github.com/netresearch/go-cron/blob/v0.15.0/CHANGELOG.md#L515) | Rounded up to a second | `@every 500ms` is FailedValidation |
+| An expression of more than 1,024 bytes is refused | [parser.go L320-L322](https://github.com/netresearch/go-cron/blob/v0.15.0/parser.go#L320-L322), [L419-L421](https://github.com/netresearch/go-cron/blob/v0.15.0/parser.go#L419-L421), [the change](https://github.com/netresearch/go-cron/blob/v0.15.0/CHANGELOG.md#L476) | No limit | None in practice |
+| The descriptors `@triggered`, `@manual` and `@none`, whose next instant is always the zero time | [parser.go L1502-L1504](https://github.com/netresearch/go-cron/blob/v0.15.0/parser.go#L1502-L1504), [L1521-L1522](https://github.com/netresearch/go-cron/blob/v0.15.0/parser.go#L1521-L1522), [triggered.go L21-L24](https://github.com/netresearch/go-cron/blob/v0.15.0/triggered.go#L21-L24) | Unrecognized descriptors, refused | A schedule with one of them is Enabled and submitted at every look of the controller, as one with no instant within five years is |
+
+The grammar and the next instant of the extension are written from these lines and
+proven against the tests of the module: the texts of the refusals are the ones the
+controller writes into a schedule. A name the server does not know is refused by the
+server alone, which the extension cannot know of: a name the runtime does not know is
+a zone that is not known, never a refusal of the extension.
+
 ## Verification And Remaining Work
 
 Completed checks:
