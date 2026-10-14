@@ -142,11 +142,16 @@ human judgment is recorded and their tests have run green in CI on main.
 
 | Feature | Task | Spec | Status |
 | --- | --- | --- | --- |
-| Expected runs from the cron expression, `status.lastBackup` and the newest matching Backup | T3.1 | [SPEC-0013](../specs/SPEC-0013-schedule-adherence.md) | Draft |
-| Grace periods, paused, new and invalid schedules, timezone and daylight saving, skipped runs, clock skew, incomplete history, limited RBAC | T3.2 | [SPEC-0013](../specs/SPEC-0013-schedule-adherence.md) | Draft |
-| Next expected run, last observed run and overdue state in list, detail and overview, with the reason | T3.3 | [SPEC-0013](../specs/SPEC-0013-schedule-adherence.md) | Draft |
-| BackupRepository, PodVolumeBackup and PodVolumeRestore views | T5.1 | [SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md) | Draft |
-| DataUpload and DataDownload views with progress and relationships | T5.2 | [SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md) | Draft |
+| Expected runs from the cron expression, `status.lastBackup` and the newest matching Backup | T3.1 | [SPEC-0013](../specs/SPEC-0013-schedule-adherence.md) | Approved |
+| Grace periods, paused, new and invalid schedules, timezone and daylight saving, skipped runs, clock skew, incomplete history, limited RBAC | T3.2 | [SPEC-0013](../specs/SPEC-0013-schedule-adherence.md) | Approved |
+| Next expected run, last observed run and overdue state in list, detail and overview, with the reason | T3.3 | [SPEC-0013](../specs/SPEC-0013-schedule-adherence.md) | Approved |
+| BackupRepository, PodVolumeBackup and PodVolumeRestore views | T5.1 | [SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md) | Approved |
+| DataUpload and DataDownload views with progress and relationships | T5.2 | [SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md) | Approved |
+
+The two specs of the milestone were approved on 2026-10-14, as drafted. The order
+of the slices: T3.1, the grammar of the cron library and the computation with a
+controlled clock; then T3.2 and T3.3, the states and the four surfaces; then T5.1,
+the repositories and the pod volume operations; then T5.2, the data movement.
 
 Exit of M4: tests with a controlled clock and packaged UI scenarios establish
 the accuracy of the adherence signal, including its uncertainty states.

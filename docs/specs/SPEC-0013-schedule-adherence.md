@@ -1,16 +1,15 @@
 # SPEC-0013: The Adherence Of A Schedule
 
-- **Status:** Draft
+- **Status:** Approved
 - **Date:** 2026-10-13
 - **Milestone / tasks:** M4 / T3.1, T3.2, T3.3
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`
 - **Reviewed main:** `c111008912919e6a1a4127b2a0b8a641ee2dad80`
 - **Freelens validation target:** v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`
 - **Dependencies:** [Schedules](SPEC-0006-schedule-read-only.md), [states and Backups](SPEC-0003-backup-read-only.md), [the Overview](SPEC-0008-overview.md), [target discovery](SPEC-0002-installation-discovery.md)
-- **Approval:** Pending; later record role, date, scope, and verdict without names
+- **Approval:** Approved by the lead maintainer on 2026-10-14, as drafted, with the one disagreement of the independent review decided as the spec says: two offsets of one installation are a change of daylight saving time (REQ-162)
 
-Governed by [AGENTS.md](../../AGENTS.md). A completed draft is not approval to
-implement.
+Governed by [AGENTS.md](../../AGENTS.md).
 
 ## Goal
 

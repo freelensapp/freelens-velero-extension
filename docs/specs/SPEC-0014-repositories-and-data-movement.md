@@ -1,16 +1,15 @@
 # SPEC-0014: Read-Only Repositories, Pod Volume Operations And Data Movement
 
-- **Status:** Draft
+- **Status:** Approved
 - **Date:** 2026-10-13
 - **Milestone / tasks:** M4 / T5.1, T5.2
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`
 - **Reviewed main:** `c111008912919e6a1a4127b2a0b8a641ee2dad80`
 - **Freelens validation target:** v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`
 - **Dependencies:** [target discovery](SPEC-0002-installation-discovery.md), [states and Backups](SPEC-0003-backup-read-only.md), [Restores](SPEC-0005-restore-read-only.md), [locations](SPEC-0007-locations-read-only.md), [the volume information of an operation](SPEC-0011-artifact-viewers.md)
-- **Approval:** Pending; later record role, date, scope, and verdict without names
+- **Approval:** Approved by the lead maintainer on 2026-10-14, as drafted
 
-Governed by [AGENTS.md](../../AGENTS.md). Use the [index](README.md) to allocate
-unique REQ-XXX identifiers. A completed draft is not approval to implement.
+Governed by [AGENTS.md](../../AGENTS.md).
 
 ## Goal
 
