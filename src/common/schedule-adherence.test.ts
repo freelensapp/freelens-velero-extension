@@ -1,11 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { expressionZone, nextInstant, parseExpression, UTC } from "./schedule-adherence";
+import {
+  anchorOf,
+  COUNT_BOUND,
+  expectedRun,
+  expressionZone,
+  GRACE,
+  laterBackups,
+  nextInstant,
+  parseExpression,
+  submissionBackup,
+  UTC,
+} from "./schedule-adherence";
+import { LABELS } from "./types";
 
 import type { Parsed, ParsedExpression, Zone } from "./schedule-adherence";
+import type { BackupResource, ScheduleResource } from "./types";
 
 // The zone of the machine the tests run on is one no row below is computed in, fourteen hours east of
 // UTC: an instant computed in it would fail every row with a wall clock. The computation never reads it.
 process.env.TZ = "Pacific/Kiritimati";
+
+const ROME: Zone = { of: "named", name: "Europe/Rome" };
+const NEW_YORK: Zone = { of: "named", name: "America/New_York" };
+const TWO_HOURS_EAST: Zone = { of: "fixed", minutes: 120 };
 
 function accepted(text: string): ParsedExpression {
   const parsed = parseExpression(text);
@@ -471,6 +488,386 @@ describe("ADH-01: the grammar of the parser of the reviewed release", () => {
     });
     expect(parseExpression(null)).toEqual(parseExpression(""));
     expect(parseExpression(7)).toEqual(parseExpression(""));
+  });
+});
+
+const now = Date.parse("2026-10-14T12:00:00.250Z");
+
+function schedule(status: ScheduleResource["status"], created = "2026-08-01T00:00:00Z"): ScheduleResource {
+  return {
+    metadata: { name: "nightly", namespace: "velero-demo", creationTimestamp: created },
+    spec: { schedule: "0 3 * * *" },
+    ...(status ? { status } : {}),
+  };
+}
+
+describe("ADH-02: the expected run as the controller counts it", () => {
+  it("counts from the last submission, from the creation when there is none, and from the last skipped time when later", () => {
+    expect(anchorOf(schedule({ lastBackup: "2026-10-13T03:00:41Z" }))).toEqual({
+      of: "last-submission",
+      at: Date.parse("2026-10-13T03:00:41Z"),
+    });
+    expect(anchorOf(schedule(undefined))).toEqual({ of: "creation", at: Date.parse("2026-08-01T00:00:00Z") });
+    expect(anchorOf(schedule({ lastBackup: "2026-10-13T03:00:41Z", lastSkipped: "2026-10-14T10:00:00Z" }))).toEqual({
+      of: "last-skipped",
+      at: Date.parse("2026-10-14T10:00:00Z"),
+    });
+    expect(anchorOf(schedule({ lastSkipped: "2026-09-01T10:00:00Z" }))).toEqual({
+      of: "last-skipped",
+      at: Date.parse("2026-09-01T10:00:00Z"),
+    });
+    // Not taken when earlier than the one chosen, nor when equal: the controller takes it when it is after.
+    expect(anchorOf(schedule({ lastBackup: "2026-10-13T03:00:41Z", lastSkipped: "2026-10-12T10:00:00Z" }))?.of).toBe(
+      "last-submission",
+    );
+    expect(anchorOf(schedule({ lastBackup: "2026-10-13T03:00:41Z", lastSkipped: "2026-10-13T03:00:41Z" }))?.of).toBe(
+      "last-submission",
+    );
+    expect(anchorOf(schedule({ lastBackup: "yesterday" }, "2026-08-01T00:00:00Z"))).toEqual({
+      of: "creation",
+      at: Date.parse("2026-08-01T00:00:00Z"),
+    });
+    expect(anchorOf({ metadata: { name: "bare" } })).toBeUndefined();
+    expect(expectedRun({ metadata: { name: "bare" } }, accepted("0 9 * * *"), UTC, now)).toEqual({ kind: "no-anchor" });
+  });
+
+  it("is due a second after the expected instant and not at it", () => {
+    const daily = accepted("0 9 * * *");
+    const submitted = schedule({ lastBackup: "2017-08-10T12:27:00Z" });
+    const at = Date.parse("2017-08-11T09:00:00Z");
+
+    expect(expectedRun(submitted, daily, UTC, at)).toMatchObject({
+      kind: "expected",
+      at,
+      due: false,
+      passed: 0,
+      beyond: false,
+    });
+    expect(expectedRun(submitted, daily, UTC, at + 1000)).toMatchObject({
+      kind: "expected",
+      at,
+      due: true,
+      passed: 1,
+      lastPassed: at,
+    });
+    expect("lastPassed" in expectedRun(submitted, daily, UTC, at)).toBe(false);
+  });
+
+  // The daily case of the tests of the release (schedule_controller_test.go L336-L378).
+  it("reproduces the daily case of the tests of the release", () => {
+    const daily = accepted("0 9 * * *");
+    const nine = Date.parse("2017-08-11T09:00:00Z");
+    const first = schedule({ lastBackup: "2017-08-10T12:27:00Z" });
+
+    expect(expectedRun(first, daily, UTC, Date.parse("2017-08-10T12:27:00Z"))).toMatchObject({ at: nine, due: false });
+    expect(expectedRun(first, daily, UTC, Date.parse("2017-08-10T14:27:00Z"))).toMatchObject({ at: nine, due: false });
+    expect(expectedRun(first, daily, UTC, Date.parse("2017-08-11T09:01:00Z"))).toMatchObject({
+      at: nine,
+      due: true,
+      passed: 1,
+    });
+    const recorded = schedule({ lastBackup: "2017-08-11T09:01:00Z" });
+
+    expect(expectedRun(recorded, daily, UTC, Date.parse("2017-08-11T09:02:00Z"))).toMatchObject({
+      anchor: { of: "last-submission", at: Date.parse("2017-08-11T09:01:00Z") },
+      at: Date.parse("2017-08-12T09:00:00Z"),
+      due: false,
+    });
+  });
+
+  // The interval case of the tests of the release (schedule_controller_test.go L249-L334): the clock of
+  // the test has a fraction of a second, and the library rounds the instant it gives down to the second,
+  // which the test allows for (L330-L331); here the fraction is a quarter of a second.
+  it("reproduces the interval case of the tests of the release", () => {
+    const every = accepted("@every 5m");
+    const minutes = (count: number, seconds = 0) => new Date(now - count * 60_000 - seconds * 1000).toISOString();
+    const five = Date.parse("2026-10-14T12:05:00Z");
+
+    expect(expectedRun(schedule(undefined, new Date(now).toISOString()), every, undefined, now)).toMatchObject({
+      anchor: { of: "creation" },
+      at: five,
+      due: false,
+    });
+    expect(expectedRun(schedule({ lastBackup: minutes(0) }), every, undefined, now)).toMatchObject({
+      at: five,
+      due: false,
+    });
+    expect(expectedRun(schedule({ lastBackup: minutes(4, 59) }), every, undefined, now)).toMatchObject({
+      at: Date.parse("2026-10-14T12:00:01Z"),
+      due: false,
+    });
+    expect(expectedRun(schedule({ lastBackup: minutes(5) }), every, undefined, now)).toMatchObject({
+      at: Date.parse("2026-10-14T12:00:00Z"),
+      due: true,
+      passed: 1,
+    });
+    expect(expectedRun(schedule({ lastBackup: minutes(5 * 60) }), every, undefined, now)).toMatchObject({
+      at: Date.parse("2026-10-14T07:05:00Z"),
+      due: true,
+      passed: 60,
+      beyond: false,
+      lastPassed: Date.parse("2026-10-14T12:00:00Z"),
+    });
+  });
+
+  it("counts the expected instants that passed, one by one, and stops at the bound", () => {
+    const daily = accepted("0 9 * * *");
+
+    expect(expectedRun(schedule({ lastBackup: "2026-10-11T09:30:00Z" }), daily, UTC, now)).toMatchObject({
+      at: Date.parse("2026-10-12T09:00:00Z"),
+      passed: 3,
+      beyond: false,
+      lastPassed: Date.parse("2026-10-14T09:00:00Z"),
+    });
+    expect(COUNT_BOUND).toBe(100);
+    expect(
+      expectedRun(schedule({ lastBackup: "2025-10-14T00:00:00Z" }), accepted("@every 1m"), undefined, now),
+    ).toMatchObject({
+      at: Date.parse("2025-10-14T00:01:00Z"),
+      due: true,
+      passed: 100,
+      beyond: true,
+      lastPassed: Date.parse("2025-10-14T01:40:00Z"),
+    });
+    expect(
+      expectedRun(schedule({ lastBackup: "2026-10-04T00:00:00Z" }), accepted("*/15 * * * *"), ROME, now),
+    ).toMatchObject({
+      passed: 100,
+      beyond: true,
+    });
+    // Exactly the bound: the hundred and first instant is the one at the clock, which has not passed.
+    expect(
+      expectedRun(
+        schedule({ lastBackup: "2026-10-14T10:19:00Z" }),
+        accepted("@every 1m"),
+        undefined,
+        Date.parse("2026-10-14T12:00:00Z"),
+      ),
+    ).toMatchObject({
+      passed: 100,
+      beyond: false,
+    });
+    expect(GRACE).toBe(5 * 60_000);
+  });
+
+  it("gives the two instants of the hour a change of daylight saving time repeats, both counted", () => {
+    const two = accepted("CRON_TZ=Europe/Rome 0 2 * * *");
+    const run = expectedRun(
+      schedule({ lastBackup: "2026-10-24T02:00:00+02:00" }),
+      two,
+      ROME,
+      Date.parse("2026-10-25T04:00:00+01:00"),
+    );
+
+    expect(run).toMatchObject({
+      at: Date.parse("2026-10-25T02:00:00+02:00"),
+      passed: 2,
+      lastPassed: Date.parse("2026-10-25T02:00:00+01:00"),
+    });
+  });
+
+  it("flags a schedule Velero submits at every look, with no expected run and no count", () => {
+    for (const [text, reason] of [
+      ["0 0 30 2 *", "beyond-five-years"],
+      ["@triggered", "no-instant"],
+      ["@manual", "no-instant"],
+      ["@none", "no-instant"],
+    ] as const) {
+      const run = expectedRun(schedule({ lastBackup: "2026-10-14T11:59:00Z" }), accepted(text), UTC, now);
+
+      expect(run).toEqual({
+        kind: "at-every-look",
+        anchor: { of: "last-submission", at: Date.parse("2026-10-14T11:59:00Z") },
+        reason,
+      });
+      expect(Object.keys(run).sort()).toEqual(["anchor", "kind", "reason"]);
+    }
+  });
+
+  it("computes nothing from an expression this version cannot read, whatever Velero did with it", () => {
+    const taken = schedule({ phase: "Enabled", lastBackup: "2026-10-01T03:00:00Z" });
+    const run = expectedRun(taken, parseExpression("0 3 * * FRI#L"), UTC, now);
+
+    expect(run).toEqual({
+      kind: "not-readable",
+      reason: "invalid schedule: #n/#L syntax requires DowNth or DowLast option to be enabled",
+    });
+    expect(JSON.stringify(run)).not.toMatch(/passed|due|overdue|"at"/);
+  });
+
+  it("needs a zone for the five fields and the calendar descriptors, and none for @every", () => {
+    expect(
+      expectedRun(schedule({ lastBackup: "2026-10-13T03:00:41Z" }), accepted("0 3 * * *"), undefined, now),
+    ).toEqual({
+      kind: "no-zone",
+      anchor: { of: "last-submission", at: Date.parse("2026-10-13T03:00:41Z") },
+    });
+    expect(expectedRun(schedule(undefined), accepted("@daily"), undefined, now).kind).toBe("no-zone");
+    expect(expectedRun(schedule(undefined), accepted("@every 6h"), undefined, now)).toMatchObject({
+      kind: "expected",
+      at: Date.parse("2026-08-01T06:00:00Z"),
+    });
+    expect(
+      expectedRun(schedule({ lastBackup: "2026-10-13T03:00:41Z" }), accepted("0 3 * * *"), TWO_HOURS_EAST, now),
+    ).toMatchObject({
+      at: Date.parse("2026-10-14T01:00:00Z"),
+      due: true,
+      passed: 1,
+    });
+  });
+});
+
+describe("ADH-03: the zone an expression names", () => {
+  it("reads the name, with its quotes taken off, and Local or no prefix as the zone of the server", () => {
+    expect(accepted("TZ=Europe/Rome 0 3 * * *").zone).toEqual({ of: "named", name: "Europe/Rome" });
+    expect(accepted("CRON_TZ=Europe/Rome 0 3 * * *").zone).toEqual({ of: "named", name: "Europe/Rome" });
+    expect(accepted(`TZ="Europe/Rome" 0 3 * * *`).zone).toEqual({ of: "named", name: "Europe/Rome" });
+    expect(accepted("TZ='UTC' * * * * *").zone).toEqual({ of: "named", name: "UTC" });
+    expect(accepted("TZ=Local 0 3 * * *").zone).toEqual({ of: "local" });
+    expect(accepted("CRON_TZ=Local @daily").zone).toEqual({ of: "local" });
+    expect(accepted("0 3 * * *").zone).toEqual({ of: "none" });
+    expect(expressionZone(accepted("TZ=Europe/Rome 0 3 * * *"))).toEqual(ROME);
+    expect(expressionZone(accepted("TZ=Local 0 3 * * *"))).toBeUndefined();
+    expect(expressionZone(accepted("0 3 * * *"))).toBeUndefined();
+    // A prefix is read at the start of the text alone, and in its capitals.
+    expect(refused("tz=Europe/Rome 0 3 * * *")).toBe(
+      "invalid schedule: expected exactly 5 fields, found 6: [tz=Europe/Rome 0 3 * * *]",
+    );
+    expect(refused(" TZ=Europe/Rome 0 3 * * *")).toBe(
+      "invalid schedule: expected exactly 5 fields, found 6: [TZ=Europe/Rome 0 3 * * *]",
+    );
+  });
+
+  it("computes Local and an expression without a prefix in the zone it is given, never in one of its own", () => {
+    const local = accepted("CRON_TZ=Local 0 3 * * *");
+
+    expect(nextInstant(local, Date.parse("2026-06-01T00:00:00Z"), TWO_HOURS_EAST)).toEqual({
+      kind: "instant",
+      at: Date.parse("2026-06-01T03:00:00+02:00"),
+    });
+    expect(nextInstant(accepted("0 3 * * *"), Date.parse("2026-06-01T00:00:00Z"), NEW_YORK)).toEqual({
+      kind: "instant",
+      at: Date.parse("2026-06-01T03:00:00-04:00"),
+    });
+    expect(nextInstant(accepted("TZ=Local @daily"), Date.parse("2026-06-01T00:00:00Z"), UTC)).toEqual({
+      kind: "instant",
+      at: Date.parse("2026-06-02T00:00:00Z"),
+    });
+  });
+
+  it("computes in the zone the expression names, whatever zone it is given beside it", () => {
+    const tokyo = accepted("TZ=Asia/Tokyo 0 3 * * *");
+    const submitted = schedule({ lastBackup: "2026-10-13T00:00:00Z" });
+    const at = Date.parse("2026-10-14T03:00:00+09:00");
+
+    expect(expectedRun(submitted, tokyo, ROME, now)).toMatchObject({ kind: "expected", at, due: true, passed: 1 });
+    expect(expectedRun(submitted, tokyo, undefined, now)).toMatchObject({ kind: "expected", at });
+    expect(expectedRun(submitted, accepted("0 3 * * *"), ROME, now)).toMatchObject({
+      at: Date.parse("2026-10-13T03:00:00+02:00"),
+    });
+  });
+
+  it("says of a name the runtime does not know that the zone is not known, and refuses an empty name", () => {
+    const run = expectedRun(
+      schedule({ lastBackup: "2026-10-13T03:00:41Z" }),
+      accepted("TZ=Mars/Olympus 0 3 * * *"),
+      { of: "named", name: "Mars/Olympus" },
+      now,
+    );
+
+    expect(run).toEqual({
+      kind: "zone-not-known",
+      anchor: { of: "last-submission", at: Date.parse("2026-10-13T03:00:41Z") },
+      name: "Mars/Olympus",
+    });
+    expect(nextInstant(accepted("0 3 * * *"), now, { of: "named", name: "Local" })).toEqual({
+      kind: "zone-not-known",
+      name: "Local",
+    });
+    expect(refused("TZ= 0 3 * * *")).toBe('invalid schedule: invalid timezone "": empty timezone string');
+    expect(refused("CRON_TZ='' 0 3 * * *")).toBe('invalid schedule: invalid timezone "": empty timezone string');
+  });
+});
+
+function backup(name: string, created: string, more: { schedule?: string; namespace?: string } = {}): BackupResource {
+  return {
+    metadata: {
+      name,
+      namespace: more.namespace ?? "velero-demo",
+      creationTimestamp: created,
+      labels: more.schedule === "" ? {} : { [LABELS.schedule]: more.schedule ?? "nightly" },
+    },
+    status: { phase: "Completed" },
+  };
+}
+
+describe("ADH-08: the backup of the last submission", () => {
+  const submitted = schedule({ lastBackup: "2026-10-13T03:00:41Z" });
+  const own = backup("nightly-20261013030041", "2026-10-13T03:01:01Z");
+
+  it("finds the backup named by the controller and created within a minute of the submission", () => {
+    const found = submissionBackup(submitted, [own, backup("nightly-20261012030041", "2026-10-12T03:00:42Z")]);
+
+    expect(found).toEqual({ kind: "found", backup: own, distance: 20_000 });
+    // Up to a minute, on either side.
+    expect(submissionBackup(submitted, [backup("nightly-20261013030041", "2026-10-13T03:01:41Z")]).kind).toBe("found");
+    expect(submissionBackup(submitted, [backup("nightly-20261013025941", "2026-10-13T02:59:41Z")]).kind).toBe("found");
+  });
+
+  it("finds none when the backup of the submission is not among the backups that exist", () => {
+    const submission = Date.parse("2026-10-13T03:00:41Z");
+
+    expect(submissionBackup(submitted, [])).toEqual({ kind: "not-found", submission });
+    expect(submissionBackup(submitted, [backup("nightly-20261012030041", "2026-10-12T03:00:42Z")])).toEqual({
+      kind: "not-found",
+      submission,
+    });
+    // Two minutes away, named by hand, of another schedule or of another namespace: not the submission.
+    expect(submissionBackup(submitted, [backup("nightly-20261013030241", "2026-10-13T03:02:41Z")]).kind).toBe(
+      "not-found",
+    );
+    expect(submissionBackup(submitted, [backup("nightly-manual", "2026-10-13T03:00:50Z")]).kind).toBe("not-found");
+    expect(submissionBackup(submitted, [backup("nightly-2026101303004", "2026-10-13T03:00:50Z")]).kind).toBe(
+      "not-found",
+    );
+    expect(
+      submissionBackup(submitted, [backup("nightly-20261013030041", "2026-10-13T03:00:50Z", { schedule: "weekly" })])
+        .kind,
+    ).toBe("not-found");
+    expect(
+      submissionBackup(submitted, [backup("nightly-20261013030041", "2026-10-13T03:00:50Z", { schedule: "" })]).kind,
+    ).toBe("not-found");
+    expect(
+      submissionBackup(submitted, [
+        backup("nightly-20261013030041", "2026-10-13T03:00:50Z", { namespace: "velero-other" }),
+      ]).kind,
+    ).toBe("not-found");
+    expect(submissionBackup(schedule(undefined), [own])).toEqual({ kind: "no-submission" });
+  });
+
+  it("takes the nearest of two that are within a minute, and by name when two are as near", () => {
+    const nearer = backup("nightly-20261013030042", "2026-10-13T03:00:45Z");
+    const asNear = backup("nightly-20261013030040", "2026-10-13T03:00:37Z");
+
+    expect(submissionBackup(submitted, [own, nearer])).toMatchObject({ kind: "found", backup: nearer });
+    expect(submissionBackup(submitted, [asNear, nearer])).toMatchObject({ kind: "found", backup: asNear });
+  });
+
+  it("names the backups newer than the last submission, which are not submissions of the schedule", () => {
+    const byHand = backup("nightly-20261013150000", "2026-10-13T15:00:00Z");
+    const synced = backup("nightly-20260901030041", "2026-10-14T06:00:00Z");
+    const older = backup("nightly-20261012030041", "2026-10-12T03:00:42Z");
+
+    expect(laterBackups(submitted, [older, own, byHand, synced]).map((item) => item.metadata.name)).toEqual([
+      synced.metadata.name,
+      byHand.metadata.name,
+    ]);
+    expect(laterBackups(submitted, [older, own])).toEqual([]);
+    // Without a submission every backup of the schedule is one nobody submitted.
+    expect(laterBackups(schedule(undefined), [older, own]).map((item) => item.metadata.name)).toEqual([
+      own.metadata.name,
+      older.metadata.name,
+    ]);
   });
 });
 

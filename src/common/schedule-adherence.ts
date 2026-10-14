@@ -1,3 +1,8 @@
+import { timestamp } from "./duration";
+import { backupsOf } from "./schedule-history";
+
+import type { BackupResource, ScheduleResource } from "./types";
+
 // The grammar of the cron library of the reviewed release and the computation of the expected run of a
 // schedule, written from the rules of the two functions the schedule controller of Velero v1.18.4 calls,
 // ParseStandard and Next of netresearch/go-cron v0.15.0 (parser.go, spec.go, constantdelay.go and
@@ -799,4 +804,161 @@ export function nextInstant(parsed: ParsedExpression, after: number, zone: Zone)
 // whose zone is the one of the server, which the views establish otherwise.
 export function expressionZone(parsed: ParsedExpression): Zone | undefined {
   return parsed.zone.of === "named" ? { of: "named", name: parsed.zone.name } : undefined;
+}
+
+// --- The expected run ---
+
+// Where the controller counts the next run from (schedule_controller.go L275-L284): the last submission,
+// the creation of the schedule when there is none, and the last skipped time when it is later than that.
+export type Anchor = { of: "last-submission" | "creation" | "last-skipped"; at: number };
+
+export function anchorOf(schedule: Pick<ScheduleResource, "metadata" | "status">): Anchor | undefined {
+  const submission = timestamp(schedule.status?.lastBackup);
+  const created = timestamp(schedule.metadata.creationTimestamp);
+  const skipped = timestamp(schedule.status?.lastSkipped);
+  let anchor: Anchor | undefined;
+
+  if (submission !== undefined) anchor = { of: "last-submission", at: submission };
+  else if (created !== undefined) anchor = { of: "creation", at: created };
+  if (skipped !== undefined && (anchor === undefined || skipped > anchor.at))
+    anchor = { of: "last-skipped", at: skipped };
+  return anchor;
+}
+
+export type ExpectedRun =
+  | {
+      kind: "expected";
+      anchor: Anchor;
+      // The first instant of the expression after the anchor.
+      at: number;
+      // The clock is after the expected run, strictly: the controller submits at its next look.
+      due: boolean;
+      // The instants after the anchor and before the clock, counted one by one, at most the bound.
+      passed: number;
+      // More than the bound passed: the count stopped there.
+      beyond: boolean;
+      // The last of the instants that passed, when any did.
+      lastPassed?: number;
+    }
+  // The expression has no instant after the anchor: the controller reads the zero time as a run that is
+  // due, and submits a backup at each of its looks.
+  | { kind: "at-every-look"; anchor: Anchor; reason: "no-instant" | "beyond-five-years" }
+  | { kind: "zone-not-known"; anchor: Anchor; name: string }
+  // The expression names no zone and none was given.
+  | { kind: "no-zone"; anchor: Anchor }
+  // This version cannot read the expression: nothing is computed, whatever the server did with it.
+  | { kind: "not-readable"; reason: string }
+  // The schedule reports no time to count from.
+  | { kind: "no-anchor" };
+
+// The expected run of a schedule as the controller counts it (schedule_controller.go L241-L251,
+// L275-L289): the next instant after the anchor, due when the clock is after it, strictly; and the
+// expected instants that passed since the anchor, which the controller does not catch up on (L258-L260),
+// one by one up to the bound. The instants are computed in the zone the expression names, and in the given
+// zone, the one of the server as the views establish it, only when the expression names none (REQ-162).
+export function expectedRun(
+  schedule: Pick<ScheduleResource, "metadata" | "status">,
+  parsed: Parsed,
+  zone: Zone | undefined,
+  now: number,
+): ExpectedRun {
+  if (parsed.kind === "refused") return { kind: "not-readable", reason: parsed.reason };
+  const anchor = anchorOf(schedule);
+
+  if (!anchor) return { kind: "no-anchor" };
+  const effective = expressionZone(parsed) ?? zone;
+
+  if (effective === undefined && (parsed.kind === "fields" || parsed.kind === "calendar"))
+    return { kind: "no-zone", anchor };
+  const first = nextInstant(parsed, anchor.at, effective ?? UTC);
+
+  if (first.kind === "zone-not-known") return { kind: "zone-not-known", anchor, name: first.name };
+  if (first.kind === "none") return { kind: "at-every-look", anchor, reason: first.reason };
+  let passed = 0;
+  let beyond = false;
+  let lastPassed: number | undefined;
+  let next: NextInstant = first;
+
+  while (next.kind === "instant" && now > next.at) {
+    if (passed === COUNT_BOUND) {
+      beyond = true;
+      break;
+    }
+    passed += 1;
+    lastPassed = next.at;
+    next = nextInstant(parsed, next.at, effective ?? UTC);
+  }
+  return {
+    kind: "expected",
+    anchor,
+    at: first.at,
+    due: now > first.at,
+    passed,
+    beyond,
+    ...(lastPassed === undefined ? {} : { lastPassed }),
+  };
+}
+
+// --- The backup of the last submission ---
+
+// The controller creates the backup and writes the submission with one reading of its clock
+// (schedule_controller.go L257-L266): a minute covers the API server and the patch.
+const SUBMISSION_WINDOW = MINUTE;
+
+// The name the controller gives what it submits: the name of the schedule, a hyphen and the wall clock of
+// the server, fourteen digits (schedule_types.go, TimestampedName).
+function isSubmissionName(name: string, schedule: string): boolean {
+  return name.length === schedule.length + 15 && name.startsWith(`${schedule}-`) && /^\d{14}$/.test(name.slice(-14));
+}
+
+export type SubmissionBackup =
+  // The milliseconds from the submission to the creation of the backup.
+  | { kind: "found"; backup: BackupResource; distance: number }
+  // The submission stands, since the schedule carries it: its backup expired, was deleted or cannot be read.
+  | { kind: "not-found"; submission: number }
+  | { kind: "no-submission" };
+
+// The backup of the last submission among the backups that exist (REQ-167): of the backups of the
+// schedule, the ones that carry its name in their label as the history reads them, the one named as the
+// controller names a submission and created within a minute of status.lastBackup, the nearest when
+// several are, by name when two are as near.
+export function submissionBackup(schedule: ScheduleResource, backups: BackupResource[]): SubmissionBackup {
+  const submission = timestamp(schedule.status?.lastBackup);
+
+  if (submission === undefined) return { kind: "no-submission" };
+  let found: { backup: BackupResource; distance: number } | undefined;
+
+  for (const backup of backupsOf(backups, schedule.metadata.namespace ?? "", schedule.metadata.name)) {
+    if (!isSubmissionName(backup.metadata.name, schedule.metadata.name)) continue;
+    const created = timestamp(backup.metadata.creationTimestamp);
+
+    if (created === undefined) continue;
+    const distance = created - submission;
+
+    if (Math.abs(distance) > SUBMISSION_WINDOW) continue;
+    if (
+      !found ||
+      Math.abs(distance) < Math.abs(found.distance) ||
+      (Math.abs(distance) === Math.abs(found.distance) && backup.metadata.name < found.backup.metadata.name)
+    ) {
+      found = { backup, distance };
+    }
+  }
+  return found ? { kind: "found", ...found } : { kind: "not-found", submission };
+}
+
+// The backups of the schedule that are newer than its last submission, the backup of the submission left
+// out, from the newest: none of them is a submission of the schedule, since the controller writes the
+// submission right after the one backup it creates. Asked by hand or synced from the store, they move
+// nothing in the schedule. Without a submission, every backup of the schedule is one of them.
+export function laterBackups(schedule: ScheduleResource, backups: BackupResource[]): BackupResource[] {
+  const submission = timestamp(schedule.status?.lastBackup);
+  const found = submissionBackup(schedule, backups);
+
+  return backupsOf(backups, schedule.metadata.namespace ?? "", schedule.metadata.name).filter((backup) => {
+    if (found.kind === "found" && backup === found.backup) return false;
+    const created = timestamp(backup.metadata.creationTimestamp);
+
+    return created !== undefined && (submission === undefined || created > submission);
+  });
 }
