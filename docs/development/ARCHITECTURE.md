@@ -1046,8 +1046,10 @@ logs; cleanup lists metadata only and suppresses request DELETE response bodies.
 
 - Adherence compares expected submissions with observed matching backups, not with
   a claimed successful recovery point. Account for lastSkipped, pauses, in-flight
-  work, incomplete history and clocks. Use an established parser compatible with
-  the reviewed cron dialect, including descriptors and TZ/CRON_TZ prefixes.
+  work, incomplete history and clocks. Read the expression with the grammar of the
+  parser of the reviewed release, written in the repository from its rules, the
+  descriptors and the TZ/CRON_TZ prefixes included, as SPEC-0013 decided: the parsers
+  available as packages have grammars of their own.
 - Never inherit the desktop timezone silently. For an unqualified expression,
   require a known installation timezone or report expected-run/adherence as unknown
   while still showing actual timestamps. Final UX belongs to the adherence spec.
