@@ -1,6 +1,6 @@
 # SPEC-0012: The Version Of The Server And Its Plugins
 
-- **Status:** Implemented
+- **Status:** Verified
 - **Date:** 2026-09-30
 - **Milestone / tasks:** M3 / T5.3
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, since the drift watch of 2026-10-13; written against v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
