@@ -1,6 +1,6 @@
 # SPEC-0010: The Diagnostic Request And Its Transport
 
-- **Status:** Implemented
+- **Status:** Verified
 - **Date:** 2026-09-30
 - **Milestone / tasks:** M3 / T2.1, T2.2, T2.4, each its own slice
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, since the drift watch of 2026-10-13; written against v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`; reviewed AWS plugin v1.14.4, `7373ae03525ce743a4f95f13a8fa9f56c7b8f551`, since the same date; written against v1.14.2, `5463822fd77bc1c2a1151ee76c830ad979ff2781`

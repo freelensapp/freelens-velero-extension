@@ -135,8 +135,10 @@ The review gate of the milestone, in
 [PROCESS.md](PROCESS.md#milestone-manual-review-gate), was held on 2026-10-13: the
 lead maintainer kept the decisions each of its four specs records, with the frames
 of a scroll as a percentile, VIEW-08 reworded and the deviation of REQ-154
-confirmed. The specs become Verified once what the pre-review of the tabs leaves to
-human judgment is recorded and their tests have run green in CI on main.
+confirmed. The third milestone is on main and its four specs are Verified: the lead
+maintainer approved the review of the milestone on 2026-10-14, with what the
+pre-review of the tabs had left to human judgment accepted as recorded, and their
+tests had run green in CI on main with the reviewed release moved to v1.18.4.
 
 ### M4 - Schedule adherence and secondary kinds (read-only)
 
