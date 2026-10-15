@@ -41,8 +41,8 @@ export function scheduleState(phase: unknown): ScheduleState {
 
 // The time zone an expression is read in. The expression names it with a prefix, or names none: it is then
 // the one of the server of Velero, which no object of the views holds. It is never the one of the desktop.
-// The name is what is between the prefix and the first space, as the release takes it: it may be empty,
-// which the reviewed release refuses, and it may be Local, which is the zone of the server.
+// The name is what is between the prefix and the first space, with matching quotes taken off, as the release
+// takes it: it may be empty, which the reviewed release refuses, and it may be Local, the zone of the server.
 export type Zone = { of: "expression"; prefix: "TZ" | "CRON_TZ"; name: string } | { of: "server" } | { of: "none" };
 
 export interface Expression {
@@ -61,10 +61,13 @@ export function expression(value: unknown): Expression {
 
   // A prefix with nothing after it is an expression the release refuses: it names no zone to read it in.
   if (space === -1) return { written: value, zone: { of: "none" } };
-  return {
-    written: value,
-    zone: { of: "expression", prefix: prefix[1] as "TZ" | "CRON_TZ", name: value.slice(prefix[0].length, space) },
-  };
+  let name = value.slice(prefix[0].length, space);
+  // The parser of the reviewed release takes off quotes that match around the name before it reads it
+  // (go-cron v0.15.0, parser.go L341-L349): TZ="" names no zone, which it refuses, and TZ='UTC' names UTC.
+  const quoted = name.length >= 2 && (name[0] === '"' || name[0] === "'") && name[name.length - 1] === name[0];
+
+  if (quoted) name = name.slice(1, -1);
+  return { written: value, zone: { of: "expression", prefix: prefix[1] as "TZ" | "CRON_TZ", name } };
 }
 
 // The words of the time zone of an expression. The zone of the server is not read: the adherence of a

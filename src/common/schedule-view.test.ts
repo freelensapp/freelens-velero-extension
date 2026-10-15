@@ -143,6 +143,18 @@ describe("expression of a schedule", () => {
     expect(parseExpression("TZ= 0 3 * * *").kind).toBe("refused");
     expect(ZONE_WORDS.empty).toContain("refuses");
     expect(ZONE_WORDS.empty).not.toContain("UTC");
+    // Quotes that match are taken off, as the parser takes them off: a quoted empty name is refused as well.
+    expect(expression('TZ="" 0 3 * * *').zone).toEqual({ of: "expression", prefix: "TZ", name: "" });
+    expect(zoneText(expression('TZ="" 0 3 * * *').zone)).toBe(ZONE_WORDS.empty);
+    expect(parseExpression('TZ="" 0 3 * * *').kind).toBe("refused");
+    expect(expression("TZ='Europe/Rome' 0 3 * * *").zone).toEqual({
+      of: "expression",
+      prefix: "TZ",
+      name: "Europe/Rome",
+    });
+    expect(zoneText(expression('CRON_TZ="Europe/Rome" 0 3 * * *').zone)).toBe(ZONE_WORDS.named("Europe/Rome"));
+    // Quotes that do not match are kept, as the parser keeps them before it refuses the name.
+    expect(expression(`TZ="UTC' 0 3 * * *`).zone).toEqual({ of: "expression", prefix: "TZ", name: `"UTC'` });
     expect(zoneText(expression("CRON_TZ=Local 0 3 * * *").zone)).toBe(ZONE_WORDS.local);
     // A tab is not what ends the name for the release.
     expect(expression("TZ=Europe/Rome\t0 3 * * *").zone).toEqual({
