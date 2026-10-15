@@ -709,11 +709,45 @@ schedules of 898 expressions, the thousand signals in 14.2 ms at the 95th percen
 of 250, 64.9 ms on the first call that parses them, one schedule in 0.03 ms of 2; the parse kept by text and
 the count bounded at one hundred asserted, 72 schedules at the bound. Deviations of the slice, to amend in the
 spec: REQ-160 (L128), the limits of the parser are in bytes, as the parser counts (`parser.go` L419, L1403),
-where the text says characters; REQ-160 (L128) and ADH-01 (L514), a name the server does not know is not a
+where the text says characters; REQ-160 (L128) and ADH-01 (L524), a name the server does not know is not a
 refusal of the extension, which cannot know the zones of the server, but a zone that is not known when the
 runtime does not know it, and a name with a space is refused by the count of fields where the server refuses
-it as an unknown zone; REQ-161 (L129) and the design (L231-L232), the count of the runs that passed is of the
+it as an unknown zone; REQ-161 (L129) and the design (L232-L233), the count of the runs that passed is of the
 instants strictly before the clock, so that it is at least one exactly when the run is due. The texts of the
 refusals are kept verbatim with the notice of the library in the header of the module, as the assumption at
-L606-L608 asks. The documentation of the release still says that a run in the hour a change skips is not run
+L616-L618 asks. The documentation of the release still says that a run in the hour a change skips is not run
 (`backup-reference.md` L74), a sentence of the earlier library, recorded in the drift watch of the recon.
+
+T3.2, the states of a schedule, their words, the zone of the server and the clocks, on 2026-10-15, on the machine
+of the runs (macOS, Node 24.21.0, pnpm 10.34.7, TypeScript 7.0.2, Vitest 5.0.5, Biome 2.5.14, Knip 6.41.0, Trunk
+launcher 1.3.4), after the independent review of the branch and its fixes, rebased on main. `pnpm type:check`,
+exit 0; `pnpm lint:check`, exit 0, 222 files; `pnpm test:unit`, exit 0, 75 files and 2,547 tests, the 79 of
+`src/common/schedule-signal.test.ts` among them, then the two measures; `pnpm knip:check`, exit 0; `pnpm
+trunk:check --all`, exit 0, 280 files; each of the fourteen commits type-checks. The signal is
+`src/common/schedule-signal.ts`, beside the module of T3.1: the offset of the server read in the name of the
+backup of the newest submission of the installation, the digits as UTC minus the creation, rounded to the quarter
+of an hour with a remainder under a minute, kept for the session as a plain value the views hold; the clocks, the
+lateness counted by the clock of the cluster when the time of the API server is given and by the clock of this
+machine when it is not, a time an object reports after the clock of this machine at the read that brought it said,
+and bounding nothing; the states with their marks, weights and words, the pause and the phase read before the
+expression; the last observed run; the order by adherence. The tests run with the zone of the machine set fourteen
+hours east of UTC, asserted, and again with it set to Los Angeles for the same signals. The measure of ADH-16
+printed `ADH-16 unit`: the whole signals with their words of 1,000 schedules of 898 expressions, the offset derived
+from 1,010 backups, in 42.7 ms at the 95th percentile and 31.5 at the median, of 250, 102 ms on the first call, one
+schedule in 0.04 ms of 2; none not known, ten held, ten at every look, 8,775 runs counted and 72 schedules at the
+bound, as for T3.1. The independent review found REQ-166 the wrong way round for a cluster that is ahead, which
+only makes the lateness the controller counts longer; the pull request amends
+REQ-166, scenario 7, REQ-163, the table of the computation, the design of the clocks, ADH-07 and the Success
+Criteria, an amendment of an approved requirement for the lead maintainer to confirm at the review of the
+milestone. Deviations of the slice, to amend in the spec: REQ-165 (L133), the hold not known, a read of before and a
+derived offset are words beside a state that keeps its mark, as REQ-165 says of the backups denied, ADH-06 (L529)
+and the design (L384-L386) have it, and the mark of what is not known is of the states of uncertainty proper;
+REQ-161 and REQ-163 (L129, L131), an expression with no instant is at every look whatever the zone, since it has
+none in any; REQ-164 (L132), a paused schedule is paused whatever its phase, what Velero would do at its resume is
+said of a phase Enabled only and of the schedule as it is now, and New is said not read as no phase is; REQ-162
+(L130, L280-L289), the derived offset is bounded to the zones in use, and the times of an interval and of a zone
+not known are written in UTC; REQ-167 (L135), the backup of a submission is said gone only from the last read of
+the backups made after it, and not known from one made before it or failing since, whose newest backup is said of
+that read; the durations are written as the views write every duration, "2h 14m", and one under a second as such,
+where the examples of the design (L224-L230) write "2 h 14 min". SPEC-0006 keeps its Success Criteria (L157-L158),
+which the views of T3.3 make untrue.
