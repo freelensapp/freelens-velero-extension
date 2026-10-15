@@ -42,11 +42,12 @@ export function scheduleState(phase: unknown): ScheduleState {
 // The time zone an expression is read in. The expression names it with a prefix, or names none: it is then
 // the one of the server of Velero, which no object of the views holds. It is never the one of the desktop.
 // The name is what is between the prefix and the first space, as the release takes it: it may be empty,
-// which the release reads as UTC, and it may be Local, which is the zone of the server.
+// which the reviewed release refuses, and it may be Local, which is the zone of the server.
 export type Zone = { of: "expression"; prefix: "TZ" | "CRON_TZ"; name: string } | { of: "server" } | { of: "none" };
 
 export interface Expression {
-  // As it is written in the object. Nothing is computed from it.
+  // As it is written in the object. The view of a schedule computes nothing from it: the runs it is expected
+  // at are the signal of schedule-signal.ts.
   written?: string;
   zone: Zone;
 }
@@ -66,25 +67,35 @@ export function expression(value: unknown): Expression {
   };
 }
 
+// The words of the time zone of an expression. The zone of the server is not read: the adherence of a
+// schedule derives it from the backups, or says that it is not known.
+export const ZONE_WORDS = {
+  named: (name: string) => `${name}, named by the expression`,
+  // The reviewed release refuses a name that is empty (go-cron v0.15.0, parser.go L1398-L1402).
+  empty: "None: the expression names a time zone with no name, which the reviewed release refuses",
+  local: "The one of the Velero server, which the expression names Local and this view does not read",
+  server: "The one of the Velero server, which this view does not read",
+  none: "Not reported",
+};
+
 export function zoneText(zone: Zone): string {
   switch (zone.of) {
     case "expression":
-      if (zone.name === "") return "UTC: the expression names a time zone with no name, which the release reads so";
-      if (zone.name === "Local") {
-        return "The one of the Velero server, which the expression names Local and this view does not read";
-      }
-      return `${zone.name}, named by the expression`;
+      if (zone.name === "") return ZONE_WORDS.empty;
+      if (zone.name === "Local") return ZONE_WORDS.local;
+      return ZONE_WORDS.named(zone.name);
     case "server":
-      return "The one of the Velero server, which this view does not read";
+      return ZONE_WORDS.server;
     default:
-      return "Not reported";
+      return ZONE_WORDS.none;
   }
 }
 
 export type Paused = "paused" | "not-paused";
 
-// What the list and the workspace show of a schedule, and the section of the details of the host. Nothing
-// here is computed from the expression: no next run, no expected run, nothing overdue.
+// What the list and the workspace show of a schedule, and the section of the details of the host, as the
+// object says it. Nothing here is computed from the expression: the next run, the expected run and what is
+// overdue are the signal of schedule-signal.ts, beside this view.
 export interface ScheduleView {
   name: string;
   namespace: string;
