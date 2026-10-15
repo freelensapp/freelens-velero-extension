@@ -588,15 +588,25 @@ export const SIGNAL_WORDS = {
       `Last submission ${moment}: its backup is not among the backups that exist; it expired, was deleted or cannot be read. The submission stands, since the schedule carries it.`,
     notKnown: (moment: string, reason: string) =>
       `Last submission ${moment}: whether its backup exists is not known, since ${reason}.`,
-    // Why, when the backups were read: before the submission, or not again since the last read.
+    // Why, when the backups were read: before the submission, or not again after the last read, which the
+    // sentence says after "since", so that it says what the last read answered with "after that".
     readBefore: (ago: string) => `the backups were last read ${ago} ago, before it`,
-    readEarlier: (ago: string, since: string) => `the backups were last read ${ago} ago: ${since}`,
+    readEarlier: (ago: string, after: string) => `the backups were last read ${ago} ago: ${after}`,
+    after: {
+      forbidden: "access was denied after that",
+      "not-served": "the cluster did not serve them after that",
+      failed: "they could not be read after that",
+      other: "they were not read again after that",
+    },
     none: "No submission is written in the schedule.",
     newer: (backup: string, moment: string) =>
       `The backup ${backup}, created ${moment}, is not a submission of the schedule: it was asked by hand or synced from the store, and it moves nothing in the schedule.`,
     newerMore: (count: number) =>
       count === 1 ? "One more of its backups is not either." : `${count} more of its backups are not either.`,
     newest: (backup: string) => `The newest backup of the schedule that exists is ${backup}.`,
+    // Of a read made before the submission, or failing since: the newest of that read, said as such.
+    newestRead: (backup: string, ago: string) =>
+      `The newest backup of the schedule in the read of ${ago} ago is ${backup}.`,
   },
   // Why the adherence of a schedule is not known, as the Overview counts them.
   reasons: {
@@ -823,6 +833,13 @@ function since(status: ReadStatus): string {
   return status === "forbidden" || status === "not-served" || status === "failed"
     ? SIGNAL_WORDS.since[status]
     : SIGNAL_WORDS.since.other;
+}
+
+// The same, in a sentence that already says "since".
+function after(status: ReadStatus): string {
+  return status === "forbidden" || status === "not-served" || status === "failed"
+    ? SIGNAL_WORDS.observed.after[status]
+    : SIGNAL_WORDS.observed.after.other;
 }
 
 // --- The signal of a schedule ---
@@ -1194,7 +1211,17 @@ function pausedSignal(schedule: ScheduleResource, phase: ScheduleState, context:
       more,
     );
   }
-  if (!run.due) return done({ would: "wait", next: run.at }, SIGNAL_WORDS.resume.wait(at), more);
+  // A skip at the resume counts an interval from the resume (schedule_controller.go L116-L119, L282-L288), and
+  // moves its next run; the next instant of a calendar is the same either way.
+  if (!run.due) {
+    return done(
+      { would: "wait", next: run.at },
+      parsed.kind === "every"
+        ? `${SIGNAL_WORDS.resume.wait(at)} ${SIGNAL_WORDS.resume.asNow}`
+        : SIGNAL_WORDS.resume.wait(at),
+      more,
+    );
+  }
   const hold = holdOf(schedule, context.reads.backups);
 
   if (hold.state === "held") {
@@ -1267,6 +1294,8 @@ export function lastObservedRun(schedule: ScheduleResource, context: AdherenceCo
   const newest = backupsOf(backups.items, schedule.metadata.namespace ?? "", schedule.metadata.name)[0];
   const words: string[] = [];
   let submission: LastObserved["submission"] = { state: "none" };
+  // How long ago the backups were read, when the read is one before the submission or one that failed since.
+  let old: string | undefined;
 
   if (at === undefined) {
     words.push(SIGNAL_WORDS.observed.none);
@@ -1282,9 +1311,10 @@ export function lastObservedRun(schedule: ScheduleResource, context: AdherenceCo
       at > read
         ? SIGNAL_WORDS.observed.readBefore(ago)
         : isStale(backups)
-          ? SIGNAL_WORDS.observed.readEarlier(ago, since(backups.status))
+          ? SIGNAL_WORDS.observed.readEarlier(ago, after(backups.status))
           : undefined;
 
+    if (reason !== undefined) old = ago;
     submission = reason === undefined ? { state: "not-found", at } : { state: "not-known", at, reason };
     words.push(
       reason === undefined
@@ -1301,7 +1331,9 @@ export function lastObservedRun(schedule: ScheduleResource, context: AdherenceCo
   }
   const older = newest && newest !== own && !later.includes(newest) ? newest.metadata.name : undefined;
 
-  if (older) words.push(SIGNAL_WORDS.observed.newest(older));
+  // The newest of a read made before the submission, or of one that failed since, is said of that read.
+  if (older)
+    words.push(old === undefined ? SIGNAL_WORDS.observed.newest(older) : SIGNAL_WORDS.observed.newestRead(older, old));
   return {
     submission,
     ...(first && created !== undefined ? { newer: { backup: first.metadata.name, created, count: later.length } } : {}),

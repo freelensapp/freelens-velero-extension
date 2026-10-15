@@ -1330,6 +1330,34 @@ describe("ADH-07: the lateness by the clock of the cluster, which an object ahea
     expect(at(-27 * MINUTE, holding)).toMatchObject({ state: "held", mark: "awaited", late: false });
     expect(at(HOUR, holding)).toMatchObject({ state: "held", mark: "late", late: true });
   });
+
+  // Probe R3 of the re-check of the review: what a paused schedule would do at its resume is counted by the clock
+  // of the cluster as well. Every hour from 10:00, this machine at 10:30: the run of 11:00 is due by a cluster an
+  // hour ahead, and ahead by one behind.
+  it("says what a paused schedule would do at its resume by the clock of the cluster", () => {
+    const paused = schedule(
+      "paused",
+      { phase: "Enabled", lastBackup: "2026-10-14T10:00:00Z" },
+      { schedule: "@every 1h", paused: true },
+    );
+    const clock = Date.parse("2026-10-14T10:30:00Z");
+    const run = Date.parse("2026-10-14T11:00:00Z");
+    const at = (difference: number) =>
+      scheduleSignal(paused, contextOf([paused], [], clock, { date: clock + difference, at: clock }));
+
+    expect(at(HOUR)).toMatchObject({ state: "paused", resume: { would: "submit", due: run, skip: "server" } });
+    expect(at(HOUR).words).toBe(
+      `${SIGNAL_WORDS.paused} ${SIGNAL_WORDS.resume.submitUnlessServer("11:00 UTC")} ${SIGNAL_WORDS.resume.skipMoves} ${SIGNAL_WORDS.resume.asNow}`,
+    );
+    // The resume of an interval waits for its next run as the schedule is now: a skip written at the resume
+    // would count it from the resume (R-7 of the re-check).
+    expect(at(-HOUR)).toMatchObject({ state: "paused", resume: { would: "wait", next: run } });
+    expect(at(-HOUR).words).toBe(
+      `${SIGNAL_WORDS.paused} ${SIGNAL_WORDS.resume.wait("11:00 UTC")} ${SIGNAL_WORDS.resume.asNow}`,
+    );
+    // By the clock of this machine alone the run is ahead: only the clock of the cluster makes it due.
+    expect(scheduleSignal(paused, contextOf([paused], [], clock)).resume).toEqual({ would: "wait", next: run });
+  });
 });
 
 describe("ADH-08: the last observed run in words", () => {
@@ -1413,12 +1441,16 @@ describe("ADH-08: the last observed run in words", () => {
     const reason = SIGNAL_WORDS.observed.readBefore("1d 10h");
 
     expect(before.submission).toEqual({ state: "not-known", at: submission, reason });
-    expect(before.words[0]).toBe(SIGNAL_WORDS.observed.notKnown("2026-10-13 03:00:41 UTC", reason));
+    // The newest backup of that read is said of that read, never as one that exists (R-1 of the re-check).
+    expect(before.words).toEqual([
+      SIGNAL_WORDS.observed.notKnown("2026-10-13 03:00:41 UTC", reason),
+      SIGNAL_WORDS.observed.newestRead(older.metadata.name, "1d 10h"),
+    ]);
     // Both read well, the backups ten seconds ago and the submission five.
     const fresh = schedule("nightly", { phase: "Enabled", lastBackup: "2026-10-14T11:59:55Z" });
     const lagging = lastObservedRun(
       fresh,
-      adherenceContext({ schedules: succeeded([fresh], now), backups: succeeded([], now - 10_000) }, now),
+      adherenceContext({ schedules: succeeded([fresh], now), backups: succeeded([older], now - 10_000) }, now),
     );
 
     expect(lagging.submission).toEqual({
@@ -1426,14 +1458,27 @@ describe("ADH-08: the last observed run in words", () => {
       at: Date.parse("2026-10-14T11:59:55Z"),
       reason: SIGNAL_WORDS.observed.readBefore("10s"),
     });
-    // Read after the submission, and failing since.
-    expect(observed(failed(succeeded([older], now - 3 * MINUTE), "failed")).submission).toEqual({
-      state: "not-known",
-      at: submission,
-      reason: SIGNAL_WORDS.observed.readEarlier("3m", SIGNAL_WORDS.since.failed),
+    expect(lagging.words[1]).toBe(SIGNAL_WORDS.observed.newestRead(older.metadata.name, "10s"));
+    // Read after the submission, and failing since: what the last read answered is said after that, in a
+    // sentence that says "since" once.
+    const failing = observed(failed(succeeded([older], now - 3 * MINUTE), "failed"));
+    const earlier = SIGNAL_WORDS.observed.readEarlier("3m", SIGNAL_WORDS.observed.after.failed);
+
+    expect(failing.submission).toEqual({ state: "not-known", at: submission, reason: earlier });
+    expect(failing.words).toEqual([
+      SIGNAL_WORDS.observed.notKnown("2026-10-13 03:00:41 UTC", earlier),
+      SIGNAL_WORDS.observed.newestRead(older.metadata.name, "3m"),
+    ]);
+    expect(failing.words[0].match(/since/g)).toHaveLength(1);
+    // The last read, after the submission, says that its backup is gone, and its newest as one that exists.
+    expect(observed(succeeded([older], now))).toEqual({
+      submission: { state: "not-found", at: submission },
+      newest: older.metadata.name,
+      words: [
+        SIGNAL_WORDS.observed.notFound("2026-10-13 03:00:41 UTC"),
+        SIGNAL_WORDS.observed.newest(older.metadata.name),
+      ],
     });
-    // The last read, after the submission, says that its backup is gone.
-    expect(observed(succeeded([older], now)).submission).toEqual({ state: "not-found", at: submission });
   });
 
   it("never names a missed run between two backups", () => {
