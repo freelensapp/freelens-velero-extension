@@ -1249,6 +1249,38 @@ describe("ADH-08: the last observed run in words", () => {
     });
   });
 
+  // Probes P8 and P12b of the review of the slice: a read of the backups that ended before the submission cannot
+  // hold its backup, and one that failed since says nothing of now.
+  it("does not say the backup of the submission gone from a read before it, nor from one that failed since", () => {
+    const older = backup("nightly-20261012050041", Date.parse("2026-10-12T03:00:42Z"));
+    // The backups last read at 02:00 on the day of the submission, and failing since.
+    const before = observed(failed(succeeded([older], Date.parse("2026-10-13T02:00:00Z")), "failed"));
+    const reason = SIGNAL_WORDS.observed.readBefore("1d 10h");
+
+    expect(before.submission).toEqual({ state: "not-known", at: submission, reason });
+    expect(before.words[0]).toBe(SIGNAL_WORDS.observed.notKnown("2026-10-13 03:00:41 UTC", reason));
+    // Both read well, the backups ten seconds ago and the submission five.
+    const fresh = schedule("nightly", { phase: "Enabled", lastBackup: "2026-10-14T11:59:55Z" });
+    const lagging = lastObservedRun(
+      fresh,
+      adherenceContext({ schedules: succeeded([fresh], now), backups: succeeded([], now - 10_000) }, now),
+    );
+
+    expect(lagging.submission).toEqual({
+      state: "not-known",
+      at: Date.parse("2026-10-14T11:59:55Z"),
+      reason: SIGNAL_WORDS.observed.readBefore("10s"),
+    });
+    // Read after the submission, and failing since.
+    expect(observed(failed(succeeded([older], now - 3 * MINUTE), "failed")).submission).toEqual({
+      state: "not-known",
+      at: submission,
+      reason: SIGNAL_WORDS.observed.readEarlier("3m", SIGNAL_WORDS.since.failed),
+    });
+    // The last read, after the submission, says that its backup is gone.
+    expect(observed(succeeded([older], now)).submission).toEqual({ state: "not-found", at: submission });
+  });
+
   it("never names a missed run between two backups", () => {
     const gap = [backup("nightly-20261001030041", Date.parse("2026-10-01T03:00:42Z")), own];
     const read = succeeded(gap, now);

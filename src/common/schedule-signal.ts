@@ -573,6 +573,9 @@ export const SIGNAL_WORDS = {
       `Last submission ${moment}: its backup is not among the backups that exist; it expired, was deleted or cannot be read. The submission stands, since the schedule carries it.`,
     notKnown: (moment: string, reason: string) =>
       `Last submission ${moment}: whether its backup exists is not known: ${reason}.`,
+    // Why, when the backups were read: before the submission, or not again since the last read.
+    readBefore: (ago: string) => `the backups were last read ${ago} ago, before it`,
+    readEarlier: (ago: string, since: string) => `the backups were last read ${ago} ago: ${since}`,
     none: "No submission is written in the schedule.",
     newer: (backup: string, moment: string) =>
       `The backup ${backup}, created ${moment}, is not a submission of the schedule: it was asked by hand or synced from the store, and it moves nothing in the schedule.`,
@@ -1199,7 +1202,7 @@ export interface LastObserved {
     | { state: "found"; at: number; backup: string }
     // None of them: it expired, was deleted or cannot be read; the submission stands.
     | { state: "not-found"; at: number }
-    // The backups were not read.
+    // The backups were not read, were last read before the submission, or not again since a read that failed.
     | { state: "not-known"; at: number; reason: string };
   // The newest backup of the schedule created after its last submission, or any when it has none: not a
   // submission of the schedule, and how many such there are.
@@ -1243,8 +1246,23 @@ export function lastObservedRun(schedule: ScheduleResource, context: AdherenceCo
     submission = { state: "found", at, backup: own.metadata.name };
     words.push(SIGNAL_WORDS.observed.found(momentText(written, at), own.metadata.name));
   } else {
-    submission = { state: "not-found", at };
-    words.push(SIGNAL_WORDS.observed.notFound(momentText(written, at)));
+    // That the backup is not among the backups that exist is said of a read that ended after the submission
+    // and is the last one: a read made before it cannot hold it, and one that failed since says nothing of now.
+    const read = backups.lastSuccess ?? 0;
+    const ago = formatDuration(Math.max(0, context.now - read));
+    const reason =
+      at > read
+        ? SIGNAL_WORDS.observed.readBefore(ago)
+        : isStale(backups)
+          ? SIGNAL_WORDS.observed.readEarlier(ago, since(backups.status))
+          : undefined;
+
+    submission = reason === undefined ? { state: "not-found", at } : { state: "not-known", at, reason };
+    words.push(
+      reason === undefined
+        ? SIGNAL_WORDS.observed.notFound(momentText(written, at))
+        : SIGNAL_WORDS.observed.notKnown(momentText(written, at), reason),
+    );
   }
   const first = later[0];
   const created = first ? timestamp(first.metadata.creationTimestamp) : undefined;
