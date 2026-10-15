@@ -781,9 +781,16 @@ and the signal of one schedule within 2, with the parse kept for the text of the
 expression and the count bounded at one hundred asserted beside the times; it prints
 its numbers as one line, `ADH-16 unit`, before anything is asserted, and it imports
 the source, as the measure of the log does. In the unit run on the machine of the
-runs, on 2026-10-14, the thousand signals took 14.1 ms at the 95th percentile and
-11.9 at the median, 64.2 on the first call, which parses the expressions and reads
-the zones, and the one schedule 0.03 ms.
+runs, on 2026-10-14, the expected runs of T3.1 alone took 14.1 ms at the 95th
+percentile and 11.9 at the median, 64.2 on the first call, which parses the
+expressions and reads the zones, and the one schedule 0.03 ms. Since T3.2 each
+signal is the whole one, with its words, as a list computes it for a read and a
+clock: the offset of the server derived from the 1,010 backups of the read, the one
+of the submission of each schedule named two hours east of UTC and ten in progress
+that hold their schedules, what the installation shares for the read, then the
+signal of every schedule, none of them not known. In the unit run on the machine of
+the runs, on 2026-10-15, the thousand took 39.3 ms at the 95th percentile and 31.8
+at the median, 99.8 on the first call, and the one schedule 0.04 ms.
 
 The second slice of the adherence (SPEC-0013, T3.2) is the module
 [`schedule-signal.ts`](../../src/common/schedule-signal.ts) and its
