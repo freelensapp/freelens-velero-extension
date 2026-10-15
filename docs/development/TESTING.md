@@ -789,8 +789,9 @@ clock: the offset of the server derived from the 1,010 backups of the read, the 
 of the submission of each schedule named two hours east of UTC and ten in progress
 that hold their schedules, what the installation shares for the read, then the
 signal of every schedule, none of them not known. In the unit run on the machine of
-the runs, on 2026-10-15, the thousand took 39.3 ms at the 95th percentile and 31.8
-at the median, 99.8 on the first call, and the one schedule 0.04 ms.
+the runs, on 2026-10-15, on the final code of the slice, the thousand took 44.1 ms
+at the 95th percentile and 32.3 at the median, 99.7 on the first call, and the one
+schedule 0.04 ms.
 
 The second slice of the adherence (SPEC-0013, T3.2) is the module
 [`schedule-signal.ts`](../../src/common/schedule-signal.ts) and its
