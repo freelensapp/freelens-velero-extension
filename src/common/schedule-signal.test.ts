@@ -1035,7 +1035,7 @@ describe("ADH-05: no run for a schedule that is paused, refused or not read", ()
     expect(SIGNAL_WORDS.notRead).toContain(NOTES.notRead);
   });
 
-  // The review of T3.1 asked that nothing be computed before the gate. A schedule and a context that throw when
+  // Nothing is computed before the gate. A schedule and a context that throw when
   // the expression, a time to count from, the backups or the offset are read prove that the gate reads only the
   // pause and the phase: the output alone could not tell.
   it("reads nothing of the expression, the anchor, the backups or the offset before the gate", () => {
@@ -1277,7 +1277,7 @@ describe("ADH-07: the lateness by the clock of the cluster, which an object ahea
     },
   );
 
-  // Probe P3b of the review of the slice: a schedule half an hour late by this machine, beside another that
+  // A schedule half an hour late by this machine, beside another that
   // reports its submission at 12:50 at 12:00, is late by an hour and twenty minutes at least by the clock of the
   // cluster: it is overdue, never due with the mark of a schedule on time.
   it("says overdue a schedule late by this machine beside another that reports 12:50 at 12:00", () => {
@@ -1331,7 +1331,7 @@ describe("ADH-07: the lateness by the clock of the cluster, which an object ahea
     expect(at(HOUR, holding)).toMatchObject({ state: "held", mark: "late", late: true });
   });
 
-  // Probe R3 of the re-check of the review: what a paused schedule would do at its resume is counted by the clock
+  // What a paused schedule would do at its resume is counted by the clock
   // of the cluster as well. Every hour from 10:00, this machine at 10:30: the run of 11:00 is due by a cluster an
   // hour ahead, and ahead by one behind.
   it("says what a paused schedule would do at its resume by the clock of the cluster", () => {
@@ -1350,7 +1350,7 @@ describe("ADH-07: the lateness by the clock of the cluster, which an object ahea
       `${SIGNAL_WORDS.paused} ${SIGNAL_WORDS.resume.submitUnlessServer("11:00 UTC")} ${SIGNAL_WORDS.resume.skipMoves} ${SIGNAL_WORDS.resume.asNow}`,
     );
     // The resume of an interval waits for its next run as the schedule is now: a skip written at the resume
-    // would count it from the resume (R-7 of the re-check).
+    // would count it from the resume.
     expect(at(-HOUR)).toMatchObject({ state: "paused", resume: { would: "wait", next: run } });
     expect(at(-HOUR).words).toBe(
       `${SIGNAL_WORDS.paused} ${SIGNAL_WORDS.resume.wait("11:00 UTC")} ${SIGNAL_WORDS.resume.asNow}`,
@@ -1432,7 +1432,7 @@ describe("ADH-08: the last observed run in words", () => {
     });
   });
 
-  // Probes P8 and P12b of the review of the slice: a read of the backups that ended before the submission cannot
+  // A read of the backups that ended before the submission cannot
   // hold its backup, and one that failed since says nothing of now.
   it("does not say the backup of the submission gone from a read before it, nor from one that failed since", () => {
     const older = backup("nightly-20261012050041", Date.parse("2026-10-12T03:00:42Z"));
@@ -1441,7 +1441,7 @@ describe("ADH-08: the last observed run in words", () => {
     const reason = SIGNAL_WORDS.observed.readBefore("1d 10h");
 
     expect(before.submission).toEqual({ state: "not-known", at: submission, reason });
-    // The newest backup of that read is said of that read, never as one that exists (R-1 of the re-check).
+    // The newest backup of that read is said of that read, never as one that exists.
     expect(before.words).toEqual([
       SIGNAL_WORDS.observed.notKnown("2026-10-13 03:00:41 UTC", reason),
       SIGNAL_WORDS.observed.newestRead(older.metadata.name, "1d 10h"),
