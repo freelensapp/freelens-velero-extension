@@ -798,19 +798,24 @@ The second slice of the adherence (SPEC-0013, T3.2) is the module
 and the zone of the machine of the tests set fourteen hours east of UTC as well:
 the offset of the zone of the server read in the name of the backup of a
 submission, east, west and at UTC, with a remainder under a minute and one of a
-minute and a half, a name of thirteen digits, a backup two minutes from its
+minute and a half, the digits read against the creation of the backup and not
+against the submission, a name of thirteen digits, a backup two minutes from its
 submission, one asked by hand in the same minute, none at all, the newest
 submission of the installation for every schedule, two offsets among the
 submissions and the offset kept once its backup is gone, the newest submission said
-with its schedule when it is another, an interval with no zone, the two runs of the
-hour a zone repeats in the words of the awaited state, in Rome and in New York, and
-the same signals with the machine set to another zone, of ADH-03; awaited, due at
-four minutes and overdue at six with the instant, the anchor of each of the three
-kinds and the count to its bound, held by a backup of each phase that holds and by
+with its schedule when it is another, an interval with no zone and one written in
+the zone it names, the runs of the hour a zone repeats in the words of the awaited
+state, in Rome and in New York, from the first of each occurrence when there are
+more, and nothing of them once the second passed, and the same signals with the
+machine set to another zone, of ADH-03; awaited, due at four minutes and overdue
+at six with the instant, the anchor of each of the three kinds and the count to its
+bound, under a second said so, held by a backup of each phase that holds and by
 none of the others, within and beyond the grace, and an expression with no instant,
 of ADH-04; paused with a run due and with none, with skip immediately set, unset and
-not written, Velero refused, not read and a phase not known, gated before the
-expression is read, of ADH-05; each state of what is not known with its mark and its
+not written, as the schedule is now, Velero refused, not read and a phase not
+known, gated before the expression, the anchor, the backups and the offset are
+read, which a schedule and a context that throw when they are read prove, of
+ADH-05; each state of what is not known with its mark and its
 words, a read of before, the derived offset said approximate, and the backups not
 read beside an interval, which keeps its state, and five fields, which are not
 known, of ADH-06; a creation, a submission, a skip and a start after the clock of

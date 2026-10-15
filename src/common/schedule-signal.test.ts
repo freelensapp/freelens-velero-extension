@@ -139,6 +139,18 @@ describe("ADH-03: the zone of the server, derived from the backup of a submissio
     expect(keepOffset(undefined, reads([nightly], [ninety]))).toBeUndefined();
   });
 
+  // REQ-162 reads the digits against the creation of the backup. A backup created forty seconds after the
+  // submission, named thirty seconds before it, is seventy seconds from its creation and gives nothing, where the
+  // instant of the submission would give an offset.
+  it("reads the digits of the name against the creation of the backup, and not against the submission", () => {
+    const created = submission + 40_000;
+    const early = backup(`nightly-${digits(submission - 30_000 + 2 * HOUR)}`, created, { schedule: "nightly" });
+    const atCreation = backup(`nightly-${digits(created + 2 * HOUR)}`, created, { schedule: "nightly" });
+
+    expect(keepOffset(undefined, reads([nightly], [early]))).toBeUndefined();
+    expect(keepOffset(undefined, reads([nightly], [atCreation]))?.minutes).toBe(120);
+  });
+
   it("gives nothing for a name of thirteen digits, a backup two minutes from the submission, or no backup", () => {
     const thirteen = backup(`nightly-${digits(submission + 2 * HOUR).slice(0, 13)}`, submission + 1000, {
       schedule: "nightly",
@@ -589,6 +601,44 @@ describe("ADH-03: the zone a schedule is read in, in its signal", () => {
     expect(SIGNAL_WORDS.repeated("d", "z", "b", "t", "f", "s", false)).toContain("at f and again at s");
   });
 
+  it("says nothing of the hour a zone repeats once its second run passed, on the day of the change", () => {
+    // Every hour in Rome, on 2026-10-25 at 04:30 in winter time: the next run, at 05:00, is after the hour that
+    // was repeated between 02:00 and 03:00, whose runs both passed.
+    const hourly = schedule(
+      "hourly",
+      { phase: "Enabled", lastBackup: "2026-10-25T03:00:12Z" },
+      { schedule: "CRON_TZ=Europe/Rome 0 * * * *" },
+    );
+    const signal = scheduleSignal(hourly, contextOf([hourly], [], Date.parse("2026-10-25T03:30:00Z")));
+
+    expect(signal.expected?.at).toBe(Date.parse("2026-10-25T04:00:00Z"));
+    expect(signal.words).toBe(
+      SIGNAL_WORDS.awaited(
+        "30m",
+        "05:00 Europe/Rome",
+        SIGNAL_WORDS.from("last-submission", "2026-10-25 04:00:12 Europe/Rome"),
+      ),
+    );
+  });
+
+  it("writes the times of an interval in the zone the expression names, which the interval needs not", () => {
+    const zoned = schedule(
+      "zoned",
+      { phase: "Enabled", lastBackup: "2026-10-14T08:00:00Z" },
+      { schedule: "TZ=Europe/Rome @every 6h" },
+    );
+
+    expect(scheduleSignal(zoned, contextOf([zoned], []))).toMatchObject({
+      state: "awaited",
+      zone: { of: "named", words: SIGNAL_WORDS.zone.named("Europe/Rome") },
+      words: SIGNAL_WORDS.awaited(
+        "2h",
+        "16:00 Europe/Rome",
+        SIGNAL_WORDS.from("last-submission", "2026-10-14 10:00:00 Europe/Rome"),
+      ),
+    });
+  });
+
   it("computes and writes the same signals whatever the zone of the machine", () => {
     const items = [
       nightly,
@@ -983,6 +1033,59 @@ describe("ADH-05: no run for a schedule that is paused, refused or not read", ()
       }
     }
     expect(SIGNAL_WORDS.notRead).toContain(NOTES.notRead);
+  });
+
+  // The review of T3.1 asked that nothing be computed before the gate. A schedule and a context that throw when
+  // the expression, a time to count from, the backups or the offset are read prove that the gate reads only the
+  // pause and the phase: the output alone could not tell.
+  it("reads nothing of the expression, the anchor, the backups or the offset before the gate", () => {
+    const touched: string[] = [];
+    const trap = (phase: unknown, paused: boolean) => {
+      const thrower = (part: string, kept: Record<string, unknown>) =>
+        new Proxy(kept, {
+          get(target, key) {
+            if (typeof key === "string" && key in target) return target[key];
+            touched.push(`${part}.${String(key)}`);
+            throw new Error(`${part}.${String(key)}`);
+          },
+        });
+
+      return {
+        metadata: thrower("metadata", { name: "trap", namespace: NAMESPACE }),
+        spec: thrower("spec", { paused }),
+        status: thrower("status", { phase }),
+      } as unknown as ScheduleResource;
+    };
+    const base = contextOf([], []);
+    const reads = new Proxy(base.reads, {
+      get(target, key) {
+        if (key === "backups") {
+          touched.push("reads.backups");
+          throw new Error("reads.backups");
+        }
+        return target[key as keyof AdherenceReads];
+      },
+    });
+    const context = new Proxy(base, {
+      get(target, key) {
+        if (key === "offset" || key === "noOffset") {
+          touched.push(`context.${key}`);
+          throw new Error(`context.${key}`);
+        }
+        return key === "reads" ? reads : target[key as keyof AdherenceContext];
+      },
+    });
+
+    for (const paused of [false, true]) {
+      for (const phase of ["FailedValidation", undefined, "", "New", "Weird"]) {
+        touched.length = 0;
+        expect(() => scheduleSignal(trap(phase, paused), context)).not.toThrow();
+        expect(touched).toEqual([]);
+      }
+    }
+    // Past the gate, a schedule Velero took is read: the trap is a trap.
+    expect(() => scheduleSignal(trap("Enabled", false), context)).toThrow("spec.schedule");
+    expect(() => scheduleSignal(trap("Enabled", true), context)).toThrow("spec.schedule");
   });
 });
 
