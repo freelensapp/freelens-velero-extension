@@ -535,6 +535,7 @@ describe("ADH-03: the zone a schedule is read in, in its signal", () => {
       "02:00",
       "02:00 Europe/Rome (UTC+02:00)",
       "02:00 Europe/Rome (UTC+01:00)",
+      false,
     );
     const first = at(rome("2026-10-24T00:00:30Z"), "2026-10-24T22:00:00Z");
 
@@ -575,8 +576,17 @@ describe("ADH-03: the zone a schedule is read in, in its signal", () => {
         "01:00",
         "01:30 America/New_York (UTC-04:00)",
         "01:30 America/New_York (UTC-05:00)",
+        false,
       ),
     );
+    // Two runs in the hour Rome repeats: each is expected twice, from the first of each occurrence.
+    const twice = at(rome("2026-10-24T00:30:30Z", "CRON_TZ=Europe/Rome 0,30 2 * * *"), "2026-10-24T22:00:00Z");
+
+    expect(twice.words).toBe(
+      `${SIGNAL_WORDS.awaited("2h", "02:00 Europe/Rome", SIGNAL_WORDS.from("last-submission", "2026-10-24 02:30:30 Europe/Rome"))} ${SIGNAL_WORDS.repeated("2026-10-25", "Europe/Rome", "03:00", "02:00", "02:00 Europe/Rome (UTC+02:00)", "02:00 Europe/Rome (UTC+01:00)", true)}`,
+    );
+    expect(SIGNAL_WORDS.repeated("d", "z", "b", "t", "f", "s", true)).toContain("from f and again from s");
+    expect(SIGNAL_WORDS.repeated("d", "z", "b", "t", "f", "s", false)).toContain("at f and again at s");
   });
 
   it("computes and writes the same signals whatever the zone of the machine", () => {
@@ -664,6 +674,17 @@ describe("ADH-04: awaited, due, overdue and held, by the clock of this machine",
     expect(at(expected + 1000).state).toBe("due");
     expect(at(expected + GRACE).state).toBe("due");
     expect(at(expected + GRACE + 1000).state).toBe("overdue");
+    // Under a second from the expected run, before or after it, is said so, and never as none.
+    expect(at(expected + 500)).toMatchObject({
+      state: "due",
+      words: SIGNAL_WORDS.due("03:00 UTC", SIGNAL_WORDS.underASecond),
+      next: { text: SIGNAL_WORDS.ago(SIGNAL_WORDS.underASecond) },
+    });
+    expect(at(expected - 500)).toMatchObject({
+      state: "awaited",
+      words: SIGNAL_WORDS.awaited(SIGNAL_WORDS.underASecond, "03:00 UTC", from),
+      next: { text: SIGNAL_WORDS.inTime(SIGNAL_WORDS.underASecond) },
+    });
   });
 
   it("is overdue after the grace, with how long, the expected run, its anchor and the count", () => {
@@ -850,17 +871,25 @@ describe("ADH-05: no run for a schedule that is paused, refused or not read", ()
       resume: { would: "submit", due: dueAt, skip: "server" },
     });
     expect(unset.expected).toBeUndefined();
+    // What the schedule says of skip immediately now decides only a resume that does not write it again.
+    const asNow = SIGNAL_WORDS.resume.asNow;
+
     expect(unset.words).toBe(
-      `${SIGNAL_WORDS.paused} ${SIGNAL_WORDS.resume.submitUnlessServer(run)} ${SIGNAL_WORDS.resume.skipMoves}`,
+      `${SIGNAL_WORDS.paused} ${SIGNAL_WORDS.resume.submitUnlessServer(run)} ${SIGNAL_WORDS.resume.skipMoves} ${asNow}`,
     );
     const no = of(paused(due, { skipImmediately: false }));
 
     expect(no.resume).toEqual({ would: "submit", due: dueAt, skip: false });
-    expect(no.words).toBe(`${SIGNAL_WORDS.paused} ${SIGNAL_WORDS.resume.submit(run)} ${SIGNAL_WORDS.resume.skipMoves}`);
+    expect(no.words).toBe(
+      `${SIGNAL_WORDS.paused} ${SIGNAL_WORDS.resume.submit(run)} ${SIGNAL_WORDS.resume.skipMoves} ${asNow}`,
+    );
     const skip = of(paused(due, { skipImmediately: true }));
 
     expect(skip.resume).toEqual({ would: "skip", due: dueAt });
-    expect(skip.words).toBe(`${SIGNAL_WORDS.paused} ${SIGNAL_WORDS.resume.skip} ${SIGNAL_WORDS.resume.skipDue(run)}`);
+    expect(skip.words).toBe(
+      `${SIGNAL_WORDS.paused} ${SIGNAL_WORDS.resume.skip} ${SIGNAL_WORDS.resume.skipDue(run)} ${asNow}`,
+    );
+    expect(asNow).toContain("as the command line does");
   });
 
   it("says that Velero would submit nothing at once when no run is due", () => {
@@ -872,7 +901,7 @@ describe("ADH-05: no run for a schedule that is paused, refused or not read", ()
     const skip = of(paused("2026-10-14T03:00:41Z", { skipImmediately: true }));
 
     expect(skip.resume).toEqual({ would: "skip" });
-    expect(skip.words).toBe(`${SIGNAL_WORDS.paused} ${SIGNAL_WORDS.resume.skip}`);
+    expect(skip.words).toBe(`${SIGNAL_WORDS.paused} ${SIGNAL_WORDS.resume.skip} ${SIGNAL_WORDS.resume.asNow}`);
   });
 
   it("says what would hold the submissions at the resume, and when what Velero would do is not known", () => {
@@ -987,7 +1016,8 @@ describe("ADH-06: what is not known, each with its mark and its words", () => {
         enabled("hash", "0 3 * * FRI#L"),
         "not-known",
         "not-readable",
-        SIGNAL_WORDS.notReadable(hash.kind === "refused" ? hash.reason : ""),
+        // The words of the refusal of this version, without those the controller writes before a refusal.
+        SIGNAL_WORDS.notReadable(hash.kind === "refused" ? hash.reason.replace("invalid schedule: ", "") : ""),
       ],
       [schedule("silent", undefined, { schedule: "TZ=UTC 0 3 * * *" }), "not-known", "not-read", SIGNAL_WORDS.notRead],
       [
@@ -1030,10 +1060,28 @@ describe("ADH-06: what is not known, each with its mark and its words", () => {
       expect(signal.next.kind).not.toBe("at");
       expect(signal.weight).toBeLessThan(SIGNAL_WEIGHTS.awaited);
       expect(signal.weight).toBeGreaterThan(SIGNAL_WEIGHTS.due);
+      // No word of the refusals the controller writes: Velero took every one of these expressions.
+      expect(signal.words).not.toContain("invalid schedule");
     }
     expect(Object.keys(SIGNAL_WORDS.reasons).sort()).toEqual(
       ["no-anchor", "no-offset", "not-read", "not-readable", "unknown-phase", "unknown-zone"].sort(),
     );
+    expect(SIGNAL_WORDS.atEveryLook("what", "last")).toContain(
+      "while no backup of the schedule is New, InProgress or without a phase",
+    );
+  });
+
+  it("says that no backup gives the zone of the server when one of a submission exists and gives nothing", () => {
+    // The backup of the submission created two minutes after it: among the backups that exist, and no evidence.
+    const late = submitted("nightly", submission, 120, submission + 2 * MINUTE);
+    const signal = scheduleSignal(nightly, contextOf([nightly], [late]));
+
+    expect(signal).toMatchObject({
+      state: "not-known",
+      reason: "no-offset",
+      words: SIGNAL_WORDS.noOffset(false, SIGNAL_WORDS.noSubmissionBackup),
+    });
+    expect(SIGNAL_WORDS.noSubmissionBackup).toContain("gives it");
   });
 
   it("says that a signal is of a read before the last one, with when it was", () => {
@@ -1086,6 +1134,10 @@ describe("ADH-06: what is not known, each with its mark and its words", () => {
         words: SIGNAL_WORDS.noOffset(false, reason),
       });
     }
+    // The sentences of what is not known add no colon of their own to the one of their reason.
+    expect(SIGNAL_WORDS.holdNotKnown("why")).not.toContain(":");
+    expect(SIGNAL_WORDS.resume.notKnown("why")).not.toContain(":");
+    expect(SIGNAL_WORDS.observed.notKnown("then", "why").match(/:/g)).toHaveLength(1);
   });
 });
 

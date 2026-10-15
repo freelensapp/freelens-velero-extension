@@ -465,11 +465,18 @@ export const SIGNAL_WORDS = {
   notKnown: "Not known",
   inTime: (duration: string) => `in ${duration}`,
   ago: (duration: string) => `${duration} ago`,
+  // A duration under a second, which the views would write as none.
+  underASecond: "less than a second",
   // Where the controller counts from, one of three times.
   from: (of: Anchor["of"], moment: string) => `${ANCHORS[of]}, ${moment}`,
   awaited: (inTime: string, run: string, from: string) => `Next run in ${inTime}, at ${run}. Counted from ${from}.`,
-  repeated: (date: string, zone: string, back: string, to: string, first: string, second: string) =>
-    `On ${date} the clock of ${zone} goes back from ${back} to ${to}: the runs of the expression in the hour it repeats are expected twice, at ${first} and again at ${second}.`,
+  // The two runs of the hour a zone repeats: from the first run of each occurrence when there are more.
+  repeated: (date: string, zone: string, back: string, to: string, first: string, second: string, many: boolean) =>
+    `On ${date} the clock of ${zone} goes back from ${back} to ${to}: ${
+      many
+        ? `the runs of the expression in the hour it repeats are expected twice, from ${first} and again from ${second}`
+        : `the run of the expression in the hour it repeats is expected twice, at ${first} and again at ${second}`
+    }.`,
   due: (run: string, ago: string) => `Due: expected at ${run}, ${ago} ago. Velero looks at a schedule once a minute.`,
   overdue: (by: string, run: string, from: string, passed: string) =>
     `Overdue by ${by}: expected at ${run}. Counted from ${from}, with no submission since; ${passed}. Velero may not be at work, or may not be able to list the backups.`,
@@ -484,7 +491,7 @@ export const SIGNAL_WORDS = {
   heldExpected: (run: string, ago: string) => `A run was expected at ${run}, ${ago} ago.`,
   heldNext: (run: string, inTime: string) => `The next run is at ${run}, ${inTime}.`,
   atEveryLook: (what: string, last: string) =>
-    `At every look: ${what}, and Velero submits a backup at each of its looks, once a minute, while none of the backups of the schedule reports no phase, New or InProgress. ${last}`,
+    `At every look: ${what}, and Velero submits a backup at each of its looks, once a minute, while no backup of the schedule is New, InProgress or without a phase. ${last}`,
   noInstant: (descriptor: string) => `${descriptor} has no instant`,
   beyondFiveYears: "the expression has no instant within five years",
   lastSubmission: (moment: string) => `Last submission ${moment}.`,
@@ -496,12 +503,14 @@ export const SIGNAL_WORDS = {
         ? "the expression names the time zone Local, the one of the Velero server, which is not read"
         : "the expression names no time zone, and the one of the Velero server is not read"
     }. It is derived from the backup of a last submission, of this schedule or of another of the installation, and ${why}. Name the zone in the expression, as CRON_TZ=Europe/Rome 0 3 * * * does, to have it read.`,
-  noSubmissionBackup: "none is among the backups that exist",
+  // A backup of a submission may exist and give nothing: created more than a minute from it, or named otherwise.
+  noSubmissionBackup: "no backup among the ones that exist gives it",
   // A name this machine does not know is not one the server refused: Velero took the expression, which it
   // does only with a zone its server knows.
   unknownZone: (name: string) =>
     `Not known: the expression names the time zone ${name}, which this machine does not know, and the run cannot be computed here. Velero took the expression: its server knows the zone.`,
-  notReadable: (reason: string) => `Not known: this version cannot read the expression, which Velero took: ${reason}.`,
+  // The reason is the one of this version, without the words the controller puts before a refusal of its own.
+  notReadable: (reason: string) => `Not known: Velero took the expression, and this version cannot read it: ${reason}.`,
   notRead: `Not known: ${NOTES.notRead}`,
   unknownPhase: (phase: string) => `Not known: the phase ${phase} is not one this version knows.`,
   noAnchor:
@@ -520,8 +529,13 @@ export const SIGNAL_WORDS = {
     wait: (run: string) => `Resumed now, Velero would submit nothing at once: the next run is at ${run}.`,
     hold: (backup: string, phase: Holding, run: string) =>
       `Resumed now, Velero would submit nothing while the backup ${backup} ${HOLDING[phase]}: a run was due at ${run}.`,
+    // A resume that writes the field again decides it then: the command line writes it at every resume, from its
+    // flag or empty (pkg/cmd/cli/schedule/pause.go L139-L140).
+    asNow:
+      "This is of the schedule as it is now: a resume that writes skip immediately again, as the command line does, decides it then.",
     everyLook: (what: string) => `Resumed now, Velero would submit a backup at each of its looks: ${what}.`,
-    notKnown: (why: string) => `Whether Velero would submit a backup at once when it is resumed is not known: ${why}.`,
+    notKnown: (why: string) =>
+      `Whether Velero would submit a backup at once when it is resumed is not known, since ${why}.`,
     refused: "Velero refused its expression when it last read it, which is before the pause.",
     notRead: NOTES.notReadPaused,
     unknownPhase: (phase: string) => `Its phase, ${phase}, is not one this version knows.`,
@@ -540,7 +554,8 @@ export const SIGNAL_WORDS = {
   otherSchedule: (name: string) => `the schedule ${name}`,
   changed: (offset: string, backup: string, of: string, moment: string) =>
     `The offset was ${offset} when the server submitted the backup ${backup} of ${of}, at ${moment}: it changed between the two submissions, and the newest stands.`,
-  holdNotKnown: (reason: string) => `Whether a backup of the schedule holds the submissions is not known: ${reason}.`,
+  holdNotKnown: (reason: string) =>
+    `Whether a backup of the schedule holds the submissions is not known, since ${reason}.`,
   schedulesStale: (ago: string, since: string) => `Computed from the schedules as they were read ${ago} ago: ${since}.`,
   backupsStale: (ago: string, since: string) =>
     `What holds the submissions is read in the backups as they were read ${ago} ago: ${since}.`,
@@ -572,7 +587,7 @@ export const SIGNAL_WORDS = {
     notFound: (moment: string) =>
       `Last submission ${moment}: its backup is not among the backups that exist; it expired, was deleted or cannot be read. The submission stands, since the schedule carries it.`,
     notKnown: (moment: string, reason: string) =>
-      `Last submission ${moment}: whether its backup exists is not known: ${reason}.`,
+      `Last submission ${moment}: whether its backup exists is not known, since ${reason}.`,
     // Why, when the backups were read: before the submission, or not again since the last read.
     readBefore: (ago: string) => `the backups were last read ${ago} ago, before it`,
     readEarlier: (ago: string, since: string) => `the backups were last read ${ago} ago: ${since}`,
@@ -598,6 +613,11 @@ export const SIGNAL_WORDS = {
 
 function pad(value: number, length = 2): string {
   return String(value).padStart(length, "0");
+}
+
+// A duration as the views write it, and one under a second as that, where the views would write none.
+function span(milliseconds: number): string {
+  return milliseconds < SECOND ? SIGNAL_WORDS.underASecond : formatDuration(milliseconds);
 }
 
 // An offset from UTC, as the words write it.
@@ -795,12 +815,7 @@ function holdOf(schedule: ScheduleResource, backups: FamilyRead<BackupResource>)
 function holdNotes(hold: Hold, context: AdherenceContext): string[] {
   if (hold.state === "not-known") return [SIGNAL_WORDS.holdNotKnown(hold.reason)];
   if (hold.stale === undefined) return [];
-  return [
-    SIGNAL_WORDS.backupsStale(
-      formatDuration(Math.max(0, context.now - hold.stale)),
-      since(context.reads.backups.status),
-    ),
-  ];
+  return [SIGNAL_WORDS.backupsStale(span(Math.max(0, context.now - hold.stale)), since(context.reads.backups.status))];
 }
 
 // What the last read of a family answered, when its items are of a read before it.
@@ -883,7 +898,7 @@ function signalOf(parts: Parts, context: AdherenceContext): ScheduleSignal {
   const stale = isStale(schedules)
     ? [
         SIGNAL_WORDS.schedulesStale(
-          formatDuration(Math.max(0, context.now - (schedules.lastSuccess ?? 0))),
+          span(Math.max(0, context.now - (schedules.lastSuccess ?? 0))),
           since(schedules.status),
         ),
       ]
@@ -970,6 +985,9 @@ function repeatedHour(parsed: ParsedExpression, zone: Zone, at: number): string 
   }
   // Said on the day of the change, until the second of the two runs.
   if (at > second.at) return undefined;
+  // More than one run in the hour: each is expected twice, from the first of each occurrence.
+  const more = nextInstant(parsed, first.at, zone);
+
   return SIGNAL_WORDS.repeated(
     run.date,
     zone.name,
@@ -977,6 +995,7 @@ function repeatedHour(parsed: ParsedExpression, zone: Zone, at: number): string 
     shown(after),
     repeatedRunText(zone, first.at),
     repeatedRunText(zone, second.at),
+    more.kind === "instant" && more.at < change,
   );
 }
 
@@ -1003,7 +1022,14 @@ function enabledSignal(schedule: ScheduleResource, context: AdherenceContext): S
   const name = schedule.metadata.name;
   const parsed = parseExpression(schedule.spec?.schedule);
 
-  if (parsed.kind === "refused") return notKnown("not-readable", SIGNAL_WORDS.notReadable(parsed.reason), context);
+  if (parsed.kind === "refused") {
+    // The words of a refusal of this version, without the ones the controller writes before a refusal of its own.
+    return notKnown(
+      "not-readable",
+      SIGNAL_WORDS.notReadable(parsed.reason.replace(/^invalid schedule: /, "")),
+      context,
+    );
+  }
   const anchor = anchorOf(schedule);
 
   if (!anchor) return notKnown("no-anchor", SIGNAL_WORDS.noAnchor, context);
@@ -1056,8 +1082,8 @@ function enabledSignal(schedule: ScheduleResource, context: AdherenceContext): S
   const late = run.due && lateness > GRACE;
   const at = runText(written, run.at, clock);
   const from = SIGNAL_WORDS.from(anchor.of, momentText(written, anchor.at));
-  const ahead = SIGNAL_WORDS.inTime(formatDuration(Math.max(0, -lateness)));
-  const ago = formatDuration(Math.max(0, lateness));
+  const ahead = SIGNAL_WORDS.inTime(span(Math.max(0, -lateness)));
+  const ago = span(Math.max(0, lateness));
   const expected: Expected = {
     at: run.at,
     lateness,
@@ -1094,7 +1120,7 @@ function enabledSignal(schedule: ScheduleResource, context: AdherenceContext): S
   }
   if (!run.due) {
     const repeated = repeatedHour(parsed, zone.of === "named" ? zone.zone : UTC, run.at);
-    const words = [SIGNAL_WORDS.awaited(formatDuration(-lateness), at, from), repeated ?? ""].filter(Boolean).join(" ");
+    const words = [SIGNAL_WORDS.awaited(span(-lateness), at, from), repeated ?? ""].filter(Boolean).join(" ");
 
     return signalOf({ state: "awaited", words, ...common }, context);
   }
@@ -1162,7 +1188,9 @@ function pausedSignal(schedule: ScheduleResource, phase: ScheduleState, context:
   if (schedule.spec?.skipImmediately === true) {
     return done(
       { would: "skip", ...(run.due ? { due: run.at } : {}) },
-      [SIGNAL_WORDS.resume.skip, run.due ? SIGNAL_WORDS.resume.skipDue(at) : ""].filter(Boolean).join(" "),
+      [SIGNAL_WORDS.resume.skip, run.due ? SIGNAL_WORDS.resume.skipDue(at) : "", SIGNAL_WORDS.resume.asNow]
+        .filter(Boolean)
+        .join(" "),
       more,
     );
   }
@@ -1180,7 +1208,7 @@ function pausedSignal(schedule: ScheduleResource, phase: ScheduleState, context:
 
   return done(
     { would: "submit", due: run.at, skip },
-    `${skip === false ? SIGNAL_WORDS.resume.submit(at) : SIGNAL_WORDS.resume.submitUnlessServer(at)} ${SIGNAL_WORDS.resume.skipMoves}`,
+    `${skip === false ? SIGNAL_WORDS.resume.submit(at) : SIGNAL_WORDS.resume.submitUnlessServer(at)} ${SIGNAL_WORDS.resume.skipMoves} ${SIGNAL_WORDS.resume.asNow}`,
     { ...more, hold, notes: [...notes, ...holdNotes(hold, context)] },
   );
 }
@@ -1249,7 +1277,7 @@ export function lastObservedRun(schedule: ScheduleResource, context: AdherenceCo
     // That the backup is not among the backups that exist is said of a read that ended after the submission
     // and is the last one: a read made before it cannot hold it, and one that failed since says nothing of now.
     const read = backups.lastSuccess ?? 0;
-    const ago = formatDuration(Math.max(0, context.now - read));
+    const ago = span(Math.max(0, context.now - read));
     const reason =
       at > read
         ? SIGNAL_WORDS.observed.readBefore(ago)
