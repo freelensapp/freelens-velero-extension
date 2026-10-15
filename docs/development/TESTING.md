@@ -785,6 +785,20 @@ runs, on 2026-10-14, the thousand signals took 14.1 ms at the 95th percentile an
 11.9 at the median, 64.2 on the first call, which parses the expressions and reads
 the zones, and the one schedule 0.03 ms.
 
+The second slice of the adherence (SPEC-0013, T3.2) is the module
+[`schedule-signal.ts`](../../src/common/schedule-signal.ts) and its
+[tests](../../src/common/schedule-signal.test.ts), with the clock as an argument
+and the zone of the machine of the tests set fourteen hours east of UTC as well:
+the offset of the zone of the server read in the name of the backup of a
+submission, east, west and at UTC, with a remainder under a minute and one of a
+minute and a half, a name of thirteen digits, a backup two minutes from its
+submission, one asked by hand in the same minute, none at all, the newest
+submission of the installation for every schedule, two offsets among the
+submissions and the offset kept once its backup is gone, of ADH-03; a creation, a
+submission, a skip and a start after the clock of this machine, none, and the time
+of the API server ahead, behind and within a second, with the words of the two
+cases, of ADH-07.
+
 The [local runner](../../e2e/scripts/local-demo.mts) and
 [image helper](../../e2e/scripts/local-images.mts) provide official-image setup and
 live readiness/authentication/isolation/ownership checks. Real backup/restore and
