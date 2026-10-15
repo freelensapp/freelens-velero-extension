@@ -637,6 +637,15 @@ function zoneClock(zone: Zone): ZoneClock | undefined {
   };
 }
 
+// The offset of a zone at an instant, in minutes east of UTC, as the computation reads it: nothing for a name
+// the runtime does not know. The words of an instant are written in the zone of the expression with it, and
+// never with the zone of the machine.
+export function zoneOffset(zone: Zone, instant: number): number | undefined {
+  const clock = zoneClock(zone);
+
+  return clock ? clock.offsetAt(instant) / MINUTE : undefined;
+}
+
 interface Wall {
   year: number;
   month: number;

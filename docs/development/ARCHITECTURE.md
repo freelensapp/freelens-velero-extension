@@ -390,7 +390,16 @@ rules, the next instant in the zone of the expression, read through Intl and nev
 from the desktop, the anchor the controller counts from, the expected run and the
 bounded count of the runs that passed, and the backup of the last submission among
 the backups that exist; the views that show them are the later slices of the
-milestone.
+milestone. The [signal of a schedule](../../src/common/schedule-signal.ts) is
+computed from them and from what was read of the installation, with the clock as
+an argument, the pause and the phase read before anything of the expression: the
+state of the schedule, awaited, due, overdue, held, at every look, not known, no
+run or paused, with its mark, its weight in the order of a list and its words,
+written once for every view; the offset of the zone of the server, read in the
+name of the backup of the newest submission of the installation and kept for the
+session as a plain value the views hold and give back with each read, so that it
+stays known once that backup expires; the backup that holds the submissions; the
+last observed run; and the clocks of this machine and of the cluster.
 
 ### The Locations And What Uses Them
 

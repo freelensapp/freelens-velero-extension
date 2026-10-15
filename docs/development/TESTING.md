@@ -781,9 +781,56 @@ and the signal of one schedule within 2, with the parse kept for the text of the
 expression and the count bounded at one hundred asserted beside the times; it prints
 its numbers as one line, `ADH-16 unit`, before anything is asserted, and it imports
 the source, as the measure of the log does. In the unit run on the machine of the
-runs, on 2026-10-14, the thousand signals took 14.1 ms at the 95th percentile and
-11.9 at the median, 64.2 on the first call, which parses the expressions and reads
-the zones, and the one schedule 0.03 ms.
+runs, on 2026-10-14, the expected runs of T3.1 alone took 14.1 ms at the 95th
+percentile and 11.9 at the median, 64.2 on the first call, which parses the
+expressions and reads the zones, and the one schedule 0.03 ms. Since T3.2 each
+signal is the whole one, with its words, as a list computes it for a read and a
+clock: the offset of the server derived from the 1,010 backups of the read, the one
+of the submission of each schedule named two hours east of UTC and ten in progress
+that hold their schedules, what the installation shares for the read, then the
+signal of every schedule, none of them not known. In the unit run on the machine of
+the runs, on 2026-10-15, on the final code of the slice with Vitest 5.0.5, the
+thousand took 42.7 ms at the 95th percentile and 31.5 at the median, 102 on the
+first call, and the one schedule 0.04 ms.
+
+The second slice of the adherence (SPEC-0013, T3.2) is the module
+[`schedule-signal.ts`](../../src/common/schedule-signal.ts) and its
+[tests](../../src/common/schedule-signal.test.ts), with the clock as an argument
+and the zone of the machine of the tests set fourteen hours east of UTC as well:
+the offset of the zone of the server read in the name of the backup of a
+submission, east, west and at UTC, with a remainder under a minute and one of a
+minute and a half, the digits read against the creation of the backup and not
+against the submission, a name of thirteen digits, a backup two minutes from its
+submission, one asked by hand in the same minute, none at all, the newest
+submission of the installation for every schedule, two offsets among the
+submissions and the offset kept once its backup is gone, the newest submission said
+with its schedule when it is another, an interval with no zone and one written in
+the zone it names, the runs of the hour a zone repeats in the words of the awaited
+state, in Rome and in New York, from the first of each occurrence when there are
+more, and nothing of them once the second passed, and the same signals with the
+machine set to another zone, of ADH-03; awaited, due at four minutes and overdue
+at six with the instant, the anchor of each of the three kinds and the count to its
+bound, under a second said so, held by a backup of each phase that holds and by
+none of the others, within and beyond the grace, and an expression with no instant,
+of ADH-04; paused with a run due and with none, with skip immediately set, unset and
+not written, as the schedule is now, Velero refused, not read and a phase not
+known, gated before the expression, the anchor, the backups and the offset are
+read, which a schedule and a context that throw when they are read prove, of
+ADH-05; each state of what is not known with its mark and its
+words, a read of before, the derived offset said approximate, and the backups not
+read beside an interval, which keeps its state, and five fields, which are not
+known, of ADH-06; a creation, a submission, a skip and a start after the clock of
+this machine, none, one under a second, and the time of the API server ahead,
+behind and within a second, with the words of the two cases; a schedule late by
+this machine said overdue beside an object ahead of it, which bounds nothing, and
+the lateness counted by the clock of the cluster when its API server gives its
+time, ahead and behind, of ADH-07; the last observed run in words, its backup
+found and not, not known from a read of the backups made before the submission or
+failing since, a newer backup said not a submission, and no word of a missed run,
+of ADH-08; the weights of the
+order of REQ-168, two of one weight by their measure and two by name; the words of a
+time in the zone of the expression. Every word a test asserts is read from the
+words of the module, as the tests of the view of a schedule do.
 
 The [local runner](../../e2e/scripts/local-demo.mts) and
 [image helper](../../e2e/scripts/local-images.mts) provide official-image setup and

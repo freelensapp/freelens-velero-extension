@@ -4,6 +4,7 @@ import { newestFirst, operationTime, operationTimeText } from "./operation-time"
 import { BACKUP_PHASES } from "./phases";
 import { emptyRead, failed, succeeded } from "./read-state";
 import { locationWarning, scheduleRestores, templateReferences } from "./references";
+import { parseExpression } from "./schedule-adherence";
 import {
   countsText,
   historyCounts,
@@ -20,6 +21,7 @@ import {
   SCHEDULE_PHASES,
   scheduleState,
   scheduleView,
+  ZONE_WORDS,
   zoneText,
 } from "./schedule-view";
 import { LABELS } from "./types";
@@ -133,16 +135,27 @@ describe("expression of a schedule", () => {
     expect(expression(" TZ=Europe/Rome 0 3 * * *").zone).toEqual({ of: "server" });
   });
 
-  // The release takes for the name what is between the prefix and the first space, and gives it to the
-  // library of the time zones of its language: an empty name is UTC, and Local is the zone of the server.
+  // The release takes for the name what is between the prefix and the first space: the reviewed release
+  // refuses an empty name, which the release before it read as UTC, and Local is the zone of the server.
   it("reads the name of a time zone as the release takes it", () => {
     expect(expression("TZ= 0 3 * * *").zone).toEqual({ of: "expression", prefix: "TZ", name: "" });
-    expect(zoneText(expression("TZ= 0 3 * * *").zone)).toBe(
-      "UTC: the expression names a time zone with no name, which the release reads so",
-    );
-    expect(zoneText(expression("CRON_TZ=Local 0 3 * * *").zone)).toBe(
-      "The one of the Velero server, which the expression names Local and this view does not read",
-    );
+    expect(zoneText(expression("TZ= 0 3 * * *").zone)).toBe(ZONE_WORDS.empty);
+    expect(parseExpression("TZ= 0 3 * * *").kind).toBe("refused");
+    expect(ZONE_WORDS.empty).toContain("refuses");
+    expect(ZONE_WORDS.empty).not.toContain("UTC");
+    // Quotes that match are taken off, as the parser takes them off: a quoted empty name is refused as well.
+    expect(expression('TZ="" 0 3 * * *').zone).toEqual({ of: "expression", prefix: "TZ", name: "" });
+    expect(zoneText(expression('TZ="" 0 3 * * *').zone)).toBe(ZONE_WORDS.empty);
+    expect(parseExpression('TZ="" 0 3 * * *').kind).toBe("refused");
+    expect(expression("TZ='Europe/Rome' 0 3 * * *").zone).toEqual({
+      of: "expression",
+      prefix: "TZ",
+      name: "Europe/Rome",
+    });
+    expect(zoneText(expression('CRON_TZ="Europe/Rome" 0 3 * * *').zone)).toBe(ZONE_WORDS.named("Europe/Rome"));
+    // Quotes that do not match are kept, as the parser keeps them before it refuses the name.
+    expect(expression(`TZ="UTC' 0 3 * * *`).zone).toEqual({ of: "expression", prefix: "TZ", name: `"UTC'` });
+    expect(zoneText(expression("CRON_TZ=Local 0 3 * * *").zone)).toBe(ZONE_WORDS.local);
     // A tab is not what ends the name for the release.
     expect(expression("TZ=Europe/Rome\t0 3 * * *").zone).toEqual({
       of: "expression",
@@ -151,15 +164,18 @@ describe("expression of a schedule", () => {
     });
     // A prefix with nothing after it is an expression the release refuses.
     expect(expression("TZ=Europe/Rome").zone).toEqual({ of: "none" });
-    expect(zoneText({ of: "none" })).toBe("Not reported");
+    expect(zoneText({ of: "none" })).toBe(ZONE_WORDS.none);
   });
 
   it("says whose time zone it is, and never the one of the desktop", () => {
-    expect(zoneText({ of: "expression", prefix: "TZ", name: "Europe/Rome" })).toBe(
-      "Europe/Rome, named by the expression",
-    );
-    expect(zoneText({ of: "server" })).toBe("The one of the Velero server, which this view does not read");
-    expect(zoneText({ of: "none" })).toBe("Not reported");
+    expect(zoneText({ of: "expression", prefix: "TZ", name: "Europe/Rome" })).toBe(ZONE_WORDS.named("Europe/Rome"));
+    expect(ZONE_WORDS.named("Europe/Rome")).toContain("Europe/Rome");
+    expect(zoneText({ of: "server" })).toBe(ZONE_WORDS.server);
+    // The view does not read the zone of the server: the adherence derives it from the backups, or says that
+    // it is not known.
+    expect(ZONE_WORDS.server).toContain("this view does not read");
+    expect(ZONE_WORDS.local).toContain("this view does not read");
+    expect(zoneText({ of: "none" })).toBe(ZONE_WORDS.none);
     expect(zoneText({ of: "server" })).not.toContain(Intl.DateTimeFormat().resolvedOptions().timeZone);
   });
 

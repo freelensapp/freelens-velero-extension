@@ -115,8 +115,8 @@ judgment of whether a backup that was submitted protects anything.
    names no zone is said not known, since the zone is derived from the backups.
 7. **P2, the clock of the cluster is ahead:** Given a schedule whose last
    submission is after the clock of this machine, then the view says that the
-   clock of the cluster is ahead by at least that much, and no schedule of the
-   installation is said overdue by less than that difference.
+   clock of the cluster is ahead by at least that much, and that by its clock a
+   run may be later still; a schedule this machine counts overdue is said overdue.
 8. **P2, a large installation:** Given 300 schedules with their backups, when the
    list is searched and ordered by the next run, then it answers within the budget
    of the lists, and the Overview within its own.
@@ -128,10 +128,10 @@ judgment of whether a backup that was submitted protects anything.
 | REQ-160 | The extension computes the instants of an expression as the parser of the reviewed release does, `ParseStandard` and `Next` of `netresearch/go-cron` at `v0.15.0`, read in its source at that version, whose rules are the facts of the parser below, and the table of ADH-01 holds the expressions it accepts and refuses with their next runs. The grammar: five fields, minute, hour, day of the month, month and day of the week, each a list of values, ranges and steps, with the names of the months and of the days, `*` or `?` for every value, `N/step` for N to the end of the field; Sunday is `0` or `7`; a range may wrap, as `22-2` for the hours or `NOV-FEB`; a step must be smaller than its range, so that `*/60` in the minutes is refused; a day of the month and a day of the week that are both restricted must both match, where the library of v1.18.2 matched either; the descriptors `@yearly`, `@annually`, `@monthly`, `@weekly`, `@daily`, `@midnight` and `@hourly`; `@every` followed by a duration as Go reads one, of one second at least, truncated to the second; the descriptors `@triggered`, `@manual` and `@none`, which have no instant; the prefixes `TZ=` and `CRON_TZ=` with an IANA name read up to the first space, with matching quotes taken off, of 64 characters at most, of letters, digits, `/`, `_`, `-`, `+` and `:`, where an empty name, a name of other characters, a name the server does not know and a prefix with nothing after it are refused, and `Local` names the zone of the server; an expression of more than 1,024 characters is refused. The next instant: the first after the given time, from its upcoming second, in the zone of the expression; in the hour a daylight saving change skips, the run of that hour is at the first instant after the change; in the hour a change repeats, both occurrences are instants; the zero time when no instant satisfies the expression within five years of the given time, and always for the three descriptors without an instant. An empty expression is refused by the controller with `Schedule must be a non-empty valid Cron expression`, one the parser refuses with `invalid schedule:`, a space and the text of the error. The extension never validates an expression in the place of the controller: of a schedule Velero took whose expression this version cannot read, the signal is not known, with that reason, and never overdue. An empty zone name, which the parser of v1.18.2 read as UTC, is refused by the parser of the reviewed release: the words of SPEC-0006 change with this slice | ADH-01 |
 | REQ-161 | The expected run is the one the controller counts: from the last submission, `status.lastBackup`; from the creation of the schedule when there is none; from `status.lastSkipped` when it is later than either; the next instant of the expression after that time is the expected run, and the controller submits when its clock is after it. The signal says which of the three the count starts from. The controller looks at every schedule once a minute, submits one backup when a run is due and does not catch up on the runs it missed: the signal counts the expected instants that passed since the anchor with no submission, up to one hundred, and says more than one hundred past that. An expression with no instant within five years of the anchor, as `0 0 30 2 *`, and the descriptors `@triggered`, `@manual` and `@none` give the zero time as the next instant, which the controller reads as a run that is due at every look: Velero submits a backup at each of them, once a minute, while none of the backups of the schedule reports no phase, New or InProgress. The signal of such a schedule is its own state, at every look, with the mark of what is not known for the expected run and the words that Velero submits a backup at every look; it is never awaited, due or overdue, and the count is not made | ADH-02 |
 | REQ-162 | The zone an expression is read in is established by this rule and no other: the zone the expression names, by its IANA name as the runtime knows it, with `Local` read as no prefix and an empty name refused by the parser, so that the schedule is FailedValidation and REQ-164 applies; for an expression without a prefix, or with `Local`, the zone of the server, which the extension does not read and does not assume: it is derived, as a fixed offset, from the newest backup of a last submission in the installation, since one server process submits every schedule of it. The backup of a last submission is the one that carries the label of its schedule, whose name is the name of that schedule followed by fourteen digits and whose creation is within a minute of the `status.lastBackup` of that schedule; the digits read as a wall clock minus the creation, rounded to the quarter of an hour, with a remainder under a minute, is the offset. When the backups of the last submissions of the installation give two offsets, the zone of the server changes its offset, which a daylight saving rule does: the offset of the newest is taken, and the words say that the offset changed between the two submissions. The signal computed with a derived offset says so, with the offset, with the schedule it came from when it is another, and that across a daylight saving change the run may be an hour off. An `@every` expression needs no zone and is computed without one. Otherwise the next run is not known, with the reason, that the expression names no zone and the one of the server is not read, with why it could not be derived, and with the way out, which is to name the zone in the expression. A name the runtime does not know is not known. In a zone the expression names, on the day the zone repeats an hour, an expression with an instant in that hour has two expected runs in it, and the words say so. The zone of the desktop and the time zone preference of the host are never used for the computation | ADH-03 |
-| REQ-163 | Of a schedule that is not paused, whose phase is Enabled, whose zone is established and whose expression has an instant, the signal is one of four states, by the clock of this machine: awaited, while the expected run is ahead; due, for five minutes after it; overdue, after those five minutes, with the duration since the expected run, the expected run itself, the anchor the count started from and the number of expected runs that passed with no submission; held, when a backup of the schedule in its namespace reports no phase, New or InProgress, which withholds every submission, with the name of that backup and the way to it, and with the duration since the expected run when it passed. The grace of five minutes is one constant, in one place with the bound of the count | ADH-04 |
+| REQ-163 | Of a schedule that is not paused, whose phase is Enabled, whose zone is established and whose expression has an instant, the signal is one of four states, by the clock of this machine, or of the cluster where REQ-166 counts the lateness by it: awaited, while the expected run is ahead; due, for five minutes after it; overdue, after those five minutes, with the duration since the expected run, the expected run itself, the anchor the count started from and the number of expected runs that passed with no submission; held, when a backup of the schedule in its namespace reports no phase, New or InProgress, which withholds every submission, with the name of that backup and the way to it, and with the duration since the expected run when it passed. The grace of five minutes is one constant, in one place with the bound of the count | ADH-04 |
 | REQ-164 | No run is computed for a paused schedule, for one in FailedValidation, for one that reports no phase and for one whose phase this version does not know; each says why in words: no run is expected until it is resumed; Velero refused the expression; Velero has not read the schedule; the phase is not one this version knows. A paused schedule whose zone is established says as well whether Velero would submit a backup at once when it is resumed, since a run is already due, and that `skipImmediately` would move that run to the next instant | ADH-05 |
 | REQ-165 | Each state of uncertainty is its own, with its words and the mark of what is not known, never the mark or the words of a schedule on time: the zone not known, with why; the expression this version cannot read; the schedule Velero submits at every look, of REQ-161, whose expected run is not known; the backups denied, not served, failed or not read yet, which make the hold not known and the zone not derivable, while the states that need only the last submission keep their value with the words that whether a backup holds the submissions is not known; a signal computed from a read that is stale, which says when the read was; a signal computed with a derived offset, which says that it is approximate across a daylight saving change | ADH-06 |
-| REQ-166 | The signal is computed by the clock of this machine, taken once for a read as the views take it, and its words say so. When a time an object of the installation reports, a creation, a submission, a skip or the start of a backup, is after that clock, the view says that the clock of the cluster is ahead of this machine by at least that difference, and no schedule of the installation is said overdue by less than it. Where the reader can see the time of the API server in its answers, as the design says, the difference between the two clocks is measured at each read and bounds the signal both ways, with its words | ADH-07 |
+| REQ-166 | The signal is computed from the clock of this machine, taken once for a read as the views take it, and its words say by which clock the lateness is counted. When a time an object of the installation reports, a creation, a submission, a skip or the start of a backup, is after the clock of this machine at the read that brought it, the view says that the clock of the cluster is ahead of this machine by at least that difference, and that by the clock of the cluster a run may be later still: the controller counts the lateness by its own clock, so a cluster that is ahead makes it longer than the one this machine counts, never shorter, and bounds nothing that is said overdue. Where the reader can see the time of the API server in its answers, as the design says, the difference between the two clocks is measured at each read, and the lateness is counted by the clock of the cluster, the clock of this machine plus that difference, both ways, with its words | ADH-07 |
 | REQ-167 | The last observed run is two facts kept apart: the last submission, `status.lastBackup`, which says that the controller submitted a backup and when; and the newest backup of the schedule among the ones that exist, as SPEC-0006 reads it. When the last submission has no backup created within a minute of it among the ones that exist, the view says that the backup of the last submission is not among the backups that exist, expired, deleted or not readable, and the signal stands, since the submission is written in the schedule. When a backup of the schedule is newer than the last submission, the view says that it is not a submission of the schedule, asked by hand from the schedule or synced from the store, and that it does not move the last submission. A gap between two backups is never named a missed run | ADH-08 |
 | REQ-168 | The native list of the Schedules gains two columns with stable IDs: Next run, which shows the expected instant relative to now, with its absolute time in the tip as the host formats a date, None with why for a schedule that has none, paused, refused or submitted at every look, and Not known where it is not known, ordered by the instant with the ones that have none last; and Adherence, which shows the mark and the word of the state, ordered by the weight of the state, and inside a weight by its measure or by name: overdue by the longest first, held, due, at every look, not known, awaited by the soonest first, no run for a refused expression, no run for a paused schedule. Both are in the search. In a narrow room the installation gives its room under 1,200 pixels, the age under 1,000, the last submission and the newest backup under 760, the expression under 640: the name, paused, next run, adherence and validation stay | ADH-09 |
 | REQ-169 | The workspace of a schedule has a band Adherence, after the status and before the history: the next run with its state, the zone it is read in and how the zone was established, the last observed run as REQ-167 says it, the anchor of the count, the held backup with its way when there is one, the grace in words, and the words of the clocks. The line of time of the history is unchanged: nothing is drawn where no backup is | ADH-10 |
@@ -216,7 +216,8 @@ the backups and the clock: the views draw what it answers.
 The anchor is the one of the controller: `status.lastBackup`, or the creation of
 the schedule, or `status.lastSkipped` when later than the one chosen. The expected
 run is the first instant of the expression after the anchor, in the zone REQ-162
-establishes. The states, by the clock of this machine, `now`:
+establishes. The states, by `now`, the clock the lateness is counted by: the one of
+this machine, or of the cluster where [the clocks](#the-clocks) count by it:
 
 | State | When | Mark | Words, for one example |
 | --- | --- | --- | --- |
@@ -315,10 +316,17 @@ The views take their clock once for a read, from the
 [clock of the views](../../src/renderer/components/views-frame.tsx), which ticks
 every five seconds; the installation reads every fifteen. The cluster writes its
 own: the creation of an object, a submission, a skip, the start of a backup. A time
-the cluster wrote that is after the clock of this machine says that the cluster is
-ahead by at least that much: the view says so, in the band and over the list, and
-no schedule is said overdue by less than that difference, since it may be the
-clocks and not the schedule. The other direction leaves no trace in the objects.
+the cluster wrote that is after the clock of this machine at the read that brought
+it says that the cluster is ahead by at least that much: the view says so, in the
+band and over the list, with that by the clock of the cluster a run may be later
+still. It bounds nothing that is said overdue: the controller writes a submission
+and counts a run by its own clock
+([L242](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/schedule_controller.go#L242),
+[L257](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/schedule_controller.go#L257),
+[L266](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/schedule_controller.go#L266),
+[L288](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/schedule_controller.go#L288)),
+so a cluster that is ahead makes the lateness it counts longer than the one this
+machine counts, never shorter. The other direction leaves no trace in the objects.
 
 The reader of the extension is given the
 [answer of the host](../../src/renderer/api/reader.ts) as a `Response`, whose
@@ -329,10 +337,11 @@ host does with the header on the way was not read, and whether it reaches the
 reader was not seen in a run: the implementation measures it first, in the
 packaged application, and records the
 answer in the evidence. Where it does, the difference between that time and the
-clock of this machine, measured at each read, is the bound of REQ-166 in both
-directions, and the words say that the clocks are compared through it; where it
-does not, the bound is the one of the times the objects carry, and the words say
-that only a cluster that is ahead can be seen.
+clock of this machine, measured at each read, is added to the clock of this machine
+to count the lateness by the clock of the cluster, in both directions, and the words
+say that the clocks are compared through it; where it does not, the lateness is
+counted by the clock of this machine, and the words say that only a cluster that is
+ahead can be seen, and that by its clock a run may be later still.
 
 The host formats a `Date` given to its tooltip with
 [`LocaleDate`](https://github.com/freelensapp/freelens/blob/3da74415bff57a77c6e08cb5f538191ce87bac17/packages/core/src/renderer/components/with-tooltip/with-tooltip.tsx#L22-L23),
@@ -389,7 +398,7 @@ The band of the workspace of a schedule, after the status and before the history
 | Last observed run | The last submission with the backup of it, which leads to the backup, or that it is not among the backups that exist; the newest backup that exists when it is another, with that it is not a submission | REQ-167 |
 | Held by | The backup that withholds the submissions, with its phase and its way; absent when none | The backups |
 | Expected runs passed | The count of REQ-161, with the first and the last of them | The computation |
-| Clocks | That the times are compared by the clock of this machine, and what is known of the clock of the cluster | REQ-166 |
+| Clocks | By which clock the times are compared, and what is known of the clock of the cluster | REQ-166 |
 
 Under the band the history is what SPEC-0006 made it, line of time and list. The
 [section](../../src/renderer/details/schedule-details.tsx) in the details of the
@@ -518,7 +527,7 @@ than its own. These stay at the unit layer, from the lines of the controller.
 | ADH-04 | Fake-clock unit/component/packaged | REQ-163 | Awaited, due at four minutes, overdue at six with its duration, its instant, its anchor and its count, held by a backup of each of the three phases and not by Queued, ReadyToStart, Completed or Failed, held beyond the grace; an expression with no instant, which is none of the four; the words of each. Packaged: awaited, overdue with its count, held, at every look, each as the fixture was placed, computed by the suite from the annotation of the placement and the clock |
 | ADH-05 | Unit/component/packaged | REQ-164 | Paused with a run already due and with none, with and without the skip; FailedValidation; no phase; a phase that is not known: no instant computed for any, and the words of each. Packaged: the schedules that exist |
 | ADH-06 | Unit/component/packaged | REQ-165 | Each state of uncertainty with its mark and its words, the schedule Velero submits at every look among them; a signal of a stale read; a derived offset said approximate; the backups denied with an `@every` schedule, which keeps its state with the words of the hold, and a five-field one, which is not known. Packaged: the second reader on both, and the schedule at every look |
-| ADH-07 | Fake-clock unit/component/packaged | REQ-166 | A submission, a creation, a skip and a start after the clock, each bounding what is said overdue; nothing after it; the words of the clocks with and without the time of the API server, which the unit test gives and withholds. Packaged: the schedule whose last submission is ahead, and the first measure of whether the header reaches the reader, recorded |
+| ADH-07 | Fake-clock unit/component/packaged | REQ-166 | A submission, a creation, a skip and a start after the clock, each said in the words of the clocks and none keeping a schedule from being said overdue; nothing after it; the lateness counted by the clock of the cluster with the time of the API server, ahead and behind, and by the clock of this machine without it; the words of the clocks with and without the time of the API server, which the unit test gives and withholds. Packaged: the schedule whose last submission is ahead, and the first measure of whether the header reaches the reader, recorded |
 | ADH-08 | Unit/component/packaged | REQ-167 | The backup of the last submission found within a minute, not found, a backup newer than the submission said not a submission; a gap between two backups with no word of a missed run. Packaged: the overdue fixture, whose backup is not among the ones that exist, and the held one, whose backup is newer than the submission |
 | ADH-09 | Component/packaged | REQ-168 | The two columns, their IDs, their words, their tips, their search, the order by adherence with a schedule of every weight, two of one weight by their measure and two by name, and the order by the next run with the past first and none last; the columns that give their room at 1,199, 999, 759 and 639 pixels. Packaged: a search by a word of a state, an order by each of the two columns read from the rows, a column made wider, a schedule opened and closed leaving the list where it was |
 | ADH-10 | Component/packaged | REQ-169 | Every line of the band present and absent, the way to the held backup and back, the line of time unchanged with no mark where no backup is. Packaged: the band of each fixture, the way to the held backup and back over the list |
@@ -535,10 +544,11 @@ than its own. These stay at the unit layer, from the lines of the controller.
 All 17 checks pass before this spec is Verified. No view shows a next run for a
 schedule that is paused, refused or not read; no five-field expression without a
 zone name has a next run unless its offset was derived, and then the words say so;
-no state of uncertainty has the mark or the words of a schedule on time; no
-schedule is said overdue by less than the difference the clock of the cluster is
-ahead by; the real schedule of the installation submits nothing while the suites
-run; the API server counts no write of the kinds of Velero.
+no state of uncertainty has the mark or the words of a schedule on time; a clock
+of the cluster seen ahead of this machine never keeps a schedule from being said
+overdue, and with the time of the API server the lateness is the one the clock of
+the cluster counts; the real schedule of the installation submits nothing while the
+suites run; the API server counts no write of the kinds of Velero.
 
 Budgets: the signal of one schedule within 2 milliseconds and of 1,000 within 250
 milliseconds at the 95th percentile in the measure of the unit run, on the machine
@@ -699,11 +709,45 @@ schedules of 898 expressions, the thousand signals in 14.2 ms at the 95th percen
 of 250, 64.9 ms on the first call that parses them, one schedule in 0.03 ms of 2; the parse kept by text and
 the count bounded at one hundred asserted, 72 schedules at the bound. Deviations of the slice, to amend in the
 spec: REQ-160 (L128), the limits of the parser are in bytes, as the parser counts (`parser.go` L419, L1403),
-where the text says characters; REQ-160 (L128) and ADH-01 (L514), a name the server does not know is not a
+where the text says characters; REQ-160 (L128) and ADH-01 (L524), a name the server does not know is not a
 refusal of the extension, which cannot know the zones of the server, but a zone that is not known when the
 runtime does not know it, and a name with a space is refused by the count of fields where the server refuses
-it as an unknown zone; REQ-161 (L129) and the design (L231-L232), the count of the runs that passed is of the
+it as an unknown zone; REQ-161 (L129) and the design (L232-L233), the count of the runs that passed is of the
 instants strictly before the clock, so that it is at least one exactly when the run is due. The texts of the
 refusals are kept verbatim with the notice of the library in the header of the module, as the assumption at
-L606-L608 asks. The documentation of the release still says that a run in the hour a change skips is not run
+L616-L618 asks. The documentation of the release still says that a run in the hour a change skips is not run
 (`backup-reference.md` L74), a sentence of the earlier library, recorded in the drift watch of the recon.
+
+T3.2, the states of a schedule, their words, the zone of the server and the clocks, on 2026-10-15, on the machine
+of the runs (macOS, Node 24.21.0, pnpm 10.34.7, TypeScript 7.0.2, Vitest 5.0.5, Biome 2.5.14, Knip 6.41.0, Trunk
+launcher 1.3.4), after the independent review of the branch and its fixes, rebased on main. `pnpm type:check`,
+exit 0; `pnpm lint:check`, exit 0, 222 files; `pnpm test:unit`, exit 0, 75 files and 2,547 tests, the 79 of
+`src/common/schedule-signal.test.ts` among them, then the two measures; `pnpm knip:check`, exit 0; `pnpm
+trunk:check --all`, exit 0, 280 files; each of the fourteen commits type-checks. The signal is
+`src/common/schedule-signal.ts`, beside the module of T3.1: the offset of the server read in the name of the
+backup of the newest submission of the installation, the digits as UTC minus the creation, rounded to the quarter
+of an hour with a remainder under a minute, kept for the session as a plain value the views hold; the clocks, the
+lateness counted by the clock of the cluster when the time of the API server is given and by the clock of this
+machine when it is not, a time an object reports after the clock of this machine at the read that brought it said,
+and bounding nothing; the states with their marks, weights and words, the pause and the phase read before the
+expression; the last observed run; the order by adherence. The tests run with the zone of the machine set fourteen
+hours east of UTC, asserted, and again with it set to Los Angeles for the same signals. The measure of ADH-16
+printed `ADH-16 unit`: the whole signals with their words of 1,000 schedules of 898 expressions, the offset derived
+from 1,010 backups, in 42.7 ms at the 95th percentile and 31.5 at the median, of 250, 102 ms on the first call, one
+schedule in 0.04 ms of 2; none not known, ten held, ten at every look, 8,775 runs counted and 72 schedules at the
+bound, as for T3.1. The independent review found REQ-166 the wrong way round for a cluster that is ahead, which
+only makes the lateness the controller counts longer; the pull request amends
+REQ-166, scenario 7, REQ-163, the table of the computation, the design of the clocks, ADH-07 and the Success
+Criteria, an amendment of an approved requirement for the lead maintainer to confirm at the review of the
+milestone. Deviations of the slice, to amend in the spec: REQ-165 (L133), the hold not known, a read of before and a
+derived offset are words beside a state that keeps its mark, as REQ-165 says of the backups denied, ADH-06 (L529)
+and the design (L384-L386) have it, and the mark of what is not known is of the states of uncertainty proper;
+REQ-161 and REQ-163 (L129, L131), an expression with no instant is at every look whatever the zone, since it has
+none in any; REQ-164 (L132), a paused schedule is paused whatever its phase, what Velero would do at its resume is
+said of a phase Enabled only and of the schedule as it is now, and New is said not read as no phase is; REQ-162
+(L130, L280-L289), the derived offset is bounded to the zones in use, and the times of an interval and of a zone
+not known are written in UTC; REQ-167 (L135), the backup of a submission is said gone only from the last read of
+the backups made after it, and not known from one made before it or failing since, whose newest backup is said of
+that read; the durations are written as the views write every duration, "2h 14m", and one under a second as such,
+where the examples of the design (L224-L230) write "2 h 14 min". SPEC-0006 keeps its Success Criteria (L157-L158),
+which the views of T3.3 make untrue.
