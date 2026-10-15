@@ -794,10 +794,26 @@ submission, east, west and at UTC, with a remainder under a minute and one of a
 minute and a half, a name of thirteen digits, a backup two minutes from its
 submission, one asked by hand in the same minute, none at all, the newest
 submission of the installation for every schedule, two offsets among the
-submissions and the offset kept once its backup is gone, of ADH-03; a creation, a
-submission, a skip and a start after the clock of this machine, none, and the time
-of the API server ahead, behind and within a second, with the words of the two
-cases, of ADH-07.
+submissions and the offset kept once its backup is gone, the newest submission said
+with its schedule when it is another, an interval with no zone, the two runs of the
+hour a zone repeats in the words of the awaited state, in Rome and in New York, and
+the same signals with the machine set to another zone, of ADH-03; awaited, due at
+four minutes and overdue at six with the instant, the anchor of each of the three
+kinds and the count to its bound, held by a backup of each phase that holds and by
+none of the others, within and beyond the grace, and an expression with no instant,
+of ADH-04; paused with a run due and with none, with skip immediately set, unset and
+not written, Velero refused, not read and a phase not known, gated before the
+expression is read, of ADH-05; each state of what is not known with its mark and its
+words, a read of before, the derived offset said approximate, and the backups not
+read beside an interval, which keeps its state, and five fields, which are not
+known, of ADH-06; a creation, a submission, a skip and a start after the clock of
+this machine, none, and the time of the API server ahead, behind and within a
+second, with the words of the two cases and the bound on what is said overdue, of
+ADH-07; the last observed run in words, its backup found and not, a newer backup
+said not a submission, and no word of a missed run, of ADH-08; the weights of the
+order of REQ-168, two of one weight by their measure and two by name; the words of a
+time in the zone of the expression. Every word a test asserts is read from the
+words of the module, as the tests of the view of a schedule do.
 
 The [local runner](../../e2e/scripts/local-demo.mts) and
 [image helper](../../e2e/scripts/local-images.mts) provide official-image setup and

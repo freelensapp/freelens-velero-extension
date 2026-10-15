@@ -1,17 +1,40 @@
 import { formatDuration, timestamp } from "./duration";
-import { hasItems } from "./read-state";
-import { submissionBackup } from "./schedule-adherence";
+import { unread } from "./location-users";
+import { hasItems, isStale } from "./read-state";
+import {
+  anchorOf,
+  COUNT_BOUND,
+  expectedRun,
+  expressionZone,
+  GRACE,
+  laterBackups,
+  nextInstant,
+  parseExpression,
+  submissionBackup,
+  UTC,
+  zoneOffset,
+} from "./schedule-adherence";
+import { backupsOf } from "./schedule-history";
+import { NOTES, scheduleState } from "./schedule-view";
 
-import type { FamilyRead } from "./read-state";
+import type { FamilyRead, ReadStatus } from "./read-state";
+import type { Anchor, ParsedExpression, Zone } from "./schedule-adherence";
+import type { ScheduleState } from "./schedule-view";
 import type { BackupResource, ScheduleResource } from "./types";
 
-// What the views of a schedule say of its adherence (SPEC-0013, T3.2): the offset of the zone of the server of
-// Velero, derived from the backups of the submissions and kept for the session as a plain value the views hold,
-// and the clocks of this machine and of the cluster. Everything is a pure function on what was read of one
-// installation and on the clock, which are arguments: no time is taken here, and no zone of the desktop or of
-// the host is ever read.
+// What the views of a schedule say of its adherence (SPEC-0013, T3.2): the state of a schedule with its mark, its
+// weight in an order and its words, the offset of the zone of the server of Velero, derived from the backups of
+// the submissions and kept for the session as a plain value the views hold, the backup that holds the
+// submissions, the last observed run and the clocks of this machine and of the cluster. Everything is a pure
+// function on what was read of one installation and on the clock, which are arguments: no time is taken here,
+// and no zone of the desktop or of the host is ever read. A time inside a sentence is written in the zone the
+// expression is read in, with the name or the offset of that zone, and a duration as the views write every
+// duration.
 
+const SECOND = 1000;
 const MINUTE = 60_000;
+const HOUR = 3_600_000;
+const DAY = 86_400_000;
 const QUARTER = 15 * MINUTE;
 // The zones in use are from twelve hours west of UTC to fourteen hours east of it.
 const WEST = -12 * 60;
@@ -301,5 +324,944 @@ export function clocksOf(reads: AdherenceReads, now: number, server?: ApiServerT
     ...(difference === undefined ? {} : { server: difference }),
     bound,
     words: words.filter(Boolean).join(" "),
+  };
+}
+
+// --- The installation, for a read and a clock ---
+
+// What the signals of one installation share for a read and a clock: computed once, and given to the signal of
+// each of its schedules.
+export interface AdherenceContext {
+  now: number;
+  reads: AdherenceReads;
+  // The offset kept for the installation, when one was derived.
+  offset?: ServerOffset;
+  // Why none was, in words that go on a sentence, when none was.
+  noOffset?: string;
+  clocks: Clocks;
+}
+
+export function adherenceContext(
+  reads: AdherenceReads,
+  now: number,
+  offset?: ServerOffset,
+  server?: ApiServerTime,
+): AdherenceContext {
+  return {
+    now,
+    reads,
+    ...(offset
+      ? { offset }
+      : {
+          noOffset: hasItems(reads.backups)
+            ? SIGNAL_WORDS.noSubmissionBackup
+            : lower(unread("backups", reads.backups).reason),
+        }),
+    clocks: clocksOf(reads, now, server),
+  };
+}
+
+// --- The states, their marks, their weights and their words ---
+
+export type SignalState =
+  | "awaited"
+  | "due"
+  | "overdue"
+  | "held"
+  | "at-every-look"
+  | "not-known"
+  // FailedValidation: no run.
+  | "refused"
+  | "paused";
+
+// Why a signal is not known.
+export type NotKnownReason =
+  // No phase, or New: Velero has not read the schedule.
+  | "not-read"
+  | "unknown-phase"
+  // This version cannot read an expression Velero took.
+  | "not-readable"
+  | "no-anchor"
+  // The expression names no zone, or Local, and no offset of the server is derived.
+  | "no-offset"
+  // The expression names a zone this machine does not know.
+  | "unknown-zone";
+
+// The marks the views already use: the hollow one of what is awaited, the one of what is late that the last
+// validation of a location has, the one of what is not known, the one of the validation for an expression
+// Velero refused, and the one of what is paused.
+export type SignalMark = "awaited" | "late" | "not-known" | "refused" | "paused";
+
+const MARKS: Record<SignalState, SignalMark> = {
+  awaited: "awaited",
+  due: "awaited",
+  overdue: "late",
+  // Late once the grace passed, which the signal says.
+  held: "awaited",
+  "at-every-look": "not-known",
+  "not-known": "not-known",
+  refused: "refused",
+  paused: "paused",
+};
+
+// The order by adherence (REQ-168): what needs a hand first, and what is not known before what is on time.
+export const SIGNAL_WEIGHTS: Record<SignalState, number> = {
+  overdue: 0,
+  held: 1,
+  due: 2,
+  "at-every-look": 3,
+  "not-known": 4,
+  awaited: 5,
+  refused: 6,
+  paused: 7,
+};
+
+// What holds the submissions: a backup of the schedule that reports no phase, New or InProgress.
+type Holding = "none" | "New" | "InProgress";
+
+const HOLDING: Record<Holding, string> = {
+  none: "reports no phase",
+  New: "is New",
+  InProgress: "is InProgress",
+};
+
+const ANCHORS: Record<Anchor["of"], string> = {
+  "last-submission": "the last submission",
+  creation: "the creation of the schedule",
+  "last-skipped": "the last skip",
+};
+
+function lower(text: string): string {
+  return text.charAt(0).toLowerCase() + text.slice(1);
+}
+
+function capital(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+// The words of the signal, written once: the list, the band, the section of the details and the Overview say
+// the same sentence for the same state.
+export const SIGNAL_WORDS = {
+  // The word of each state, beside its mark: who does not see the mark reads it.
+  label: {
+    awaited: "Awaited",
+    due: "Due",
+    overdue: "Overdue",
+    held: "Held",
+    "at-every-look": "At every look",
+    "not-known": "Not known",
+    refused: "No run",
+    paused: "Paused",
+  } satisfies Record<SignalState, string>,
+  // What the cell of the next run says.
+  none: "None",
+  notKnown: "Not known",
+  inTime: (duration: string) => `in ${duration}`,
+  ago: (duration: string) => `${duration} ago`,
+  // Where the controller counts from, one of three times.
+  from: (of: Anchor["of"], moment: string) => `${ANCHORS[of]}, ${moment}`,
+  awaited: (inTime: string, run: string, from: string) => `Next run in ${inTime}, at ${run}. Counted from ${from}.`,
+  repeated: (date: string, zone: string, back: string, to: string, first: string, second: string) =>
+    `On ${date} the clock of ${zone} goes back from ${back} to ${to}: the runs of the expression in the hour it repeats are expected twice, at ${first} and again at ${second}.`,
+  due: (run: string, ago: string) => `Due: expected at ${run}, ${ago} ago. Velero looks at a schedule once a minute.`,
+  dueByClocks: (run: string, ago: string, bound: string) =>
+    `Due: expected at ${run}, ${ago} ago. The clocks of this machine and of the cluster differ by at least ${bound}, and no schedule is said overdue by less than that.`,
+  overdue: (by: string, run: string, from: string, passed: string) =>
+    `Overdue by ${by}: expected at ${run}. Counted from ${from}, with no submission since; ${passed}. Velero may not be at work, or may not be able to list the backups.`,
+  passed: (count: number, beyond: boolean) =>
+    beyond ? `more than ${COUNT_BOUND} expected runs passed` : `${count} expected run${count === 1 ? "" : "s"} passed`,
+  held: (backup: string, phase: Holding) =>
+    `Held: Velero submits nothing while the backup ${backup} ${HOLDING[phase]}.`,
+  heldMore: (count: number) =>
+    count === 1
+      ? "One more of its backups holds the submissions as well."
+      : `${count} more of its backups hold the submissions as well.`,
+  heldExpected: (run: string, ago: string) => `A run was expected at ${run}, ${ago} ago.`,
+  heldNext: (run: string, inTime: string) => `The next run is at ${run}, ${inTime}.`,
+  atEveryLook: (what: string, last: string) =>
+    `At every look: ${what}, and Velero submits a backup at each of its looks, once a minute, while none of the backups of the schedule reports no phase, New or InProgress. ${last}`,
+  noInstant: (descriptor: string) => `${descriptor} has no instant`,
+  beyondFiveYears: "the expression has no instant within five years",
+  lastSubmission: (moment: string) => `Last submission ${moment}.`,
+  noSubmissionYet: "No submission is written in the schedule yet.",
+  heldNow: (backup: string, phase: Holding) => `The backup ${backup} ${HOLDING[phase]} now.`,
+  noOffset: (local: boolean, why: string) =>
+    `Not known: ${
+      local
+        ? "the expression names the time zone Local, the one of the Velero server, which is not read"
+        : "the expression names no time zone, and the one of the Velero server is not read"
+    }. It is derived from the backup of a last submission, of this schedule or of another of the installation, and ${why}. Name the zone in the expression, as CRON_TZ=Europe/Rome 0 3 * * * does, to have it read.`,
+  noSubmissionBackup: "none is among the backups that exist",
+  // A name this machine does not know is not one the server refused: Velero took the expression, which it
+  // does only with a zone its server knows.
+  unknownZone: (name: string) =>
+    `Not known: the expression names the time zone ${name}, which this machine does not know, and the run cannot be computed here. Velero took the expression: its server knows the zone.`,
+  notReadable: (reason: string) => `Not known: this version cannot read the expression, which Velero took: ${reason}.`,
+  notRead: `Not known: ${NOTES.notRead}`,
+  unknownPhase: (phase: string) => `Not known: the phase ${phase} is not one this version knows.`,
+  noAnchor:
+    "Not known: the schedule reports neither its creation nor a submission, which the next run is counted from.",
+  refused: "No run: Velero refused the expression.",
+  paused: "Paused: no run is expected until it is resumed.",
+  // What Velero would do if the schedule were resumed now, after the words of a pause.
+  resume: {
+    submit: (run: string) => `Resumed now, Velero would submit a backup at once: a run was due at ${run}.`,
+    submitUnlessServer: (run: string) =>
+      `Resumed now, Velero would submit a backup at once, unless its server is set to skip immediately, which this view does not read: a run was due at ${run}.`,
+    skipMoves:
+      "Skip immediately, set at the resume, would move that run: Velero would count the next run from the time it reads the schedule.",
+    skip: "Resumed now, Velero would submit nothing at once: skip immediately is set, and it would count the next run from the time it reads the schedule.",
+    skipDue: (run: string) => `A run was due at ${run}.`,
+    wait: (run: string) => `Resumed now, Velero would submit nothing at once: the next run is at ${run}.`,
+    hold: (backup: string, phase: Holding, run: string) =>
+      `Resumed now, Velero would submit nothing while the backup ${backup} ${HOLDING[phase]}: a run was due at ${run}.`,
+    everyLook: (what: string) => `Resumed now, Velero would submit a backup at each of its looks: ${what}.`,
+    notKnown: (why: string) => `Whether Velero would submit a backup at once when it is resumed is not known: ${why}.`,
+    refused: "Velero refused its expression when it last read it, which is before the pause.",
+    notRead: NOTES.notReadPaused,
+    unknownPhase: (phase: string) => `Its phase, ${phase}, is not one this version knows.`,
+  },
+  // Why what Velero would do at a resume is not known, in words that go on a sentence.
+  why: {
+    "not-readable": "this version cannot read the expression",
+    "no-anchor": "the schedule reports no time the next run is counted from",
+    "no-offset": "the time zone of the Velero server is not known",
+    "unknown-zone": (name: string) => `this machine does not know the time zone ${name}`,
+  },
+  // What is said beside the words of a state.
+  derived: (offset: string, backup: string, of: string, moment: string) =>
+    `Computed with ${offset}, the offset of the clock of the Velero server when it submitted the backup ${backup} of ${of}, at ${moment}: across a change of daylight saving time the run may be an hour off.`,
+  thisSchedule: "this schedule",
+  otherSchedule: (name: string) => `the schedule ${name}`,
+  changed: (offset: string, backup: string, of: string, moment: string) =>
+    `The offset was ${offset} when the server submitted the backup ${backup} of ${of}, at ${moment}: it changed between the two submissions, and the newest stands.`,
+  holdNotKnown: (reason: string) => `Whether a backup of the schedule holds the submissions is not known: ${reason}.`,
+  schedulesStale: (ago: string, since: string) => `Computed from the schedules as they were read ${ago} ago: ${since}.`,
+  backupsStale: (ago: string, since: string) =>
+    `What holds the submissions is read in the backups as they were read ${ago} ago: ${since}.`,
+  // What is said of a family whose items are of an earlier read, by what the last read answered.
+  since: {
+    forbidden: "access is denied since then",
+    "not-served": "the cluster does not serve them since then",
+    failed: "they could not be read since then",
+    other: "they were not read again since then",
+  },
+  // The lines of the band of a schedule.
+  zone: {
+    named: (name: string) => `${name}, named by the expression`,
+    namedNotKnown: (name: string) => `${name}, named by the expression, which this machine does not know`,
+    interval: "None: an interval is counted without a time zone, and its times are written in UTC",
+    derived: (offset: string, backup: string, of: string, moment: string) =>
+      `${offset}, the offset of the clock of the Velero server when it submitted the backup ${backup} of ${of}, at ${moment}`,
+    notKnown: (why: string) =>
+      `Not known: the one of the Velero server, which is derived from the backup of a last submission of the installation, and ${why}. Name the zone in the expression to have it read`,
+  },
+  passedNone: "None yet: the expected run is ahead",
+  passedOne: (run: string) => `1 expected run passed, at ${run}`,
+  passedMany: (count: number, first: string, last: string) =>
+    `${count} expected runs passed, the first at ${first} and the last at ${last}`,
+  passedBeyond: (first: string) => `More than ${COUNT_BOUND} expected runs passed, the first at ${first}`,
+  // The last observed run: the last submission with its backup, and the newest backup when it is another.
+  observed: {
+    found: (moment: string, backup: string) => `Last submission ${moment}: its backup is ${backup}.`,
+    notFound: (moment: string) =>
+      `Last submission ${moment}: its backup is not among the backups that exist; it expired, was deleted or cannot be read. The submission stands, since the schedule carries it.`,
+    notKnown: (moment: string, reason: string) =>
+      `Last submission ${moment}: whether its backup exists is not known: ${reason}.`,
+    none: "No submission is written in the schedule.",
+    newer: (backup: string, moment: string) =>
+      `The backup ${backup}, created ${moment}, is not a submission of the schedule: it was asked by hand or synced from the store, and it moves nothing in the schedule.`,
+    newerMore: (count: number) =>
+      count === 1 ? "One more of its backups is not either." : `${count} more of its backups are not either.`,
+    newest: (backup: string) => `The newest backup of the schedule that exists is ${backup}.`,
+  },
+  // Why the adherence of a schedule is not known, as the Overview counts them.
+  reasons: {
+    "not-read": "not read by Velero yet",
+    "unknown-phase": "a phase this version does not know",
+    "not-readable": "an expression this version cannot read",
+    "no-anchor": "no time to count the next run from",
+    "no-offset": "the time zone of the Velero server not known",
+    "unknown-zone": "a time zone this machine does not know",
+  } satisfies Record<NotKnownReason, string>,
+};
+
+// --- The words of a time ---
+
+function pad(value: number, length = 2): string {
+  return String(value).padStart(length, "0");
+}
+
+// An offset from UTC, as the words write it.
+function offsetText(minutes: number): string {
+  if (minutes === 0) return "UTC";
+  const size = Math.abs(minutes);
+
+  return `UTC${minutes < 0 ? "-" : "+"}${pad(Math.floor(size / 60))}:${pad(Math.round(size % 60))}`;
+}
+
+// A zone as the words name it: by the name the expression gives it, or by its offset.
+function zoneName(zone: Zone): string {
+  return zone.of === "named" ? zone.name : offsetText(zone.minutes);
+}
+
+interface WallClock {
+  date: string;
+  minute: string;
+  second: number;
+  offset: number;
+}
+
+// The wall clock of an instant in a zone, from the offset the computation reads: never from the zone of the
+// machine, whose clock the Date of the language would read.
+function wallClock(zone: Zone, instant: number): WallClock {
+  const offset = zoneOffset(zone, instant) ?? 0;
+  const at = new Date(instant + offset * MINUTE);
+
+  return {
+    date: `${pad(at.getUTCFullYear(), 4)}-${pad(at.getUTCMonth() + 1)}-${pad(at.getUTCDate())}`,
+    minute: `${pad(at.getUTCHours())}:${pad(at.getUTCMinutes())}`,
+    second: at.getUTCSeconds(),
+    offset,
+  };
+}
+
+// A time the cluster wrote, a submission, a creation or a skip, in a zone: with its date and its seconds.
+export function momentText(zone: Zone, instant: number): string {
+  const wall = wallClock(zone, instant);
+
+  return `${wall.date} ${wall.minute}:${pad(wall.second)} ${zoneName(zone)}`;
+}
+
+// A run in a zone: with its seconds when it has some, and with its date when it is not the day of the clock in
+// that zone.
+export function runText(zone: Zone, instant: number, now: number): string {
+  const wall = wallClock(zone, instant);
+  const time = `${wall.minute}${wall.second ? `:${pad(wall.second)}` : ""} ${zoneName(zone)}`;
+
+  return wall.date === wallClock(zone, now).date ? time : `${time} on ${wall.date}`;
+}
+
+// A run in the hour a zone repeats, with the offset that tells the two occurrences apart.
+function repeatedRunText(zone: Zone, instant: number): string {
+  const wall = wallClock(zone, instant);
+
+  return `${wall.minute} ${zoneName(zone)} (${offsetText(wall.offset)})`;
+}
+
+// --- The zone a schedule is read in ---
+
+type ZoneOf =
+  // The zone the expression names, which this machine knows or does not.
+  | { of: "named"; zone: Zone; known: boolean }
+  // The expression names none, or Local: the offset of the server, derived from the backups.
+  | { of: "derived"; zone: Zone; offset: ServerOffset }
+  // An interval names no zone and needs none.
+  | { of: "interval" }
+  // The expression names none, or Local, and no offset of the server is derived.
+  | { of: "not-known"; local: boolean; why: string };
+
+function zoneOf(parsed: ParsedExpression, context: AdherenceContext, at: number): ZoneOf {
+  const named = expressionZone(parsed);
+
+  if (named) return { of: "named", zone: named, known: zoneOffset(named, at) !== undefined };
+  if (parsed.kind === "every") return { of: "interval" };
+  if (context.offset) {
+    return { of: "derived", zone: { of: "fixed", minutes: context.offset.minutes }, offset: context.offset };
+  }
+  return {
+    of: "not-known",
+    local: parsed.zone.of === "local",
+    why: context.noOffset ?? SIGNAL_WORDS.noSubmissionBackup,
+  };
+}
+
+// The zone the times of a schedule are written in: the one it is read in, and UTC when that one is not known
+// or not needed, with its name.
+function writtenIn(zone: ZoneOf): Zone {
+  if (zone.of === "named") return zone.known ? zone.zone : UTC;
+  return zone.of === "derived" ? zone.zone : UTC;
+}
+
+function whose(offset: { schedule: string }, schedule: string): string {
+  return offset.schedule === schedule ? SIGNAL_WORDS.thisSchedule : SIGNAL_WORDS.otherSchedule(offset.schedule);
+}
+
+export interface ZoneLine {
+  of: ZoneOf["of"];
+  words: string;
+}
+
+function zoneLine(zone: ZoneOf, schedule: string): ZoneLine {
+  switch (zone.of) {
+    case "named":
+      return {
+        of: "named",
+        words: (zone.known ? SIGNAL_WORDS.zone.named : SIGNAL_WORDS.zone.namedNotKnown)(zoneName(zone.zone)),
+      };
+    case "derived":
+      return {
+        of: "derived",
+        words: SIGNAL_WORDS.zone.derived(
+          offsetText(zone.offset.minutes),
+          zone.offset.backup,
+          whose(zone.offset, schedule),
+          momentText(zone.zone, zone.offset.submission),
+        ),
+      };
+    case "interval":
+      return { of: "interval", words: SIGNAL_WORDS.zone.interval };
+    default:
+      return { of: "not-known", words: SIGNAL_WORDS.zone.notKnown(zone.why) };
+  }
+}
+
+// The words that say a signal was computed with a derived offset, and that the offset changed when it did.
+function derivedNotes(zone: ZoneOf, schedule: string): string[] {
+  if (zone.of !== "derived") return [];
+  const { offset } = zone;
+  const changed = offset.changed;
+
+  return [
+    SIGNAL_WORDS.derived(
+      offsetText(offset.minutes),
+      offset.backup,
+      whose(offset, schedule),
+      momentText(zone.zone, offset.submission),
+    ),
+    ...(changed
+      ? [
+          SIGNAL_WORDS.changed(
+            offsetText(changed.minutes),
+            changed.backup,
+            whose(changed, schedule),
+            momentText({ of: "fixed", minutes: changed.minutes }, changed.submission),
+          ),
+        ]
+      : []),
+  ];
+}
+
+// --- What holds the submissions ---
+
+export type Hold =
+  | {
+      state: "held";
+      // The newest backup that holds the submissions, and how many more do.
+      backup: string;
+      phase: Holding;
+      others: number;
+      // The backups are of an earlier read, at that time: the last one did not succeed.
+      stale?: number;
+    }
+  | { state: "none"; stale?: number }
+  // The backups were not read: whether one holds the submissions is not known, which is not that none does.
+  | { state: "not-known"; reason: string };
+
+function holding(backup: BackupResource): Holding | undefined {
+  const phase = backup.status?.phase;
+
+  if (typeof phase !== "string" || phase === "") return "none";
+  return phase === "New" || phase === "InProgress" ? phase : undefined;
+}
+
+// What the controller checks before it submits (schedule_controller.go L215-L238): the backups of the schedule
+// in its namespace, by its label, whichever backup it is; one with no phase, New or InProgress holds every
+// submission. The newest of them is named.
+function holdOf(schedule: ScheduleResource, backups: FamilyRead<BackupResource>): Hold {
+  if (!hasItems(backups)) return { state: "not-known", reason: lower(unread("backups", backups).reason) };
+  const stale = isStale(backups) ? { stale: backups.lastSuccess ?? 0 } : {};
+  let held: { backup: string; phase: Holding } | undefined;
+  let others = 0;
+
+  for (const backup of backupsOf(backups.items, schedule.metadata.namespace ?? "", schedule.metadata.name)) {
+    const phase = holding(backup);
+
+    if (phase === undefined) continue;
+    if (held) others += 1;
+    else held = { backup: backup.metadata.name, phase };
+  }
+  return held ? { state: "held", ...held, others, ...stale } : { state: "none", ...stale };
+}
+
+function holdNotes(hold: Hold, context: AdherenceContext): string[] {
+  if (hold.state === "not-known") return [SIGNAL_WORDS.holdNotKnown(hold.reason)];
+  if (hold.stale === undefined) return [];
+  return [
+    SIGNAL_WORDS.backupsStale(
+      formatDuration(Math.max(0, context.now - hold.stale)),
+      since(context.reads.backups.status),
+    ),
+  ];
+}
+
+// What the last read of a family answered, when its items are of a read before it.
+function since(status: ReadStatus): string {
+  return status === "forbidden" || status === "not-served" || status === "failed"
+    ? SIGNAL_WORDS.since[status]
+    : SIGNAL_WORDS.since.other;
+}
+
+// --- The signal of a schedule ---
+
+export type NextRun =
+  | { kind: "at"; at: number; text: string }
+  | { kind: "none" | "not-known"; text: string; why: string };
+
+export interface Expected {
+  // The first instant of the expression after the anchor, and how long ago it was: below zero while it is ahead.
+  at: number;
+  lateness: number;
+  // The expected instants that passed, at most the bound, the last of them, and whether more passed.
+  passed: number;
+  beyond: boolean;
+  last?: number;
+  words: string;
+}
+
+// What Velero would do if a paused schedule were resumed now, when it can be said.
+export type Resume =
+  // A run is due: it would submit at once, unless skip immediately is set at the resume, or by its server when
+  // the schedule says nothing of it.
+  | { would: "submit"; due: number; skip: false | "server" }
+  // Skip immediately is set: it would count the next run from the time it reads the schedule.
+  | { would: "skip"; due?: number }
+  | { would: "wait"; next: number }
+  | { would: "hold"; due: number; backup: string; phase: Holding }
+  | { would: "every-look" }
+  | { would: "not-known"; why: string };
+
+export interface ScheduleSignal {
+  state: SignalState;
+  reason?: NotKnownReason;
+  label: string;
+  mark: SignalMark;
+  weight: number;
+  // What orders two signals of one weight: the expected run, the earliest first, which puts the latest first
+  // among what is overdue and the soonest first among what is awaited.
+  measure?: number;
+  // The sentence of the state.
+  words: string;
+  // What is said beside it: the derived offset, the hold not known, a read of before.
+  notes: string[];
+  next: NextRun;
+  // The lines of the band, for a schedule whose expression is read.
+  zone?: ZoneLine;
+  anchor?: Anchor & { words: string };
+  expected?: Expected;
+  hold?: Hold;
+  resume?: Resume;
+  // Overdue, or held beyond the grace and the bound of the clocks.
+  late: boolean;
+}
+
+interface Parts {
+  state: SignalState;
+  reason?: NotKnownReason;
+  words: string;
+  notes?: string[];
+  next: NextRun;
+  zone?: ZoneLine;
+  anchor?: Anchor & { words: string };
+  expected?: Expected;
+  hold?: Hold;
+  resume?: Resume;
+  late?: boolean;
+}
+
+function signalOf(parts: Parts, context: AdherenceContext): ScheduleSignal {
+  const { state, notes = [], late = false, ...rest } = parts;
+  const schedules = context.reads.schedules;
+  const stale = isStale(schedules)
+    ? [
+        SIGNAL_WORDS.schedulesStale(
+          formatDuration(Math.max(0, context.now - (schedules.lastSuccess ?? 0))),
+          since(schedules.status),
+        ),
+      ]
+    : [];
+
+  return {
+    state,
+    ...rest,
+    label: SIGNAL_WORDS.label[state],
+    mark: state === "held" && late ? "late" : MARKS[state],
+    weight: SIGNAL_WEIGHTS[state],
+    ...(parts.expected && ["awaited", "due", "overdue", "held"].includes(state) ? { measure: parts.expected.at } : {}),
+    notes: [...notes, ...stale],
+    late,
+  };
+}
+
+function noRun(why: string): NextRun {
+  return { kind: "none", text: SIGNAL_WORDS.none, why };
+}
+
+function notKnown(reason: NotKnownReason, words: string, context: AdherenceContext, more: Partial<Parts> = {}) {
+  return signalOf(
+    {
+      state: "not-known",
+      reason,
+      words,
+      next: { kind: "not-known", text: SIGNAL_WORDS.notKnown, why: words },
+      ...more,
+    },
+    context,
+  );
+}
+
+// An expression with no instant at all has none in any zone, but within hours of the end of five years: Velero
+// submits it at every look, whatever the zone of its server.
+function withoutInstant(parsed: ParsedExpression, from: number): boolean {
+  return parsed.kind === "no-instant" || (parsed.kind === "fields" && nextInstant(parsed, from, UTC).kind === "none");
+}
+
+function everyLookWhat(parsed: ParsedExpression): string {
+  return parsed.kind === "no-instant" ? SIGNAL_WORDS.noInstant(parsed.descriptor) : SIGNAL_WORDS.beyondFiveYears;
+}
+
+// The day the zone the expression names repeats an hour, when it is the day of the run and the expression has
+// a run in that hour: the words of the two runs (REQ-162). A change is found in the offsets the computation
+// reads, with two hours of room on each side of the day.
+function repeatedHour(parsed: ParsedExpression, zone: Zone, at: number): string | undefined {
+  if (zone.of !== "named") return undefined;
+  const run = wallClock(zone, at);
+  const midnight = Date.UTC(Number(run.date.slice(0, 4)), Number(run.date.slice(5, 7)) - 1, Number(run.date.slice(8)));
+  const from = midnight - run.offset * MINUTE - 2 * HOUR;
+  const to = from + DAY + 4 * HOUR;
+  const before = zoneOffset(zone, from);
+  const after = zoneOffset(zone, to);
+
+  if (before === undefined || after === undefined || after >= before) return undefined;
+  let low = 0;
+  let high = (to - from) / MINUTE;
+
+  while (high - low > 1) {
+    const middle = Math.floor((low + high) / 2);
+
+    if (zoneOffset(zone, from + middle * MINUTE) === after) high = middle;
+    else low = middle;
+  }
+  // The first instant at the later offset; the wall clock goes back from what it would show then at the
+  // earlier offset to what it shows, and the instants of that length before the change are the first
+  // occurrence of the hour it repeats.
+  const change = from + high * MINUTE;
+
+  if (wallClock(zone, change).date !== run.date) return undefined;
+  const length = (before - after) * MINUTE;
+  const shown = (offset: number) => {
+    const wall = new Date(change + offset * MINUTE);
+
+    return `${pad(wall.getUTCHours())}:${pad(wall.getUTCMinutes())}`;
+  };
+  const first = nextInstant(parsed, change - length - SECOND, zone);
+  const second = nextInstant(parsed, change - SECOND, zone);
+
+  if (first.kind !== "instant" || first.at >= change || second.kind !== "instant" || second.at >= change + length) {
+    return undefined;
+  }
+  // Said on the day of the change, until the second of the two runs.
+  if (at > second.at) return undefined;
+  return SIGNAL_WORDS.repeated(
+    run.date,
+    zone.name,
+    shown(before),
+    shown(after),
+    repeatedRunText(zone, first.at),
+    repeatedRunText(zone, second.at),
+  );
+}
+
+// The signal of a schedule (REQ-163 to REQ-166): the gates of the pause and of the phase first, and nothing
+// computed before them; then, of a schedule Velero took, the expected run in the zone the expression is read
+// in, the hold, and the state by the clock, with the grace and the bound of the clocks.
+export function scheduleSignal(schedule: ScheduleResource, context: AdherenceContext): ScheduleSignal {
+  const phase = scheduleState(schedule.status?.phase);
+
+  if (schedule.spec?.paused === true) return pausedSignal(schedule, phase, context);
+  if (phase.validation === "invalid") {
+    return signalOf({ state: "refused", words: SIGNAL_WORDS.refused, next: noRun(SIGNAL_WORDS.refused) }, context);
+  }
+  if (phase.validation === "not-validated") return notKnown("not-read", SIGNAL_WORDS.notRead, context);
+  if (phase.validation === "unknown") {
+    return notKnown("unknown-phase", SIGNAL_WORDS.unknownPhase(phase.reported ?? ""), context);
+  }
+  return enabledSignal(schedule, context);
+}
+
+function enabledSignal(schedule: ScheduleResource, context: AdherenceContext): ScheduleSignal {
+  const { now } = context;
+  const name = schedule.metadata.name;
+  const parsed = parseExpression(schedule.spec?.schedule);
+
+  if (parsed.kind === "refused") return notKnown("not-readable", SIGNAL_WORDS.notReadable(parsed.reason), context);
+  const anchor = anchorOf(schedule);
+
+  if (!anchor) return notKnown("no-anchor", SIGNAL_WORDS.noAnchor, context);
+  const zone = zoneOf(parsed, context, anchor.at);
+  const written = writtenIn(zone);
+  const hold = holdOf(schedule, context.reads.backups);
+  const line = zoneLine(zone, name);
+  const anchored = { ...anchor, words: capital(SIGNAL_WORDS.from(anchor.of, momentText(written, anchor.at))) };
+  const everyLook = () => {
+    const last = timestamp(schedule.status?.lastBackup);
+    const words = [
+      SIGNAL_WORDS.atEveryLook(
+        everyLookWhat(parsed),
+        last === undefined ? SIGNAL_WORDS.noSubmissionYet : SIGNAL_WORDS.lastSubmission(momentText(written, last)),
+      ),
+      hold.state === "held" ? SIGNAL_WORDS.heldNow(hold.backup, hold.phase) : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    return signalOf(
+      {
+        state: "at-every-look",
+        words,
+        notes: holdNotes(hold, context),
+        next: noRun(words),
+        zone: line,
+        anchor: anchored,
+        hold,
+        late: false,
+      },
+      context,
+    );
+  };
+
+  if (zone.of === "not-known" || (zone.of === "named" && !zone.known)) {
+    if (withoutInstant(parsed, anchor.at)) return everyLook();
+    return zone.of === "not-known"
+      ? notKnown("no-offset", SIGNAL_WORDS.noOffset(zone.local, zone.why), context, { zone: line, anchor: anchored })
+      : notKnown("unknown-zone", SIGNAL_WORDS.unknownZone(zoneName(zone.zone)), context, {
+          zone: line,
+          anchor: anchored,
+        });
+  }
+  const run = expectedRun(schedule, parsed, zone.of === "interval" ? undefined : zone.zone, now);
+
+  if (run.kind === "at-every-look") return everyLook();
+  if (run.kind !== "expected") return notKnown("no-anchor", SIGNAL_WORDS.noAnchor, context);
+  const lateness = now - run.at;
+  const bound = Math.max(GRACE, context.clocks.bound);
+  const late = run.due && lateness > bound;
+  const at = runText(written, run.at, now);
+  const from = SIGNAL_WORDS.from(anchor.of, momentText(written, anchor.at));
+  const ahead = SIGNAL_WORDS.inTime(formatDuration(Math.max(0, -lateness)));
+  const ago = formatDuration(Math.max(0, lateness));
+  const expected: Expected = {
+    at: run.at,
+    lateness,
+    passed: run.passed,
+    beyond: run.beyond,
+    ...(run.lastPassed === undefined ? {} : { last: run.lastPassed }),
+    words:
+      run.passed === 0
+        ? SIGNAL_WORDS.passedNone
+        : run.beyond
+          ? SIGNAL_WORDS.passedBeyond(at)
+          : run.passed === 1
+            ? SIGNAL_WORDS.passedOne(at)
+            : SIGNAL_WORDS.passedMany(run.passed, at, runText(written, run.lastPassed ?? run.at, now)),
+  };
+  const next: NextRun = {
+    kind: "at",
+    at: run.at,
+    text: run.due ? SIGNAL_WORDS.ago(ago) : ahead,
+  };
+  const notes = [...derivedNotes(zone, name), ...holdNotes(hold, context)];
+  const common = { next, zone: line, anchor: anchored, expected, hold, notes };
+
+  if (hold.state === "held") {
+    const words = [
+      SIGNAL_WORDS.held(hold.backup, hold.phase),
+      hold.others ? SIGNAL_WORDS.heldMore(hold.others) : "",
+      run.due ? SIGNAL_WORDS.heldExpected(at, ago) : SIGNAL_WORDS.heldNext(at, ahead),
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    return signalOf({ state: "held", words, ...common, late }, context);
+  }
+  if (!run.due) {
+    const repeated = repeatedHour(parsed, zone.of === "named" ? zone.zone : UTC, run.at);
+    const words = [SIGNAL_WORDS.awaited(formatDuration(-lateness), at, from), repeated ?? ""].filter(Boolean).join(" ");
+
+    return signalOf({ state: "awaited", words, ...common }, context);
+  }
+  if (!late) {
+    const words =
+      lateness > GRACE
+        ? SIGNAL_WORDS.dueByClocks(at, ago, formatDuration(context.clocks.bound))
+        : SIGNAL_WORDS.due(at, ago);
+
+    return signalOf({ state: "due", words, ...common }, context);
+  }
+  return signalOf(
+    {
+      state: "overdue",
+      words: SIGNAL_WORDS.overdue(ago, at, from, SIGNAL_WORDS.passed(run.passed, run.beyond)),
+      ...common,
+      late: true,
+    },
+    context,
+  );
+}
+
+// A paused schedule: no run, and what Velero would do if it were resumed now, when Velero took the expression
+// before the pause and the zone it is read in is known (REQ-164). The phase is the one written before the
+// pause, which Velero writes again when it reads the schedule at the resume.
+function pausedSignal(schedule: ScheduleResource, phase: ScheduleState, context: AdherenceContext): ScheduleSignal {
+  if (phase.validation !== "valid") {
+    const said =
+      phase.validation === "invalid"
+        ? SIGNAL_WORDS.resume.refused
+        : phase.validation === "not-validated"
+          ? SIGNAL_WORDS.resume.notRead
+          : SIGNAL_WORDS.resume.unknownPhase(phase.reported ?? "");
+    const words = `${SIGNAL_WORDS.paused} ${said}`;
+
+    return signalOf({ state: "paused", words, next: noRun(words) }, context);
+  }
+  const { now } = context;
+  const parsed = parseExpression(schedule.spec?.schedule);
+  const anchor = anchorOf(schedule);
+  const done = (resume: Resume, said: string, more: Partial<Parts> = {}) => {
+    const words = `${SIGNAL_WORDS.paused} ${said}`;
+
+    return signalOf({ state: "paused", words, next: noRun(words), resume, ...more }, context);
+  };
+  const unknown = (why: string, more: Partial<Parts> = {}) =>
+    done({ would: "not-known", why }, SIGNAL_WORDS.resume.notKnown(why), more);
+
+  if (parsed.kind === "refused") return unknown(SIGNAL_WORDS.why["not-readable"]);
+  if (!anchor) return unknown(SIGNAL_WORDS.why["no-anchor"]);
+  const zone = zoneOf(parsed, context, anchor.at);
+  const written = writtenIn(zone);
+  const line = zoneLine(zone, schedule.metadata.name);
+  const everyLook = () =>
+    done({ would: "every-look" }, SIGNAL_WORDS.resume.everyLook(everyLookWhat(parsed)), { zone: line });
+
+  if (zone.of === "not-known" || (zone.of === "named" && !zone.known)) {
+    if (withoutInstant(parsed, anchor.at)) return everyLook();
+    return unknown(
+      zone.of === "not-known" ? SIGNAL_WORDS.why["no-offset"] : SIGNAL_WORDS.why["unknown-zone"](zoneName(zone.zone)),
+      { zone: line },
+    );
+  }
+  const run = expectedRun(schedule, parsed, zone.of === "interval" ? undefined : zone.zone, now);
+
+  if (run.kind === "at-every-look") return everyLook();
+  if (run.kind !== "expected") return unknown(SIGNAL_WORDS.why["no-anchor"]);
+  const notes = derivedNotes(zone, schedule.metadata.name);
+  const at = runText(written, run.at, now);
+  const more = { zone: line, notes };
+
+  if (schedule.spec?.skipImmediately === true) {
+    return done(
+      { would: "skip", ...(run.due ? { due: run.at } : {}) },
+      [SIGNAL_WORDS.resume.skip, run.due ? SIGNAL_WORDS.resume.skipDue(at) : ""].filter(Boolean).join(" "),
+      more,
+    );
+  }
+  if (!run.due) return done({ would: "wait", next: run.at }, SIGNAL_WORDS.resume.wait(at), more);
+  const hold = holdOf(schedule, context.reads.backups);
+
+  if (hold.state === "held") {
+    return done(
+      { would: "hold", due: run.at, backup: hold.backup, phase: hold.phase },
+      SIGNAL_WORDS.resume.hold(hold.backup, hold.phase, at),
+      { ...more, hold },
+    );
+  }
+  const skip = schedule.spec?.skipImmediately === false ? false : "server";
+
+  return done(
+    { would: "submit", due: run.at, skip },
+    `${skip === false ? SIGNAL_WORDS.resume.submit(at) : SIGNAL_WORDS.resume.submitUnlessServer(at)} ${SIGNAL_WORDS.resume.skipMoves}`,
+    { ...more, hold, notes: [...notes, ...holdNotes(hold, context)] },
+  );
+}
+
+// The order by adherence of the list (REQ-168), as one text a column sorts: the weight of the state, then the
+// expected run, the earliest first, then the name, by its characters.
+export function adherenceOrder(signal: ScheduleSignal, name: string): string {
+  const measure = Math.min(Math.max(0, Math.floor(signal.measure ?? 0)), 9_999_999_999_999);
+
+  return `${signal.weight}${pad(measure, 13)}${name}`;
+}
+
+// --- The last observed run ---
+
+export interface LastObserved {
+  submission:
+    | { state: "none" }
+    // The backup created within a minute of the last submission, among the backups that exist.
+    | { state: "found"; at: number; backup: string }
+    // None of them: it expired, was deleted or cannot be read; the submission stands.
+    | { state: "not-found"; at: number }
+    // The backups were not read.
+    | { state: "not-known"; at: number; reason: string };
+  // The newest backup of the schedule created after its last submission, or any when it has none: not a
+  // submission of the schedule, and how many such there are.
+  newer?: { backup: string; created: number; count: number };
+  // The newest backup of the schedule that exists, when it is another than the one of the submission and
+  // older than the submission.
+  newest?: string;
+  words: string[];
+}
+
+// The last observed run (REQ-167): the last submission with the backup of it, and the newest backup when it is
+// another, which is said not to be a submission when it is newer. A distance between two backups is never
+// said to be a run that was missed.
+export function lastObservedRun(schedule: ScheduleResource, context: AdherenceContext): LastObserved {
+  const parsed = parseExpression(schedule.spec?.schedule);
+  const written =
+    parsed.kind === "refused" ? UTC : writtenIn(zoneOf(parsed, context, timestamp(schedule.status?.lastBackup) ?? 0));
+  const at = timestamp(schedule.status?.lastBackup);
+  const backups = context.reads.backups;
+
+  if (!hasItems(backups)) {
+    const reason = lower(unread("backups", backups).reason);
+
+    return at === undefined
+      ? { submission: { state: "none" }, words: [SIGNAL_WORDS.observed.none] }
+      : {
+          submission: { state: "not-known", at, reason },
+          words: [SIGNAL_WORDS.observed.notKnown(momentText(written, at), reason)],
+        };
+  }
+  const found = submissionBackup(schedule, backups.items);
+  const later = laterBackups(schedule, backups.items);
+  const own = found.kind === "found" ? found.backup : undefined;
+  const newest = backupsOf(backups.items, schedule.metadata.namespace ?? "", schedule.metadata.name)[0];
+  const words: string[] = [];
+  let submission: LastObserved["submission"] = { state: "none" };
+
+  if (at === undefined) {
+    words.push(SIGNAL_WORDS.observed.none);
+  } else if (own) {
+    submission = { state: "found", at, backup: own.metadata.name };
+    words.push(SIGNAL_WORDS.observed.found(momentText(written, at), own.metadata.name));
+  } else {
+    submission = { state: "not-found", at };
+    words.push(SIGNAL_WORDS.observed.notFound(momentText(written, at)));
+  }
+  const first = later[0];
+  const created = first ? timestamp(first.metadata.creationTimestamp) : undefined;
+
+  if (first && created !== undefined) {
+    words.push(SIGNAL_WORDS.observed.newer(first.metadata.name, momentText(written, created)));
+    if (later.length > 1) words.push(SIGNAL_WORDS.observed.newerMore(later.length - 1));
+  }
+  const older = newest && newest !== own && !later.includes(newest) ? newest.metadata.name : undefined;
+
+  if (older) words.push(SIGNAL_WORDS.observed.newest(older));
+  return {
+    submission,
+    ...(first && created !== undefined ? { newer: { backup: first.metadata.name, created, count: later.length } } : {}),
+    ...(older ? { newest: older } : {}),
+    words,
   };
 }

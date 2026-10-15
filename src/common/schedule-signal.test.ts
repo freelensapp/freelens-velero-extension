@@ -1,9 +1,36 @@
 import { describe, expect, it } from "vitest";
-import { emptyRead, failed, succeeded } from "./read-state";
-import { CLOCK_WORDS, clocksOf, keepOffset } from "./schedule-signal";
+import { formatDuration } from "./duration";
+import { unread } from "./location-users";
+import { BACKUP_PHASES } from "./phases";
+import { emptyRead, failed, loading, succeeded } from "./read-state";
+import { COUNT_BOUND, GRACE, parseExpression, UTC } from "./schedule-adherence";
+import { holdsSubmissions, scheduleHistory } from "./schedule-history";
+import {
+  adherenceContext,
+  adherenceOrder,
+  CLOCK_WORDS,
+  clocksOf,
+  keepOffset,
+  lastObservedRun,
+  momentText,
+  runText,
+  SIGNAL_WEIGHTS,
+  SIGNAL_WORDS,
+  scheduleSignal,
+} from "./schedule-signal";
+import { NOTES } from "./schedule-view";
 import { LABELS } from "./types";
 
-import type { AdherenceReads, ServerOffset } from "./schedule-signal";
+import type { FamilyRead } from "./read-state";
+import type { Zone } from "./schedule-adherence";
+import type {
+  AdherenceContext,
+  AdherenceReads,
+  ApiServerTime,
+  ScheduleSignal,
+  ServerOffset,
+  SignalState,
+} from "./schedule-signal";
 import type { BackupResource, ScheduleResource } from "./types";
 
 // The zone of the machine the tests run on is one no case below is computed or written in, fourteen hours east
@@ -40,8 +67,9 @@ function backup(
       creationTimestamp: new Date(created).toISOString(),
       labels: more.schedule === "" ? {} : { [LABELS.schedule]: more.schedule ?? name.replace(/-\d+$/, "") },
     },
+    // A phase of nothing is a backup that reports none.
     status: {
-      phase: more.phase ?? "Completed",
+      ...(more.phase === "" ? {} : { phase: more.phase ?? "Completed" }),
       ...(more.start === undefined ? {} : { startTimestamp: new Date(more.start).toISOString() }),
     },
   };
@@ -61,6 +89,21 @@ function submitted(name: string, submission: number, minutes: number, created = 
 function reads(schedules: ScheduleResource[], backups: BackupResource[], at = now): AdherenceReads {
   return { schedules: succeeded(schedules, at), backups: succeeded(backups, at) };
 }
+
+// The installation with these schedules and backups, read at the clock, with the offset they give.
+function contextOf(
+  schedules: ScheduleResource[],
+  backups: BackupResource[],
+  at = now,
+  server?: ApiServerTime,
+): AdherenceContext {
+  const read = reads(schedules, backups, at);
+
+  return adherenceContext(read, at, keepOffset(undefined, read), server);
+}
+
+// A reason of the words of a family that was not read, inside a sentence.
+const lowered = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
 
 const submission = Date.parse("2026-10-13T03:00:41Z");
 const nightly = schedule("nightly", { phase: "Enabled", lastBackup: "2026-10-13T03:00:41Z" });
@@ -336,5 +379,906 @@ describe("ADH-07: the clocks of this machine and of the cluster", () => {
 
     expect(both).toMatchObject({ ahead: HOUR, server: 3000, bound: HOUR });
     expect(both.words).toContain(CLOCK_WORDS.object({ kind: "schedule", name: "nightly", time: "submission" }, HOUR));
+  });
+});
+
+const ROME: Zone = { of: "named", name: "Europe/Rome" };
+const EAST: Zone = { of: "fixed", minutes: 120 };
+
+describe("the words of a time, in the zone the expression is read in", () => {
+  it("writes a run with its date when it is not the day of the clock in that zone, and a time the cluster wrote whole", () => {
+    expect(runText(UTC, Date.parse("2026-10-14T03:00:00Z"), now)).toBe("03:00 UTC");
+    expect(runText(UTC, Date.parse("2026-10-13T03:00:00Z"), now)).toBe("03:00 UTC on 2026-10-13");
+    expect(runText(UTC, Date.parse("2026-10-14T09:00:41Z"), now)).toBe("09:00:41 UTC");
+    expect(runText(EAST, Date.parse("2026-10-14T23:30:00Z"), now)).toBe("01:30 UTC+02:00 on 2026-10-15");
+    expect(runText({ of: "fixed", minutes: -330 }, Date.parse("2026-10-14T08:30:00Z"), now)).toBe("03:00 UTC-05:30");
+    expect(runText(ROME, Date.parse("2026-10-14T01:00:00Z"), now)).toBe("03:00 Europe/Rome");
+    expect(momentText(UTC, Date.parse("2026-10-13T03:00:41Z"))).toBe("2026-10-13 03:00:41 UTC");
+    expect(momentText(EAST, Date.parse("2026-10-13T03:00:41Z"))).toBe("2026-10-13 05:00:41 UTC+02:00");
+    expect(momentText(ROME, Date.parse("2026-01-13T03:00:41Z"))).toBe("2026-01-13 04:00:41 Europe/Rome");
+  });
+});
+
+describe("ADH-03: the zone a schedule is read in, in its signal", () => {
+  const own = submitted("nightly", submission, 120);
+  const moment = "2026-10-13 05:00:41 UTC+02:00";
+
+  it("runs with the zone of the machine fourteen hours east of UTC, which nothing is computed or written in", () => {
+    expect(new Date(now).getTimezoneOffset()).toBe(-840);
+  });
+
+  it("computes with the offset of the newest submission, and says it with the schedule it came from when it is another", () => {
+    const fresh = schedule("fresh", { phase: "Enabled" }, { schedule: "0 3 * * *" }, "2026-10-14T10:00:00Z");
+    const context = contextOf([nightly, fresh], [own]);
+    const signal = scheduleSignal(fresh, context);
+    const other = SIGNAL_WORDS.otherSchedule("nightly");
+
+    // 03:00 two hours east of UTC, the day after the creation: 01:00 in UTC.
+    expect(signal).toMatchObject({ state: "awaited", zone: { of: "derived" }, anchor: { of: "creation" } });
+    expect(signal.expected?.at).toBe(Date.parse("2026-10-15T01:00:00Z"));
+    expect(signal.notes).toEqual([SIGNAL_WORDS.derived("UTC+02:00", own.metadata.name, other, moment)]);
+    expect(signal.zone?.words).toBe(SIGNAL_WORDS.zone.derived("UTC+02:00", own.metadata.name, other, moment));
+    expect(scheduleSignal(nightly, context).notes).toEqual([
+      SIGNAL_WORDS.derived("UTC+02:00", own.metadata.name, SIGNAL_WORDS.thisSchedule, moment),
+    ]);
+    // Approximate across a change of daylight saving time, which a derived offset cannot see.
+    expect(signal.notes[0]).toContain("an hour off");
+  });
+
+  it("says that the offset changed between two submissions, the newest standing", () => {
+    const daily = schedule("daily", { phase: "Enabled", lastBackup: "2026-10-12T03:00:00Z" });
+    const before = submitted("daily", Date.parse("2026-10-12T03:00:00Z"), 60);
+    const context = contextOf([daily, nightly], [before, own]);
+    const changed = (of: string) =>
+      SIGNAL_WORDS.changed("UTC+01:00", before.metadata.name, of, "2026-10-12 04:00:00 UTC+01:00");
+
+    expect(scheduleSignal(nightly, context).notes).toEqual([
+      SIGNAL_WORDS.derived("UTC+02:00", own.metadata.name, SIGNAL_WORDS.thisSchedule, moment),
+      changed(SIGNAL_WORDS.otherSchedule("daily")),
+    ]);
+    expect(scheduleSignal(daily, context).notes).toEqual([
+      SIGNAL_WORDS.derived("UTC+02:00", own.metadata.name, SIGNAL_WORDS.otherSchedule("nightly"), moment),
+      changed(SIGNAL_WORDS.thisSchedule),
+    ]);
+  });
+
+  it("computes an interval with no zone, and five fields with no zone only from a derived offset", () => {
+    const every = schedule(
+      "every",
+      { phase: "Enabled", lastBackup: "2026-10-14T10:00:00Z" },
+      { schedule: "@every 6h" },
+    );
+    const context = contextOf([every, nightly], []);
+
+    expect(scheduleSignal(every, context)).toMatchObject({
+      state: "awaited",
+      zone: { of: "interval", words: SIGNAL_WORDS.zone.interval },
+      notes: [],
+      next: { kind: "at", at: Date.parse("2026-10-14T16:00:00Z") },
+    });
+    expect(scheduleSignal(nightly, context)).toMatchObject({ state: "not-known", reason: "no-offset" });
+  });
+
+  it("computes with the offset kept once the backup it was read in is gone", () => {
+    const kept = keepOffset(undefined, reads([nightly], [own]));
+    const gone = reads([nightly], []);
+    const signal = scheduleSignal(nightly, adherenceContext(gone, now, keepOffset(kept, gone)));
+
+    expect(signal).toMatchObject({ state: "overdue", zone: { of: "derived" } });
+    expect(signal.expected?.at).toBe(Date.parse("2026-10-14T01:00:00Z"));
+    expect(scheduleSignal(nightly, adherenceContext(gone, now)).reason).toBe("no-offset");
+  });
+
+  it("reads Local as the zone of the server, and a name this machine does not know as a zone not known", () => {
+    const local = schedule(
+      "local",
+      { phase: "Enabled", lastBackup: "2026-10-13T03:00:41Z" },
+      { schedule: "TZ=Local 0 3 * * *" },
+    );
+    const mars = schedule(
+      "mars",
+      { phase: "Enabled", lastBackup: "2026-10-13T03:00:41Z" },
+      { schedule: "TZ=Mars/Olympus 0 3 * * *" },
+    );
+
+    expect(scheduleSignal(local, contextOf([local], []))).toMatchObject({
+      reason: "no-offset",
+      words: SIGNAL_WORDS.noOffset(true, SIGNAL_WORDS.noSubmissionBackup),
+    });
+    expect(scheduleSignal(local, contextOf([local, nightly], [own]))).toMatchObject({
+      state: "overdue",
+      zone: { of: "derived" },
+    });
+    // Velero took the expression: the words say that this machine does not know the zone, never that the
+    // server refused it.
+    expect(scheduleSignal(mars, contextOf([mars], []))).toMatchObject({
+      state: "not-known",
+      reason: "unknown-zone",
+      words: SIGNAL_WORDS.unknownZone("Mars/Olympus"),
+      zone: { of: "named", words: SIGNAL_WORDS.zone.namedNotKnown("Mars/Olympus") },
+    });
+    expect(SIGNAL_WORDS.unknownZone("Mars/Olympus")).not.toMatch(/refuse/);
+  });
+
+  it("says the two runs of the hour a named zone repeats, on that day, in the words of the awaited state", () => {
+    const rome = (lastBackup: string, expression = "CRON_TZ=Europe/Rome 0 2 * * *") =>
+      schedule("rome", { phase: "Enabled", lastBackup }, { schedule: expression });
+    const at = (item: ScheduleResource, clock: string) =>
+      scheduleSignal(item, contextOf([item], [], Date.parse(clock)));
+    const repeated = SIGNAL_WORDS.repeated(
+      "2026-10-25",
+      "Europe/Rome",
+      "03:00",
+      "02:00",
+      "02:00 Europe/Rome (UTC+02:00)",
+      "02:00 Europe/Rome (UTC+01:00)",
+    );
+    const first = at(rome("2026-10-24T00:00:30Z"), "2026-10-24T22:00:00Z");
+
+    expect(first.expected?.at).toBe(Date.parse("2026-10-25T00:00:00Z"));
+    expect(first.words).toBe(
+      `${SIGNAL_WORDS.awaited("2h", "02:00 Europe/Rome", SIGNAL_WORDS.from("last-submission", "2026-10-24 02:00:30 Europe/Rome"))} ${repeated}`,
+    );
+    // Once the first is submitted the second is the next run, and the words still say both.
+    const second = at(rome("2026-10-25T00:00:12Z"), "2026-10-25T00:30:00Z");
+
+    expect(second.expected?.at).toBe(Date.parse("2026-10-25T01:00:00Z"));
+    expect(second.words).toContain(repeated);
+    // After the second, and for an expression with no run in that hour, nothing of it.
+    const after = at(rome("2026-10-25T01:00:12Z"), "2026-10-25T02:00:00Z");
+
+    expect(after.words).toBe(
+      SIGNAL_WORDS.awaited(
+        "23h",
+        "02:00 Europe/Rome on 2026-10-26",
+        SIGNAL_WORDS.from("last-submission", "2026-10-25 02:00:12 Europe/Rome"),
+      ),
+    );
+    expect(at(rome("2026-10-24T02:00:30Z", "CRON_TZ=Europe/Rome 0 4 * * *"), "2026-10-24T22:00:00Z").words).toBe(
+      SIGNAL_WORDS.awaited(
+        "5h",
+        "04:00 Europe/Rome",
+        SIGNAL_WORDS.from("last-submission", "2026-10-24 04:00:30 Europe/Rome"),
+      ),
+    );
+    // A zone west of UTC, on the day it goes back.
+    const york = at(rome("2026-10-31T05:30:30Z", "CRON_TZ=America/New_York 30 1 * * *"), "2026-11-01T04:00:00Z");
+
+    expect(york.words).toContain(
+      SIGNAL_WORDS.repeated(
+        "2026-11-01",
+        "America/New_York",
+        "02:00",
+        "01:00",
+        "01:30 America/New_York (UTC-04:00)",
+        "01:30 America/New_York (UTC-05:00)",
+      ),
+    );
+  });
+
+  it("computes and writes the same signals whatever the zone of the machine", () => {
+    const items = [
+      nightly,
+      schedule(
+        "rome",
+        { phase: "Enabled", lastBackup: "2026-10-13T00:00:30Z" },
+        { schedule: "CRON_TZ=Europe/Rome 0 2 * * *" },
+      ),
+      schedule("every", { phase: "Enabled", lastBackup: "2026-10-14T10:00:00Z" }, { schedule: "@every 6h" }),
+      schedule("fresh", { phase: "Enabled" }, { schedule: "0 3 * * *" }, "2026-10-14T10:00:00Z"),
+    ];
+    const signals = () => {
+      const context = contextOf(items, [own]);
+
+      return items.map((item) => [scheduleSignal(item, context), lastObservedRun(item, context)]);
+    };
+    const before = signals();
+    const machine = process.env.TZ;
+
+    process.env.TZ = "America/Los_Angeles";
+    try {
+      expect(new Date(now).getTimezoneOffset()).toBe(420);
+      expect(signals()).toEqual(before);
+    } finally {
+      process.env.TZ = machine;
+    }
+    expect(new Date(now).getTimezoneOffset()).toBe(-840);
+    expect(JSON.stringify(before)).not.toMatch(/\+14:00|-07:00|Kiritimati|Los_Angeles/);
+  });
+});
+
+describe("ADH-04: awaited, due, overdue and held, by the clock of this machine", () => {
+  const daily = schedule(
+    "daily",
+    { phase: "Enabled", lastBackup: "2026-10-13T03:00:41Z" },
+    { schedule: "TZ=UTC 0 3 * * *" },
+  );
+  const expected = Date.parse("2026-10-14T03:00:00Z");
+  const from = SIGNAL_WORDS.from("last-submission", "2026-10-13 03:00:41 UTC");
+  const at = (clock: number, backups: BackupResource[] = [], item = daily) =>
+    scheduleSignal(item, contextOf([item], backups, clock));
+
+  it("is awaited while the expected run is ahead, and at it", () => {
+    const signal = at(expected - 2 * HOUR - 12 * MINUTE);
+
+    expect(signal).toMatchObject({
+      state: "awaited",
+      label: SIGNAL_WORDS.label.awaited,
+      mark: "awaited",
+      weight: SIGNAL_WEIGHTS.awaited,
+      measure: expected,
+      late: false,
+      notes: [],
+      next: { kind: "at", at: expected, text: SIGNAL_WORDS.inTime("2h 12m") },
+      zone: { of: "named", words: SIGNAL_WORDS.zone.named("UTC") },
+      anchor: { of: "last-submission", at: submission, words: from.charAt(0).toUpperCase() + from.slice(1) },
+    });
+    expect(signal.words).toBe(SIGNAL_WORDS.awaited("2h 12m", "03:00 UTC", from));
+    expect(signal.expected).toEqual({
+      at: expected,
+      lateness: -(2 * HOUR + 12 * MINUTE),
+      passed: 0,
+      beyond: false,
+      words: SIGNAL_WORDS.passedNone,
+    });
+    // At the instant itself: the controller submits when its clock is after it.
+    expect(at(expected).state).toBe("awaited");
+  });
+
+  it("is due for the five minutes of the grace after the expected run", () => {
+    const signal = at(expected + 4 * MINUTE);
+
+    expect(signal).toMatchObject({
+      state: "due",
+      label: SIGNAL_WORDS.label.due,
+      mark: "awaited",
+      weight: SIGNAL_WEIGHTS.due,
+      late: false,
+      next: { kind: "at", at: expected, text: SIGNAL_WORDS.ago("4m") },
+    });
+    expect(signal.words).toBe(SIGNAL_WORDS.due("03:00 UTC", "4m"));
+    expect(signal.words).toContain("once a minute");
+    expect(at(expected + 1000).state).toBe("due");
+    expect(at(expected + GRACE).state).toBe("due");
+    expect(at(expected + GRACE + 1000).state).toBe("overdue");
+  });
+
+  it("is overdue after the grace, with how long, the expected run, its anchor and the count", () => {
+    const signal = at(expected + 6 * MINUTE);
+
+    expect(signal).toMatchObject({
+      state: "overdue",
+      label: SIGNAL_WORDS.label.overdue,
+      mark: "late",
+      weight: SIGNAL_WEIGHTS.overdue,
+      measure: expected,
+      late: true,
+      anchor: { of: "last-submission", at: submission },
+    });
+    expect(signal.expected).toEqual({
+      at: expected,
+      lateness: 6 * MINUTE,
+      passed: 1,
+      beyond: false,
+      last: expected,
+      words: SIGNAL_WORDS.passedOne("03:00 UTC"),
+    });
+    expect(signal.words).toBe(SIGNAL_WORDS.overdue("6m", "03:00 UTC", from, SIGNAL_WORDS.passed(1, false)));
+    const three = at(Date.parse("2026-10-16T12:00:00Z"));
+
+    expect(three.expected).toMatchObject({ passed: 3, last: Date.parse("2026-10-16T03:00:00Z") });
+    expect(three.expected?.words).toBe(SIGNAL_WORDS.passedMany(3, "03:00 UTC on 2026-10-14", "03:00 UTC"));
+    expect(three.words).toBe(
+      SIGNAL_WORDS.overdue("2d 9h", "03:00 UTC on 2026-10-14", from, SIGNAL_WORDS.passed(3, false)),
+    );
+  });
+
+  it("counts up to one hundred, and says which of the three times the count starts from", () => {
+    const minutely = schedule(
+      "minutely",
+      { phase: "Enabled", lastBackup: "2025-10-14T00:00:00Z" },
+      { schedule: "@every 1m" },
+    );
+    const first = Date.parse("2025-10-14T00:01:00Z");
+    const many = at(now, [], minutely);
+
+    expect(many.expected).toMatchObject({ at: first, passed: COUNT_BOUND, beyond: true });
+    expect(many.expected?.words).toBe(SIGNAL_WORDS.passedBeyond("00:01 UTC on 2025-10-14"));
+    expect(many.words).toBe(
+      SIGNAL_WORDS.overdue(
+        formatDuration(now - first),
+        "00:01 UTC on 2025-10-14",
+        SIGNAL_WORDS.from("last-submission", "2025-10-14 00:00:00 UTC"),
+        SIGNAL_WORDS.passed(COUNT_BOUND, true),
+      ),
+    );
+    expect(SIGNAL_WORDS.passed(COUNT_BOUND, true)).toContain(`more than ${COUNT_BOUND}`);
+    const created = schedule("created", { phase: "Enabled" }, { schedule: "TZ=UTC 0 3 * * *" }, "2026-10-12T10:00:00Z");
+
+    expect(at(now, [], created)).toMatchObject({ state: "overdue", anchor: { of: "creation" } });
+    expect(at(now, [], created).words).toBe(
+      SIGNAL_WORDS.overdue(
+        "1d 9h",
+        "03:00 UTC on 2026-10-13",
+        SIGNAL_WORDS.from("creation", "2026-10-12 10:00:00 UTC"),
+        SIGNAL_WORDS.passed(2, false),
+      ),
+    );
+    const skipped = schedule(
+      "skipped",
+      { phase: "Enabled", lastBackup: "2026-10-12T03:00:00Z", lastSkipped: "2026-10-13T10:00:00Z" },
+      { schedule: "TZ=UTC 0 3 * * *" },
+    );
+
+    expect(at(now, [], skipped)).toMatchObject({ state: "overdue", anchor: { of: "last-skipped" } });
+    expect(at(now, [], skipped).words).toBe(
+      SIGNAL_WORDS.overdue(
+        "9h",
+        "03:00 UTC",
+        SIGNAL_WORDS.from("last-skipped", "2026-10-13 10:00:00 UTC"),
+        SIGNAL_WORDS.passed(1, false),
+      ),
+    );
+  });
+
+  it.each([...BACKUP_PHASES.map((phase): [string, string] => [phase, phase]), ["no phase", ""]])(
+    "is held by a backup of the schedule that reports %s only when it is none, New or InProgress",
+    (_, phase) => {
+      const backups = [backup("daily-20261014030041", expected + 41_000, { phase })];
+      const holds = phase === "" || phase === "New" || phase === "InProgress";
+      const history = scheduleHistory(daily, succeeded(backups, now), now);
+
+      expect(at(expected + HOUR, backups).state).toBe(holds ? "held" : "overdue");
+      // As the history of the schedule says of what holds the submissions.
+      expect(history.state === "listed" && holdsSubmissions(history.items)).toBe(holds);
+    },
+  );
+
+  it("leads with the hold, which is late once the grace passed", () => {
+    const holding = backup("daily-20261014030000", expected, { phase: "InProgress" });
+    const beyond = at(expected + 2 * HOUR + 14 * MINUTE, [holding]);
+
+    expect(beyond).toMatchObject({
+      state: "held",
+      label: SIGNAL_WORDS.label.held,
+      mark: "late",
+      weight: SIGNAL_WEIGHTS.held,
+      late: true,
+      hold: { state: "held", backup: holding.metadata.name, phase: "InProgress", others: 0 },
+    });
+    expect(beyond.words).toBe(
+      `${SIGNAL_WORDS.held(holding.metadata.name, "InProgress")} ${SIGNAL_WORDS.heldExpected("03:00 UTC", "2h 14m")}`,
+    );
+    expect(at(expected + 2 * MINUTE, [holding])).toMatchObject({ state: "held", mark: "awaited", late: false });
+    expect(at(expected - HOUR, [holding]).words).toBe(
+      `${SIGNAL_WORDS.held(holding.metadata.name, "InProgress")} ${SIGNAL_WORDS.heldNext("03:00 UTC", SIGNAL_WORDS.inTime("1h"))}`,
+    );
+    // The newest that holds them is named, and the others counted.
+    const more = at(expected + HOUR, [
+      holding,
+      backup("daily-20261014020000", expected - HOUR, { phase: "New" }),
+      backup("daily-20261014010000", expected - 2 * HOUR, { phase: "" }),
+    ]);
+
+    expect(more.hold).toEqual({
+      state: "held",
+      backup: holding.metadata.name,
+      phase: "InProgress",
+      others: 2,
+    });
+    expect(more.words).toContain(SIGNAL_WORDS.heldMore(2));
+    expect(SIGNAL_WORDS.held("b", "none")).toContain("reports no phase");
+  });
+
+  it("is none of the four for an expression with no instant, which Velero submits at every look", () => {
+    const look = schedule(
+      "look",
+      { phase: "Enabled", lastBackup: "2026-10-14T11:59:00Z" },
+      { schedule: "TZ=UTC 0 0 30 2 *" },
+    );
+    const signal = at(now, [], look);
+
+    expect(signal).toMatchObject({
+      state: "at-every-look",
+      label: SIGNAL_WORDS.label["at-every-look"],
+      mark: "not-known",
+      weight: SIGNAL_WEIGHTS["at-every-look"],
+      late: false,
+      next: { kind: "none", text: SIGNAL_WORDS.none },
+    });
+    expect(signal.expected).toBeUndefined();
+    expect(signal.measure).toBeUndefined();
+    expect(signal.words).toBe(
+      SIGNAL_WORDS.atEveryLook(SIGNAL_WORDS.beyondFiveYears, SIGNAL_WORDS.lastSubmission("2026-10-14 11:59:00 UTC")),
+    );
+    for (const descriptor of ["@triggered", "@manual", "@none"]) {
+      const none = schedule("look", { phase: "Enabled" }, { schedule: descriptor }, "2026-10-14T11:00:00Z");
+
+      expect(at(now, [], none).words).toBe(
+        SIGNAL_WORDS.atEveryLook(SIGNAL_WORDS.noInstant(descriptor), SIGNAL_WORDS.noSubmissionYet),
+      );
+    }
+    const held = at(now, [backup("look-20261014115900", now - MINUTE, { phase: "InProgress" })], look);
+
+    expect(held.state).toBe("at-every-look");
+    expect(held.words).toContain(SIGNAL_WORDS.heldNow("look-20261014115900", "InProgress"));
+  });
+});
+
+describe("ADH-05: no run for a schedule that is paused, refused or not read", () => {
+  const due = "2026-10-12T03:00:41Z";
+  const run = "03:00 UTC on 2026-10-13";
+  const dueAt = Date.parse("2026-10-13T03:00:00Z");
+  const paused = (lastBackup = due, more: Partial<NonNullable<ScheduleResource["spec"]>> = {}) =>
+    schedule("paused", { phase: "Enabled", lastBackup }, { schedule: "TZ=UTC 0 3 * * *", paused: true, ...more });
+  const of = (item: ScheduleResource, backups: BackupResource[] = []) =>
+    scheduleSignal(item, contextOf([item], backups));
+
+  it("says that no run is expected until it is resumed, and that Velero would submit at once a run that is due", () => {
+    const unset = of(paused());
+
+    expect(unset).toMatchObject({
+      state: "paused",
+      label: SIGNAL_WORDS.label.paused,
+      mark: "paused",
+      weight: SIGNAL_WEIGHTS.paused,
+      late: false,
+      next: { kind: "none", text: SIGNAL_WORDS.none },
+      resume: { would: "submit", due: dueAt, skip: "server" },
+    });
+    expect(unset.expected).toBeUndefined();
+    expect(unset.words).toBe(
+      `${SIGNAL_WORDS.paused} ${SIGNAL_WORDS.resume.submitUnlessServer(run)} ${SIGNAL_WORDS.resume.skipMoves}`,
+    );
+    const no = of(paused(due, { skipImmediately: false }));
+
+    expect(no.resume).toEqual({ would: "submit", due: dueAt, skip: false });
+    expect(no.words).toBe(`${SIGNAL_WORDS.paused} ${SIGNAL_WORDS.resume.submit(run)} ${SIGNAL_WORDS.resume.skipMoves}`);
+    const skip = of(paused(due, { skipImmediately: true }));
+
+    expect(skip.resume).toEqual({ would: "skip", due: dueAt });
+    expect(skip.words).toBe(`${SIGNAL_WORDS.paused} ${SIGNAL_WORDS.resume.skip} ${SIGNAL_WORDS.resume.skipDue(run)}`);
+  });
+
+  it("says that Velero would submit nothing at once when no run is due", () => {
+    const waits = of(paused("2026-10-14T03:00:41Z"));
+
+    expect(waits.resume).toEqual({ would: "wait", next: Date.parse("2026-10-15T03:00:00Z") });
+    expect(waits.words).toBe(`${SIGNAL_WORDS.paused} ${SIGNAL_WORDS.resume.wait("03:00 UTC on 2026-10-15")}`);
+    expect(of(paused("2026-10-14T03:00:41Z", { skipImmediately: false })).resume).toEqual(waits.resume);
+    const skip = of(paused("2026-10-14T03:00:41Z", { skipImmediately: true }));
+
+    expect(skip.resume).toEqual({ would: "skip" });
+    expect(skip.words).toBe(`${SIGNAL_WORDS.paused} ${SIGNAL_WORDS.resume.skip}`);
+  });
+
+  it("says what would hold the submissions at the resume, and when what Velero would do is not known", () => {
+    const holding = backup("paused-20261014100000", now - 2 * HOUR, { phase: "InProgress" });
+    const held = of(paused(), [holding]);
+
+    expect(held.resume).toEqual({ would: "hold", due: dueAt, backup: holding.metadata.name, phase: "InProgress" });
+    expect(held.words).toBe(
+      `${SIGNAL_WORDS.paused} ${SIGNAL_WORDS.resume.hold(holding.metadata.name, "InProgress", run)}`,
+    );
+    const noZone = of(
+      schedule("paused", { phase: "Enabled", lastBackup: due }, { schedule: "0 3 * * *", paused: true }),
+    );
+
+    expect(noZone.resume).toEqual({ would: "not-known", why: SIGNAL_WORDS.why["no-offset"] });
+    expect(noZone.words).toBe(`${SIGNAL_WORDS.paused} ${SIGNAL_WORDS.resume.notKnown(SIGNAL_WORDS.why["no-offset"])}`);
+    expect(
+      of(schedule("paused", { phase: "Enabled", lastBackup: due }, { schedule: "0 3 * * FRI#L", paused: true })).resume,
+    ).toEqual({ would: "not-known", why: SIGNAL_WORDS.why["not-readable"] });
+    const look = of(schedule("paused", { phase: "Enabled", lastBackup: due }, { schedule: "@none", paused: true }));
+
+    expect(look.resume).toEqual({ would: "every-look" });
+    expect(look.words).toBe(`${SIGNAL_WORDS.paused} ${SIGNAL_WORDS.resume.everyLook(SIGNAL_WORDS.noInstant("@none"))}`);
+    // The backups not read: whether one would hold the submissions is not known, and said.
+    const deniedRead = failed(emptyRead<BackupResource>(), "forbidden");
+    const denied = scheduleSignal(
+      paused(),
+      adherenceContext({ schedules: succeeded([paused()], now), backups: deniedRead }, now),
+    );
+
+    expect(denied.resume).toMatchObject({ would: "submit" });
+    expect(denied.notes).toEqual([SIGNAL_WORDS.holdNotKnown(lowered(unread("backups", deniedRead).reason))]);
+  });
+
+  it("says of a paused schedule Velero refused or has not read what its phase says, with nothing computed", () => {
+    for (const [status, said] of [
+      [{ phase: "FailedValidation", lastBackup: due }, SIGNAL_WORDS.resume.refused],
+      [undefined, SIGNAL_WORDS.resume.notRead],
+      [{ phase: "New" }, SIGNAL_WORDS.resume.notRead],
+      [{ phase: "Weird", lastBackup: due }, SIGNAL_WORDS.resume.unknownPhase("Weird")],
+    ] as const) {
+      const signal = of(schedule("paused", status, { schedule: "TZ=UTC 0 3 * * *", paused: true }));
+
+      expect(signal).toMatchObject({
+        state: "paused",
+        words: `${SIGNAL_WORDS.paused} ${said}`,
+        next: { kind: "none" },
+      });
+      expect(Object.keys(signal).sort()).toEqual([
+        "label",
+        "late",
+        "mark",
+        "next",
+        "notes",
+        "state",
+        "weight",
+        "words",
+      ]);
+    }
+    expect(SIGNAL_WORDS.resume.notRead).toBe(NOTES.notReadPaused);
+  });
+
+  it("gates on the phase before the expression is read: refused, not read and a phase not known", () => {
+    for (const [status, state, reason, words] of [
+      [{ phase: "FailedValidation", lastBackup: due }, "refused", undefined, SIGNAL_WORDS.refused],
+      [undefined, "not-known", "not-read", SIGNAL_WORDS.notRead],
+      [{ phase: "New" }, "not-known", "not-read", SIGNAL_WORDS.notRead],
+      [{ phase: "Paused", lastBackup: due }, "not-known", "unknown-phase", SIGNAL_WORDS.unknownPhase("Paused")],
+    ] as const) {
+      // An expression this version cannot read, one with no zone and one Velero refuses alike: nothing of the
+      // expression is read before the phase.
+      for (const expression of ["0 3 * * FRI#L", "0 3 * * *", "TZ= 0 3 * * *", "TZ=UTC 0 3 * * *"]) {
+        const signal = of(schedule("gated", status, { schedule: expression }));
+
+        expect(signal).toMatchObject({ state, words, mark: state === "refused" ? "refused" : "not-known" });
+        expect(signal.reason).toBe(reason);
+        expect(signal.next.kind).toBe(state === "refused" ? "none" : "not-known");
+        expect(JSON.stringify(signal)).not.toMatch(/"at"|lateness|passed|anchor|expected|resume|hold/);
+      }
+    }
+    expect(SIGNAL_WORDS.notRead).toContain(NOTES.notRead);
+  });
+});
+
+describe("ADH-06: what is not known, each with its mark and its words", () => {
+  const enabled = (name: string, expression: string, status: ScheduleResource["status"] = undefined) =>
+    schedule(name, status ?? { phase: "Enabled", lastBackup: "2026-10-13T03:00:41Z" }, { schedule: expression });
+  const every = schedule("every", { phase: "Enabled", lastBackup: "2026-10-14T10:00:00Z" }, { schedule: "@every 6h" });
+
+  it("gives each state of uncertainty the mark of what is not known, never the one of a schedule on time", () => {
+    const hash = parseExpression("0 3 * * FRI#L");
+    const cases: [ScheduleResource, SignalState, string | undefined, string][] = [
+      [
+        enabled("zone", "0 3 * * *"),
+        "not-known",
+        "no-offset",
+        SIGNAL_WORDS.noOffset(false, SIGNAL_WORDS.noSubmissionBackup),
+      ],
+      [
+        enabled("local", "CRON_TZ=Local @daily"),
+        "not-known",
+        "no-offset",
+        SIGNAL_WORDS.noOffset(true, SIGNAL_WORDS.noSubmissionBackup),
+      ],
+      [
+        enabled("mars", "TZ=Mars/Olympus 0 3 * * *"),
+        "not-known",
+        "unknown-zone",
+        SIGNAL_WORDS.unknownZone("Mars/Olympus"),
+      ],
+      [
+        enabled("hash", "0 3 * * FRI#L"),
+        "not-known",
+        "not-readable",
+        SIGNAL_WORDS.notReadable(hash.kind === "refused" ? hash.reason : ""),
+      ],
+      [schedule("silent", undefined, { schedule: "TZ=UTC 0 3 * * *" }), "not-known", "not-read", SIGNAL_WORDS.notRead],
+      [
+        enabled("odd", "TZ=UTC 0 3 * * *", { phase: "Disabled" }),
+        "not-known",
+        "unknown-phase",
+        SIGNAL_WORDS.unknownPhase("Disabled"),
+      ],
+      [
+        {
+          metadata: { name: "bare", namespace: NAMESPACE },
+          spec: { schedule: "TZ=UTC 0 3 * * *" },
+          status: { phase: "Enabled" },
+        },
+        "not-known",
+        "no-anchor",
+        SIGNAL_WORDS.noAnchor,
+      ],
+      [
+        enabled("look", "@manual"),
+        "at-every-look",
+        undefined,
+        SIGNAL_WORDS.atEveryLook(
+          SIGNAL_WORDS.noInstant("@manual"),
+          SIGNAL_WORDS.lastSubmission("2026-10-13 03:00:41 UTC"),
+        ),
+      ],
+    ];
+    const context = contextOf(
+      cases.map(([item]) => item),
+      [],
+    );
+
+    expect(hash.kind).toBe("refused");
+    for (const [item, state, reason, words] of cases) {
+      const signal = scheduleSignal(item, context);
+
+      expect(signal).toMatchObject({ state, words, mark: "not-known", late: false, label: SIGNAL_WORDS.label[state] });
+      expect(signal.reason).toBe(reason);
+      expect(signal.next.kind).not.toBe("at");
+      expect(signal.weight).toBeLessThan(SIGNAL_WEIGHTS.awaited);
+      expect(signal.weight).toBeGreaterThan(SIGNAL_WEIGHTS.due);
+    }
+    expect(Object.keys(SIGNAL_WORDS.reasons).sort()).toEqual(
+      ["no-anchor", "no-offset", "not-read", "not-readable", "unknown-phase", "unknown-zone"].sort(),
+    );
+  });
+
+  it("says that a signal is of a read before the last one, with when it was", () => {
+    const of = (schedules: FamilyRead<ScheduleResource>, backups: FamilyRead<BackupResource> = succeeded([], now)) =>
+      scheduleSignal(every, adherenceContext({ schedules, backups }, now));
+    const earlier = (status: "failed" | "forbidden" | "not-served") =>
+      failed(succeeded([every], now - 3 * MINUTE), status);
+
+    expect(of(earlier("failed"))).toMatchObject({
+      state: "awaited",
+      notes: [SIGNAL_WORDS.schedulesStale("3m", SIGNAL_WORDS.since.failed)],
+    });
+    for (const status of ["forbidden", "not-served"] as const) {
+      expect(of(earlier(status)).notes).toEqual([SIGNAL_WORDS.schedulesStale("3m", SIGNAL_WORDS.since[status])]);
+    }
+    // A read asked again keeps what it said, and is not of before.
+    expect(of(loading(succeeded([every], now))).notes).toEqual([]);
+    // The backups the hold is read in, of a read before the last.
+    const backups = failed(succeeded([backup("every-20261014100000", now - 2 * HOUR)], now - 5 * MINUTE), "failed");
+    const held = of(succeeded([every], now), backups);
+
+    expect(held.hold).toEqual({ state: "none", stale: now - 5 * MINUTE });
+    expect(held.notes).toEqual([SIGNAL_WORDS.backupsStale("5m", SIGNAL_WORDS.since.failed)]);
+  });
+
+  it("keeps the state of an interval with the words of the hold when the backups are not read, and not of five fields", () => {
+    const late = schedule("late", { phase: "Enabled", lastBackup: "2026-10-14T08:00:00Z" }, { schedule: "@every 1h" });
+
+    for (const read of [
+      failed(emptyRead<BackupResource>(), "forbidden"),
+      failed(emptyRead<BackupResource>(), "not-served"),
+      failed(emptyRead<BackupResource>(), "failed"),
+      emptyRead<BackupResource>(),
+    ]) {
+      const reason = lowered(unread("backups", read).reason);
+      const context = adherenceContext({ schedules: succeeded([every, late, nightly], now), backups: read }, now);
+
+      expect(scheduleSignal(every, context)).toMatchObject({
+        state: "awaited",
+        hold: { state: "not-known", reason },
+        notes: [SIGNAL_WORDS.holdNotKnown(reason)],
+      });
+      expect(scheduleSignal(late, context)).toMatchObject({
+        state: "overdue",
+        notes: [SIGNAL_WORDS.holdNotKnown(reason)],
+      });
+      expect(scheduleSignal(nightly, context)).toMatchObject({
+        state: "not-known",
+        reason: "no-offset",
+        words: SIGNAL_WORDS.noOffset(false, reason),
+      });
+    }
+  });
+});
+
+describe("ADH-07: the clocks bound what is said overdue", () => {
+  // Every hour from 10:30: expected at 11:30, half an hour before the clock.
+  const hourly = schedule(
+    "hourly",
+    { phase: "Enabled", lastBackup: "2026-10-14T10:30:00Z" },
+    { schedule: "@every 1h" },
+  );
+  const ahead = new Date(now + HOUR).toISOString();
+  const by = SIGNAL_WORDS.dueByClocks("11:30 UTC", "30m", "1h");
+
+  it.each([
+    ["a submission", [schedule("other", { phase: "Enabled", lastBackup: ahead }, { schedule: "@every 1h" })], []],
+    ["a creation", [schedule("other", { phase: "Enabled" }, { schedule: "@every 1h" }, ahead)], []],
+    ["a skip", [schedule("other", { phase: "Enabled", lastSkipped: ahead }, { schedule: "@every 1h" })], []],
+    ["the start of a backup", [], [backup("other-1", now - HOUR, { start: now + HOUR })]],
+  ] as const)("says no schedule overdue by less than the time %s reports after the clock", (_, others, backups) => {
+    const context = contextOf([hourly, ...others], [...backups]);
+    const signal = scheduleSignal(hourly, context);
+
+    expect(context.clocks.bound).toBe(HOUR);
+    expect(signal).toMatchObject({ state: "due", mark: "awaited", late: false, words: by });
+  });
+
+  it("says overdue past the bound, and past the grace when nothing is after the clock", () => {
+    const other = schedule("other", { phase: "Enabled", lastBackup: ahead }, { schedule: "@every 1h" });
+    const longer = schedule(
+      "longer",
+      { phase: "Enabled", lastBackup: "2026-10-14T09:00:00Z" },
+      { schedule: "@every 1h" },
+    );
+
+    expect(scheduleSignal(hourly, contextOf([hourly], []))).toMatchObject({ state: "overdue", late: true });
+    expect(scheduleSignal(longer, contextOf([longer, other], []))).toMatchObject({ state: "overdue", late: true });
+  });
+
+  it("bounds the signal both ways with the time of the API server, when it is given", () => {
+    for (const date of [now + HOUR, now - HOUR]) {
+      expect(scheduleSignal(hourly, contextOf([hourly], [], now, { date, at: now }))).toMatchObject({
+        state: "due",
+        words: by,
+      });
+    }
+    expect(scheduleSignal(hourly, contextOf([hourly], [], now, { date: now + 2000, at: now })).state).toBe("overdue");
+    // Held beyond the grace and within the bound: not late.
+    const held = scheduleSignal(
+      hourly,
+      contextOf([hourly], [backup("hourly-1", now - 10 * MINUTE, { phase: "InProgress" })], now, {
+        date: now - HOUR,
+        at: now,
+      }),
+    );
+
+    expect(held).toMatchObject({ state: "held", mark: "awaited", late: false });
+  });
+});
+
+describe("ADH-08: the last observed run in words", () => {
+  const own = submitted("nightly", submission, 120);
+  const observed = (backups: FamilyRead<BackupResource>, item = nightly, kept?: ServerOffset) => {
+    const read = { schedules: succeeded([item], now), backups };
+
+    return lastObservedRun(item, adherenceContext(read, now, kept ?? keepOffset(undefined, read)));
+  };
+  const wall = "2026-10-13 05:00:41 UTC+02:00";
+
+  it("names the backup of the last submission, and says when it is not among the backups that exist", () => {
+    expect(observed(succeeded([own], now))).toEqual({
+      submission: { state: "found", at: submission, backup: own.metadata.name },
+      words: [SIGNAL_WORDS.observed.found(wall, own.metadata.name)],
+    });
+    // Gone: the submission stands, and so does the signal counted from it.
+    const kept = keepOffset(undefined, reads([nightly], [own]));
+
+    expect(observed(succeeded([], now), nightly, kept)).toEqual({
+      submission: { state: "not-found", at: submission },
+      words: [SIGNAL_WORDS.observed.notFound(wall)],
+    });
+    expect(scheduleSignal(nightly, adherenceContext(reads([nightly], []), now, kept)).state).toBe("overdue");
+  });
+
+  it("says that a backup newer than the last submission is not a submission, and moves nothing", () => {
+    const byHand = backup("nightly-20261013150000", Date.parse("2026-10-13T15:00:00Z"));
+    const synced = backup("nightly-20260901030041", Date.parse("2026-10-14T06:00:00Z"));
+    const seen = observed(succeeded([own, byHand, synced], now));
+
+    expect(seen.newer).toEqual({ backup: synced.metadata.name, created: Date.parse("2026-10-14T06:00:00Z"), count: 2 });
+    expect(seen.words).toEqual([
+      SIGNAL_WORDS.observed.found(wall, own.metadata.name),
+      SIGNAL_WORDS.observed.newer(synced.metadata.name, "2026-10-14 08:00:00 UTC+02:00"),
+      SIGNAL_WORDS.observed.newerMore(1),
+    ]);
+  });
+
+  it("names the newest backup when it is another and older, and says of a schedule with no submission that none of its backups is one", () => {
+    const older = backup("nightly-20261012050041", Date.parse("2026-10-12T03:00:42Z"));
+    const seen = observed(succeeded([older], now));
+
+    expect(seen).toEqual({
+      submission: { state: "not-found", at: submission },
+      newest: older.metadata.name,
+      words: [
+        SIGNAL_WORDS.observed.notFound("2026-10-13 03:00:41 UTC"),
+        SIGNAL_WORDS.observed.newest(older.metadata.name),
+      ],
+    });
+    const fresh = schedule("nightly", { phase: "Enabled" });
+
+    expect(observed(succeeded([older], now), fresh)).toEqual({
+      submission: { state: "none" },
+      newer: { backup: older.metadata.name, created: Date.parse("2026-10-12T03:00:42Z"), count: 1 },
+      words: [SIGNAL_WORDS.observed.none, SIGNAL_WORDS.observed.newer(older.metadata.name, "2026-10-12 03:00:42 UTC")],
+    });
+  });
+
+  it("does not say whether the backup of the submission exists when the backups were not read", () => {
+    const read = failed(emptyRead<BackupResource>(), "forbidden");
+    const reason = lowered(unread("backups", read).reason);
+
+    expect(observed(read)).toEqual({
+      submission: { state: "not-known", at: submission, reason },
+      words: [SIGNAL_WORDS.observed.notKnown("2026-10-13 03:00:41 UTC", reason)],
+    });
+    expect(observed(read, schedule("nightly", { phase: "Enabled" }))).toEqual({
+      submission: { state: "none" },
+      words: [SIGNAL_WORDS.observed.none],
+    });
+  });
+
+  it("never names a missed run between two backups", () => {
+    const gap = [backup("nightly-20261001030041", Date.parse("2026-10-01T03:00:42Z")), own];
+    const read = succeeded(gap, now);
+
+    expect(JSON.stringify([observed(read), scheduleSignal(nightly, contextOf([nightly], gap))])).not.toMatch(
+      /missed|missing|skipped run/i,
+    );
+  });
+});
+
+describe("REQ-168: the order by adherence", () => {
+  const every = (name: string, lastBackup: number, expression = "@every 1h") =>
+    schedule(name, { phase: "Enabled", lastBackup: new Date(lastBackup).toISOString() }, { schedule: expression });
+  const items = [
+    schedule(
+      "paused",
+      { phase: "Enabled", lastBackup: "2026-10-14T10:00:00Z" },
+      { schedule: "@every 1h", paused: true },
+    ),
+    schedule("refused-b", { phase: "FailedValidation" }, { schedule: "TZ= 0 3 * * *" }),
+    schedule("refused-a", { phase: "FailedValidation" }, { schedule: "TZ= 0 3 * * *" }),
+    every("awaited-later", now - 30 * MINUTE, "@every 2h"),
+    every("awaited-soon-b", now - 50 * MINUTE),
+    every("awaited-soon-a", now - 50 * MINUTE),
+    schedule("zone-b", { phase: "Enabled", lastBackup: "2026-10-13T03:00:41Z" }),
+    schedule("zone-a", { phase: "Enabled", lastBackup: "2026-10-13T03:00:41Z" }),
+    every("look", now - MINUTE, "@none"),
+    every("due", now - 62 * MINUTE),
+    every("held", now - 30 * MINUTE),
+    every("overdue-shorter", now - 2 * HOUR),
+    every("overdue-longer", now - 5 * HOUR),
+  ];
+  const signals = () => {
+    const context = contextOf(items, [backup("held-1", now - 10 * MINUTE, { phase: "InProgress" })]);
+
+    return items.map((item) => ({ name: item.metadata.name, signal: scheduleSignal(item, context) }));
+  };
+
+  it("weighs the states in the order of the spec", () => {
+    expect(
+      (Object.keys(SIGNAL_WEIGHTS) as SignalState[]).sort((one, other) => SIGNAL_WEIGHTS[one] - SIGNAL_WEIGHTS[other]),
+    ).toEqual(["overdue", "held", "due", "at-every-look", "not-known", "awaited", "refused", "paused"]);
+  });
+
+  it("orders a schedule of every state, two of one weight by their measure, and two by name", () => {
+    const ordered = signals()
+      .map(({ name, signal }) => ({ name, key: adherenceOrder(signal, name) }))
+      .sort((one, other) => (one.key < other.key ? -1 : one.key > other.key ? 1 : 0))
+      .map(({ name }) => name);
+
+    expect(signals().map(({ name, signal }) => [name, signal.state])).toEqual(
+      expect.arrayContaining([
+        ["overdue-longer", "overdue"],
+        ["held", "held"],
+        ["due", "due"],
+        ["look", "at-every-look"],
+        ["zone-a", "not-known"],
+        ["awaited-soon-a", "awaited"],
+        ["refused-a", "refused"],
+        ["paused", "paused"],
+      ]),
+    );
+    expect(ordered).toEqual([
+      // The longest overdue first, then held, then due.
+      "overdue-longer",
+      "overdue-shorter",
+      "held",
+      "due",
+      "look",
+      // Not known, by name, before what is awaited, the soonest first and by name when as soon.
+      "zone-a",
+      "zone-b",
+      "awaited-soon-a",
+      "awaited-soon-b",
+      "awaited-later",
+      "refused-a",
+      "refused-b",
+      "paused",
+    ]);
+  });
+
+  it("gives plain values: nothing in a signal is a function, a date or a value that is not one", () => {
+    const all = signals().map(({ signal }) => signal);
+
+    expect(JSON.stringify(all)).not.toMatch(/NaN|undefined|Infinity|function/);
+    for (const signal of all) expect(JSON.parse(JSON.stringify(signal))).toStrictEqual(signal as ScheduleSignal);
   });
 });
