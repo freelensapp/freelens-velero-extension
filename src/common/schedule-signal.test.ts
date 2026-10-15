@@ -291,11 +291,16 @@ describe("ADH-07: the clocks of this machine and of the cluster", () => {
       now,
     );
 
-    expect(clocks).toMatchObject({ now, ahead: 0, bound: 0 });
+    expect(clocks).toMatchObject({ now, cluster: now, ahead: 0 });
     expect(clocks.by).toBeUndefined();
     expect(clocks.server).toBeUndefined();
     expect(clocks.words).toBe(`${CLOCK_WORDS.compared} ${CLOCK_WORDS.aheadOnly}: ${CLOCK_WORDS.noneAhead}`);
     expect(CLOCK_WORDS.aheadOnly).toContain("Only a clock of the cluster that is ahead");
+    // Less than a second after the read is not said: the times of the objects are written to the second.
+    const close = clocksOf(reads([bare({ lastBackup: new Date(now + 700).toISOString() })], []), now);
+
+    expect(close).toMatchObject({ ahead: 0, cluster: now, words: clocks.words });
+    expect(close.by).toBeUndefined();
   });
 
   it.each([
@@ -314,9 +319,16 @@ describe("ADH-07: the clocks of this machine and of the cluster", () => {
     const clocks = clocksOf(reads(made(), [...backups]), now);
     const name = kind === "schedule" ? "nightly" : "nightly-1";
 
-    expect(clocks).toMatchObject({ ahead: HOUR, by: { kind, name, time }, bound: HOUR });
-    expect(clocks.words).toContain(CLOCK_WORDS.ahead({ kind, name, time }, HOUR));
-    expect(clocks.words).toContain(CLOCK_WORDS.bound(HOUR));
+    // Without the time of the API server the lateness stays counted by the clock of this machine.
+    expect(clocks).toMatchObject({ ahead: HOUR, by: { kind, name, time }, cluster: now });
+    expect(clocks.words).toBe(
+      [
+        CLOCK_WORDS.compared,
+        `${CLOCK_WORDS.aheadOnly}: ${CLOCK_WORDS.ahead({ kind, name, time }, HOUR)}`,
+        CLOCK_WORDS.laterStill,
+      ].join(" "),
+    );
+    expect(CLOCK_WORDS.laterStill).toContain("later still");
   });
 
   it("takes the latest of the times after the clock, by the clock at the read that brought the object", () => {
@@ -351,34 +363,45 @@ describe("ADH-07: the clocks of this machine and of the cluster", () => {
     expect(clocksOf({ schedules: kept, backups: emptyRead<BackupResource>() }, now).ahead).toBe(MINUTE);
   });
 
-  it("compares the clocks through the time of the API server both ways when it is given, and says so", () => {
+  it("counts by the clock of the cluster through the time of the API server, both ways, and says so", () => {
     const quiet = reads([bare({ lastBackup: "2026-10-14T03:00:41Z" })], []);
     const ahead = clocksOf(quiet, now, { date: now + 3 * MINUTE, at: now });
     const behind = clocksOf(quiet, now, { date: now - 2 * MINUTE, at: now });
     const agree = clocksOf(quiet, now, { date: now + 400, at: now });
 
-    expect(ahead).toMatchObject({ server: 3 * MINUTE, bound: 3 * MINUTE, ahead: 0 });
-    expect(ahead.words).toBe(
-      [CLOCK_WORDS.compared, CLOCK_WORDS.server(3 * MINUTE), CLOCK_WORDS.bound(3 * MINUTE)].join(" "),
-    );
-    expect(behind).toMatchObject({ server: -2 * MINUTE, bound: 2 * MINUTE });
-    expect(behind.words).toContain(CLOCK_WORDS.server(-2 * MINUTE));
+    expect(ahead).toMatchObject({ server: 3 * MINUTE, cluster: now + 3 * MINUTE, ahead: 0 });
+    expect(ahead.words).toBe(CLOCK_WORDS.server(3 * MINUTE));
+    expect(behind).toMatchObject({ server: -2 * MINUTE, cluster: now - 2 * MINUTE });
+    expect(behind.words).toBe(CLOCK_WORDS.server(-2 * MINUTE));
     expect(CLOCK_WORDS.server(-2 * MINUTE)).toContain("behind");
     expect(CLOCK_WORDS.server(3 * MINUTE)).toContain("ahead");
-    expect(agree).toMatchObject({ server: 400, bound: 400 });
-    expect(agree.words).toBe([CLOCK_WORDS.compared, CLOCK_WORDS.server(400)].join(" "));
+    expect(agree).toMatchObject({ server: 400, cluster: now + 400 });
+    expect(agree.words).toBe(CLOCK_WORDS.server(400));
     expect(CLOCK_WORDS.server(400)).toContain("within a second");
     // Without it, only a cluster that is ahead can be seen: the words say which of the two holds.
     expect(clocksOf(quiet, now).words).toContain(CLOCK_WORDS.aheadOnly);
     expect(ahead.words).not.toContain(CLOCK_WORDS.aheadOnly);
-    // An object ahead by more than the API server says is said beside it, and bounds what is said overdue.
+    // An object ahead of the clock of the API server is said beside it: the clock that wrote it, which may be
+    // the one of the controller, may count a run later still.
     const both = clocksOf(reads([bare({ lastBackup: new Date(now + HOUR).toISOString() })], []), now, {
       date: now + 3000,
       at: now,
     });
 
-    expect(both).toMatchObject({ ahead: HOUR, server: 3000, bound: HOUR });
-    expect(both.words).toContain(CLOCK_WORDS.object({ kind: "schedule", name: "nightly", time: "submission" }, HOUR));
+    expect(both).toMatchObject({ ahead: HOUR, server: 3000, cluster: now + 3000 });
+    expect(both.words).toBe(
+      [
+        CLOCK_WORDS.server(3000),
+        CLOCK_WORDS.object({ kind: "schedule", name: "nightly", time: "submission" }, HOUR),
+      ].join(" "),
+    );
+    // Not beside an API server as far ahead as it.
+    const level = clocksOf(reads([bare({ lastBackup: new Date(now + 2 * MINUTE).toISOString() })], []), now, {
+      date: now + 2 * MINUTE,
+      at: now,
+    });
+
+    expect(level.words).toBe(CLOCK_WORDS.server(2 * MINUTE));
   });
 });
 
@@ -1066,59 +1089,91 @@ describe("ADH-06: what is not known, each with its mark and its words", () => {
   });
 });
 
-describe("ADH-07: the clocks bound what is said overdue", () => {
-  // Every hour from 10:30: expected at 11:30, half an hour before the clock.
+describe("ADH-07: the lateness by the clock of the cluster, which an object ahead cannot shorten", () => {
+  // Every hour from 10:30: expected at 11:30, half an hour before the clock of this machine.
   const hourly = schedule(
     "hourly",
     { phase: "Enabled", lastBackup: "2026-10-14T10:30:00Z" },
     { schedule: "@every 1h" },
   );
   const ahead = new Date(now + HOUR).toISOString();
-  const by = SIGNAL_WORDS.dueByClocks("11:30 UTC", "30m", "1h");
+  const from = SIGNAL_WORDS.from("last-submission", "2026-10-14 10:30:00 UTC");
+  const overdue = SIGNAL_WORDS.overdue("30m", "11:30 UTC", from, SIGNAL_WORDS.passed(1, false));
 
   it.each([
     ["a submission", [schedule("other", { phase: "Enabled", lastBackup: ahead }, { schedule: "@every 1h" })], []],
     ["a creation", [schedule("other", { phase: "Enabled" }, { schedule: "@every 1h" }, ahead)], []],
     ["a skip", [schedule("other", { phase: "Enabled", lastSkipped: ahead }, { schedule: "@every 1h" })], []],
     ["the start of a backup", [], [backup("other-1", now - HOUR, { start: now + HOUR })]],
-  ] as const)("says no schedule overdue by less than the time %s reports after the clock", (_, others, backups) => {
-    const context = contextOf([hourly, ...others], [...backups]);
-    const signal = scheduleSignal(hourly, context);
+  ] as const)(
+    "says overdue what is late by this machine beside %s after the clock, a cluster ahead",
+    (_, others, backups) => {
+      const context = contextOf([hourly, ...others], [...backups]);
 
-    expect(context.clocks.bound).toBe(HOUR);
-    expect(signal).toMatchObject({ state: "due", mark: "awaited", late: false, words: by });
-  });
+      // The controller counts by its clock, ahead by an hour at least: the run is later still by it.
+      expect(context.clocks).toMatchObject({ ahead: HOUR, cluster: now });
+      expect(context.clocks.words).toContain(CLOCK_WORDS.laterStill);
+      expect(scheduleSignal(hourly, context)).toMatchObject({
+        state: "overdue",
+        mark: "late",
+        late: true,
+        words: overdue,
+      });
+    },
+  );
 
-  it("says overdue past the bound, and past the grace when nothing is after the clock", () => {
-    const other = schedule("other", { phase: "Enabled", lastBackup: ahead }, { schedule: "@every 1h" });
-    const longer = schedule(
-      "longer",
-      { phase: "Enabled", lastBackup: "2026-10-14T09:00:00Z" },
+  // Probe P3b of the review of the slice: a schedule half an hour late by this machine, beside another that
+  // reports its submission at 12:50 at 12:00, is late by an hour and twenty minutes at least by the clock of the
+  // cluster: it is overdue, never due with the mark of a schedule on time.
+  it("says overdue a schedule late by this machine beside another that reports 12:50 at 12:00", () => {
+    const other = schedule(
+      "other",
+      { phase: "Enabled", lastBackup: "2026-10-14T12:50:00Z" },
       { schedule: "@every 1h" },
     );
+    const context = contextOf([hourly, other], []);
 
-    expect(scheduleSignal(hourly, contextOf([hourly], []))).toMatchObject({ state: "overdue", late: true });
-    expect(scheduleSignal(longer, contextOf([longer, other], []))).toMatchObject({ state: "overdue", late: true });
+    expect(scheduleSignal(hourly, context)).toMatchObject({
+      state: "overdue",
+      label: SIGNAL_WORDS.label.overdue,
+      mark: "late",
+      weight: SIGNAL_WEIGHTS.overdue,
+      late: true,
+      words: overdue,
+    });
+    expect(context.clocks.words).toBe(
+      [
+        CLOCK_WORDS.compared,
+        `${CLOCK_WORDS.aheadOnly}: ${CLOCK_WORDS.ahead({ kind: "schedule", name: "other", time: "submission" }, 50 * MINUTE)}`,
+        CLOCK_WORDS.laterStill,
+      ].join(" "),
+    );
+    // With nothing after the clock, the same state and the same words.
+    expect(scheduleSignal(hourly, contextOf([hourly], []))).toMatchObject({ state: "overdue", words: overdue });
   });
 
-  it("bounds the signal both ways with the time of the API server, when it is given", () => {
-    for (const date of [now + HOUR, now - HOUR]) {
-      expect(scheduleSignal(hourly, contextOf([hourly], [], now, { date, at: now }))).toMatchObject({
-        state: "due",
-        words: by,
-      });
-    }
-    expect(scheduleSignal(hourly, contextOf([hourly], [], now, { date: now + 2000, at: now })).state).toBe("overdue");
-    // Held beyond the grace and within the bound: not late.
-    const held = scheduleSignal(
-      hourly,
-      contextOf([hourly], [backup("hourly-1", now - 10 * MINUTE, { phase: "InProgress" })], now, {
-        date: now - HOUR,
-        at: now,
-      }),
-    );
+  it("counts the lateness by the clock of the cluster with the time of the API server, both ways", () => {
+    const at = (difference: number, backups: BackupResource[] = []) =>
+      scheduleSignal(hourly, contextOf([hourly], backups, now, { date: now + difference, at: now }));
+    const holding = [backup("hourly-1", now - 10 * MINUTE, { phase: "InProgress" })];
 
-    expect(held).toMatchObject({ state: "held", mark: "awaited", late: false });
+    // An hour ahead: an hour and a half late by the clock of the cluster, two runs passed.
+    expect(at(HOUR)).toMatchObject({ state: "overdue", late: true, expected: { lateness: 90 * MINUTE, passed: 2 } });
+    expect(at(HOUR).words).toBe(SIGNAL_WORDS.overdue("1h 30m", "11:30 UTC", from, SIGNAL_WORDS.passed(2, false)));
+    // Twenty-eight minutes behind: two minutes late by the clock of the cluster, which is due.
+    expect(at(-28 * MINUTE)).toMatchObject({
+      state: "due",
+      mark: "awaited",
+      late: false,
+      words: SIGNAL_WORDS.due("11:30 UTC", "2m"),
+    });
+    // An hour behind: the run is ahead by the clock of the cluster.
+    expect(at(-HOUR)).toMatchObject({ state: "awaited", next: { kind: "at", text: SIGNAL_WORDS.inTime("30m") } });
+    // Within a second: as by the clock of this machine.
+    expect(at(400)).toMatchObject({ state: "overdue", words: overdue });
+    // A hold within the grace by the clock of the cluster is not late, and one past it is.
+    expect(at(-27 * MINUTE, holding)).toMatchObject({ state: "held", mark: "awaited", late: false });
+    expect(at(HOUR, holding)).toMatchObject({ state: "held", mark: "late", late: true });
   });
 });
 

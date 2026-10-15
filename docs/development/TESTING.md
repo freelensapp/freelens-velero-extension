@@ -814,9 +814,11 @@ expression is read, of ADH-05; each state of what is not known with its mark and
 words, a read of before, the derived offset said approximate, and the backups not
 read beside an interval, which keeps its state, and five fields, which are not
 known, of ADH-06; a creation, a submission, a skip and a start after the clock of
-this machine, none, and the time of the API server ahead, behind and within a
-second, with the words of the two cases and the bound on what is said overdue, of
-ADH-07; the last observed run in words, its backup found and not, a newer backup
+this machine, none, one under a second, and the time of the API server ahead,
+behind and within a second, with the words of the two cases; a schedule late by
+this machine said overdue beside an object ahead of it, which bounds nothing, and
+the lateness counted by the clock of the cluster when its API server gives its
+time, ahead and behind, of ADH-07; the last observed run in words, its backup found and not, a newer backup
 said not a submission, and no word of a missed run, of ADH-08; the weights of the
 order of REQ-168, two of one weight by their measure and two by name; the words of a
 time in the zone of the expression. Every word a test asserts is read from the

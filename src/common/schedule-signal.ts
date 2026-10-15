@@ -216,15 +216,17 @@ interface Latest {
 
 export interface Clocks {
   now: number;
+  // The clock the lateness is counted by: the one of the cluster, the clock of this machine plus the
+  // difference with the time of the API server when it is given, and the clock of this machine when it is not.
+  cluster: number;
   // By how much the clock of the cluster is ahead of this machine at least: by the time an object reports
   // after the clock of this machine at the read that brought it, a creation, a submission, a skip or the start
-  // of a backup. Zero when none does: a clock of the cluster that is behind leaves no trace in the objects.
+  // of a backup. Zero when none does, or by less than a second: a clock of the cluster that is behind leaves
+  // no trace in the objects.
   ahead: number;
   by?: Latest["by"];
   // The time of the API server minus the clock of this machine, measured at a read, when it was given.
   server?: number;
-  // No schedule of the installation is said overdue by less than this: the larger of the two.
-  bound: number;
   words: string;
 }
 
@@ -268,27 +270,32 @@ const REPORTED: Record<Reported, string> = {
 };
 
 export const CLOCK_WORDS = {
+  // Without the time of the API server: the lateness by the clock of this machine, beside which only a clock
+  // of the cluster that is ahead can be seen.
   compared: "Times are compared by the clock of this machine.",
-  // Without the time of the API server only a clock of the cluster that is ahead can be seen.
   aheadOnly: "Only a clock of the cluster that is ahead of it can be seen, by a time an object reports after it",
   noneAhead: "no object does.",
   ahead: (by: Latest["by"], after: number) =>
     `the clock of the cluster is ahead by at least ${formatDuration(after)}, since the ${by.kind} ${by.name} reports ${REPORTED[by.time]} that much after it.`,
-  // With the time of the API server, the two clocks are compared through it, both ways.
+  // The controller counts by its own clock: a cluster that is ahead makes the lateness longer, never shorter.
+  laterStill: "By the clock of the cluster a run may be later still than this machine counts it.",
+  // With the time of the API server: the lateness by the clock of the cluster, both ways.
   server: (difference: number) =>
-    `The clock of the cluster is compared with it through the time its API server writes in its answers: ${
-      Math.abs(difference) < 1000
-        ? "the two agree within a second"
-        : `the cluster is ${difference > 0 ? "ahead" : "behind"} by ${formatDuration(Math.abs(difference))}`
+    `Times are compared by the clock of the cluster, which the time its API server writes in its answers gives: ${
+      Math.abs(difference) < SECOND
+        ? "it is within a second of the clock of this machine"
+        : `it is ${difference > 0 ? "ahead of" : "behind"} the clock of this machine by ${formatDuration(Math.abs(difference))}`
     }.`,
   object: (by: Latest["by"], after: number) =>
-    `The ${by.kind} ${by.name} reports ${REPORTED[by.time]} ${formatDuration(after)} after the clock of this machine.`,
-  bound: (bound: number) => `No schedule of the installation is said overdue by less than ${formatDuration(bound)}.`,
+    `The ${by.kind} ${by.name} reports ${REPORTED[by.time]} ${formatDuration(after)} after the clock of this machine, later than the clock of the API server: by the clock that wrote it a run may be later still.`,
 };
 
-// The clocks of an installation for a read (REQ-166): the signals are computed by the clock of this machine,
-// taken once for a read; a time the cluster wrote after it bounds what is said overdue, and so does the
-// difference with the time of the API server, both ways, when the reader can see it.
+// The clocks of an installation for a read (REQ-166): the lateness is counted by the clock of this machine,
+// taken once for a read, and by the clock of the cluster when the time of the API server is given, the clock
+// of this machine plus the difference measured at the read, both ways. A time the cluster wrote after the
+// clock of this machine says that the cluster is ahead by at least that much and bounds nothing that is said
+// overdue: the controller decides that a run is due by its own clock (schedule_controller.go L242, L288), so
+// a cluster that is ahead makes the lateness longer, never shorter. Less than a second is not said.
 export function clocksOf(reads: AdherenceReads, now: number, server?: ApiServerTime): Clocks {
   const latest = [
     latestOf(reads.schedules, "schedule", (schedule) => [
@@ -301,28 +308,28 @@ export function clocksOf(reads: AdherenceReads, now: number, server?: ApiServerT
       ["start", backup.status?.startTimestamp],
     ]),
   ].reduce<Latest | undefined>((one, other) => (other && (!one || other.after > one.after) ? other : one), undefined);
-  const ahead = latest?.after ?? 0;
+  const seen = latest && latest.after >= SECOND ? latest : undefined;
+  const ahead = seen?.after ?? 0;
   const difference = server ? server.date - server.at : undefined;
-  const bound = Math.max(ahead, difference === undefined ? 0 : Math.abs(difference));
   const words =
     difference === undefined
       ? [
           CLOCK_WORDS.compared,
-          `${CLOCK_WORDS.aheadOnly}: ${latest ? CLOCK_WORDS.ahead(latest.by, ahead) : CLOCK_WORDS.noneAhead}`,
+          `${CLOCK_WORDS.aheadOnly}: ${seen ? CLOCK_WORDS.ahead(seen.by, ahead) : CLOCK_WORDS.noneAhead}`,
+          seen ? CLOCK_WORDS.laterStill : "",
         ]
       : [
-          CLOCK_WORDS.compared,
           CLOCK_WORDS.server(difference),
-          latest && ahead > Math.abs(difference) ? CLOCK_WORDS.object(latest.by, ahead) : "",
+          // A clock that wrote an object is ahead of the one of the API server: the controller may be the one.
+          seen && ahead - difference >= SECOND ? CLOCK_WORDS.object(seen.by, ahead) : "",
         ];
 
-  if (bound >= 1000) words.push(CLOCK_WORDS.bound(bound));
   return {
     now,
+    cluster: now + (difference ?? 0),
     ahead,
-    ...(latest ? { by: latest.by } : {}),
+    ...(seen ? { by: seen.by } : {}),
     ...(difference === undefined ? {} : { server: difference }),
-    bound,
     words: words.filter(Boolean).join(" "),
   };
 }
@@ -464,8 +471,6 @@ export const SIGNAL_WORDS = {
   repeated: (date: string, zone: string, back: string, to: string, first: string, second: string) =>
     `On ${date} the clock of ${zone} goes back from ${back} to ${to}: the runs of the expression in the hour it repeats are expected twice, at ${first} and again at ${second}.`,
   due: (run: string, ago: string) => `Due: expected at ${run}, ${ago} ago. Velero looks at a schedule once a minute.`,
-  dueByClocks: (run: string, ago: string, bound: string) =>
-    `Due: expected at ${run}, ${ago} ago. The clocks of this machine and of the cluster differ by at least ${bound}, and no schedule is said overdue by less than that.`,
   overdue: (by: string, run: string, from: string, passed: string) =>
     `Overdue by ${by}: expected at ${run}. Counted from ${from}, with no submission since; ${passed}. Velero may not be at work, or may not be able to list the backups.`,
   passed: (count: number, beyond: boolean) =>
@@ -851,7 +856,7 @@ export interface ScheduleSignal {
   expected?: Expected;
   hold?: Hold;
   resume?: Resume;
-  // Overdue, or held beyond the grace and the bound of the clocks.
+  // Overdue, or held beyond the grace, by the clock the lateness is counted by.
   late: boolean;
 }
 
@@ -974,7 +979,7 @@ function repeatedHour(parsed: ParsedExpression, zone: Zone, at: number): string 
 
 // The signal of a schedule (REQ-163 to REQ-166): the gates of the pause and of the phase first, and nothing
 // computed before them; then, of a schedule Velero took, the expected run in the zone the expression is read
-// in, the hold, and the state by the clock, with the grace and the bound of the clocks.
+// in, the hold, and the state with the grace, by the clock of the cluster as far as this machine can see it.
 export function scheduleSignal(schedule: ScheduleResource, context: AdherenceContext): ScheduleSignal {
   const phase = scheduleState(schedule.status?.phase);
 
@@ -990,7 +995,8 @@ export function scheduleSignal(schedule: ScheduleResource, context: AdherenceCon
 }
 
 function enabledSignal(schedule: ScheduleResource, context: AdherenceContext): ScheduleSignal {
-  const { now } = context;
+  // The clock the controller counts by, as far as this machine can see it (REQ-166).
+  const clock = context.clocks.cluster;
   const name = schedule.metadata.name;
   const parsed = parseExpression(schedule.spec?.schedule);
 
@@ -1039,14 +1045,13 @@ function enabledSignal(schedule: ScheduleResource, context: AdherenceContext): S
           anchor: anchored,
         });
   }
-  const run = expectedRun(schedule, parsed, zone.of === "interval" ? undefined : zone.zone, now);
+  const run = expectedRun(schedule, parsed, zone.of === "interval" ? undefined : zone.zone, clock);
 
   if (run.kind === "at-every-look") return everyLook();
   if (run.kind !== "expected") return notKnown("no-anchor", SIGNAL_WORDS.noAnchor, context);
-  const lateness = now - run.at;
-  const bound = Math.max(GRACE, context.clocks.bound);
-  const late = run.due && lateness > bound;
-  const at = runText(written, run.at, now);
+  const lateness = clock - run.at;
+  const late = run.due && lateness > GRACE;
+  const at = runText(written, run.at, clock);
   const from = SIGNAL_WORDS.from(anchor.of, momentText(written, anchor.at));
   const ahead = SIGNAL_WORDS.inTime(formatDuration(Math.max(0, -lateness)));
   const ago = formatDuration(Math.max(0, lateness));
@@ -1063,7 +1068,7 @@ function enabledSignal(schedule: ScheduleResource, context: AdherenceContext): S
           ? SIGNAL_WORDS.passedBeyond(at)
           : run.passed === 1
             ? SIGNAL_WORDS.passedOne(at)
-            : SIGNAL_WORDS.passedMany(run.passed, at, runText(written, run.lastPassed ?? run.at, now)),
+            : SIGNAL_WORDS.passedMany(run.passed, at, runText(written, run.lastPassed ?? run.at, clock)),
   };
   const next: NextRun = {
     kind: "at",
@@ -1090,14 +1095,7 @@ function enabledSignal(schedule: ScheduleResource, context: AdherenceContext): S
 
     return signalOf({ state: "awaited", words, ...common }, context);
   }
-  if (!late) {
-    const words =
-      lateness > GRACE
-        ? SIGNAL_WORDS.dueByClocks(at, ago, formatDuration(context.clocks.bound))
-        : SIGNAL_WORDS.due(at, ago);
-
-    return signalOf({ state: "due", words, ...common }, context);
-  }
+  if (!late) return signalOf({ state: "due", words: SIGNAL_WORDS.due(at, ago), ...common }, context);
   return signalOf(
     {
       state: "overdue",
@@ -1124,7 +1122,7 @@ function pausedSignal(schedule: ScheduleResource, phase: ScheduleState, context:
 
     return signalOf({ state: "paused", words, next: noRun(words) }, context);
   }
-  const { now } = context;
+  const clock = context.clocks.cluster;
   const parsed = parseExpression(schedule.spec?.schedule);
   const anchor = anchorOf(schedule);
   const done = (resume: Resume, said: string, more: Partial<Parts> = {}) => {
@@ -1150,12 +1148,12 @@ function pausedSignal(schedule: ScheduleResource, phase: ScheduleState, context:
       { zone: line },
     );
   }
-  const run = expectedRun(schedule, parsed, zone.of === "interval" ? undefined : zone.zone, now);
+  const run = expectedRun(schedule, parsed, zone.of === "interval" ? undefined : zone.zone, clock);
 
   if (run.kind === "at-every-look") return everyLook();
   if (run.kind !== "expected") return unknown(SIGNAL_WORDS.why["no-anchor"]);
   const notes = derivedNotes(zone, schedule.metadata.name);
-  const at = runText(written, run.at, now);
+  const at = runText(written, run.at, clock);
   const more = { zone: line, notes };
 
   if (schedule.spec?.skipImmediately === true) {
