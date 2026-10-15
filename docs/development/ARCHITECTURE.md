@@ -381,9 +381,16 @@ newest of them. A failure is a shape beside the mark, and not its colour
 alone. Two marks are as far from each other as
 a mark is wide, at least. The line ends at the newest backup when the clock of
 the cluster is ahead of the one that draws it. The width is measured where the
-line is drawn, when it is drawn. Nothing is computed from the cron expression, and nothing is drawn between
-two backups: what a schedule should have done is the adherence of a later
-milestone, which needs the time zone of the server and what the controller skips.
+line is drawn, when it is drawn. Nothing is drawn between two backups: what a schedule should have done is the
+adherence of the fourth milestone, which needs the time zone of the server and
+what the controller skips. The [grammar and the computation of the expected
+run](../../src/common/schedule-adherence.ts) are pure functions beside the history,
+with the clock as an argument: the parser of the reviewed release written from its
+rules, the next instant in the zone of the expression, read through Intl and never
+from the desktop, the anchor the controller counts from, the expected run and the
+bounded count of the runs that passed, and the backup of the last submission among
+the backups that exist; the views that show them are the later slices of the
+milestone.
 
 ### The Locations And What Uses Them
 
@@ -1039,8 +1046,10 @@ logs; cleanup lists metadata only and suppresses request DELETE response bodies.
 
 - Adherence compares expected submissions with observed matching backups, not with
   a claimed successful recovery point. Account for lastSkipped, pauses, in-flight
-  work, incomplete history and clocks. Use an established parser compatible with
-  the reviewed cron dialect, including descriptors and TZ/CRON_TZ prefixes.
+  work, incomplete history and clocks. Read the expression with the grammar of the
+  parser of the reviewed release, written in the repository from its rules, the
+  descriptors and the TZ/CRON_TZ prefixes included, as SPEC-0013 decided: the parsers
+  available as packages have grammars of their own.
 - Never inherit the desktop timezone silently. For an unqualified expression,
   require a known installation timezone or report expected-run/adherence as unknown
   while still showing actual timestamps. Final UX belongs to the adherence spec.

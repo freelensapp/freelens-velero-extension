@@ -229,7 +229,8 @@ establishes. The states, by the clock of this machine, `now`:
 | At every look | The expression has no instant within five years of the anchor, or is `@triggered`, `@manual` or `@none` | The mark of what is not known | At every look: the expression has no instant, and Velero submits a backup at each of its looks, once a minute, while none of the backups of the schedule is New or InProgress. Last submission 2026-10-13 14:01:12 |
 
 The count of the expected runs that passed is of the instants of the expression
-after the anchor and not after `now`, one by one, stopped at one hundred: an
+after the anchor and before `now`, strictly, so that it is at least one exactly
+when a run is due, one by one, stopped at one hundred: an
 `@every 1m` schedule whose last submission is a year old says more than one
 hundred, and the computation does not walk the year. The grace of five minutes is
 five times the period at which the controller looks at the schedules: a daily
@@ -667,12 +668,9 @@ and no cluster was contacted for this draft.
 
 What this draft could not verify, and what the implementation establishes first:
 
-- The test environment runs v1.18.2, whose parser is the library of the recon and
-  differs from the reviewed one in the rules of REQ-160: the real schedule uses an
-  expression both read the same, `@every 8760h`; the fixtures placed by the clock
-  are read by no controller; and no packaged case rests on a rule that differs.
-  Moving the pins of the environment to the reviewed release is a decision of the
-  lead maintainer, as the roadmap says of them.
+- The test environment ran v1.18.2 when this was drafted, whose parser is the
+  library of the recon; it runs the reviewed v1.18.4 since the pull request that
+  moved the reviewed release, so the parser of its controller is the one of REQ-160.
 - The zone of the server process on the image of the release, which is outside the
   tree; the spec does not rely on it.
 - Whether the `Date` header of the API server reaches the reader through the
@@ -685,3 +683,27 @@ source, the measure of ADH-16 with the machine and the run, the answer of the
 header of ADH-07, the cleanup of the fixtures of the adherence and of the real
 schedule, and every deviation with its approval before claiming Verified. Actual
 environment data stay outside project files and agent output.
+
+T3.1, the grammar of the cron library and the computation with a controlled clock, on 2026-10-14, on the
+machine of the runs (macOS, Node 24.21.0, pnpm 10.34.7, TypeScript 7.0.2, Vitest 5.0.4, Biome 2.5.14, Knip
+6.41.0, Trunk launcher 1.3.4), after the independent review of the branch. `pnpm type:check`, exit 0; `pnpm
+lint:check`, exit 0, 220 files; `pnpm test:unit`, exit 0, 74 files and 2,468 tests, the 177 of
+`src/common/schedule-adherence.test.ts` among them, then the two measures; `pnpm knip:check`, exit 0; `pnpm
+trunk:check --all`, exit 0, 276 files. The table of ADH-01 is in the test file, 112 accepted expressions with
+their next runs, 8 with no instant or a zone not known and 34 refused with the words the controller writes,
+each row with the file and the line of the tests of go-cron v0.15.0 or of Velero v1.18.4 it is taken from, 52
+rows marked as read otherwise by the library of v1.18.2; the tests run with the zone of the machine set
+fourteen hours east of UTC, asserted. The next instant agreed with an oracle of the review, a transliteration
+of `Next` and of the zone rule of Go, on 17,832 cases. The measure of ADH-16 printed `ADH-16 unit`: 1,000
+schedules of 898 expressions, the thousand signals in 14.2 ms at the 95th percentile and 11.6 at the median,
+of 250, 64.9 ms on the first call that parses them, one schedule in 0.03 ms of 2; the parse kept by text and
+the count bounded at one hundred asserted, 72 schedules at the bound. Deviations of the slice, to amend in the
+spec: REQ-160 (L128), the limits of the parser are in bytes, as the parser counts (`parser.go` L419, L1403),
+where the text says characters; REQ-160 (L128) and ADH-01 (L514), a name the server does not know is not a
+refusal of the extension, which cannot know the zones of the server, but a zone that is not known when the
+runtime does not know it, and a name with a space is refused by the count of fields where the server refuses
+it as an unknown zone; REQ-161 (L129) and the design (L231-L232), the count of the runs that passed is of the
+instants strictly before the clock, so that it is at least one exactly when the run is due. The texts of the
+refusals are kept verbatim with the notice of the library in the header of the module, as the assumption at
+L606-L608 asks. The documentation of the release still says that a run in the hour a change skips is not run
+(`backup-reference.md` L74), a sentence of the earlier library, recorded in the drift watch of the recon.

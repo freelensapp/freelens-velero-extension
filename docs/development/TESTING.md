@@ -761,6 +761,30 @@ pull request, on 2026-10-07, under the load the unit run itself raised, the pars
 took 142.1 ms at the 95th percentile on the separate modules and 124.2 on the
 production build, every series within the budget in both forms.
 
+The unit layer of the adherence of a schedule (SPEC-0013, T3.1) is the module
+[`schedule-adherence.ts`](../../src/common/schedule-adherence.ts) and its
+[tests](../../src/common/schedule-adherence.test.ts), with the clock as an argument
+and the zone of the machine of the tests set to one fourteen hours east of UTC,
+which no row is computed in: the table of ADH-01, each row with the file and the
+line of the tests of go-cron v0.15.0 or of Velero v1.18.4 it is taken from, and
+marked when the library of v1.18.2 read it otherwise, the accepted expressions with
+their next runs in UTC, in Rome and in New York across the changes of daylight
+saving time of 2026, and the refused ones with the words the controller writes; the
+anchors, the due instant, the counts and their bound of ADH-02, with the daily and
+the interval cases of the tests of the release; the zones an expression names, of
+ADH-03; the backup of the last submission, of ADH-08. The measure of the adherence,
+[`schedule-adherence.measure.ts`](../../test/schedule-adherence.measure.ts), times
+the signals of 1,000 schedules of 898 expressions, every so many minutes or hours,
+five fields with and without a zone name, the calendar descriptors and ten with no
+instant, twenty calls after five, within 250 milliseconds at the 95th percentile,
+and the signal of one schedule within 2, with the parse kept for the text of the
+expression and the count bounded at one hundred asserted beside the times; it prints
+its numbers as one line, `ADH-16 unit`, before anything is asserted, and it imports
+the source, as the measure of the log does. In the unit run on the machine of the
+runs, on 2026-10-14, the thousand signals took 14.1 ms at the 95th percentile and
+11.9 at the median, 64.2 on the first call, which parses the expressions and reads
+the zones, and the one schedule 0.03 ms.
+
 The [local runner](../../e2e/scripts/local-demo.mts) and
 [image helper](../../e2e/scripts/local-images.mts) provide official-image setup and
 live readiness/authentication/isolation/ownership checks. Real backup/restore and
