@@ -141,7 +141,8 @@ export type PanelPart = keyof typeof OF_THE_PANEL;
 
 // The parts of a viewer, by what each is, with the end of its identifier.
 const OF_A_VIEWER = {
-  // A text shown as its lines: the log, and an artifact of another shape, which has a note over it.
+  // A text shown as its lines: the log, and an artifact of another shape, which has a note over it. The
+  // list of the lines is the text, and the part of it that scrolls is its rows.
   note: "note",
   wrap: "wrap",
   count: "count",
@@ -162,6 +163,7 @@ const OF_A_VIEWER = {
   errors: "errors",
   warnings: "warnings",
   // The resource list: its filter, its choices by action, its table, what scrolls, and its two kinds of rows.
+  // What scrolls is the rows, as it is of a list of lines.
   filter: "filter",
   actions: "actions",
   table: "table",
@@ -1207,16 +1209,17 @@ export async function searchLog(frame: Frame, kind: Operation, words: string): P
  */
 export async function scrollLogTo(frame: Frame, kind: Operation, line: number): Promise<LogShown> {
   const id = PARTS.viewer(kind, "log", "text");
+  const rows = PARTS.viewer(kind, "log", "rows");
 
   await part(frame, id);
   const found = await frame.evaluate(
-    ({ id, top }) => {
-      const scrolled = document.querySelector(`[data-testid="${id}"] .VirtualList .list`);
+    ({ rows, top }) => {
+      const scrolled = document.querySelector(`[data-testid="${rows}"]`);
 
       if (scrolled) scrolled.scrollTop = top;
       return scrolled !== null;
     },
-    { id, top: (line - 1) * LINE_HEIGHT },
+    { rows, top: (line - 1) * LINE_HEIGHT },
   );
 
   if (!found) throw new Error(`The list ${id} has nothing to scroll`);
@@ -1280,8 +1283,8 @@ export async function logRoom(frame: Frame, kind: Operation): Promise<number> {
 
   await part(frame, id);
   const room = await frame.evaluate(
-    (id) => document.querySelector<HTMLElement>(`[data-testid="${id}"] .VirtualList .list`)?.clientHeight ?? 0,
-    id,
+    (rows) => document.querySelector<HTMLElement>(`[data-testid="${rows}"]`)?.clientHeight ?? 0,
+    PARTS.viewer(kind, "log", "rows"),
   );
 
   if (!room) throw new Error(`The list ${id} has no room`);
@@ -1513,13 +1516,14 @@ export async function measureLogScroll(
   lines: number,
 ): Promise<LogGesture> {
   const id = PARTS.viewer(kind, "log", "text");
+  const rows = PARTS.viewer(kind, "log", "rows");
 
   await part(frame, id);
   return frame.evaluate(
-    ({ id, top, shows, lines, timeout }) =>
+    ({ id, rows, top, shows, lines, timeout }) =>
       new Promise<{ frames: number[]; mounted: number }>((resolve, reject) => {
         const root = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
-        const scrolled = root?.querySelector<HTMLElement>(".VirtualList .list");
+        const scrolled = root?.querySelector<HTMLElement>(`[data-testid="${rows}"]`);
 
         if (!root || !scrolled) {
           reject(new Error(`The list ${id} has nothing to scroll`));
@@ -1581,7 +1585,7 @@ export async function measureLogScroll(
         scrolled.scrollTop = top;
         requestAnimationFrame(look);
       }),
-    { id, top, shows, lines, timeout: MEASURE_TIMEOUT },
+    { id, rows, top, shows, lines, timeout: MEASURE_TIMEOUT },
   );
 }
 

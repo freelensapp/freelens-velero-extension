@@ -16,8 +16,8 @@ export interface ArtifactViewerProps {
 
 // The mark of the part of a viewer that is given the focus when its text arrives: the first line of what
 // it shows. Each viewer has one, which can be given the focus and is not in the order of the Tab key. A
-// viewer that shows its text in a list of the host has it when the list has drawn its first row, which is
-// a moment after the viewer itself: the tab waits for it.
+// viewer that shows its text in a list has it when the list has drawn its first row, which can be a moment
+// after the viewer itself: the tab waits for it.
 export const CONTENT = "data-artifact-content";
 
 // Escape in a text field of a viewer belongs to the field, as it does in the search field of the host: it

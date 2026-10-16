@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { virtualList } from "../../../test/host-components";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { layOutLists, resize, room, rowTop } from "../../../test/list-layout";
 import { LINE_BOUND, logLine, parseLog, searchLog, shownLines } from "../../common/artifact-log";
 import { LINE, ROOM, ROWS_BOUND } from "./artifact-lines";
 import { CONTENT } from "./artifact-viewer";
@@ -22,7 +22,9 @@ vi.mock("../../common/artifact-log", async (original) => {
   };
 });
 
-const ROOM_OF_THE_TESTS = virtualList.room;
+// The lists are laid out as a browser lays them out, in the room a test gives them: by default the tallest
+// room a list is given.
+layOutLists();
 
 // Entries as the server of the reviewed release writes them, in its two formats.
 const entry = (level: string, message: string, fields = 'backup=velero/nightly logSource="pkg/backup/backup.go:1"') =>
@@ -41,7 +43,8 @@ const TEXT = [
 ].join("\n");
 
 const list = () => screen.getByTestId("log-text");
-const scroller = () => list().querySelector<HTMLElement>(".list") as HTMLElement;
+// The part of the list that scrolls, which react-window draws.
+const scroller = () => screen.getByTestId("log-rows");
 const rows = () => [...list().querySelectorAll<HTMLElement>("[data-text-line]")];
 const numbers = () => rows().map((row) => Number(row.dataset.textLine));
 const row = (number: number) => screen.getByTestId(`log-line-${number}`);
@@ -70,9 +73,9 @@ function inRoom(): number[] {
 
   return rows()
     .filter((element) => {
-      const from = Number.parseFloat(element.style.top);
+      const from = rowTop(element);
 
-      return from + Number.parseFloat(element.style.height) > top && from < top + virtualList.room;
+      return from + Number.parseFloat(element.style.height) > top && from < top + room.height;
     })
     .map((element) => Number(element.dataset.textLine));
 }
@@ -82,10 +85,13 @@ function scroll(to: number): void {
   fireEvent.scroll(scroller());
 }
 
+beforeEach(() => {
+  Object.assign(room, { height: ROOM, width: 0 });
+});
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
-  virtualList.room = ROOM_OF_THE_TESTS;
   Reflect.deleteProperty(navigator, "clipboard");
 });
 
@@ -549,9 +555,9 @@ describe("a line that takes more than one row, among the lines a filter leaves",
     fireEvent.click(level("error"));
     expect(numbers()).toEqual([2, 4]);
     // The line that is cut is the first that is left: its row is the one that is a line taller.
-    expect([2, 4].map((number) => [row(number).style.top, row(number).style.height])).toEqual([
-      ["0px", "40px"],
-      ["40px", "20px"],
+    expect([2, 4].map((number) => [rowTop(row(number)), row(number).style.height])).toEqual([
+      [0, "40px"],
+      [40, "20px"],
     ]);
   });
 });
@@ -568,7 +574,7 @@ describe("a log of two hundred thousand lines", () => {
   it("has a hundred rows mounted at most, whatever is searched, filtered and scrolled to", () => {
     render(<LogViewer id="log" text={large} of="Backup" />);
     expect(list().style.maxHeight).toBe(`${ROOM}px`);
-    virtualList.room = Number.parseFloat(list().style.maxHeight);
+    resize({ height: Number.parseFloat(list().style.maxHeight) });
     const within = () => [numbers().length <= ROWS_BOUND, numbers().length > 70];
 
     scroll(100_000 * LINE + 3);

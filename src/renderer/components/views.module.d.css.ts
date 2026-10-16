@@ -140,6 +140,7 @@ declare const classNames: {
   readonly resourcesActionChosen: "resourcesActionChosen";
   readonly resourcesTable: "resourcesTable";
   readonly resourcesRows: "resourcesRows";
+  readonly resourcesList: "resourcesList";
   readonly resourcesKind: "resourcesKind";
   readonly resourcesText: "resourcesText";
   readonly resourcesFailed: "resourcesFailed";
