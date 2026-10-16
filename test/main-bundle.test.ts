@@ -47,6 +47,9 @@ it("loads under Node with a stand-in of the host, activates and deactivates, and
       static getInstance() {
         return instances.get(this);
       }
+      static resetInstance() {
+        instances.delete(this);
+      }
       constructor(extension) {
         this.extension = extension;
         calls.push("Ipc.constructor");
@@ -89,6 +92,8 @@ it("loads under Node with a stand-in of the host, activates and deactivates, and
       JSON.stringify({
         asked,
         calls,
+        // What the deactivation leaves of the IPC: nothing, so that the next activation makes its own.
+        instancesLeft: instances.size,
         extendsTheHost: Object.getPrototypeOf(loaded.default) === LensExtension,
         exported: Object.keys(loaded).sort(),
       }),
@@ -122,6 +127,7 @@ it("loads under Node with a stand-in of the host, activates and deactivates, and
         CHANNELS.allowanceRevoke,
       ].map((channel) => `Ipc.handle ${channel}`),
     ],
+    instancesLeft: 0,
     extendsTheHost: true,
     exported: [
       "DiagnosticError",

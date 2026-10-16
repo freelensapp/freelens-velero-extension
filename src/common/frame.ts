@@ -3,22 +3,22 @@
 // window: `<identifier>.renderer.freelens.app` in the packaged application, `<identifier>.localhost` in
 // development. The window of the host itself has no such label, and is the frame of no cluster.
 
-const WINDOW_HOSTS = ["renderer.freelens.app", "localhost"];
-
-// The identifier of the cluster of a frame, from the host of its address, or nothing for the window.
+// The identifier of the cluster of a frame, from the host of its address, or nothing for the window. It is
+// the rule of the host, step by step: getClusterIdFromHost, in
+// packages/core/src/common/utils/cluster-id-url-parsing.ts lines 14 to 27 at the validation target. The host
+// writes the address of a frame as `//<identifier>.<host of the window>` (getClusterFrameUrl, lines 34 to 36
+// of the same file), and reads the identifier back as the last label left once the port is taken off, then
+// the last label when it is `localhost`, or the last three when they are `renderer.freelens.app`. The host
+// reads it of no other host: a host that ends in neither is not one it writes for a frame, and is the frame
+// of no cluster here. The form of an identifier is the contract's to check, where a request names one.
 export function clusterOfHost(host: string): string | undefined {
-  const labels = host.split(":")[0].split(".").filter(Boolean);
+  const labels = host.split(":")[0].split(".");
 
-  for (const window of WINDOW_HOSTS) {
-    const suffix = window.split(".");
-
-    if (labels.length > suffix.length && labels.slice(-suffix.length).join(".") === window) {
-      const identifier = labels[labels.length - suffix.length - 1];
-
-      return typeof identifier === "string" && /^[a-z0-9][a-z0-9-]{0,63}$/i.test(identifier) ? identifier : undefined;
-    }
-  }
-  return undefined;
+  if (labels[labels.length - 1] === "localhost") labels.pop();
+  else if (labels.length >= 3 && labels.slice(-3).join(".") === "renderer.freelens.app") labels.splice(-3);
+  else return undefined;
+  // What the host reads as no identifier, an empty label, is none here as well.
+  return labels[labels.length - 1] || undefined;
 }
 
 // The identifier of the cluster of a frame, from the whole address of the frame.

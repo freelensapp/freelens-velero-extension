@@ -22,20 +22,35 @@ function blockedNamespace(name: string): object {
   );
 }
 
+// What an API of the host gave an extension pushes the way back to its disposers, which the host runs when
+// the extension is disabled, after its onDeactivate (packages/core/src/extensions/lens-extension.ts lines 95
+// to 110 at the validation target). An object a test gives in place of an extension has none.
+function disposersOf(extension: unknown): (() => void)[] | undefined {
+  const disposers = (extension as { disposers?: unknown } | null | undefined)?.disposers;
+
+  return Array.isArray(disposers) ? disposers : undefined;
+}
+
 export class HostExtensionStub {
   name = "@freelensapp/velero-extension";
+  // Where the host unpacked the extension: its folder is the working directory of what the main process runs.
+  manifestPath = "/synthetic/extensions/velero-extension/package.json";
   clusterPages: unknown[] = [];
   clusterPageMenus: unknown[] = [];
   kubeObjectDetailItems: unknown[] = [];
   kubeObjectMenuItems: unknown[] = [];
   kubeObjectHandlers: unknown[] = [];
+  // The disposers of the extension, in the order they were given.
+  readonly disposers: (() => void)[] = [];
 
   activate(): void {
     this.onActivate();
   }
 
+  // As the host disables an extension: its onDeactivate, then its disposers, each once.
   disable(): void {
     this.onDeactivate();
+    for (const dispose of this.disposers.splice(0)) dispose();
   }
 
   protected onActivate(): void {
@@ -60,10 +75,19 @@ export const ipcFrame = {
   current: { senderFrame: { url: "https://synthetic-cluster.renderer.freelens.app:1234/" }, processId: 1, frameId: 4 },
 };
 
+// The instances of the IPC of the host, one for each class.
+const ipcInstances = new Map<unknown, IpcStub>();
+
+// How many listeners hear a channel of the IPC, in the renderer: the frames of the tests.
+export function ipcListenerCount(channel: string): number {
+  return ipcListeners.get(channel)?.size ?? 0;
+}
+
 export function resetIpc(): void {
   ipcHandlers.clear();
   ipcBroadcasts.length = 0;
   ipcListeners.clear();
+  ipcInstances.clear();
   ipcFrame.current = {
     senderFrame: { url: "https://synthetic-cluster.renderer.freelens.app:1234/" },
     processId: 1,
@@ -71,24 +95,33 @@ export function resetIpc(): void {
   };
 }
 
+// `Main.Ipc` and `Renderer.Ipc` as the host makes them (packages/core/src/extensions/ipc/ at the validation
+// target): one instance for each class, made with the extension of its first call (Singleton,
+// packages/core/src/common/utils/singleton.ts lines 36 to 82), whose reset the host gives the disposers of
+// that extension (ipc-main.ts line 37, ipc-renderer.ts line 21); a handler and a listener are taken out by
+// the same disposers (ipc-main.ts lines 72 to 88, ipc-renderer.ts lines 40 to 59). Electron refuses a second
+// handler for a channel that has one.
 class IpcStub {
-  private static instances = new Map<unknown, IpcStub>();
-
   constructor(protected readonly extension: unknown) {
     hostCalls.push("Ipc.constructor");
+    disposersOf(extension)?.push(() => (this.constructor as typeof IpcStub).resetInstance());
   }
 
   static createInstance<Stub extends IpcStub>(this: new (extension: unknown) => Stub, extension: unknown): Stub {
-    const instance = new this(extension);
-
     // biome-ignore lint/complexity/noThisInStatic: see above
-    IpcStub.instances.set(this, instance);
+    let instance = ipcInstances.get(this) as Stub | undefined;
+
+    if (!instance) {
+      instance = new this(extension);
+      // biome-ignore lint/complexity/noThisInStatic: see above
+      ipcInstances.set(this, instance);
+    }
     return instance;
   }
 
   static getInstance<Stub extends IpcStub>(this: new (extension: unknown) => Stub, strict = true): Stub | undefined {
     // biome-ignore lint/complexity/noThisInStatic: see above
-    const instance = IpcStub.instances.get(this) as Stub | undefined;
+    const instance = ipcInstances.get(this) as Stub | undefined;
 
     if (!instance && strict) throw new Error("The IPC of the extension was not created");
     return instance;
@@ -96,20 +129,26 @@ class IpcStub {
 
   static resetInstance(): void {
     // biome-ignore lint/complexity/noThisInStatic: see above
-    IpcStub.instances.delete(this);
+    ipcInstances.delete(this);
   }
 
   handle(channel: string, handler: (event: unknown, ...args: unknown[]) => unknown): void {
     hostCalls.push(`Ipc.handle ${channel}`);
+    if (ipcHandlers.has(channel)) throw new Error(`Attempted to register a second handler for '${channel}'`);
     ipcHandlers.set(channel, handler);
+    disposersOf(this.extension)?.push(() => ipcHandlers.delete(channel));
   }
 
   listen(channel: string, listener: (event: unknown, ...args: unknown[]) => void): () => void {
     const listeners = ipcListeners.get(channel) ?? new Set();
+    const stop = () => {
+      listeners.delete(listener);
+    };
 
     listeners.add(listener);
     ipcListeners.set(channel, listeners);
-    return () => listeners.delete(listener);
+    disposersOf(this.extension)?.push(stop);
+    return stop;
   }
 
   broadcast(channel: string, ...args: unknown[]): void {
@@ -171,8 +210,17 @@ class KubeObjectStoreStub {}
 
 const stores = new Map<unknown, ExtensionStoreStub>();
 
-// The store of the host is one for each class that extends it: the class is what it is asked by.
+// The stores that save into their file now, each with the store it is of: one for each load of a store
+// that was not stopped since.
+export const savingStores: { store: object }[] = [];
+
+// The store of the host is one for each class that extends it: the class is what it is asked by. It
+// outlives a disable, as the module of the extension does; a load stops the saving of the load before and
+// starts its own, which the disposers of the extension stop (packages/core/src/extensions/
+// base-extension-store.ts lines 82 to 109 at the validation target).
 class ExtensionStoreStub {
+  private saving?: { store: object };
+
   static getInstanceOrCreate(this: new () => ExtensionStoreStub): ExtensionStoreStub {
     // biome-ignore lint/complexity/noThisInStatic: see above
     let instance = stores.get(this);
@@ -190,8 +238,20 @@ class ExtensionStoreStub {
     return stores.get(this);
   }
 
-  loadExtension(): void {
+  loadExtension(extension?: unknown): void {
     hostCalls.push("ExtensionStore.loadExtension");
+    const stop = (saving: { store: object }) => {
+      const index = savingStores.indexOf(saving);
+
+      if (index >= 0) savingStores.splice(index, 1);
+    };
+
+    if (this.saving) stop(this.saving);
+    const saving = { store: this };
+
+    savingStores.push(saving);
+    this.saving = saving;
+    disposersOf(extension)?.push(() => stop(saving));
   }
 }
 

@@ -455,6 +455,17 @@ export class Installation {
     };
   }
 
+  // The extension is deactivated: the reads asked every so often stop, and what the views loaded or asked
+  // of the main process goes, a confirmation that waits and a request that runs with it. What arrives after
+  // is of a step that was dropped, and is not taken.
+  dispose(): void {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = undefined;
+    this.watchers = 0;
+    this.server.drop();
+    this.artifacts.drop();
+  }
+
   // What is kept is changed from what the store holds now, and not from what this installation read of
   // it when it was made. The store is one for every cluster, and the frame of another cluster may have
   // written to it since: what it wrote would be lost, the window with it.

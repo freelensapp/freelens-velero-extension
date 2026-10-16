@@ -694,7 +694,6 @@ describe("what a request that failed left in the cluster", () => {
       ["conflict", "request"],
       ["validation", "request"],
       ["validation", "kind"],
-      ["request-failed", "credential"],
     ]) {
       expect([code, stage, requestLeft(failure(code, stage))]).toEqual([code, stage, "none"]);
     }

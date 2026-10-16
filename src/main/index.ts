@@ -13,8 +13,10 @@ export { WriteGate } from "./write-gate";
 
 export default class VeleroMain extends Main.LensExtension {
   // The preferences are written by this process: the store is opened here for what the views change to be
-  // kept. The procedures of the gate are registered, and answer the frames when they ask. Nothing is
-  // asked of a cluster, or of the catalog, until a frame asks.
+  // kept. The procedures of the gate are registered on an instance of the IPC made for this activation, and
+  // answer the frames when they ask. Nothing is asked of a cluster, or of the catalog, until a frame asks.
+  // The host keeps the module of the extension from a disable to the next enable: the store is the same
+  // instance, which the host makes save again, and the IPC is made again, since it was reset.
   protected onActivate(): void {
     const store = PreferencesStore.getInstanceOrCreate<PreferencesStore>();
 
@@ -38,9 +40,11 @@ export default class VeleroMain extends Main.LensExtension {
     });
   }
 
-  // Everything off: the writes in flight are aborted on this side, no cluster keeps writes on, and every
-  // kubectl of the extension is killed.
+  // Everything off: the writes in flight are aborted on this side, no cluster keeps writes on, every
+  // kubectl of the extension is killed, and the IPC is reset, so that the next activation makes its own. The
+  // host then removes the handlers of the instance and resets it again, which finds nothing to reset.
   protected onDeactivate(): void {
     VeleroIpc.getInstance(false)?.release();
+    VeleroIpc.resetInstance();
   }
 }

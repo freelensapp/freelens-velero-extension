@@ -1,8 +1,26 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { forbiddenAccesses, type HostExtensionStub, hostCalls, Main, Renderer } from "../test/freelens-extensions";
+import { randomUUID } from "node:crypto";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  forbiddenAccesses,
+  type HostExtensionStub,
+  hostCalls,
+  hostCatalog,
+  ipcHandlers,
+  ipcListenerCount,
+  Main,
+  Renderer,
+  resetIpc,
+  savingStores,
+} from "../test/freelens-extensions";
+import { CHANNELS } from "./common/ipc";
 import VeleroMain from "./main";
+import { KubectlTunnels } from "./main/diagnostic-tunnel";
+import { catalogEntries } from "./main/host";
+import { VeleroIpc } from "./main/ipc";
 import VeleroRenderer from "./renderer";
+import { VeleroIpcRenderer } from "./renderer/api/ipc";
 import { PAGES } from "./renderer/navigation";
+import { currentInstallation } from "./renderer/state/context";
 
 const importAccesses = [...forbiddenAccesses];
 const importCalls = [...hostCalls];
@@ -114,5 +132,127 @@ describe("what the extension registers", () => {
       ["BackupStorageLocation", ["velero.io/v1"]],
       ["VolumeSnapshotLocation", ["velero.io/v1"]],
     ]);
+  });
+});
+
+// The channels the main process handles: every one of the contract but the broadcast of the gate.
+const HANDLED = Object.values(CHANNELS)
+  .filter((channel) => channel !== CHANNELS.gateChanged)
+  .sort();
+const CLUSTER = "synthetic-cluster";
+
+// A disable and an enable of the extension in one session, as the host makes them: the module stays, a new
+// instance of the extension is activated, and what the host gave the instance before was taken back by its
+// disposers after its onDeactivate (packages/core/src/extensions/lens-extension.ts lines 95 to 110 and
+// extension-loader/extension-loader.ts lines 547 to 600 at the validation target).
+describe("activated, deactivated and activated again", () => {
+  beforeEach(() => {
+    resetIpc();
+    savingStores.length = 0;
+    hostCatalog.clusters = [
+      {
+        id: CLUSTER,
+        name: "synthetic",
+        kubeConfigPath: "/synthetic/kubeconfig",
+        contextName: "kind-synthetic",
+        status: "connected",
+      },
+    ];
+  });
+
+  afterEach(() => {
+    hostCatalog.clusters = undefined;
+    resetIpc();
+    vi.restoreAllMocks();
+  });
+
+  it("leaves in the main process one handler for each channel, one store that saves, and no kubectl, confirmation or write of before", async () => {
+    const closing = vi.spyOn(KubectlTunnels.prototype, "closeAll");
+    const first = Reflect.construct(VeleroMain, []) as HostExtensionStub;
+
+    first.activate();
+    // The frame of the tests, which reaches the handlers the main process registered.
+    const frame = VeleroIpcRenderer.createInstance({} as never);
+    const made = VeleroIpc.getInstance();
+
+    expect(await frame.enable(CLUSTER, "velero", { context: "kind-synthetic", namespace: "velero" })).toMatchObject({
+      ok: true,
+      value: { writes: { on: true } },
+    });
+    const confirmed = await frame.confirm(CLUSTER, "velero", "ServerStatusRequest");
+
+    expect(confirmed.ok).toBe(true);
+    // The host runs the disposers after onDeactivate: what this one, put first, sees is what onDeactivate left.
+    const left: unknown[] = [];
+
+    first.disposers.unshift(() => left.push(VeleroIpc.getInstance(false)));
+    first.disable();
+    expect(left).toEqual([undefined]);
+    // Every kubectl of the procedures was let go with them, the host took the handlers out, and the store
+    // stopped saving.
+    expect(closing).toHaveBeenCalledTimes(1);
+    expect(ipcHandlers.size).toBe(0);
+    expect(savingStores).toEqual([]);
+
+    // The host refuses a second handler for a channel: an activation that registered one twice would throw.
+    const second = Reflect.construct(VeleroMain, []) as HostExtensionStub;
+
+    second.activate();
+    expect(VeleroIpc.getInstance()).not.toBe(made);
+    expect([...ipcHandlers.keys()].sort()).toEqual(HANDLED);
+    expect(savingStores).toHaveLength(1);
+    // Nothing of before: writes are off, and the confirmation given before runs nothing.
+    expect(await frame.state(CLUSTER)).toMatchObject({ ok: true, value: { writes: { on: false } } });
+    if (confirmed.ok)
+      expect(await frame.runServerStatus(CLUSTER, "velero", confirmed.value.token, randomUUID())).toMatchObject({
+        ok: false,
+        code: "forbidden",
+        stage: "gate",
+      });
+    second.disable();
+    expect(closing).toHaveBeenCalledTimes(2);
+    expect(ipcHandlers.size).toBe(0);
+  });
+
+  it("leaves in the renderer one listener of the changes of the gate, one store that saves, and views that start from nothing", async () => {
+    // The procedures of the main process, as an activation of the main process registers them.
+    const main = VeleroIpc.createInstance({} as never);
+
+    main.register(catalogEntries);
+    const first = Reflect.construct(VeleroRenderer, []) as HostExtensionStub;
+
+    first.activate();
+    // The first view of the frame opens.
+    const before = currentInstallation();
+
+    await before.openGate();
+    expect(before.gate?.writes).toEqual({ on: false });
+    expect(ipcListenerCount(CHANNELS.gateChanged)).toBe(1);
+    const left: unknown[] = [];
+
+    first.disposers.unshift(() => left.push(VeleroIpcRenderer.getInstance(false)));
+    first.disable();
+    expect(left).toEqual([undefined]);
+    expect(ipcListenerCount(CHANNELS.gateChanged)).toBe(0);
+    expect(savingStores).toEqual([]);
+
+    const second = Reflect.construct(VeleroRenderer, []) as HostExtensionStub;
+
+    second.activate();
+    expect(savingStores).toHaveLength(1);
+    // The first view after the enable makes the state of the views again, which knows nothing of before and
+    // hears the main process through the way of this activation, once.
+    const after = currentInstallation();
+
+    expect(after).not.toBe(before);
+    expect(after.gate).toBeUndefined();
+    expect(ipcListenerCount(CHANNELS.gateChanged)).toBe(1);
+    const asking = vi.spyOn(after, "openGate").mockResolvedValue(undefined);
+
+    main.broadcast(CHANNELS.gateChanged, { cluster: CLUSTER });
+    expect(asking).toHaveBeenCalledTimes(1);
+    second.disable();
+    expect(ipcListenerCount(CHANNELS.gateChanged)).toBe(0);
+    main.release();
   });
 });

@@ -8,6 +8,8 @@ import { Installation } from "./installation";
 import type { PreferenceStorage } from "../../common/discovery";
 
 let installation: Installation | undefined;
+// What stops the frame from hearing that the main process changed the gate on its own.
+let stopListening: (() => void) | undefined;
 
 // Without the store of the host the choices hold for the session and are not kept.
 function storage(): PreferenceStorage {
@@ -33,10 +35,20 @@ export function currentInstallation(): Installation {
     });
 
     // When the main process turns writes off on its own, the frame of that cluster asks the state again.
-    gate?.onChanged((changed) => {
+    stopListening = gate?.onChanged((changed) => {
       if (changed === created.cluster.id) void created.openGate();
     });
     installation = created;
   }
   return installation;
+}
+
+// The extension is deactivated: the views of this frame let go of what they hold and stop hearing the main
+// process. The host keeps the module until the extension is enabled again, and the views then start from
+// nothing, with the IPC of that activation: no confirmation, no load and no listener of before.
+export function releaseInstallation(): void {
+  stopListening?.();
+  stopListening = undefined;
+  installation?.dispose();
+  installation = undefined;
 }

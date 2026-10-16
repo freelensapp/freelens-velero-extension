@@ -29,6 +29,7 @@ import { RestoresPage } from "./pages/restores-page";
 import { SchedulesPage } from "./pages/schedules-page";
 import { SnapshotLocationsPage } from "./pages/snapshot-locations-page";
 import { StorageLocationsPage } from "./pages/storage-locations-page";
+import { releaseInstallation } from "./state/context";
 
 export default class VeleroRenderer extends Renderer.LensExtension {
   // Only the views that exist have a page and an entry: nothing here leads to a page that is not there.
@@ -149,5 +150,13 @@ export default class VeleroRenderer extends Renderer.LensExtension {
   protected onActivate(): void {
     PreferencesStore.getInstanceOrCreate<PreferencesStore>().loadExtension(this);
     VeleroIpcRenderer.createInstance(this);
+  }
+
+  // The views let go of what they hold, and the way to the main process is reset: the next activation makes
+  // its own, and the views made after it use that one. The host then removes the listener of the instance
+  // and resets it again, which finds nothing to reset.
+  protected onDeactivate(): void {
+    releaseInstallation();
+    VeleroIpcRenderer.resetInstance();
   }
 }

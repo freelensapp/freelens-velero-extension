@@ -401,4 +401,36 @@ describe("the frame of a cluster", () => {
     await vi.waitFor(() => expect(state.gate?.writes).toEqual({ on: true, namespace: "velero", since: 1 }));
     expect(asked).toEqual([{ cluster: "synthetic-cluster" }, { cluster: "synthetic-cluster" }]);
   });
+
+  it("hears the arguments of a broadcast of the main process, and never reads the event it is given with them", () => {
+    resetIpc();
+    const ipc = VeleroIpcRenderer.createInstance({} as never);
+    let heard: ((event: unknown, ...args: unknown[]) => unknown) | undefined;
+    const listen = vi.spyOn(ipc, "listen").mockImplementation((_channel, listener) => {
+      heard = listener;
+      return () => undefined;
+    });
+    const told: string[] = [];
+    // The event a listener of the renderer is given is no contract of the host (typed unknown): any read of
+    // it throws here.
+    const event = new Proxy(
+      {},
+      {
+        get: (_target, property) => {
+          throw new Error(`the event was read: ${String(property)}`);
+        },
+        has: (_target, property) => {
+          throw new Error(`the event was read: ${String(property)}`);
+        },
+      },
+    );
+
+    ipc.onChanged((cluster) => told.push(cluster));
+    expect(listen).toHaveBeenCalledWith(CHANNELS.gateChanged, expect.any(Function));
+    heard?.(event, { cluster: "synthetic-cluster" });
+    heard?.(event, { cluster: 7 });
+    heard?.(event);
+    expect(told).toEqual(["synthetic-cluster"]);
+    listen.mockRestore();
+  });
 });

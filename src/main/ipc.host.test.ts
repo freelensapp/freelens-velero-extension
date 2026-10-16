@@ -110,9 +110,35 @@ describe("the gate through the IPC and the catalog of the host", () => {
 
   it("turns writes off when the extension is deactivated, and tells nothing of it", async () => {
     await renderer.enable(CLUSTER, "velero", { context: "kind-synthetic", namespace: "velero" });
+    // As the extension is deactivated: the procedures are let go and the instance is reset, then the host
+    // takes its handlers out. The next activation registers them on an instance of its own.
     main.release();
+    VeleroIpc.resetInstance();
+    ipcHandlers.clear();
+    main = VeleroIpc.createInstance({} as never);
     main.register(catalogEntries);
     expect(await renderer.state(CLUSTER)).toMatchObject({ ok: true, value: { writes: { on: false } } });
     expect(ipcBroadcasts).toEqual([]);
+  });
+
+  it("refuses the cluster of a frame the catalog of the host does not give as connected", async () => {
+    for (const status of ["connecting", "disconnected", "disconnecting"]) {
+      hostCatalog.clusters = hostCatalog.clusters?.map((cluster) => ({ ...cluster, status }));
+      expect(await renderer.state(CLUSTER)).toEqual({
+        ok: false,
+        code: "target-changed",
+        stage: "catalog",
+        retry: false,
+        text: CLUSTER_WORDS.disconnected,
+      });
+    }
+    hostCatalog.clusters = hostCatalog.clusters?.filter((cluster) => cluster.id !== CLUSTER);
+    expect(await renderer.allow(CLUSTER, { what: "private", origin: "https://storage.example:9000" })).toEqual({
+      ok: false,
+      code: "target-changed",
+      stage: "catalog",
+      retry: false,
+      text: CLUSTER_WORDS.absent,
+    });
   });
 });

@@ -762,7 +762,6 @@ describe("the band of the server", () => {
     ["target-changed", "wait", "created", "The cluster or the installation changed while the request was made."],
     ["transport-unreachable", "creation", "none", "The API server of the cluster could not be reached."],
     ["tls-invalid", "creation", "none", "The certificate of the API server of the cluster is not trusted."],
-    ["request-failed", "credential", "none", "The credential plugin kubelogin of the context did not give one."],
     ["request-failed", "way", "unknown", "The main process did not answer."],
     ["validation", "answer", "unknown", "The main process answered with what the views do not understand."],
   ] as const)(

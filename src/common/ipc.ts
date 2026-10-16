@@ -68,10 +68,9 @@ export function downloadRequestName(target: string, request: string): string {
 }
 
 // Where the write of such a request failed, which the main process says and the views read what the
-// request left in the cluster by: before the cluster answered its creation, while the request was waited
-// for, which is after it was created, and while the plugin of the context was asked for its credential
-// before the creation.
-export const REQUEST_STAGES = { creation: "creation", wait: "wait", credential: "credential" } as const;
+// request left in the cluster by: before the cluster answered its creation, and while the request was waited
+// for, which is after it was created.
+export const REQUEST_STAGES = { creation: "creation", wait: "wait" } as const;
 
 // The steps of the way of a DownloadRequest, in their order: the wait for one of the two places of the
 // process, the target read again, its backup when it is a restore, the storage location of the backup,
@@ -130,46 +129,21 @@ export interface Failure {
 }
 export type Answer<Value> = { ok: true; value: Value } | Failure;
 
-// What the main process says of the connection of a cluster, when writes are on for it: the adapter takes
-// a client certificate, a token or a plugin that gives a credential; every other form is named.
-export type Connection =
-  | { supported: true; credential: "certificate" | "token" | "plugin" }
-  | {
-      supported: false;
-      reason: ConnectionReason;
-    };
+// What the main process says of the connection of a cluster it could not make the writes of the extension
+// for. The writes go through the client of the host, which authenticates as the connection of the host does:
+// the extension refuses no form of a kubeconfig, and reads none, so the one reason left is a client it could
+// not make.
+export interface Connection {
+  supported: false;
+  reason: ConnectionReason;
+}
 
-export const CONNECTION_REASON_NAMES = [
-  "entry",
-  "file",
-  "context",
-  "auth-provider",
-  "proxy",
-  "basic",
-  "insecure-tls",
-  "no-credential",
-  "impersonation",
-  "unusable",
-] as const;
+export const CONNECTION_REASON_NAMES = ["unusable"] as const;
 export type ConnectionReason = (typeof CONNECTION_REASON_NAMES)[number];
 
-// Why the writes of the extension cannot use the connection of a cluster: the form of the kubeconfig the
-// adapter refuses, or what is missing of it. The main process says them when it refuses to turn writes
-// on, and the views show them.
+// Why the writes of the extension cannot use the connection of a cluster. The main process says it when it
+// refuses to turn writes on, and the views show it.
 export const CONNECTION_REASONS: Record<ConnectionReason, string> = {
-  entry: "The cluster is not in the catalog of Freelens any more.",
-  file: "The kubeconfig of the cluster cannot be read.",
-  context: "The context of the cluster is not in its kubeconfig.",
-  "auth-provider":
-    "The connection of this cluster uses an authentication provider of the kubeconfig, which the writes of the extension do not use.",
-  proxy: "The connection of this cluster goes through a proxy, which the writes of the extension do not use.",
-  basic:
-    "The connection of this cluster uses a user name and a password, which the writes of the extension do not use.",
-  "insecure-tls":
-    "The connection of this cluster turns the verification of TLS off, which the writes of the extension never do.",
-  "no-credential": "The connection of this cluster has no credential the writes of the extension can use.",
-  impersonation:
-    "The connection of this cluster impersonates groups, a uid or extra fields, which the writes of the extension cannot send.",
   unusable: "The connection of this cluster is not one the writes of the extension can use.",
 };
 
@@ -558,14 +532,9 @@ export function readGateState(value: unknown): GateState | undefined {
 }
 
 const REASONS: readonly string[] = CONNECTION_REASON_NAMES;
-const CREDENTIALS = ["certificate", "token", "plugin"];
 
 export function readConnection(value: unknown): Connection | undefined {
-  if (!isRecord(value) || typeof value.supported !== "boolean") return;
-  if (value.supported) {
-    if (!hasKeys(value, ["supported", "credential"]) || !CREDENTIALS.includes(value.credential as string)) return;
-    return { supported: true, credential: value.credential as "certificate" | "token" | "plugin" };
-  }
+  if (!isRecord(value) || value.supported !== false) return;
   if (!hasKeys(value, ["supported", "reason"]) || !REASONS.includes(value.reason as string)) return;
   return { supported: false, reason: value.reason as ConnectionReason };
 }

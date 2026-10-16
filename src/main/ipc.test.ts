@@ -1,11 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import { CLUSTER_WORDS } from "../common/diagnostic-text";
 import { CHANNELS } from "../common/ipc";
+import { ArtifactHolder } from "./artifact-holder";
 import { registerHandlers, senderOf } from "./ipc";
 import { WriteGate } from "./write-gate";
 
+import type { IpcMainInvokeEvent } from "electron";
+
 import type { CatalogEntry } from "./catalog";
-import type { DiagnosticObject } from "./diagnostic-kubernetes";
+import type { DiagnosticKubernetes, DiagnosticObject } from "./diagnostic-kubernetes";
 import type { IpcEvent, Registrar } from "./ipc";
 
 const FRAME_A: IpcEvent = {
@@ -86,6 +90,48 @@ describe("the sender of a request", () => {
   it("is the frame of a cluster, keyed by its cluster, its process and its frame", () => {
     expect(senderOf(FRAME_A)).toEqual({ cluster: "cluster-a", key: "cluster-a:1:4" });
     expect(senderOf(FRAME_B)).toEqual({ cluster: "cluster-b", key: "cluster-b:1:9" });
+  });
+
+  it("is read from the addresses of the frames of v2, of the packaged application and of development", () => {
+    expect(
+      senderOf({ senderFrame: { url: "https://cluster-a.renderer.freelens.app/" }, processId: 3, frameId: 7 }),
+    ).toEqual({ cluster: "cluster-a", key: "cluster-a:3:7" });
+    expect(
+      senderOf({
+        senderFrame: { url: "http://cluster-a.localhost:9191/extension/freelensapp--velero-extension/backups" },
+        processId: 3,
+        frameId: 8,
+      }),
+    ).toEqual({ cluster: "cluster-a", key: "cluster-a:3:8" });
+    // The window of development, and a frame of an address the host never writes for a cluster.
+    expect(
+      senderOf({ senderFrame: { url: "http://localhost:9191/#/catalog" }, processId: 3, frameId: 1 }),
+    ).toBeUndefined();
+    expect(
+      senderOf({ senderFrame: { url: "https://storage.example.invalid/" }, processId: 3, frameId: 9 }),
+    ).toBeUndefined();
+  });
+
+  it("reads of the event of Electron what the compiler checks against its type, and nothing else", () => {
+    // The event of a handler of the host is the IpcMainInvokeEvent of Electron: what the procedures read of
+    // it is typed from that declaration, so that a field Electron renamed or retyped fails the type check.
+    expectTypeOf<IpcMainInvokeEvent>().toExtend<IpcEvent>();
+    expectTypeOf<IpcEvent["processId"]>().toEqualTypeOf<number>();
+    expectTypeOf<IpcEvent["frameId"]>().toEqualTypeOf<number>();
+    expectTypeOf<NonNullable<IpcEvent["senderFrame"]>["url"]>().toEqualTypeOf<string>();
+    const read: string[] = [];
+    const event = new Proxy(
+      { senderFrame: { url: "https://cluster-a.renderer.freelens.app/" }, processId: 1, frameId: 4 },
+      {
+        get: (target, property, receiver) => {
+          read.push(String(property));
+          return Reflect.get(target, property, receiver);
+        },
+      },
+    );
+
+    expect(senderOf(event)).toEqual({ cluster: "cluster-a", key: "cluster-a:1:4" });
+    expect([...new Set(read)].sort()).toEqual(["frameId", "processId", "senderFrame"]);
   });
 
   it("is nothing for the window of the host and for an event that names no frame", () => {
@@ -436,5 +482,160 @@ describe("the frame of a write, checked again", () => {
       },
     });
     expect(senderOf(event)).toBeUndefined();
+  });
+});
+
+// A request of each procedure, valid for the contract, for a cluster: what the binding is checked with.
+const REQUEST = randomUUID();
+const ORIGIN = "https://storage.example:9000";
+const PAYLOADS: Record<string, (cluster: string) => unknown> = {
+  [CHANNELS.gateState]: (cluster) => ({ cluster }),
+  [CHANNELS.gateEnable]: (cluster) => ({
+    cluster,
+    namespace: "velero",
+    confirmation: { context: "kind-a", namespace: "velero" },
+  }),
+  [CHANNELS.gateDisable]: (cluster) => ({ cluster }),
+  [CHANNELS.writeConfirm]: (cluster) => ({ cluster, namespace: "velero", kind: "ServerStatusRequest" }),
+  [CHANNELS.writeRun]: (cluster) => ({
+    cluster,
+    namespace: "velero",
+    kind: "ServerStatusRequest",
+    token: randomUUID(),
+    request: REQUEST,
+  }),
+  [CHANNELS.writeStatus]: (cluster) => ({ cluster, request: REQUEST }),
+  [CHANNELS.writeCancel]: (cluster) => ({ cluster, request: REQUEST }),
+  [CHANNELS.artifactPage]: (cluster) => ({ cluster, request: REQUEST, page: 0 }),
+  [CHANNELS.artifactRelease]: (cluster) => ({ cluster, request: REQUEST }),
+  [CHANNELS.artifactSave]: (cluster) => ({ cluster, request: REQUEST }),
+  [CHANNELS.allowanceGrant]: (cluster) => ({ cluster, what: "origin", origin: ORIGIN, location: "velero/default" }),
+  [CHANNELS.allowanceRevoke]: (cluster) => ({ cluster, what: "origin", origin: ORIGIN, location: "velero/default" }),
+};
+
+// The procedures with everything they could act on watched: the gate, the texts held, the allowances kept and
+// the dialog of a saving. A request the binding refuses reaches none of them.
+function watchedFixture() {
+  const catalog: CatalogEntry[] = [
+    { id: "cluster-a", name: "demo", kubeConfigPath: "/synthetic/a", contextName: "kind-a", status: "connected" },
+    { id: "cluster-b", name: "other", kubeConfigPath: "/synthetic/b", contextName: "kind-b", status: "connected" },
+  ];
+  const handlers = new Map<string, (event: IpcEvent, payload: unknown) => Promise<unknown>>();
+  const gate = new WriteGate<DiagnosticKubernetes>({
+    catalog: () => catalog,
+    adapter: () => ({ assertCurrent: () => undefined }) as never,
+  });
+  const holder = new ArtifactHolder();
+  const reached = [
+    ...(["state", "enable", "disable", "confirm", "take", "status", "cancel"] as const).map((name) =>
+      vi.spyOn(gate, name),
+    ),
+    ...(["page", "release", "content"] as const).map((name) => vi.spyOn(holder, name)),
+  ];
+  const allowances = { read: vi.fn(() => ({})), write: vi.fn() };
+  const save = vi.fn(async () => true);
+  const dispose = registerHandlers(
+    { handle: (channel, handler) => handlers.set(channel, handler), broadcast: () => undefined },
+    { catalog: () => catalog, gate, holder, allowances, save, pollMs: 5 },
+  );
+  const call = (channel: string, event: IpcEvent, payload: unknown) => {
+    const handler = handlers.get(channel);
+
+    if (!handler) throw new Error(`no handler for ${channel}`);
+    return handler(event, payload);
+  };
+  const untouched = () => {
+    for (const spy of reached) expect(spy).not.toHaveBeenCalled();
+    expect(allowances.read).not.toHaveBeenCalled();
+    expect(allowances.write).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+  };
+
+  return { catalog, handlers, call, untouched, dispose };
+}
+
+describe("the binding of a request to its frame and to its cluster", () => {
+  it("is checked by every procedure there is", () => {
+    const { handlers, dispose } = watchedFixture();
+
+    expect(Object.keys(PAYLOADS).sort()).toEqual([...handlers.keys()].sort());
+    dispose();
+  });
+
+  it("refuses, on every procedure, the frame of a cluster that names another, the window, and a frame of no cluster", async () => {
+    const { call, untouched, dispose } = watchedFixture();
+    const frames: IpcEvent[] = [
+      FRAME_B,
+      WINDOW,
+      { senderFrame: { url: "http://localhost:9191/" }, processId: 1, frameId: 2 },
+      { senderFrame: null, processId: 1, frameId: 3 },
+    ];
+
+    for (const [channel, payload] of Object.entries(PAYLOADS)) {
+      for (const frame of frames) {
+        expect([channel, await call(channel, frame, payload("cluster-a"))]).toEqual([
+          channel,
+          expect.objectContaining({ ok: false, code: "forbidden", stage: "frame" }),
+        ]);
+      }
+    }
+    untouched();
+    dispose();
+  });
+
+  it("refuses the frame of an address that carries what is not an identifier, whatever its request names", async () => {
+    const { call, untouched, dispose } = watchedFixture();
+    // The host reads the label of such an address as it is; the contract refuses it where a request names it.
+    const odd: IpcEvent = { senderFrame: { url: "https://_.renderer.freelens.app/" }, processId: 1, frameId: 5 };
+
+    expect(senderOf(odd)).toEqual({ cluster: "_", key: "_:1:5" });
+    for (const [channel, payload] of Object.entries(PAYLOADS)) {
+      expect(await call(channel, odd, payload("cluster-a"))).toMatchObject({
+        ok: false,
+        code: "forbidden",
+        stage: "frame",
+      });
+      expect(await call(channel, odd, payload("_"))).toMatchObject({ ok: false, code: "validation", stage: "request" });
+    }
+    untouched();
+    dispose();
+  });
+
+  it("refuses, on every procedure, a cluster the catalog does not give, and one it gives in a state that is not connected, and does nothing for either", async () => {
+    const { catalog, call, untouched, dispose } = watchedFixture();
+
+    for (const status of ["connecting", "disconnected", "disconnecting"]) {
+      catalog[0] = { ...catalog[0], status };
+      for (const [channel, payload] of Object.entries(PAYLOADS)) {
+        expect([status, channel, await call(channel, FRAME_A, payload("cluster-a"))]).toEqual([
+          status,
+          channel,
+          { ok: false, code: "target-changed", stage: "catalog", retry: false, text: CLUSTER_WORDS.disconnected },
+        ]);
+      }
+    }
+    catalog.splice(0, 1);
+    for (const [channel, payload] of Object.entries(PAYLOADS)) {
+      expect([channel, await call(channel, FRAME_A, payload("cluster-a"))]).toEqual([
+        channel,
+        { ok: false, code: "target-changed", stage: "catalog", retry: false, text: CLUSTER_WORDS.absent },
+      ]);
+    }
+    untouched();
+    dispose();
+  });
+
+  it("takes the request of the frame of a cluster the catalog gives as connected", async () => {
+    const { call, dispose } = watchedFixture();
+
+    expect(await call(CHANNELS.gateState, FRAME_A, PAYLOADS[CHANNELS.gateState]("cluster-a"))).toEqual({
+      ok: true,
+      value: { cluster: { id: "cluster-a", name: "demo", context: "kind-a" }, writes: { on: false } },
+    });
+    expect(await call(CHANNELS.allowanceGrant, FRAME_A, PAYLOADS[CHANNELS.allowanceGrant]("cluster-a"))).toEqual({
+      ok: true,
+      value: null,
+    });
+    dispose();
   });
 });

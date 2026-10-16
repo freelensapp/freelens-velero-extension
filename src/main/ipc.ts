@@ -1,11 +1,12 @@
 // The procedures the renderer calls of the main process, and what binds them: every request is validated,
-// every sender is the frame of one cluster, and every answer is a result. Nothing is raised to the
-// renderer, nothing is broadcast of a write, and the catalog of the host is where a cluster is resolved.
+// every sender is the frame of one cluster, the cluster a request names is the one of its frame and one the
+// catalog of the host gives as connected, and every answer is a result. Nothing is raised to the renderer,
+// nothing is broadcast of a write, and the catalog of the host is where a cluster is resolved.
 
 import { Main } from "@freelensapp/extensions";
 import { ALLOWANCES_BOUND, type Allowances, isAllowed, withAllowance, withoutAllowance } from "../common/allowances";
 import { saveTitle } from "../common/artifact-text";
-import { type DownloadContext, downloadFailure } from "../common/diagnostic-text";
+import { CLUSTER_WORDS, type DownloadContext, downloadFailure } from "../common/diagnostic-text";
 import { clusterOfAddress, senderKey } from "../common/frame";
 import {
   type AllowanceRequest,
@@ -35,6 +36,7 @@ import {
   type WriteTarget,
 } from "../common/ipc";
 import { ArtifactHolder } from "./artifact-holder";
+import { type CatalogEntry, refusalOf } from "./catalog";
 import { DiagnosticKubernetes, type HostClient } from "./diagnostic-kubernetes";
 import { resolveRoute } from "./diagnostic-route";
 import { type DiagnosticOptions, runDownload } from "./diagnostic-service";
@@ -43,14 +45,16 @@ import { KubectlTunnels, type Spawn, type TunnelHost } from "./diagnostic-tunnel
 import { readServerStatus, serverStatusFailure } from "./server-status";
 import { signatureOf, WriteGate } from "./write-gate";
 
-import type { CatalogEntry } from "./catalog";
+import type { IpcMainInvokeEvent } from "electron";
 
-// What a handler is given of the event of the host: the frame that sent the request.
-export interface IpcEvent {
-  senderFrame?: { url: string } | null;
-  processId: number;
-  frameId: number;
-}
+// What a handler reads of the event the host gives it, with the types Electron gives them: the frame that
+// sent the request, by its address, and the identifiers of its process and of the frame, which tell the
+// frames of one window apart. The event of a handler of the host is the IpcMainInvokeEvent of Electron
+// (packages/core/src/extensions/ipc/ipc-main.ts lines 72 to 88 at the validation target), whose type alone
+// is imported: nothing of Electron is loaded with the main process.
+export type IpcEvent = Pick<IpcMainInvokeEvent, "processId" | "frameId"> & {
+  senderFrame?: Pick<NonNullable<IpcMainInvokeEvent["senderFrame"]>, "url"> | null;
+};
 
 export interface Sender {
   cluster: string;
@@ -210,6 +214,11 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
           return failure("validation", "request", false, "The request is not one the main process understands.");
         if (request.cluster !== sender.cluster)
           return failure("forbidden", "frame", false, "The request names a cluster that is not the one of its frame.");
+        // The cluster of the frame is one the catalog of the host gives, and in the connected state: nothing
+        // is done for a cluster that is not there, or not connected, and the words say which.
+        const refused = refusalOf(dependencies.catalog().find((entry) => entry.id === request.cluster));
+
+        if (refused) return failure("target-changed", "catalog", false, CLUSTER_WORDS[refused]);
         return await answer(sender, request, () => senderOf(event)?.key === sender.key);
       } catch {
         return failure("request-failed", "handler", false, "The main process could not answer the request.");
@@ -564,7 +573,9 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
   };
 }
 
-// The IPC of the extension in the main process. One for the extension, made when it is activated.
+// The IPC of the extension in the main process. One for the extension, made when it is activated and reset
+// when it is deactivated: the host keeps the handlers of an instance until the disposers of the extension
+// that made it run, so the procedures are registered once for each instance.
 export class VeleroIpc extends Main.Ipc {
   private dispose?: () => void;
 
@@ -573,7 +584,8 @@ export class VeleroIpc extends Main.Ipc {
     this.dispose?.();
     this.dispose = registerHandlers(
       {
-        handle: (channel, handler) => this.handle(channel, (event, payload) => handler(event as IpcEvent, payload)),
+        handle: (channel, handler) =>
+          this.handle(channel, (event: IpcMainInvokeEvent, payload: unknown) => handler(event, payload)),
         broadcast: (channel, ...args) => this.broadcast(channel, ...args),
       },
       { ...more, catalog },

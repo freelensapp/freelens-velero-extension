@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { describe, expect, it, vi } from "vitest";
 import { answered, fakeHostClient, type HostReply, type HostRequest, statusOf } from "../../test/host-client";
+import { CLUSTER_WORDS } from "../common/diagnostic-text";
 import { CHANNELS } from "../common/ipc";
 import { DiagnosticError } from "./diagnostic-transport";
 import { registerHandlers } from "./ipc";
@@ -334,15 +335,26 @@ describe("the way of a download through the host", () => {
     expect(value.children[0].child.signals[0]).toBe("SIGTERM");
     expect(value.broadcasts).toContainEqual([CHANNELS.gateChanged, { cluster: "cluster-a" }]);
     expect(await running).toMatchObject({ ok: false });
+    // The frame that asks again is told that its cluster is not connected, and nothing more is asked of the
+    // cluster: it stays disconnected.
+    const asked = value.host.requests.length;
+    const refused = {
+      ok: false,
+      code: "target-changed",
+      stage: "catalog",
+      retry: false,
+      text: CLUSTER_WORDS.disconnected,
+    };
+
+    expect(await value.call(CHANNELS.gateState, { cluster: "cluster-a" })).toEqual(refused);
+    expect(await value.enable()).toEqual(refused);
+    expect(value.host.requests).toHaveLength(asked);
+    // Connected again, the cluster has writes off until they are turned on.
+    value.status("cluster-a", "connected");
     expect(await value.call(CHANNELS.gateState, { cluster: "cluster-a" })).toMatchObject({
       ok: true,
       value: { writes: { on: false } },
     });
-    // Nothing more is asked of it: the cluster stays disconnected.
-    const asked = value.host.requests.length;
-
-    expect(await value.enable()).toMatchObject({ ok: false, code: "target-changed", stage: "catalog" });
-    expect(value.host.requests).toHaveLength(asked);
     value.dispose();
   });
 });
