@@ -54,15 +54,9 @@
     "dist/**",
     "e2e/__tests__/pre-review.tests.ts",
     "e2e/__tests__/velero-e2e-artifacts.tests.ts",
-    "e2e/__tests__/velero-e2e-gate.tests.ts",
-    "e2e/__tests__/velero-e2e-journey.tests.ts",
-    "e2e/__tests__/velero-e2e-locations.tests.ts",
     "e2e/__tests__/velero-e2e-preferences.tests.ts",
-    "e2e/__tests__/velero-e2e-restores.tests.ts",
     "e2e/__tests__/velero-e2e-restricted-restores.tests.ts",
     "e2e/__tests__/velero-e2e-restricted.tests.ts",
-    "e2e/__tests__/velero-e2e-scale.tests.ts",
-    "e2e/__tests__/velero-e2e-schedules.tests.ts",
     "e2e/__tests__/velero-e2e-server.tests.ts"
   ],
 
