@@ -173,7 +173,12 @@ describe("a text shown as its lines", () => {
   });
 });
 
-describe("the rows a list mounts", () => {
+// Texts of two hundred thousand and of 1,700,000 lines. What a case of them takes is the list itself, not
+// the text: scrolled to the end of 1,650,000 rows, react-window counts the place of every row before it,
+// some 0.6 of the 1.2 to 1.5 seconds of such a case run alone, and several times that in a run on a machine
+// the test environment loads. Their time is not what they prove: they are given a minute, as the cases of
+// the other long texts are.
+describe("the rows a list mounts", { timeout: 60_000 }, () => {
   const large = Array.from({ length: 200_000 }, (_, index) => `line ${index + 1} of a large text`).join("\n");
 
   it("are a hundred at most, of a text of two hundred thousand lines, wherever the list is scrolled to", () => {
