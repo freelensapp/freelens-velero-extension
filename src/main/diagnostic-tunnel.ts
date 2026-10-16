@@ -57,7 +57,8 @@ export const TUNNEL_BOUNDS = {
 } as const;
 
 const LOOPBACK = "127.0.0.1";
-const READY = /^Forwarding from 127\.0\.0\.1:(\d+)\b/m;
+// The port is taken once what follows it is there: a line cut inside its port is not read as a shorter one.
+const READY = /^Forwarding from 127\.0\.0\.1:(\d+) -> /m;
 // The refusal of the API server, as kubectl writes it: a port-forward is asked with the verb create, or
 // with get and create over a WebSocket.
 const PORT_FORWARD_REFUSED = /cannot (?:create|get) resource "pods\/portforward"/;

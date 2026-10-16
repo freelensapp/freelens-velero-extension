@@ -170,11 +170,14 @@ describe("the tunnel to the Pod of the store", () => {
     const opening = value.tunnels.open(CLUSTER, POD, new AbortController().signal);
     const child = await started(value);
 
-    // A line of another address, and a line cut in two: not ready until the line is whole.
+    // A line of another address, and a line cut in two, before its port and inside it: not ready until the
+    // port is whole.
     child.say("Forwarding from [::1]:41821 -> 8333\n");
     child.say("Forwarding from 127.0.0.1:");
     expect(await outcome(opening)).toBe("pending");
-    child.say("39017 -> 8333\nHandling connection for 39017\n");
+    child.say("390");
+    expect(await outcome(opening)).toBe("pending");
+    child.say("17 -> 8333\nHandling connection for 39017\n");
     await expect(opening).resolves.toMatchObject({ address: "127.0.0.1", port: 39017 });
     // A port that is no port is not taken.
     const other = fixture();
