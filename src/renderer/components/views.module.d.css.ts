@@ -17,6 +17,7 @@ declare const classNames: {
   readonly state: "state";
   readonly stateTitle: "stateTitle";
   readonly stateText: "stateText";
+  readonly errorMessage: "errorMessage";
   readonly choices: "choices";
   readonly choice: "choice";
   readonly choiceName: "choiceName";

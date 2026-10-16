@@ -123,6 +123,14 @@
   overflow-wrap: anywhere;
 }
 
+/* The error a page or a section of the details threw, in the place of the part that threw it. */
+.errorMessage {
+  margin-bottom: 12px;
+  color: var(--colorError);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .choices {
   display: flex;
   flex-direction: column;

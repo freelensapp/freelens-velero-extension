@@ -21,6 +21,7 @@ import { VeleroIpc } from "./main/ipc";
 import VeleroRenderer from "./renderer";
 import { VeleroIpcRenderer } from "./renderer/api/ipc";
 import { Backup, BackupStorageLocation, Restore, Schedule, VolumeSnapshotLocation } from "./renderer/api/kinds";
+import { ErrorBoundary } from "./renderer/components/error-boundary";
 import { BackupDetails } from "./renderer/details/backup-details";
 import { RestoreDetails } from "./renderer/details/restore-details";
 import { ScheduleDetails } from "./renderer/details/schedule-details";
@@ -206,49 +207,75 @@ describe("what the extension registers", () => {
     });
   });
 
-  it("is the five sections of the details, each made with detailsFor for its kind, rendered with the object alone", () => {
+  it("is the five sections of the details, each made with detailsFor for its kind, drawn inside a boundary of the extension with the object alone", () => {
     const extension = Reflect.construct(VeleroRenderer, []) as HostExtensionStub;
     const items = extension.kubeObjectDetailItems as {
       kind: string;
       apiVersions: string[];
       priority?: number;
-      components: { Details: (props: { object: unknown }) => React.ReactElement<Record<string, unknown>> };
+      components: { Details: (props: { object: unknown }) => Drawn };
     }[];
 
-    expect(items.map((item) => registeredWith.get(item))).toEqual(Array(KINDS.length).fill("detailsFor"));
     expect(items.map((item) => [item.kind, item.apiVersions, item.priority])).toEqual(
       KINDS.map(([, kind]) => [kind, ["velero.io/v1"], 10]),
     );
     const object = { metadata: { name: "one", namespace: "velero" } };
 
     items.forEach((item, index) => {
-      const element = item.components.Details({ object });
+      const boundary = item.components.Details({ object });
+      // The boundary of the extension, drawn again for another object, with what the registration was made with.
+      const inner = boundary.props.children as Drawn;
+
+      expect([
+        item.kind,
+        boundary.type,
+        boundary.props.extension,
+        boundary.props.resetKey,
+        boundary.props.fallback,
+      ]).toEqual([item.kind, ErrorBoundary, extension, object, undefined]);
+      expect([item.kind, registeredWith.get(inner.type as object), inner.props]).toEqual([
+        item.kind,
+        "detailsFor",
+        { object },
+      ]);
+      const element = (inner.type as (props: object) => Drawn)(inner.props);
 
       // The host gives the object, and the registration gives the extension.
       expect([item.kind, element.type, element.props]).toEqual([item.kind, SECTIONS[index], { object, extension }]);
     });
   });
 
-  it("is the pages taking the parameters the host gives alone, the extension given by the registration where a page needs it", () => {
+  it("is the pages taking the parameters the host gives alone, each drawn inside a boundary of the extension, the extension given by the registration where a page needs it", () => {
     const extension = Reflect.construct(VeleroRenderer, []) as HostExtensionStub;
     const pages = extension.clusterPages as {
       id: string;
-      components: { Page: (props: { params: object }) => React.ReactElement<Record<string, unknown>> };
+      components: { Page: (props: { params: object }) => Drawn };
     }[];
+    const params = {};
 
     expect(
       pages.map((page) => {
-        const element = page.components.Page({ params: {} });
+        const boundary = page.components.Page({ params });
+        const inner = boundary.props.children as Drawn;
+        const element = (inner.type as (props: object) => Drawn)(inner.props);
 
-        return [page.id, element.type, element.props];
+        return [
+          page.id,
+          boundary.type,
+          boundary.props.extension === extension,
+          boundary.props.fallback,
+          inner.props.params === params,
+          element.type,
+          element.props,
+        ];
       }),
     ).toEqual([
-      ["overview", OverviewPage, { extension }],
-      ["backups", BackupsPage, {}],
-      ["restores", RestoresPage, {}],
-      ["schedules", SchedulesPage, {}],
-      ["storage-locations", StorageLocationsPage, {}],
-      ["snapshot-locations", SnapshotLocationsPage, {}],
+      ["overview", ErrorBoundary, true, undefined, true, OverviewPage, { extension }],
+      ["backups", ErrorBoundary, true, undefined, true, BackupsPage, {}],
+      ["restores", ErrorBoundary, true, undefined, true, RestoresPage, {}],
+      ["schedules", ErrorBoundary, true, undefined, true, SchedulesPage, {}],
+      ["storage-locations", ErrorBoundary, true, undefined, true, StorageLocationsPage, {}],
+      ["snapshot-locations", ErrorBoundary, true, undefined, true, SnapshotLocationsPage, {}],
     ]);
   });
 });
@@ -278,6 +305,9 @@ const KINDS = [
 
 // The sections of the details, in the order of the kinds.
 const SECTIONS = [BackupDetails, RestoreDetails, ScheduleDetails, StorageLocationDetails, SnapshotLocationDetails];
+
+// An element a registration draws: a boundary of the extension, what it holds, or a page or a section.
+type Drawn = React.ReactElement<Record<string, unknown> & { children?: unknown; params?: unknown }>;
 
 // The channels the main process handles: every one of the contract but the broadcast of the gate.
 const HANDLED = Object.values(CHANNELS)

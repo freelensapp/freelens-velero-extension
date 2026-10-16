@@ -219,7 +219,8 @@ const apiManager = {
   },
 };
 
-// What a registration helper of the host made each registration with, by the registration it returned.
+// What a registration helper of the host made each registration with, by the component it was given: the
+// registration itself is copied by the boundary of the extension around that component.
 export const registeredWith = new WeakMap<object, "detailsFor" | "menuItemFor">();
 
 // The registration helpers of the host, as packages/core/src/extensions/renderer-api/
@@ -253,7 +254,7 @@ function detailsFor(
     ...(visible === undefined ? {} : { visible }),
   };
 
-  registeredWith.set(registration, "detailsFor");
+  registeredWith.set(Details as object, "detailsFor");
   return registration;
 }
 
@@ -267,7 +268,7 @@ function menuItemFor(
     ...(visible === undefined ? {} : { visible }),
   };
 
-  registeredWith.set(registration, "menuItemFor");
+  registeredWith.set(MenuItem as object, "menuItemFor");
   return registration;
 }
 
@@ -488,6 +489,25 @@ export const Renderer = {
   Ipc: IpcStub,
 };
 
+// The log of the host, `Common.logger` (packages/core/src/extensions/common-api/index.ts line 37 at the
+// validation target): one function for each level, each given a message and what follows it, which the host
+// writes into its log as they were given (packages/logger/src/logger.injectable.ts lines 11 to 49). What was
+// logged is recorded, in order.
+export const hostLog: { level: string; message: string; data: unknown[] }[] = [];
+
+function logAt(level: string) {
+  return (message: string, ...data: unknown[]): void => {
+    hostLog.push({ level, message, data });
+  };
+}
+
 export const Common = {
+  logger: {
+    debug: logAt("debug"),
+    info: logAt("info"),
+    warn: logAt("warn"),
+    error: logAt("error"),
+    silly: logAt("silly"),
+  },
   Store: { ExtensionStore: ExtensionStoreStub },
 };

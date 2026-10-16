@@ -135,17 +135,21 @@ describe("what the list gives the host", () => {
 });
 
 describe("the components of the views", () => {
-  it("read their props in their render: none is a class that reads this.props", () => {
+  it("read their props in their render: none is a class that reads this.props, but the boundary, which observes nothing", () => {
     // Under mobx-react 10 the props of an observer class are read in its render only: a derivation that reads
     // them throws in the render of the host. The views are function components, and stay so.
     const root = join(process.cwd(), "src", "renderer");
     const sources = (readdirSync(root, { recursive: true }) as string[])
       .filter((file) => /\.tsx?$/.test(file) && !/\.test\.tsx?$/.test(file))
       .map((file) => [file, readFileSync(join(root, file), "utf8")] as const);
+    const classes = sources.filter(([, text]) =>
+      /this\.props|extends\s+(React\.)?(Pure)?Component\b|@observer/.test(text),
+    );
 
     expect(sources.length).toBeGreaterThan(40);
-    expect(
-      sources.filter(([, text]) => /this\.props|extends\s+(React\.)?(Pure)?Component\b|@observer/.test(text)),
-    ).toEqual([]);
+    // The one class is the boundary, the one kind of component React lets keep an error: it is no observer and
+    // reads no observable, so no derivation reads its props.
+    expect(classes.map(([file]) => file)).toEqual([join("components", "error-boundary.tsx")]);
+    expect(classes[0][1]).not.toMatch(/from "mobx|\bobserver\(|@observ|@computed|makeObservable/);
   });
 });

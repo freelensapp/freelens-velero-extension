@@ -2,6 +2,7 @@ import { Renderer } from "@freelensapp/extensions";
 import { PreferencesStore } from "../common/preferences-store";
 import { VeleroIpcRenderer } from "./api/ipc";
 import { Backup, BackupStorageLocation, Restore, Schedule, VolumeSnapshotLocation } from "./api/kinds";
+import { withDetailsErrorBoundary, withPageErrorBoundary } from "./components/error-boundary";
 import { VeleroIcon } from "./components/velero-icon";
 import { BackupDetails } from "./details/backup-details";
 import { RestoreDetails } from "./details/restore-details";
@@ -33,15 +34,17 @@ import { releaseInstallation } from "./state/context";
 
 export default class VeleroRenderer extends Renderer.LensExtension {
   // Only the views that exist have a page and an entry: nothing here leads to a page that is not there. The
-  // host renders a page with its parameters alone: a page that needs the extension is given it here.
-  clusterPages = [
+  // host renders a page with its parameters alone: a page that needs the extension is given it here. Every
+  // page is drawn inside a boundary, which keeps an error it throws in its place: the field is mapped through
+  // it, so a page added to it is too. Its type is given, since the mapping refers to the instance.
+  clusterPages: Renderer.LensExtension["clusterPages"] = [
     { id: OVERVIEW_PAGE_ID, components: { Page: () => <OverviewPage extension={this} /> } },
     { id: BACKUPS_PAGE_ID, components: { Page: () => <BackupsPage /> } },
     { id: RESTORES_PAGE_ID, components: { Page: () => <RestoresPage /> } },
     { id: SCHEDULES_PAGE_ID, components: { Page: () => <SchedulesPage /> } },
     { id: STORAGE_LOCATIONS_PAGE_ID, components: { Page: () => <StorageLocationsPage /> } },
     { id: SNAPSHOT_LOCATIONS_PAGE_ID, components: { Page: () => <SnapshotLocationsPage /> } },
-  ];
+  ].map((registration) => withPageErrorBoundary(this, registration));
 
   // The host gives a page the tabs of its group when the first entry that leads to it is an entry of the
   // group: the entries of the pages come before the one of the group, which names the first of them.
@@ -95,8 +98,10 @@ export default class VeleroRenderer extends Renderer.LensExtension {
 
   // The sections of the details of the five kinds, each tied to its kind by `detailsFor`, which takes the
   // kind and the versions from the class and checks the section against it. The host renders a section with
-  // the object alone: the extension is given by the registration.
-  kubeObjectDetailItems = [
+  // the object alone: the extension is given by the registration. The host has no boundary around its drawer
+  // of the details: every section is drawn inside one of the extension, which keeps an error in the section
+  // and draws it again for another object.
+  kubeObjectDetailItems: Renderer.LensExtension["kubeObjectDetailItems"] = [
     Renderer.K8sApi.detailsFor(Backup, {
       priority: 10,
       Details: (props) => <BackupDetails {...props} extension={this} />,
@@ -117,7 +122,7 @@ export default class VeleroRenderer extends Renderer.LensExtension {
       priority: 10,
       Details: (props) => <SnapshotLocationDetails {...props} extension={this} />,
     }),
-  ];
+  ].map((registration) => withDetailsErrorBoundary(this, registration));
 
   // The kinds with pages of their own in the group of Velero: the Custom Resources tree of the cluster leaves
   // them out while the extension is enabled, and lists them again once it is disabled.
