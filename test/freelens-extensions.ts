@@ -63,7 +63,9 @@ export class HostExtensionStub {
 }
 
 class MainExtensionStub extends HostExtensionStub {}
-class RendererExtensionStub extends HostExtensionStub {}
+class RendererExtensionStub extends HostExtensionStub {
+  customResources: unknown[] = [];
+}
 
 // The IPC of the host, in both processes: what the main process registered, what was broadcast, and the
 // frame a request of the tests comes from. A call of the renderer reaches the handler the main process
@@ -193,20 +195,91 @@ class KubeObjectStub {
   }
 }
 
+// A `KubeApi` an extension creates registers itself with the host (packages/core/src/extensions/
+// common-api/k8s-api.ts lines 82 to 96 at the validation target): each one created, and each registration
+// with the API manager, is recorded, and the extension is to make neither.
 class KubeApiStub {
-  readonly request = {
-    getResponse: async (path: string, _params?: unknown, init?: { method?: string }) => {
-      hostCalls.push(`${init?.method ?? "GET"} ${path}`);
-      return { status: 404, text: async () => "404 page not found\n" };
-    },
-  };
-
   constructor(options: { objectConstructor: { kind: string } }) {
     hostCalls.push(`KubeApi ${options.objectConstructor.kind}`);
   }
 }
 
-class KubeObjectStoreStub {}
+class KubeObjectStoreStub {
+  constructor() {
+    hostCalls.push("KubeObjectStore");
+  }
+}
+
+const apiManager = {
+  registerApi: (): void => {
+    hostCalls.push("apiManager.registerApi");
+  },
+  registerStore: (): void => {
+    hostCalls.push("apiManager.registerStore");
+  },
+};
+
+// What a registration helper of the host made each registration with, by the registration it returned.
+export const registeredWith = new WeakMap<object, "detailsFor" | "menuItemFor">();
+
+// The registration helpers of the host, as packages/core/src/extensions/renderer-api/
+// kube-object-registrations.ts makes them at the validation target (lines 121 to 162): the kind and the
+// versions taken from the class, and the component with the options given.
+function kindAndVersions(
+  helper: string,
+  kubeObjectClass: { name: string; kind?: string; apiBase?: string; crd?: { apiVersions: readonly string[] } },
+  apiVersions?: readonly string[],
+) {
+  const versions = apiVersions ?? kubeObjectClass.crd?.apiVersions;
+
+  if (!kubeObjectClass.kind) throw new Error(`${helper}(${kubeObjectClass.name}): the class has no static "kind"`);
+  if (!versions?.length) throw new Error(`${helper}(${kubeObjectClass.name}): no versions`);
+  return { kind: kubeObjectClass.kind, apiVersions: [...versions] };
+}
+
+function detailsFor(
+  kubeObjectClass: { name: string; kind?: string; crd?: { apiVersions: readonly string[] } },
+  {
+    Details,
+    apiVersions,
+    priority,
+    visible,
+  }: { Details: unknown; apiVersions?: string[]; priority?: number; visible?: unknown },
+) {
+  const registration = {
+    ...kindAndVersions("detailsFor", kubeObjectClass, apiVersions),
+    components: { Details },
+    ...(priority === undefined ? {} : { priority }),
+    ...(visible === undefined ? {} : { visible }),
+  };
+
+  registeredWith.set(registration, "detailsFor");
+  return registration;
+}
+
+function menuItemFor(
+  kubeObjectClass: { name: string; kind?: string; crd?: { apiVersions: readonly string[] } },
+  { MenuItem, apiVersions, visible }: { MenuItem: unknown; apiVersions?: string[]; visible?: unknown },
+) {
+  const registration = {
+    ...kindAndVersions("menuItemFor", kubeObjectClass, apiVersions),
+    components: { MenuItem },
+    ...(visible === undefined ? {} : { visible }),
+  };
+
+  registeredWith.set(registration, "menuItemFor");
+  return registration;
+}
+
+// What the host gives the renderer for the cluster of a frame, as a test sets it: the client of its proxy,
+// `Renderer.K8sApi.KubeJsonApi.forCluster`. Asked before a test sets it, it is what the scaffold must not
+// reach.
+export const hostViews: { forCluster?: (clusterId: string) => unknown } = {};
+
+// The clusters the catalog of the host gives the renderer by their identifier, as a test sets them.
+export const rendererCatalog: { clusters: { id: string; name: string }[] } = {
+  clusters: [{ id: "synthetic-cluster", name: "synthetic-cluster" }],
+};
 
 const stores = new Map<unknown, ExtensionStoreStub>();
 
@@ -393,10 +466,25 @@ export const Renderer = {
     LensExtensionKubeObject: KubeObjectStub,
     KubeApi: KubeApiStub,
     KubeObjectStore: KubeObjectStoreStub,
+    KubeJsonApi: {
+      forCluster: (clusterId: string) => {
+        if (!hostViews.forCluster) {
+          forbiddenAccesses.push("Renderer.K8sApi.KubeJsonApi.forCluster");
+          throw new Error("Unexpected scaffold access: Renderer.K8sApi.KubeJsonApi.forCluster");
+        }
+        return hostViews.forCluster(clusterId);
+      },
+    },
+    apiManager,
+    detailsFor,
+    menuItemFor,
   },
   Component: components,
   Navigation: { createPageParam: param, navigate },
-  Catalog: { activeCluster: { get: () => ({ getId: () => "synthetic-cluster", getName: () => "synthetic-cluster" }) } },
+  Catalog: {
+    activeCluster: { get: () => ({ getId: () => "synthetic-cluster", getName: () => "synthetic-cluster" }) },
+    getClusterById: (clusterId: string) => rendererCatalog.clusters.find((cluster) => cluster.id === clusterId),
+  },
   Ipc: IpcStub,
 };
 

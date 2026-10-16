@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
   forbiddenAccesses,
   type HostExtensionStub,
@@ -9,6 +9,7 @@ import {
   ipcListenerCount,
   Main,
   Renderer,
+  registeredWith,
   resetIpc,
   savingStores,
 } from "../test/freelens-extensions";
@@ -19,8 +20,22 @@ import { catalogEntries } from "./main/host";
 import { VeleroIpc } from "./main/ipc";
 import VeleroRenderer from "./renderer";
 import { VeleroIpcRenderer } from "./renderer/api/ipc";
+import { Backup, BackupStorageLocation, Restore, Schedule, VolumeSnapshotLocation } from "./renderer/api/kinds";
+import { BackupDetails } from "./renderer/details/backup-details";
+import { RestoreDetails } from "./renderer/details/restore-details";
+import { ScheduleDetails } from "./renderer/details/schedule-details";
+import { SnapshotLocationDetails } from "./renderer/details/snapshot-location-details";
+import { StorageLocationDetails } from "./renderer/details/storage-location-details";
 import { PAGES } from "./renderer/navigation";
+import { BackupsPage } from "./renderer/pages/backups-page";
+import { OverviewPage } from "./renderer/pages/overview-page";
+import { RestoresPage } from "./renderer/pages/restores-page";
+import { SchedulesPage } from "./renderer/pages/schedules-page";
+import { SnapshotLocationsPage } from "./renderer/pages/snapshot-locations-page";
+import { StorageLocationsPage } from "./renderer/pages/storage-locations-page";
 import { currentInstallation } from "./renderer/state/context";
+
+import type React from "react";
 
 const importAccesses = [...forbiddenAccesses];
 const importCalls = [...hostCalls];
@@ -133,7 +148,136 @@ describe("what the extension registers", () => {
       ["VolumeSnapshotLocation", ["velero.io/v1"]],
     ]);
   });
+
+  it("is each kind of Velero as one class of the host, with its metadata on the class and the literals of its objects", () => {
+    for (const [Kind, kind, plural, singular, shortNames, title] of KINDS) {
+      expect(Object.getPrototypeOf(Kind)).toBe(Renderer.K8sApi.LensExtensionKubeObject);
+      expect([kind, Kind.kind, Kind.namespaced, Kind.apiBase, Kind.crd]).toEqual([
+        kind,
+        kind,
+        true,
+        `/apis/velero.io/v1/${plural}`,
+        { apiVersions: ["velero.io/v1"], plural, singular, shortNames, title },
+      ]);
+      // No method of an instance: the objects the host hands over are its own, without one.
+      expect([kind, Object.getOwnPropertyNames(Kind.prototype)]).toEqual([kind, ["constructor"]]);
+      // The literals of an object are declared and not defined: an object made by the constructor of the host
+      // keeps the kind and the version of its data.
+      const object = Reflect.construct(Kind, [
+        { apiVersion: "velero.io/v1", kind, metadata: { name: "one", namespace: "velero", uid: "uid" } },
+      ]) as { kind?: string; apiVersion?: string };
+
+      expect([kind, object.kind, object.apiVersion]).toEqual([kind, kind, "velero.io/v1"]);
+    }
+    expectTypeOf<Backup["kind"]>().toEqualTypeOf<"Backup">();
+    expectTypeOf<Restore["kind"]>().toEqualTypeOf<"Restore">();
+    expectTypeOf<Schedule["kind"]>().toEqualTypeOf<"Schedule">();
+    expectTypeOf<BackupStorageLocation["kind"]>().toEqualTypeOf<"BackupStorageLocation">();
+    expectTypeOf<VolumeSnapshotLocation["kind"]>().toEqualTypeOf<"VolumeSnapshotLocation">();
+    for (const version of [
+      expectTypeOf<Backup["apiVersion"]>(),
+      expectTypeOf<Restore["apiVersion"]>(),
+      expectTypeOf<Schedule["apiVersion"]>(),
+      expectTypeOf<BackupStorageLocation["apiVersion"]>(),
+      expectTypeOf<VolumeSnapshotLocation["apiVersion"]>(),
+    ])
+      version.toEqualTypeOf<"velero.io/v1">();
+  });
+
+  it("is no API and no store of its own for a kind: the module of the kinds is the five classes", async () => {
+    const kinds = await import("./renderer/api/kinds");
+
+    expect(Object.keys(kinds).sort()).toEqual(
+      ["Backup", "BackupStorageLocation", "Restore", "Schedule", "VolumeSnapshotLocation"].sort(),
+    );
+    for (const value of Object.values(kinds)) {
+      expect(Object.getPrototypeOf(value)).toBe(Renderer.K8sApi.LensExtensionKubeObject);
+      expect(value.prototype).not.toBeInstanceOf(Renderer.K8sApi.KubeApi);
+      expect(value.prototype).not.toBeInstanceOf(Renderer.K8sApi.KubeObjectStore);
+    }
+  });
+
+  it("is the five kinds as the custom resources the Custom Resources tree leaves out, and nothing else", () => {
+    const extension = Reflect.construct(VeleroRenderer, []) as HostExtensionStub & { customResources: unknown[] };
+
+    expect(extension.customResources).toHaveLength(KINDS.length);
+    KINDS.forEach(([Kind], index) => {
+      expect(extension.customResources[index]).toBe(Kind);
+    });
+  });
+
+  it("is the five sections of the details, each made with detailsFor for its kind, rendered with the object alone", () => {
+    const extension = Reflect.construct(VeleroRenderer, []) as HostExtensionStub;
+    const items = extension.kubeObjectDetailItems as {
+      kind: string;
+      apiVersions: string[];
+      priority?: number;
+      components: { Details: (props: { object: unknown }) => React.ReactElement<Record<string, unknown>> };
+    }[];
+
+    expect(items.map((item) => registeredWith.get(item))).toEqual(Array(KINDS.length).fill("detailsFor"));
+    expect(items.map((item) => [item.kind, item.apiVersions, item.priority])).toEqual(
+      KINDS.map(([, kind]) => [kind, ["velero.io/v1"], 10]),
+    );
+    const object = { metadata: { name: "one", namespace: "velero" } };
+
+    items.forEach((item, index) => {
+      const element = item.components.Details({ object });
+
+      // The host gives the object, and the registration gives the extension.
+      expect([item.kind, element.type, element.props]).toEqual([item.kind, SECTIONS[index], { object, extension }]);
+    });
+  });
+
+  it("is the pages taking the parameters the host gives alone, the extension given by the registration where a page needs it", () => {
+    const extension = Reflect.construct(VeleroRenderer, []) as HostExtensionStub;
+    const pages = extension.clusterPages as {
+      id: string;
+      components: { Page: (props: { params: object }) => React.ReactElement<Record<string, unknown>> };
+    }[];
+
+    expect(
+      pages.map((page) => {
+        const element = page.components.Page({ params: {} });
+
+        return [page.id, element.type, element.props];
+      }),
+    ).toEqual([
+      ["overview", OverviewPage, { extension }],
+      ["backups", BackupsPage, {}],
+      ["restores", RestoresPage, {}],
+      ["schedules", SchedulesPage, {}],
+      ["storage-locations", StorageLocationsPage, {}],
+      ["snapshot-locations", SnapshotLocationsPage, {}],
+    ]);
+  });
 });
+
+// The five kinds of Velero, with their kind, plural, singular, short names and title.
+const KINDS = [
+  [Backup, "Backup", "backups", "backup", [], "Backups"],
+  [Restore, "Restore", "restores", "restore", [], "Restores"],
+  [Schedule, "Schedule", "schedules", "schedule", [], "Schedules"],
+  [
+    BackupStorageLocation,
+    "BackupStorageLocation",
+    "backupstoragelocations",
+    "backupstoragelocation",
+    ["bsl"],
+    "Backup Storage Locations",
+  ],
+  [
+    VolumeSnapshotLocation,
+    "VolumeSnapshotLocation",
+    "volumesnapshotlocations",
+    "volumesnapshotlocation",
+    ["vsl"],
+    "Volume Snapshot Locations",
+  ],
+] as const;
+
+// The sections of the details, in the order of the kinds.
+const SECTIONS = [BackupDetails, RestoreDetails, ScheduleDetails, StorageLocationDetails, SnapshotLocationDetails];
 
 // The channels the main process handles: every one of the contract but the broadcast of the gate.
 const HANDLED = Object.values(CHANNELS)
