@@ -2,11 +2,12 @@ import { writeFile } from "node:fs/promises";
 import { Main } from "@freelensapp/extensions";
 import { PreferencesStore } from "../common/preferences-store";
 import { hostDialog, saveThroughDialog } from "./artifact-save";
-import { catalogEntries, VeleroIpc } from "./ipc";
+import { catalogEntries, hostDependencies } from "./host";
+import { VeleroIpc } from "./ipc";
 
 export { DiagnosticKubernetes } from "./diagnostic-kubernetes";
 export { DiagnosticError, downloadArtifact } from "./diagnostic-transport";
-export { openPodTunnel } from "./diagnostic-tunnel";
+export { KubectlTunnels } from "./diagnostic-tunnel";
 export { registerHandlers } from "./ipc";
 export { WriteGate } from "./write-gate";
 
@@ -23,18 +24,22 @@ export default class VeleroMain extends Main.LensExtension {
     store.keepAllowances();
     store.loadExtension(this);
     VeleroIpc.createInstance(this).register(catalogEntries, {
+      // A cluster is reached through the host alone: its catalog, the client of its proxy, and the kubectl
+      // it runs for the cluster, in the folder of the extension.
+      ...hostDependencies(() => this.manifestPath),
       allowances: {
         read: () => store.read().allowances ?? {},
         write: (allowances) => store.write({ ...store.read(), allowances }),
       },
       // The text of an artifact is saved into the file the operator chooses in the dialog of the host,
-      // which is asked of the module of the host at each save.
+      // which is taken from the module of Electron at each save.
       save: (suggested, content, still) =>
         saveThroughDialog(hostDialog(), (file, bytes) => writeFile(file, bytes), suggested, content, still),
     });
   }
 
-  // Everything off: the writes in flight are aborted on this side, and no cluster keeps writes on.
+  // Everything off: the writes in flight are aborted on this side, no cluster keeps writes on, and every
+  // kubectl of the extension is killed.
   protected onDeactivate(): void {
     VeleroIpc.getInstance(false)?.release();
   }

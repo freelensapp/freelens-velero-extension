@@ -1,24 +1,22 @@
 // The route to the store for a signed URL: which origin is trusted, which path, which address, and when a
 // tunnel to the Pod of the storage is opened. The URL comes from an object of the cluster: its origin is
 // checked against what its storage location gives, its path against the key of the artifact that was
-// asked, and its host is either a Service of the cluster, reached through a port-forward the extension
-// opens with the identity of the kubeconfig, or a name this machine resolves, whose addresses are checked
-// before any is connected to. What the operator has not allowed is said, with what may be allowed, and
-// never assumed.
+// asked, and its host is either a Service of the cluster, reached through a port-forward kubectl opens
+// through the proxy of the host, or a name this machine resolves, whose addresses are checked before any is
+// connected to. What the operator has not allowed is said, with what may be allowed, and never assumed.
 
 import { lookup as resolve } from "node:dns/promises";
 import { type AllowanceKind, locationOf } from "../common/allowances";
 import { canonicalAddress, classifyAddress, isMetadataName } from "../common/artifact-address";
 import { checkOrigin, hostForm, isArtifactPath, type StoreOfLocation } from "../common/artifact-origin";
-import { CredentialPluginError } from "./context-identity";
 import { type ArtifactRoute, DiagnosticError } from "./diagnostic-transport";
-import { openPodTunnel, type PortForwardRefusal } from "./diagnostic-tunnel";
 
 import type { DownloadVerdict } from "../common/diagnostic-text";
 import type { DiagnosticKubernetes, DiagnosticObject } from "./diagnostic-kubernetes";
 import type { DiagnosticInput } from "./diagnostic-service";
+import type { PodTarget, PodTunnel } from "./diagnostic-tunnel";
 
-type Api = Pick<DiagnosticKubernetes, "read" | "list" | "assertCurrent" | "authenticatedConfiguration">;
+type Api = Pick<DiagnosticKubernetes, "read" | "list" | "assertCurrent">;
 
 export interface RouteDependencies {
   api: Api;
@@ -27,14 +25,14 @@ export interface RouteDependencies {
   allowed(what: AllowanceKind, origin: string, location: string): boolean;
   // The addresses a name resolves to on this machine, in the order its resolver gives them.
   lookup?(host: string): Promise<string[]>;
-  tunnel?: typeof openPodTunnel;
+  // The tunnel to a Pod of the cluster of the adapter: the kubectl the host runs for it. Without it, a
+  // store that is a Service of the cluster is not reached.
+  tunnel?(pod: PodTarget, signal: AbortSignal): Promise<PodTunnel>;
 }
 
 export interface ResolvedRoute {
   route: ArtifactRoute;
   close(): void | Promise<void>;
-  // Whether the cluster refused the port-forward of a route through it, and how.
-  refused?(): PortForwardRefusal;
 }
 
 // A destination that is denied, by the rule that denies it.
@@ -47,10 +45,7 @@ async function at<Value>(stage: string, read: () => Promise<Value>): Promise<Val
   try {
     return await read();
   } catch (error) {
-    // What was raised is not written on: the adapter gives one error to every request that waited for the
-    // same plugin. The plugin of the context keeps its command and its reason.
-    if (error instanceof CredentialPluginError && error.stage === undefined)
-      throw new CredentialPluginError(error.command, error.reason, stage);
+    // What was raised is not written on: it may be given to more than one waiting for it.
     if (error instanceof DiagnosticError && error.stage === undefined)
       throw new DiagnosticError(error.code, stage, error.verdict, error.needs);
     throw error;
@@ -77,10 +72,10 @@ interface ContainerPort {
 // The route through the cluster to a Service: the port of the URL matched to one of the ports of the
 // Service; the endpoint slices of the Service read for an endpoint that is ready and is a Pod; the Pod read
 // and checked, as the one of the endpoint, as ready and as one the Service selects; the port of the Service
-// followed to its target port in that Pod, by number or by name; and a port-forward to it. The listener is
-// on the loopback of this machine, for one connection. A slice says which Pod answers, and nothing else is
-// taken from it: whoever may write one in the namespace could otherwise send the request to another Pod, or
-// to another port.
+// followed to its target port in that Pod, by number or by name; and a port-forward to it, which kubectl
+// listens for on the loopback of this machine. A slice says which Pod answers, and nothing else is taken from
+// it: whoever may write one in the namespace could otherwise send the request to another Pod, or to another
+// port.
 async function throughTheCluster(
   service: DiagnosticObject,
   port: number,
@@ -157,22 +152,20 @@ async function throughTheCluster(
     )?.containerPort;
 
   if (typeof declared !== "number") throw denied("port", "pod");
-  // The client of the port-forward is given the credential the adapter holds, and no plugin to run.
-  const configuration = await at("forward", () => api.authenticatedConfiguration(signal));
-  const tunnel = await at("forward", () =>
-    (dependencies.tunnel ?? openPodTunnel)(
-      { configuration, read: api.read.bind(api), assertCurrent: api.assertCurrent.bind(api) },
-      { namespace, name: target.pod, uid: target.uid, port: declared },
-      signal,
-    ),
-  );
+  const { tunnel: open } = dependencies;
+
+  if (!open) throw new DiagnosticError("transport-unreachable", "forward");
+  // The cluster is looked at before kubectl is asked for: nothing is run for one that is not connected.
+  const tunnel = await at("forward", async () => {
+    api.assertCurrent();
+    return open({ namespace, name: target.pod, uid: target.uid, port: declared }, signal);
+  });
 
   return {
     // Plain HTTP through the tunnel needs no allowance: the bytes travel inside the connection to the API
     // server, and inside the cluster.
     route: { origin, pathname, address: tunnel.address, port: tunnel.port, mode: "tunnel", allowHttp: true },
     close: tunnel.close,
-    refused: tunnel.refused,
   };
 }
 

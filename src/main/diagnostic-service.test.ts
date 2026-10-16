@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { CredentialPluginError } from "./context-identity";
 import { type DiagnosticInput, type DiagnosticOptions, DOWNLOAD_BOUNDS, runDownload } from "./diagnostic-service";
 import { DiagnosticError } from "./diagnostic-transport";
 
@@ -467,8 +466,8 @@ describe("the way of a DownloadRequest", () => {
   });
 
   it("does not write on what was raised: an error two operations share says the step of each", async () => {
-    // The adapter gives one error to every request that waited for the same run of the plugin.
-    const shared = new CredentialPluginError("/usr/local/bin/kubelogin", "failed");
+    // One error given to two operations, each at a step of its own.
+    const shared = new DiagnosticError("request-failed", undefined, "credential");
     const first = fixture();
     const second = fixture();
 
@@ -477,17 +476,10 @@ describe("the way of a DownloadRequest", () => {
     const failures = [await ended(first.run()), await ended(second.run())];
 
     expect(failures).toMatchObject([
-      { code: "request-failed", stage: "target" },
-      { code: "request-failed", stage: "certificate" },
+      { code: "request-failed", stage: "target", verdict: "credential" },
+      { code: "request-failed", stage: "certificate", verdict: "credential" },
     ]);
     expect(shared.stage).toBeUndefined();
-    // The command and the reason of the plugin go with each.
-    second.api.certificate.mockRejectedValueOnce(shared);
-    const plugin = await second.run().catch((error: unknown) => error);
-
-    expect(plugin).toBeInstanceOf(CredentialPluginError);
-    expect(plugin).not.toBe(shared);
-    expect(plugin).toMatchObject({ command: "kubelogin", reason: "failed", stage: "certificate" });
     const one = new DiagnosticError("forbidden");
 
     first.api.read.mockRejectedValueOnce(one);
@@ -724,43 +716,33 @@ describe("the way of a DownloadRequest", () => {
     ]);
   });
 
-  it("says that the cluster refused the port-forward when the route says so, and not that the store was not reached", async () => {
-    const route = (refused: false | "permission" | "credential") =>
-      vi.fn(async () => ({
-        route: {
-          origin: "https://storage.example.invalid",
-          pathname: "/bucket/backups/backup/backup-logs.gz",
-          address: "127.0.0.1",
-          port: 1234,
-          mode: "tunnel" as const,
-        },
-        close: vi.fn(),
-        refused: () => refused,
-      }));
-    const refused = fixture({ route: route("permission") });
+  it("says that the cluster refused the port-forward at its step, as the route says it, and a store not reached after it at the download", async () => {
+    // The tunnel is ready only once kubectl opened its stream: a refusal of the cluster ends the route at
+    // the step of the port-forward, before anything is downloaded.
+    for (const verdict of [undefined, "credential"] as const) {
+      const refused = fixture({
+        route: vi.fn(async () => {
+          throw new DiagnosticError("forbidden", "forward", verdict);
+        }),
+      });
 
-    refused.download.mockRejectedValueOnce(new DiagnosticError("transport-unreachable"));
-    expect(await ended(refused.run())).toEqual({
-      code: "forbidden",
-      stage: "forward",
-      message: "Diagnostic operation failed: forbidden",
-    });
-    // A credential the cluster did not take is said as that, and not as a permission the identity lacks.
-    const unknown = fixture({ route: route("credential") });
-
-    unknown.download.mockRejectedValueOnce(new DiagnosticError("transport-unreachable"));
-    expect(await ended(unknown.run())).toMatchObject({ code: "forbidden", stage: "forward", verdict: "credential" });
-    // A route that was not refused, and a download that ended with its file, say nothing of it.
-    const reached = fixture({ route: route(false) });
+      expect(await ended(refused.run())).toEqual({
+        code: "forbidden",
+        stage: "forward",
+        message: "Diagnostic operation failed: forbidden",
+        ...(verdict ? { verdict } : {}),
+      });
+      expect(refused.download).not.toHaveBeenCalled();
+    }
+    // A download that is not reached through a tunnel that was ready is a store that was not reached.
+    const reached = fixture();
 
     reached.download.mockRejectedValueOnce(new DiagnosticError("transport-unreachable"));
     expect(await ended(reached.run())).toMatchObject({ code: "transport-unreachable", stage: "download" });
-    const delivered = fixture({ route: route("permission") });
-
-    expect((await delivered.run()).content.toString()).toBe("synthetic log");
-    // A cancellation is a cancellation, whatever the route says.
+    expect(reached.close).toHaveBeenCalledTimes(1);
+    // A cancellation is a cancellation, whatever the download ended with.
     const controller = new AbortController();
-    const cancelled = fixture({ route: route("permission") });
+    const cancelled = fixture();
 
     cancelled.download.mockImplementationOnce(async () => {
       controller.abort();

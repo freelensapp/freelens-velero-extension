@@ -34,9 +34,6 @@ export default defineConfig({
       // The other host modules (react, mobx, ...) resolve to the
       // devDependencies, which are pinned to the host's versions.
       "@freelensapp/extensions": fileURLToPath(new URL("./test/freelens-extensions.ts", import.meta.url)),
-      // As in the main build: the Kubernetes client imports undici for API clients the extension
-      // never calls, and the real module installs a dispatcher for the whole process.
-      undici: fileURLToPath(new URL("./build/undici-stub.ts", import.meta.url)),
     },
   },
 });

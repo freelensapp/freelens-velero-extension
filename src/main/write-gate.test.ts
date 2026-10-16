@@ -1,26 +1,25 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
+import { CLUSTER_WORDS } from "../common/diagnostic-text";
 import { CONFIRMATIONS_BOUND, TOKEN_LIFETIME, WRITES_BOUND, WriteGate } from "./write-gate";
 
-import type { Connection } from "../common/ipc";
-import type { CatalogEntry } from "./write-gate";
+import type { CatalogEntry } from "./catalog";
 
-function fixture(options: { connection?: Connection; adapterFails?: boolean; disposeFails?: boolean } = {}) {
+function fixture(options: { adapterFails?: boolean; disposeFails?: boolean } = {}) {
   let now = 1_700_000_000_000;
   const catalog: CatalogEntry[] = [
-    { id: "cluster-a", name: "demo", kubeConfigPath: "/synthetic/a", contextName: "kind-a" },
-    { id: "cluster-b", name: "other", kubeConfigPath: "/synthetic/b", contextName: "kind-b" },
+    { id: "cluster-a", name: "demo", kubeConfigPath: "/synthetic/a", contextName: "kind-a", status: "connected" },
+    { id: "cluster-b", name: "other", kubeConfigPath: "/synthetic/b", contextName: "kind-b", status: "connected" },
   ];
   let current = true;
-  const adapters: { entry: CatalogEntry; isCurrent: () => boolean }[] = [];
+  const adapters: { entry: CatalogEntry }[] = [];
   // The adapters the gate let go, by the cluster of each, in the order they were let go.
   const disposed: string[] = [];
   const gate = new WriteGate({
     catalog: () => catalog,
-    connection: () => options.connection ?? { supported: true, credential: "token" },
-    adapter: (entry, isCurrent) => {
+    adapter: (entry) => {
       if (options.adapterFails) throw new Error("no adapter");
-      adapters.push({ entry, isCurrent });
+      adapters.push({ entry });
       return {
         assertCurrent: () => {
           if (!current) throw new Error("changed");
@@ -73,12 +72,12 @@ describe("the write gate", () => {
       ok: false,
       code: "forbidden",
     });
+    // No kubeconfig is read: the state says nothing of a connection of the extension's own.
     expect(gate.enable("cluster-a", "velero", confirmation)).toEqual({
       ok: true,
       value: {
         cluster: { id: "cluster-a", name: "demo", context: "kind-a" },
         writes: { on: true, namespace: "velero", since: 1_700_000_000_000 },
-        connection: { supported: true, credential: "token" },
       },
     });
     expect(adapters).toHaveLength(1);
@@ -289,54 +288,134 @@ describe("the write gate", () => {
     });
   });
 
-  it("turns writes off when the entry of the catalog goes or changes, and tells", () => {
+  it("turns writes off when the entry of the catalog goes or changes its kubeconfig or its context, and tells", () => {
+    for (const change of [{ kubeConfigPath: "/synthetic/moved" }, { contextName: "kind-renamed" }]) {
+      const { gate, confirmation, catalog } = fixture();
+      const told: string[] = [];
+
+      gate.onChanged((cluster) => told.push(cluster));
+      gate.enable("cluster-a", "velero", confirmation);
+      gate.enable("cluster-b", "velero", { context: "kind-b", namespace: "velero" });
+      catalog[0] = { ...catalog[0], ...change };
+      catalog.pop();
+      gate.reconcile();
+      expect(told.sort()).toEqual(["cluster-a", "cluster-b"]);
+      expect(gate.state("cluster-a")).toMatchObject({ ok: true, value: { writes: { on: false } } });
+      expect(gate.state("cluster-b")).toMatchObject({ ok: false, code: "target-changed", text: CLUSTER_WORDS.absent });
+      expect(gate.confirm("s", "cluster-a", "velero", "ServerStatusRequest", undefined)).toMatchObject({
+        ok: false,
+        code: "forbidden",
+      });
+    }
+    // A change of the name the catalog gives the cluster is not one of its identity: writes stay on, and the
+    // state names it as it is now.
+    const { gate, confirmation, catalog } = fixture();
+
+    gate.enable("cluster-a", "velero", confirmation);
+    catalog[0] = { ...catalog[0], name: "renamed" };
+    gate.reconcile();
+    expect(gate.state("cluster-a")).toMatchObject({
+      ok: true,
+      value: { cluster: { name: "renamed" }, writes: { on: true } },
+    });
+  });
+
+  it("refuses to turn writes on for a cluster that is not connected, in each state, with its words, and makes no adapter", () => {
+    for (const status of ["connecting", "disconnected", "disconnecting"]) {
+      const { gate, confirmation, adapters, catalog } = fixture();
+
+      catalog[0] = { ...catalog[0], status };
+      expect(gate.enable("cluster-a", "velero", confirmation)).toEqual({
+        ok: false,
+        code: "target-changed",
+        stage: "catalog",
+        retry: false,
+        text: CLUSTER_WORDS.disconnected,
+      });
+      expect(adapters).toHaveLength(0);
+      expect(gate.state("cluster-a")).toEqual({
+        ok: true,
+        value: { cluster: { id: "cluster-a", name: "demo", context: "kind-a" }, writes: { on: false } },
+      });
+      // Connected again, writes are turned on as they are for any cluster.
+      catalog[0] = { ...catalog[0], status: "connected" };
+      expect(gate.enable("cluster-a", "velero", confirmation)).toMatchObject({ ok: true });
+    }
+    // A cluster that is not in the catalog is said as such.
+    const { gate, confirmation } = fixture();
+
+    expect(gate.enable("absent", "velero", confirmation)).toEqual({
+      ok: false,
+      code: "target-changed",
+      stage: "catalog",
+      retry: false,
+      text: CLUSTER_WORDS.absent,
+    });
+  });
+
+  it("turns writes off when the cluster leaves the connected state, in each state, tells once, and refuses a write with its words", () => {
+    for (const status of ["connecting", "disconnected", "disconnecting"]) {
+      const { gate, confirmation, catalog, disposed } = fixture();
+      const told: string[] = [];
+      const letGo: string[] = [];
+
+      gate.onChanged((cluster) => told.push(cluster));
+      gate.onLetGo((cluster) => letGo.push(cluster));
+      gate.enable("cluster-a", "velero", confirmation);
+      const confirmed = gate.confirm("s", "cluster-a", "velero", "ServerStatusRequest", undefined);
+      const taken = gate.take(
+        "s",
+        "cluster-a",
+        "velero",
+        "ServerStatusRequest",
+        undefined,
+        confirmed.ok ? confirmed.value.token : "",
+        randomUUID(),
+      );
+
+      catalog[0] = { ...catalog[0], status };
+      gate.reconcile();
+      expect(told).toEqual(["cluster-a"]);
+      expect(letGo).toEqual(["cluster-a"]);
+      expect(disposed).toEqual(["cluster-a"]);
+      expect(taken.ok && taken.value.write.controller.signal.aborted).toBe(true);
+      // A cluster that stays out of the connected state is not let go again at every look.
+      gate.reconcile();
+      gate.state("cluster-a");
+      gate.reconcile();
+      expect([told, letGo]).toEqual([["cluster-a"], ["cluster-a"]]);
+      expect(gate.state("cluster-a")).toMatchObject({ ok: true, value: { writes: { on: false } } });
+      expect(gate.confirm("s", "cluster-a", "velero", "ServerStatusRequest", undefined)).toEqual({
+        ok: false,
+        code: "target-changed",
+        stage: "catalog",
+        retry: false,
+        text: CLUSTER_WORDS.disconnected,
+      });
+    }
+  });
+
+  it("finds the cluster out of the connected state when it is asked, before the catalog is looked at again", () => {
     const { gate, confirmation, catalog } = fixture();
     const told: string[] = [];
 
     gate.onChanged((cluster) => told.push(cluster));
     gate.enable("cluster-a", "velero", confirmation);
-    gate.enable("cluster-b", "velero", { context: "kind-b", namespace: "velero" });
-    catalog[0] = { ...catalog[0], kubeConfigPath: "/synthetic/moved" };
-    catalog.pop();
-    gate.reconcile();
-    expect(told.sort()).toEqual(["cluster-a", "cluster-b"]);
-    expect(gate.state("cluster-a")).toMatchObject({ ok: true, value: { writes: { on: false } } });
-    expect(gate.state("cluster-b")).toMatchObject({ ok: false, code: "target-changed" });
-    expect(gate.confirm("s", "cluster-a", "velero", "ServerStatusRequest", undefined)).toMatchObject({
-      ok: false,
-      code: "forbidden",
-    });
-  });
+    const confirmed = gate.confirm("s", "cluster-a", "velero", "ServerStatusRequest", undefined);
 
-  it("refuses to turn writes on for a connection the adapter does not take, with the reason, and says it in the state", () => {
-    const { gate, confirmation, adapters } = fixture({ connection: { supported: false, reason: "proxy" } });
-    const refused = gate.enable("cluster-a", "velero", confirmation);
-
-    expect(refused).toMatchObject({ ok: false, code: "connection-unsupported", stage: "connection", retry: false });
-    expect(refused.ok ? "" : refused.text).toContain("proxy");
-    expect(adapters).toHaveLength(0);
-    expect(gate.state("cluster-a")).toMatchObject({
-      ok: true,
-      value: { writes: { on: false }, connection: { supported: false, reason: "proxy" } },
-    });
-    expect(gate.confirm("s", "cluster-a", "velero", "ServerStatusRequest", undefined)).toMatchObject({
-      ok: false,
-      code: "forbidden",
-      stage: "gate",
-    });
-  });
-
-  it("refuses to turn writes on as a target that changed when the file or the context is not there", () => {
-    for (const reason of ["file", "context"] as const) {
-      const { gate, confirmation } = fixture({ connection: { supported: false, reason } });
-
-      expect(gate.enable("cluster-a", "velero", confirmation)).toMatchObject({
-        ok: false,
-        code: "target-changed",
-        stage: reason,
-      });
-      expect(gate.state("cluster-a")).toMatchObject({ ok: true, value: { writes: { on: false } } });
-    }
+    catalog[0] = { ...catalog[0], status: "disconnected" };
+    expect(
+      gate.take(
+        "s",
+        "cluster-a",
+        "velero",
+        "ServerStatusRequest",
+        undefined,
+        confirmed.ok ? confirmed.value.token : "",
+        randomUUID(),
+      ),
+    ).toMatchObject({ ok: false, code: "target-changed", stage: "catalog" });
+    expect(told).toEqual(["cluster-a"]);
   });
 
   it("refuses to turn writes on when the adapter cannot be made, and says the connection is not usable", () => {

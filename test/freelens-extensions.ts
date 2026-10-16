@@ -266,23 +266,62 @@ const components = new Proxy(hostComponents as Record<string | symbol, unknown>,
   },
 });
 
-// The clusters the catalog of the host gives the main process, as a test sets them. Asked before a test
-// sets them, the catalog is what the scaffold must not reach.
-export const hostCatalog: { clusters?: { id: string; name: string; kubeConfigPath: string; contextName: string }[] } =
-  {};
+// The clusters the catalog of the host gives the main process, as a test sets them, each with its state:
+// connecting, connected, disconnected or disconnecting (packages/core/src/extensions/common-api/
+// cluster-types.ts at the validation target). Asked before a test sets them, the catalog is what the
+// scaffold must not reach. A test that follows a change sets an observable list, as the catalog of the host
+// is observable.
+export const hostCatalog: {
+  clusters?: { id: string; name: string; kubeConfigPath: string; contextName: string; status: string }[];
+} = {};
+
+// What the host gives the main process for a cluster beside its catalog, as a test sets it: the client of
+// its proxy, `Main.K8sApi.KubeJsonApi.forCluster`, and the kubectl and the environment of `Main.Shell`.
+// Asked before a test sets them, they are what the scaffold must not reach.
+export const hostCluster: {
+  forCluster?: (clusterId: string) => unknown;
+  kubectl?: (clusterId: string) => Promise<string>;
+  environment?: (clusterId: string) => Promise<Record<string, string>>;
+} = {};
+
+function catalogClusters(access: string) {
+  if (!hostCatalog.clusters) {
+    forbiddenAccesses.push(access);
+    throw new Error(`Unexpected scaffold access: ${access}`);
+  }
+  hostCalls.push(access.replace(/^Main\./, ""));
+  return hostCatalog.clusters;
+}
+
+function ofTheHost<Name extends keyof typeof hostCluster>(
+  name: Name,
+  access: string,
+): NonNullable<(typeof hostCluster)[Name]> {
+  const given = hostCluster[name];
+
+  if (!given) {
+    forbiddenAccesses.push(access);
+    throw new Error(`Unexpected scaffold access: ${access}`);
+  }
+  return given as NonNullable<(typeof hostCluster)[Name]>;
+}
 
 export const Main = {
   LensExtension: MainExtensionStub,
   K8s: blockedNamespace("Main.K8s"),
-  Catalog: {
-    getAllClusters: () => {
-      if (!hostCatalog.clusters) {
-        forbiddenAccesses.push("Main.Catalog.getAllClusters");
-        throw new Error("Unexpected scaffold access: Main.Catalog.getAllClusters");
-      }
-      hostCalls.push("Catalog.getAllClusters");
-      return hostCatalog.clusters;
+  K8sApi: {
+    KubeJsonApi: {
+      forCluster: (clusterId: string) => ofTheHost("forCluster", "Main.K8sApi.KubeJsonApi.forCluster")(clusterId),
     },
+  },
+  Shell: {
+    getKubectlPath: (clusterId: string) => ofTheHost("kubectl", "Main.Shell.getKubectlPath")(clusterId),
+    getEnvironment: (clusterId: string) => ofTheHost("environment", "Main.Shell.getEnvironment")(clusterId),
+  },
+  Catalog: {
+    getAllClusters: () => catalogClusters("Main.Catalog.getAllClusters"),
+    getClusterById: (clusterId: string) =>
+      catalogClusters("Main.Catalog.getClusterById").find((cluster) => cluster.id === clusterId),
   },
   Ipc: IpcStub,
 };

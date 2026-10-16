@@ -32,8 +32,8 @@ function fixture(initial: Allowances = {}) {
   let now = 1_700_000_000_000;
   const dispose = registerHandlers(registrar, {
     catalog: () => [
-      { id: "cluster-a", name: "demo", kubeConfigPath: "/synthetic/a", contextName: "kind-a" },
-      { id: "cluster-b", name: "other", kubeConfigPath: "/synthetic/b", contextName: "kind-b" },
+      { id: "cluster-a", name: "demo", kubeConfigPath: "/synthetic/a", contextName: "kind-a", status: "connected" },
+      { id: "cluster-b", name: "other", kubeConfigPath: "/synthetic/b", contextName: "kind-b", status: "connected" },
     ],
     allowances: {
       read: () => stored.allowances,

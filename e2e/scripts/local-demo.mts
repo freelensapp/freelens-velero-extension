@@ -27,13 +27,7 @@ import { promisify } from "node:util";
 import { gunzipSync } from "node:zlib";
 import { createTlsFixture } from "../../test/tls-fixture.ts";
 import { tabArtifacts, tabExpectations } from "./local-artifacts.mts";
-import {
-  compiledDiagnostics,
-  DIRECT_PROOF_ORIGIN,
-  runDownloadProof,
-  runIdentityProof,
-  tlsProofResources,
-} from "./local-download-proof.mts";
+import { DIRECT_PROOF_ORIGIN, runDownloadProof, runIdentityProof, tlsProofResources } from "./local-download-proof.mts";
 import {
   assertFixtureNamespaceContents,
   assertFixtureOperationsRemoved,
@@ -2282,14 +2276,6 @@ async function runTransportProof(): Promise<void> {
       save();
     }
     await certificates?.dispose();
-    const main = compiledDiagnostics();
-    const api = new main.DiagnosticKubernetes(
-      { clusterId: journal.owner, context: DEMO_CONTEXT, kubeconfigPath: CONFIG },
-      () => {
-        verifyTarget();
-        return true;
-      },
-    );
 
     if (journal.fixtureRun) {
       const activeRun = journal.fixtureRun as { id: string };
@@ -2327,17 +2313,35 @@ async function runTransportProof(): Promise<void> {
     }
 
     for (const identity of requests) {
-      let request: Awaited<ReturnType<typeof api.read>>;
+      const resource = identity.kind === "DownloadRequest" ? "downloadrequests" : "serverstatusrequests";
+      let request: KubeResource;
 
+      // Read by the client of the environment, which checks its target before every command: the main
+      // process reads nothing of a kubeconfig.
       try {
-        request = await api.read(identity.kind, DEMO_NAMESPACE, identity.name, new AbortController().signal);
-      } catch (error) {
-        if (error instanceof main.DiagnosticError && error.code === "not-found") continue;
+        const raw = kubectl(
+          [
+            "get",
+            `${resource}.velero.io`,
+            identity.name,
+            "--namespace",
+            DEMO_NAMESPACE,
+            "--ignore-not-found",
+            "-o",
+            "json",
+          ],
+          undefined,
+          undefined,
+          false,
+        ).trim();
+
+        if (!raw) continue;
+        request = JSON.parse(raw) as KubeResource;
+      } catch {
         requestCleanupFailed = true;
         continue;
       }
       assertOwnedResource(journal.owner, request, identity.uid);
-      const resource = identity.kind === "DownloadRequest" ? "downloadrequests" : "serverstatusrequests";
 
       kubectl(
         ["delete", "--raw", `/apis/velero.io/v1/namespaces/${DEMO_NAMESPACE}/${resource}/${identity.name}`, "-f", "-"],

@@ -5,11 +5,13 @@ import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { FIXTURE_LABEL, fixtureArtifactPath, fixtureNames } from "./local-fixtures.mts";
+import { type ProofHost, startProofHost } from "./local-host.mts";
 import { DEMO_CONTEXT, DEMO_NAMESPACE, OWNER_LABEL, requireCondition, SUBNETS, subnetsOverlap } from "./local-kind.mts";
 import { type KubeResource, STORAGE_ENDPOINT } from "./local-manifests.mts";
 
 import type { AllowanceFor, Allowances } from "../../src/common/allowances.ts";
 import type { Answer, ArtifactPage, ArtifactValue, WriteConfirmAnswer } from "../../src/common/ipc.ts";
+import type { CatalogEntry } from "../../src/main/catalog.ts";
 import type { DiagnosticKind } from "../../src/main/diagnostic-kubernetes.ts";
 import type { HandlersDependencies } from "../../src/main/ipc.ts";
 
@@ -131,6 +133,28 @@ export function tlsProofResources(
 
 type Main = ReturnType<typeof compiledDiagnostics>;
 
+// The entry of the cluster of a proof in a catalog of the proof, connected: the kubeconfig and the context
+// of the environment, which the main process does not read.
+function proofEntry(id: string, kubeconfig: string): CatalogEntry {
+  return { id, name: "proof", kubeConfigPath: kubeconfig, contextName: DEMO_CONTEXT, status: "connected" };
+}
+
+// The adapter of the main process for the cluster of a proof, through the client of the host the proof
+// stands in for. The target of the environment is checked before every request, as the catalog is.
+function proofAdapter(main: Main, entry: CatalogEntry, host: ProofHost, assertCurrent: () => void, labels = {}) {
+  return new main.DiagnosticKubernetes(
+    entry,
+    {
+      entry: () => {
+        assertCurrent();
+        return entry;
+      },
+      client: () => host.client(),
+    },
+    labels,
+  );
+}
+
 // The procedures of the main process, as the extension registers them with the host: a proof calls them as
 // a frame of the cluster does, with the gate, its confirmations and its tokens. The cluster is the one
 // entry of a catalog of the proof, over the kubeconfig it is given, and the requests carry the labels of
@@ -140,25 +164,19 @@ function proofProcedures(
   main: Main,
   context: Pick<DownloadProofContext, "owner" | "run" | "assertCurrent">,
   kubeconfig: string,
+  host: ProofHost,
   dependencies: Partial<HandlersDependencies>,
 ) {
   const cluster = "velero-proof";
-  const catalog = [{ id: cluster, name: "proof", kubeConfigPath: kubeconfig, contextName: DEMO_CONTEXT }];
+  const catalog = [proofEntry(cluster, kubeconfig)];
   const gate = new main.WriteGate({
     catalog: () => catalog,
-    adapter: (entry, isCurrent) =>
-      new main.DiagnosticKubernetes(
-        { clusterId: entry.id, context: entry.contextName, kubeconfigPath: entry.kubeConfigPath },
-        () => {
-          context.assertCurrent();
-          return isCurrent();
-        },
-        {
-          "app.kubernetes.io/managed-by": "freelens-velero-extension",
-          [OWNER_LABEL]: context.owner,
-          [FIXTURE_LABEL]: context.run,
-        },
-      ),
+    adapter: (entry) =>
+      proofAdapter(main, entry, host, context.assertCurrent, {
+        "app.kubernetes.io/managed-by": "freelens-velero-extension",
+        [OWNER_LABEL]: context.owner,
+        [FIXTURE_LABEL]: context.run,
+      }),
   });
   const handlers = new Map<string, (event: unknown, payload: unknown) => Promise<unknown>>();
   const frame = { senderFrame: { url: `https://${cluster}.renderer.freelens.app:1/` }, processId: 1, frameId: 1 };
@@ -168,7 +186,7 @@ function proofProcedures(
         handlers.set(channel, handler as (event: unknown, payload: unknown) => Promise<unknown>),
       broadcast: () => undefined,
     },
-    { catalog: () => catalog, gate, ...dependencies },
+    { catalog: () => catalog, gate, tunnel: host.tunnel, ...dependencies },
   );
   // A call of a procedure, from the frame of the cluster of the proof. A failure says its code and its
   // step, which name nothing of the environment; its words are not printed.
@@ -241,14 +259,13 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
   allowanceAsked: boolean;
 }> {
   const main = compiledDiagnostics();
-  const api = new main.DiagnosticKubernetes(
-    { clusterId: context.owner, context: DEMO_CONTEXT, kubeconfigPath: context.kubeconfig },
-    () => {
-      context.assertCurrent();
-      return true;
-    },
-    { [OWNER_LABEL]: context.owner, [FIXTURE_LABEL]: context.run },
-  );
+  const host = await startProofHost(context.kubeconfig, DEMO_CONTEXT);
+  const api = proofAdapter(main, proofEntry(context.owner, context.kubeconfig), host, context.assertCurrent, {
+    [OWNER_LABEL]: context.owner,
+    [FIXTURE_LABEL]: context.run,
+  });
+  // The kubectl of the connections of the proof itself, every one of them killed with the proof.
+  const tunnels = new main.KubectlTunnels(host.tunnel);
   const names = fixtureNames(context.run);
   // The path of an artifact of an operation of this run: the four the proof asks for, and no other.
   const pathOf = (target: string, name: string) => {
@@ -284,7 +301,7 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
   const newConnection = async (signal: AbortSignal) =>
     context.direct
       ? { address: await podAddress(signal), port, close: async () => {} }
-      : main.openPodTunnel(api, { ...context.pod, namespace: DEMO_NAMESPACE, port }, signal);
+      : tunnels.open(context.owner, { ...context.pod, namespace: DEMO_NAMESPACE, port }, signal);
   // The paths the proof asks the store for: the artifacts of the real backup and of the real restore, and
   // the logs of the operations that failed their validation.
   const paths = new Set([
@@ -298,7 +315,7 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
   ]);
   // What the operator allowed, as the proof keeps it for the procedures that give it and take it back.
   let allowed: Allowances = {};
-  const { cluster, call, refusal, enable, release } = proofProcedures(main, context, context.kubeconfig, {
+  const { cluster, call, refusal, enable, release } = proofProcedures(main, context, context.kubeconfig, host, {
     allowances: {
       read: () => allowed,
       write: (next) => {
@@ -578,7 +595,8 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
   } finally {
     controller.abort();
     release();
-    api.dispose();
+    tunnels.closeAll();
+    await host.close();
   }
 }
 
@@ -606,14 +624,25 @@ export async function runIdentityProof(context: IdentityProofContext): Promise<{
   const main = compiledDiagnostics();
   const names = fixtureNames(context.run);
   const controller = new AbortController();
-  const environment = new main.DiagnosticKubernetes(
-    { clusterId: context.owner, context: DEMO_CONTEXT, kubeconfigPath: context.environment },
-    () => {
-      context.assertCurrent();
-      return true;
-    },
+  // The environment looks at what the identity left through a host of its own kubeconfig.
+  const environmentHost = await startProofHost(context.environment, DEMO_CONTEXT);
+  const identityHost = await startProofHost(context.kubeconfig, DEMO_CONTEXT).catch(async (error: unknown) => {
+    await environmentHost.close();
+    throw error;
+  });
+  const environment = proofAdapter(
+    main,
+    proofEntry(context.owner, context.environment),
+    environmentHost,
+    context.assertCurrent,
   );
-  const { cluster, call, refusal, enable, release } = proofProcedures(main, context, context.kubeconfig, {});
+  const { cluster, call, refusal, enable, release } = proofProcedures(
+    main,
+    context,
+    context.kubeconfig,
+    identityHost,
+    {},
+  );
 
   try {
     await enable();
@@ -664,7 +693,8 @@ export async function runIdentityProof(context: IdentityProofContext): Promise<{
   } finally {
     controller.abort();
     release();
-    environment.dispose();
+    await identityHost.close();
+    await environmentHost.close();
   }
 }
 

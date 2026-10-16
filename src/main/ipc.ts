@@ -35,13 +35,15 @@ import {
   type WriteTarget,
 } from "../common/ipc";
 import { ArtifactHolder } from "./artifact-holder";
-import { CredentialPluginError, PLUGIN_TIMEOUT } from "./context-identity";
-import { DiagnosticKubernetes } from "./diagnostic-kubernetes";
+import { DiagnosticKubernetes, type HostClient } from "./diagnostic-kubernetes";
 import { resolveRoute } from "./diagnostic-route";
 import { type DiagnosticOptions, runDownload } from "./diagnostic-service";
 import { DiagnosticError } from "./diagnostic-transport";
+import { KubectlTunnels, type Spawn, type TunnelHost } from "./diagnostic-tunnel";
 import { readServerStatus, serverStatusFailure } from "./server-status";
-import { type CatalogEntry, signatureOf, WriteGate } from "./write-gate";
+import { signatureOf, WriteGate } from "./write-gate";
+
+import type { CatalogEntry } from "./catalog";
 
 // What a handler is given of the event of the host: the frame that sent the request.
 export interface IpcEvent {
@@ -92,6 +94,15 @@ export interface Registrar {
 
 export interface HandlersDependencies {
   catalog(): CatalogEntry[];
+  // The client of the host for the API server of a cluster: every request of the adapter goes through it.
+  client?(cluster: string): HostClient;
+  // Told whenever the catalog of the host changes, while writes are on somewhere: a reaction on it.
+  watchCatalog?(listener: () => void): () => void;
+  // What the tunnel to the Pod of a store is run with: the kubectl and the environment the host gives for
+  // a cluster, the state of the cluster and the folder of the extension.
+  tunnel?: TunnelHost;
+  // What starts kubectl, when a test gives its own in place of the one of Node.
+  spawn?: Spawn;
   gate?: WriteGate<DiagnosticKubernetes>;
   pollMs?: number;
   // The route to the store for a signed URL, when a test gives its own in place of the one the main
@@ -112,14 +123,9 @@ export interface HandlersDependencies {
   now?(): number;
 }
 
-// The words of how a download ended, from what was raised: the code and the step of a failure of the
-// way, the plugin of the context by its command, and nothing of what any of them carried.
+// The words of how a download ended, from what was raised: the code and the step of a failure of the way,
+// and nothing of what it carried.
 export function downloadFailureOf(error: unknown, context: DownloadContext): Failure {
-  if (error instanceof CredentialPluginError)
-    return downloadFailure("request-failed", error.stage ?? "creation", {
-      ...context,
-      plugin: { command: error.command, reason: error.reason, seconds: PLUGIN_TIMEOUT / 1000 },
-    });
   if (error instanceof DiagnosticError)
     return downloadFailure(
       error.code,
@@ -131,28 +137,49 @@ export function downloadFailureOf(error: unknown, context: DownloadContext): Fai
 
 // The handlers, registered on what is given: the class below gives them the IPC of the host.
 export function registerHandlers(registrar: Registrar, dependencies: HandlersDependencies): () => void {
+  // The adapter of a cluster reads the entry of the cluster in the catalog before every request, and sends
+  // it through the client of the host for that cluster. Where no client is given, nothing is sent.
+  const client =
+    dependencies.client ??
+    (() => {
+      throw new DiagnosticError("transport-unreachable");
+    });
   const gate =
     dependencies.gate ??
     new WriteGate<DiagnosticKubernetes>({
       catalog: dependencies.catalog,
-      adapter: (entry, isCurrent) =>
+      adapter: (entry) =>
         new DiagnosticKubernetes(
-          { clusterId: entry.id, context: entry.contextName, kubeconfigPath: entry.kubeConfigPath },
-          isCurrent,
+          entry,
+          {
+            entry: () => dependencies.catalog().find((item) => item.id === entry.id),
+            client: () => client(entry.id),
+          },
           { ...REQUEST_LABELS },
         ),
     });
+  // The kubectl of the tunnels of this registration, every one killed when it is let go.
+  const tunnels = dependencies.tunnel ? new KubectlTunnels(dependencies.tunnel, dependencies.spawn) : undefined;
   let poll: ReturnType<typeof setInterval> | undefined;
+  let stopWatching: (() => void) | undefined;
+  // What the catalog or a frame raises now is asked again at the next turn.
+  const reconcile = () => {
+    try {
+      gate.reconcile();
+    } catch {
+      /* the next turn */
+    }
+  };
+  // While writes are on somewhere, the gate follows the catalog as it changes, and looks at the frames
+  // that turned writes on at every turn of the poll.
   const watch = () => {
-    if (!poll)
-      poll = setInterval(() => {
-        // What the catalog or a frame raises now is asked again at the next turn.
-        try {
-          gate.reconcile();
-        } catch {
-          /* the next turn */
-        }
-      }, dependencies.pollMs ?? CATALOG_POLL);
+    if (!poll) poll = setInterval(reconcile, dependencies.pollMs ?? CATALOG_POLL);
+    if (!stopWatching && dependencies.watchCatalog)
+      try {
+        stopWatching = dependencies.watchCatalog(reconcile);
+      } catch {
+        stopWatching = undefined;
+      }
   };
   const holder = dependencies.holder ?? new ArtifactHolder();
   // The downloads that run, by their cluster and the identifier of their request: a request with the
@@ -211,7 +238,7 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
     gate.cancel(sender.key, request.cluster, request.request),
   );
   // While a write runs its frame is watched: a frame that goes aborts it, so that nothing is submitted
-  // for it after a wait, as the one for a plugin that gives the credential.
+  // for it after a wait, as the one for a kubectl the host prepares.
   const watchFrame = (still: () => boolean, controller: AbortController) =>
     setInterval(
       () => {
@@ -307,6 +334,7 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
           allowed: (what, origin, location) =>
             isAllowed(dependencies.allowances?.read() ?? {}, request.cluster, what, origin, location),
           ...(dependencies.lookup ? { lookup: dependencies.lookup } : {}),
+          ...(tunnels ? { tunnel: (pod, signal) => tunnels.open(request.cluster, pod, signal) } : {}),
         }));
     const watching = watchFrame(still, write.controller);
 
@@ -526,10 +554,13 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
   return () => {
     if (poll) clearInterval(poll);
     poll = undefined;
+    stopWatching?.();
+    stopWatching = undefined;
     stopChanged();
     stopLetGo();
     holder.dispose();
     gate.dispose();
+    tunnels?.closeAll();
   };
 }
 
@@ -553,14 +584,4 @@ export class VeleroIpc extends Main.Ipc {
     this.dispose?.();
     this.dispose = undefined;
   }
-}
-
-// The clusters of the catalog of the host, as the gate reads them.
-export function catalogEntries(): CatalogEntry[] {
-  return Main.Catalog.getAllClusters().map((cluster) => ({
-    id: cluster.id,
-    name: cluster.name,
-    kubeConfigPath: cluster.kubeConfigPath,
-    contextName: cluster.contextName,
-  }));
 }

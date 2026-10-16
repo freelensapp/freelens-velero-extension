@@ -30,17 +30,13 @@ const STORE_UNTRUSTED =
 const NAME_THE_AUTHORITY =
   "The storage location can name the certificate of its authority; the verification is never turned off.";
 
-// A plugin of the context that gave no credential: the cluster was not asked, so it refused nothing. The
-// command is named by its file alone.
-export function pluginWords(command: string, reason: "failed" | "deadline" | "unreadable", seconds: number): string {
-  const plugin = `The credential plugin ${command} of the context`;
-
-  return reason === "deadline"
-    ? `${plugin} did not give a credential in ${seconds} seconds. Run it in a terminal to see what it waits for, then ask again.`
-    : reason === "unreadable"
-      ? `${plugin} ended, but what it printed is not a credential the extension can read.`
-      : `${plugin} did not give a credential: it failed, or it is not installed. Run it in a terminal, for example to sign in again, then ask again.`;
-}
+// What is said of a cluster the extension asks nothing of, before anything is sent to it: one that is not
+// in the catalog of Freelens any more, and one that is not connected, which the extension never connects.
+export const CLUSTER_WORDS = {
+  absent: "The cluster is not in the catalog of Freelens any more: the extension asks it nothing.",
+  disconnected:
+    "The cluster is not connected in Freelens: the extension asks nothing of a cluster that is not connected, and does not connect it.",
+} as const;
 
 // What the way of a request found by itself, where the code alone does not say it. The same code at the
 // same step is also what the cluster answers a read with: a read of the request the cluster did not answer
@@ -69,6 +65,10 @@ export function pluginWords(command: string, reason: "failed" | "deadline" | "un
 //   was refused;
 //   credential: the cluster did not take the credential of the context, which says nothing of what the
 //   identity may do.
+// And of the cluster itself, which the main process reads in the catalog of the host before it sends
+// anything to it:
+//   absent: the cluster is not in the catalog any more;
+//   disconnected: the cluster is not connected.
 export type DownloadVerdict =
   | "unsigned"
   | "failed"
@@ -87,7 +87,9 @@ export type DownloadVerdict =
   | "address"
   | "allowance"
   | "candidate"
-  | "credential";
+  | "credential"
+  | "absent"
+  | "disconnected";
 
 export interface DownloadContext {
   artifact: ArtifactTarget;
@@ -96,8 +98,6 @@ export interface DownloadContext {
   namespace: string;
   // The name of the request, once it is in the cluster or may be.
   request?: string;
-  // The plugin of the context that gave no credential, by the file of its command, with its bound.
-  plugin?: { command: string; reason: "failed" | "deadline" | "unreadable"; seconds: number };
   verdict?: DownloadVerdict;
   // What the operator may allow for the request to go on, when that is what denied its destination.
   needs?: AllowanceFor;
@@ -179,11 +179,6 @@ export function downloadFailure(code: FailureCode, stage: string, context: Downl
   const left = created ? ` ${stays}` : before ? ` ${none}` : "";
   const say = (retry: boolean, text: string) => failure(code, stage, retry, text);
 
-  if (context.plugin)
-    return say(
-      true,
-      `${pluginWords(context.plugin.command, context.plugin.reason, context.plugin.seconds)}${created ? ` ${stays}` : ""}`,
-    );
   switch (code) {
     case "validation":
       // The request of the views that is not one of the contract.
@@ -225,9 +220,13 @@ export function downloadFailure(code: FailureCode, stage: string, context: Downl
           `${request} says that it expired already, and a URL of it would not be good: the clock of this machine and the one of the cluster may not agree. ${stays}`,
         );
       if (stage === "route") return say(true, `The route to the store was not opened in time. ${stays}`);
+      // kubectl did not say that it forwards a port within the wait for it.
+      if (stage === "forward")
+        return say(true, `The port-forward to the Pod of the store was not ready in fifteen seconds. ${stays}`);
       if (store) return say(true, `The store did not answer in time. ${stays}`);
-      // A creation the cluster did not take in time was not sent: the adapter says a deadline only then.
-      return say(true, `${API_WORDS.late}${stage === "creation" ? ` ${none}` : left}`);
+      // Nothing is claimed of a creation: one without an answer in time is not known to have been sent,
+      // and the adapter says it as a submission that is not known.
+      return say(true, `${API_WORDS.late}${left}`);
     case "artifact-missing":
       return say(
         false,
@@ -280,6 +279,10 @@ export function downloadFailure(code: FailureCode, stage: string, context: Downl
         return say(false, `${capital(target)} is not in ${context.namespace} any more.${left}`);
       return say(false, `What the request needs in the cluster is not there.${left}`);
     case "target-changed":
+      // The cluster was read in the catalog before a request was sent to it: nothing was, and at the
+      // creation no request was created.
+      if (context.verdict === "absent" || context.verdict === "disconnected")
+        return say(false, `${CLUSTER_WORDS[context.verdict]}${stage === "creation" ? ` ${none}` : left}`);
       if (context.verdict === "another")
         return say(false, `${request} is not the one that was created: nothing of it is used.`);
       if (context.verdict === "replaced")
@@ -376,8 +379,16 @@ export function downloadFailure(code: FailureCode, stage: string, context: Downl
           `What was opened to reach the store did not close in time. Nothing of the file is shown. ${stays}`,
         );
       if (stage === "route") return say(true, `The route to the store could not be opened. ${stays}`);
+      // kubectl ended before it said that it forwards a port, for another reason than a refusal of the
+      // cluster, or could not be run.
+      if (stage === "forward")
+        return say(
+          true,
+          `The port-forward to the Pod of the store could not be opened: kubectl ended before it was ready, or could not be run. ${stays}`,
+        );
       if (store) return say(true, `The store could not be reached. ${stays}`);
-      // A creation the cluster was not reached for was not sent: the adapter says so only then.
+      // A creation for which the client of the host could not be had was not sent: the adapter says so only
+      // then.
       return say(true, `${API_WORDS.unreachable}${stage === "creation" ? ` ${none}` : left}`);
     case "request-failed":
       if (context.verdict === "failed")

@@ -4,9 +4,9 @@ import { CHANNELS } from "../common/ipc";
 import { registerHandlers, senderOf } from "./ipc";
 import { WriteGate } from "./write-gate";
 
+import type { CatalogEntry } from "./catalog";
 import type { DiagnosticObject } from "./diagnostic-kubernetes";
 import type { IpcEvent, Registrar } from "./ipc";
-import type { CatalogEntry } from "./write-gate";
 
 const FRAME_A: IpcEvent = {
   senderFrame: { url: "https://cluster-a.renderer.freelens.app:1234/" },
@@ -26,8 +26,8 @@ const WINDOW: IpcEvent = {
 
 function fixture(options: { processed?: boolean } = {}) {
   const catalog: CatalogEntry[] = [
-    { id: "cluster-a", name: "demo", kubeConfigPath: "/synthetic/a", contextName: "kind-a" },
-    { id: "cluster-b", name: "other", kubeConfigPath: "/synthetic/b", contextName: "kind-b" },
+    { id: "cluster-a", name: "demo", kubeConfigPath: "/synthetic/a", contextName: "kind-a", status: "connected" },
+    { id: "cluster-b", name: "other", kubeConfigPath: "/synthetic/b", contextName: "kind-b", status: "connected" },
   ];
   const handlers = new Map<string, (event: IpcEvent, payload: unknown) => Promise<unknown>>();
   const broadcasts: unknown[] = [];
@@ -63,7 +63,6 @@ function fixture(options: { processed?: boolean } = {}) {
   });
   const gate = new WriteGate({
     catalog: () => catalog,
-    connection: () => ({ supported: true, credential: "token" }),
     adapter: () => watched as never,
   });
   const dispose = registerHandlers(registrar, { catalog: () => catalog, gate, pollMs: 5 });
@@ -272,7 +271,7 @@ describe("the procedures of the main process", () => {
 
   it("answers a failure of the handler as a result, never as a raised error", async () => {
     const catalog: CatalogEntry[] = [
-      { id: "cluster-a", name: "demo", kubeConfigPath: "/synthetic/a", contextName: "kind-a" },
+      { id: "cluster-a", name: "demo", kubeConfigPath: "/synthetic/a", contextName: "kind-a", status: "connected" },
     ];
     const handlers = new Map<string, (event: IpcEvent, payload: unknown) => Promise<unknown>>();
     const gate = new WriteGate({

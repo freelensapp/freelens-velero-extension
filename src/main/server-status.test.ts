@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { downloadFailure } from "../common/diagnostic-text";
+import { CLUSTER_WORDS, downloadFailure } from "../common/diagnostic-text";
 import { REQUEST_PREFIX } from "../common/ipc";
-import { CredentialPluginError } from "./context-identity";
 import { DiagnosticError } from "./diagnostic-transport";
 import { readServerStatus, serverStatusFailure } from "./server-status";
 
@@ -160,13 +159,14 @@ describe("the version of the server", () => {
       retry: true,
       text: "The server did not answer in ten seconds: it may be stopped, or busy. The request stays until the server processes it.",
     });
-    // A creation the cluster did not take in time was not sent: no request stays.
+    // Nothing is claimed of a creation that did not end in time: the adapter says it as a submission that
+    // is not known, and words of a deadline say nothing of what was created.
     expect(serverStatusFailure(new DiagnosticError("deadline"))).toEqual({
       ok: false,
       code: "deadline",
       stage: "creation",
       retry: true,
-      text: "The cluster did not answer in time. Nothing was created.",
+      text: "The cluster did not answer in time.",
     });
     expect(serverStatusFailure(new DiagnosticError("submission-unknown")).text).toContain("freelens-velero-");
     // A write that was cancelled says whether the request is there: it is, once it was created, and it is
@@ -192,36 +192,27 @@ describe("the version of the server", () => {
 
       expect([code, tab]).toEqual([code, `${band} No request was created.`]);
     }
-    expect(serverStatusFailure(new CredentialPluginError("kubelogin", "failed")).text).toBe(
-      downloadFailure("request-failed", "target", {
-        ...context,
-        plugin: { command: "kubelogin", reason: "failed", seconds: 30 },
-      }).text,
-    );
   });
 
-  it("says that the credential plugin failed, by its command, and not that the cluster refused", () => {
-    for (const [reason, words] of [
-      ["failed", "did not give a credential"],
-      ["deadline", "30 seconds"],
-      ["unreadable", "not a credential"],
-    ] as const) {
-      for (const requestName of [undefined, "x"]) {
-        const failed = serverStatusFailure(new CredentialPluginError("kubelogin", reason), requestName);
+  it("says of a cluster not in the catalog, or not connected, which it is, and that nothing was sent to it", () => {
+    for (const verdict of ["absent", "disconnected"] as const) {
+      const error = new DiagnosticError("target-changed", undefined, verdict);
 
-        // Before the creation it is the stage of the credential; after it, the request is there and it is
-        // the wait that ended.
-        expect(failed).toMatchObject({
-          ok: false,
-          code: "request-failed",
-          stage: requestName ? "wait" : "credential",
-          retry: true,
-        });
-        expect(failed.text).toContain("credential plugin kubelogin");
-        expect(failed.text).toContain(words);
-        expect(failed.text).not.toContain("refused");
-        expect(failed.text).not.toContain("verb");
-      }
+      expect(serverStatusFailure(error)).toEqual({
+        ok: false,
+        code: "target-changed",
+        stage: "creation",
+        retry: false,
+        text: `${CLUSTER_WORDS[verdict]} Nothing was created.`,
+      });
+      expect(serverStatusFailure(error, "x")).toMatchObject({
+        stage: "wait",
+        text: `${CLUSTER_WORDS[verdict]} The request stays until the server processes it.`,
+      });
     }
+    // A change found once the cluster answered is said as before.
+    expect(serverStatusFailure(new DiagnosticError("target-changed")).text).toBe(
+      "The cluster or the installation changed while the request was made.",
+    );
   });
 });

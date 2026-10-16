@@ -10,7 +10,6 @@
 // process would have to load.
 
 import { builtinModules, isBuiltin } from "node:module";
-import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
 import { defaultServerConditions, defaultServerMainFields, defineConfig } from "vite";
 import { cssModuleDeclarations } from "./build/vite-plugin-css-module-declarations.mjs";
@@ -93,17 +92,6 @@ export default defineConfig(({ mode }) => {
           resolve: {
             conditions: [...defaultServerConditions],
             mainFields: [...defaultServerMainFields],
-            // The Kubernetes client the main bundle carries imports undici
-            // for API clients this extension never calls. The real module
-            // installs a dispatcher for the whole process when it loads,
-            // which inside Freelens is the process of the host.
-            alias: { undici: fileURLToPath(new URL("./build/undici-stub.ts", import.meta.url)) },
-          },
-          // The optional native accelerators of ws, turned off through the
-          // variables the library reads, so that the bundle requires none.
-          define: {
-            "process.env.WS_NO_BUFFER_UTIL": JSON.stringify("1"),
-            "process.env.WS_NO_UTF_8_VALIDATE": JSON.stringify("1"),
           },
         }),
     build: {
