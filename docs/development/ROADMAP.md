@@ -13,7 +13,7 @@ the end of each milestone.
 
 The compatibility reference is Freelens v1.10.3 with SDK v1.10.3, and Velero
 v1.18.4 with the AWS plugin v1.14.4 (see [RECON-T0.1.md](RECON-T0.1.md)).
-[SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md), a draft, moves the reference
+[SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md), approved on 2026-10-16, moves the reference
 of Freelens to v2, so that v1.0.0 ships for Freelens v2 and no longer for v1.
 
 ## Releases
@@ -49,8 +49,8 @@ Status values: `Planned`, `Draft` (the spec is written, not approved),
 | Activation of the packed extension in a packaged Freelens, as an integration test | FND-10 | [SPEC-0001](../specs/SPEC-0001-local-foundation.md) | Done |
 | Test environment on Linux and macOS, x64 and ARM64, and in the hosted checks | | [SPEC-0004](../specs/SPEC-0004-test-environment-every-platform.md) | Done |
 | Release workflows | | | Done |
-| Move to the extension API of Freelens v2: manifest and build, the main process through the host, the way between the processes, registrations, components, tests and documents, in one pull request | T0.7 | [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md) | Draft |
-| Every check of M1 to M3 and of T3.1 and T3.2 green on Freelens v2 in CI on main, with the pre-review on both themes and a gallery for the review | T0.8 | [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md) | Draft |
+| Move to the extension API of Freelens v2: manifest and build, the main process through the host, the way between the processes, registrations, components, tests and documents, in one pull request | T0.7 | [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md) | Approved |
+| Every check of M1 to M3 and of T3.1 and T3.2 green on Freelens v2 in CI on main, with the pre-review on both themes and a gallery for the review | T0.8 | [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md) | Approved |
 
 The T0.4 to T0.6 evidence is in [TESTING.md](TESTING.md). It covers the
 scaffold, the readiness of the infrastructure, a workload of synthetic
