@@ -1,4 +1,4 @@
-import { action, makeObservable, observable, runInAction } from "mobx";
+import { action, makeObservable, observableRef, runInAction } from "mobx";
 import { REQUEST_STAGES } from "../../common/ipc";
 
 import type { Failure, ServerStatusValue } from "../../common/ipc";
@@ -82,8 +82,8 @@ export class ServerStatus {
   constructor(dependencies: ServerStatusDependencies) {
     this.dependencies = dependencies;
     makeObservable(this, {
-      step: observable.ref,
-      last: observable.ref,
+      step: observableRef,
+      last: observableRef,
       leave: action,
       drop: action,
     });

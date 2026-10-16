@@ -1,4 +1,4 @@
-import { action, computed, makeObservable, observable, runInAction } from "mobx";
+import { action, computed, makeObservable, observable, observableRef, runInAction } from "mobx";
 import { withAllowance, withoutAllowance } from "../../common/allowances";
 import {
   apiAvailability,
@@ -145,14 +145,14 @@ export class Installation {
       refused: () => void this.openGate(),
     });
     makeObservable(this, {
-      api: observable.ref,
-      found: observable.ref,
-      preferences: observable.ref,
-      generation: observable.ref,
-      reads: observable.ref,
+      api: observableRef,
+      found: observableRef,
+      preferences: observableRef,
+      generation: observableRef,
+      reads: observableRef,
       asked: observable,
       asking: observable,
-      gate: observable.ref,
+      gate: observableRef,
       gateFailure: observable,
       allowanceFailure: observable,
       choices: computed,

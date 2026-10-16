@@ -16,10 +16,10 @@ import {
   downloadRequestName,
   isArtifactTarget,
 } from "../common/ipc";
-import { CredentialPluginError } from "./context-identity.ts";
-import { type ArtifactRoute, DiagnosticError, downloadArtifact } from "./diagnostic-transport.ts";
+import { CredentialPluginError } from "./context-identity";
+import { type ArtifactRoute, DiagnosticError, downloadArtifact } from "./diagnostic-transport";
 
-import type { DiagnosticKubernetes, DiagnosticObject } from "./diagnostic-kubernetes.ts";
+import type { DiagnosticKubernetes, DiagnosticObject } from "./diagnostic-kubernetes";
 
 export interface DiagnosticInput {
   // The identifier of the request of the views: the name of the DownloadRequest ends with it.

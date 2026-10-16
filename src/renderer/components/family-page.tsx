@@ -8,7 +8,7 @@ import { FamilyListStore } from "../state/list-store";
 import styles from "./views.module.css";
 import { ViewsFrame } from "./views-frame";
 
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 
 import type { Family } from "../../common/discovery";
 import type { ViewKind } from "../../common/views";
@@ -43,7 +43,7 @@ export interface ListDefinition<View extends { name: string }> {
   sorting: Record<string, (view: View) => string | number>;
   search(view: View): string[];
   // The cells after the name, one for each column after the first.
-  cells(view: View, item: HostObject): ReactNode[];
+  cells(view: View, item: HostObject): ReactElement[];
   // The other families a row is made from: the list says when what it shows of them is of an earlier read.
   uses?: Family[];
   // What is to be said of the list as a whole, which no row says: over the list, in words.

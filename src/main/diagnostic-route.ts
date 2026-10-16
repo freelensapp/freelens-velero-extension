@@ -10,12 +10,12 @@ import { lookup as resolve } from "node:dns/promises";
 import { type AllowanceKind, locationOf } from "../common/allowances";
 import { canonicalAddress, classifyAddress, isMetadataName } from "../common/artifact-address";
 import { checkOrigin, hostForm, isArtifactPath, type StoreOfLocation } from "../common/artifact-origin";
-import { CredentialPluginError } from "./context-identity.ts";
-import { type ArtifactRoute, DiagnosticError } from "./diagnostic-transport.ts";
-import { openPodTunnel, type PortForwardRefusal } from "./diagnostic-tunnel.ts";
+import { CredentialPluginError } from "./context-identity";
+import { type ArtifactRoute, DiagnosticError } from "./diagnostic-transport";
+import { openPodTunnel, type PortForwardRefusal } from "./diagnostic-tunnel";
 
 import type { DownloadVerdict } from "../common/diagnostic-text";
-import type { DiagnosticKubernetes, DiagnosticObject } from "./diagnostic-kubernetes.ts";
+import type { DiagnosticKubernetes, DiagnosticObject } from "./diagnostic-kubernetes";
 import type { DiagnosticInput } from "./diagnostic-service";
 
 type Api = Pick<DiagnosticKubernetes, "read" | "list" | "assertCurrent" | "authenticatedConfiguration">;

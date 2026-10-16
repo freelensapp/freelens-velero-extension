@@ -14,7 +14,7 @@ import { readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { KubeConfig } from "@kubernetes/client-node/dist/config.js";
 import { loadYaml } from "@kubernetes/client-node/dist/yaml.js";
-import { DiagnosticError } from "./diagnostic-transport.ts";
+import { DiagnosticError } from "./diagnostic-transport";
 
 import type { Connection } from "../common/ipc";
 

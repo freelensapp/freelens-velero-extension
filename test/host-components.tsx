@@ -352,9 +352,11 @@ const VirtualList = React.forwardRef<VirtualListHandle, Passed>(function Virtual
   for (let row = from; row < first; row += 1) top -= heights[row];
   for (let row = from; row <= to; row += 1) {
     const entry = entries[row];
-    const element = (getRow as ((place: number | string) => React.ReactElement | null | undefined) | undefined)?.(
-      typeof entry === "string" ? row : entry.getId(),
-    );
+    const element = (
+      getRow as
+        | ((place: number | string) => React.ReactElement<{ style?: React.CSSProperties }> | null | undefined)
+        | undefined
+    )?.(typeof entry === "string" ? row : entry.getId());
 
     if (element) {
       rows.push(

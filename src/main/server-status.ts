@@ -6,8 +6,8 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { API_WORDS, pluginWords } from "../common/diagnostic-text";
 import { type Failure, failure, REQUEST_PREFIX, REQUEST_STAGES, type ServerStatusValue } from "../common/ipc";
-import { CredentialPluginError, PLUGIN_TIMEOUT } from "./context-identity.ts";
-import { DiagnosticError } from "./diagnostic-transport.ts";
+import { CredentialPluginError, PLUGIN_TIMEOUT } from "./context-identity";
+import { DiagnosticError } from "./diagnostic-transport";
 
 import type { DiagnosticObject } from "./diagnostic-kubernetes";
 

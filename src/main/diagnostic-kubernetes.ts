@@ -10,8 +10,8 @@ import {
   CredentialPluginError,
   readContext,
   runCredentialPlugin,
-} from "./context-identity.ts";
-import { DiagnosticError } from "./diagnostic-transport.ts";
+} from "./context-identity";
+import { DiagnosticError } from "./diagnostic-transport";
 
 export interface KubernetesBinding {
   clusterId: string;

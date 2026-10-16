@@ -82,11 +82,11 @@ function ViewsFrameView({ id, title, installation, families, earlier, view, orig
   const first = path[0];
   const ready = installation.entry.state === "ready";
   const content = React.useRef<HTMLDivElement>(null);
-  const opened = React.useRef<ViewTarget>();
+  const opened = React.useRef<ViewTarget | undefined>(undefined);
   // What was last pointed at, or reached with the keyboard, in the page, and when.
-  const pointed = React.useRef<{ element: HTMLElement; at: number }>();
+  const pointed = React.useRef<{ element: HTMLElement; at: number } | undefined>(undefined);
   // What the first view of a way was opened from.
-  const from = React.useRef<HTMLElement>();
+  const from = React.useRef<HTMLElement | undefined>(undefined);
   const shown = open ? `${open.kind}/${open.name}` : "";
 
   React.useEffect(() => {

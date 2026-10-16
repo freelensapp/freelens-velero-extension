@@ -334,7 +334,7 @@ describe("the way of a DownloadRequest", () => {
     ["a name with no room for the identifier after it", { name: "a".repeat(217) }],
     ["a namespace that is not one", { namespace: "Fixture" }],
     ["a namespace that is not a text", { namespace: 1 }],
-    ["a UID that is not a text", { uid: { toString: () => "target-uid" } }],
+    ["a UID that is not a text", { uid: { toString: (): string => "target-uid" } }],
     ["an empty UID", { uid: "" }],
   ])("refuses %s before anything is asked", async (_what, change) => {
     const value = fixture();

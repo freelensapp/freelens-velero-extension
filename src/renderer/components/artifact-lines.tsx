@@ -99,7 +99,7 @@ interface LineRowProps {
   marked: boolean;
   // The words a search is of, which the row marks where it shows them.
   sought: string;
-  list: React.RefObject<HTMLDivElement>;
+  list: React.RefObject<HTMLDivElement | null>;
   onCopy: (line: number) => void;
   // Where the list of the host places the row.
   style?: React.CSSProperties;
@@ -274,9 +274,9 @@ export const LineList = React.forwardRef<LineListHandle, LineListProps>(function
   const list = React.useRef<Renderer.Component.VirtualListRef>(null);
   // Where the list is scrolled to, as the host last said, and the rows it was laid out in before.
   const offset = React.useRef(0);
-  const before = React.useRef<{ lines: TextLines; heights: number[]; shown?: Uint32Array }>();
+  const before = React.useRef<{ lines: TextLines; heights: number[]; shown?: Uint32Array } | undefined>(undefined);
   // The row the keys went to before it was mounted, which is given the focus when the list has moved.
-  const awaited = React.useRef<number>();
+  const awaited = React.useRef<number | undefined>(undefined);
   const mounted = React.useRef(true);
   const ratio = useRatio();
   const layout = React.useMemo(

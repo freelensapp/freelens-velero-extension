@@ -5,7 +5,7 @@
 
 import { type AllowanceFor, readAllowanceFor } from "./allowances";
 
-import type { DiagnosticCode } from "../main/diagnostic-transport";
+import type { DiagnosticCode } from "./diagnostic-code";
 
 export const CHANNELS = {
   gateState: "gate.state",
