@@ -13,8 +13,7 @@
 // name: it is never read as empty. A number is read from an attribute, never
 // from the words around it, which the language of a machine writes its way.
 //
-// See `velero-extension.ts` for why these files live next to the Freelens
-// integration helpers at run time.
+// See `velero-extension.ts` for how the suites start the application they drive.
 
 import { readFile } from "node:fs/promises";
 import * as path from "node:path";

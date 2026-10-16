@@ -3,23 +3,25 @@
  * Licensed under MIT License. See LICENSE in root directory for more information.
  */
 
-// Helpers shared by the integration smoke test (`integration/__tests__`) and
-// the E2E suite (`e2e/__tests__`).
+// Helpers shared by the integration test (`integration/__tests__`) and the
+// suites of the views (`e2e/__tests__`).
 //
-// Both suites run inside a checkout of freelensapp/freelens: their files are
-// copied next to the Freelens ones, under `integration/__tests__` and
-// `integration/helpers`, and are run by the Freelens `test:integration` script,
-// which owns the Playwright/Electron launch helpers (`../helpers/utils`) these
-// suites build on. That is why relative imports of `../helpers/*` resolve when
-// the tests run but not inside this repository.
+// Both run in this repository, under its own Vitest (`vitest.integration.config.ts`,
+// `pnpm test:integration`), and start the application themselves with `_electron`
+// of Playwright: the Freelens that `FREELENS_APP` names, built from source at the
+// validation target in CI, and the nightly of that commit on a machine of a
+// developer. They reach its main process as well as its windows: the menu of the
+// application, which is the way an operator goes to the catalog and to the
+// Extensions page, the size and the zoom of its window, the dialog of a save, the
+// modules it loaded, and what the process writes.
 
 import { execFileSync } from "node:child_process";
+import { realpathSync, statSync } from "node:fs";
 import { mkdir, readdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { setImmediate } from "node:timers";
+import { StringDecoder } from "node:string_decoder";
 import { _electron as electron } from "playwright";
-import * as utils from "./utils";
 
 import type { ConsoleMessage, ElectronApplication, Page, Request } from "playwright";
 
@@ -55,6 +57,62 @@ export async function captureWindowScreenshot(window: Page, name: string): Promi
 
 /** The name of the application, which is also the name of its directory inside the profile. */
 const APPLICATION_NAME = process.env.FREELENS_APP_NAME || "Freelens";
+
+/**
+ * The executable of the application the suites start. `FREELENS_APP` names the
+ * application: its bundle on macOS (`Freelens.app`), the folder the build unpacked
+ * on Linux and Windows, or the executable itself. It is never an application
+ * installed in `/Applications` for daily use: what the suites start is a build made
+ * for them, and they start it in a profile of their own.
+ */
+export function applicationExecutable(): string {
+  const named = process.env.FREELENS_APP;
+
+  if (!named) {
+    throw new Error(
+      "FREELENS_APP is not set: it names the Freelens the suites start (see docs/development/TESTING.md)",
+    );
+  }
+  const application = realpathSync(path.resolve(named));
+
+  if (/^\/(System\/Volumes\/Data\/)?Applications\//.test(application)) {
+    throw new Error(`${named} is installed in /Applications: the suites start a build made for them, never that one`);
+  }
+  if (application.endsWith(".app")) return path.join(application, "Contents", "MacOS", APPLICATION_NAME);
+  if (statSync(application).isDirectory()) {
+    return path.join(
+      application,
+      process.platform === "win32" ? `${APPLICATION_NAME}.exe` : APPLICATION_NAME.toLowerCase(),
+    );
+  }
+
+  return application;
+}
+
+/**
+ * What the processes of the applications started here write on their standard output, as the host writes
+ * it, given to every collector of errors that listens: the host logs there what it logs to its file, every
+ * level, with the level at the start of each line.
+ */
+const outputListeners = new Set<(text: string) => void>();
+
+function tapOutput(app: ElectronApplication): void {
+  const decoder = new StringDecoder("utf8");
+
+  app.process().stdout?.on("data", (chunk: Buffer) => {
+    const text = decoder.write(chunk);
+
+    for (const listener of outputListeners) listener(text);
+  });
+}
+
+/**
+ * The kubeconfig of the environment the store of a new profile names, by default, as the one the catalog
+ * syncs: the one the suite is given, or none. Without an entry the host would sync the `.kube` of its home.
+ */
+function environmentKubeconfigs(): string[] {
+  return process.env.E2E_KUBECONFIG ? [process.env.E2E_KUBECONFIG] : [];
+}
 
 /**
  * Gives a step its time and its name: a step that does not end says which one
@@ -119,36 +177,40 @@ export interface StartedApplication {
 }
 
 /**
- * Starts Freelens as the helper of the host does, with two differences: before
- * the launch the profile gets preferences that sync no kubeconfig, and that name
- * a theme. Left to its default, Freelens loads the kubeconfig of the user into
- * its catalog, and the clusters of the user have no place in a run of this
- * suite, nor in one of its screenshots; and it takes the theme of the system,
- * which is dark on a machine and light on another.
+ * Starts the application in a profile of its own, `FREELENS_INTEGRATION_TESTING_DIR`, a folder under
+ * the one of the temporary files of the system: only there does the host take its home from the profile
+ * as well as its data, so that it finds neither the kubeconfig nor the extensions of the user. Before
+ * the start the store of the profile names a kubeconfig of the environment as the only one the catalog
+ * syncs, the one of the environment unless another is given, and a theme: left to its defaults the host
+ * syncs the `.kube` of its home and takes the theme of the system, which is dark on a machine and light
+ * on another. On macOS the logs of the host and its reports of a crash go to the Library of the home the
+ * system gives the process, which `CFFIXED_USER_HOME` points at the profile, so that the ones of the user
+ * stay as they were.
  */
-export async function startIsolated(profile?: string, theme: ColorTheme = "Dark"): Promise<StartedApplication> {
-  const executable = utils.appPaths[process.platform];
-
-  if (!executable) {
-    throw new Error(`No Freelens build is known for ${process.platform}`);
-  }
+export async function startIsolated(
+  profile?: string,
+  theme: ColorTheme = "Dark",
+  kubeconfigs: string[] = environmentKubeconfigs(),
+): Promise<StartedApplication> {
+  const executable = applicationExecutable();
   const directory =
     profile ?? path.join(os.tmpdir(), "freelens-integration-testing", `velero-${process.pid}-${Date.now()}`);
+  const systemHome = path.join(directory, "system-home");
 
+  if (!path.resolve(directory).startsWith(`${os.tmpdir()}${path.sep}`)) {
+    throw new Error(`The profile ${directory} is not under ${os.tmpdir()}: the host would take the home of the user`);
+  }
   process.env.FREELENS_INTEGRATION_TESTING_DIR = directory;
-  // Playwright does not read the package.json through the runtime of Jest.
-  process.env.PW_VERSION_OVERRIDE = (
-    require("./../../package.json") as { devDependencies: Record<string, string> }
-  ).devDependencies.playwright.replace(/[^0-9.]/g, "");
-  global.setImmediate = setImmediate;
   // A profile that is given is the one of a start before this one, and is found as that start left it.
   if (!profile) {
     await rm(directory, { recursive: true, force: true });
-    await mkdir(path.join(directory, "home", ".freelens", "extensions"), { recursive: true });
     await mkdir(path.join(directory, APPLICATION_NAME), { recursive: true });
+    await mkdir(systemHome, { recursive: true });
     await writeFile(
       path.join(directory, APPLICATION_NAME, "lens-user-store.json"),
-      JSON.stringify({ preferences: { syncKubeconfigEntries: [], colorTheme: theme } }),
+      JSON.stringify({
+        preferences: { syncKubeconfigEntries: kubeconfigs.map((filePath) => ({ filePath })), colorTheme: theme },
+      }),
       { mode: 0o600 },
     );
   }
@@ -156,9 +218,16 @@ export async function startIsolated(profile?: string, theme: ColorTheme = "Dark"
     args: ["--integration-testing"],
     executablePath: executable,
     bypassCSP: true,
-    env: { ...process.env, FREELENS_INTEGRATION_TESTING_DIR: directory, LOG_LEVEL: "debug" } as Record<string, string>,
+    env: {
+      ...process.env,
+      FREELENS_INTEGRATION_TESTING_DIR: directory,
+      LOG_LEVEL: "debug",
+      ...(process.platform === "darwin" ? { CFFIXED_USER_HOME: systemHome } : {}),
+    } as Record<string, string>,
     timeout: 100_000,
   });
+
+  tapOutput(app);
   // The application is asked to close and is given its time. One that does not leave is ended, and what
   // it held of its profile is released, for the start after this one to find the profile free.
   const close = async () => {
@@ -216,6 +285,16 @@ export async function startIsolated(profile?: string, theme: ColorTheme = "Dark"
     await cleanup();
     throw error;
   }
+}
+
+/** Where the host writes its logs: the one of its main process, `lens.log`, and the ones of its frames. */
+export async function logDirectory(app: ElectronApplication): Promise<string> {
+  return app.evaluate(({ app }) => app.getPath("logs"));
+}
+
+/** Leaves the welcome page, which a new profile starts on. */
+export async function clickWelcomeButton(window: Page): Promise<void> {
+  await window.click("[data-testid=welcome-menu-container] li a");
 }
 
 /** Gives the window of the application a size, in pixels of its content. */
@@ -375,24 +454,26 @@ async function notificationTexts(window: Page): Promise<string[]> {
 }
 
 const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
-const OUTPUT_ERROR_PATTERN = /\[out\]\s*error:/i;
+// A line the host logs at the level of an error starts with the level, on its output as in its file.
+const OUTPUT_ERROR_PATTERN = /^\s*error:/im;
 // The host's kubectl proxy logs at error level every request its client gave
 // up on before the API server answered. That is what closing a drawer does to
 // the reference loads it had just started: an abort on purpose, not a failure.
 // The record spans from its opening line to its closing one.
 const CANCELED_PROXY_RECORD_PATTERN =
-  /[^\n]*\[out\]\s*error:\s*┏[^\n]*Error while proxying request: context canceled[\s\S]*?\[out\]\s*error:\s*┗[^\n]*\n?/g;
-const CANCELED_PROXY_START_PATTERN = /\[out\]\s*error:\s*┏[^\n]*Error while proxying request: context canceled/;
+  /^[^\n]*error:\s*┏[^\n]*Error while proxying request: context canceled[\s\S]*?^[^\n]*error:\s*┗[^\n]*\n?/gim;
+const CANCELED_PROXY_START_PATTERN = /^\s*error:\s*┏[^\n]*Error while proxying request: context canceled/im;
 const HOST_ASSET_FAILURE_PATTERN = /^Failed to load resource: net::/;
 const HOST_ASSET_URL_PATTERN = /^https:\/\/renderer\.freelens\.app(:\d+)?\/build\//;
 
 /**
  * Collects everything that looks like an error while the app runs: renderer
- * console messages and the process output of the main process, which reports
- * extension failures as plain `[out] error:` lines rather than as exceptions.
+ * console messages and the output of the process of the application, where the
+ * host logs a failure of an extension as a line at the level of an error rather
+ * than as an exception.
  */
 export interface ErrorCollector {
-  /** Starts capturing the process output. Call it before launching the app. */
+  /** Starts capturing the output of the applications the helpers start. Call it before launching the app. */
   start: () => void;
   /** Starts capturing the renderer console of a window. */
   watch: (window: Page) => void;
@@ -407,11 +488,8 @@ export function createErrorCollector(): ErrorCollector {
   const outputErrors: string[] = [];
 
   let outputBuffer = "";
-  let restoreOutputHooks: undefined | (() => void);
 
-  const collectOutputErrors = (chunk: string | Uint8Array) => {
-    const text = typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
-
+  const collectOutputErrors = (text: string) => {
     outputBuffer += text;
 
     // Keep the buffer bounded while preserving enough tail to match patterns
@@ -462,25 +540,7 @@ export function createErrorCollector(): ErrorCollector {
 
   return {
     start: () => {
-      const originalStdoutWrite = process.stdout.write.bind(process.stdout);
-      const originalStderrWrite = process.stderr.write.bind(process.stderr);
-
-      process.stdout.write = ((chunk, encoding, callback) => {
-        collectOutputErrors(chunk);
-
-        return originalStdoutWrite(chunk, encoding as never, callback as never);
-      }) as typeof process.stdout.write;
-
-      process.stderr.write = ((chunk, encoding, callback) => {
-        collectOutputErrors(chunk);
-
-        return originalStderrWrite(chunk, encoding as never, callback as never);
-      }) as typeof process.stderr.write;
-
-      restoreOutputHooks = () => {
-        process.stdout.write = originalStdoutWrite;
-        process.stderr.write = originalStderrWrite;
-      };
+      outputListeners.add(collectOutputErrors);
     },
 
     watch: (window: Page) => {
@@ -491,8 +551,7 @@ export function createErrorCollector(): ErrorCollector {
     stop: (window: Page) => {
       window.off("console", logger);
       window.off("requestfailed", requestFailedLogger);
-      restoreOutputHooks?.();
-      restoreOutputHooks = undefined;
+      outputListeners.delete(collectOutputErrors);
     },
 
     errors: () => [...consoleErrors, ...outputErrors],
@@ -667,19 +726,22 @@ async function stallIfAsked(app: ElectronApplication): Promise<void> {
  *
  * What a suite puts in the profile, its kubeconfig, is put there by `beforeInstall`, for each start and
  * before the welcome is left: the suites did so before they started through here, and the installs that
- * were asked of a profile without it were given up on by the host far more often on the runners.
+ * were asked of a profile without it were given up on by the host far more often on the runners. The
+ * store of the profile names `kubeconfigs` for the catalog to sync, the one of the environment unless a
+ * suite gives another.
  */
 export async function startWithExtension(
   beforeInstall?: (started: StartedApplication) => Promise<void>,
   theme: ColorTheme = "Dark",
   attempts = 2,
+  kubeconfigs: string[] = environmentKubeconfigs(),
 ): Promise<StartedApplication> {
   for (let attempt = 1; ; attempt++) {
-    const started = await startIsolated(undefined, theme);
+    const started = await startIsolated(undefined, theme, kubeconfigs);
 
     try {
       await beforeInstall?.(started);
-      await utils.clickWelcomeButton(started.window);
+      await clickWelcomeButton(started.window);
       await installExtension(started.app, started.window);
       return started;
     } catch (error) {
@@ -692,11 +754,16 @@ export async function startWithExtension(
   }
 }
 
+/** What the Extensions page says when no extension is installed in the profile. */
+const NO_EXTENSION = "There are no extensions installed.";
+
 /**
  * Installs the packed extension and waits for it to be listed as enabled.
  *
  * `EXTENSION_PATH` points at the tarball built from this repository; without it
- * the extension is installed from the registry by name.
+ * the extension is installed from the registry by name. The page is to list no
+ * extension before: the profile is a new one, and an extension found there
+ * would be one of another profile.
  *
  * On failure, screenshots the window and reports every notification and the
  * state of the install button, so a stuck install is never a blind timeout.
@@ -708,15 +775,16 @@ export async function installExtension(
 ): Promise<void> {
   await navigateToExtensions(app);
 
-  const textbox = window.getByPlaceholder("Name or file path or URL");
+  const textbox = window.getByPlaceholder("Name, URL, or path to a package or directory");
 
   try {
     await textbox.waitFor({ state: "visible", timeout: INSTALL_TIMEOUT });
+    await window.getByText(NO_EXTENSION, { exact: true }).waitFor({ state: "visible", timeout: INSTALL_TIMEOUT });
   } catch {
     const screenshot = await captureWindowScreenshot(window, "install-no-extensions-page");
 
     throw new Error(
-      `The Extensions page never showed its install field (menu navigation may have failed). Current URL: ${window.url()}.` +
+      `The Extensions page never showed its install field, or it listed an extension before the install. Current URL: ${window.url()}.` +
         (screenshot ? ` Screenshot: ${screenshot}` : ""),
     );
   }

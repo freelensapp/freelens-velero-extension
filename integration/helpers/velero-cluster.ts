@@ -7,12 +7,11 @@
 // environment where Freelens finds it, opening the cluster from the catalog,
 // opening the views of Velero and reading what they show.
 //
-// See `velero-extension.ts` for why these files live next to the Freelens
-// integration helpers at run time.
+// See `velero-extension.ts` for how the suites start the application they drive.
 
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFile, mkdir, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { captureWindowScreenshot, EXTENSION_NAME } from "./velero-extension";
 
@@ -521,9 +520,12 @@ export async function readsDuring(
 }
 
 /**
- * Copies a kubeconfig of the test environment into the sandboxed Freelens user
- * data directory, which Freelens always watches, so that the cluster shows up
- * in the catalog without touching the kubeconfig of the developer.
+ * Puts a kubeconfig of the test environment where the catalog of the profile
+ * finds it, without touching the kubeconfig of the developer, and answers the
+ * path the catalog knows it by. One the store of the profile names, which
+ * `startIsolated()` writes, is synced where it is: the catalog reads it there.
+ * Another one, of a second cluster or of a reader, is copied into the folder of
+ * the profile the host always watches.
  */
 export async function publishKubeconfig(source = kubeconfigPath(), fileName = "velero-e2e"): Promise<string> {
   const testingDirectory = process.env.FREELENS_INTEGRATION_TESTING_DIR;
@@ -531,10 +533,14 @@ export async function publishKubeconfig(source = kubeconfigPath(), fileName = "v
   if (!testingDirectory) {
     throw new Error("FREELENS_INTEGRATION_TESTING_DIR is not set. Launch the app with `startIsolated()`.");
   }
-
   // The user data directory is <testing dir>/<app name>, and the app name is
   // the product name of the packaged build.
   const appName = process.env.FREELENS_APP_NAME || "Freelens";
+  const store = JSON.parse(await readFile(path.join(testingDirectory, appName, "lens-user-store.json"), "utf8")) as {
+    preferences?: { syncKubeconfigEntries?: { filePath: string }[] };
+  };
+
+  if (store.preferences?.syncKubeconfigEntries?.some(({ filePath }) => filePath === source)) return source;
   const directory = path.join(testingDirectory, appName, "kubeconfigs");
 
   await mkdir(directory, { recursive: true });
@@ -1169,7 +1175,7 @@ async function measure(
           const now = performance.now();
 
           if (over) return;
-          if (waiting && searched() !== action.text && shown() === before) {
+          if (waiting && action.kind === "search" && searched() !== action.text && shown() === before) {
             given = now;
           } else {
             waiting = false;

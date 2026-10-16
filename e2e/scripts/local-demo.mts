@@ -4,7 +4,6 @@ import {
   appendFileSync,
   chmodSync,
   closeSync,
-  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -2724,29 +2723,23 @@ function prepareDemo(): void {
   );
 }
 
+// The suites run from this repository, under its Vitest, and start the Freelens that FREELENS_APP names:
+// the nightly of the validation target on a machine of a developer, a build of the host from source in CI.
 function runViews(): void {
   const pattern = process.env.E2E_TEST_PATTERN ?? "velero-e2e";
-  const checkout = join(resolve(process.env.FREELENS_DIR ?? join(process.cwd(), "freelens")), "freelens");
+  const application = process.env.FREELENS_APP ?? "";
   const tarballs = readdirSync(process.cwd()).filter((name) => /^freelensapp-velero-extension-.+\.tgz$/.test(name));
 
   requireCondition(/^[a-z0-9-]+$/.test(pattern), "The pattern of the suite is a name, not a path");
   requireCondition(
-    existsSync(join(checkout, "integration", "__tests__")) && existsSync(join(checkout, "dist")),
-    `No built Freelens in ${checkout}: see docs/development/TESTING.md`,
+    application !== "" && existsSync(application),
+    "FREELENS_APP names no application: the suites start the Freelens it names, see docs/development/TESTING.md",
+  );
+  requireCondition(
+    !/^\/(System\/Volumes\/Data\/)?Applications\//.test(realpathSync(application)),
+    "FREELENS_APP names an application installed in /Applications: the suites start a build made for them",
   );
   requireCondition(tarballs.length === 1, "One packed extension is expected in the repository: run pnpm pack");
-  for (const [from, to] of [
-    [join("e2e", "__tests__"), join("integration", "__tests__")],
-    [join("integration", "helpers"), join("integration", "helpers")],
-  ]) {
-    const files = readdirSync(join(process.cwd(), from)).filter((name) => name.endsWith(".ts"));
-
-    // What an earlier run left of a suite that has another name now would run with the ones of this run.
-    for (const left of readdirSync(join(checkout, to))) {
-      if (/^(velero-|pre-review)/.test(left) && !files.includes(left)) rmSync(join(checkout, to, left));
-    }
-    for (const file of files) copyFileSync(join(process.cwd(), from, file), join(checkout, to, file));
-  }
   const artifacts = join(process.cwd(), "e2e-artifacts", pattern);
   const headless = process.platform === "linux" && !process.env.DISPLAY;
   const placed = placeViewsAndTabs();
@@ -2771,8 +2764,8 @@ function runViews(): void {
   try {
     writeReaderKubeconfig(readerFile, names.views, "2h");
     writeReaderKubeconfig(secondFile, names.views, "2h", VIEW_READER_OF_RESTORES);
-    // The application is started by the harness with the environment of the harness: what the suite needs of
-    // this environment is named here, and the home is the one of the caller, where its toolchain is.
+    // The suites start the application with their environment: what they need of this environment is named
+    // here, and the home is the one of the caller, where its toolchain is.
     status = spawnSync(
       headless ? "xvfb-run" : "corepack",
       // Without a display the application gets one that has room for its largest window.
@@ -2783,11 +2776,12 @@ function runViews(): void {
         pattern,
       ],
       {
-        cwd: checkout,
+        cwd: process.cwd(),
         env: childEnvironment(process.env, {
           HOME: homedir(),
           ...(process.env.DISPLAY ? { DISPLAY: process.env.DISPLAY } : {}),
           DO_NOT_TRACK: "1",
+          FREELENS_APP: resolve(application),
           EXTENSION_PATH: join(process.cwd(), tarballs[0]),
           E2E_KUBECONFIG: CONFIG,
           E2E_READER_KUBECONFIG: readerFile,
