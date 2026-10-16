@@ -1,11 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { FIXTURE_LABEL, fixtureArtifactPath, fixtureNames } from "./local-fixtures.mts";
-import { type ProofHost, startProofHost } from "./local-host.mts";
+import { type ProofHost, type ProofShell, startProofHost } from "./local-host.mts";
 import { DEMO_CONTEXT, DEMO_NAMESPACE, OWNER_LABEL, requireCondition, SUBNETS, subnetsOverlap } from "./local-kind.mts";
 import { type KubeResource, STORAGE_ENDPOINT } from "./local-manifests.mts";
 
@@ -32,32 +31,35 @@ export interface DownloadProofContext {
   // The operations the server refused, when the proof asks for their artifacts as well: a backup and a
   // restore that failed their validation, and a restore without a backup.
   refused?: Record<"backup" | "restore" | "orphan", { name: string; uid: string }>;
+  // The kubectl of the environment and what it runs with, which stand in for the ones of the host; none
+  // where no kubectl is, for a proof that opens no tunnel.
+  shell?: ProofShell;
   assertCurrent(): void;
   record(kind: DiagnosticKind, identity: { name: string; uid: string }): void;
 }
 
-// The compiled main process, loaded where there is no host. It is given what it asks of the host when it
-// loads, as names and nothing under them: the proofs run its diagnostic code, which uses none of it, and
-// need no package installed.
-export function compiledDiagnostics(): typeof import("../../src/main/index.ts") {
-  const globals = globalThis as typeof globalThis & { LensExtensions?: unknown; Mobx?: unknown };
-  const previous = { sdk: globals.LensExtensions, state: globals.Mobx };
+type Main = typeof import("../../src/main/index.ts");
 
-  globals.LensExtensions = {
+// The bundle of the main process as it was built, an ES module, loaded where there is no host. It is given
+// on the global of the API of the host what it reads when it loads, as names and nothing under them: the
+// proofs run its diagnostic code, which uses none of it, and need no package installed. A module is loaded
+// once, and keeps what it read: the global is the stand-in while it loads, and is put back after.
+export async function compiledDiagnostics(): Promise<Main> {
+  // The global as the host would have it, and not as the declaration of the SDK types it.
+  const globals = globalThis as unknown as { FreelensExtensionApi?: unknown };
+  const previous = globals.FreelensExtensionApi;
+
+  globals.FreelensExtensionApi = {
     Main: { LensExtension: class {}, Ipc: class {} },
     Common: { Store: { ExtensionStore: class {} } },
     Renderer: {},
+    Mobx: {},
   };
-  globals.Mobx = {};
   try {
-    return createRequire(import.meta.url)(
-      fileURLToPath(new URL("../../out/main/index.js", import.meta.url)),
-    ) as typeof import("../../src/main/index.ts");
+    return (await import(new URL("../../dist/main.js", import.meta.url).href)) as Main;
   } finally {
-    if (previous.sdk === undefined) delete globals.LensExtensions;
-    else globals.LensExtensions = previous.sdk;
-    if (previous.state === undefined) delete globals.Mobx;
-    else globals.Mobx = previous.state;
+    if (previous === undefined) delete globals.FreelensExtensionApi;
+    else globals.FreelensExtensionApi = previous;
   }
 }
 
@@ -130,8 +132,6 @@ export function tlsProofResources(
     location,
   ];
 }
-
-type Main = ReturnType<typeof compiledDiagnostics>;
 
 // The entry of the cluster of a proof in a catalog of the proof, connected: the kubeconfig and the context
 // of the environment, which the main process does not read.
@@ -258,8 +258,8 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
   refusedBeforeCreation: boolean;
   allowanceAsked: boolean;
 }> {
-  const main = compiledDiagnostics();
-  const host = await startProofHost(context.kubeconfig, DEMO_CONTEXT);
+  const main = await compiledDiagnostics();
+  const host = await startProofHost(context.kubeconfig, DEMO_CONTEXT, context.shell);
   const api = proofAdapter(main, proofEntry(context.owner, context.kubeconfig), host, context.assertCurrent, {
     [OWNER_LABEL]: context.owner,
     [FIXTURE_LABEL]: context.run,
@@ -609,6 +609,8 @@ export interface IdentityProofContext {
   environment: string;
   // The step of a download the identity may not do; none for the identity that may do them all.
   stage?: "creation" | "certificate" | "service" | "forward";
+  // The kubectl of the environment and what it runs with, which stand in for the ones of the host.
+  shell: ProofShell;
   assertCurrent(): void;
   record(kind: DiagnosticKind, identity: { name: string; uid: string }): void;
 }
@@ -621,15 +623,17 @@ const AFTER_THE_CREATION = ["service", "forward"];
 // step, with nothing of a URL. Its request is in the cluster only when the step comes after the creation.
 // The identity that has what the documentation lists downloads the log through the cluster.
 export async function runIdentityProof(context: IdentityProofContext): Promise<{ stage: string; created: boolean }> {
-  const main = compiledDiagnostics();
+  const main = await compiledDiagnostics();
   const names = fixtureNames(context.run);
   const controller = new AbortController();
   // The environment looks at what the identity left through a host of its own kubeconfig.
-  const environmentHost = await startProofHost(context.environment, DEMO_CONTEXT);
-  const identityHost = await startProofHost(context.kubeconfig, DEMO_CONTEXT).catch(async (error: unknown) => {
-    await environmentHost.close();
-    throw error;
-  });
+  const environmentHost = await startProofHost(context.environment, DEMO_CONTEXT, context.shell);
+  const identityHost = await startProofHost(context.kubeconfig, DEMO_CONTEXT, context.shell).catch(
+    async (error: unknown) => {
+      await environmentHost.close();
+      throw error;
+    },
+  );
   const environment = proofAdapter(
     main,
     proofEntry(context.owner, context.environment),

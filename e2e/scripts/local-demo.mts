@@ -124,6 +124,7 @@ import {
 import { type RunJournal, type StoreReach, storeRequest, tabRecord } from "./local-runtime.mts";
 import { assertOfficialImages } from "./local-security.mts";
 
+import type { ProofShell } from "./local-host.mts";
 import type { StoreBody } from "./local-store.mts";
 
 const STATE = join(homedir(), ".local", "state", DEMO_CLUSTER);
@@ -1912,6 +1913,18 @@ async function cleanupFixtures(): Promise<void> {
   );
 }
 
+// What stands in for the kubectl the host runs for a cluster in the proofs on this machine: the kubectl of the
+// environment, with the environment of its commands, its cache in the private state, and the repository, the
+// folder of the extension, as its working directory. The proof gives it the kubeconfig of each identity.
+function proofShell(): ProofShell {
+  return {
+    kubectl: KUBECTL,
+    environment: localEnvironment(process.env, CONFIG),
+    cache: join(STATE, "proof-cache"),
+    cwd: process.cwd(),
+  };
+}
+
 function runDirectProof(input: {
   owner: string;
   run: string;
@@ -2051,6 +2064,7 @@ async function runTransportProof(): Promise<void> {
       owner: journal.owner,
       run: active.id,
       kubeconfig: CONFIG,
+      shell: proofShell(),
       pod: { name: pods.items[0].metadata.name, uid: pods.items[0].metadata.uid },
       assertCurrent: verifyTarget,
       record: (
@@ -2095,6 +2109,7 @@ async function runTransportProof(): Promise<void> {
           run: active.id,
           kubeconfig: file,
           environment: CONFIG,
+          shell: proofContext.shell,
           ...(stage ? { stage } : {}),
           assertCurrent: verifyTarget,
           record: proofContext.record,
