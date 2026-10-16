@@ -5,7 +5,7 @@
 
 import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { hostCatalog, hostCluster, resetIpc } from "../../test/freelens-extensions";
+import { anExtension, hostCatalog, hostCluster, resetIpc } from "../../test/freelens-extensions";
 import { answered, fakeHostClient, type HostRequest, statusOf } from "../../test/host-client";
 import { REQUEST_LABELS, REQUEST_PREFIX } from "../common/ipc";
 import { VeleroIpcRenderer } from "../renderer/api/ipc";
@@ -76,13 +76,13 @@ beforeEach(() => {
     },
   ];
   hostCluster.forCluster = host.forCluster;
-  main = VeleroIpc.createInstance({} as never);
+  main = VeleroIpc.createInstance(anExtension("main") as never);
   // The procedures as the extension registers them, with what it takes of the host.
   main.register(
     catalogEntries,
     hostDependencies(() => "/synthetic/extensions/velero/package.json"),
   );
-  renderer = VeleroIpcRenderer.createInstance({} as never);
+  renderer = VeleroIpcRenderer.createInstance(anExtension("renderer") as never);
 });
 
 afterEach(() => {

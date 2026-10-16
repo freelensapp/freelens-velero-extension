@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { observer } from "mobx-react";
 import React from "react";
 import { afterEach, describe, expect, it } from "vitest";
@@ -152,8 +152,9 @@ describe("what the operator allowed the downloads to do, in the target bar", () 
 
     await waitFor(() => expect(screen.getByTestId("velero-target-cluster").textContent).toBe("local-demo"));
     expect(screen.queryByTestId("velero-allowances-toggle")).toBeNull();
-    await expect(installation.allow({ what: "private", origin: ORIGIN })).resolves.toBe(true);
-    await expect(installation.allow({ what: "origin", origin: ORIGIN, location: "velero/default" })).resolves.toBe(
+    // What the views are given changes inside act, as an event of the operator does.
+    expect(await act(() => installation.allow({ what: "private", origin: ORIGIN }))).toBe(true);
+    expect(await act(() => installation.allow({ what: "origin", origin: ORIGIN, location: "velero/default" }))).toBe(
       true,
     );
     expect(given).toEqual([
@@ -172,7 +173,7 @@ describe("what the operator allowed the downloads to do, in the target bar", () 
     expect("allowances" in storage.read()).toBe(false);
     // One that is there already is asked of the main process all the same, which keeps its time, and is
     // shown once.
-    await expect(installation.allow({ what: "private", origin: ORIGIN })).resolves.toBe(true);
+    expect(await act(() => installation.allow({ what: "private", origin: ORIGIN }))).toBe(true);
     expect(given).toHaveLength(3);
     expect(installation.allowances).toHaveLength(2);
   });
@@ -187,7 +188,7 @@ describe("what the operator allowed the downloads to do, in the target bar", () 
     });
 
     await waitFor(() => expect(screen.getByTestId("velero-target-cluster").textContent).toBe("local-demo"));
-    await expect(installation.allow({ what: "http", origin: "http://minio.storage:9000" })).resolves.toBe(false);
+    expect(await act(() => installation.allow({ what: "http", origin: "http://minio.storage:9000" }))).toBe(false);
     expect(installation.allowances).toEqual([]);
     expect(installation.allowanceFailure).toBe("What is allowed cannot be kept: the store is not there.");
     expect(screen.queryByTestId("velero-allowances-toggle")).toBeNull();

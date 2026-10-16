@@ -1,12 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
+import { ACTIVATION_CALLS } from "../test/activation";
 import {
+  anExtension,
+  Disposers,
   forbiddenAccesses,
   type HostExtensionStub,
   hostCalls,
   hostCatalog,
+  hostObject,
   ipcHandlers,
   ipcListenerCount,
+  loaded,
   Main,
   Renderer,
   registeredWith,
@@ -51,29 +56,6 @@ it("imports both entry points without contacting a cluster or registering IPC", 
   expect(importCalls).toEqual([]);
 });
 
-// What the activation asks of the host: the store of the preferences in both processes, which the host
-// writes from the main one; the way between the processes in both; and in the main process the
-// procedures of the gate, registered and not called. Nothing of a cluster, and nothing of the catalog.
-export const ACTIVATION_CALLS = {
-  main: [
-    "ExtensionStore.loadExtension",
-    "Ipc.constructor",
-    "Ipc.handle gate.state",
-    "Ipc.handle gate.enable",
-    "Ipc.handle gate.disable",
-    "Ipc.handle write.confirm",
-    "Ipc.handle write.status",
-    "Ipc.handle write.cancel",
-    "Ipc.handle write.run",
-    "Ipc.handle artifact.page",
-    "Ipc.handle artifact.release",
-    "Ipc.handle artifact.save",
-    "Ipc.handle allowance.grant",
-    "Ipc.handle allowance.revoke",
-  ],
-  renderer: ["ExtensionStore.loadExtension", "Ipc.constructor"],
-} as const;
-
 describe.each([
   ["main", VeleroMain, Main.LensExtension],
   ["renderer", VeleroRenderer, Renderer.LensExtension],
@@ -82,11 +64,10 @@ describe.each([
     expect(Object.getPrototypeOf(Extension)).toBe(HostExtension);
   });
 
-  it("activates and deactivates without cluster or catalog access, and asks nothing through the IPC", () => {
-    const extension = Reflect.construct(Extension, []) as HostExtensionStub;
+  it("activates and deactivates without cluster or catalog access, and asks nothing through the IPC", async () => {
+    const extension = await loaded(Reflect.construct(Extension, []) as HostExtensionStub);
 
-    extension.activate();
-    extension.disable();
+    await extension.disable();
 
     expect(forbiddenAccesses).toEqual([]);
     // Neither an API nor a request: the activation asks nothing of a cluster, and calls no procedure.
@@ -97,18 +78,19 @@ describe.each([
   it("adds no control to the objects of the cluster", () => {
     const extension = Reflect.construct(Extension, []) as HostExtensionStub;
 
-    expect(extension.kubeObjectMenuItems).toEqual([]);
-    expect(extension.kubeObjectHandlers).toEqual([]);
+    // The main process has no registration of the kind at all: the renderer leaves its own empty.
+    expect([extension.kubeObjectMenuItems, extension.kubeObjectHandlers]).toEqual(
+      name === "main" ? [undefined, undefined] : [[], []],
+    );
   });
 });
 
 describe("what the extension registers", () => {
-  it("is nothing in the main process", () => {
+  it("is nothing in the main process: it adds no field to the class of the host", () => {
     const extension = Reflect.construct(VeleroMain, []) as HostExtensionStub;
 
-    expect(extension.clusterPages).toEqual([]);
-    expect(extension.clusterPageMenus).toEqual([]);
-    expect(extension.kubeObjectDetailItems).toEqual([]);
+    expect(Object.keys(extension).sort()).toEqual(Object.keys(new Main.LensExtension()).sort());
+    expect(extension.clusterPages).toBeUndefined();
   });
 
   it("is the views that exist in the renderer, and no entry that leads to one that does not", () => {
@@ -164,9 +146,11 @@ describe("what the extension registers", () => {
       expect([kind, Object.getOwnPropertyNames(Kind.prototype)]).toEqual([kind, ["constructor"]]);
       // The literals of an object are declared and not defined: an object made by the constructor of the host
       // keeps the kind and the version of its data.
-      const object = Reflect.construct(Kind, [
-        { apiVersion: "velero.io/v1", kind, metadata: { name: "one", namespace: "velero", uid: "uid" } },
-      ]) as { kind?: string; apiVersion?: string };
+      const object = hostObject<{ kind?: string; apiVersion?: string }>(Kind, {
+        apiVersion: "velero.io/v1",
+        kind,
+        metadata: { name: "one", namespace: "velero", uid: "uid" },
+      });
 
       expect([kind, object.kind, object.apiVersion]).toEqual([kind, kind, "velero.io/v1"]);
     }
@@ -343,10 +327,14 @@ describe("activated, deactivated and activated again", () => {
   it("leaves in the main process one handler for each channel, one store that saves, and no kubectl, confirmation or write of before", async () => {
     const closing = vi.spyOn(KubectlTunnels.prototype, "closeAll");
     const first = Reflect.construct(VeleroMain, []) as HostExtensionStub;
+    // The host runs the disposers after onDeactivate, in the order they were given: what this one, given before
+    // the activation, sees is what onDeactivate left.
+    const left: unknown[] = [];
 
-    first.activate();
+    first[Disposers].push(() => left.push(VeleroIpc.getInstance(false)));
+    await loaded(first);
     // The frame of the tests, which reaches the handlers the main process registered.
-    const frame = VeleroIpcRenderer.createInstance({} as never);
+    const frame = VeleroIpcRenderer.createInstance(anExtension("renderer") as never);
     const made = VeleroIpc.getInstance();
 
     expect(await frame.enable(CLUSTER, "velero", { context: "kind-synthetic", namespace: "velero" })).toMatchObject({
@@ -356,11 +344,7 @@ describe("activated, deactivated and activated again", () => {
     const confirmed = await frame.confirm(CLUSTER, "velero", "ServerStatusRequest");
 
     expect(confirmed.ok).toBe(true);
-    // The host runs the disposers after onDeactivate: what this one, put first, sees is what onDeactivate left.
-    const left: unknown[] = [];
-
-    first.disposers.unshift(() => left.push(VeleroIpc.getInstance(false)));
-    first.disable();
+    await first.disable();
     expect(left).toEqual([undefined]);
     // Every kubectl of the procedures was let go with them, the host took the handlers out, and the store
     // stopped saving.
@@ -369,9 +353,8 @@ describe("activated, deactivated and activated again", () => {
     expect(savingStores).toEqual([]);
 
     // The host refuses a second handler for a channel: an activation that registered one twice would throw.
-    const second = Reflect.construct(VeleroMain, []) as HostExtensionStub;
+    const second = await loaded(Reflect.construct(VeleroMain, []) as HostExtensionStub);
 
-    second.activate();
     expect(VeleroIpc.getInstance()).not.toBe(made);
     expect([...ipcHandlers.keys()].sort()).toEqual(HANDLED);
     expect(savingStores).toHaveLength(1);
@@ -383,36 +366,34 @@ describe("activated, deactivated and activated again", () => {
         code: "forbidden",
         stage: "gate",
       });
-    second.disable();
+    await second.disable();
     expect(closing).toHaveBeenCalledTimes(2);
     expect(ipcHandlers.size).toBe(0);
   });
 
   it("leaves in the renderer one listener of the changes of the gate, one store that saves, and views that start from nothing", async () => {
     // The procedures of the main process, as an activation of the main process registers them.
-    const main = VeleroIpc.createInstance({} as never);
+    const main = VeleroIpc.createInstance(anExtension("main") as never);
 
     main.register(catalogEntries);
     const first = Reflect.construct(VeleroRenderer, []) as HostExtensionStub;
+    const left: unknown[] = [];
 
-    first.activate();
+    first[Disposers].push(() => left.push(VeleroIpcRenderer.getInstance(false)));
+    await loaded(first);
     // The first view of the frame opens.
     const before = currentInstallation();
 
     await before.openGate();
     expect(before.gate?.writes).toEqual({ on: false });
     expect(ipcListenerCount(CHANNELS.gateChanged)).toBe(1);
-    const left: unknown[] = [];
-
-    first.disposers.unshift(() => left.push(VeleroIpcRenderer.getInstance(false)));
-    first.disable();
+    await first.disable();
     expect(left).toEqual([undefined]);
     expect(ipcListenerCount(CHANNELS.gateChanged)).toBe(0);
     expect(savingStores).toEqual([]);
 
-    const second = Reflect.construct(VeleroRenderer, []) as HostExtensionStub;
+    const second = await loaded(Reflect.construct(VeleroRenderer, []) as HostExtensionStub);
 
-    second.activate();
     expect(savingStores).toHaveLength(1);
     // The first view after the enable makes the state of the views again, which knows nothing of before and
     // hears the main process through the way of this activation, once.
@@ -424,8 +405,10 @@ describe("activated, deactivated and activated again", () => {
     const asking = vi.spyOn(after, "openGate").mockResolvedValue(undefined);
 
     main.broadcast(CHANNELS.gateChanged, { cluster: CLUSTER });
-    expect(asking).toHaveBeenCalledTimes(1);
-    second.disable();
+    // The frames hear a broadcast once it returned, as Electron sends it to them.
+    expect(asking).toHaveBeenCalledTimes(0);
+    await vi.waitFor(() => expect(asking).toHaveBeenCalledTimes(1));
+    await second.disable();
     expect(ipcListenerCount(CHANNELS.gateChanged)).toBe(0);
     main.release();
   });

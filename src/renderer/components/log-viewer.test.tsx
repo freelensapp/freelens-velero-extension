@@ -349,7 +349,7 @@ describe("the search of the log", () => {
     // Enter goes nowhere then: the list is at the line it was at, whose command the Tab key still reaches.
     const reached = () => numbers().filter((number) => screen.getByTestId(`log-line-${number}-copy`).tabIndex === 0);
 
-    row(4).focus();
+    act(() => row(4).focus());
     expect(reached()).toEqual([4]);
     enter();
     enter(true);
@@ -462,7 +462,7 @@ describe("the search of the log", () => {
     type("NEEDLE");
     expect([status(), marked(), inRoom().includes(1_000)]).toEqual(["Match 1 of 3, on line 1000.", [1_000], true]);
     // The command of the line the list is at is the one the Tab key reaches, and the field keeps the focus.
-    field().focus();
+    act(() => field().focus());
     enter();
     expect([status(), marked(), inRoom().includes(3_000)]).toEqual(["Match 2 of 3, on line 3000.", [3_000], true]);
     expect(screen.getByTestId("log-line-3000-copy").tabIndex).toBe(0);

@@ -2,7 +2,14 @@
 // when it is activated: the stub of the host stands for both processes, and a call of the renderer
 // reaches the handler the main process registered.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { hostCatalog, ipcBroadcasts, ipcFrame, ipcHandlers, resetIpc } from "../../test/freelens-extensions";
+import {
+  anExtension,
+  hostCatalog,
+  ipcBroadcasts,
+  ipcFrame,
+  ipcHandlers,
+  resetIpc,
+} from "../../test/freelens-extensions";
 import { CLUSTER_WORDS } from "../common/diagnostic-text";
 import { CHANNELS } from "../common/ipc";
 import { VeleroIpcRenderer } from "../renderer/api/ipc";
@@ -33,9 +40,9 @@ beforeEach(() => {
       status: "connected",
     },
   ];
-  main = VeleroIpc.createInstance({} as never);
+  main = VeleroIpc.createInstance(anExtension("main") as never);
   main.register(catalogEntries);
-  renderer = VeleroIpcRenderer.createInstance({} as never);
+  renderer = VeleroIpcRenderer.createInstance(anExtension("renderer") as never);
 });
 
 afterEach(() => {
@@ -115,7 +122,7 @@ describe("the gate through the IPC and the catalog of the host", () => {
     main.release();
     VeleroIpc.resetInstance();
     ipcHandlers.clear();
-    main = VeleroIpc.createInstance({} as never);
+    main = VeleroIpc.createInstance(anExtension("main") as never);
     main.register(catalogEntries);
     expect(await renderer.state(CLUSTER)).toMatchObject({ ok: true, value: { writes: { on: false } } });
     expect(ipcBroadcasts).toEqual([]);

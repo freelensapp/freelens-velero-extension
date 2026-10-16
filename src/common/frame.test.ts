@@ -6,10 +6,14 @@ const ID = "86a008d2588de4178aa2ac8a245ac1f4";
 
 describe("the cluster of a frame", () => {
   it("reads the identifier of the frames of v2, of the packaged application and of development", () => {
-    // The packaged application serves the window and its frames from its own scheme of HTTPS.
-    expect(clusterOfAddress(`https://${ID}.renderer.freelens.app/`)).toBe(ID);
+    // The packaged application serves the window from the proxy of Freelens, at `renderer.freelens.app` and the
+    // port of the proxy, which Chromium sends to the loopback (packages/core/src/main/start-main-application/
+    // lens-window/application-window/create-application-window.injectable.ts line 38, runnables/
+    // setup-hostnames.injectable.ts lines 18 to 25 at the validation target), and the frame of a cluster at
+    // `//<identifier>.<host of the window>` (common/utils/cluster-id-url-parsing.ts lines 34 to 36).
+    expect(clusterOfAddress(`https://${ID}.renderer.freelens.app:45345/`)).toBe(ID);
     expect(
-      clusterOfAddress(`https://${ID}.renderer.freelens.app/extension/freelensapp--velero-extension/backups`),
+      clusterOfAddress(`https://${ID}.renderer.freelens.app:45345/extension/freelensapp--velero-extension/backups`),
     ).toBe(ID);
     // Development serves them from the loopback, on the port of the server of development.
     expect(clusterOfAddress(`http://${ID}.localhost:9191/`)).toBe(ID);
@@ -30,7 +34,7 @@ describe("the cluster of a frame", () => {
     expect(clusterOfHost("renderer.freelens.app:45345")).toBeUndefined();
     expect(clusterOfHost("localhost:9191")).toBeUndefined();
     expect(clusterOfHost("localhost")).toBeUndefined();
-    expect(clusterOfAddress("https://renderer.freelens.app/catalog")).toBeUndefined();
+    expect(clusterOfAddress("https://renderer.freelens.app:45345/catalog")).toBeUndefined();
     expect(clusterOfAddress("http://localhost:9191/#/catalog")).toBeUndefined();
   });
 

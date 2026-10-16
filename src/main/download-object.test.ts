@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  anExtension,
   type HostExtensionStub,
   hostCatalog,
   hostCluster,
@@ -147,7 +148,7 @@ const STORE: NonNullable<Parameters<VeleroIpc["register"]>[1]> = {
 // The procedures as the extension registers them, with what it takes of the host, and the route and the
 // download of the test in place of the store.
 function register(): void {
-  main = VeleroIpc.createInstance({} as never);
+  main = VeleroIpc.createInstance(anExtension("main") as never);
   main.register(catalogEntries, { ...hostDependencies(() => MANIFEST), ...STORE });
 }
 
@@ -191,7 +192,7 @@ beforeEach(() => {
   ];
   hostCluster.forCluster = host.forCluster;
   register();
-  renderer = VeleroIpcRenderer.createInstance({} as never);
+  renderer = VeleroIpcRenderer.createInstance(anExtension("renderer") as never);
 });
 
 afterEach(() => {

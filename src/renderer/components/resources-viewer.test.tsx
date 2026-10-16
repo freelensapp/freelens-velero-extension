@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as layout from "../../../test/list-layout";
 import { CONTENT } from "./artifact-viewer";
@@ -397,7 +397,7 @@ describe("the filter of a resource list", () => {
     render(<ResourcesViewer id="resources" text={BACKUP} of="Backup" />);
     expect(screen.getByLabelText(FILTER)).toBe(screen.getByTestId("resources-filter"));
     // The field keeps the focus when Enter is pressed in it, which the host would take from it.
-    screen.getByLabelText(FILTER).focus();
+    act(() => screen.getByLabelText(FILTER).focus());
     fireEvent.keyDown(screen.getByLabelText(FILTER), { key: "Enter" });
     expect(document.activeElement).toBe(screen.getByLabelText(FILTER));
     type("POD");
@@ -486,7 +486,7 @@ describe("the filter of a resource list", () => {
     expect(first).toBe(screen.getByTestId("resources-count"));
     expect(first?.contains(told)).toBe(true);
     expect(first?.tabIndex).toBe(-1);
-    first?.focus();
+    act(() => first?.focus());
     expect(document.activeElement).toBe(first);
   });
 

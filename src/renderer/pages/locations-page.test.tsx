@@ -2,7 +2,8 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { listProps } from "../../../test/host-components";
+import { hostObject } from "../../../test/freelens-extensions";
+import { drawerValue, listProps } from "../../../test/host-components";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { REFUSED_WHEN_NOT_AVAILABLE } from "../../common/location-users";
 import { LEFT_OUT, SNAPSHOT_PHASE_NOTE } from "../../common/location-view";
@@ -250,8 +251,9 @@ const cell = (name: string, column: string, kind = STORAGE) =>
   row(name, kind).querySelector(`.TableCell.${column}`)?.textContent;
 const notice = (family: string) => screen.queryByTestId(`velero-notice-${family}`)?.textContent ?? "";
 // What is said over a list, in words: the text beside the mark.
+// The words of a note, beside its icon, whose name the host holds in a part of its own.
 const notes = (id: string) =>
-  screen.queryAllByTestId(`velero-${id}-note`).map((note) => note.querySelector("span")?.textContent);
+  screen.queryAllByTestId(`velero-${id}-note`).map((note) => note.querySelector(":scope > span")?.textContent);
 const open = async (name: string, kind = STORAGE) => {
   await waitFor(() => expect(rows(kind)).toContain(name));
   fireEvent.click(screen.getByText(name, { selector: `[data-${kind}-row]` }));
@@ -1312,7 +1314,7 @@ describe("details of the host for a location", () => {
       now: () => NOW,
       storage: heldPreferences(preferences),
     });
-  const item = (name: string) => document.querySelector(`[data-name="${name}"] .value`)?.textContent;
+  const item = (name: string) => drawerValue(name);
 
   it("reads a storage location as the views do, and leads to the workspace of the installation selected", async () => {
     mount(answers(), chosen(A));
@@ -1326,7 +1328,7 @@ describe("details of the host for a location", () => {
     cleanup();
     render(
       <StorageLocationDetails
-        object={new BackupStorageLocation(archive as never)}
+        object={hostObject(BackupStorageLocation, archive)}
         extension={extension}
         installation={installation(chosen(A))}
       />,
@@ -1348,7 +1350,7 @@ describe("details of the host for a location", () => {
   it("shows the message of Velero, and gives no link to a location of a namespace that is not selected", () => {
     render(
       <StorageLocationDetails
-        object={new BackupStorageLocation(broken as never)}
+        object={hostObject(BackupStorageLocation, broken)}
         extension={extension}
         installation={installation(chosen(B))}
       />,
@@ -1363,7 +1365,7 @@ describe("details of the host for a location", () => {
   it("reads a snapshot location as the views do, and says what its phase is worth", () => {
     render(
       <SnapshotLocationDetails
-        object={new VolumeSnapshotLocation(claimed as never)}
+        object={hostObject(VolumeSnapshotLocation, claimed)}
         extension={extension}
         installation={installation(chosen(A))}
       />,

@@ -4,6 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  anExtension,
   forbiddenAccesses,
   hostCatalog,
   hostViews,
@@ -38,7 +39,10 @@ afterEach(() => {
 
 describe("the cluster of the frame of the views", () => {
   it("is the identifier the host writes in the address of the frame, with the name the catalog gives it", () => {
-    vi.stubGlobal("location", new URL(`https://${ID}.renderer.freelens.app/extension/freelensapp--velero-extension`));
+    vi.stubGlobal(
+      "location",
+      new URL(`https://${ID}.renderer.freelens.app:45345/extension/freelensapp--velero-extension`),
+    );
     expect(frameCluster()).toEqual({ id: ID, name: "demo" });
     vi.stubGlobal("location", new URL(`http://${ID}.localhost:9191/extension/freelensapp--velero-extension`));
     expect(frameCluster()).toEqual({ id: ID, name: "demo" });
@@ -46,7 +50,7 @@ describe("the cluster of the frame of the views", () => {
 
   it("is the address's and not the one the catalog shows, when the two differ", () => {
     // The stub of the catalog shows synthetic-cluster: the frame is of another, and its requests are of it.
-    vi.stubGlobal("location", new URL(`https://${ID}.renderer.freelens.app/`));
+    vi.stubGlobal("location", new URL(`https://${ID}.renderer.freelens.app:45345/`));
     expect(frameCluster().id).toBe(ID);
   });
 
@@ -58,7 +62,10 @@ describe("the cluster of the frame of the views", () => {
   });
 
   it("is the cluster the views read through the client of the host, and the one the main process binds their requests to", async () => {
-    vi.stubGlobal("location", new URL(`https://${ID}.renderer.freelens.app/extension/freelensapp--velero-extension`));
+    vi.stubGlobal(
+      "location",
+      new URL(`https://${ID}.renderer.freelens.app:45345/extension/freelensapp--velero-extension`),
+    );
     const taken: string[] = [];
 
     hostViews.forCluster = (cluster) => {
@@ -70,11 +77,11 @@ describe("the cluster of the frame of the views", () => {
     hostCatalog.clusters = [
       { id: ID, name: "demo", kubeConfigPath: "/synthetic/kubeconfig", contextName: "kind-demo", status: "connected" },
     ];
-    const main = VeleroIpc.createInstance({} as never);
+    const main = VeleroIpc.createInstance(anExtension("main") as never);
 
     main.register(catalogEntries);
     ipcFrame.current = { senderFrame: { url: globalThis.location.href }, processId: 1, frameId: 4 };
-    VeleroIpcRenderer.createInstance({} as never);
+    VeleroIpcRenderer.createInstance(anExtension("renderer") as never);
     const installation = currentInstallation();
 
     expect(installation.cluster).toEqual({ id: ID, name: "demo" });

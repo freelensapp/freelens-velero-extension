@@ -2,7 +2,7 @@
 
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { addressSearch, Renderer as Host } from "../../../test/freelens-extensions";
+import { addressSearch, Renderer as Host, hostObject } from "../../../test/freelens-extensions";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { Backup, BackupStorageLocation, Restore, Schedule, VolumeSnapshotLocation } from "../api/kinds";
 import { BackupDetails } from "../details/backup-details";
@@ -146,16 +146,16 @@ describe("the rules of the views", () => {
         <ResourcesViewer id="resources" text='{"v1/Pod":["shop/cart"]}' of="Restore" />
         <VolumesViewer id="volumes" text="[]" of="Backup" />
         <ArtifactLines id="lines" text={"one\ntwo"} note="As the text it is." />
-        <BackupDetails object={new Backup(OBJECTS.backups as never)} extension={extension} installation={shown} />
-        <RestoreDetails object={new Restore(OBJECTS.restores as never)} extension={extension} installation={shown} />
-        <ScheduleDetails object={new Schedule(OBJECTS.schedules as never)} extension={extension} installation={shown} />
+        <BackupDetails object={hostObject(Backup, OBJECTS.backups)} extension={extension} installation={shown} />
+        <RestoreDetails object={hostObject(Restore, OBJECTS.restores)} extension={extension} installation={shown} />
+        <ScheduleDetails object={hostObject(Schedule, OBJECTS.schedules)} extension={extension} installation={shown} />
         <StorageLocationDetails
-          object={new BackupStorageLocation(OBJECTS.storageLocations as never)}
+          object={hostObject(BackupStorageLocation, OBJECTS.storageLocations)}
           extension={extension}
           installation={shown}
         />
         <SnapshotLocationDetails
-          object={new VolumeSnapshotLocation(OBJECTS.snapshotLocations as never)}
+          object={hostObject(VolumeSnapshotLocation, OBJECTS.snapshotLocations)}
           extension={extension}
           installation={shown}
         />

@@ -6,7 +6,8 @@
 // - `get` and `post` (lines 159-173, 199-254) read the body whole and reject when the status is not 2xx: a
 //   GET answered 403 with the body itself, the `Status` object or its text when it is not JSON, and every
 //   other failure with a `JsonApiErrorParsed`, which is not an `Error` and carries the body it parsed as
-//   `error`; a request that gets no answer rejects with the error of the fetch.
+//   `error`, with the messages `parseError` reads of it (lines 256-276); a request that gets no answer rejects
+//   with the error of the fetch.
 // Every request is recorded: the cluster it was made for, the call, the method, the path, the query, the
 // headers and the body, as the client was given them.
 
@@ -204,14 +205,24 @@ export function fakeHostClient(reply: (request: HostRequest) => HostReply | Prom
     }
     if (response.status >= 200 && response.status < 300) return data;
     if (method === "GET" && response.status === 403) throw data;
-    const message =
+    // `parseError`: the text itself, nothing of what is not an object, the titles of a list of errors, the
+    // message, or the words of the status.
+    const { errors, message } = (typeof data === "object" && data !== null ? data : {}) as {
+      errors?: { title: string }[];
+      message?: unknown;
+    };
+    const messages =
       typeof data === "string"
-        ? data
-        : typeof (data as { message?: unknown })?.message === "string"
-          ? (data as { message: string }).message
-          : response.statusText || "Error!";
+        ? [data]
+        : typeof data !== "object" || data === null
+          ? []
+          : Array.isArray(errors)
+            ? errors.map((error) => error.title)
+            : typeof message === "string"
+              ? [message]
+              : [response.statusText || "Error!"];
 
-    throw new JsonApiErrorParsedDouble(data, [message]);
+    throw new JsonApiErrorParsedDouble(data, messages);
   };
 
   const forCluster = (cluster: string) => ({

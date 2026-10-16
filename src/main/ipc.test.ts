@@ -94,7 +94,7 @@ describe("the sender of a request", () => {
 
   it("is read from the addresses of the frames of v2, of the packaged application and of development", () => {
     expect(
-      senderOf({ senderFrame: { url: "https://cluster-a.renderer.freelens.app/" }, processId: 3, frameId: 7 }),
+      senderOf({ senderFrame: { url: "https://cluster-a.renderer.freelens.app:45345/" }, processId: 3, frameId: 7 }),
     ).toEqual({ cluster: "cluster-a", key: "cluster-a:3:7" });
     expect(
       senderOf({
@@ -121,7 +121,7 @@ describe("the sender of a request", () => {
     expectTypeOf<NonNullable<IpcEvent["senderFrame"]>["url"]>().toEqualTypeOf<string>();
     const read: string[] = [];
     const event = new Proxy(
-      { senderFrame: { url: "https://cluster-a.renderer.freelens.app/" }, processId: 1, frameId: 4 },
+      { senderFrame: { url: "https://cluster-a.renderer.freelens.app:45345/" }, processId: 1, frameId: 4 },
       {
         get: (target, property, receiver) => {
           read.push(String(property));
@@ -139,7 +139,7 @@ describe("the sender of a request", () => {
     expect(senderOf({ senderFrame: null, processId: 1, frameId: 1 })).toBeUndefined();
     expect(senderOf({ processId: 1, frameId: 1 })).toBeUndefined();
     expect(
-      senderOf({ senderFrame: { url: "https://cluster-a.renderer.freelens.app/" }, processId: 1.5, frameId: 1 }),
+      senderOf({ senderFrame: { url: "https://cluster-a.renderer.freelens.app:45345/" }, processId: 1.5, frameId: 1 }),
     ).toBeUndefined();
   });
 });
@@ -586,7 +586,7 @@ describe("the binding of a request to its frame and to its cluster", () => {
   it("refuses the frame of an address that carries what is not an identifier, whatever its request names", async () => {
     const { call, untouched, dispose } = watchedFixture();
     // The host reads the label of such an address as it is; the contract refuses it where a request names it.
-    const odd: IpcEvent = { senderFrame: { url: "https://_.renderer.freelens.app/" }, processId: 1, frameId: 5 };
+    const odd: IpcEvent = { senderFrame: { url: "https://_.renderer.freelens.app:45345/" }, processId: 1, frameId: 5 };
 
     expect(senderOf(odd)).toEqual({ cluster: "_", key: "_:1:5" });
     for (const [channel, payload] of Object.entries(PAYLOADS)) {

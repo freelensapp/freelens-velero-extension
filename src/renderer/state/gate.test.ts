@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ipcHandlers, resetIpc, Main as StubMain } from "../../../test/freelens-extensions";
+import { anExtension, ipcHandlers, resetIpc, Main as StubMain } from "../../../test/freelens-extensions";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { CHANNELS } from "../../common/ipc";
 import { VeleroIpcRenderer } from "../api/ipc";
@@ -385,9 +385,9 @@ describe("the frame of a cluster", () => {
       asked.push(request);
       return { ok: true, value: held };
     });
-    VeleroIpcRenderer.createInstance({} as never);
+    VeleroIpcRenderer.createInstance(anExtension("renderer") as never);
     // What the main process broadcasts with, as it does in production.
-    const main = new StubMain.Ipc({});
+    const main = StubMain.Ipc.createInstance(anExtension("main"));
     const state = currentInstallation();
 
     await state.openGate();
@@ -404,7 +404,7 @@ describe("the frame of a cluster", () => {
 
   it("hears the arguments of a broadcast of the main process, and never reads the event it is given with them", () => {
     resetIpc();
-    const ipc = VeleroIpcRenderer.createInstance({} as never);
+    const ipc = VeleroIpcRenderer.createInstance(anExtension("renderer") as never);
     let heard: ((event: unknown, ...args: unknown[]) => unknown) | undefined;
     const listen = vi.spyOn(ipc, "listen").mockImplementation((_channel, listener) => {
       heard = listener;

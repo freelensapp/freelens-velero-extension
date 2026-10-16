@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { otherShape } from "../../common/artifact-volumes";
 import { CONTENT } from "./artifact-viewer";
@@ -177,8 +177,9 @@ describe("the volumes of an operation", () => {
     expect(table.getAttribute("aria-label")).toBe("Volumes of the backup");
     expect(root().contains(table)).toBe(true);
     expect(table.querySelectorAll(".Table .TableHead")).toHaveLength(1);
-    // The table is scrolled in its own room, not by the host, and its columns have the room of their words.
-    expect(table.querySelector(".Table")?.className).toBe("Table flex column");
+    // The table is scrolled in its own room, not by the host, and its columns have the room of their words: the
+    // table of the host has its own classes alone (table.tsx lines 297 to 305 at the validation target).
+    expect(table.querySelector(".Table")?.className).toBe("Table flex flex-col");
     expect(heads()).toEqual([
       "Details",
       "Claim",
@@ -295,7 +296,7 @@ describe("the volumes of an operation", () => {
     expect(rows().map((_row, index) => details(index))).toEqual([null, null, null, null, null]);
     // The command is in the order of the keyboard, which chooses a button with Enter and with Space.
     expect(command.tabIndex).toBe(0);
-    command.focus();
+    act(() => command.focus());
     expect(document.activeElement).toBe(command);
     fireEvent.click(command);
     expect(command.getAttribute("aria-expanded")).toBe("true");
@@ -495,7 +496,7 @@ describe("the volumes of an operation", () => {
     expect(root().querySelectorAll(`[${CONTENT}]`)).toHaveLength(1);
     expect(count.hasAttribute(CONTENT)).toBe(true);
     expect(count.tabIndex).toBe(-1);
-    count.focus();
+    act(() => count.focus());
     expect(document.activeElement).toBe(count);
     cleanup();
     render(<Shown entries={[POD]} />);

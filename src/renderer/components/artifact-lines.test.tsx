@@ -129,7 +129,7 @@ describe("a text shown as its lines", () => {
 
     expect(marked).toEqual([row(1)]);
     expect(marked[0].tabIndex).toBe(-1);
-    marked[0].focus();
+    act(() => marked[0].focus());
     expect(focused()).toBe(row(1));
   });
 
@@ -149,7 +149,7 @@ describe("a text shown as its lines", () => {
     const view = render(<ArtifactLines id="lines" text={text("first")} />);
 
     scroll(600 * LINE);
-    row(601).focus();
+    act(() => row(601).focus());
     expect([numbers().includes(1), document.querySelector(`[${CONTENT}]`)]).toEqual([false, null]);
     view.rerender(<ArtifactLines id="lines" text={text("second")} />);
     expect([scroller().scrollTop, inRoom()[0], shown(1).textContent]).toEqual([0, 1, "second 1"]);
@@ -210,7 +210,10 @@ describe("the rows a list mounts", () => {
     expect(screen.getByTestId("lines-left").getAttribute("role")).toBe("status");
     // The mark beside the words is not read with them: the host draws it as the text of its name.
     expect(screen.getByTestId("lines-left").querySelector(".Icon")?.getAttribute("aria-hidden")).toBe("true");
-    expect(screen.getByTestId("lines-left").querySelector("span")?.textContent).toMatch(/^The list has the room of/);
+    // The words are the part's own, beside the icon, whose name the host holds in a part of its own.
+    expect(screen.getByTestId("lines-left").querySelector(":scope > span")?.textContent).toMatch(
+      /^The list has the room of/,
+    );
     expect(screen.getByTestId("lines-count").textContent).toBe("1700000 lines");
     scroll(1_650_000 * LINE);
     expect(numbers()[numbers().length - 1]).toBe(1_650_000);
@@ -222,7 +225,7 @@ describe("the rows a list mounts", () => {
     vi.stubGlobal("devicePixelRatio", 1_000);
     render(<ArtifactLines id="lines" text={"\n".repeat(1_651)} />);
     expect(list().dataset.rows).toBe("1650");
-    expect(screen.getByTestId("lines-left").querySelector("span")?.textContent).toBe(
+    expect(screen.getByTestId("lines-left").querySelector(":scope > span")?.textContent).toBe(
       "The list has the room of 1650 lines: 1 line after them is not in it. The file that is saved has every line.",
     );
   });
@@ -591,7 +594,7 @@ describe("the keys of a list", () => {
     // The room has no height here: a page is the rows of ten lines but one.
     room.height = 0;
     render(<ArtifactLines id="lines" text={text} />);
-    list().focus();
+    act(() => list().focus());
     // The first key of a list the Tab key reached goes to the line the list is at.
     press("ArrowDown");
     expect(focused()).toBe(row(1));
@@ -639,7 +642,7 @@ describe("the keys of a list", () => {
 
   it("draw the rows of the place they take the list to at once, and do not wait for the browser to tell of the scroll", () => {
     render(<ArtifactLines id="lines" text={text} />);
-    list().focus();
+    act(() => list().focus());
     // The browser tells of a scroll with the next frame: the rows of the end are drawn before it does, in the
     // room, and the last line has the focus.
     press("End");
@@ -665,7 +668,7 @@ describe("the keys of a list", () => {
     render(<ArtifactLines id="lines" text={long} />);
     fireEvent.click(screen.getByTestId("lines-wrap"));
     expect([list().dataset.columns, row(1).style.height]).toEqual(["99", "60px"]);
-    list().focus();
+    act(() => list().focus());
     press("ArrowDown");
     expect(focused()).toBe(row(1));
     const rooms = [inRoom()];
@@ -703,11 +706,11 @@ describe("the keys of a list", () => {
 
   it("go on from the line a command or a row was given the focus at", () => {
     render(<ArtifactLines id="lines" text={text} />);
-    screen.getByTestId("lines-line-7-copy").focus();
+    act(() => screen.getByTestId("lines-line-7-copy").focus());
     expect(reached()).toEqual([7]);
     press("ArrowDown");
     expect([focused(), reached()]).toEqual([row(8), [8]]);
-    row(20).focus();
+    act(() => row(20).focus());
     expect(reached()).toEqual([20]);
     press("ArrowUp");
     expect(focused()).toBe(row(19));
@@ -715,7 +718,7 @@ describe("the keys of a list", () => {
 
   it("are not lost with a row that leaves the list while it has the focus: the list takes it", () => {
     render(<ArtifactLines id="lines" text={text} />);
-    row(1).focus();
+    act(() => row(1).focus());
     scroll(300 * LINE);
     expect(numbers().includes(1)).toBe(false);
     expect(focused()).toBe(list());

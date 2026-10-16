@@ -241,7 +241,7 @@ const focused = () => document.activeElement?.getAttribute("data-testid");
 
 // A command is given as the pointer gives it in the application: what is pressed has the focus.
 function press(element: HTMLElement): void {
-  element.focus();
+  act(() => element.focus());
   fireEvent.click(element);
 }
 
@@ -588,7 +588,7 @@ describe("the first line of what a tab shows", () => {
       layout.room.height = 0;
       const viewer = await loaded("Backup", "Log");
 
-      screen.getByTestId(`${viewer}-search`).focus();
+      act(() => screen.getByTestId(`${viewer}-search`).focus());
       room(ROOM);
       await settled();
       expect(marked(viewer)).toHaveLength(1);

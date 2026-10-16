@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CONTENT } from "./artifact-viewer";
 import { ResultsViewer } from "./results-viewer";
@@ -200,7 +200,7 @@ describe("the results of an operation", () => {
     expect(marked).toEqual([summary]);
     expect(viewer().firstElementChild).toBe(summary);
     expect(summary.getAttribute("tabindex")).toBe("-1");
-    summary.focus();
+    act(() => summary.focus());
     expect(document.activeElement).toBe(summary);
     cleanup();
     // The results that hold nothing have the mark as well: the focus has where to go.
