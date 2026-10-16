@@ -292,6 +292,171 @@ export async function logDirectory(app: ElectronApplication): Promise<string> {
   return app.evaluate(({ app }) => app.getPath("logs"));
 }
 
+/**
+ * The lines at the level of an error in each file of the log of the host: the one of its main process, the
+ * one of the window and the one of each frame of a cluster, which the renderer sends to the main process.
+ * The record of a request of the proxy that its client gave up on is left out, as the collector of errors
+ * leaves it out of the output. A line is given cut, as a failure message needs it.
+ */
+export async function hostLogErrors(app: ElectronApplication): Promise<Record<string, string[]>> {
+  const directory = await logDirectory(app);
+  const found: Record<string, string[]> = {};
+
+  for (const file of (await readdir(directory)).filter((name) => name.endsWith(".log")).sort()) {
+    const text = (await readFile(path.join(directory, file), "utf8"))
+      .replace(ANSI_ESCAPE_PATTERN, "")
+      .replace(CANCELED_PROXY_RECORD_PATTERN, "");
+
+    found[file] = text
+      .split("\n")
+      .filter((line) => /^\s*error:/i.test(line))
+      .map((line) => line.slice(0, 300));
+  }
+  return found;
+}
+
+/** A cluster of the catalog of the main process, as the host gives it to an extension. */
+export interface MainCatalogEntry {
+  id: string;
+  name: string;
+  kubeConfigPath: string;
+  contextName: string;
+  status: string;
+}
+
+/** The clusters of the catalog of the main process, through the API the host gives the extensions there. */
+export async function mainCatalog(app: ElectronApplication): Promise<MainCatalogEntry[]> {
+  return app.evaluate(() => {
+    const api = (
+      globalThis as unknown as {
+        FreelensExtensionApi?: { Main?: { Catalog?: { getAllClusters?: () => MainCatalogEntry[] } } };
+      }
+    ).FreelensExtensionApi;
+
+    return (api?.Main?.Catalog?.getAllClusters?.() ?? []).map(({ id, name, kubeConfigPath, contextName, status }) => ({
+      id,
+      name,
+      kubeConfigPath,
+      contextName,
+      status: String(status),
+    }));
+  });
+}
+
+/**
+ * Disables the extension from the Extensions page, as an operator does: the command of the menu of its row.
+ * The page then says that it is disabled.
+ */
+export async function disableExtension(app: ElectronApplication, window: Page): Promise<void> {
+  await navigateToExtensions(app);
+  const row = window.locator("tr", {
+    has: window.locator('div[class*="installed-extensions-module__extensionName--"]', { hasText: EXTENSION_NAME }),
+  });
+
+  await row.waitFor({ state: "visible", timeout: ELEMENT_TIMEOUT });
+  await window.click(`[id="menu-actions-for-installed-extensions-for-${EXTENSION_NAME}"]`);
+  await window.locator(".Menu .MenuItem", { hasText: "Disable" }).click();
+  await row.locator("td").nth(2).getByText("Disabled", { exact: true }).waitFor({ timeout: ELEMENT_TIMEOUT });
+}
+
+/** A request a handler of the extension in the main process was given, as it read it, and its answer. */
+export interface HandledRequest {
+  /** The procedure, without the prefix the host gives the channels of an extension. */
+  channel: string;
+  /** The address of the frame the request came from, which the handler reads the cluster of. */
+  address: string;
+  /** The process and the frame of the sender, which tell the frames of one window apart. */
+  processId: number;
+  frameId: number;
+  /** The cluster the request named. */
+  named: string;
+  /** `ok`, or the code and the stage of the refusal. */
+  answer: string;
+  /** Of the state of the gate: the cluster it is of, as the catalog of the main process names it, and the writes. */
+  state?: { cluster: string; on: boolean };
+}
+
+interface HandlerWatch {
+  calls: HandledRequest[];
+  originals: [channel: string, handler: unknown][];
+}
+
+/**
+ * Watches the handlers the host registered for the procedures of the extension, in its main process. Electron
+ * keeps the handler of a channel in a map it reads at every call; each one of the extension is wrapped there,
+ * and called as it was with what it was given: the wrapper reads of the event what the handler reads, the
+ * address of the frame and the identifiers of its process and frame, and keeps the answer. The channels are
+ * answered with their whole names, which the host prefixes; `stopWatchingHandlers` puts the handlers back.
+ */
+export async function watchHandlers(app: ElectronApplication): Promise<string[]> {
+  return app.evaluate(({ ipcMain }) => {
+    type Handler = (event: Electron.IpcMainInvokeEvent, ...args: unknown[]) => unknown;
+    const handlers = (ipcMain as unknown as { _invokeHandlers?: Map<string, Handler> })._invokeHandlers;
+    const main = globalThis as unknown as { veleroHandlers?: HandlerWatch };
+
+    if (!handlers) throw new Error("Electron keeps the handlers of its channels elsewhere: no _invokeHandlers");
+    if (main.veleroHandlers) return main.veleroHandlers.originals.map(([channel]) => channel);
+    const kept: HandlerWatch = { calls: [], originals: [] };
+
+    for (const [channel, handler] of [...handlers]) {
+      if (!/^extensions@[0-9a-f]{64}:[a-z]+\.[a-z]+$/.test(channel)) continue;
+      kept.originals.push([channel, handler]);
+      handlers.set(channel, async (event, ...args) => {
+        let address = "";
+
+        try {
+          address = event.senderFrame?.url ?? "";
+        } catch {
+          address = "(a frame that was disposed)";
+        }
+        const named = (args[0] as { cluster?: unknown } | undefined)?.cluster;
+        const answer = (await handler(event, ...args)) as {
+          ok?: boolean;
+          code?: string;
+          stage?: string;
+          value?: { cluster?: { id?: string }; writes?: { on?: boolean } };
+        };
+
+        kept.calls.push({
+          channel: channel.slice(channel.indexOf(":") + 1),
+          address,
+          processId: event.processId,
+          frameId: event.frameId,
+          named: typeof named === "string" ? named : "",
+          answer: answer?.ok ? "ok" : `${answer?.code} at ${answer?.stage}`,
+          ...(answer?.ok && answer.value?.writes
+            ? { state: { cluster: answer.value.cluster?.id ?? "", on: answer.value.writes.on === true } }
+            : {}),
+        });
+        return answer;
+      });
+    }
+    main.veleroHandlers = kept;
+    return kept.originals.map(([channel]) => channel);
+  });
+}
+
+/** What the handlers of the extension were given since they are watched. */
+export async function handledRequests(app: ElectronApplication): Promise<HandledRequest[]> {
+  return app.evaluate(() => {
+    const kept = (globalThis as unknown as { veleroHandlers?: HandlerWatch }).veleroHandlers;
+
+    if (!kept) throw new Error("The handlers are not watched: watchHandlers comes first");
+    return kept.calls;
+  });
+}
+
+/** Puts back the handlers of the extension that `watchHandlers` wrapped. */
+export async function stopWatchingHandlers(app: ElectronApplication): Promise<void> {
+  await app.evaluate(({ ipcMain }) => {
+    const handlers = (ipcMain as unknown as { _invokeHandlers?: Map<string, unknown> })._invokeHandlers;
+    const main = globalThis as unknown as { veleroHandlers?: HandlerWatch };
+
+    for (const [channel, handler] of main.veleroHandlers?.originals ?? []) handlers?.set(channel, handler);
+    main.veleroHandlers = undefined;
+  });
+}
+
 /** Leaves the welcome page, which a new profile starts on. */
 export async function clickWelcomeButton(window: Page): Promise<void> {
   await window.click("[data-testid=welcome-menu-container] li a");

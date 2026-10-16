@@ -25,6 +25,8 @@ const NOTHING = 1500;
 const MENU = ".Menu .MenuItem";
 const DIALOG = '[data-testid="confirmation-dialog"], .Dialog, .ConfirmDialog';
 const STARTED = /\b2026\b/;
+// The five kinds of Velero with pages of their own, as the API names them.
+const FAMILIES = ["backups", "backupstoragelocations", "restores", "schedules", "volumesnapshotlocations"];
 const WAITING = {
   failure: "No failure reported",
   progress: "Not reported",
@@ -74,6 +76,7 @@ describe("views of the first milestone", () => {
   const errors = velero.createErrorCollector();
   let before: cluster.ClusterSnapshot;
   let counted: Record<string, number>;
+  let kubeconfig = "";
 
   beforeAll(async () => {
     if (!cluster.fixturesReady()) {
@@ -81,7 +84,6 @@ describe("views of the first milestone", () => {
     }
     before = cluster.clusterSnapshot();
     errors.start();
-    let kubeconfig = "";
 
     // The kubeconfig is in the profile before the install is asked, for each start of the application.
     started = await velero.startWithExtension(async () => {
@@ -96,6 +98,8 @@ describe("views of the first milestone", () => {
     counted = cluster.apiRequests();
     frame = await cluster.openClusterFromCatalog(started.window, kubeconfig);
     await velero.setWindowSize(started.app, 1440, 900);
+    // Every address of the frame that names an object for the details of the host is kept from now on.
+    await cluster.watchHostDetails(frame);
   }, TIMEOUT);
 
   afterAll(async () => {
@@ -210,6 +214,26 @@ describe("views of the first milestone", () => {
   );
 
   it(
+    "leaves the focus with the search of the host when its list opens, and gives it back there at Ctrl or Cmd with F",
+    async () => {
+      const inSearch = () =>
+        frame.evaluate(
+          () => document.activeElement === document.querySelector("[data-testid=velero-backups] .SearchInput input"),
+        );
+
+      // The list of the case before was mounted when the namespace was chosen: the search of the host took the
+      // focus then, as the host gives it to the search of every list it draws.
+      expect(await inSearch()).toBe(true);
+      // From a row, the keys the host takes for the whole frame bring the focus back to the search of the list.
+      await frame.locator('[data-backup-row="backup-completed"]').focus();
+      expect(await inSearch()).toBe(false);
+      await started.window.keyboard.press(process.platform === "darwin" ? "Meta+f" : "Control+f");
+      await expect.poll(inSearch, { timeout: 10_000 }).toBe(true);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "reads again the installation that is shown and nothing else",
     async () => {
       const earlier = cluster.apiRequests();
@@ -231,6 +255,84 @@ describe("views of the first milestone", () => {
       });
       expect((await cluster.target(frame)).namespace).toBe(cluster.E2E_STATIC_NAMESPACE);
       await cluster.expectRow(frame, "backup-completed", "Completed");
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "reads the cluster from its frame, whose identifier the address of the frame and the catalogs of both processes give alike",
+    async () => {
+      // The identifier the host wrote in the address of the frame is the one it gives the cluster of the
+      // kubeconfig and the context of the environment, in the catalog of the renderer and in the one of the
+      // main process, which name the same cluster.
+      const id = cluster.frameClusterId(frame);
+      const origin = new URL(frame.url()).origin;
+
+      expect(new URL(frame.url()).hostname).toBe(`${id}.renderer.freelens.app`);
+      expect(id).toBe(cluster.clusterEntityId(kubeconfig, cluster.E2E_KUBE_CONTEXT));
+      expect(await cluster.rendererCatalogCluster(frame)).toEqual({
+        id,
+        name: cluster.E2E_KUBE_CONTEXT,
+        contextName: cluster.E2E_KUBE_CONTEXT,
+      });
+      expect(await velero.mainCatalog(started.app)).toEqual([
+        {
+          id,
+          name: cluster.E2E_KUBE_CONTEXT,
+          kubeConfigPath: kubeconfig,
+          contextName: cluster.E2E_KUBE_CONTEXT,
+          status: "connected",
+        },
+      ]);
+      // A read of the installation leaves from the frame, to the address of the frame: what the window sent of
+      // it is what the API server counted of the reads of the kinds of Velero, and nothing else reached it. The
+      // controllers of the installation read through their watches, which are not counted here; a read that
+      // something else asked in the same time is taken again.
+      const reads = (counts: Record<string, number>) =>
+        Object.fromEntries(Object.entries(counts).filter(([key]) => /^(LIST|GET) /.test(key)));
+      let seen: cluster.SeenRequest[] = [];
+      let sent: Record<string, number> = {};
+      let asked: Record<string, number> = {};
+
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        await cluster.afterRead(frame);
+        const earlier = cluster.apiRequests();
+
+        seen = await cluster.veleroRequestsDuring(started.window, async () => {
+          await cluster.readAgain(frame);
+          await frame.waitForTimeout(1500);
+        });
+        asked = reads(cluster.counted(earlier, cluster.apiRequests()));
+        sent = {};
+        for (const request of seen) {
+          const key = cluster.countedAs(request);
+
+          if (key) sent[key] = (sent[key] ?? 0) + 1;
+        }
+        sent = reads(sent);
+        if (JSON.stringify(Object.entries(sent).sort()) === JSON.stringify(Object.entries(asked).sort())) break;
+      }
+      // Every read went from the frame of the cluster to the proxy of its own address: of a kind of Velero, or
+      // of the group, which says what the cluster serves.
+      expect(
+        seen.filter(
+          (request) =>
+            request.method !== "GET" ||
+            new URL(request.url).origin !== origin ||
+            !/^\/api-kube\/apis\/velero\.io\/v1(\/|$)/.test(new URL(request.url).pathname) ||
+            new URL(request.frame || "about:blank").origin !== origin,
+        ),
+      ).toEqual([]);
+      for (const kind of FAMILIES) expect([kind, (sent[`LIST ${kind} namespace`] ?? 0) >= 1]).toEqual([kind, true]);
+      expect(sent["LIST backupstoragelocations cluster"]).toBeGreaterThanOrEqual(1);
+      expect(sent).toEqual(asked);
+      await cluster.writeReport("host-12-reads-of-the-frame", {
+        cluster: id,
+        origin,
+        sent,
+        asked,
+        group: seen.filter((request) => !cluster.countedAs(request)).length,
+      });
     },
     TIMEOUT,
   );
@@ -424,6 +526,18 @@ describe("views of the first milestone", () => {
   );
 
   it(
+    "opens the details of the host by none of its own actions",
+    async () => {
+      // The cases before this one took the actions of the views alone: a page of the group, a choice, a read,
+      // the views of objects, their ways to one another and back, another installation. None of them named an
+      // object for the details of the host in the address of the frame, which is what opens their drawer.
+      expect(await cluster.hostDetailsAddresses(frame)).toEqual([]);
+      expect(await cluster.hostDetailsShown(frame)).toEqual({ drawer: false, address: false });
+    },
+    TIMEOUT,
+  );
+
+  it(
     "offers no way to select, edit or delete a backup, by pointer or by keyboard",
     async () => {
       const list = frame.locator("[data-testid=velero-backups]");
@@ -498,8 +612,102 @@ describe("views of the first milestone", () => {
       await frame.click("[data-testid=velero-backup-details-link]");
       await frame.waitForSelector(`[data-testid=velero-backup-workspace] >> text="${SCHEDULED}"`, { timeout: 60_000 });
       expect((await cluster.target(frame)).namespace).toBe(cluster.E2E_VIEWS_NAMESPACE);
+      // The link leads to the view of the extension: the drawer is gone with the address that named the object,
+      // and neither the log of the main process nor the ones of the frames have an error.
+      expect(await cluster.hostDetailsGone(frame)).toEqual({ drawer: false, address: false });
+      const logs = await velero.hostLogErrors(started.app);
+
+      expect(Object.keys(logs)).toEqual(
+        expect.arrayContaining([
+          "lens.log",
+          "lens-renderer-root-frame.log",
+          `lens-renderer-cluster-${cluster.frameClusterId(frame)}-frame.log`,
+        ]),
+      );
+      expect(Object.values(logs).flat()).toEqual([]);
       await cluster.closeWorkspace(frame);
       await cluster.expectRow(frame, SCHEDULED, "Completed");
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "opens a view of its list under the details of the host, which a way of the view closes as a click outside does",
+    async () => {
+      // The details of the host over the page of the backups, as the host opens them: by the address.
+      await cluster.showHostDetails(
+        frame,
+        `/apis/velero.io/v1/namespaces/${cluster.E2E_VIEWS_NAMESPACE}/backups/${SCHEDULED}`,
+      );
+      await frame.waitForSelector(".Drawer.KubeObjectDetails [data-testid=velero-backup-details]", {
+        timeout: 60_000,
+      });
+      // A click on a row of the list opens its view under them, and the drawer stays over it: the row of the
+      // host prevents the default of the click, which the drawer then does not take for a click outside.
+      await frame
+        .locator("[data-testid=velero-backups] .TableRow", { has: frame.locator(`[data-backup-row="${SCHEDULED}"]`) })
+        .locator(".TableCell.phase")
+        .click();
+      await frame.waitForSelector(`[data-testid=velero-backup-name] >> text="${SCHEDULED}"`, { timeout: 60_000 });
+      expect(await cluster.addressViews(frame)).toEqual([`backup/${SCHEDULED}`]);
+      expect(await cluster.hostDetailsShown(frame)).toEqual({ drawer: true, address: true });
+      await cluster.captureScreenshot(frame, "dark-view-under-host-details");
+      // A way of the view is a click outside the drawer: the host closes it, and the view goes on to the
+      // schedule, with the views the address names.
+      await cluster.followTo(frame, "schedule", "views-daily");
+      expect(await cluster.hostDetailsGone(frame)).toEqual({ drawer: false, address: false });
+      expect(await cluster.addressViews(frame)).toEqual([`backup/${SCHEDULED}`, "schedule/views-daily"]);
+      await cluster.showList(frame);
+      // The name of a row, which the keyboard reaches, keeps its click to itself: the drawer stays as well. The
+      // way back of the view, a command, is a click outside, and the drawer goes.
+      await cluster.showHostDetails(
+        frame,
+        `/apis/velero.io/v1/namespaces/${cluster.E2E_VIEWS_NAMESPACE}/backups/backup-inprogress`,
+      );
+      await cluster.openWorkspace(frame, "backup-inprogress");
+      expect(await cluster.hostDetailsShown(frame)).toEqual({ drawer: true, address: true });
+      await frame.click("[data-testid=velero-back]");
+      expect(await cluster.hostDetailsGone(frame)).toEqual({ drawer: false, address: false });
+      expect(await cluster.shownView(frame)).toBeUndefined();
+      expect(Object.values(await velero.hostLogErrors(started.app)).flat()).toEqual([]);
+      await cluster.expectRow(frame, SCHEDULED, "Completed");
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "gives every page of the group the tabs of the group, and leaves its five kinds out of the Custom Resources of the host until it is disabled",
+    async () => {
+      const { velero: _group, ...entries } = await cluster.veleroSidebarEntries(frame);
+      const titles = Object.values(entries);
+
+      for (const of of [
+        cluster.OVERVIEW,
+        cluster.BACKUPS,
+        cluster.RESTORES,
+        cluster.SCHEDULES,
+        cluster.STORAGE_LOCATIONS,
+        cluster.SNAPSHOT_LOCATIONS,
+      ]) {
+        await cluster.openPage(frame, of);
+        expect([of.id, await cluster.groupTabs(frame)]).toEqual([of.id, { tabs: titles, active: [entries[of.menu]] }]);
+        expect([of.id, await frame.locator(".TabLayout .TabLayout").count()]).toEqual([of.id, 0]);
+      }
+      // While the extension is enabled the kinds with pages of their own are out of the tree, and the other
+      // kinds of the group are in it.
+      const enabled = await cluster.customResourceKinds(frame);
+
+      expect(enabled.filter((kind) => FAMILIES.includes(kind))).toEqual([]);
+      expect(enabled).toContain("downloadrequests");
+      await cluster.captureScreenshot(frame, "dark-custom-resources-enabled");
+      // Disabled from the Extensions page, the extension leaves the sidebar, and the tree has the five again.
+      await velero.disableExtension(started.app, started.window);
+      await velero.captureWindowScreenshot(started.window, "dark-extension-disabled");
+      await velero.navigateToCatalog(started.app);
+      frame = await cluster.openClusterFromCatalog(started.window, kubeconfig);
+      await expect.poll(() => cluster.veleroSidebarEntries(frame), { timeout: 60_000 }).toEqual({});
+      expect(await cluster.customResourceKinds(frame)).toEqual([...enabled, ...FAMILIES].sort());
+      await cluster.captureScreenshot(frame, "dark-custom-resources-disabled");
     },
     TIMEOUT,
   );

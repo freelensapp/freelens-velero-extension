@@ -15,7 +15,7 @@ import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { captureWindowScreenshot, EXTENSION_NAME } from "./velero-extension";
 
-import type { Frame, Locator, Page } from "playwright";
+import type { Frame, Locator, Page, Request } from "playwright";
 
 /** The cluster `pnpm demo:up` brings up, and its namespaces with Velero objects. */
 export const E2E_CLUSTER_NAME = process.env.E2E_CLUSTER_NAME || "freelens-velero-dev";
@@ -1859,6 +1859,202 @@ export async function closeDetails(frame: Frame): Promise<void> {
     .click({ timeout: DRAWER_ESCAPE_TIMEOUT })
     .catch(() => {});
   await frame.waitForSelector(".Drawer.KubeObjectDetails", { state: "hidden", timeout: ELEMENT_TIMEOUT });
+}
+
+/** The parameter of the address that names the object whose details the host shows in its drawer. */
+const HOST_DETAILS = "kube-details";
+
+/**
+ * Opens the details of the host of an object over the page that is shown, as the host does: it adds the link
+ * of the object to the address of the page, and its drawer follows the address.
+ */
+export async function showHostDetails(frame: Frame, selfLink: string): Promise<void> {
+  await frame.evaluate(
+    ({ parameter, link }) => {
+      const search = new URLSearchParams(window.location.search);
+
+      search.set(parameter, link);
+      window.history.pushState({}, "", `${window.location.pathname}?${search}`);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    },
+    { parameter: HOST_DETAILS, link: selfLink },
+  );
+  await frame.waitForSelector(".Drawer.KubeObjectDetails", { state: "visible", timeout: ELEMENT_TIMEOUT });
+}
+
+/** Whether the drawer of the details of the host is shown, and whether the address names an object for it. */
+export async function hostDetailsShown(frame: Frame): Promise<{ drawer: boolean; address: boolean }> {
+  return frame.evaluate((parameter) => {
+    const drawer = document.querySelector<HTMLElement>(".Drawer.KubeObjectDetails");
+
+    return {
+      drawer: drawer !== null && getComputedStyle(drawer).display !== "none",
+      address: new URLSearchParams(window.location.search).has(parameter),
+    };
+  }, HOST_DETAILS);
+}
+
+/**
+ * Waits for the details of the host to be gone, the drawer with the parameter of the address that named the
+ * object, and answers what is shown when the time is over.
+ */
+export async function hostDetailsGone(frame: Frame): Promise<{ drawer: boolean; address: boolean }> {
+  await frame
+    .waitForFunction(
+      (parameter) =>
+        document.querySelector(".Drawer.KubeObjectDetails") === null &&
+        !new URLSearchParams(window.location.search).has(parameter),
+      HOST_DETAILS,
+      { timeout: ELEMENT_TIMEOUT, polling: 100 },
+    )
+    .catch(() => undefined);
+  return hostDetailsShown(frame);
+}
+
+/**
+ * Watches the frame for the details of the host from now on: every address that names an object for them,
+ * however the address was changed.
+ */
+export async function watchHostDetails(frame: Frame): Promise<void> {
+  await frame.evaluate((parameter) => {
+    const page = window as unknown as { veleroHostDetails?: string[] };
+
+    if (page.veleroHostDetails) return;
+    const named: string[] = [];
+    const note = () => {
+      if (new URLSearchParams(window.location.search).has(parameter)) {
+        named.push(`${window.location.pathname}${window.location.search}`);
+      }
+    };
+    const push = window.history.pushState.bind(window.history);
+    const replace = window.history.replaceState.bind(window.history);
+
+    page.veleroHostDetails = named;
+    window.history.pushState = (...parameters: Parameters<History["pushState"]>) => {
+      push(...parameters);
+      note();
+    };
+    window.history.replaceState = (...parameters: Parameters<History["replaceState"]>) => {
+      replace(...parameters);
+      note();
+    };
+    window.addEventListener("popstate", note);
+  }, HOST_DETAILS);
+}
+
+/** The addresses that named an object for the details of the host since the frame is watched. */
+export async function hostDetailsAddresses(frame: Frame): Promise<string[]> {
+  return frame.evaluate(() => {
+    const named = (window as unknown as { veleroHostDetails?: string[] }).veleroHostDetails;
+
+    if (!named) throw new Error("The details of the host are not watched: watchHostDetails comes first");
+    return [...named];
+  });
+}
+
+/** The identifier of the cluster the address of a frame names, by the rule of the host: the first label. */
+export function frameClusterId(frame: Frame): string {
+  return new URL(frame.url()).hostname.split(".")[0];
+}
+
+/** The cluster of the frame, as the catalog of the renderer gives it to an extension there. */
+export async function rendererCatalogCluster(
+  frame: Frame,
+): Promise<{ id: string; name: string; contextName: string } | undefined> {
+  return frame.evaluate(() => {
+    const catalog = (
+      globalThis as unknown as {
+        FreelensExtensionApi?: {
+          Renderer?: { Catalog?: { getActiveCluster?: () => { id: string; name: string; contextName: string } } };
+        };
+      }
+    ).FreelensExtensionApi?.Renderer?.Catalog;
+    const active = catalog?.getActiveCluster?.();
+
+    return active ? { id: active.id, name: active.name, contextName: active.contextName } : undefined;
+  });
+}
+
+/** A request the window sent to the API of Velero: its method, its address and the address of its frame. */
+export interface SeenRequest {
+  method: string;
+  url: string;
+  frame: string;
+}
+
+/**
+ * The requests to the API of the kinds of Velero the window sends while a step is taken. The driver sees
+ * what the window sends, from any of its frames, and nothing of what the main process sends.
+ */
+export async function veleroRequestsDuring(page: Page, step: () => Promise<void>): Promise<SeenRequest[]> {
+  const seen: SeenRequest[] = [];
+  const listener = (request: Request) => {
+    if (!new URL(request.url()).pathname.includes("/apis/velero.io/")) return;
+    let frame = "";
+
+    try {
+      frame = request.frame().url();
+    } catch {
+      frame = "";
+    }
+    seen.push({ method: request.method(), url: request.url(), frame });
+  };
+
+  page.on("request", listener);
+  try {
+    await step();
+  } finally {
+    page.off("request", listener);
+  }
+  return seen;
+}
+
+/**
+ * What the API server counts of a request the window sent to the API of Velero, in its words: the verb, the
+ * kind and the scope, as `apiRequests()` gives them. The read of the group itself, which says what it serves,
+ * is of no kind, and is counted as none of them.
+ */
+export function countedAs(request: SeenRequest): string | undefined {
+  const address = new URL(request.url);
+  const path = /\/apis\/velero\.io\/v1\/(.+)$/.exec(address.pathname)?.[1];
+
+  if (!path) return undefined;
+  const parts = path.split("/");
+  const namespaced = parts[0] === "namespaces";
+  const [kind, name] = namespaced ? parts.slice(2) : parts;
+  const verb = address.searchParams.get("watch") ? "WATCH" : name ? "GET" : "LIST";
+
+  return `${verb} ${kind} ${name ? "resource" : namespaced ? "namespace" : "cluster"}`;
+}
+
+/** The kinds of Velero the Custom Resources of the host list in their tree, under the group of `velero.io`. */
+export async function customResourceKinds(frame: Frame): Promise<string[]> {
+  const tree = "sidebar-item-custom-resources";
+  const group = "sidebar-item-custom-resource-group-velero.io";
+
+  if ((await frame.$(`[data-parent-id-test="${tree}"]`)) === null) {
+    await clickSidebarItem(frame, `link-for-${tree}`);
+    await frame.waitForSelector(`[data-parent-id-test="${tree}"]`, { timeout: ELEMENT_TIMEOUT });
+  }
+  if ((await frame.$(`[data-parent-id-test="${group}"]`)) === null) {
+    await clickSidebarItem(frame, `link-for-${group}`);
+    await frame.waitForSelector(`[data-parent-id-test="${group}"]`, { timeout: ELEMENT_TIMEOUT });
+  }
+  return frame.$$eval(
+    `[data-parent-id-test="${group}"]`,
+    (items, prefix) => items.map((item) => (item.getAttribute("data-testid") ?? "").slice(prefix.length)).sort(),
+    `${group}/`,
+  );
+}
+
+/** The tabs the host gives the page that is shown, in their order, and the one that is active. */
+export async function groupTabs(frame: Frame): Promise<{ tabs: string[]; active: string[] }> {
+  return frame.evaluate(() => {
+    const text = (tab: Element) => ((tab as HTMLElement).innerText ?? "").replace(/\s+/g, " ").trim();
+    const tabs = [...document.querySelectorAll(".TabLayout .Tabs .Tab")];
+
+    return { tabs: tabs.map(text), active: tabs.filter((tab) => tab.classList.contains("active")).map(text) };
+  });
 }
 
 export interface OverviewShown {

@@ -625,6 +625,10 @@ describe("views of the schedules", () => {
       await frame.click("[data-testid=velero-schedule-details-link]");
       await frame.waitForSelector('[data-testid=velero-schedule-name] >> text="views-history"', { timeout: 60_000 });
       expect(await frame.locator("[data-testid=velero-schedules-page]").count()).toBe(1);
+      // The link leads to the view of the extension: the drawer is gone with the address that named the object,
+      // and neither the log of the main process nor the ones of the frames have an error.
+      expect(await cluster.hostDetailsGone(frame)).toEqual({ drawer: false, address: false });
+      expect(Object.values(await velero.hostLogErrors(started.app)).flat()).toEqual([]);
       expect((await cluster.history(frame)).rows).toEqual(HISTORY);
       await cluster.closeWorkspace(frame);
     },
