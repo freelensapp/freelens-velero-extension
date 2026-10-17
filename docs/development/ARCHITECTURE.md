@@ -872,7 +872,11 @@ and is the last check before a byte is sent. It trusts what the host trusts, the
 authorities the runtime lists as its defaults and the ones of the system, with the
 certificate of the location beside them and never in their place; the key of a
 location that turns the verification off is read by the way only to say that it is not
-honored. The address of a route is read into its numbers by [pure
+honored. A direct download leaves this machine through Node `https`, as on Freelens 1:
+it follows neither the proxy preference nor the certificate preferences of Freelens,
+and a store this machine reaches only through a proxy is said not reached (REQ-206,
+[D3 of SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#d3-the-transport)). The
+address of a route is read into its numbers by [pure
 rules](../../src/common/artifact-address.ts), so that no written form of an address is
 another address to them: what is unspecified, link-local, multicast or the address of
 a metadata service is never connected to, in IPv4, in IPv6 and carried by an IPv6

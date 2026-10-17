@@ -363,7 +363,9 @@ to a read of a frame of a cluster, which on
 v2 the browser writes in the console of the frame when an identity is refused a
 read, the host's own reads among them; and the record of a load of the window that
 did not end, with the code -3, which a disconnection writes when it takes the frame
-of the cluster out.
+of the cluster out. It leaves out every answer 401, 403 or 404 to a read of a frame
+of a cluster, the reads of the views among them: a view that reads a wrong path is
+no error for the collector, and fails only the suite that asserts its state.
 
 When a suite closes the application it ends what the application started and
 left behind, the proxy of every cluster it opened among it: a machine that runs
@@ -509,7 +511,13 @@ removes the fixtures of the tabs with the cleanup of the fixtures and verifies t
 installation they leave. It uploads the directory of their screenshots and reports,
 `e2e-artifacts/`, as `views`, and nothing else:
 the private state of the environment is elsewhere, and a test of the workflow
-fails if a path of it is ever named there.
+fails if a path of it is ever named there. At the validation target the scale suite
+fails BACK-12 and REST-11, the known exception of
+[SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#evidence-and-deviations), so
+the job fails: the pull request of T0.7 is merged only with every check green on
+v2, after the pin moves to a commit of the host with the fix of its list layout,
+and until then a run of the job is read case by case, its failed cases exactly
+BACK-12 and REST-11.
 
 ### The Fixtures Of The Tabs
 

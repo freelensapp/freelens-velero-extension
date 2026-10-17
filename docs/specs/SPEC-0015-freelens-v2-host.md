@@ -672,8 +672,18 @@ inside them, which the lead maintainer may change at approval:
 - **The first prerelease is made when the lead maintainer asks for it**, after
   T0.8 at the earliest, so that nothing is published that was not verified on v2.
 - **The integration of the template through the development build of Freelens**,
-  which the template has as an open change, is not taken now: the host drift watch
-  decides when the way of the template changes.
+  over CDP, which the template merged on 2026-10-16 (`28c28e8`), is taken in its
+  form and not in its way of starting Freelens. This repository takes its runner:
+  the integration test and the suites run from the repository of the extension,
+  under its own Vitest, `vitest.integration.config.ts` and `pnpm test:integration`,
+  with a session for each kind made as the sessions of the template are. They start
+  the packaged application otherwise, with `_electron.launch` of Playwright: the
+  nightly of the validation target on a machine of a developer, and Freelens built
+  from source at that commit in CI. REQ-215 asks the packaged application at the
+  commit of the validation target, and the suites need its main process, which CDP
+  does not reach: the menu of the application, the size and the zoom of the window,
+  the dialog of a save, the bundle of FND-10 inside the main process, and the output
+  of the process, where the host logs.
 
 No NEEDS CLARIFICATION marker: every decision above has a default with its
 reasons.
@@ -716,9 +726,10 @@ WebSocket as well ask both), and falls back to the older protocol, with the verb
 test environment, v1.33.4, against its cluster at v1.34.11: three temporary
 accounts of the namespace of the demo, each with `get` on Pods and, on
 `pods/portforward`, `create` alone, `get` alone or neither, ran
-`kubectl port-forward` to the Pod of the store. With `create` kubectl wrote that
-the upgrade was refused for `get`, fell back, and forwarded; with `get` it
-forwarded over the WebSocket; with neither it exited before its line of readiness,
+`kubectl port-forward` at verbosity 4 to the Pod of the store. With `create`
+kubectl wrote at that verbosity that the upgrade was refused for `get`, fell back,
+and forwarded; with `get` it forwarded over the WebSocket; with neither it exited
+before its line of readiness,
 its last words `cannot create resource "pods/portforward"`. So `create` alone
 forwards and only an identity with neither verb is refused, which contradicted
 "The identities are refused at the same steps" for the router of the transport
@@ -732,6 +743,16 @@ With them the transport proof passed on 2026-10-17 in its four modes, with the
 stand-ins of the host of D9: the downloader downloaded through the cluster with
 `create` alone, and the router ended as forbidden at the port-forward, its
 request left in the cluster for the server to remove.
+
+At the default verbosity, the one the extension runs kubectl with, kubectl writes
+nothing of the refusal of `get`: the fallback is a log of level 4 of the client of
+Kubernetes, and what kubectl writes at last, when the older protocol is refused as
+well, names `create`, as a kubectl before 1.31, which asks with `create` alone,
+does. So the reading of a refused port-forward in
+[`diagnostic-tunnel.ts`](../../src/main/diagnostic-tunnel.ts) takes the refusal of
+`create` alone since the review of T0.7, on 2026-10-17, and its test with it: its
+other form, a refusal of `get`, matched nothing kubectl writes there, and would
+have said that the identity needs `create` for a refusal of `get`.
 
 **T0.7, local evidence of its branch, 2026-10-16 to 2026-10-17.** Steps 1 to 10
 were made in the order above, each in its own commits, and step 11 is the
@@ -750,6 +771,18 @@ CI of step 10 and of T0.8 are recorded when they are made.
   They are left out of the report of unused files alone, by `ignoreFiles` in
   `knip.jsonc`, until T3.3 imports them and removes that entry, so
   `pnpm knip:check` and the step of Knip of the check workflow pass.
+- **HOST-03, seen failing once**, on 2026-10-16: in a copy of the manifest, the
+  lockfile and the workspace with React and its DOM at 19.3.0, one patch below the
+  peer range of the SDK, `pnpm install --lockfile-only --offline` exited 1 with
+  `ERR_PNPM_PEER_DEP_ISSUES`, an unmet peer of `@freelensapp/extensions`
+  2.0.0-0-nightly-2026-10-15 for each.
+- **HOST-04, seen failing once**: on 2026-10-16, a file of `src/renderer` that
+  imports `act` of React, `react-dom/test-utils` and Testing Library got three
+  errors of the lint rule `noRestrictedImports`, and none once named as a test; on
+  2026-10-17, a source of the renderer that imports `node:fs` failed the environment tests
+  of the renderer, `tsc -p environment-tests/tsconfig.renderer.json`, with TS2591,
+  and so did one that brings in the types of Node with a reference, on the four
+  marked lines of `environment-tests/node-apis.ts`, with TS2578. Each probe was removed after.
 - **HOST-01**: on the nightly v2.0.0-0-nightly-2026-10-16, its package checked
   against its published checksum, the tarball installed from the Extensions page
   is listed as Enabled, both entries load, and neither log has an error. On
@@ -814,13 +847,74 @@ CI of step 10 and of T0.8 are recorded when they are made.
   kubeconfig the host writes with a user of its proxy and no plugin. A unit test of
   the environment runs the script and finds its own process named in that file:
   a run by any other process is named the same way.
+- **The gate of the head after the review of T0.7**, on 2026-10-17, on Node
+  24.21.0 and pnpm 12.11.2: the install frozen; the type check of the nine
+  programs with no error; lint; the build; the unit run, 83 files and 2,591 tests
+  with none failed, and the two measures within their budgets (VIEW-10 unit, the
+  parser at 127.1 ms at the 95th percentile; ADH-16, the thousand schedules at
+  41.7 ms and one at 0.06 ms); knip, both passes with no finding. On the nightly,
+  one at a time, after the changes of the collector of errors and of the reading of
+  a refused port-forward: overview 15 of 15 in 85.7 seconds, journey 19 of 19 in
+  72.4 seconds, and the suite of the tabs 52 of 52 in 875.0 seconds, with no error
+  of either process.
 - **Not yet proven**: what only CI proves of HOST-20, the build of Freelens from
   source at the commit of the validation target on the hosted runner and its
   cache; HOST-21 at the first prerelease; HOST-02, HOST-24 and HOST-25 with T0.8;
   HOST-22 and HOST-23, the reviews of the documents of step 11 and of the watch in
-  the pull request. The header of SPEC-0013, which REQ-217 names with T0.7, moves
-  with its evidence at T0.8, as REQ-219 says: a change of the order, for the lead
-  maintainer to confirm.
+  the pull request. The header of SPEC-0013 names the v2 target with T0.7, as
+  REQ-217 asks, and its evidence moves with T0.8, as REQ-219 says.
+- **The host drift watch of this pull request** (REQ-218, HOST-23), read on
+  2026-10-17: the main branch of the host at `f95000fc`, sixteen commits after the
+  validation target, and the one of the template at `2eaedcd9`, three commits after
+  `e9881f92`, the commit this spec read it at. What each changes for the extension:
+  - `3295db4e` (freelensapp/freelens#2762): a failed load of a frame inside the
+    window is logged as a frame, at the level of debugging for a load aborted with
+    the code -3 and as a warning otherwise, and no longer as a window that failed
+    to load. The record of a load aborted by a disconnection, which the collector
+    of the suites leaves out, and what AGENTS.md and TESTING say of it no longer
+    hold once the pin moves past it: they go with the move, and the case of the
+    disconnection keeps proving, from Electron, that the loads it aborts are
+    frames.
+  - `f535e42f` (freelensapp/freelens#2767): the client of the host leaves a query
+    value that is undefined out of the address, the behavior the row of the query
+    in the facts of the host above records with freelensapp/freelens#2759. The
+    adapter still sends no query parameter without a value (REQ-202); the comment
+    of its `queryOf` and that row change with the move. The patch of the
+    finalizers of a Pod is not used by the extension.
+  - `c4d61d98` (freelensapp/freelens#2770): the classes of the objects of the
+    extension API can be constructed with `new`, which the extension does not do,
+    and the drawer of the details stays open after a click whose target was drawn
+    again before the click reached the window. The fact of AGENTS.md on the drawer
+    gains that exception with the move, and the comment of the viewer of the
+    volumes and the checks of the clicks of the journey suite are read again with
+    it.
+  - `cb4b46ac` (freelensapp/freelens#2773): Electron 43.8.0 in the catalog of the
+    host, to which REQ-198 pins the devDependency of its types. It moves with the
+    pin, as do the versions this repository takes from the catalog of the host for
+    its tests, Vitest 5.0.5 and jsdom 30.1.3 (`229590f6`, `fb3eec54`), and the pnpm
+    of the host, 12.14.0 (`58a3c133`).
+  - `90eec876` (freelensapp/freelens#2774): the binaries the host bundles are
+    downloaded and checked against `freelens/binaries.lock.json` by a script of
+    their own, `build:binaries`, which `build:resources` runs, outside the cache of
+    Turborepo. Nothing of the extension changes. The workflows of the views and of
+    the integration, which build Freelens from source when their cache by commit
+    misses, download and check the binaries at that build, and take the cache the
+    host keeps of them, or not, with the move.
+  - The other eight, nothing for the extension: the instructions and the workflows
+    of the agents of the host (`25781c83`, `f66ed5dd`, `f29254bd`), and
+    dependencies of the host the extension does not take (`1ec9a4be` undici,
+    `87c096a0` js-yaml, `5fb36ebe` and `6984f095` mise, `f95000fc` sass-embedded).
+  - The template: `28c28e8` (freelensapp/freelens-example-extension#383) runs its
+    integration test against Freelens dev over CDP, which the assumptions above
+    take in their form; `ac8026b` (#386) describes the integration test as an
+    optional pattern of its skills, and `2eaedcd` (#388) moves the template of the
+    issue of a migration into the skill of the port: nothing for the extension.
+
+  Decided while implementing, on 2026-10-17: these changes
+  are taken in with one move of the pin, to the commit of the host that has the
+  fix of its list layout, freelensapp/freelens#2776, open, which the merge of this
+  pull request waits for, so that the validation target moves once. Until then the
+  facts above stay as they are at the target.
 
 The known exception, which the lead maintainer decides: BACK-12 and REST-11, the
 lists of a thousand backups and of a thousand restores, are over the budget of 250
@@ -833,9 +927,24 @@ computed in freelensapp/freelens#2254, which is in the target and not in 1.10.3.
 Neither the budgets, nor the data, nor the suite were changed, and nothing works
 around the host.
 
+Decided while implementing, on 2026-10-17, as the order of T0.7 asks: this pull request is merged only with
+every check green on v2, so after the move of the pin to a commit of the host with
+the fix of its list layout. Until then a run of the job of the views is read case
+by case, and its failed cases must be exactly BACK-12 and REST-11: any other case
+that fails is a failure of the pull request.
+
 Decided while implementing, inside the requirements: the words of a refused
 port-forward name the verb `create` on `pods/portforward`, which the amended
-REQ-137 makes the one the identity needs (REQ-205); the tag workflow tags
+REQ-137 makes the one the identity needs (REQ-205); kubectl that ends before
+its line of readiness having written `Unauthorized` ends the operation as
+forbidden at the step of the port-forward, with the verdict of a credential and
+the words that the cluster did not take the credential of the context, which may
+have expired, where REQ-205 says transport-unreachable for any other end: the
+cluster refused the credential of the connection of the host, which says nothing
+of what the identity may do, and those words send the operator to that credential,
+where the words of a store that was not reached would send to the store; it is
+read, as the refusal of the port-forward is, from what kubectl writes, the one
+place a state of the extension comes from a text (REQ-205); the tag workflow tags
 `X.Y.Z` and `X.Y.Z-N` alone, stricter than the template's, so that a version
 such as `0.1.0-alpha.0` is not tagged (REQ-216); the workflow of the type check of
 the template is not added, since the check workflow already runs the type check of
