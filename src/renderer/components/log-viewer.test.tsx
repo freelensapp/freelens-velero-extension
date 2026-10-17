@@ -562,7 +562,13 @@ describe("a line that takes more than one row, among the lines a filter leaves",
   });
 });
 
-describe("a log of two hundred thousand lines", () => {
+// A log of two hundred thousand lines. What a case of it takes is the viewer itself, not the text, which is made
+// once for them all: alone, the case that reads it and searches it took 1.2 seconds, of which the parse and the
+// first rows 0.24, the search 0.15 and the fourteen moves among matches far apart, which the list scrolls to,
+// 0.6; in a whole run of the unit tests on a machine that ran the test environment, 4.4 seconds of the five a
+// case has by default, and the two others 3.4 and 2.1. Their time is not what they prove: they are given a
+// minute, as the cases of the other long texts are.
+describe("a log of two hundred thousand lines", { timeout: 60_000 }, () => {
   const large = Array.from({ length: 200_000 }, (_, index) =>
     entry(
       index % 97 === 0 ? "error" : index % 13 === 0 ? "warning" : index % 5 === 0 ? "debug" : "info",
