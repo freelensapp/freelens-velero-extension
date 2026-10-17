@@ -93,9 +93,6 @@ jobs:
       - name: Pack plugin
         run: pnpm clean:tgz && pnpm pack
 
-      - name: Get extension path
-        run: echo "EXTENSION_PATH=$(find "$PWD" -maxdepth 1 -name '*.tgz')" >> ${GITHUB_ENV}
-
       # Cache the .deb archives and package lists that `playwright install-deps`
       # downloads through apt, so re-runs reuse them instead of re-downloading.
       # apt is pointed at this project-local directory via a global config file
@@ -130,6 +127,14 @@ jobs:
           # apt ran as root, so hand the cache dir back to the runner user for
           # the cache-save post step to read.
           sudo chown -R "$(id -u):$(id -g)" .apt
+
+      # The disposable kind cluster of this repository's scripts, with Velero
+      # and the CRDs of the reviewed release, and none of the fixtures: each
+      # session of the integration tests places its own object. The state of
+      # the environment, with the generated credentials, is under the home of
+      # the runner: no step uploads it.
+      - name: Bring the test environment up
+        run: pnpm --color=always e2e:cluster:up
 
       - name: Checkout app
         uses: actions/checkout@v7
@@ -315,8 +320,26 @@ jobs:
           sudo chmod 4755 freelens/freelens/dist/linux*-unpacked/chrome-sandbox
           echo "FREELENS_APP=$(echo "$PWD"/freelens/freelens/dist/linux*-unpacked)" >> "$GITHUB_ENV"
 
-      # FND-10, from this repository: the tarball installed from the Extensions
-      # page of a new profile, with no cluster. The test is deterministic, so a
-      # failure is not retried.
+      # FND-10, with no cluster, and the session of each of the five kinds,
+      # from this repository, as `pnpm e2e:integration` runs them: the runner
+      # checks the target of the environment, runs the files one at a time
+      # under xvfb, each in a new profile of the application, checks the
+      # target again and that no session left anything in the cluster. The
+      # tests are deterministic, so a failure is not retried.
       - name: Run integration tests
-        run: timeout 600 xvfb-run -a pnpm --color=always test:integration extensions --reporter=verbose --reporter=github-actions --includeTaskLocation
+        run: node e2e/scripts/local-demo.mts integration --context kind-freelens-velero-dev
+
+      # The screenshots a failure leaves, of the frame of the test cluster:
+      # synthetic data. The state of the environment is not among them.
+      - name: Upload the screenshots of the integration tests
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: integration
+          path: e2e-artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Take the test environment down
+        if: always()
+        run: pnpm --color=always e2e:cluster:down

@@ -9204,6 +9204,25 @@ describe("platform of the test environment", () => {
     expect(workflow).toMatch(/^permissions:\n {2}contents: read$/m);
   });
 
+  it("uploads from the integration tests their screenshots, and nothing of the state", () => {
+    // What the workflow does, without what it says of itself in its comments.
+    const workflow = readFileSync(new URL("../.github/workflows/integration-tests.yaml", import.meta.url), "utf8")
+      .split("\n")
+      .filter((line) => !line.trimStart().startsWith("#"))
+      .join("\n");
+    const uploads = [...workflow.matchAll(/uses: actions\/upload-artifact@[^\n]+\n\s+with:\n((?:\s{10,}[^\n]+\n)+)/g)];
+    const saved = [...workflow.matchAll(/uses: actions\/cache\/save@[^\n]+\n\s+with:\n\s+path: ([^\n]+)/g)];
+
+    expect(uploads).toHaveLength(1);
+    expect(uploads[0][1]).toMatch(/\n?\s+path: e2e-artifacts\/\n/);
+    expect(uploads[0][1].match(/path:/g)).toHaveLength(1);
+    expect(saved.map((match) => match[1])).toEqual(["~/.cache/electron", "freelens/freelens/dist"]);
+    expect(workflow).not.toMatch(/\.local\/state|kubeconfig|credentials|operations\.log/);
+    expect(workflow).toMatch(/if: always\(\)\n\s+run: pnpm --color=always e2e:cluster:down/);
+    expect(workflow).toContain("runs-on: ubuntu-24.04-arm");
+    expect(workflow).toMatch(/^permissions:\n {2}contents: read$/m);
+  });
+
   it("builds Freelens for the views and for the integration at the validation target of SPEC-0015, named once", () => {
     const spec = readFileSync(new URL("../docs/specs/SPEC-0015-freelens-v2-host.md", import.meta.url), "utf8");
     const target = /^- \*\*Freelens validation target:\*\* freelensapp\/freelens `([0-9a-f]{40})`/m.exec(spec)?.[1];

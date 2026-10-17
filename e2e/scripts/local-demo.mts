@@ -2848,6 +2848,77 @@ function runViews(): void {
   console.log(`PASS: the ${named} ran in Freelens against the fixtures; the artifacts are in ${artifacts}.`);
 }
 
+// The label of what a session of the integration test writes, its namespace and its object, as the helpers
+// of the sessions name it (integration/helpers/velero-kinds.ts).
+const INTEGRATION_SESSION_LABEL = "freelensapp.io/velero-integration-session";
+
+// The integration test runs from this repository, under its Vitest, in the Freelens that FREELENS_APP names:
+// FND-10, which needs no cluster, and a session for each of the five kinds, each of which puts one object of
+// its kind in a namespace of its own of this environment and removes it when it ends. It needs none of the
+// fixtures. E2E_TEST_PATTERN names some of its files by a part of their names, one or several separated by
+// spaces; without it every file runs. The target is checked before the first write and after the last, and
+// nothing a session wrote may be left.
+function runIntegration(): void {
+  const files = (process.env.E2E_TEST_PATTERN ?? "").split(/\s+/).filter(Boolean);
+  const application = process.env.FREELENS_APP ?? "";
+  const tarballs = readdirSync(process.cwd()).filter((name) => /^freelensapp-velero-extension-.+\.tgz$/.test(name));
+
+  requireCondition(
+    files.every((file) => /^[a-z0-9-]+$/.test(file)),
+    "The pattern of the integration test is a list of names, not of paths",
+  );
+  requireCondition(
+    application !== "" && existsSync(application),
+    "FREELENS_APP names no application: the integration test starts the Freelens it names, see docs/development/TESTING.md",
+  );
+  requireCondition(
+    !/^\/(System\/Volumes\/Data\/)?Applications\//.test(realpathSync(application)),
+    "FREELENS_APP names an application installed in /Applications: the integration test starts a build made for it",
+  );
+  requireCondition(tarballs.length === 1, "One packed extension is expected in the repository: run pnpm pack");
+  verifyTarget();
+  const artifacts = join(process.cwd(), "e2e-artifacts", "integration");
+  const headless = process.platform === "linux" && !process.env.DISPLAY;
+
+  rmSync(artifacts, { recursive: true, force: true });
+  mkdirSync(artifacts, { recursive: true });
+  const status = spawnSync(
+    headless ? "xvfb-run" : "corepack",
+    [
+      ...(headless ? ["-a", "--server-args=-screen 0 1920x1200x24", "corepack"] : []),
+      "pnpm",
+      "test:integration",
+      ...(files.length ? files.map((file) => `integration/__tests__/${file}`) : ["integration/__tests__/"]),
+    ],
+    {
+      cwd: process.cwd(),
+      env: childEnvironment(process.env, {
+        HOME: homedir(),
+        ...(process.env.DISPLAY ? { DISPLAY: process.env.DISPLAY } : {}),
+        DO_NOT_TRACK: "1",
+        FREELENS_APP: resolve(application),
+        EXTENSION_PATH: join(process.cwd(), tarballs[0]),
+        E2E_KUBECONFIG: CONFIG,
+        E2E_KUBECTL: KUBECTL,
+        E2E_CLUSTER_NAME: DEMO_CLUSTER,
+        E2E_KUBE_CONTEXT: DEMO_CONTEXT,
+        E2E_ARTIFACTS_DIR: artifacts,
+      }),
+      stdio: "inherit",
+      timeout: 1_800_000,
+    },
+  ).status;
+
+  verifyTarget();
+  const left = kubectl(["get", "namespaces", "--selector", INTEGRATION_SESSION_LABEL, "-o", "name"]).trim();
+
+  requireCondition(left === "", `The integration test left in the cluster what a session wrote: ${left}`);
+  requireCondition(status === 0, "The integration test did not pass");
+  console.log(
+    `PASS: the integration test ran in Freelens and left nothing in the cluster; the artifacts are in ${artifacts}.`,
+  );
+}
+
 async function main(): Promise<void> {
   const [action, flag, context, ...extra] = process.argv.slice(2);
 
@@ -2872,12 +2943,13 @@ async function main(): Promise<void> {
       "stop",
       "remove-failed-node",
       "views",
+      "integration",
       "demo",
     ].includes(action) &&
       flag === "--context" &&
       context === DEMO_CONTEXT &&
       !extra.length,
-    `Usage: node e2e/scripts/local-demo.mts <up|down|tools|cluster|storage|bucket|velero|verify|transport-proof|fixtures|fixtures-static|fixtures-live|fixtures-artifacts|fixtures-permissions|fixtures-cleanup|start|stop|remove-failed-node|views|demo> --context ${DEMO_CONTEXT}`,
+    `Usage: node e2e/scripts/local-demo.mts <up|down|tools|cluster|storage|bucket|velero|verify|transport-proof|fixtures|fixtures-static|fixtures-live|fixtures-artifacts|fixtures-permissions|fixtures-cleanup|start|stop|remove-failed-node|views|integration|demo> --context ${DEMO_CONTEXT}`,
   );
   let lock: number | undefined;
 
@@ -2901,6 +2973,7 @@ async function main(): Promise<void> {
     else if (action === "start") await startCluster();
     else if (action === "remove-failed-node") removeFailedNode();
     else if (action === "views") runViews();
+    else if (action === "integration") runIntegration();
     else if (action === "demo") prepareDemo();
     else stopCluster();
     assertPrivateLog();

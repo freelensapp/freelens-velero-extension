@@ -54,6 +54,7 @@
     "demo:views": "node e2e/scripts/local-demo.mts demo --context kind-freelens-velero-dev",
     "demo:down": "pnpm e2e:cluster:down",
     "e2e:views": "pnpm build && pnpm clean:tgz && pnpm pack && node e2e/scripts/local-demo.mts views --context kind-freelens-velero-dev",
+    "e2e:integration": "pnpm build && pnpm clean:tgz && pnpm pack && node e2e/scripts/local-demo.mts integration --context kind-freelens-velero-dev",
     "pre-review": "E2E_TEST_PATTERN=pre-review pnpm e2e:views",
     "type:check": "pnpm type:check:sources && pnpm type:check:tests && pnpm type:check:tooling && pnpm type:check:integration && pnpm type:check:scripts && pnpm type:check:environments",
     "type:check:sources": "tsc -p src/main && tsc -p src/renderer",
