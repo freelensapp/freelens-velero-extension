@@ -4,7 +4,6 @@ import {
   appendFileSync,
   chmodSync,
   closeSync,
-  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -27,13 +26,7 @@ import { promisify } from "node:util";
 import { gunzipSync } from "node:zlib";
 import { createTlsFixture } from "../../test/tls-fixture.ts";
 import { tabArtifacts, tabExpectations } from "./local-artifacts.mts";
-import {
-  compiledDiagnostics,
-  DIRECT_PROOF_ORIGIN,
-  runDownloadProof,
-  runIdentityProof,
-  tlsProofResources,
-} from "./local-download-proof.mts";
+import { DIRECT_PROOF_ORIGIN, runDownloadProof, runIdentityProof, tlsProofResources } from "./local-download-proof.mts";
 import {
   assertFixtureNamespaceContents,
   assertFixtureOperationsRemoved,
@@ -41,6 +34,8 @@ import {
   awaitRequestsRemoved,
   clearTabFixtures,
   createStaticFixtures,
+  type ExecPluginFiles,
+  execPluginKubeconfig,
   FIXTURE_LABEL,
   type FixtureRuntime,
   fixtureArtifactPaths,
@@ -63,6 +58,8 @@ import {
   VIEW_READER,
   VIEW_READER_OF_RESTORES,
   verifyStaticFixtures,
+  viewIdentityOfAnExecPlugin,
+  viewIdentityWithoutPortForward,
 } from "./local-fixtures.mts";
 import {
   assertEgressRules,
@@ -131,6 +128,7 @@ import {
 import { type RunJournal, type StoreReach, storeRequest, tabRecord } from "./local-runtime.mts";
 import { assertOfficialImages } from "./local-security.mts";
 
+import type { ProofShell } from "./local-host.mts";
 import type { StoreBody } from "./local-store.mts";
 
 const STATE = join(homedir(), ".local", "state", DEMO_CLUSTER);
@@ -146,6 +144,8 @@ const BIN = join(STATE, "bin");
 const KIND = join(BIN, "kind");
 const KUBECTL = join(BIN, "kubectl");
 const DEFAULT_KUBECONFIG = join(homedir(), ".kube", "config");
+// The credential plugin of the identity of the views whose kubeconfig takes its token from an `exec` plugin.
+const EXEC_PLUGIN = fileURLToPath(new URL("./local-exec-credential.sh", import.meta.url));
 
 function localDocker(): string {
   try {
@@ -1919,6 +1919,18 @@ async function cleanupFixtures(): Promise<void> {
   );
 }
 
+// What stands in for the kubectl the host runs for a cluster in the proofs on this machine: the kubectl of the
+// environment, with the environment of its commands, its cache in the private state, and the repository, the
+// folder of the extension, as its working directory. The proof gives it the kubeconfig of each identity.
+function proofShell(): ProofShell {
+  return {
+    kubectl: KUBECTL,
+    environment: localEnvironment(process.env, CONFIG),
+    cache: join(STATE, "proof-cache"),
+    cwd: process.cwd(),
+  };
+}
+
 function runDirectProof(input: {
   owner: string;
   run: string;
@@ -1980,7 +1992,7 @@ function runDirectProof(input: {
       .map((line) => JSON.parse(line) as { result?: unknown; nodeVersion?: string });
     const result = messages.find((message) => message.result);
 
-    requireCondition(result?.nodeVersion === "v24.15.0", "Direct proof runtime version differs");
+    requireCondition(result?.nodeVersion === "v24.21.0", "Direct proof runtime version differs");
     return result.result;
   } finally {
     const remaining = docker(["ps", "-aq", "--filter", `name=^${helper}$`]).trim();
@@ -2002,6 +2014,49 @@ function runDirectProof(input: {
       docker(["rm", "--force", remaining]);
     }
     unlinkSync(file);
+  }
+}
+
+// Removes accounts of the namespace of the installation that were applied for a run, with their roles and their
+// bindings, by the identity the cluster gives of each, read as owned by that run: the binding first, then the
+// role and the account. One that is not in the journal, or not in the cluster any more, is passed over.
+function removeAccounts(accounts: KubeResource[]): void {
+  for (const account of [...accounts].reverse()) {
+    const entry = journal.resources.find(
+      (resource) =>
+        resource.kind === account.kind &&
+        resource.name === account.metadata.name &&
+        resource.namespace === DEMO_NAMESPACE,
+    );
+
+    if (!entry) continue;
+    const raw = kubectl(["get", ...resourceArguments(entry), "--ignore-not-found", "-o", "json"]).trim();
+
+    if (raw) {
+      const found = JSON.parse(raw) as KubeResource;
+
+      assertOwnedResource(journal.owner, found, entry.uid);
+      requireCondition(
+        found.metadata.labels?.[FIXTURE_LABEL] === account.metadata.labels?.[FIXTURE_LABEL],
+        "An identity of a run belongs to a different fixture run",
+      );
+      kubectl(
+        [
+          "delete",
+          "--raw",
+          account.kind === "ServiceAccount"
+            ? `/api/v1/namespaces/${DEMO_NAMESPACE}/serviceaccounts/${entry.name}`
+            : `/apis/rbac.authorization.k8s.io/v1/namespaces/${DEMO_NAMESPACE}/${account.kind === "Role" ? "roles" : "rolebindings"}/${entry.name}`,
+          "-f",
+          "-",
+        ],
+        JSON.stringify({ apiVersion: "v1", kind: "DeleteOptions", preconditions: { uid: found.metadata.uid } }),
+        undefined,
+        false,
+      );
+    }
+    journal.resources = journal.resources.filter((resource) => resource !== entry);
+    save();
   }
 }
 
@@ -2058,6 +2113,7 @@ async function runTransportProof(): Promise<void> {
       owner: journal.owner,
       run: active.id,
       kubeconfig: CONFIG,
+      shell: proofShell(),
       pod: { name: pods.items[0].metadata.name, uid: pods.items[0].metadata.uid },
       assertCurrent: verifyTarget,
       record: (
@@ -2102,6 +2158,7 @@ async function runTransportProof(): Promise<void> {
           run: active.id,
           kubeconfig: file,
           environment: CONFIG,
+          shell: proofContext.shell,
           ...(stage ? { stage } : {}),
           assertCurrent: verifyTarget,
           record: proofContext.record,
@@ -2242,54 +2299,9 @@ async function runTransportProof(): Promise<void> {
       journal.resources = journal.resources.filter((resource) => resource !== entry);
       save();
     }
-    // The identities of the proof go by the identity the cluster gives of each, read as owned by this
-    // run: the binding first, then the role and the account.
-    for (const account of [...accounts].reverse()) {
-      const entry = journal.resources.find(
-        (resource) =>
-          resource.kind === account.kind &&
-          resource.name === account.metadata.name &&
-          resource.namespace === DEMO_NAMESPACE,
-      );
-
-      if (!entry) continue;
-      const raw = kubectl(["get", ...resourceArguments(entry), "--ignore-not-found", "-o", "json"]).trim();
-
-      if (raw) {
-        const found = JSON.parse(raw) as KubeResource;
-
-        assertOwnedResource(journal.owner, found, entry.uid);
-        requireCondition(
-          found.metadata.labels?.[FIXTURE_LABEL] === account.metadata.labels?.[FIXTURE_LABEL],
-          "An identity of the proof belongs to a different fixture run",
-        );
-        kubectl(
-          [
-            "delete",
-            "--raw",
-            account.kind === "ServiceAccount"
-              ? `/api/v1/namespaces/${DEMO_NAMESPACE}/serviceaccounts/${entry.name}`
-              : `/apis/rbac.authorization.k8s.io/v1/namespaces/${DEMO_NAMESPACE}/${account.kind === "Role" ? "roles" : "rolebindings"}/${entry.name}`,
-            "-f",
-            "-",
-          ],
-          JSON.stringify({ apiVersion: "v1", kind: "DeleteOptions", preconditions: { uid: found.metadata.uid } }),
-          undefined,
-          false,
-        );
-      }
-      journal.resources = journal.resources.filter((resource) => resource !== entry);
-      save();
-    }
+    // The identities of the proof go by the identity the cluster gives of each, read as owned by this run.
+    removeAccounts(accounts);
     await certificates?.dispose();
-    const main = compiledDiagnostics();
-    const api = new main.DiagnosticKubernetes(
-      { clusterId: journal.owner, context: DEMO_CONTEXT, kubeconfigPath: CONFIG },
-      () => {
-        verifyTarget();
-        return true;
-      },
-    );
 
     if (journal.fixtureRun) {
       const activeRun = journal.fixtureRun as { id: string };
@@ -2327,17 +2339,35 @@ async function runTransportProof(): Promise<void> {
     }
 
     for (const identity of requests) {
-      let request: Awaited<ReturnType<typeof api.read>>;
+      const resource = identity.kind === "DownloadRequest" ? "downloadrequests" : "serverstatusrequests";
+      let request: KubeResource;
 
+      // Read by the client of the environment, which checks its target before every command: the main
+      // process reads nothing of a kubeconfig.
       try {
-        request = await api.read(identity.kind, DEMO_NAMESPACE, identity.name, new AbortController().signal);
-      } catch (error) {
-        if (error instanceof main.DiagnosticError && error.code === "not-found") continue;
+        const raw = kubectl(
+          [
+            "get",
+            `${resource}.velero.io`,
+            identity.name,
+            "--namespace",
+            DEMO_NAMESPACE,
+            "--ignore-not-found",
+            "-o",
+            "json",
+          ],
+          undefined,
+          undefined,
+          false,
+        ).trim();
+
+        if (!raw) continue;
+        request = JSON.parse(raw) as KubeResource;
+      } catch {
         requestCleanupFailed = true;
         continue;
       }
       assertOwnedResource(journal.owner, request, identity.uid);
-      const resource = identity.kind === "DownloadRequest" ? "downloadrequests" : "serverstatusrequests";
 
       kubectl(
         ["delete", "--raw", `/apis/velero.io/v1/namespaces/${DEMO_NAMESPACE}/${resource}/${identity.name}`, "-f", "-"],
@@ -2635,7 +2665,7 @@ function fixtureRuntime(): FixtureRuntime {
   };
 }
 
-// The suites of the views run inside a checkout of Freelens, by its integration harness, against this
+// The suites of the views run from this repository, in the Freelens that FREELENS_APP names, against this
 // environment and its fixtures. They read the cluster and the application: they write to neither.
 // The fixtures the views and their tabs need beside the ones of the phases, put in place once: the objects of
 // the views, the files the store is given for the tabs, the operations the server refuses, and the wait for
@@ -2690,6 +2720,29 @@ function writeReaderKubeconfig(file: string, namespace: string, duration: string
   );
 }
 
+// The kubeconfig of the identity of the installation whose token an `exec` plugin gives, and the two files of
+// the plugin: the token, which lasts as long as it is asked, and the record of the runs of the plugin, empty.
+// The three are written in the private state and nowhere else, and the kubeconfig names the token by its file.
+function writeExecPluginKubeconfig(file: string, plugin: ExecPluginFiles, identity: string, duration: string): void {
+  const token = kubectl(
+    ["create", "token", identity, "--namespace", DEMO_NAMESPACE, `--duration=${duration}`],
+    undefined,
+    undefined,
+    false,
+  ).trim();
+
+  requireCondition(token.length > 100, "Local plugin credential was not generated");
+  writeFileSync(plugin.token, token, { mode: 0o600 });
+  writeFileSync(plugin.runs, "", { mode: 0o600 });
+  writeFileSync(
+    file,
+    JSON.stringify(
+      execPluginKubeconfig(JSON.parse(readFileSync(CONFIG, "utf8")) as KindConfig, plugin, DEMO_NAMESPACE),
+    ),
+    { mode: 0o600 },
+  );
+}
+
 // What each artifact of the tabs holds: the runner made the files the store was given and reads the ones the
 // server wrote, and counts both itself.
 function tabFacts(placed: ReturnType<typeof placeViewsAndTabs>): ReturnType<typeof tabFixtureFacts> {
@@ -2720,29 +2773,30 @@ function prepareDemo(): void {
   );
 }
 
+// The suites run from this repository, under its Vitest, and start the Freelens that FREELENS_APP names:
+// the nightly of the validation target on a machine of a developer, a build of the host from source in CI.
+// E2E_TEST_PATTERN names what is run: one name, or several separated by spaces, each a part of the names
+// of the files, as Vitest takes it. CI names every suite of the views and FND-10, in one run.
 function runViews(): void {
-  const pattern = process.env.E2E_TEST_PATTERN ?? "velero-e2e";
-  const checkout = join(resolve(process.env.FREELENS_DIR ?? join(process.cwd(), "freelens")), "freelens");
+  const suites = (process.env.E2E_TEST_PATTERN ?? "velero-e2e").split(/\s+/).filter(Boolean);
+  const pattern = suites.join("+");
+  const named = `${suites.length === 1 ? "suite" : "suites"} ${suites.join(", ")}`;
+  const application = process.env.FREELENS_APP ?? "";
   const tarballs = readdirSync(process.cwd()).filter((name) => /^freelensapp-velero-extension-.+\.tgz$/.test(name));
 
-  requireCondition(/^[a-z0-9-]+$/.test(pattern), "The pattern of the suite is a name, not a path");
   requireCondition(
-    existsSync(join(checkout, "integration", "__tests__")) && existsSync(join(checkout, "dist")),
-    `No built Freelens in ${checkout}: see docs/development/TESTING.md`,
+    suites.length > 0 && suites.every((suite) => /^[a-z0-9-]+$/.test(suite)),
+    "The pattern of the suites is a list of names, not of paths",
+  );
+  requireCondition(
+    application !== "" && existsSync(application),
+    "FREELENS_APP names no application: the suites start the Freelens it names, see docs/development/TESTING.md",
+  );
+  requireCondition(
+    !/^\/(System\/Volumes\/Data\/)?Applications\//.test(realpathSync(application)),
+    "FREELENS_APP names an application installed in /Applications: the suites start a build made for them",
   );
   requireCondition(tarballs.length === 1, "One packed extension is expected in the repository: run pnpm pack");
-  for (const [from, to] of [
-    [join("e2e", "__tests__"), join("integration", "__tests__")],
-    [join("integration", "helpers"), join("integration", "helpers")],
-  ]) {
-    const files = readdirSync(join(process.cwd(), from)).filter((name) => name.endsWith(".ts"));
-
-    // What an earlier run left of a suite that has another name now would run with the ones of this run.
-    for (const left of readdirSync(join(checkout, to))) {
-      if (/^(velero-|pre-review)/.test(left) && !files.includes(left)) rmSync(join(checkout, to, left));
-    }
-    for (const file of files) copyFileSync(join(process.cwd(), from, file), join(checkout, to, file));
-  }
   const artifacts = join(process.cwd(), "e2e-artifacts", pattern);
   const headless = process.platform === "linux" && !process.env.DISPLAY;
   const placed = placeViewsAndTabs();
@@ -2756,10 +2810,22 @@ function runViews(): void {
   // What the suites of the tabs expect of each artifact they load is told by the runner, and not copied
   // from the extension: they find it beside their reports.
   writeFileSync(join(artifacts, "tab-fixtures.json"), `${JSON.stringify(tabFacts(placed), null, 2)}\n`);
-  // The identity that reads a part of the views lasts as long as the suite: its kubeconfig is in the private
-  // state, and goes when the suite ends.
+  // The identity that reads a part of the views lasts as long as the run may: its kubeconfig is in the private
+  // state, and goes when the run ends. So do the identity that may not port-forward and the one whose token an
+  // `exec` plugin gives, each made for the run, an account of the namespace of the installation with its role,
+  // and gone with it, the second with the files of its plugin: its token, and the record of its runs, which the
+  // suites read.
   const readerFile = join(STATE, `views-reader-${run}.json`);
   const secondFile = join(STATE, `views-reader-of-restores-${run}.json`);
+  const forwardlessFile = join(STATE, `views-without-port-forward-${run}.json`);
+  const forwardless = viewIdentityWithoutPortForward(journal.owner, run);
+  const pluginFile = join(STATE, `views-exec-plugin-${run}.json`);
+  const plugin: ExecPluginFiles = {
+    script: EXEC_PLUGIN,
+    token: join(STATE, `views-exec-plugin-${run}.token`),
+    runs: join(STATE, `views-exec-plugin-${run}.runs`),
+  };
+  const ofThePlugin = viewIdentityOfAnExecPlugin(journal.owner, run);
   let status: number | null;
 
   // What is written is removed whatever happens after it, the second file when the first was written
@@ -2767,8 +2833,12 @@ function runViews(): void {
   try {
     writeReaderKubeconfig(readerFile, names.views, "2h");
     writeReaderKubeconfig(secondFile, names.views, "2h", VIEW_READER_OF_RESTORES);
-    // The application is started by the harness with the environment of the harness: what the suite needs of
-    // this environment is named here, and the home is the one of the caller, where its toolchain is.
+    for (const resource of forwardless) applyOwned(resource);
+    writeReaderKubeconfig(forwardlessFile, DEMO_NAMESPACE, "2h", forwardless[0].metadata.name);
+    for (const resource of ofThePlugin) applyOwned(resource);
+    writeExecPluginKubeconfig(pluginFile, plugin, ofThePlugin[0].metadata.name, "2h");
+    // The suites start the application with their environment: what they need of this environment is named
+    // here, and the home is the one of the caller, where its toolchain is.
     status = spawnSync(
       headless ? "xvfb-run" : "corepack",
       // Without a display the application gets one that has room for its largest window.
@@ -2776,18 +2846,22 @@ function runViews(): void {
         ...(headless ? ["-a", "--server-args=-screen 0 1920x1200x24", "corepack"] : []),
         "pnpm",
         "test:integration",
-        pattern,
+        ...suites,
       ],
       {
-        cwd: checkout,
+        cwd: process.cwd(),
         env: childEnvironment(process.env, {
           HOME: homedir(),
           ...(process.env.DISPLAY ? { DISPLAY: process.env.DISPLAY } : {}),
           DO_NOT_TRACK: "1",
+          FREELENS_APP: resolve(application),
           EXTENSION_PATH: join(process.cwd(), tarballs[0]),
           E2E_KUBECONFIG: CONFIG,
           E2E_READER_KUBECONFIG: readerFile,
           E2E_SECOND_READER_KUBECONFIG: secondFile,
+          E2E_NO_PORT_FORWARD_KUBECONFIG: forwardlessFile,
+          E2E_EXEC_PLUGIN_KUBECONFIG: pluginFile,
+          E2E_EXEC_PLUGIN_RUNS: plugin.runs,
           E2E_KUBECTL: KUBECTL,
           E2E_CLUSTER_NAME: DEMO_CLUSTER,
           E2E_KUBE_CONTEXT: DEMO_CONTEXT,
@@ -2801,15 +2875,90 @@ function runViews(): void {
           E2E_ARTIFACTS_DIR: artifacts,
         }),
         stdio: "inherit",
-        timeout: 3_600_000,
+        // Two hours, as long as the identities made for the run last: every suite of the views is one run in
+        // CI, and the ones that run last must still find them.
+        timeout: 7_200_000,
       },
     ).status;
   } finally {
-    for (const file of [readerFile, secondFile]) rmSync(file, { force: true });
+    for (const file of [readerFile, secondFile, forwardlessFile, pluginFile, plugin.token, plugin.runs])
+      rmSync(file, { force: true });
+    removeAccounts([...forwardless, ...ofThePlugin]);
   }
   verifyTarget();
-  requireCondition(status === 0, `The suite ${pattern} did not pass`);
-  console.log(`PASS: the suite ${pattern} ran in Freelens against the fixtures; its artifacts are in ${artifacts}.`);
+  requireCondition(status === 0, `The ${named} did not pass`);
+  console.log(`PASS: the ${named} ran in Freelens against the fixtures; the artifacts are in ${artifacts}.`);
+}
+
+// The label of what a session of the integration test writes, its namespace and its object, as the helpers
+// of the sessions name it (integration/helpers/velero-kinds.ts).
+const INTEGRATION_SESSION_LABEL = "freelensapp.io/velero-integration-session";
+
+// The integration test runs from this repository, under its Vitest, in the Freelens that FREELENS_APP names:
+// FND-10, which needs no cluster, and a session for each of the five kinds, each of which puts one object of
+// its kind in a namespace of its own of this environment and removes it when it ends. It needs none of the
+// fixtures. E2E_TEST_PATTERN names some of its files by a part of their names, one or several separated by
+// spaces; without it every file runs. The target is checked before the first write and after the last, and
+// nothing a session wrote may be left.
+function runIntegration(): void {
+  const files = (process.env.E2E_TEST_PATTERN ?? "").split(/\s+/).filter(Boolean);
+  const application = process.env.FREELENS_APP ?? "";
+  const tarballs = readdirSync(process.cwd()).filter((name) => /^freelensapp-velero-extension-.+\.tgz$/.test(name));
+
+  requireCondition(
+    files.every((file) => /^[a-z0-9-]+$/.test(file)),
+    "The pattern of the integration test is a list of names, not of paths",
+  );
+  requireCondition(
+    application !== "" && existsSync(application),
+    "FREELENS_APP names no application: the integration test starts the Freelens it names, see docs/development/TESTING.md",
+  );
+  requireCondition(
+    !/^\/(System\/Volumes\/Data\/)?Applications\//.test(realpathSync(application)),
+    "FREELENS_APP names an application installed in /Applications: the integration test starts a build made for it",
+  );
+  requireCondition(tarballs.length === 1, "One packed extension is expected in the repository: run pnpm pack");
+  verifyTarget();
+  const artifacts = join(process.cwd(), "e2e-artifacts", "integration");
+  const headless = process.platform === "linux" && !process.env.DISPLAY;
+
+  rmSync(artifacts, { recursive: true, force: true });
+  mkdirSync(artifacts, { recursive: true });
+  const status = spawnSync(
+    headless ? "xvfb-run" : "corepack",
+    [
+      ...(headless ? ["-a", "--server-args=-screen 0 1920x1200x24", "corepack"] : []),
+      "pnpm",
+      "test:integration",
+      ...(files.length ? files.map((file) => `integration/__tests__/${file}`) : ["integration/__tests__/"]),
+    ],
+    {
+      cwd: process.cwd(),
+      env: childEnvironment(process.env, {
+        HOME: homedir(),
+        ...(process.env.DISPLAY ? { DISPLAY: process.env.DISPLAY } : {}),
+        DO_NOT_TRACK: "1",
+        FREELENS_APP: resolve(application),
+        EXTENSION_PATH: join(process.cwd(), tarballs[0]),
+        E2E_KUBECONFIG: CONFIG,
+        E2E_KUBECTL: KUBECTL,
+        E2E_CLUSTER_NAME: DEMO_CLUSTER,
+        E2E_KUBE_CONTEXT: DEMO_CONTEXT,
+        E2E_ARTIFACTS_DIR: artifacts,
+      }),
+      stdio: "inherit",
+      timeout: 1_800_000,
+    },
+  ).status;
+
+  verifyTarget();
+  const left = kubectl(["get", "namespaces", "--selector", INTEGRATION_SESSION_LABEL, "-o", "name"]).trim();
+
+  requireCondition(left === "", `The integration test left in the cluster what a session wrote: ${left}`);
+  requireCondition(status === 0, "The integration test did not pass");
+  console.log(
+    `PASS: the integration test ran in Freelens and left nothing in the cluster; the artifacts are in ${artifacts}.`,
+  );
 }
 
 async function main(): Promise<void> {
@@ -2836,12 +2985,13 @@ async function main(): Promise<void> {
       "stop",
       "remove-failed-node",
       "views",
+      "integration",
       "demo",
     ].includes(action) &&
       flag === "--context" &&
       context === DEMO_CONTEXT &&
       !extra.length,
-    `Usage: node e2e/scripts/local-demo.mts <up|down|tools|cluster|storage|bucket|velero|verify|transport-proof|fixtures|fixtures-static|fixtures-live|fixtures-artifacts|fixtures-permissions|fixtures-cleanup|start|stop|remove-failed-node|views|demo> --context ${DEMO_CONTEXT}`,
+    `Usage: node e2e/scripts/local-demo.mts <up|down|tools|cluster|storage|bucket|velero|verify|transport-proof|fixtures|fixtures-static|fixtures-live|fixtures-artifacts|fixtures-permissions|fixtures-cleanup|start|stop|remove-failed-node|views|integration|demo> --context ${DEMO_CONTEXT}`,
   );
   let lock: number | undefined;
 
@@ -2865,6 +3015,7 @@ async function main(): Promise<void> {
     else if (action === "start") await startCluster();
     else if (action === "remove-failed-node") removeFailedNode();
     else if (action === "views") runViews();
+    else if (action === "integration") runIntegration();
     else if (action === "demo") prepareDemo();
     else stopCluster();
     assertPrivateLog();

@@ -1,5 +1,5 @@
 import { Common } from "@freelensapp/extensions";
-import { makeObservable, observable, toJS } from "mobx";
+import { makeObservable, observableRef, toJS } from "mobx";
 import { emptyPreferences, readPreferences } from "./discovery";
 
 import type { PreferenceStorage, Preferences } from "./discovery";
@@ -17,7 +17,7 @@ export class PreferencesStore extends Common.Store.ExtensionStore<Preferences> i
 
   constructor() {
     super({ configName: "velero-preferences", defaults: emptyPreferences() });
-    makeObservable(this, { preferences: observable.ref });
+    makeObservable(this, { preferences: observableRef });
   }
 
   // Said by the main process before it loads the store: the allowances are the ones of its file and of

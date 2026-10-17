@@ -9,10 +9,10 @@
 // any more, and the restore the controller of the installation ran. The suite
 // reads the application and the cluster, and writes to neither.
 
-import { expect } from "@jest/globals";
-import * as artifacts from "../helpers/velero-artifacts";
-import * as cluster from "../helpers/velero-cluster";
-import * as velero from "../helpers/velero-extension";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import * as artifacts from "../../integration/helpers/velero-artifacts";
+import * as cluster from "../../integration/helpers/velero-cluster";
+import * as velero from "../../integration/helpers/velero-extension";
 
 import type { Frame } from "playwright";
 
@@ -654,6 +654,10 @@ describe("views of the restores", () => {
       await frame.waitForSelector(`[data-testid=velero-restore-name] >> text="${MAPPED}"`, { timeout: 60_000 });
       expect(await frame.locator("[data-testid=velero-restores-page]").count()).toBe(1);
       expect((await cluster.target(frame)).namespace).toBe(cluster.E2E_VIEWS_NAMESPACE);
+      // The link leads to the view of the extension: the drawer is gone with the address that named the object,
+      // and neither the log of the main process nor the ones of the frames have an error.
+      expect(await cluster.hostDetailsGone(frame)).toEqual({ drawer: false, address: false });
+      expect(Object.values(await velero.hostLogErrors(started.app)).flat()).toEqual([]);
       await cluster.closeWorkspace(frame);
       await cluster.expectRowOf(RESTORES, frame, MAPPED, "Waiting for plugin operations");
     },

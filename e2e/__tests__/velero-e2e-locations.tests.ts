@@ -10,9 +10,9 @@
 // ago, or nothing. The suite reads the application and the cluster, and
 // writes to neither.
 
-import { expect } from "@jest/globals";
-import * as cluster from "../helpers/velero-cluster";
-import * as velero from "../helpers/velero-extension";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import * as cluster from "../../integration/helpers/velero-cluster";
+import * as velero from "../../integration/helpers/velero-extension";
 
 import type { Frame } from "playwright";
 
@@ -855,6 +855,23 @@ describe("views of the locations", () => {
         timeout: 60_000,
       });
       expect(await frame.locator("[data-testid=velero-snapshot-locations-page]").count()).toBe(1);
+      // The link leads to the view of the extension: the drawer is gone with the address that named the object,
+      // and neither the log of the main process nor the ones of the frames have an error.
+      expect(await cluster.hostDetailsGone(frame)).toEqual({ drawer: false, address: false });
+      expect(Object.values(await velero.hostLogErrors(started.app)).flat()).toEqual([]);
+      await cluster.closeWorkspace(frame);
+
+      // The way of the details of a storage location leads to its view as well.
+      await cluster.navigate(frame, "/crd/velero.io/backupstoragelocations");
+      await cluster.selectHostNamespace(frame, cluster.E2E_VIEWS_NAMESPACE);
+      await cluster.hostDetails(frame, "views-archive", "Read only");
+      await frame.click("[data-testid=velero-storage-location-details-link]");
+      await frame.waitForSelector('[data-testid=velero-storage-location-name] >> text="views-archive"', {
+        timeout: 60_000,
+      });
+      expect(await frame.locator("[data-testid=velero-storage-locations-page]").count()).toBe(1);
+      expect(await cluster.hostDetailsGone(frame)).toEqual({ drawer: false, address: false });
+      expect(Object.values(await velero.hostLogErrors(started.app)).flat()).toEqual([]);
       await cluster.closeWorkspace(frame);
     },
     TIMEOUT,

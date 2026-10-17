@@ -240,8 +240,8 @@ export const ArtifactPanel = observer(({ installation, kind, tab, object, counte
       there?.focus();
       return;
     }
-    // The first line of a text may be drawn a moment after its viewer: the list of the host measures its
-    // room before it draws a row. The focus waits for it where it is, on the words of the tab.
+    // The first line of a text may be drawn a moment after its viewer, by a later draw of its list. The
+    // focus waits for it where it is, on the words of the tab.
     const drawn = new MutationObserver(() => {
       const line = first();
 

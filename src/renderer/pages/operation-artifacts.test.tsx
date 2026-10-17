@@ -3,12 +3,14 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { addressSearch, Renderer } from "../../../test/freelens-extensions";
-import { confirmDialogs, listProps, virtualList } from "../../../test/host-components";
+import { confirmDialogs, listProps } from "../../../test/host-components";
+import * as layout from "../../../test/list-layout";
 import { otherShape as otherResources, parseResources, resourcesCount } from "../../common/artifact-resources";
 import { otherShape as otherResults, parseResults, resultsSummary } from "../../common/artifact-results";
 import { artifactOf } from "../../common/artifact-text";
 import { otherShape as otherVolumes, volumesCount } from "../../common/artifact-volumes";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
+import { ROOM } from "../components/artifact-lines";
 import { CONTENT } from "../components/artifact-viewer";
 import { closeViews, openView } from "../navigation";
 import { Installation } from "../state/installation";
@@ -31,8 +33,10 @@ const A = "velero-a";
 const NOW = Date.parse("2026-10-05T09:30:00Z");
 // The time of a test that goes through the load of several tabs, on a machine that is busy.
 const SLOW = 30_000;
-// The room the list of the host has in the tests, which one of them takes away and gives back.
-const ROOM = virtualList.room;
+// The lists are laid out as a browser lays them out: in the tallest room a list is given, which some of the
+// tests take away and give back.
+layout.layOutLists();
+layout.room.height = ROOM;
 
 function path(family: Family, namespace: string): string {
   return `/apis/velero.io/v1/namespaces/${namespace}/${RESOURCES[family]}`;
@@ -237,7 +241,7 @@ const focused = () => document.activeElement?.getAttribute("data-testid");
 
 // A command is given as the pointer gives it in the application: what is pressed has the focus.
 function press(element: HTMLElement): void {
-  element.focus();
+  act(() => element.focus());
   fireEvent.click(element);
 }
 
@@ -281,10 +285,9 @@ function marked(viewer: string): HTMLElement[] {
   return [...panel.querySelectorAll<HTMLElement>(`[${CONTENT}]`)];
 }
 
-// The list of the host is given a room, or loses it, as it does when what holds it changes its size.
+// The list is given a room, or loses it, as it does when what holds it changes its size.
 function room(height: number): void {
-  virtualList.room = height;
-  fireEvent(window, new Event("resize"));
+  layout.resize({ height });
 }
 
 // What was asked of the page had the time to be done.
@@ -295,7 +298,7 @@ async function settled() {
 }
 
 afterEach(() => {
-  virtualList.room = ROOM;
+  layout.room.height = ROOM;
   act(() => closeViews());
   if (addressSearch()) act(() => Renderer.Navigation.navigate({ search: "" }));
   cleanup();
@@ -559,21 +562,17 @@ describe("the first line of what a tab shows", () => {
   );
 
   it(
-    "is given the focus when it is drawn, in a list that had no room when its text arrived",
+    "is given the focus at once, in a list that has no room when its text arrives: the list draws its first line all the same",
     async () => {
       await opened("Backup", "nightly");
-      // The list of the host measures its room before it draws a row, and draws none while it has no room.
-      virtualList.room = 0;
+      // react-window draws the first row of a list, and the rows it keeps ready after it, before it knows its
+      // room: the first line arrives with the text, and nothing waits for the room.
+      layout.room.height = 0;
       const viewer = await loaded("Backup", "Log");
 
-      expect(marked(viewer)).toEqual([]);
-      // The focus waits on the words of the tab: it is not given to a command in the meantime.
-      expect(focused()).toBe("velero-backup-log-status");
-      // What else changes in the tab meanwhile is not what is waited for.
-      fireEvent.change(screen.getByTestId(`${viewer}-search`), { target: { value: "backing" } });
-      await settled();
-      expect(screen.getByTestId(`${viewer}-search-status`).textContent).toBe("Match 1 of 2, on line 1.");
-      expect(focused()).toBe("velero-backup-log-status");
+      expect(marked(viewer)).toEqual([screen.getByTestId(`${viewer}-line-1`)]);
+      expect(focused()).toBe(`${viewer}-line-1`);
+      // The room that comes after it moves the focus nowhere.
       room(ROOM);
       await settled();
       expect(marked(viewer)).toEqual([screen.getByTestId(`${viewer}-line-1`)]);
@@ -583,13 +582,13 @@ describe("the first line of what a tab shows", () => {
   );
 
   it(
-    "is not given the focus the operator moved to something else before it was drawn",
+    "is not taken back from what the operator moved the focus to when the list gets its room",
     async () => {
       await opened("Backup", "nightly");
-      virtualList.room = 0;
+      layout.room.height = 0;
       const viewer = await loaded("Backup", "Log");
 
-      screen.getByTestId(`${viewer}-search`).focus();
+      act(() => screen.getByTestId(`${viewer}-search`).focus());
       room(ROOM);
       await settled();
       expect(marked(viewer)).toHaveLength(1);
@@ -599,10 +598,10 @@ describe("the first line of what a tab shows", () => {
   );
 
   it(
-    "is not waited for any more when another tab is shown in its place",
+    "is not given the focus when its tab is shown again in the place of another",
     async () => {
       await opened("Backup", "nightly");
-      virtualList.room = 0;
+      layout.room.height = 0;
       const viewer = await loaded("Backup", "Log");
 
       fireEvent.click(tab("Results"));

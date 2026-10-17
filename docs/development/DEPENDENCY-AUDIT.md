@@ -1,67 +1,78 @@
 # Dependencies
 
-Updated: 2026-10-05
+Updated: 2026-10-17
 
 What the extension ships, what it only builds with, and how both are kept
-current. The rule on third-party software is the
+current, on Freelens v2 since T0.7
+([SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md)). The rule on third-party
+software is the
 [official-artifacts directive](../../AGENTS.md#official-artifacts-and-scope).
 
-## Runtime Libraries Bundled In Main
+## What The Bundles Carry
 
-Declared under `devDependencies` and bundled into `out/main`: a declaration there
-does not make a bundled library development-only.
+The host installs nothing for an extension: what the code needs at run time and
+the host does not provide is in the bundle. The rule of the template of the
+organization applies: a third-party library a bundle carries is declared in
+`dependencies`, and the modules of the host in `devDependencies`.
 
-| Package | Pin | Use |
-| --- | --- | --- |
-| `@kubernetes/client-node` | 2.0.0 | Explicit kubeconfig/authentication and the WebSocket handler of the port-forward protocol |
-| `ws` | 8.21.3 | Owned WebSocket handshake, cancellation and backpressure |
-| `@types/ws` | 8.18.1 | Build-time declarations only |
+| Package | Pin | Bundle | Use |
+| --- | --- | --- | --- |
+| `react-window` | 2.3.4, the version of the catalog of the host | Renderer | The windowing of the lines of a log and of the rows of the resources viewer, in place of the virtual list the host no longer offers to an extension |
 
-- The client is imported by its files, `dist/config.js` and
-  `dist/web-socket-handler.js`, never from its root, which would bundle every
-  generated API client. The package has no `exports` map: a future one would break
-  the build visibly. Run the adapter and tunnel tests before changing the version.
-- undici is replaced by [a stub](../../build/undici-stub.ts) in the main build. The
-  reasons are in [ARCHITECTURE.md](ARCHITECTURE.md#scaffold-progress).
-- The build defines `WS_NO_BUFFER_UTIL` and `WS_NO_UTF_8_VALIDATE`: they disable
-  the optional native accelerators of `ws`; no library is patched.
-- The main process asks the host for one module it does not bundle: `electron`,
-  for the dialog in which the operator chooses the file the text of an artifact
-  is saved into. The build leaves the module out of the bundle, as it leaves the
-  modules of Node, and the module is asked when a text is saved, not when the
-  extension is loaded: the proofs of the test environment load the main bundle
-  where there is no host. It is the module of the process the extension runs in:
-  it is no dependency of the package, and the configuration of Knip says so.
-- The renderer bundles no library: its bundle is the code of the views. React,
-  its DOM, its JSX runtime, MobX and its bindings for React are asked of the host
-  by the globals it provides them under, and a build test fails when one of them
-  is found in the output.
+- The main bundle, `dist/main.js`, carries the code of the extension and the shim
+  of the SDK, and no library. It reaches the API server through the client of the
+  host, and opens the tunnel to the store with the kubectl the host runs for the
+  cluster: no Kubernetes client, no WebSocket library and no undici are in the
+  graph. The modules of Node and `electron` stay outside the bundle. `electron`
+  is imported at the moment a text is saved, for the dialog in which the
+  operator chooses the file, and never when the extension is loaded: the proofs
+  of the test environment load the main bundle under Node, where there is no
+  host. It is the module of the process the extension runs in, and no
+  dependency of the package.
+- The renderer bundle, `dist/renderer.js`, carries the code of the views, the
+  shim of the SDK and react-window. React, its DOM, its JSX runtime, MobX and its
+  bindings for React are read from `globalThis.FreelensExtensionApi`, which the
+  host provides, by the plugin `build/vite-plugin-host-modules.mjs`; the main
+  process reads MobX alone from it. The build test lists the sources each
+  bundle carries, the code of the extension, the shim and react-window in the
+  renderer, and fails on anything else, a copy of React or MobX among it.
+- The shim of the SDK is the module of `@freelensapp/extensions` that reads
+  `Common`, `Main` and `Renderer` from the same global: it is bundled, and the
+  rest of the SDK is never reached.
 
-The packed production build is about 0.6 MB.
+The packed build is about 0.5 MB.
 
 ## Development Graph
 
-- The host SDK, `@freelensapp/extensions`, is a type and build input. The build
-  maps it to the global the host provides and never bundles its implementation,
-  nor anything the SDK depends on.
-- `@freelensapp/core` is where the declarations of the SDK are: the paths of
-  `tsconfig.json` point to them. Nothing of it is imported by the source.
-- `react`, `react-dom`, `mobx` and `mobx-react` are pinned at the versions the
-  host provides, 17.0.2, 6.15.0 and 7.6.0: the build reads the names they export
-  and the tests of the views run against them. `@testing-library/react` 12.1.5,
-  the last one for React 17, and `jsdom` are for those tests alone.
+- The host SDK, `@freelensapp/extensions`, is pinned exactly to the nightly of the
+  validation target, 2.0.0-0-nightly-2026-10-15, until Freelens 2.0.0 is released,
+  then to a range of versions. Its declarations are in the package itself.
+- `react`, `react-dom` 19.3.1, `mobx` 7.0.6, `mobx-react` 10.0.2, their
+  declarations and `electron` 43.7.11, for its types, are devDependencies at the
+  versions of the catalog of the host: the build reads the names they export and
+  the tests of the views run against them. pnpm 12 runs with
+  `strictPeerDependencies`, so a library shared with the host outside the peer
+  range of the SDK fails the install. `@testing-library/react` 16.3.3, with
+  `@testing-library/dom` 10.4.2, and `jsdom` are for the tests alone.
 - Biome, Knip, Trunk and shx are not dependencies: the scripts run them through
   `pnpm dlx` at an exact version.
 - There is no dependency override and no patch.
 - OSV-Scanner reads the lockfile on every pull request and on main. It reports and
   does not fail the run: a finding in the development graph is information to
   explain in context.
-- Renovate proposes the updates, of the versions the scripts give to `pnpm dlx`
-  too. It leaves alone what must match the host: React, MobX and their bindings,
-  the major version of the declarations of React, and the library the components
-  are tested with, which stays at the last version for React 17. Two workflows run every day and open a pull request when they have
-  something: one deduplicates the lockfile, one runs `pnpm audit fix`. The second
-  can propose an override: whoever merges it takes on keeping it current.
+- Renovate follows the host, with the configuration of the template: custom
+  datasources read the default catalog of Freelens on main for the libraries,
+  the scripts of its root package for the tools run through `pnpm dlx`, and its
+  `mise.toml` for Node and the tools of mise. A version arrives once Freelens
+  took it, at that version, in one pull request, the group `Freelens
+  dependencies`, with the nightly of the SDK. React, MobX, react-window and
+  every other library follow the catalog. The pins of the test environment keep
+  rules of their own: Velero and its plugin move together, kind, its node image
+  and kubectl together, the checksums beside them by hand, and the image of the
+  helper with `.nvmrc`, by hand. Two workflows run every day and open a pull
+  request when they have something: one deduplicates the lockfile, one runs
+  `pnpm audit fix`. The second can propose an override: whoever merges it takes
+  on keeping it current.
 
 ### History
 
@@ -86,7 +97,9 @@ vulnerabilities in two packages, none of them critical or high:
 | `decode-uri-component` 0.2.2 | `query-string` of the core of the host, through the host SDK | No |
 
 Both belong to the host and reach this graph through its SDK, which the build
-never bundles. Their fix is a release of the host, not an override here.
+never bundles. Their fix is a release of the host, not an override here. Since
+T0.7 the SDK of Freelens v2 brings neither of them, nor the core of the host,
+into the graph.
 
 ## T0.4 Container Image Findings
 

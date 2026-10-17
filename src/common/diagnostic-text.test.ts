@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createdNothing, downloadFailure, pluginWords } from "./diagnostic-text";
+import { CLUSTER_WORDS, createdNothing, downloadFailure } from "./diagnostic-text";
 import { DOWNLOAD_STAGES, type FailureCode, readAnswer } from "./ipc";
 
 // Every code a DownloadRequest can end with.
@@ -231,10 +231,10 @@ describe("the words of a DownloadRequest that did not end with its file", () => 
     expect(downloadFailure("forbidden", "pod", created).text).toBe(
       `The cluster refused to read the Pod of the store: the route through the cluster needs the verb get on pods. ${stays}`,
     );
-    // A port-forward over a WebSocket is asked with the verb get, and the releases that check the verb
-    // create as well ask for both: the words name both.
+    // The kubectl of the host asks the verb get first, over a WebSocket, and falls back to the verb create:
+    // the words name the one it needs.
     expect(downloadFailure("forbidden", "forward", created).text).toBe(
-      `The cluster refused the port-forward to the Pod of the store: the route through the cluster needs the verbs get and create on pods/portforward. ${stays}`,
+      `The cluster refused the port-forward to the Pod of the store: the route through the cluster needs the verb create on pods/portforward. ${stays}`,
     );
     // A name that only may be a Service, which the cluster refused to say: the words do not call it one.
     expect(downloadFailure("forbidden", "service", { ...created, verdict: "candidate" }).text).toBe(
@@ -306,7 +306,7 @@ describe("the words of a DownloadRequest that did not end with its file", () => 
       "The request is not one the main process understands.",
     );
     expect(downloadFailure("validation", "creation", context).text).toBe(
-      "The request could not be written for the cluster: a name, or the credential it would carry, is not one that can be sent. No request was created.",
+      "The request could not be written for the cluster: a name is not one that can be sent. No request was created.",
     );
     expect(downloadFailure("validation", "certificate", context).text).toContain(
       "What the storage location says of its certificate is not something the extension can use",
@@ -403,31 +403,46 @@ describe("the words of a DownloadRequest that did not end with its file", () => 
     expect(downloadFailure("deadline", "wait", whole).text).toBe(
       "The operation did not end in two minutes, and was stopped. The DownloadRequest nightly-0e7c5b7a-1111-4111-8111-000000000001 stays in velero-a until Velero removes it.",
     );
-    expect(downloadFailure("deadline", "creation", created).text).toBe(
-      "The cluster did not answer in time. No request was created.",
-    );
+    // Nothing is claimed of a creation without an answer in time: whether it was sent is not known.
+    expect(downloadFailure("deadline", "creation", created).text).toBe("The cluster did not answer in time.");
     // Only a deadline is of the whole operation.
     expect(downloadFailure("cancelled", "wait", whole).text).toBe(downloadFailure("cancelled", "wait", created).text);
   });
 
-  it("says a plugin of the context that gave no credential by its command, and not as a refusal of the cluster", () => {
-    for (const reason of ["failed", "deadline", "unreadable"] as const) {
-      const said = downloadFailure("request-failed", "creation", {
-        ...context,
-        plugin: { command: "kubelogin", reason, seconds: 30 },
-      });
+  it("says of a cluster not in the catalog, or not connected, which it is, and what was left at the step", () => {
+    for (const verdict of ["absent", "disconnected"] as const) {
+      for (const stage of DOWNLOAD_STAGES) {
+        const said = downloadFailure("target-changed", stage, { ...created, verdict });
 
-      expect(said).toMatchObject({ code: "request-failed", stage: "creation", retry: true });
-      expect(said.text).toBe(pluginWords("kubelogin", reason, 30));
-      expect(said.text).not.toMatch(/refused|verb/);
+        expect([stage, said.text.startsWith(CLUSTER_WORDS[verdict])]).toEqual([stage, true]);
+        expect(said).toMatchObject({ code: "target-changed", stage, retry: false });
+      }
+      // Refused before anything was sent: at the creation nothing was created, after it the request stays.
+      expect(downloadFailure("target-changed", "creation", { ...created, verdict }).text).toBe(
+        `${CLUSTER_WORDS[verdict]} No request was created.`,
+      );
+      expect(downloadFailure("target-changed", "target", { ...created, verdict }).text).toBe(
+        `${CLUSTER_WORDS[verdict]} No request was created.`,
+      );
+      expect(downloadFailure("target-changed", "forward", { ...created, verdict }).text).toBe(
+        `${CLUSTER_WORDS[verdict]} The DownloadRequest nightly-0e7c5b7a-1111-4111-8111-000000000001 stays in velero-a until Velero removes it.`,
+      );
     }
-    // After the creation the request is there, and the words say so.
-    expect(
-      downloadFailure("request-failed", "wait", {
-        ...created,
-        plugin: { command: "kubelogin", reason: "failed", seconds: 30 },
-      }).text,
-    ).toContain("stays in velero-a until Velero removes it");
+    expect(CLUSTER_WORDS.absent).not.toBe(CLUSTER_WORDS.disconnected);
+  });
+
+  it("says how a port-forward that was not opened ended: not ready in time, ended before it was ready, refused", () => {
+    expect(downloadFailure("deadline", "forward", created)).toMatchObject({
+      retry: true,
+      text: "The port-forward to the Pod of the store was not ready in fifteen seconds. The DownloadRequest nightly-0e7c5b7a-1111-4111-8111-000000000001 stays in velero-a until Velero removes it.",
+    });
+    expect(downloadFailure("transport-unreachable", "forward", created)).toMatchObject({
+      retry: true,
+      text: "The port-forward to the Pod of the store could not be opened: kubectl ended before it was ready, or could not be run. The DownloadRequest nightly-0e7c5b7a-1111-4111-8111-000000000001 stays in velero-a until Velero removes it.",
+    });
+    expect(downloadFailure("forbidden", "forward", created).text).toBe(
+      "The cluster refused the port-forward to the Pod of the store: the route through the cluster needs the verb create on pods/portforward. The DownloadRequest nightly-0e7c5b7a-1111-4111-8111-000000000001 stays in velero-a until Velero removes it.",
+    );
   });
 
   it("says whether asking again, as it was asked, is safe", () => {

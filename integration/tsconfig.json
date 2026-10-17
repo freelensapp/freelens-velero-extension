@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "types": ["node", "@freelensapp/extensions"]
+  },
+  // The helpers, the integration test and the suites of the views, which run on
+  // Freelens v2: the callbacks of an evaluate run in a page, hence the DOM.
+  "include": ["./**/*.ts", "../e2e/__tests__/*.tests.ts"]
+}

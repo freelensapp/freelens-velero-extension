@@ -1,56 +1,54 @@
 // The procedures of the gate through the IPC and the catalog of the host, as the extension wires them
 // when it is activated: the stub of the host stands for both processes, and a call of the renderer
 // reaches the handler the main process registered.
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { hostCatalog, ipcBroadcasts, ipcFrame, ipcHandlers, resetIpc } from "../../test/freelens-extensions";
+import {
+  anExtension,
+  hostCatalog,
+  ipcBroadcasts,
+  ipcFrame,
+  ipcHandlers,
+  resetIpc,
+} from "../../test/freelens-extensions";
+import { CLUSTER_WORDS } from "../common/diagnostic-text";
 import { CHANNELS } from "../common/ipc";
 import { VeleroIpcRenderer } from "../renderer/api/ipc";
-import { catalogEntries, VeleroIpc } from "./ipc";
+import { catalogEntries } from "./host";
+import { VeleroIpc } from "./ipc";
 
 const CLUSTER = "synthetic-cluster";
-const KUBECONFIG = `apiVersion: v1
-kind: Config
-clusters:
-  - name: synthetic
-    cluster:
-      server: https://127.0.0.1:6443
-      certificate-authority-data: c3ludGhldGlj
-contexts:
-  - name: kind-synthetic
-    context:
-      cluster: synthetic
-      user: synthetic
-users:
-  - name: synthetic
-    user:
-      token: synthetic-token
-`;
 
-let directory: string;
 let main: VeleroIpc;
 let renderer: VeleroIpcRenderer;
 
-beforeEach(async () => {
-  directory = await mkdtemp(join(tmpdir(), "velero-ipc-host-"));
-  await writeFile(join(directory, "kubeconfig"), KUBECONFIG);
+beforeEach(() => {
   resetIpc();
+  // No file is behind the paths of the catalog: the extension reads no kubeconfig.
   hostCatalog.clusters = [
-    { id: CLUSTER, name: "synthetic", kubeConfigPath: join(directory, "kubeconfig"), contextName: "kind-synthetic" },
-    { id: "other-cluster", name: "other", kubeConfigPath: join(directory, "absent"), contextName: "kind-other" },
+    {
+      id: CLUSTER,
+      name: "synthetic",
+      kubeConfigPath: "/synthetic/kubeconfig",
+      contextName: "kind-synthetic",
+      status: "connected",
+    },
+    {
+      id: "other-cluster",
+      name: "other",
+      kubeConfigPath: "/synthetic/absent",
+      contextName: "kind-other",
+      status: "connected",
+    },
   ];
-  main = VeleroIpc.createInstance({} as never);
+  main = VeleroIpc.createInstance(anExtension("main") as never);
   main.register(catalogEntries);
-  renderer = VeleroIpcRenderer.createInstance({} as never);
+  renderer = VeleroIpcRenderer.createInstance(anExtension("renderer") as never);
 });
 
-afterEach(async () => {
+afterEach(() => {
   main.release();
   hostCatalog.clusters = undefined;
   resetIpc();
-  await rm(directory, { recursive: true, force: true });
 });
 
 describe("the gate through the IPC and the catalog of the host", () => {
@@ -71,7 +69,10 @@ describe("the gate through the IPC and the catalog of the host", () => {
         CHANNELS.allowanceRevoke,
       ].sort(),
     );
-    expect(catalogEntries().map((entry) => entry.id)).toEqual([CLUSTER, "other-cluster"]);
+    expect(catalogEntries().map((entry) => [entry.id, entry.status])).toEqual([
+      [CLUSTER, "connected"],
+      ["other-cluster", "connected"],
+    ]);
     expect(await renderer.state(CLUSTER)).toEqual({
       ok: true,
       value: { cluster: { id: CLUSTER, name: "synthetic", context: "kind-synthetic" }, writes: { on: false } },
@@ -81,11 +82,11 @@ describe("the gate through the IPC and the catalog of the host", () => {
   it("turns writes on with the adapter it makes from the entry of the catalog, and confirms a write", async () => {
     const enabled = await renderer.enable(CLUSTER, "velero", { context: "kind-synthetic", namespace: "velero" });
 
-    expect(enabled).toMatchObject({
+    expect(enabled).toEqual({
       ok: true,
       value: {
-        writes: { on: true, namespace: "velero" },
-        connection: { supported: true, credential: "token" },
+        cluster: { id: CLUSTER, name: "synthetic", context: "kind-synthetic" },
+        writes: { on: true, namespace: "velero", since: expect.any(Number) },
       },
     });
     expect(await renderer.confirm(CLUSTER, "velero", "ServerStatusRequest")).toMatchObject({ ok: true });
@@ -97,6 +98,17 @@ describe("the gate through the IPC and the catalog of the host", () => {
     });
   });
 
+  it("does not turn writes on for a cluster the catalog says is not connected, and says so", async () => {
+    hostCatalog.clusters = hostCatalog.clusters?.map((cluster) => ({ ...cluster, status: "disconnected" }));
+    expect(await renderer.enable(CLUSTER, "velero", { context: "kind-synthetic", namespace: "velero" })).toEqual({
+      ok: false,
+      code: "target-changed",
+      stage: "catalog",
+      retry: false,
+      text: CLUSTER_WORDS.disconnected,
+    });
+  });
+
   it("refuses the frame of a cluster that asks for another, and the window of the host", async () => {
     expect(await renderer.state("other-cluster")).toMatchObject({ ok: false, code: "forbidden", stage: "frame" });
     ipcFrame.current = { senderFrame: { url: "https://renderer.freelens.app:1234/catalog" }, processId: 1, frameId: 1 };
@@ -105,9 +117,35 @@ describe("the gate through the IPC and the catalog of the host", () => {
 
   it("turns writes off when the extension is deactivated, and tells nothing of it", async () => {
     await renderer.enable(CLUSTER, "velero", { context: "kind-synthetic", namespace: "velero" });
+    // As the extension is deactivated: the procedures are let go and the instance is reset, then the host
+    // takes its handlers out. The next activation registers them on an instance of its own.
     main.release();
+    VeleroIpc.resetInstance();
+    ipcHandlers.clear();
+    main = VeleroIpc.createInstance(anExtension("main") as never);
     main.register(catalogEntries);
     expect(await renderer.state(CLUSTER)).toMatchObject({ ok: true, value: { writes: { on: false } } });
     expect(ipcBroadcasts).toEqual([]);
+  });
+
+  it("refuses the cluster of a frame the catalog of the host does not give as connected", async () => {
+    for (const status of ["connecting", "disconnected", "disconnecting"]) {
+      hostCatalog.clusters = hostCatalog.clusters?.map((cluster) => ({ ...cluster, status }));
+      expect(await renderer.state(CLUSTER)).toEqual({
+        ok: false,
+        code: "target-changed",
+        stage: "catalog",
+        retry: false,
+        text: CLUSTER_WORDS.disconnected,
+      });
+    }
+    hostCatalog.clusters = hostCatalog.clusters?.filter((cluster) => cluster.id !== CLUSTER);
+    expect(await renderer.allow(CLUSTER, { what: "private", origin: "https://storage.example:9000" })).toEqual({
+      ok: false,
+      code: "target-changed",
+      stage: "catalog",
+      retry: false,
+      text: CLUSTER_WORDS.absent,
+    });
   });
 });

@@ -9,9 +9,9 @@
 // and the one of the long lists. The suite reads the application and the
 // cluster, and writes to neither.
 
-import { expect } from "@jest/globals";
-import * as cluster from "../helpers/velero-cluster";
-import * as velero from "../helpers/velero-extension";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import * as cluster from "../../integration/helpers/velero-cluster";
+import * as velero from "../../integration/helpers/velero-extension";
 
 import type { Frame } from "playwright";
 
@@ -904,6 +904,8 @@ describe("overview of an installation", () => {
           namespace,
           { timeout: 60_000 },
         );
+        // The five families are read in any order: what needs attention is shown whole once they all are.
+        await cluster.overview(frame);
         await showEvery("attention");
         const shown = await cluster.overview(frame);
 

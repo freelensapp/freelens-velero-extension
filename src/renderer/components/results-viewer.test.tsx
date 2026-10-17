@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CONTENT } from "./artifact-viewer";
 import { ResultsViewer } from "./results-viewer";
@@ -200,7 +200,7 @@ describe("the results of an operation", () => {
     expect(marked).toEqual([summary]);
     expect(viewer().firstElementChild).toBe(summary);
     expect(summary.getAttribute("tabindex")).toBe("-1");
-    summary.focus();
+    act(() => summary.focus());
     expect(document.activeElement).toBe(summary);
     cleanup();
     // The results that hold nothing have the mark as well: the focus has where to go.
@@ -419,7 +419,11 @@ describe("a text that is not of the shape of the results", () => {
   });
 });
 
-describe("the results of thousands of messages", () => {
+// Results of thousands of messages. The case that draws them for another text took 0.8 to 1 second alone, and
+// 3.1 seconds of the five a case has by default in a whole run of the unit tests on a machine that ran the test
+// environment: the time of drawing the messages, not what the cases prove. They are given a minute, as the
+// cases of the other long texts are; the one that pages through them keeps its own bound.
+describe("the results of thousands of messages", { timeout: 60_000 }, () => {
   it("parses a text once, however many times it is drawn again", () => {
     const parse = vi.spyOn(JSON, "parse");
     const parsed = (text: string) => parse.mock.calls.filter(([given]) => given === text).length;

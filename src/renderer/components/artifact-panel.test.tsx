@@ -371,7 +371,7 @@ const focused = () => document.activeElement?.getAttribute("data-testid");
 
 // A command is given as the pointer gives it in the application: what is pressed has the focus.
 function press(element: HTMLElement): void {
-  element.focus();
+  act(() => element.focus());
   fireEvent.click(element);
 }
 
@@ -1050,7 +1050,7 @@ describe("the text a diagnostic tab loaded", () => {
       await writesOn(mounted);
       await ask(mounted);
       await at(mounted, { step: "wait", count: 1 });
-      screen.getByTestId("velero-refresh").focus();
+      act(() => screen.getByTestId("velero-refresh").focus());
       await mounted.main.answer();
       await waitFor(() => expect(mounted.panel().getAttribute("data-step")).toBe("loaded"));
       expect(focused()).toBe("velero-refresh");
@@ -1066,7 +1066,7 @@ describe("the text a diagnostic tab loaded", () => {
     expect(mounted.maybe("create")).toBeTruthy();
     expect(document.activeElement).toBe(document.body);
     await load(mounted);
-    (document.activeElement as HTMLElement).blur();
+    act(() => (document.activeElement as HTMLElement).blur());
     // Another tab is shown, then this one again, with the text it loaded.
     mounted.show({ tab: "results" });
     mounted.show({ tab: "log" });
@@ -1394,7 +1394,7 @@ describe("the time the main process holds the text of a tab for", () => {
     const hold = timers.mock.calls.filter(([, delay]) => delay === ARTIFACT_HOLD_MS);
 
     expect(hold).toHaveLength(1);
-    mounted.part("save").focus();
+    act(() => mounted.part("save").focus());
     act(() => (hold[0][0] as () => void)());
     // The command is not offered for a text it could not save, and the words say what there is to do.
     expect(mounted.maybe("save")).toBeNull();
@@ -1419,7 +1419,7 @@ describe("the time the main process holds the text of a tab for", () => {
 
     // The operator reads, with the focus on nothing: the words that take the place of the command say what
     // there is to do, and the focus is not moved to them from where the operator left it.
-    (document.activeElement as HTMLElement).blur();
+    act(() => (document.activeElement as HTMLElement).blur());
     expect(document.activeElement).toBe(document.body);
     act(() => (hold[0][0] as () => void)());
     expect(mounted.maybe("save")).toBeNull();

@@ -10,7 +10,7 @@ export const IMAGES = {
 } as const;
 // The runtime of the helpers that run beside the cluster: the direct transport proof and the egress check.
 export const DIRECT_PROOF_IMAGE =
-  "docker.io/library/node:24.15.0-bookworm-slim@sha256:4e6b70dd6cbfc88c8157ba19aa3d9f9cce6ba4703576d55459e45efcbc9c5f5d";
+  "docker.io/library/node:24.21.0-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20";
 export const BUCKET = "velero-demo";
 export const STORAGE_ENDPOINT = `http://seaweedfs.${DEMO_NAMESPACE}.svc.cluster.local:8333`;
 export const DATA_DIRECTORY = "/var/local/freelens-velero-dev/seaweedfs";

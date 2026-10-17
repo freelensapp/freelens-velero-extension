@@ -5,7 +5,7 @@
 - **Milestone / tasks:** Foundation / T0.3, T0.4, T0.5, T0.6
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, since the drift watch of 2026-10-13; written against v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
 - **Reviewed main:** `60163e0827e72658bb6546165a727300170e628b`
-- **Freelens validation target:** v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`
+- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `5e1870e97467edab81b856a4983483d0729db896`, the base of the nightly v2.0.0-0-nightly-2026-10-16, which moves with the host drift watch until Freelens 2.0.0 is released; the evidence of T0.3 to T0.6 below was made on v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and is the history of this spec
 - **Dependencies:** [versioned recon](../development/RECON-T0.1.md)
 - **Approval:** Foundation contract approved by the lead maintainer on 2026-09-18; T0.3/T0.4 complete; T0.5 and T0.6 completed on 2026-09-25
 - **Backend revision:** Official SeaweedFS 4.47 accepted; upstream repairs/custom images retired on 2026-09-18; T0.4 setup verified on 2026-09-24

@@ -1883,3 +1883,29 @@ to the methods a backup writes, and confirmed what the decision on the requests
 covers. What the pre-review leaves to human judgment, at 900 by 650 and at twice the
 zoom, with the contrast, the key Escape and the long lines, stays open until it is
 looked at; the spec is Verified once that is recorded.
+
+## Amendments
+
+### 2026-10-16: The Freelens v2 Host
+
+Approved by the lead maintainer on 2026-10-16 with
+[SPEC-0015](SPEC-0015-freelens-v2-host.md), whose REQ-213 and
+[D8](SPEC-0015-freelens-v2-host.md#d8-the-virtual-list) change how the lists of this
+spec are drawn, and made by the pull request of T0.7. Freelens v2 no longer offers
+its virtual list to an extension: the lines of a log and the rows of the resources
+viewer are windowed by react-window 2, which the extension bundles at 2.3.4, the
+version of the catalog of the host, in place of the virtual list of the host. Its
+API is not the one of the list of Freelens 1: the measure of a row, the scroll to a
+row, the rows kept ready around the room and the focus are written again for it.
+
+What this spec requires of the lists of lines does not change: at most a hundred
+rows mounted, each line whole with its wrap, the search that brings its match into
+view, the focus on the first line after a load, and the keyboard (REQ-142, REQ-149).
+The budgets of REQ-147 are measured again in the packaged Freelens v2, on the log of
+200,000 lines, and by the measure of the unit run on 500,000 lines, which is HOST-18
+of SPEC-0015. No requirement of this spec names the list of the host, and none is
+changed. The passages that name the virtual list of the host, the viewers of the
+design and, in the evidence of the first pull request of T2.3, its summary, VIEW-07
+and what was not seen in the packaged application, describe Freelens 1, and are read
+with this amendment. The header and the evidence of this spec move to Freelens v2
+with T0.8.

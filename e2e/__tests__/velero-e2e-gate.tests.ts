@@ -11,9 +11,9 @@
 
 import { readFile, writeFile } from "node:fs/promises";
 import * as path from "node:path";
-import { expect } from "@jest/globals";
-import * as cluster from "../helpers/velero-cluster";
-import * as velero from "../helpers/velero-extension";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import * as cluster from "../../integration/helpers/velero-cluster";
+import * as velero from "../../integration/helpers/velero-extension";
 
 import type { Frame } from "playwright";
 
@@ -25,6 +25,9 @@ describe("the gate of the writes", () => {
   let profile = "";
   let kubeconfig = "";
   let frame: Frame;
+  // The frame of the second entry of the catalog, and the path of its kubeconfig.
+  let other: Frame | undefined;
+  let second = "";
   let before: cluster.ClusterSnapshot;
   let counted: Record<string, number>;
 
@@ -154,11 +157,10 @@ describe("the gate of the writes", () => {
       const renamed = path.join(profile, "second-kubeconfig.json");
 
       await writeFile(renamed, JSON.stringify(source), { mode: 0o600 });
-      const second = await cluster.publishKubeconfig(renamed, "velero-e2e-second");
-
+      second = await cluster.publishKubeconfig(renamed, "velero-e2e-second");
       await velero.navigateToCatalog(started.app);
       await started.window.waitForSelector(`div.TableCell >> text='${SECOND_CONTEXT}'`, { timeout: 60_000 });
-      const other = await cluster.openClusterFromCatalog(started.window, second, SECOND_CONTEXT);
+      other = await cluster.openClusterFromCatalog(started.window, second, SECOND_CONTEXT);
 
       await cluster.openBackups(other);
       await cluster.configureInstallation(other, cluster.E2E_VIEWS_NAMESPACE);
@@ -169,6 +171,120 @@ describe("the gate of the writes", () => {
       frame = await cluster.openClusterFromCatalog(started.window, kubeconfig);
       await frame.waitForSelector("[data-testid=velero-writes]", { timeout: 60_000 });
       expect((await writesState(frame)).on).toBe(true);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "binds every request to the frame it comes from, by the address of the frame that a handler of the main process reads",
+    async () => {
+      if (!started || !other) throw new Error("The application or the frame of the second entry is not there");
+      const { app, window } = started;
+      const port = new URL(window.url()).port;
+      const firstId = cluster.clusterEntityId(kubeconfig, cluster.E2E_KUBE_CONTEXT);
+      const secondId = cluster.clusterEntityId(second, SECOND_CONTEXT);
+
+      // Each frame is the frame of its cluster, by the identifier of its address, which both catalogs give it.
+      expect([cluster.frameClusterId(frame), cluster.frameClusterId(other)]).toEqual([firstId, secondId]);
+      const byId = (one: { id: string }, other: { id: string }) => one.id.localeCompare(other.id);
+
+      expect(
+        (await velero.mainCatalog(app)).map(({ id, contextName, status }) => ({ id, contextName, status })).sort(byId),
+      ).toEqual(
+        [
+          { id: firstId, contextName: cluster.E2E_KUBE_CONTEXT, status: "connected" },
+          { id: secondId, contextName: SECOND_CONTEXT, status: "connected" },
+        ].sort(byId),
+      );
+      // The handlers of the twelve procedures the frames call, as the host registered them in the main process,
+      // are watched there; each frame asks the state of its gate when a page of the group opens.
+      const channels = await velero.watchHandlers(app);
+
+      expect(channels.map((channel) => channel.slice(channel.indexOf(":") + 1)).sort()).toEqual([
+        "allowance.grant",
+        "allowance.revoke",
+        "artifact.page",
+        "artifact.release",
+        "artifact.save",
+        "gate.disable",
+        "gate.enable",
+        "gate.state",
+        "write.cancel",
+        "write.confirm",
+        "write.run",
+        "write.status",
+      ]);
+      try {
+        await cluster.openPage(frame, cluster.RESTORES);
+        await frame.waitForSelector("[data-testid=velero-writes][data-writes=on]", { timeout: 60_000 });
+        await velero.navigateToCatalog(app);
+        other = await cluster.openClusterFromCatalog(window, second, SECOND_CONTEXT);
+        await cluster.openPage(other, cluster.RESTORES);
+        await other.waitForSelector("[data-testid=velero-writes-on]", { timeout: 60_000 });
+        expect(await writesState(other)).toEqual({ state: "Off", on: false });
+        // A request of the frame of the second entry that names the cluster of the first one, sent to the same
+        // channel as the extension sends it: the handler reads the frame it came from, and refuses it.
+        const state = channels.find((channel) => channel.endsWith(":gate.state")) ?? "";
+        const forged = await other.evaluate(
+          async ({ channel, cluster: named }) => {
+            const { ipcRenderer } = (
+              globalThis as unknown as {
+                require: (name: string) => { ipcRenderer: { invoke: (...args: unknown[]) => Promise<unknown> } };
+              }
+            ).require("electron");
+
+            return ipcRenderer.invoke(channel, { cluster: named });
+          },
+          { channel: state, cluster: firstId },
+        );
+
+        expect(forged).toMatchObject({ ok: false, code: "forbidden", stage: "frame" });
+        const handled = await velero.handledRequests(app);
+        const of = (id: string) => handled.filter((request) => new URL(request.address).hostname.startsWith(`${id}.`));
+        const keys = (requests: velero.HandledRequest[]) => [
+          ...new Set(requests.map(({ processId, frameId }) => `${processId}:${frameId}`)),
+        ];
+
+        // Every request came from the address of a frame of a cluster of v2, with the port of the window.
+        expect(
+          handled.filter(({ address }) => {
+            const { hostname, protocol, port: at } = new URL(address);
+
+            return protocol !== "https:" || !/^[0-9a-f]{32}\.renderer\.freelens\.app$/.test(hostname) || at !== port;
+          }),
+        ).toEqual([]);
+        // The frame of the first entry asked for its own cluster, which the main process answered with writes on.
+        expect(of(firstId).filter(({ channel }) => channel === "gate.state").length).toBeGreaterThan(0);
+        for (const request of of(firstId)) {
+          expect(request).toMatchObject({ named: firstId, answer: "ok" });
+          if (request.state) expect(request.state).toEqual({ cluster: firstId, on: true });
+        }
+        // The one of the second entry asked for its own, off, and was refused the first one at the frame.
+        const asked = of(secondId);
+
+        expect(asked.filter(({ named }) => named === secondId).length).toBeGreaterThan(0);
+        for (const request of asked.filter(({ named }) => named === secondId)) {
+          expect(request).toMatchObject({ answer: "ok" });
+          if (request.state) expect(request.state).toEqual({ cluster: secondId, on: false });
+        }
+        expect(asked.filter(({ named }) => named !== secondId)).toEqual([
+          expect.objectContaining({ channel: "gate.state", named: firstId, answer: "forbidden at frame" }),
+        ]);
+        // Two senders: each frame has its process and frame identifiers, which tell it from the other.
+        expect([keys(of(firstId)).length, keys(asked).length]).toEqual([1, 1]);
+        expect(keys(of(firstId))).not.toEqual(keys(asked));
+        await cluster.writeReport("host-14-handled-requests", {
+          port,
+          frames: { first: firstId, second: secondId },
+          handled: handled.map(({ address, ...request }) => ({ ...request, host: new URL(address).host })),
+        });
+      } finally {
+        await velero.stopWatchingHandlers(app);
+      }
+      // The first frame still has writes on: nothing the second one asked changed its gate.
+      await velero.navigateToCatalog(app);
+      frame = await cluster.openClusterFromCatalog(window, kubeconfig);
+      await frame.waitForSelector("[data-testid=velero-writes][data-writes=on]", { timeout: 60_000 });
     },
     TIMEOUT,
   );

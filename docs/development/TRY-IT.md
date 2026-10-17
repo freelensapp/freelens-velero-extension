@@ -17,7 +17,11 @@ the views, and nothing else.
 - Docker with four processors and 6 GiB of memory, Node.js of `.nvmrc` and
   `corepack pnpm`. kind and kubectl are installed by the first command, under
   the private state of the environment.
-- Freelens 1.10.3.
+- Freelens v2 at the validation target of
+  [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md): the nightly
+  v2.0.0-0-nightly-2026-10-16, built from freelensapp/freelens `5e1870e9`, its
+  download checked against the checksum the release publishes beside it.
+  Freelens 1 lists the extension as Incompatible.
 
 ## 1. Bring the demo up
 
@@ -62,11 +66,13 @@ prints.
 ## 2. Install the extension in Freelens
 
 ```sh
-pnpm build:production && pnpm clean:tgz && pnpm pack
+pnpm build && pnpm clean:tgz && pnpm pack
 ```
 
 In Freelens, Extensions, give the path of the tarball that is now in the
-repository and install it. Then add the kubeconfig of the demo: in the catalog,
+repository and install it. Freelens says that nothing vouches for the integrity
+of the tarball, since no checksum is beside it, installs it anyway and lists it
+as Enabled. Then add the kubeconfig of the demo: in the catalog,
 the button that adds, "Sync file(s)", and the file `kubeconfig` of the private
 state. The cluster is `kind-freelens-velero-dev`.
 
@@ -105,7 +111,8 @@ Then the Backups, under Velero in the sidebar:
 | Open `views-daily-20260901030000` | Its schedule, its storage location, its snapshot location and its three restores |
 | Open `backup-missing-location` and `backup-missing-schedule` | References to what is not there: a name with its reason, and no link |
 | Other namespace, `velero-scale-<run>` | A namespace nothing suggests, read because it was named. A thousand backups: search, sort, drag the edge of a column, scroll, open one and come back |
-| Custom Resources, `velero.io`, Backups | The page of the host. In the details of a backup the section of Velero reads it as the views do, says that its log, its results, its resources and its volumes are in the workspace and loads none of them, and leads to the workspace when the backup is of the installation selected |
+| Custom Resources | While the extension is enabled, the group `velero.io` of the tree lists the kinds of Velero that have no page under Velero, and none of the five that have one |
+| Custom Resources, Definitions, then `Backup` of the group `velero.io` | The page of the host. In the details of a backup the section of Velero reads it as the views do, says that its log, its results, its resources and its volumes are in the workspace and loads none of them, and leads to the workspace when the backup is of the installation selected |
 | Close Freelens and open it again | The namespace that was selected is the one shown |
 
 Then the Restores:
@@ -248,7 +255,8 @@ pnpm e2e:views
 pnpm pre-review
 ```
 
-They need a Freelens that was built: see
+They start the Freelens that `FREELENS_APP` names, the nightly of the
+validation target on a machine of a developer: see
 [TESTING.md](TESTING.md#suites-of-the-views). The first runs the suites of the
 views, the second every view, the tabs of an operation among them, in both themes,
 at two sizes of the window and at twice the zoom, and the journeys with the

@@ -3,13 +3,17 @@
 // and the namespace, and each write confirmed for one exact target, from the frame that asks it, with a
 // token good for thirty seconds and for one use. The renderer shows a mirror of what is here and decides
 // nothing.
+//
+// The identity of a cluster is its entry in the catalog of the host: its identifier, the path of its
+// kubeconfig and the name of its context as the catalog names them, and its state. Writes go off when the
+// entry goes, leaves the connected state, or changes its path or its context; no file is read.
 
 import { randomUUID } from "node:crypto";
+import { CLUSTER_WORDS } from "../common/diagnostic-text";
 import {
   type ArtifactTarget,
   CONNECTION_REASONS,
   type Connection,
-  type ConnectionReason,
   type Failure,
   failure,
   type GateState,
@@ -17,31 +21,20 @@ import {
   type WriteStatus,
   type WriteTarget,
 } from "../common/ipc";
-import { readContext } from "./context-identity";
+import { type CatalogEntry, CONNECTED, sameEntry } from "./catalog";
 
-// A cluster as the catalog of the host gives it to the main process.
-export interface CatalogEntry {
-  id: string;
-  name: string;
-  kubeConfigPath: string;
-  contextName: string;
-}
-
-// What a write needs of the cluster: made when writes are turned on for a connection the adapter takes.
+// What a write needs of the cluster: made when writes are turned on for a cluster that is connected.
 export interface GateAdapter {
   assertCurrent(): void;
-  // Closes what the adapter keeps open. Called when the gate lets the adapter go.
+  // Lets go of what the adapter keeps. Called when the gate lets the adapter go.
   dispose?(): void;
 }
 
 export interface GateDependencies<Adapter extends GateAdapter> {
   // The clusters the catalog holds now.
   catalog(): CatalogEntry[];
-  // The adapter of a cluster, for the entry of the catalog; `isCurrent` says whether the entry is still
-  // the same in the catalog.
-  adapter(entry: CatalogEntry, isCurrent: () => boolean): Adapter;
-  // Reads the entry of the context of the kubeconfig, to say what its connection is.
-  connection?(entry: CatalogEntry): Connection;
+  // The adapter of a cluster, for the entry of the catalog writes are turned on with.
+  adapter(entry: CatalogEntry): Adapter;
   now?(): number;
 }
 
@@ -77,29 +70,8 @@ export const TOKEN_LIFETIME = 30_000;
 export const CONFIRMATIONS_BOUND = 32;
 export const WRITES_BOUND = 16;
 
-function connectionOfEntry(entry: CatalogEntry): Connection {
-  const read = readContext(entry.kubeConfigPath, entry.contextName);
-
-  if ("missing" in read) return { supported: false, reason: read.missing === "file" ? "file" : "context" };
-  return read.connection;
-}
-
-function sameEntry(one: CatalogEntry, other: CatalogEntry | undefined): boolean {
-  return (
-    !!other &&
-    one.id === other.id &&
-    one.kubeConfigPath === other.kubeConfigPath &&
-    one.contextName === other.contextName
-  );
-}
-
-// Why writes are not turned on for a connection: a file or a context that is not there is a target that
-// changed, anything else is a connection the writes of the extension do not use.
-function refusalOf(reason: ConnectionReason): Failure {
-  return reason === "file" || reason === "context"
-    ? failure("target-changed", reason, false, CONNECTION_REASONS[reason])
-    : failure("connection-unsupported", "connection", false, CONNECTION_REASONS[reason]);
-}
+// A cluster that is not connected: nothing is asked of it, and writes are not on for it.
+const NOT_CONNECTED = () => failure("target-changed", "catalog", false, CLUSTER_WORDS.disconnected);
 
 // What a confirmation is for: the namespace, the kind of the write, its target and, for a DownloadRequest,
 // the artifact. A token confirmed for the log of a backup does not run for its results.
@@ -127,7 +99,7 @@ export class WriteGate<Adapter extends GateAdapter> {
   private entryOf(cluster: string): CatalogEntry | Failure {
     const entry = this.dependencies.catalog().find((item) => item.id === cluster);
 
-    if (!entry) return failure("target-changed", "catalog", false, "The cluster is not in the catalog any more.");
+    if (!entry) return failure("target-changed", "catalog", false, CLUSTER_WORDS.absent);
     return entry;
   }
 
@@ -137,13 +109,22 @@ export class WriteGate<Adapter extends GateAdapter> {
     if ("ok" in entry) return entry;
     const held = this.clusters.get(cluster);
 
-    // The entry changed its file or its context: what was held is of another cluster. The frame that
-    // turned writes on went: they are off with it. Both are reasons of the gate itself, and are told.
-    if (held && (!sameEntry(entry, held.entry) || this.ownerGone(held))) this.invalidate(cluster, true);
+    // The entry changed its file or its context: what was held is of another cluster. The cluster left the
+    // connected state, or the frame that turned writes on went: they are off with it. Each is a reason of
+    // the gate itself, and is told.
+    if (held && (this.changed(held, entry) || this.ownerGone(held))) this.invalidate(cluster, true);
     const gate = this.clusters.get(cluster) ?? { entry, confirmations: new Map(), writes: new Map() };
 
+    // The entry as the catalog gives it now, its state among its fields.
+    gate.entry = entry;
     this.clusters.set(cluster, gate);
     return gate;
+  }
+
+  // Whether what the gate holds of a cluster is not of its entry as the catalog gives it now: the entry went,
+  // is of another file or context, or left the connected state since the gate last read it.
+  private changed(gate: ClusterGate<Adapter>, entry: CatalogEntry | undefined): boolean {
+    return !sameEntry(gate.entry, entry) || (gate.entry.status === CONNECTED && entry?.status !== CONNECTED);
   }
 
   // Whether writes are on for a frame that is not there any more. A frame that cannot be asked is gone.
@@ -186,6 +167,8 @@ export class WriteGate<Adapter extends GateAdapter> {
     const gate = this.gateOf(cluster);
 
     if ("ok" in gate) return gate;
+    // A cluster that is not connected is not connected by the extension.
+    if (gate.entry.status !== CONNECTED) return NOT_CONNECTED();
     if (confirmation.context !== gate.entry.contextName || confirmation.namespace !== namespace)
       return failure(
         "forbidden",
@@ -198,26 +181,24 @@ export class WriteGate<Adapter extends GateAdapter> {
     const held = this.gateOf(cluster);
 
     if ("ok" in held) return held;
-    held.connection = (this.dependencies.connection ?? connectionOfEntry)(held.entry);
-    if (held.connection.supported && !held.adapter) {
+    held.connection = undefined;
+    if (!held.adapter) {
       try {
-        held.adapter = this.dependencies.adapter(held.entry, () =>
-          sameEntry(held.entry, this.entryOf(cluster) as CatalogEntry),
-        );
+        held.adapter = this.dependencies.adapter(held.entry);
       } catch {
         held.connection = { supported: false, reason: "unusable" };
       }
     }
-    // A connection the adapter does not take: writes are not turned on, and what was on for it goes. The
-    // state keeps what the adapter said of the connection.
-    if (!held.connection.supported) {
-      const connection = held.connection;
+    // An adapter that cannot be made: writes are not turned on, and what was on for it goes. The state
+    // keeps what was said of the connection.
+    if (held.connection) {
+      const connection: Connection = held.connection;
 
       this.invalidate(cluster);
       const off = this.gateOf(cluster);
 
       if (!("ok" in off)) off.connection = connection;
-      return refusalOf(connection.reason);
+      return failure("connection-unsupported", "connection", false, CONNECTION_REASONS.unusable);
     }
     held.namespace = namespace;
     held.since = this.now();
@@ -286,8 +267,9 @@ export class WriteGate<Adapter extends GateAdapter> {
     return { ok: true, value: { token, expires } };
   }
 
-  // Whether writes are on for this namespace, and the connection is one the adapter takes.
+  // Whether the cluster is connected, writes are on for this namespace, and the adapter is there.
   private open(gate: ClusterGate<Adapter>, namespace: string): Failure | undefined {
+    if (gate.entry.status !== CONNECTED) return NOT_CONNECTED();
     if (!gate.namespace || gate.namespace !== namespace)
       return failure(
         "forbidden",
@@ -295,7 +277,7 @@ export class WriteGate<Adapter extends GateAdapter> {
         false,
         "Writes are off for this installation: turn them on in the target bar.",
       );
-    if (!gate.connection?.supported || !gate.adapter)
+    if (!gate.adapter)
       return failure(
         "connection-unsupported",
         "connection",
@@ -389,18 +371,16 @@ export class WriteGate<Adapter extends GateAdapter> {
     return { ok: true, value: null };
   }
 
-  // Every cluster whose entry went or changed in the catalog, or whose frame went, is turned off, and
-  // told when writes were on.
+  // Every cluster whose entry went, changed or left the connected state in the catalog, or whose frame
+  // went, is turned off, and told when writes were on.
   reconcile(): void {
     const catalog = this.dependencies.catalog();
 
     for (const [cluster, gate] of [...this.clusters]) {
-      const changed = !sameEntry(
-        gate.entry,
-        catalog.find((item) => item.id === cluster),
-      );
+      const entry = catalog.find((item) => item.id === cluster);
 
-      if (changed || this.ownerGone(gate)) this.invalidate(cluster, true);
+      if (this.changed(gate, entry) || this.ownerGone(gate)) this.invalidate(cluster, true);
+      else if (entry) gate.entry = entry;
     }
   }
 

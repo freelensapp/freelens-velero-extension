@@ -5,7 +5,7 @@
 - **Milestone / tasks:** Foundation
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, since the drift watch of 2026-10-13; written against v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
 - **Reviewed main:** not relevant: the environment installs the reviewed release only
-- **Freelens validation target:** v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`
+- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `5e1870e97467edab81b856a4983483d0729db896`, the base of the nightly v2.0.0-0-nightly-2026-10-16, which moves with the host drift watch until Freelens 2.0.0 is released; the evidence of this spec below was made on v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and is its history
 - **Dependencies:** [foundation](SPEC-0001-local-foundation.md)
 - **Approval:** Approved by the lead maintainer on 2026-09-27, with the published loopback accepted on the machines of the developers
 

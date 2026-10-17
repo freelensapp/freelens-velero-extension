@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { virtualList } from "../../../test/host-components";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { layOutLists, observing, resize, room, rowTop } from "../../../test/list-layout";
 import { LINE_BOUND, parseLog, textLines } from "../../common/artifact-log";
 import { ArtifactLines, LINE, LineList, linesWords, ROOM, ROWS_BOUND } from "./artifact-lines";
 import { CONTENT } from "./artifact-viewer";
@@ -14,10 +14,13 @@ vi.mock("../../common/artifact-log", async (original) => {
   return { ...log, parseLog: vi.fn(log.parseLog) };
 });
 
-const ROOM_OF_THE_TESTS = virtualList.room;
+// The lists are laid out as a browser lays them out, in the room a test gives them: by default the tallest
+// room a list is given.
+layOutLists();
 
 const list = () => screen.getByTestId("lines-text");
-const scroller = () => list().querySelector<HTMLElement>(".list") as HTMLElement;
+// The part of the list that scrolls, which react-window draws.
+const scroller = () => screen.getByTestId("lines-rows");
 const rows = () => [...list().querySelectorAll<HTMLElement>("[data-text-line]")];
 const numbers = () => rows().map((row) => Number(row.dataset.textLine));
 const row = (number: number) => screen.getByTestId(`lines-line-${number}`);
@@ -37,52 +40,39 @@ function inRoom(): number[] {
 
   return rows()
     .filter((element) => {
-      const from = Number.parseFloat(element.style.top);
+      const from = rowTop(element);
 
-      return from + Number.parseFloat(element.style.height) > top && from < top + virtualList.room;
+      return from + Number.parseFloat(element.style.height) > top && from < top + room.height;
     })
     .map((element) => Number(element.dataset.textLine));
 }
 
-// The room a list measures: its width, the width of a character, and what a row has before its text. The
-// observers of the room are kept, to be told that it changed.
-const observers: (() => void)[] = [];
-
-function measure(room: { width: number; character: number; before: number }): void {
-  vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
-    return this.classList.contains("list") ? room.width : 0;
-  });
-  vi.spyOn(HTMLElement.prototype, "offsetLeft", "get").mockImplementation(() => room.before);
+// The room a list measures: its width, the width of a character, and what a row has before its text.
+function measure(measured: { width: number; character: number; before: number }): void {
+  room.width = measured.width;
+  vi.spyOn(HTMLElement.prototype, "offsetLeft", "get").mockImplementation(() => measured.before);
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
-    return { width: (this.textContent ?? "").length * room.character } as DOMRect;
+    return { width: (this.textContent ?? "").length * measured.character } as DOMRect;
   });
-  vi.stubGlobal(
-    "ResizeObserver",
-    class {
-      constructor(private readonly changed: () => void) {}
-
-      observe(): void {
-        observers.push(this.changed);
-      }
-
-      disconnect(): void {
-        observers.splice(observers.indexOf(this.changed), 1);
-      }
-    },
-  );
 }
+
+// The observers of the room of a list that measure its columns: react-window keeps one of its own on the
+// part that scrolls while the list is there, to know its height, which is not counted.
+const followers = () => observing() - (screen.queryByTestId("lines-rows") ? 1 : 0);
 
 function clipboard(writeText: (text: string) => Promise<void>): void {
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
 }
+
+beforeEach(() => {
+  Object.assign(room, { height: ROOM, width: 0 });
+});
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
-  observers.length = 0;
-  virtualList.room = ROOM_OF_THE_TESTS;
   Reflect.deleteProperty(navigator, "clipboard");
 });
 
@@ -139,7 +129,7 @@ describe("a text shown as its lines", () => {
 
     expect(marked).toEqual([row(1)]);
     expect(marked[0].tabIndex).toBe(-1);
-    marked[0].focus();
+    act(() => marked[0].focus());
     expect(focused()).toBe(row(1));
   });
 
@@ -159,7 +149,7 @@ describe("a text shown as its lines", () => {
     const view = render(<ArtifactLines id="lines" text={text("first")} />);
 
     scroll(600 * LINE);
-    row(601).focus();
+    act(() => row(601).focus());
     expect([numbers().includes(1), document.querySelector(`[${CONTENT}]`)]).toEqual([false, null]);
     view.rerender(<ArtifactLines id="lines" text={text("second")} />);
     expect([scroller().scrollTop, inRoom()[0], shown(1).textContent]).toEqual([0, 1, "second 1"]);
@@ -183,16 +173,21 @@ describe("a text shown as its lines", () => {
   });
 });
 
-describe("the rows a list mounts", () => {
+// Texts of two hundred thousand and of 1,700,000 lines. What a case of them takes is the list itself, not
+// the text: scrolled to the end of 1,650,000 rows, react-window counts the place of every row before it,
+// some 0.6 of the 1.2 to 1.5 seconds of such a case run alone, and several times that in a run on a machine
+// the test environment loads. Their time is not what they prove: they are given a minute, as the cases of
+// the other long texts are.
+describe("the rows a list mounts", { timeout: 60_000 }, () => {
   const large = Array.from({ length: 200_000 }, (_, index) => `line ${index + 1} of a large text`).join("\n");
 
   it("are a hundred at most, of a text of two hundred thousand lines, wherever the list is scrolled to", () => {
     render(<ArtifactLines id="lines" text={large} />);
     // The tallest room a list is given is the one it sets for itself, whatever the window.
     expect(list().style.maxHeight).toBe(`${ROOM}px`);
-    virtualList.room = Number.parseFloat(list().style.maxHeight);
+    resize({ height: Number.parseFloat(list().style.maxHeight) });
     expect(ROWS_BOUND).toBe(100);
-    for (const to of [0, 7, 20 * LINE, 1_000_010, 2_500_000 - 3, 200_000 * LINE - virtualList.room, 200_000 * LINE]) {
+    for (const to of [0, 7, 20 * LINE, 1_000_010, 2_500_000 - 3, 200_000 * LINE - room.height, 200_000 * LINE]) {
       scroll(to);
       const mounted = numbers();
 
@@ -220,7 +215,10 @@ describe("the rows a list mounts", () => {
     expect(screen.getByTestId("lines-left").getAttribute("role")).toBe("status");
     // The mark beside the words is not read with them: the host draws it as the text of its name.
     expect(screen.getByTestId("lines-left").querySelector(".Icon")?.getAttribute("aria-hidden")).toBe("true");
-    expect(screen.getByTestId("lines-left").querySelector("span")?.textContent).toMatch(/^The list has the room of/);
+    // The words are the part's own, beside the icon, whose name the host holds in a part of its own.
+    expect(screen.getByTestId("lines-left").querySelector(":scope > span")?.textContent).toMatch(
+      /^The list has the room of/,
+    );
     expect(screen.getByTestId("lines-count").textContent).toBe("1700000 lines");
     scroll(1_650_000 * LINE);
     expect(numbers()[numbers().length - 1]).toBe(1_650_000);
@@ -232,7 +230,7 @@ describe("the rows a list mounts", () => {
     vi.stubGlobal("devicePixelRatio", 1_000);
     render(<ArtifactLines id="lines" text={"\n".repeat(1_651)} />);
     expect(list().dataset.rows).toBe("1650");
-    expect(screen.getByTestId("lines-left").querySelector("span")?.textContent).toBe(
+    expect(screen.getByTestId("lines-left").querySelector(":scope > span")?.textContent).toBe(
       "The list has the room of 1650 lines: 1 line after them is not in it. The file that is saved has every line.",
     );
   });
@@ -320,7 +318,7 @@ describe("a line longer than a row shows", () => {
     );
     expect(screen.queryByTestId("lines-line-1-cut")).toBeNull();
     expect([row(1).style.height, row(2).style.height, row(3).style.height]).toEqual(["20px", "40px", "20px"]);
-    expect([row(1).style.top, row(2).style.top, row(3).style.top]).toEqual(["0px", "20px", "60px"]);
+    expect([rowTop(row(1)), rowTop(row(2)), rowTop(row(3))]).toEqual([0, 20, 60]);
   });
 
   it("says of one character that it is left out, as of many", () => {
@@ -409,12 +407,12 @@ describe("the choice to wrap the lines", () => {
       "b".repeat(52),
     ]);
     expect([1, 2, 3, 4].map((number) => shown(number).children.length)).toEqual([1, 3, 1, 2]);
-    expect([1, 2, 3, 4, 5].map((number) => [row(number).style.top, row(number).style.height])).toEqual([
-      ["0px", "20px"],
-      ["20px", "60px"],
-      ["80px", "20px"],
-      ["100px", "40px"],
-      ["140px", "40px"],
+    expect([1, 2, 3, 4, 5].map((number) => [rowTop(row(number)), row(number).style.height])).toEqual([
+      [0, "20px"],
+      [20, "60px"],
+      [80, "20px"],
+      [100, "40px"],
+      [140, "40px"],
     ]);
     // The lines are whole in their pieces.
     expect(shown(2).textContent).toBe("b".repeat(250));
@@ -436,7 +434,7 @@ describe("the choice to wrap the lines", () => {
     fireEvent.click(wrap());
     // Every line before it is taller now: it is where they end, at the start of the room.
     expect(inRoom()[0]).toBe(1_501);
-    expect(Number.parseFloat(row(1_501).style.top)).toBe(scroller().scrollTop);
+    expect(rowTop(row(1_501))).toBe(scroller().scrollTop);
     expect(scroller().scrollTop).toBe((1 + 3 + 1 + 2 + 1_496 * 2) * LINE);
     expect(numbers().length).toBeLessThan(before);
     expect(numbers().length).toBeLessThanOrEqual(ROWS_BOUND);
@@ -448,38 +446,32 @@ describe("the choice to wrap the lines", () => {
   });
 
   it("counts the columns again when the room changes, and keeps the place", () => {
-    const room = { width: 1_000, character: 9, before: 100 };
-
-    measure(room);
+    measure({ width: 1_000, character: 9, before: 100 });
     render(<ArtifactLines id="lines" text={text} />);
     fireEvent.click(wrap());
     scroll((1 + 3 + 1 + 2 + 1_496 * 2) * LINE);
-    expect([list().dataset.columns, inRoom()[0], observers.length]).toEqual(["99", 1_501, 1]);
+    expect([list().dataset.columns, inRoom()[0], followers()]).toEqual(["99", 1_501, 1]);
     // Half the room: every line of a hundred and twenty characters and more is three pieces.
-    room.width = 550;
-    act(() => observers[0]());
+    resize({ width: 550 });
     expect(list().dataset.columns).toBe("49");
     expect(shown(1_501).children.length).toBe(3);
     expect(inRoom()[0]).toBe(1_501);
-    expect(Number.parseFloat(row(1_501).style.top)).toBe(scroller().scrollTop);
+    expect(rowTop(row(1_501))).toBe(scroller().scrollTop);
     // A room narrower than any line has the fewest columns a wrapped line is given.
-    room.width = 120;
-    act(() => observers[0]());
+    resize({ width: 120 });
     expect(list().dataset.columns).toBe("20");
     fireEvent.click(wrap());
-    expect(observers.length).toBe(0);
+    expect(followers()).toBe(0);
   });
 
-  it("wraps the lines of a list the host draws after the choice was made, and follows its room from then", () => {
-    const room = { width: 1_000, character: 9, before: 100 };
-
-    measure(room);
-    // A text with no line: the list of the host is not there, and the choice is made all the same.
+  it("wraps the lines of a list drawn after the choice was made, and follows its room from then", () => {
+    measure({ width: 1_000, character: 9, before: 100 });
+    // A text with no line: the list is not there, and the choice is made all the same.
     const view = render(<ArtifactLines id="lines" text="" />);
 
     fireEvent.click(wrap());
-    expect(observers).toHaveLength(0);
-    // The host draws the part its list scrolls a moment after the list itself: the room is measured when
+    expect(followers()).toBe(0);
+    // react-window names the part that scrolls a moment after the list itself: the room is measured when
     // that part arrives, and not only in the draw that asked for the list.
     view.rerender(<ArtifactLines id="lines" text={text} />);
     expect([wrap().getAttribute("aria-pressed"), list().dataset.wrap, list().dataset.columns]).toEqual([
@@ -488,27 +480,29 @@ describe("the choice to wrap the lines", () => {
       "99",
     ]);
     expect([shown(2).children.length, row(2).style.height]).toEqual([3, "60px"]);
-    expect(observers).toHaveLength(1);
+    expect(followers()).toBe(1);
     // The room is followed from then on.
-    room.width = 550;
-    act(() => observers[0]());
+    resize({ width: 550 });
     expect(list().dataset.columns).toBe("49");
     // The list goes and comes back, with the choice still made: its new room is the one that is followed.
     view.rerender(<ArtifactLines id="lines" text="" />);
-    expect(observers).toHaveLength(0);
+    expect(followers()).toBe(0);
     room.width = 1_000;
     view.rerender(<ArtifactLines id="lines" text={text} />);
-    expect([list().dataset.columns, row(2).style.height, observers.length]).toEqual(["99", "60px", 1]);
-    room.width = 550;
-    act(() => observers[0]());
+    expect([list().dataset.columns, row(2).style.height, followers()]).toEqual(["99", "60px", 1]);
+    resize({ width: 550 });
     expect(list().dataset.columns).toBe("49");
   });
 
-  it("takes the part the host scrolls out of the order of the Tab key: the list is the stop, and its keys are its own", () => {
+  it("takes the part that scrolls out of the order of the Tab key and of the roles: the list is the stop, with its name and its keys", () => {
     render(<ArtifactLines id="lines" text={text} />);
     // A part that scrolls and holds nothing the Tab key reaches would be a stop of its own, with no name.
     expect(scroller().getAttribute("tabindex")).toBe("-1");
     expect(list().tabIndex).toBe(0);
+    // It is no list of its own between the list and its items: react-window writes no role on it.
+    expect(scroller().getAttribute("role")).toBeNull();
+    expect(scroller().parentElement).toBe(list());
+    expect(rows().every((element) => element.parentElement === scroller())).toBe(true);
   });
 
   it("keeps what a cut line says of itself on one line of the room, and whole for who points at it", () => {
@@ -526,10 +520,10 @@ describe("the choice to wrap the lines", () => {
     // one row more, no wider than the columns.
     expect(list().dataset.columns).toBe("49");
     expect([cut().textContent, cut().title, cut().style.maxWidth]).toEqual([words, words, "49ch"]);
-    expect([shown(1).children.length, row(1).style.height, row(2).style.top]).toEqual([
+    expect([shown(1).children.length, row(1).style.height, rowTop(row(2))]).toEqual([
       206,
       `${206 * LINE}px`,
-      `${206 * LINE}px`,
+      206 * LINE,
     ]);
   });
 
@@ -541,15 +535,12 @@ describe("the choice to wrap the lines", () => {
     cleanup();
     // The width of a character is known and the one of the room is not yet: no line is taken in pieces of
     // the fewest columns meanwhile, and the lines are wrapped when the room says its width.
-    const room = { width: 0, character: 9, before: 100 };
-
-    measure(room);
+    measure({ width: 0, character: 9, before: 100 });
     render(<ArtifactLines id="lines" text={text} />);
     fireEvent.click(wrap());
     expect([list().dataset.wrap, list().dataset.columns]).toEqual(["true", undefined]);
     expect([shown(2).children.length, row(2).style.height]).toEqual([1, "20px"]);
-    room.width = 1_000;
-    act(() => observers[0]());
+    resize({ width: 1_000 });
     expect([list().dataset.columns, shown(2).children.length, row(2).style.height]).toEqual(["99", 3, "60px"]);
   });
 });
@@ -605,8 +596,10 @@ describe("the keys of a list", () => {
   });
 
   it("move the list among its lines, with the focus on the row it is at", () => {
+    // The room has no height here: a page is the rows of ten lines but one.
+    room.height = 0;
     render(<ArtifactLines id="lines" text={text} />);
-    list().focus();
+    act(() => list().focus());
     // The first key of a list the Tab key reached goes to the line the list is at.
     press("ArrowDown");
     expect(focused()).toBe(row(1));
@@ -652,20 +645,35 @@ describe("the keys of a list", () => {
       expect([key, press(key, held)]).toEqual([key, true]);
   });
 
+  it("draw the rows of the place they take the list to at once, and do not wait for the browser to tell of the scroll", () => {
+    render(<ArtifactLines id="lines" text={text} />);
+    act(() => list().focus());
+    // The browser tells of a scroll with the next frame: the rows of the end are drawn before it does, in the
+    // room, and the last line has the focus.
+    press("End");
+    expect([focused(), inRoom().at(-1), numbers().length <= ROWS_BOUND]).toEqual([row(500), 500, true]);
+    expect(scroller().scrollTop).toBe(500 * LINE - room.height);
+    // And back at the first line, as far away.
+    press("Home");
+    expect([focused(), inRoom()[0], scroller().scrollTop]).toEqual([row(1), 1, 0]);
+    // The line after the last of the room is brought in by as little as shows it: the list moves by a line.
+    act(() => row(78).focus());
+    expect(inRoom().at(-1)).toBe(78);
+    press("ArrowDown");
+    expect([focused(), inRoom().at(-1), scroller().scrollTop]).toEqual([row(79), 79, LINE]);
+  });
+
   it("page by what the room shows when the lines are wrapped: no line is left between one room and the next", () => {
     // A room of twenty lines, and lines of two hundred and fifty characters in a room of ninety-nine
     // columns: each row is three lines tall, and the room shows six rows and a part of the seventh.
     const long = Array.from({ length: 200 }, (_, index) => `${index + 1} `.padEnd(250, "x")).join("\n");
 
-    virtualList.room = 20 * LINE;
+    room.height = 20 * LINE;
     measure({ width: 1_000, character: 9, before: 100 });
-    vi.spyOn(Element.prototype, "clientHeight", "get").mockImplementation(function (this: Element) {
-      return this.classList.contains("list") ? virtualList.room : 0;
-    });
     render(<ArtifactLines id="lines" text={long} />);
     fireEvent.click(screen.getByTestId("lines-wrap"));
     expect([list().dataset.columns, row(1).style.height]).toEqual(["99", "60px"]);
-    list().focus();
+    act(() => list().focus());
     press("ArrowDown");
     expect(focused()).toBe(row(1));
     const rooms = [inRoom()];
@@ -694,8 +702,7 @@ describe("the keys of a list", () => {
     for (let page = 1; page < back.length; page += 1)
       expect([page, (back[page].at(-1) as number) >= back[page - 1][0] - 1]).toEqual([page, true]);
     // A row taller than the room is still left by a page: the list goes on by one row at least.
-    virtualList.room = 2 * LINE;
-    fireEvent(window, new Event("resize"));
+    resize({ height: 2 * LINE });
     press("PageDown");
     expect(focused()).toBe(row(2));
     press("PageUp");
@@ -704,11 +711,11 @@ describe("the keys of a list", () => {
 
   it("go on from the line a command or a row was given the focus at", () => {
     render(<ArtifactLines id="lines" text={text} />);
-    screen.getByTestId("lines-line-7-copy").focus();
+    act(() => screen.getByTestId("lines-line-7-copy").focus());
     expect(reached()).toEqual([7]);
     press("ArrowDown");
     expect([focused(), reached()]).toEqual([row(8), [8]]);
-    row(20).focus();
+    act(() => row(20).focus());
     expect(reached()).toEqual([20]);
     press("ArrowUp");
     expect(focused()).toBe(row(19));
@@ -716,7 +723,7 @@ describe("the keys of a list", () => {
 
   it("are not lost with a row that leaves the list while it has the focus: the list takes it", () => {
     render(<ArtifactLines id="lines" text={text} />);
-    row(1).focus();
+    act(() => row(1).focus());
     scroll(300 * LINE);
     expect(numbers().includes(1)).toBe(false);
     expect(focused()).toBe(list());

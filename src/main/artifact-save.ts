@@ -12,15 +12,22 @@ export interface SaveDialog {
   }): Promise<{ canceled: boolean; filePath?: string }>;
 }
 
+// The module of Electron, imported when a text is saved and never when this is loaded: the bundle of the
+// main process is loaded as well where there is no host, by the proofs of the test environment and the
+// test of the build, which save nothing.
+async function electronDialog(): Promise<{ dialog: SaveDialog }> {
+  const electron = await import("electron");
+
+  return { dialog: electron.dialog ?? electron.default.dialog };
+}
+
 // The dialog of the host, asked of the module of Electron each time a text is saved, and not kept from
 // when this was loaded: what stands in the place of the dialog of the module at that moment is what is
-// asked, which is how a suite answers for the operator. Nothing is asked of the module before a save:
-// this file is loaded as well where there is no host, by the proofs of the test environment, which save
-// nothing.
+// asked, which is how a suite answers for the operator.
 export function hostDialog(
-  electron: () => { dialog: SaveDialog } = () => require("electron") as { dialog: SaveDialog },
+  electron: () => Promise<{ dialog: SaveDialog }> | { dialog: SaveDialog } = electronDialog,
 ): SaveDialog {
-  return { showSaveDialog: (options) => electron().dialog.showSaveDialog(options) };
+  return { showSaveDialog: async (options) => (await electron()).dialog.showSaveDialog(options) };
 }
 
 // `still` is asked when the operator has chosen a file, which may be long after the dialog opened: a text

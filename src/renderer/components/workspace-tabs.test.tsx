@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { panelId, readTab, tabId, WORKSPACE_TABS, type WorkspaceTab, WorkspaceTabs } from "./workspace-tabs";
@@ -80,7 +80,7 @@ describe("the tabs of a workspace", () => {
     const focused = () => tabs.indexOf(document.activeElement as HTMLElement);
     const press = (key: string) => fireEvent.keyDown(document.activeElement as HTMLElement, { key });
 
-    tabs[0].focus();
+    act(() => tabs[0].focus());
     press("ArrowRight");
     expect(focused()).toBe(1);
     press("ArrowRight");

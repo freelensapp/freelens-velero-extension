@@ -4,10 +4,9 @@
 // extension deletes no request.
 
 import { setTimeout as delay } from "node:timers/promises";
-import { API_WORDS, pluginWords } from "../common/diagnostic-text";
+import { API_WORDS, CLUSTER_WORDS } from "../common/diagnostic-text";
 import { type Failure, failure, REQUEST_PREFIX, REQUEST_STAGES, type ServerStatusValue } from "../common/ipc";
-import { CredentialPluginError, PLUGIN_TIMEOUT } from "./context-identity.ts";
-import { DiagnosticError } from "./diagnostic-transport.ts";
+import { DiagnosticError } from "./diagnostic-transport";
 
 import type { DiagnosticObject } from "./diagnostic-kubernetes";
 
@@ -49,16 +48,6 @@ export interface ServerStatusOptions {
 
 // The words of each way it can end, safe to show.
 export function serverStatusFailure(error: unknown, requestName?: string): Failure {
-  // The plugin of the context gave no credential: the cluster was not asked, so it refused nothing. Asking
-  // again is safe; it runs the plugin again. When the request was created before, it is the wait that
-  // ended, and the request is there.
-  if (error instanceof CredentialPluginError)
-    return failure(
-      "request-failed",
-      requestName ? REQUEST_STAGES.wait : REQUEST_STAGES.credential,
-      true,
-      pluginWords(error.command, error.reason, PLUGIN_TIMEOUT / 1000),
-    );
   if (error instanceof IncompleteServerStatusError)
     return failure(
       "request-failed",
@@ -89,14 +78,15 @@ export function serverStatusFailure(error: unknown, requestName?: string): Failu
           : "The request was cancelled before the cluster answered its creation: it may have been created.",
       );
     case "deadline":
-      // A creation the cluster did not take in time was not sent: the adapter says a deadline only then.
+      // Nothing is claimed of a creation: one without an answer in time is not known to have been sent, and
+      // the adapter says it as a submission that is not known.
       return failure(
         "deadline",
         stage,
         true,
         requestName
           ? "The server did not answer in ten seconds: it may be stopped, or busy. The request stays until the server processes it."
-          : `${API_WORDS.late} Nothing was created.`,
+          : API_WORDS.late,
       );
     case "submission-unknown":
       return failure(
@@ -105,8 +95,19 @@ export function serverStatusFailure(error: unknown, requestName?: string): Failu
         false,
         `The creation of the request may have happened: the answer of the cluster was lost. Look for a ServerStatusRequest whose name begins with ${REQUEST_PREFIX} before asking again.`,
       );
-    case "target-changed":
+    case "target-changed": {
+      // The cluster was read in the catalog before the request was sent to it, and nothing was.
+      const verdict = error instanceof DiagnosticError ? error.verdict : undefined;
+
+      if (verdict === "absent" || verdict === "disconnected")
+        return failure(
+          "target-changed",
+          stage,
+          false,
+          `${CLUSTER_WORDS[verdict]} ${requestName ? "The request stays until the server processes it." : "Nothing was created."}`,
+        );
       return failure("target-changed", stage, false, API_WORDS.changed);
+    }
     case "transport-unreachable":
       return failure("transport-unreachable", stage, true, API_WORDS.unreachable);
     case "tls-invalid":

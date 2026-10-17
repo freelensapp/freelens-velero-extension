@@ -1,5 +1,6 @@
 import { Renderer } from "@freelensapp/extensions";
 import React from "react";
+import { List, useListCallbackRef } from "react-window";
 import {
   cutLine,
   foundPlaces,
@@ -13,16 +14,18 @@ import {
 import { CONTENT } from "./artifact-viewer";
 import styles from "./views.module.css";
 
+import type { Align, RowComponentProps } from "react-window";
+
 import type { TextLines } from "../../common/artifact-log";
 
 const {
-  Component: { Icon, VirtualList },
+  Component: { Icon },
 } = Renderer;
 
 // The height of a line of a list, in pixels. A row is as tall as the lines it takes, which are counted
-// before it is drawn: the list of the host is given the height of every row, and measures none.
+// before it is drawn: the list is given the height of every row, and measures none.
 export const LINE = 20;
-// The rows the list of the host keeps ready before and after the ones its room shows.
+// The rows the list keeps ready before and after the ones its room shows.
 const READY = 10;
 // The rows a list mounts at most, whatever the text and whatever the window.
 export const ROWS_BOUND = 100;
@@ -68,75 +71,80 @@ export function linesWords(rows: number, total: number): string {
   return rows === total ? many(total, "line") : `${rows} of ${many(total, "line")}`;
 }
 
-// The rows of a list: the height of each, by the lines it takes, and as many items as the list of the
-// host counts its rows by, which carry nothing. The rows that would be placed further down than a page
-// places anything, at the ratio of the window, are left out, and counted.
+// The rows of a list: the height of each, by the lines it takes, and how tall they are together. The rows
+// that would be placed further down than a page places anything, at the ratio of the window, are left out,
+// and counted.
 function layOut(lines: TextLines, shown: Uint32Array | undefined, columns: number | undefined, ratio: number) {
   const count = shown ? shown.length : lines.starts.length;
   const placed = Math.floor(PLACED / ratio);
   const heights: number[] = [];
+  let top = 0;
 
-  for (let row = 0, top = 0; row < count; row += 1) {
+  for (let row = 0; row < count; row += 1) {
     const height = lineRows(lines, shown ? shown[row] : row, columns) * LINE;
 
     if (top + height > placed) break;
     heights.push(height);
     top += height;
   }
-  return { heights, items: new Array<string>(heights.length).fill(""), left: count - heights.length };
+  return { heights, total: top, left: count - heights.length };
 }
+
+// What the rows of a list show that changes while their lines do not: the row the list is at, whose command
+// the Tab key reaches, the line of the match a search is at, and the words a search is of. The rows that are
+// mounted read it here, and react-window is given nothing new for it: a key or a search lays out no row
+// again, and the places of the rows are counted again only when their heights change.
+interface RowMarks {
+  at: number;
+  marked?: number;
+  sought: string;
+}
+
+const RowMarksContext = React.createContext<RowMarks>({ at: 0, sought: "" });
 
 interface LineRowProps {
   id: string;
   lines: TextLines;
-  line: number;
-  row: number;
-  rows: number;
+  // The lines a filter leaves, or nothing while no line is hidden.
+  shown: Uint32Array | undefined;
   columns: number | undefined;
   digits: number;
-  // Whether the command of the row is the one of the list the Tab key reaches.
-  reached: boolean;
-  marked: boolean;
-  // The words a search is of, which the row marks where it shows them.
-  sought: string;
-  list: React.RefObject<HTMLDivElement>;
+  list: React.RefObject<HTMLDivElement | null>;
   onCopy: (line: number) => void;
-  // Where the list of the host places the row.
-  style?: React.CSSProperties;
 }
 
 // One line in its row: its number, the command that copies it, and what the row shows of it, in the
 // pieces the room takes it in. A line longer than the bound is cut, and says how much of it is left out.
 // The words a search is of are marked where the row shows them, in every row that carries them: the row
-// of the match the search is at is told from the others by its own mark, and so are its words.
+// of the match the search is at is told from the others by its own mark, and so are its words. react-window
+// gives the row its place among the rows of the list, and where it is placed.
 function LineRow({
+  index: row,
+  style,
+  ariaAttributes,
   id,
   lines,
-  line,
-  row,
-  rows,
+  shown,
   columns,
   digits,
-  reached,
-  marked,
-  sought,
   list,
   onCopy,
-  style,
-}: LineRowProps) {
+}: RowComponentProps<LineRowProps>) {
+  const { at, marked, sought } = React.useContext(RowMarksContext);
   const element = React.useRef<HTMLDivElement>(null);
-  const shown = cutLine(logLine(lines, line));
+  const line = shown ? shown[row] : row;
+  const cut = cutLine(logLine(lines, line));
   const number = line + 1;
   // What a line that is cut says of itself: one line of the row, which a room of few columns cuts in its
   // turn, and which is whole for who points at it and for who does not see.
-  const left = `${many(shown.left, "more character")} of this line ${
-    shown.left === 1 ? "is" : "are"
+  const left = `${many(cut.left, "more character")} of this line ${
+    cut.left === 1 ? "is" : "are"
   } not shown: the copy of the line takes it whole.`;
   const pieces: React.ReactNode[] = [];
-  const places = sought ? foundPlaces(shown.text, sought) : [];
+  const places = sought ? foundPlaces(cut.text, sought) : [];
   let from = 0;
 
-  for (const piece of linePieces(shown.text, columns)) {
+  for (const piece of linePieces(cut.text, columns)) {
     let at = from;
 
     pieces.push(
@@ -169,14 +177,14 @@ function LineRow({
   );
 
   return (
-    // biome-ignore lint/a11y/useSemanticElements: the list of the host places a row in elements of its own, which an item of a list element cannot be inside
+    // biome-ignore lint/a11y/useSemanticElements: react-window places a row in the part of the list that scrolls, which an item of a list element cannot be inside
     <div
       ref={element}
       role="listitem"
-      aria-posinset={row + 1}
-      aria-setsize={rows}
-      aria-current={marked ? "true" : undefined}
-      className={`${styles.linesRow}${marked ? ` ${styles.linesMarked}` : ""}`}
+      aria-posinset={ariaAttributes["aria-posinset"]}
+      aria-setsize={ariaAttributes["aria-setsize"]}
+      aria-current={line === marked ? "true" : undefined}
+      className={`${styles.linesRow}${line === marked ? ` ${styles.linesMarked}` : ""}`}
       data-testid={`${id}-line-${number}`}
       data-text-line={number}
       data-text-row={row}
@@ -192,7 +200,7 @@ function LineRow({
         className={styles.linesCopy}
         aria-label={`Copy line ${number}`}
         title={`Copy line ${number}`}
-        tabIndex={reached ? 0 : -1}
+        tabIndex={row === at ? 0 : -1}
         data-testid={`${id}-line-${number}-copy`}
         onClick={() => onCopy(line)}
       >
@@ -200,7 +208,7 @@ function LineRow({
       </button>
       <span className={styles.linesText} data-testid={`${id}-line-${number}-text`}>
         {pieces}
-        {shown.left ? (
+        {cut.left ? (
           <span
             className={`${styles.linesPiece} ${styles.linesCut}`}
             data-testid={`${id}-line-${number}-cut`}
@@ -236,9 +244,9 @@ export interface LineListProps {
   none: string;
 }
 
-// The lines of a text with their numbers, in the virtual list of the host: the rows its room shows are
-// mounted, and the ones the host keeps ready around them. The text is the one it is given, and a line is
-// made of it for a row that is mounted and for no other.
+// The lines of a text with their numbers, windowed by react-window: the rows its room shows are mounted,
+// and the ones it keeps ready around them. The text is the one it is given, and a line is made of it for a
+// row that is mounted and for no other.
 //
 // The list is one stop of the Tab key, and the command of the line it is at another. The arrows, Page Up,
 // Page Down, Home and End move it among its lines, with the focus on the row, which is read to who does
@@ -254,29 +262,16 @@ export const LineList = React.forwardRef<LineListHandle, LineListProps>(function
   const [here, setHere] = React.useState(0);
   const [copied, setCopied] = React.useState("");
   const root = React.useRef<HTMLDivElement>(null);
-  // The part the list of the host scrolls. The host draws it a moment after the list itself, once it has
-  // measured its room: it is taken when it arrives. While the lines are wrapped its room is measured then,
-  // and the list is drawn again for it; while they are not, nothing is drawn again for its arrival.
-  const outer = React.useRef<HTMLDivElement | null>(null);
-  const wrapped = React.useRef(wrap);
-  const [scroller, setScroller] = React.useState<HTMLDivElement | null>(null);
-  const scrolled = React.useCallback((part: HTMLDivElement | null) => {
-    outer.current = part;
-    if (!part) return;
-    // The list is the stop of the Tab key, and the keys that move among the lines are its own: the part
-    // that scrolls is no stop beside it, which it would be while none of its rows can be reached.
-    part.tabIndex = -1;
-    if (wrapped.current) setScroller(part);
-  }, []);
-
-  wrapped.current = wrap;
+  // What react-window gives of the list: the way to scroll it to a row, and the part that scrolls, which it
+  // names once that part is there, a moment after the list itself.
+  const [api, setApi] = useListCallbackRef(null);
+  const scroller = api?.element ?? null;
   const probe = React.useRef<HTMLSpanElement>(null);
-  const list = React.useRef<Renderer.Component.VirtualListRef>(null);
-  // Where the list is scrolled to, as the host last said, and the rows it was laid out in before.
+  // Where the list was last scrolled to, and the rows it was laid out in before.
   const offset = React.useRef(0);
-  const before = React.useRef<{ lines: TextLines; heights: number[]; shown?: Uint32Array }>();
-  // The row the keys went to before it was mounted, which is given the focus when the list has moved.
-  const awaited = React.useRef<number>();
+  const before = React.useRef<{ lines: TextLines; heights: number[]; shown?: Uint32Array } | undefined>(undefined);
+  // The row the keys went to before it was mounted, which is given the focus when the list has drawn it.
+  const awaited = React.useRef<number | undefined>(undefined);
   const mounted = React.useRef(true);
   const ratio = useRatio();
   const layout = React.useMemo(
@@ -287,10 +282,76 @@ export const LineList = React.forwardRef<LineListHandle, LineListProps>(function
   const listed = rows > 0;
   const digits = String(lines.starts.length).length;
   const at = Math.max(0, Math.min(rowOf(shown, here), rows - 1));
+  // The height of a row, which react-window asks by its place. Another layout is another function, and
+  // react-window counts the places of the rows again for it.
+  const rowHeight = React.useCallback((row: number) => layout.heights[row], [layout]);
+  const marks = React.useMemo(() => ({ at, marked, sought }), [at, marked, sought]);
+
+  // The line is copied whole, whatever its row shows of it, by the clipboard of the page, which the host
+  // allows the frame of a cluster.
+  const copy = React.useCallback(
+    async (line: number) => {
+      const whole = logLine(lines, line);
+      let said: string;
+
+      try {
+        await navigator.clipboard.writeText(whole);
+        said = `Line ${line + 1} is copied whole: ${many(whole.length, "character")}.`;
+      } catch {
+        said = `Line ${line + 1} could not be copied: the clipboard did not take it.`;
+      }
+      if (mounted.current) setCopied(said);
+    },
+    [lines],
+  );
+  const rowProps = React.useMemo(
+    () => ({
+      id,
+      lines,
+      shown,
+      columns: wrap ? columns : undefined,
+      digits,
+      list: root,
+      onCopy: (line: number) => void copy(line),
+    }),
+    [id, lines, shown, wrap, columns, digits, copy],
+  );
+  // A row the keys went to before it was mounted is given the focus once react-window has drawn the rows of
+  // the place the list went to, and is not waited for after that.
+  const rendered = React.useCallback(() => {
+    const row = awaited.current;
+
+    awaited.current = undefined;
+    if (row !== undefined) {
+      root.current?.querySelector<HTMLElement>(`[data-text-row="${row}"]`)?.focus({ preventScroll: true });
+    }
+  }, []);
 
   const mountedRow = (row: number) => root.current?.querySelector<HTMLElement>(`[data-text-row="${row}"]`);
+  // The list is scrolled to a row, and react-window is told at once where it went: it hears of a scroll by
+  // its event, which the browser sends with the next frame. Told at once, it draws the rows of the place in
+  // the same draw as what scrolled the list, and no frame shows the room without them.
+  const scrollTo = (row: number, align: Align) => {
+    if (!api) return;
+    api.scrollToRow({ index: row, align });
+    api.element?.dispatchEvent(new Event("scroll"));
+  };
+  // A row is brought into the room as little as shows it when it is no further than a room from where the
+  // list is, and to the middle of the room when it is further: a key moves the list by what it must, and a
+  // match far away is shown with the lines around it.
+  const bring = (row: number) => {
+    const room = scroller?.clientHeight ?? 0;
+    const from = scroller?.scrollTop ?? 0;
+    let top = 0;
+
+    for (let place = 0; place < row; place += 1) top += layout.heights[place];
+    const most = Math.max(0, Math.min(layout.total - room, top));
+    const least = Math.max(0, top - room + layout.heights[row]);
+
+    scrollTo(row, from >= least - room && from <= most + room ? "auto" : "center");
+  };
   // The list goes to a row: it is at its line, and the row is brought into its room. The keys take the
-  // focus with them, to the row when it is mounted, and when the list has moved to it when it is not.
+  // focus with them, to the row when it is mounted, and when the list has drawn it when it is not.
   const go = (row: number, focus: boolean) => {
     if (!rows) return;
     const to = Math.max(0, Math.min(row, rows - 1));
@@ -299,7 +360,7 @@ export const LineList = React.forwardRef<LineListHandle, LineListProps>(function
     setHere(shown ? shown[to] : to);
     there?.focus({ preventScroll: true });
     awaited.current = focus && !there ? to : undefined;
-    list.current?.scrollToItem(to, "smart");
+    bring(to);
   };
 
   React.useImperativeHandle(ref, () => ({ show: (line) => go(rowOf(shown, line), false) }));
@@ -310,12 +371,12 @@ export const LineList = React.forwardRef<LineListHandle, LineListProps>(function
     [],
   );
   // The columns of the room: what is left of its width after the number and the command of a row, in
-  // characters of the width they have here. They are measured on a row that is not shown, when the part
-  // the host scrolls is there, and again when the room changes.
+  // characters of the width they have here. They are measured on a row that is not shown, once the part
+  // that scrolls is there, and again when its room changes.
   React.useLayoutEffect(() => {
-    if (!wrap || !listed) return;
+    if (!wrap || !scroller) return;
     const measure = () => {
-      const room = outer.current?.clientWidth ?? 0;
+      const room = scroller.clientWidth;
       const width = (probe.current?.getBoundingClientRect().width ?? 0) / PROBE.length;
 
       if (!probe.current || !room || !width) return;
@@ -324,12 +385,12 @@ export const LineList = React.forwardRef<LineListHandle, LineListProps>(function
     };
 
     measure();
-    if (typeof ResizeObserver !== "function" || !outer.current) return;
+    if (typeof ResizeObserver !== "function") return;
     const observer = new ResizeObserver(measure);
 
-    observer.observe(outer.current);
+    observer.observe(scroller);
     return () => observer.disconnect();
-  }, [wrap, listed, digits, scroller]);
+  }, [wrap, scroller, digits]);
   // The place of the scroll is kept when the rows change their heights or their number, which a choice to
   // wrap, a room that changes and a filter do: the line that was first in the room is first again, or the
   // next one that is left. Another text begins at its first line, which is the one that is given the focus.
@@ -340,8 +401,7 @@ export const LineList = React.forwardRef<LineListHandle, LineListProps>(function
     if (!was?.heights.length || !layout.heights.length) return;
     if (was.lines !== lines) {
       setHere(0);
-      list.current?.resetAfterIndex(0);
-      list.current?.scrollToItem(0, "start");
+      scrollTo(0, "start");
       return;
     }
     if (!offset.current) return;
@@ -353,8 +413,7 @@ export const LineList = React.forwardRef<LineListHandle, LineListProps>(function
     }
     const first = rowOf(shown, was.shown ? was.shown[row] : row);
 
-    list.current?.resetAfterIndex(0);
-    list.current?.scrollToItem(Math.max(0, Math.min(first, layout.heights.length - 1)), "start");
+    scrollTo(Math.max(0, Math.min(first, layout.heights.length - 1)), "start");
   }, [layout, shown, lines]);
 
   if (!listed) {
@@ -369,26 +428,12 @@ export const LineList = React.forwardRef<LineListHandle, LineListProps>(function
       </p>
     );
   }
-  // The line is copied whole, whatever its row shows of it, by the clipboard of the page, which the host
-  // allows the frame of a cluster.
-  const copy = async (line: number) => {
-    const whole = logLine(lines, line);
-    let said: string;
-
-    try {
-      await navigator.clipboard.writeText(whole);
-      said = `Line ${line + 1} is copied whole: ${many(whole.length, "character")}.`;
-    } catch {
-      said = `Line ${line + 1} could not be copied: the clipboard did not take it.`;
-    }
-    if (mounted.current) setCopied(said);
-  };
   // The row a page away from the one the list is at, after it or before it: the furthest one whose rows,
   // from the next to itself, the room shows together with a line to spare, and the next one at least. The
   // rows are as tall as the lines they take: a page of wrapped lines is fewer rows, and every row between
   // the two is in the room the list moves to.
   const paged = (by: 1 | -1): number => {
-    const room = (outer.current?.clientHeight || 10 * LINE) - LINE;
+    const room = (scroller?.clientHeight || 10 * LINE) - LINE;
     let to = at;
 
     for (let filled = 0, next = at + by; next >= 0 && next < rows; next += by) {
@@ -439,7 +484,7 @@ export const LineList = React.forwardRef<LineListHandle, LineListProps>(function
           </span>
         </p>
       ) : null}
-      {/* biome-ignore lint/a11y/useSemanticElements: the list of the host is between this and its rows, with elements of its own */}
+      {/* biome-ignore lint/a11y/useSemanticElements: react-window draws the part that scrolls between this and its rows, with an element of its own */}
       <div
         ref={root}
         role="list"
@@ -455,41 +500,27 @@ export const LineList = React.forwardRef<LineListHandle, LineListProps>(function
         onKeyDown={onKeyDown}
         onFocus={onFocus}
       >
-        <VirtualList<string>
-          ref={list}
-          className={styles.linesRows}
-          items={layout.items}
-          rowHeights={layout.heights}
-          readyOffset={READY}
-          outerRef={scrolled}
-          onScroll={({ scrollOffset }) => {
-            const row = awaited.current;
-
-            offset.current = scrollOffset;
-            awaited.current = undefined;
-            if (row !== undefined) mountedRow(row)?.focus({ preventScroll: true });
-          }}
-          getRow={(row) => {
-            const line = shown ? shown[row] : row;
-
-            return (
-              <LineRow
-                id={id}
-                lines={lines}
-                line={line}
-                row={row}
-                rows={rows}
-                columns={wrap ? columns : undefined}
-                digits={digits}
-                reached={row === at}
-                marked={line === marked}
-                sought={sought}
-                list={root}
-                onCopy={(copied) => void copy(copied)}
-              />
-            );
-          }}
-        />
+        <RowMarksContext.Provider value={marks}>
+          {/* The part that scrolls is no list of its own, and no stop of the Tab key: the list is the element
+              around it, which has the name and the keys, and the rows are its items. */}
+          {/* biome-ignore lint/a11y/useValidAriaRole: the role of a list that react-window writes on the part that scrolls is taken away, and no role is written in its place */}
+          <List
+            listRef={setApi}
+            className={styles.linesRows}
+            role={undefined}
+            tabIndex={-1}
+            data-testid={`${id}-rows`}
+            rowComponent={LineRow}
+            rowCount={rows}
+            rowHeight={rowHeight}
+            rowProps={rowProps}
+            overscanCount={READY}
+            onScroll={(event) => {
+              offset.current = event.currentTarget.scrollTop;
+            }}
+            onRowsRendered={rendered}
+          />
+        </RowMarksContext.Provider>
         {wrap ? (
           <div className={styles.linesProbe} aria-hidden="true">
             <div className={styles.linesRow}>

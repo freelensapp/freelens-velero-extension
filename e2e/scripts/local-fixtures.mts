@@ -51,6 +51,10 @@ export const RESTORE_PHASES = [
 // first reader reads the backups and not the restores; the second one the restores and not the backups.
 export const VIEW_READER = "views-reader";
 export const VIEW_READER_OF_RESTORES = "views-reader-of-restores";
+export const VIEW_WITHOUT_PORT_FORWARD = "views-without-port-forward";
+export const VIEW_OF_AN_EXEC_PLUGIN = "views-exec-plugin";
+// The version of the credential an `exec` plugin prints, which its kubeconfig names.
+export const EXEC_CREDENTIAL_VERSION = "client.authentication.k8s.io/v1";
 export const SCALE_BACKUPS = 1000;
 export const SCALE_RESTORES = 1000;
 
@@ -1370,6 +1374,41 @@ export function readerKubeconfig(config: KindConfig, token: string, namespace: s
   return reader;
 }
 
+// The files of the plugin of the identity whose kubeconfig takes its token from an `exec` plugin: the script
+// of the test environment, the file of the token in the private state, and the file of its runs there.
+export interface ExecPluginFiles {
+  script: string;
+  token: string;
+  runs: string;
+}
+
+// The kubeconfig of that identity: the one of the environment with its credential replaced by the plugin,
+// which the shell of the system runs with the two files of the private state, and the namespace the identity
+// reads as the one of its context. The kubeconfig holds no token, only where the plugin reads one.
+export function execPluginKubeconfig(config: KindConfig, plugin: ExecPluginFiles, namespace: string): KindConfig {
+  requireCondition(
+    config.users.length === 1 && config.contexts.length === 1 && config.clusters.length === 1,
+    "The kubeconfig of the environment has one target",
+  );
+  requireCondition(
+    [plugin.script, plugin.token, plugin.runs].every((file) => file.startsWith("/")),
+    "The files of the plugin are named by their absolute paths",
+  );
+  const kubeconfig = structuredClone(config);
+
+  kubeconfig.users[0].user = {
+    exec: {
+      apiVersion: EXEC_CREDENTIAL_VERSION,
+      command: "/bin/sh",
+      args: [plugin.script, plugin.token, plugin.runs],
+      interactiveMode: "Never",
+      provideClusterInfo: false,
+    },
+  };
+  kubeconfig.contexts[0].context = { ...kubeconfig.contexts[0].context, namespace };
+  return kubeconfig;
+}
+
 // What is placed by the clock is found by what it says of when it was placed. It is left as it is while it
 // is good, and put in place again when it is not: the objects of the namespace that are of this run are
 // removed, and the ones of now are created. Nothing else of the cluster is touched. What is answered says
@@ -2392,9 +2431,9 @@ export function refusedFixtures(
 // The identities of the transport proof. Three may do what a download asks of the cluster up to one step,
 // and are refused at the next: the reader at the creation of the request; the requester at the read of the
 // Secret a location refers to, and at the read of the Service of the store; the router at the port-forward,
-// for which it has the verb create alone. The downloader has what the documentation lists for a download
-// through the cluster, and downloads. Each is an account of the namespace of the installation, of this
-// run, with a role of that namespace.
+// for which it has no verb. The downloader has what the documentation lists for a download through the
+// cluster, and downloads. Each is an account of the namespace of the installation, of this run, with a role
+// of that namespace.
 export function proofIdentities(
   owner: string,
   run: string,
@@ -2434,22 +2473,109 @@ export function proofIdentities(
   return {
     reader: identity("reader", [reads]),
     requester: identity("requester", [reads, requests]),
-    // A port-forward over a WebSocket is asked of the API server with the verb get; the releases that
-    // check the verb create for it as well ask for both. The verb create alone, which is what the older
-    // protocol asks with, is refused.
-    router: identity("router", [
+    // The kubectl of the host asks a port-forward of the API server over a WebSocket first, with the verb
+    // get, and when that is refused falls back to the older protocol, with the verb create: create alone
+    // forwards, and the documentation lists it. An identity with neither verb is refused, and the last
+    // words of kubectl name create. The router has neither.
+    router: identity("router", [reads, requests, ...route]),
+    downloader: identity("downloader", [
       reads,
       requests,
       ...route,
       { apiGroups: [""], resources: ["pods/portforward"], verbs: ["create"] },
     ]),
-    downloader: identity("downloader", [
-      reads,
-      requests,
-      ...route,
-      { apiGroups: [""], resources: ["pods/portforward"], verbs: ["get", "create"] },
-    ]),
   };
+}
+
+// The identity of the views that may not port-forward, which the runner of the suites makes for as long as
+// they run: an account of the namespace of the installation, of the run, with a role of that namespace. It
+// reads what the views and a download read of the installation, creates and reads a DownloadRequest there,
+// and reads the route to the store, its Service, its endpoint slices and its Pod. It has neither verb of the
+// port-forward, get nor create, and reads no Secret: a load of a log is refused at the port-forward, once its
+// request is in the cluster.
+export function viewIdentityWithoutPortForward(owner: string, run: string): KubeResource[] {
+  requireCondition(owner, "Fixture ownership is required");
+  fixtureNames(run);
+  const name = `${VIEW_WITHOUT_PORT_FORWARD}-${run}`;
+  const metadata = {
+    name,
+    namespace: DEMO_NAMESPACE,
+    labels: { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" },
+  };
+
+  return [
+    { apiVersion: "v1", kind: "ServiceAccount", metadata, automountServiceAccountToken: false },
+    {
+      apiVersion: "rbac.authorization.k8s.io/v1",
+      kind: "Role",
+      metadata,
+      rules: [
+        {
+          apiGroups: ["velero.io"],
+          resources: ["backups", "restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"],
+          verbs: ["get", "list", "watch"],
+        },
+        { apiGroups: ["velero.io"], resources: ["downloadrequests"], verbs: ["create", "get"] },
+        { apiGroups: [""], resources: ["services", "pods"], verbs: ["get"] },
+        { apiGroups: ["discovery.k8s.io"], resources: ["endpointslices"], verbs: ["list"] },
+      ],
+    },
+    {
+      apiVersion: "rbac.authorization.k8s.io/v1",
+      kind: "RoleBinding",
+      metadata,
+      roleRef: { apiGroup: "rbac.authorization.k8s.io", kind: "Role", name },
+      subjects: [{ kind: "ServiceAccount", name, namespace: DEMO_NAMESPACE }],
+    },
+  ];
+}
+
+// The identity of the views whose kubeconfig takes its token from an `exec` plugin, which the runner of the
+// suites makes for as long as they run: an account of the namespace of the installation, of the run, with a
+// role of that namespace. It has what the documentation lists for the writes and for a download through the
+// cluster: it reads what the views read of the installation, creates and reads the two requests the gate lets
+// through, reads the Service of the store, its endpoint slices and its Pod, and may create a port-forward. It
+// reads no Secret: the storage location of the demo refers to none for its certificate.
+export function viewIdentityOfAnExecPlugin(owner: string, run: string): KubeResource[] {
+  requireCondition(owner, "Fixture ownership is required");
+  fixtureNames(run);
+  const name = `${VIEW_OF_AN_EXEC_PLUGIN}-${run}`;
+  const metadata = {
+    name,
+    namespace: DEMO_NAMESPACE,
+    labels: { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" },
+  };
+
+  return [
+    { apiVersion: "v1", kind: "ServiceAccount", metadata, automountServiceAccountToken: false },
+    {
+      apiVersion: "rbac.authorization.k8s.io/v1",
+      kind: "Role",
+      metadata,
+      rules: [
+        {
+          apiGroups: ["velero.io"],
+          resources: ["backups", "restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"],
+          verbs: ["get", "list", "watch"],
+        },
+        {
+          apiGroups: ["velero.io"],
+          resources: ["downloadrequests", "serverstatusrequests"],
+          verbs: ["create", "get"],
+        },
+        { apiGroups: [""], resources: ["services", "pods"], verbs: ["get"] },
+        { apiGroups: ["discovery.k8s.io"], resources: ["endpointslices"], verbs: ["list"] },
+        { apiGroups: [""], resources: ["pods/portforward"], verbs: ["create"] },
+      ],
+    },
+    {
+      apiVersion: "rbac.authorization.k8s.io/v1",
+      kind: "RoleBinding",
+      metadata,
+      roleRef: { apiGroup: "rbac.authorization.k8s.io", kind: "Role", name },
+      subjects: [{ kind: "ServiceAccount", name, namespace: DEMO_NAMESPACE }],
+    },
+  ];
 }
 
 // What the release writes when it refuses each of them, as the controller of each says it.
