@@ -833,10 +833,14 @@ const OUTPUT_ERROR_PATTERN = /^\s*error:/im;
 // The host's kubectl proxy logs at error level every request its client gave
 // up on before the API server answered. That is what closing a drawer does to
 // the reference loads it had just started: an abort on purpose, not a failure.
-// The record spans from its opening line to its closing one.
+// The record spans from its opening line to its closing one, with no line that
+// opens another record between them. One whose closing line has not arrived yet
+// is the last thing written: its opening line, then lines that neither open nor
+// close a record, to the end.
 const CANCELED_PROXY_RECORD_PATTERN =
-  /^[^\n]*error:\s*┏[^\n]*Error while proxying request: context canceled[\s\S]*?^[^\n]*error:\s*┗[^\n]*\n?/gim;
-const CANCELED_PROXY_START_PATTERN = /^\s*error:\s*┏[^\n]*Error while proxying request: context canceled/im;
+  /^[^\n]*error:\s*┏[^\n]*Error while proxying request: context canceled[^\n]*\n(?:(?![^\n]*\b[a-z]+:\s*[┏▪])[^\n]*\n)*?[^\n]*error:\s*┗[^\n]*\n?/gim;
+const CANCELED_PROXY_START_PATTERN =
+  /error:\s*┏[^\n]*Error while proxying request: context canceled[^\n]*(?:\n(?![^\n]*\b[a-z]+:\s*[┏▪┗])[^\n]*)*$/i;
 // The host logs at the level of an error every load in its window that did not end, the frames in it as well, as
 // a window that failed to load. The frame of a cluster it takes out when the cluster is disconnected is one: its
 // load is aborted, code -3, and nothing failed. The record spans from its opening line to its closing one, and one
