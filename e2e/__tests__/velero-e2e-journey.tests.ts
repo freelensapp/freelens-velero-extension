@@ -27,6 +27,9 @@ const DIALOG = '[data-testid="confirmation-dialog"], .Dialog, .ConfirmDialog';
 const STARTED = /\b2026\b/;
 // The five kinds of Velero with pages of their own, as the API names them.
 const FAMILIES = ["backups", "backupstoragelocations", "restores", "schedules", "volumesnapshotlocations"];
+// The words of the error the suite makes the section of the details of a backup throw: the one error the
+// application is to have, which is known by them.
+const MADE = "The suite made the section of the details of a backup throw";
 const WAITING = {
   failure: "No failure reported",
   progress: "Not reported",
@@ -676,6 +679,68 @@ describe("views of the first milestone", () => {
   );
 
   it(
+    "keeps an error its section of the details throws in its place, in the drawer of the host: the error page there, the rest of the drawer and the view of the cluster kept, and the error in the log of the host with the name of the extension",
+    async () => {
+      const link = `/apis/velero.io/v1/namespaces/${cluster.E2E_VIEWS_NAMESPACE}/backups/${SCHEDULED}`;
+      const drawer = frame.locator(".Drawer.KubeObjectDetails");
+      const page = drawer.locator("[data-testid=velero-error-page]");
+
+      // The page under the drawer is a list of the host, which draws no view of the extension.
+      await cluster.navigate(frame, "/crd/velero.io/backups");
+      await cluster.selectHostNamespace(frame, cluster.E2E_VIEWS_NAMESPACE);
+      await frame.locator(".TableRow", { hasText: SCHEDULED }).first().waitFor({ timeout: 60_000 });
+      // The section of a backup reads the validation errors of its status, which a backup that completed does
+      // not hold. While the drawer opens, a read of that name of an object that does not hold it throws, in the
+      // frame of the cluster: no part of the host reads that name, and the one part that throws is the section
+      // of the extension. Nothing else of the frame is changed, and the name is given back as it was after.
+      await frame.evaluate((thrown) => {
+        Object.defineProperty(Object.prototype, "validationErrors", {
+          configurable: true,
+          get() {
+            throw new Error(thrown);
+          },
+        });
+      }, MADE);
+      try {
+        await cluster.showHostDetails(frame, link);
+        await page.waitFor({ timeout: 60_000 });
+      } finally {
+        await frame.evaluate(() => {
+          delete (Object.prototype as { validationErrors?: unknown }).validationErrors;
+        });
+      }
+      // The error page is in the place of the section, and names the error.
+      expect(await drawer.locator("[data-testid=velero-backup-details]").count()).toBe(0);
+      expect(await page.count()).toBe(1);
+      expect((await page.innerText()).replace(/\s+/g, " ")).toContain(MADE);
+      // The rest of the drawer is what the host shows of any object: the name of the backup and its namespace.
+      const words = (await drawer.innerText()).replace(/\s+/g, " ");
+
+      expect(words).toContain(SCHEDULED);
+      expect(words).toContain(cluster.E2E_VIEWS_NAMESPACE);
+      // The view of the cluster is kept: its sidebar is there, and no crash page of the host took its place.
+      expect(await frame.locator("[data-testid=cluster-sidebar]").count()).toBe(1);
+      expect(await frame.locator(".ErrorBoundary").count()).toBe(0);
+      await cluster.captureScreenshot(frame, "dark-host-details-section-error");
+      // The log of the host, in the file of the frame of the cluster, has the error with the name of the
+      // extension, at the level of an error.
+      const file = `lens-renderer-cluster-${cluster.frameClusterId(frame)}-frame.log`;
+      const logged = (await velero.hostLogErrors(started.app))[file] ?? [];
+
+      expect(
+        logged.filter((line) => line.includes(MADE) && line.includes(velero.EXTENSION_NAME)).length,
+      ).toBeGreaterThan(0);
+      // Opened again, with nothing made to throw, the drawer shows the section of the backup.
+      await cluster.closeDetails(frame);
+      await cluster.showHostDetails(frame, link);
+      await drawer.locator("[data-testid=velero-backup-details]").waitFor({ timeout: 60_000 });
+      expect(await page.count()).toBe(0);
+      await cluster.closeDetails(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "gives every page of the group the tabs of the group, and leaves its five kinds out of the Custom Resources of the host until it is disabled",
     async () => {
       const { velero: _group, ...entries } = await cluster.veleroSidebarEntries(frame);
@@ -731,9 +796,19 @@ describe("views of the first milestone", () => {
   );
 
   it(
-    "leaves no error in the application",
+    "leaves no error in the application but the one the suite made a section of the details throw",
     async () => {
-      expect(errors.errors()).toEqual([]);
+      // What the collector has, but what carries the words of the error the suite made: a message of the console
+      // is one, and the output of the application is read by its lines at the level of an error.
+      const others = errors
+        .errors()
+        .filter((found) =>
+          /^\[[a-z]+\] /.test(found)
+            ? !found.includes(MADE)
+            : found.split("\n").some((line) => /^\s*error:/i.test(line) && !line.includes(MADE)),
+        );
+
+      expect(others).toEqual([]);
     },
     TIMEOUT,
   );

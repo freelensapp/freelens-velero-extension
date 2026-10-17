@@ -51,6 +51,7 @@ export const RESTORE_PHASES = [
 // first reader reads the backups and not the restores; the second one the restores and not the backups.
 export const VIEW_READER = "views-reader";
 export const VIEW_READER_OF_RESTORES = "views-reader-of-restores";
+export const VIEW_WITHOUT_PORT_FORWARD = "views-without-port-forward";
 export const SCALE_BACKUPS = 1000;
 export const SCALE_RESTORES = 1000;
 
@@ -2446,6 +2447,49 @@ export function proofIdentities(
       { apiGroups: [""], resources: ["pods/portforward"], verbs: ["create"] },
     ]),
   };
+}
+
+// The identity of the views that may not port-forward, which the runner of the suites makes for as long as
+// they run: an account of the namespace of the installation, of the run, with a role of that namespace. It
+// reads what the views and a download read of the installation, creates and reads a DownloadRequest there,
+// and reads the route to the store, its Service, its endpoint slices and its Pod. It has neither verb of the
+// port-forward, get nor create, and reads no Secret: a load of a log is refused at the port-forward, once its
+// request is in the cluster.
+export function viewIdentityWithoutPortForward(owner: string, run: string): KubeResource[] {
+  requireCondition(owner, "Fixture ownership is required");
+  fixtureNames(run);
+  const name = `${VIEW_WITHOUT_PORT_FORWARD}-${run}`;
+  const metadata = {
+    name,
+    namespace: DEMO_NAMESPACE,
+    labels: { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" },
+  };
+
+  return [
+    { apiVersion: "v1", kind: "ServiceAccount", metadata, automountServiceAccountToken: false },
+    {
+      apiVersion: "rbac.authorization.k8s.io/v1",
+      kind: "Role",
+      metadata,
+      rules: [
+        {
+          apiGroups: ["velero.io"],
+          resources: ["backups", "restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"],
+          verbs: ["get", "list", "watch"],
+        },
+        { apiGroups: ["velero.io"], resources: ["downloadrequests"], verbs: ["create", "get"] },
+        { apiGroups: [""], resources: ["services", "pods"], verbs: ["get"] },
+        { apiGroups: ["discovery.k8s.io"], resources: ["endpointslices"], verbs: ["list"] },
+      ],
+    },
+    {
+      apiVersion: "rbac.authorization.k8s.io/v1",
+      kind: "RoleBinding",
+      metadata,
+      roleRef: { apiGroup: "rbac.authorization.k8s.io", kind: "Role", name },
+      subjects: [{ kind: "ServiceAccount", name, namespace: DEMO_NAMESPACE }],
+    },
+  ];
 }
 
 // What the release writes when it refuses each of them, as the controller of each says it.

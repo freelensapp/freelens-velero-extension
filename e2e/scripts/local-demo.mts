@@ -56,6 +56,7 @@ import {
   VIEW_READER,
   VIEW_READER_OF_RESTORES,
   verifyStaticFixtures,
+  viewIdentityWithoutPortForward,
 } from "./local-fixtures.mts";
 import {
   assertEgressRules,
@@ -2011,6 +2012,49 @@ function runDirectProof(input: {
   }
 }
 
+// Removes accounts of the namespace of the installation that were applied for a run, with their roles and their
+// bindings, by the identity the cluster gives of each, read as owned by that run: the binding first, then the
+// role and the account. One that is not in the journal, or not in the cluster any more, is passed over.
+function removeAccounts(accounts: KubeResource[]): void {
+  for (const account of [...accounts].reverse()) {
+    const entry = journal.resources.find(
+      (resource) =>
+        resource.kind === account.kind &&
+        resource.name === account.metadata.name &&
+        resource.namespace === DEMO_NAMESPACE,
+    );
+
+    if (!entry) continue;
+    const raw = kubectl(["get", ...resourceArguments(entry), "--ignore-not-found", "-o", "json"]).trim();
+
+    if (raw) {
+      const found = JSON.parse(raw) as KubeResource;
+
+      assertOwnedResource(journal.owner, found, entry.uid);
+      requireCondition(
+        found.metadata.labels?.[FIXTURE_LABEL] === account.metadata.labels?.[FIXTURE_LABEL],
+        "An identity of a run belongs to a different fixture run",
+      );
+      kubectl(
+        [
+          "delete",
+          "--raw",
+          account.kind === "ServiceAccount"
+            ? `/api/v1/namespaces/${DEMO_NAMESPACE}/serviceaccounts/${entry.name}`
+            : `/apis/rbac.authorization.k8s.io/v1/namespaces/${DEMO_NAMESPACE}/${account.kind === "Role" ? "roles" : "rolebindings"}/${entry.name}`,
+          "-f",
+          "-",
+        ],
+        JSON.stringify({ apiVersion: "v1", kind: "DeleteOptions", preconditions: { uid: found.metadata.uid } }),
+        undefined,
+        false,
+      );
+    }
+    journal.resources = journal.resources.filter((resource) => resource !== entry);
+    save();
+  }
+}
+
 async function runTransportProof(): Promise<void> {
   verifyPreloadedImages();
   requireCondition(
@@ -2250,45 +2294,8 @@ async function runTransportProof(): Promise<void> {
       journal.resources = journal.resources.filter((resource) => resource !== entry);
       save();
     }
-    // The identities of the proof go by the identity the cluster gives of each, read as owned by this
-    // run: the binding first, then the role and the account.
-    for (const account of [...accounts].reverse()) {
-      const entry = journal.resources.find(
-        (resource) =>
-          resource.kind === account.kind &&
-          resource.name === account.metadata.name &&
-          resource.namespace === DEMO_NAMESPACE,
-      );
-
-      if (!entry) continue;
-      const raw = kubectl(["get", ...resourceArguments(entry), "--ignore-not-found", "-o", "json"]).trim();
-
-      if (raw) {
-        const found = JSON.parse(raw) as KubeResource;
-
-        assertOwnedResource(journal.owner, found, entry.uid);
-        requireCondition(
-          found.metadata.labels?.[FIXTURE_LABEL] === account.metadata.labels?.[FIXTURE_LABEL],
-          "An identity of the proof belongs to a different fixture run",
-        );
-        kubectl(
-          [
-            "delete",
-            "--raw",
-            account.kind === "ServiceAccount"
-              ? `/api/v1/namespaces/${DEMO_NAMESPACE}/serviceaccounts/${entry.name}`
-              : `/apis/rbac.authorization.k8s.io/v1/namespaces/${DEMO_NAMESPACE}/${account.kind === "Role" ? "roles" : "rolebindings"}/${entry.name}`,
-            "-f",
-            "-",
-          ],
-          JSON.stringify({ apiVersion: "v1", kind: "DeleteOptions", preconditions: { uid: found.metadata.uid } }),
-          undefined,
-          false,
-        );
-      }
-      journal.resources = journal.resources.filter((resource) => resource !== entry);
-      save();
-    }
+    // The identities of the proof go by the identity the cluster gives of each, read as owned by this run.
+    removeAccounts(accounts);
     await certificates?.dispose();
 
     if (journal.fixtureRun) {
@@ -2769,9 +2776,12 @@ function runViews(): void {
   // from the extension: they find it beside their reports.
   writeFileSync(join(artifacts, "tab-fixtures.json"), `${JSON.stringify(tabFacts(placed), null, 2)}\n`);
   // The identity that reads a part of the views lasts as long as the suite: its kubeconfig is in the private
-  // state, and goes when the suite ends.
+  // state, and goes when the suite ends. So does the identity that may not port-forward, which is made for the
+  // suite, an account of the namespace of the installation with its role, and goes with it.
   const readerFile = join(STATE, `views-reader-${run}.json`);
   const secondFile = join(STATE, `views-reader-of-restores-${run}.json`);
+  const forwardlessFile = join(STATE, `views-without-port-forward-${run}.json`);
+  const forwardless = viewIdentityWithoutPortForward(journal.owner, run);
   let status: number | null;
 
   // What is written is removed whatever happens after it, the second file when the first was written
@@ -2779,6 +2789,8 @@ function runViews(): void {
   try {
     writeReaderKubeconfig(readerFile, names.views, "2h");
     writeReaderKubeconfig(secondFile, names.views, "2h", VIEW_READER_OF_RESTORES);
+    for (const resource of forwardless) applyOwned(resource);
+    writeReaderKubeconfig(forwardlessFile, DEMO_NAMESPACE, "2h", forwardless[0].metadata.name);
     // The suites start the application with their environment: what they need of this environment is named
     // here, and the home is the one of the caller, where its toolchain is.
     status = spawnSync(
@@ -2801,6 +2813,7 @@ function runViews(): void {
           E2E_KUBECONFIG: CONFIG,
           E2E_READER_KUBECONFIG: readerFile,
           E2E_SECOND_READER_KUBECONFIG: secondFile,
+          E2E_NO_PORT_FORWARD_KUBECONFIG: forwardlessFile,
           E2E_KUBECTL: KUBECTL,
           E2E_CLUSTER_NAME: DEMO_CLUSTER,
           E2E_KUBE_CONTEXT: DEMO_CONTEXT,
@@ -2818,7 +2831,8 @@ function runViews(): void {
       },
     ).status;
   } finally {
-    for (const file of [readerFile, secondFile]) rmSync(file, { force: true });
+    for (const file of [readerFile, secondFile, forwardlessFile]) rmSync(file, { force: true });
+    removeAccounts(forwardless);
   }
   verifyTarget();
   requireCondition(status === 0, `The suite ${pattern} did not pass`);

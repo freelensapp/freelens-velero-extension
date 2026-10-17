@@ -23,7 +23,7 @@ import * as path from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import { _electron as electron } from "playwright";
 
-import type { ConsoleMessage, ElectronApplication, Page, Request } from "playwright";
+import type { ConsoleMessage, ElectronApplication, Frame, Page, Request } from "playwright";
 
 /** Name of this extension, as published and as shown by the extensions page. */
 export const EXTENSION_NAME = "@freelensapp/velero-extension";
@@ -305,7 +305,8 @@ export async function hostLogErrors(app: ElectronApplication): Promise<Record<st
   for (const file of (await readdir(directory)).filter((name) => name.endsWith(".log")).sort()) {
     const text = (await readFile(path.join(directory, file), "utf8"))
       .replace(ANSI_ESCAPE_PATTERN, "")
-      .replace(CANCELED_PROXY_RECORD_PATTERN, "");
+      .replace(CANCELED_PROXY_RECORD_PATTERN, "")
+      .replace(ABORTED_FRAME_RECORD_PATTERN, "");
 
     found[file] = text
       .split("\n")
@@ -344,6 +345,42 @@ export async function mainCatalog(app: ElectronApplication): Promise<MainCatalog
 }
 
 /**
+ * Waits for the catalog of the main process to give a cluster a state, and answers the entry: a minute at
+ * most, after which the state it has is said.
+ */
+export async function clusterInState(app: ElectronApplication, id: string, state: string): Promise<MainCatalogEntry> {
+  const deadline = Date.now() + ELEMENT_TIMEOUT;
+
+  for (;;) {
+    const entry = (await mainCatalog(app)).find((cluster) => cluster.id === id);
+
+    if (entry?.status === state) return entry;
+    if (Date.now() > deadline) {
+      throw new Error(`The cluster ${id} is ${entry ? entry.status : "not in the catalog"}, and not ${state}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
+/**
+ * Disconnects a cluster in the catalog, as an operator does: the menu of its row, and its command Disconnect,
+ * which the host offers for a cluster that is connected. Answers once the catalog of the main process says that
+ * the cluster is disconnected.
+ */
+export async function disconnectInCatalog(app: ElectronApplication, window: Page, id: string): Promise<void> {
+  await navigateToCatalog(app);
+  // The icon of the row opens its menu, which carries the identifier of the row once it is open.
+  const opens = window.locator(`[data-testid="icon-for-menu-actions-for-catalog-for-${id}"]`);
+
+  await opens.waitFor({ state: "visible", timeout: ELEMENT_TIMEOUT });
+  await opens.click();
+  await window
+    .locator(`[data-testid="menu-actions-for-catalog-for-${id}"] .MenuItem`, { hasText: /^\s*Disconnect\s*$/ })
+    .click({ timeout: ELEMENT_TIMEOUT });
+  await clusterInState(app, id, "disconnected");
+}
+
+/**
  * Disables the extension from the Extensions page, as an operator does: the command of the menu of its row.
  * The page then says that it is disabled.
  */
@@ -357,6 +394,178 @@ export async function disableExtension(app: ElectronApplication, window: Page): 
   await window.click(`[id="menu-actions-for-installed-extensions-for-${EXTENSION_NAME}"]`);
   await window.locator(".Menu .MenuItem", { hasText: "Disable" }).click();
   await row.locator("td").nth(2).getByText("Disabled", { exact: true }).waitFor({ timeout: ELEMENT_TIMEOUT });
+}
+
+/**
+ * Enables the extension again from the Extensions page, as an operator does: the command of the menu of its
+ * row, which the host names "Enabled" while the extension is disabled. The page then says that it is enabled.
+ */
+export async function enableExtension(app: ElectronApplication, window: Page): Promise<void> {
+  await navigateToExtensions(app);
+  const row = window.locator("tr", {
+    has: window.locator('div[class*="installed-extensions-module__extensionName--"]', { hasText: EXTENSION_NAME }),
+  });
+
+  await row.waitFor({ state: "visible", timeout: ELEMENT_TIMEOUT });
+  await row.locator("td").nth(2).getByText("Disabled", { exact: true }).waitFor({ timeout: ELEMENT_TIMEOUT });
+  await window.click(`[id="menu-actions-for-installed-extensions-for-${EXTENSION_NAME}"]`);
+  await window.locator(".Menu .MenuItem", { hasText: "Enabled" }).click();
+  await row.locator("td").nth(2).getByText("Enabled", { exact: true }).waitFor({ timeout: ELEMENT_TIMEOUT });
+}
+
+/**
+ * The kubectl that the application runs to forward a port, which the extension runs for a download through
+ * the cluster: the processes under the main process of the application whose command is a kubectl
+ * port-forward, by their identifiers. The host runs no other. The table of the processes is read once, so
+ * that a case can ask it several times a second while a load runs.
+ */
+export function kubectlForwards(app: ElectronApplication): number[] {
+  const main = app.process().pid;
+
+  if (!main) return [];
+  const rows = execFileSync("ps", ["-A", "-o", "pid=,ppid=,command="], { encoding: "utf8" })
+    .split("\n")
+    .map((line) => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line))
+    .filter((match) => match !== null)
+    .map(([, pid, parent, line]) => ({ pid: Number(pid), parent: Number(parent), line }));
+  const under = new Set([main]);
+
+  // A process is under the main process when its parent is: the table is gone through until nothing is added.
+  for (let added = true; added; ) {
+    added = false;
+    for (const row of rows) {
+      if (under.has(row.parent) && !under.has(row.pid)) {
+        under.add(row.pid);
+        added = true;
+      }
+    }
+  }
+  return rows
+    .filter((row) => row.pid !== main && under.has(row.pid) && /\bkubectl\s+port-forward\b/.test(row.line))
+    .map((row) => row.pid);
+}
+
+/** What the process that draws a frame of the window holds in memory, and the heap of its scripts. */
+export interface FrameMemory {
+  /** The process that draws the frame, and what it holds, in kilobytes as Electron counts them. */
+  process: { pid: number; workingSetKB: number; peakWorkingSetKB: number };
+  /** The heap of the scripts of that process, in bytes, after its garbage was collected. */
+  heap: { usedBytes: number; totalBytes: number };
+  /** Whether the frame has a process of its own, or is drawn by the one of the window. */
+  ownProcess: boolean;
+}
+
+/**
+ * Measures the memory of the window where a frame is drawn: its garbage is collected, through the protocol of
+ * the tools of the browser, then the heap of its scripts is read, and Electron is asked what the process that
+ * draws the frame holds. A frame of the same site as the window is drawn by the process of the window, and is
+ * reached through the window; one with a process of its own through itself.
+ */
+export async function frameMemory(app: ElectronApplication, window: Page, frame: Frame): Promise<FrameMemory> {
+  const context = window.context();
+  const own = await context.newCDPSession(frame).catch(() => undefined);
+  const session = own ?? (await context.newCDPSession(window));
+
+  try {
+    await session.send("HeapProfiler.collectGarbage");
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await session.send("HeapProfiler.collectGarbage");
+    const heap = await session.send("Runtime.getHeapUsage");
+    // The frame is known to Electron by its origin: its path changes with every view it shows.
+    const drawing = await app.evaluate(({ app, BrowserWindow }, origin) => {
+      const frames = BrowserWindow.getAllWindows().flatMap((each) =>
+        each.isVisible() ? each.webContents.mainFrame.framesInSubtree : [],
+      );
+      const drawn = frames.find((each) => {
+        try {
+          return new URL(each.url).origin === origin;
+        } catch {
+          return false;
+        }
+      });
+
+      if (!drawn) throw new Error(`No frame of the window is of ${origin}`);
+      const metric = app.getAppMetrics().find((each) => each.pid === drawn.osProcessId);
+
+      if (!metric) throw new Error(`Electron counts no process ${drawn.osProcessId} for the frame of ${origin}`);
+      return {
+        pid: metric.pid,
+        workingSetKB: metric.memory.workingSetSize,
+        peakWorkingSetKB: metric.memory.peakWorkingSetSize,
+      };
+    }, new URL(frame.url()).origin);
+
+    return {
+      process: drawing,
+      heap: { usedBytes: heap.usedSize, totalBytes: heap.totalSize },
+      ownProcess: own !== undefined,
+    };
+  } finally {
+    await session.detach().catch(() => undefined);
+  }
+}
+
+/** A load in the window that did not end, as Electron tells it: its code, whether it was of the window itself, and the host of its address. */
+export interface FailedLoad {
+  code: number;
+  mainFrame: boolean;
+  host: string;
+}
+
+/**
+ * Keeps, from now on, every load in the windows of the application that did not end, as Electron tells it to the
+ * host, which logs each one at the level of an error as a window that failed to load.
+ */
+export async function watchFailedLoads(app: ElectronApplication): Promise<void> {
+  await app.evaluate(({ BrowserWindow }) => {
+    const main = globalThis as unknown as { veleroFailedLoads?: FailedLoad[] };
+
+    if (main.veleroFailedLoads) return;
+    const seen: FailedLoad[] = [];
+
+    main.veleroFailedLoads = seen;
+    for (const window of BrowserWindow.getAllWindows()) {
+      window.webContents.on("did-fail-load", (_event, code, _description, address, mainFrame) => {
+        let host = "";
+
+        try {
+          host = new URL(address).host;
+        } catch {
+          host = address;
+        }
+        seen.push({ code, mainFrame, host });
+      });
+    }
+  });
+}
+
+/** The loads that did not end since they are watched. */
+export async function failedLoads(app: ElectronApplication): Promise<FailedLoad[]> {
+  return app.evaluate(() => {
+    const seen = (globalThis as unknown as { veleroFailedLoads?: FailedLoad[] }).veleroFailedLoads;
+
+    if (!seen) throw new Error("The loads are not watched: watchFailedLoads comes first");
+    return [...seen];
+  });
+}
+
+/**
+ * Counts, from now on, the lines the applications started here write on their standard output that match a
+ * pattern: what the host says of its own work, the saving of the store of an extension among it. A line is
+ * counted once it is whole.
+ */
+export function countOutput(pattern: RegExp): { count: () => number; stop: () => void } {
+  let partial = "";
+  let count = 0;
+  const listener = (text: string) => {
+    const lines = `${partial}${text}`.split("\n");
+
+    partial = lines.pop() ?? "";
+    for (const line of lines) if (pattern.test(line.replace(ANSI_ESCAPE_PATTERN, ""))) count += 1;
+  };
+
+  outputListeners.add(listener);
+  return { count: () => count, stop: () => outputListeners.delete(listener) };
 }
 
 /** A request a handler of the extension in the main process was given, as it read it, and its answer. */
@@ -628,6 +837,13 @@ const OUTPUT_ERROR_PATTERN = /^\s*error:/im;
 const CANCELED_PROXY_RECORD_PATTERN =
   /^[^\n]*error:\s*┏[^\n]*Error while proxying request: context canceled[\s\S]*?^[^\n]*error:\s*┗[^\n]*\n?/gim;
 const CANCELED_PROXY_START_PATTERN = /^\s*error:\s*┏[^\n]*Error while proxying request: context canceled/im;
+// The host logs at the level of an error every load in its window that did not end, the frames in it as well, as
+// a window that failed to load. The frame of a cluster it takes out when the cluster is disconnected is one: its
+// load is aborted, code -3, and nothing failed. The record spans from its opening line to its closing one, and one
+// whose closing line has not arrived yet is the last one of what was written.
+const ABORTED_FRAME_RECORD_PATTERN =
+  /^[^\n]*error:\s*┏[^\n]*\[CREATE-ELECTRON-WINDOW\]: Failed to load window "[^"\n]*"[^\n]*\n[^\n]*error:\s*┗[^\n]*\{ code: -3,[^\n]*\n?/gim;
+const ABORTED_FRAME_START_PATTERN = /error:\s*┏[^\n]*\[CREATE-ELECTRON-WINDOW\]: Failed to load window[^\n]*\n?$/;
 const HOST_ASSET_FAILURE_PATTERN = /^Failed to load resource: net::/;
 const HOST_ASSET_URL_PATTERN = /^https:\/\/renderer\.freelens\.app(:\d+)?\/build\//;
 // On Freelens v2 the reads of the frame of a cluster, the host's and the views' alike, leave from the frame through
@@ -671,10 +887,13 @@ export function createErrorCollector(): ErrorCollector {
       outputBuffer = outputBuffer.slice(-20_000);
     }
 
-    const normalizedOutput = outputBuffer.replace(ANSI_ESCAPE_PATTERN, "").replace(CANCELED_PROXY_RECORD_PATTERN, "");
+    const normalizedOutput = outputBuffer
+      .replace(ANSI_ESCAPE_PATTERN, "")
+      .replace(CANCELED_PROXY_RECORD_PATTERN, "")
+      .replace(ABORTED_FRAME_RECORD_PATTERN, "");
 
-    // A canceled-request record that is still arriving: wait for its end.
-    if (CANCELED_PROXY_START_PATTERN.test(normalizedOutput)) {
+    // A canceled-request record, or a record of a load that did not end, that is still arriving: wait for its end.
+    if (CANCELED_PROXY_START_PATTERN.test(normalizedOutput) || ABORTED_FRAME_START_PATTERN.test(normalizedOutput)) {
       return;
     }
 

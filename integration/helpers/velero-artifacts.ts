@@ -2562,6 +2562,9 @@ export const WORDS = {
   /** How a creation the cluster refused to the identity is said. */
   forbiddenCreation:
     "The cluster refused the creation of a DownloadRequest: the identity needs the verb create on downloadrequests of the namespace.",
+  /** How a load whose port-forward the cluster refused is said to have ended: the verb the identity needs, and where its request is. */
+  forbiddenForward: (request: string, namespace: string) =>
+    `The cluster refused the port-forward to the Pod of the store: the route through the cluster needs the verb create on pods/portforward. The ${REQUEST} ${request} stays in ${namespace} until Velero removes it.`,
   /** How a load cancelled once its request was in the cluster is said to have ended. */
   cancelledAfter: (request: string, namespace: string) =>
     `The download was cancelled. The ${REQUEST} ${request} stays in ${namespace} until Velero removes it.`,

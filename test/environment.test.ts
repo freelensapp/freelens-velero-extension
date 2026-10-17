@@ -102,7 +102,9 @@ import {
   unlikeTheTakenBackup,
   VIEW_READER,
   VIEW_READER_OF_RESTORES,
+  VIEW_WITHOUT_PORT_FORWARD,
   viewFixtures,
+  viewIdentityWithoutPortForward,
 } from "../e2e/scripts/local-fixtures.mts";
 import {
   assertEgressRules,
@@ -1364,6 +1366,39 @@ describe("foundation fixture boundaries", () => {
     for (const name of ["reader", "requester", "router"] as const)
       expect(JSON.stringify(identities[name])).not.toContain("portforward");
     expect(() => proofIdentities("", run)).toThrow();
+  });
+
+  it("makes the identity of the views that may not port-forward, which reads, creates its request and reads the route, and has no verb of the port-forward", () => {
+    const resources = viewIdentityWithoutPortForward("synthetic-owner", run);
+    const identity = `${VIEW_WITHOUT_PORT_FORWARD}-${run}`;
+    const labels = { [OWNER_LABEL]: "synthetic-owner", [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" };
+
+    // An account of the namespace of the installation, of this run, with a role of that namespace and no role of
+    // the cluster, and no credential mounted anywhere.
+    expect(resources.map((resource) => resource.kind)).toEqual(["ServiceAccount", "Role", "RoleBinding"]);
+    for (const resource of resources)
+      expect(resource.metadata).toEqual({ name: identity, namespace: "velero-demo", labels });
+    expect(resources[0]).toMatchObject({ automountServiceAccountToken: false });
+    expect(resources[2]).toMatchObject({
+      roleRef: { apiGroup: "rbac.authorization.k8s.io", kind: "Role", name: identity },
+      subjects: [{ kind: "ServiceAccount", name: identity, namespace: "velero-demo" }],
+    });
+    // What the views read of the installation, the request a download creates and reads, and the route to the
+    // store: the Service, its endpoint slices and its Pod. Neither verb of the port-forward, get nor create, no
+    // Secret, and nothing that deletes or changes.
+    expect((resources[1] as unknown as { rules: unknown[] }).rules).toEqual([
+      {
+        apiGroups: ["velero.io"],
+        resources: ["backups", "restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"],
+        verbs: ["get", "list", "watch"],
+      },
+      { apiGroups: ["velero.io"], resources: ["downloadrequests"], verbs: ["create", "get"] },
+      { apiGroups: [""], resources: ["services", "pods"], verbs: ["get"] },
+      { apiGroups: ["discovery.k8s.io"], resources: ["endpointslices"], verbs: ["list"] },
+    ]);
+    expect(JSON.stringify(resources)).not.toMatch(/portforward|secrets|delete|update|patch|"\*"/);
+    expect(() => viewIdentityWithoutPortForward("", run)).toThrow();
+    expect(() => viewIdentityWithoutPortForward("synthetic-owner", "not-a-run")).toThrow();
   });
 
   it("asks the controller to delete a backup of the fixtures, the real one, the refused one or one the store was given, and no other", () => {

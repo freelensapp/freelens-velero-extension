@@ -150,6 +150,14 @@ export function secondReaderKubeconfigPath(): string {
   return required("E2E_SECOND_READER_KUBECONFIG");
 }
 
+/**
+ * The kubeconfig of the identity of the installation that reads what a download reads, creates its request
+ * and reads the route to the store, and has neither verb of the port-forward.
+ */
+export function withoutPortForwardKubeconfigPath(): string {
+  return required("E2E_NO_PORT_FORWARD_KUBECONFIG");
+}
+
 /** A list of the views, and the kind of what a row of it opens. */
 export interface ListOf {
   /** How the list and its page are found: `velero-<id>` and `velero-<id>-page`. */
