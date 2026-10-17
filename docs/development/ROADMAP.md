@@ -11,14 +11,32 @@ every PR that starts, completes, or re-scopes a feature. The process is in
 [PROCESS.md](PROCESS.md): specs are approved one by one, the review gate is at
 the end of each milestone.
 
-The compatibility reference is Freelens v1.10.3 with SDK v1.10.3, and Velero
-v1.18.4 with the AWS plugin v1.14.4 (see [RECON-T0.1.md](RECON-T0.1.md)).
-[SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md), approved on 2026-10-16, moves the reference
-of Freelens to v2, so that v1.0.0 ships for Freelens v2 and no longer for v1.
+The compatibility reference is Freelens v2, at the validation target of
+[SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md): the nightly
+v2.0.0-0-nightly-2026-10-16, built from freelensapp/freelens
+`5e1870e97467edab81b856a4983483d0729db896`, with `@freelensapp/extensions`
+2.0.0-0-nightly-2026-10-15 pinned exactly. The target moves with the
+[host drift watch](PROCESS.md#host-drift-watch) until Freelens 2.0.0 is released.
+Velero is v1.18.4 with the AWS plugin v1.14.4 (see [RECON-T0.1.md](RECON-T0.1.md)).
+v1.0.0 ships for Freelens v2 and not for Freelens 1, which lists the package as
+Incompatible and runs none of it. The checks of M1 to M3 and of T3.1 and T3.2
+were made green on Freelens 1 first; T0.8 makes them green on v2.
 
 ## Releases
 
-- **1.0.0**: M1 to M6, the complete agreed scope.
+The version line is 1.0.0, decided by the lead maintainer on 2026-10-16 (D10 of
+[SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#d10-the-version-and-the-release)):
+
+- **1.0.0-N**: prereleases of the line, from main, each through the pull request
+  of the version workflow, tagged, published on the npm tag `next` and released
+  on GitHub as a prerelease. The first is made when the lead maintainer asks for
+  it, after T0.8 at the earliest; until then main keeps its version. A prerelease
+  is installed by its tag, `@freelensapp/velero-extension@next`, or by its version.
+- **1.0.0**: M1 to M6, the complete agreed scope, published on `latest` only
+  after Freelens 2.0.0 is released and M6 is done: installing by name takes the
+  newest version that is not a prerelease, whatever Freelens it is for. With
+  Freelens 2.0.0 the pin of the SDK becomes a range of versions and the
+  integration runs at the tag v2.0.0, as work of M6.
 - An earlier read-only release after M2 is the lead maintainer's call.
 
 Every milestone keeps the whole agreed scope: nothing moves out of v1.0.0
@@ -49,7 +67,7 @@ Status values: `Planned`, `Draft` (the spec is written, not approved),
 | Activation of the packed extension in a packaged Freelens, as an integration test | FND-10 | [SPEC-0001](../specs/SPEC-0001-local-foundation.md) | Done |
 | Test environment on Linux and macOS, x64 and ARM64, and in the hosted checks | | [SPEC-0004](../specs/SPEC-0004-test-environment-every-platform.md) | Done |
 | Release workflows | | | Done |
-| Move to the extension API of Freelens v2: manifest and build, the main process through the host, the way between the processes, registrations, components, tests and documents, in one pull request | T0.7 | [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md) | Approved |
+| Move to the extension API of Freelens v2: manifest and build, the main process through the host, the way between the processes, registrations, components, tests and documents, in one pull request | T0.7 | [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md) | In PR |
 | Every check of M1 to M3 and of T3.1 and T3.2 green on Freelens v2 in CI on main, with the pre-review on both themes and a gallery for the review | T0.8 | [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md) | Approved |
 
 The T0.4 to T0.6 evidence is in [TESTING.md](TESTING.md). It covers the
@@ -58,8 +76,10 @@ ConfigMaps and the transport run in Node. It is not a claim about the full
 product, about the recovery of persistent volumes or about all the eight
 artifact formats.
 
-The integration test installs the packed production build in a Freelens
-v1.10.3 built for the purpose, on every pull request and on main.
+The integration test, FND-10 and a session for each of the five kinds,
+installs the packed build in a Freelens built from source at the commit of the
+validation target, on every pull request and on main; the suites of the views
+run in the same build.
 
 ### M1 - Discovery and Backups (read-only)
 
@@ -158,6 +178,8 @@ The two specs of the milestone were approved on 2026-10-14, as drafted. The orde
 of the slices: T3.1, the grammar of the cron library and the computation with a
 controlled clock; then T3.2 and T3.3, the states and the four surfaces; then T5.1,
 the repositories and the pod volume operations; then T5.2, the data movement.
+T3.3 and the rest of the milestone resume on Freelens v2 after T0.8, as
+[SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md) says.
 
 Exit of M4: tests with a controlled clock and packaged UI scenarios establish
 the accuracy of the adherence signal, including its uncertainty states.
@@ -185,4 +207,5 @@ deletion of backups, no way around the confirmation.
 | Visual and accessibility pass on both themes and on narrow and large windows | T6.2 | | Planned |
 | Installation, permissions, safety, compatibility and troubleshooting documentation, screenshots, demonstration video, release notes | T6.3 | | Planned |
 | Tarball, checksums and software bill of materials from the release workflow | T6.4 | | Planned |
+| With Freelens 2.0.0: the pin of the SDK a range of versions, the integration at the tag v2.0.0, the host drift watch ended | | [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#d10-the-version-and-the-release) | Planned |
 | Release through the organization's flow, on the lead maintainer's go | T6.5 | | Planned |

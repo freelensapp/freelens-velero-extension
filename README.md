@@ -50,14 +50,19 @@ the [roadmap](docs/development/ROADMAP.md).
 
 ## Requirements
 
-- **Freelens >= 1.10.3.** The extension is built and tested against Freelens
-  1.10.3. Freelens v2 is not a target of this phase.
+- **Freelens v2.** The manifest declares `engines.freelens` as `^2.0.0`. Until
+  Freelens 2.0.0 is released the extension is built and tested against a
+  nightly of Freelens v2, the validation target of
+  [SPEC-0015](docs/specs/SPEC-0015-freelens-v2-host.md): v2.0.0-0-nightly-2026-10-16,
+  built from freelensapp/freelens `5e1870e97467edab81b856a4983483d0729db896`.
+  Freelens 1 lists the package as Incompatible and runs none of its code.
 - **A Kubernetes cluster with Velero.** The reviewed versions are Velero
   v1.18.4 and its AWS plugin v1.14.4; the API is `velero.io/v1`, with
   `velero.io/v2alpha1` for the data movement kinds.
 - **Node.js** is required only when building the extension from source. The
-  package is a self-contained bundle: its runtime libraries are compiled into
-  `out/`.
+  package is a self-contained bundle in `dist/`: the one library it carries,
+  react-window, is compiled into it, and what Freelens provides is taken from
+  Freelens.
 
 ## Safety
 
@@ -102,8 +107,8 @@ The repository is developed spec-first, with the specs in the repository:
 
 ### Local gates
 
-Node.js 24.15.0 (`.nvmrc` / `mise.toml`) and `corepack pnpm`. Run the local
-gates after every change:
+Node.js 24.21.0 (`.nvmrc` / `mise.toml`) and `corepack pnpm`, pnpm 12. Run the
+local gates after every change:
 
 ```sh
 pnpm type:check
@@ -113,12 +118,10 @@ pnpm knip:check
 pnpm trunk:check
 ```
 
-The tests of the compiled entry points run on the bundle that gets packed
-with:
-
-```sh
-VITE_PRESERVE_MODULES=false pnpm test:unit
-```
+The build is one form, the one that gets packed: `pnpm build` writes
+`dist/main.js`, `dist/renderer.js`, their source maps and `dist/renderer.css`,
+and the build test of `pnpm test:unit` reads those files and loads both
+bundles.
 
 ### Test environment
 
@@ -146,13 +149,15 @@ its fixtures left in place:
 
 ```sh
 pnpm demo:up            # the environment with the fixtures left in place
-pnpm e2e:views          # the suites of the views, in a Freelens that was built
+pnpm e2e:views          # the suites of the views, in the Freelens FREELENS_APP names
 pnpm pre-review         # both themes, the sizes of the window, the keyboard
+pnpm e2e:integration    # the integration test, a session for each of the five kinds
 ```
 
-They need a checkout of Freelens v1.10.3 that was built, in `freelens/` or where
-`FREELENS_DIR` says: see
-[TESTING.md](docs/development/TESTING.md#suites-of-the-views).
+They start the Freelens that `FREELENS_APP` names: on a machine of a
+developer, the nightly of the validation target, its download checked against
+the checksum the release publishes; in CI, Freelens built from source at that
+commit. See [TESTING.md](docs/development/TESTING.md#suites-of-the-views).
 
 No cloud account and no personal credential is needed. Every write of
 development and tests goes to that disposable cluster, never to another one.
@@ -166,7 +171,7 @@ You can build the extension from this repository.
 Use [NVM](https://github.com/nvm-sh/nvm),
 [mise-en-place](https://mise.jdx.dev/), or
 [windows-nvm](https://github.com/coreybutler/nvm-windows) to install the
-required Node.js version.
+Node.js version in `.nvmrc`.
 
 From the root of this repository:
 
@@ -176,8 +181,8 @@ nvm install
 mise install
 # or
 winget install CoreyButler.NVMforWindows
-nvm install 24.15.0
-nvm use 24.15.0
+nvm install "$(cat .nvmrc)"
+nvm use "$(cat .nvmrc)"
 ```
 
 Install pnpm:
@@ -193,8 +198,8 @@ winget install pnpm.pnpm
 ### Build extension
 
 ```sh
-pnpm i
-pnpm build:production
+pnpm install
+pnpm build
 pnpm pack
 ```
 

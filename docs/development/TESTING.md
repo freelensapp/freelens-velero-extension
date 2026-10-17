@@ -1,11 +1,15 @@
 # Testing Strategy
 
-Date: 2026-10-06
+Date: 2026-10-17
 
 Status: T0.3-T0.6 scaffold, environment, fixture and compiled-main transport checks
 pass. The [integration test](#integration-tests) covers the activation in Freelens.
 The [end-to-end tests](#end-to-end-tests) bring the environment up on the hosted
-runner and on the machines of the contributors.
+runner and on the machines of the contributors. Since T0.7 every packaged layer runs
+on Freelens v2, at the validation target of
+[SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md): the nightly
+v2.0.0-0-nightly-2026-10-16 on the machines of the contributors, and Freelens built
+from source at its commit, `5e1870e97467edab81b856a4983483d0729db896`, in CI.
 
 This is a desktop Electron extension with renderer UI, main-process Kubernetes
 operations and object-storage transport. The binding safety/privacy rules are in
@@ -24,10 +28,13 @@ and kubectl CLIs. No Docker context listing, Kubernetes request, install, servic
 start, or container creation was performed. T0.3 must select the toolchain required
 by the pinned SDK/build; these checks do not prove a full build environment.
 
-T0.3 used Node v24.15.0, pnpm v10.34.4 and SDK v1.10.3. The manifest accepts the
-hosts compatible with Freelens v1.10.3, not v2. Electron/Playwright host launch, app installation, display
-support, fixture images and runtime authentication remain unverified and separately
-gated. No Kubernetes access occurred during scaffold checks.
+T0.3 used Node v24.15.0, pnpm v10.34.4 and the SDK of Freelens 1, and the
+manifest of the extension accepted the hosts compatible with Freelens 1. Electron/Playwright host launch, app
+installation, display support, fixture images and runtime authentication were then
+unverified and separately gated. No Kubernetes access occurred during scaffold
+checks. Since T0.7 the toolchain is Node 24.21.0 of `.nvmrc`, pnpm 12.11.2 and the
+SDK `@freelensapp/extensions` 2.0.0-0-nightly-2026-10-15, and the manifest declares
+`engines.freelens` as `^2.0.0`.
 
 T0.4 preflight confirmed the explicitly local Docker daemon and existing kind
 v0.29.0/kubectl v1.33.4, with sufficient capacity and an unused dedicated demo name.
@@ -50,20 +57,20 @@ No extension download service, upstream rebuild or scanner was used.
 
 There is no legacy Velero extension test baseline. The official extension and host
 integration conventions are reference assets, not pre-existing Velero coverage.
-Reuse suitable installation/launch helpers in an isolated harness with new
-Velero-specific journeys. The tests are copied into the Freelens checkout of the
-harness under their own names; they never replace the tests of a checkout somebody
-else works in.
+The integration test and the suites of the views run from this repository, under
+its Vitest, with their helpers in [`integration/helpers`](../../integration/helpers/),
+in the Freelens that `FREELENS_APP` names: nothing is copied into a checkout of
+Freelens, and no test of Freelens is run or replaced.
 
 ## Primary Validation Stack
 
 | Layer | Planned tooling and dependencies | Proves |
 | --- | --- | --- |
 | Unit/domain | Vitest; synthetic objects, fake clock, table-driven phases | Classification, durations, progress, relationships, policy and schema validation |
-| Component | Vitest and host-compatible React testing utilities, stub host APIs | States, accessible interactions, forms, tabs and no implicit diagnostic writes |
+| Component | Vitest, Testing Library 16 on React 19, the stub of the SDK and the doubles of the components of the host | States, accessible interactions, forms, tabs and no implicit diagnostic writes |
 | Main contract | Vitest with injected Kubernetes adapter and loopback HTTP/TLS test servers | IPC validation, create-only behavior, retry policy, abort, size limits and sanitized errors |
 | Kubernetes integration | Real local kind, pinned Velero/plugin and authenticated local S3 backend | API schema acceptance, generated names, controller outcomes, artifacts and permissions |
-| Packaged application | Pinned Freelens Electron integration harness driven by Playwright | Tarball installation/activation, host APIs, navigation and actual UI behavior |
+| Packaged application | Freelens v2 at the validation target, started by `_electron.launch` of Playwright in an isolated profile | Tarball installation/activation, host APIs, navigation and actual UI behavior |
 | Pre-review | Same local app plus deterministic DOM checks and synthetic screenshots | Both-theme layout, links, focus, menu safety and regressions before manual judgment |
 
 Unit/component and main-contract tests are reachable through the canonical
@@ -76,24 +83,58 @@ Vitest alone is not a packaged-app result.
 
 ## Integration Tests
 
-The [integration test](../../integration/__tests__/extensions.tests.ts) runs inside
-the integration harness of Freelens, in the
-[workflow](../../.github/workflows/integration-tests.yaml) that builds Freelens
-v1.10.3 and packs the production build of the extension. It installs the tarball
-from the Extensions page of an isolated profile and checks that:
+The integration tests run from this repository, under its Vitest
+(`vitest.integration.config.ts`, one file at a time, no retry), in the Freelens
+that `FREELENS_APP` names, started by `_electron.launch` of Playwright in an
+isolated profile, as the [suites of the views](#suites-of-the-views) start it.
+`pnpm e2e:integration` builds and packs the extension and runs them against the
+disposable environment of this repository, checking its target before and after;
+the [workflow](../../.github/workflows/integration-tests.yaml) builds Freelens from
+source at the commit of the validation target, cached by that commit, brings the
+environment up with `pnpm e2e:cluster:up`, which installs Velero and the CRDs of
+the reviewed release and places no fixture, runs them, uploads the screenshots of
+a failure as `integration` and always takes the environment down.
 
-- the extension is listed and enabled;
-- the host loaded the main and the renderer entry points, and both extend the
-  classes of the host;
+FND-10, the [test of the installation](../../integration/__tests__/extensions.tests.ts),
+installs the tarball from the Extensions page of an isolated profile and checks
+that:
+
+- the extension is listed as Enabled, in a Freelens whose major version is 2;
+- the host imported the main entry, `dist/main.js` of the build it manages in the
+  profile, and the renderer entry from its own scheme, both extending the classes
+  of the host, and linked the one stylesheet, `dist/renderer.css`, in the head of
+  the window; the case proves that it reads the module of the host and not a copy
+  by the scripts the debugger of the process lists before and after;
 - the dispatcher of the host process is as it was before the installation;
 - the bundled transport downloads and decodes an artifact inside the main process,
   keeps the signed query and the Host header, turns a 404 into a missing artifact
   without the URL in its message, and refuses a URL of another origin;
-- the host wrote no error while all of this happened.
+- the files of the log of the host hold the activation of the extension, and no
+  line at the level of an error, nor does what either process wrote.
 
-No cluster takes part in this test. The views are driven by their own
-[suites](#suites-of-the-views), against the test environment. The test is copied
-into the Freelens checkout of the workflow under its own name.
+No cluster takes part in FND-10. Beside it, the integration test of the template
+has a session for each of the five kinds, each a file of its own,
+[`backups`](../../integration/__tests__/backups.tests.ts),
+[`restores`](../../integration/__tests__/restores.tests.ts),
+[`schedules`](../../integration/__tests__/schedules.tests.ts),
+[`storage-locations`](../../integration/__tests__/storage-locations.tests.ts) and
+[`snapshot-locations`](../../integration/__tests__/snapshot-locations.tests.ts),
+made from [one helper](../../integration/helpers/velero-kinds.ts). A session places
+one synthetic object of its kind, which the CRD of the reviewed release accepts, in
+a namespace of its own, `velero-integration-<list>`, which no server of Velero reads,
+both labelled `freelensapp.io/velero-integration-session`, after it removed what an
+earlier run left; it starts Freelens with the isolation of the suites, with the
+kubeconfig of the environment as the one cluster of the catalog, and checks three
+cases: the page of the kind, reached from the sidebar, lists the object; the details
+of the host, opened from the list of the host for the kind, which is reached by its
+address while `customResources` keeps the kind out of the Custom Resources tree,
+show the section of the extension, with the installation, the way to the view and
+no error page; the menu of the object holds the commands of the host, Edit and
+Delete, and no item of the extension, which registers none. A session fails on an
+error of either process or of the files of the log, and on its namespace left: the
+runner refuses any labelled namespace that is still there at the end. The views are
+driven by their own [suites](#suites-of-the-views), against the fixtures of the
+environment.
 
 ## End-To-End Tests
 
@@ -153,42 +194,52 @@ state.
 
 Renovate follows the pins. kind, its node image and kubectl move in one pull
 request, Velero and its plugin in another. The checksums of kind and kubectl are
-replaced by hand with the ones of the release, and the image of the helper moves
-by hand with `.nvmrc`. Each of these pull requests asks for the
+replaced by hand with the ones of the release. `.nvmrc` follows the Node of
+Freelens, with the configuration of the template, and its pull request says that
+the image of the helper moves with it by hand: its tag, its digest and the version
+the direct proof checks, then the transport proof run in its four modes. Each pull
+request of a pin of the environment asks for the
 [upstream drift watch](PROCESS.md#upstream-drift-watch) before the merge.
 
 ## Suites Of The Views
 
-The [suites](../../e2e/__tests__/) drive the views in a packaged Freelens v1.10.3,
-with the packed production build of the extension installed in an isolated
-profile, against the test environment with its fixtures left in place. They run
-inside the integration harness of Freelens, in a checkout of Freelens that was
-built: `freelens/` in the repository, or the directory `FREELENS_DIR` names.
-The build is the one of the
-[integration workflow](../../.github/workflows/integration-tests.yaml).
+The [suites](../../e2e/__tests__/) drive the views in a packaged Freelens v2, with
+the packed build of the extension installed in an isolated profile, against the
+test environment with its fixtures left in place. They run from this repository,
+under its Vitest (`pnpm test:integration`, the configuration of the template, one
+file at a time, no retry), with the helpers of
+[`integration/helpers`](../../integration/helpers/), and start the Freelens that
+`FREELENS_APP` names, through `_electron.launch` of Playwright, which reaches the
+main process of the application as well as its window: a bundle, a folder or an
+executable, and never one installed in `/Applications`. On a machine of a
+developer it is the nightly of the validation target, v2.0.0-0-nightly-2026-10-16,
+built from `5e1870e9`, its download checked against the checksum the release
+publishes beside it; in CI it is Freelens built from source at that commit, as the
+[views workflow](../../.github/workflows/views-tests.yaml) builds it, cached by the
+commit. On a Linux without a display the runner starts them under `xvfb-run`.
 
 | Command | What it does |
 | --- | --- |
 | `pnpm demo:up` | The environment with the fixtures left in place, once |
 | `pnpm demo:views` | The fixtures of the views and of their tabs, and for who looks at the demo by hand the kubeconfigs of its two readers and what each artifact of the tabs holds: see [TRY-IT.md](TRY-IT.md) |
-| `pnpm e2e:views` | Builds and packs the extension, puts the fixtures of the views and of their tabs in place, waits for the server to remove the requests to Velero it removes, tells the suites what the artifacts of the tabs hold, runs the suites |
-| `E2E_TEST_PATTERN=velero-e2e-journey pnpm e2e:views` | The same for one suite |
+| `pnpm e2e:views` | Builds and packs the extension, puts the fixtures of the views and of their tabs in place, waits for the server to remove the requests to Velero it removes, tells the suites what the artifacts of the tabs hold, makes the identity of the views that may not port-forward for the run, and gives the suites its kubeconfig in `E2E_NO_PORT_FORWARD_KUBECONFIG`, runs the suites, then removes that identity and its kubeconfig |
+| `E2E_TEST_PATTERN=velero-e2e-journey pnpm e2e:views` | The same for one suite. The pattern is a part of the names of the files, or several separated by spaces: CI runs `velero-e2e pre-review extensions`, every suite, the pre-review and FND-10, in one run |
 | `pnpm pre-review` | The pass before the review of a milestone |
 
 | Suite | What it proves |
 | --- | --- |
-| `velero-e2e-journey` | Nothing is asked before a view opens; the choice among the installations; the list of every phase; the workspace, which opens at its summary, the first of five tabs, with the ways of the summary and no field; the references that lead somewhere and the ones that do not; equal names in two installations; no way to select, edit or delete; the section in the details of the host |
+| `velero-e2e-journey` | Nothing is asked before a view opens; the choice among the installations; the list of every phase; the workspace, which opens at its summary, the first of five tabs, with the ways of the summary and no field; the references that lead somewhere and the ones that do not; equal names in two installations; no way to select, edit or delete; the section in the details of the host, whose link leads to the view with the drawer gone and no error in the files of the log. On v2 as well: the identifier of the cluster the same in the address of its frame and in the catalogs of both processes, and the reads of the views leaving from the frame, the same ones the API server counts; every page with the tabs of the group, and the five kinds out of the Custom Resources tree of the host until the extension is disabled; the search of the host with the focus when a list opens, and given it back at Ctrl or Cmd with F; a view opened from a row under the details of the host, which a way of the view closes as a click outside does; no action of the extension that opens the details of the host; and a section of the details that throws, kept in its place with the error page of the extension, the rest of the drawer and of the cluster view left, and the error in the log of the frame with the name of the extension. 19 cases |
 | `velero-e2e-overview` | The Overview as the first entry under Velero, with what the API server counted when it opens; what was read of the five families; what needs attention by its rules, in its order, with the reason of each; what is in flight; the newest completed backup; the three windows, on the line of time and in the list; ten lines of twelve schedules; every way of the page followed, and the way back; the installation of the demo as the fixtures of the tabs leave it, with what ended with a failure inside the window computed from the times the cluster holds, the backups synced from the store at their start, the count of the items and the newest completed backup by the time each completed; no value of the whole in any installation; two thousand operations within the budget, and the scroll after a read |
 | `velero-e2e-preferences` | What is kept between two starts of the application, which is the two maps of the namespaces, the window of the recent operations and what the operator allowed the downloads to do, and nothing else; a namespace that is not there any more stays selected; what the file says was allowed is shown in the target bar, one is taken back through the main process, the one that is left is found at the next start, and once the last is taken back nothing is allowed at the start after it |
-| `velero-e2e-restores` | The list of every phase of a restore; a restore as Velero keeps it, with where it restores into and the scope it carries, which opens at its summary under the five tabs, with the ways of the summary and no field; one that failed its validation, with no time and no backup made up; a source that is not there; the way between a restore and its backup in both directions, over the list the first view was opened from; no way to select, edit or delete; the section in the details of the host |
+| `velero-e2e-restores` | The list of every phase of a restore; a restore as Velero keeps it, with where it restores into and the scope it carries, which opens at its summary under the five tabs, with the ways of the summary and no field; one that failed its validation, with no time and no backup made up; a source that is not there; the way between a restore and its backup in both directions, over the list the first view was opened from; no way to select, edit or delete; the section in the details of the host, whose link leads to the view with the drawer gone and no error in the files of the log |
 | `velero-e2e-restricted` | The views for an identity that reads three kinds of one namespace: what is denied is said, and is neither absent nor empty; a location shown with the Secrets it names, to an identity the API server refuses the Secrets to; the Overview, which says what the rules did not look at |
 | `velero-e2e-restricted-restores` | The views for an identity that reads the restores and the schedules and not the backups: the source of a restore, the history of a schedule, the backups that name a location and the newest completed backup of the Overview are said denied or not known, and are neither absent nor empty |
-| `velero-e2e-schedules` | The schedules Velero took, refused and has not read, with paused and validation as two facts; the last submission beside the newest backup; the history of a schedule, from the newest, on its line of time and in its list, with the backup that never started at the time it was created; the template and where its backups go; the way between a schedule and its backups in both directions; no way to edit, pause or run; the section in the details of the host |
-| `velero-e2e-locations` | The storage locations with availability, access mode and default as three facts; the location the controller validates, which is not late, and the backups that name it, by how each ended; the synthetic ones, which are late; none and two marked default; a message of many lines; where a location points and the Secrets it names, by their names; what uses a location, and the way to it and back; the way from a backup, a restore and a schedule to their locations; the snapshot locations, with a phase that has the mark of what is not known, and one a synced backup names that the installation does not have, said absent by the list and by the workspace of the backup; no way to select, edit, delete or set as default; the sections in the details of the host |
-| `velero-e2e-scale` | A thousand backups and a thousand restores: the rows that are mounted, the time of the interactions, the state of each list when an object is opened and closed |
-| `velero-e2e-gate` | The gate of the writes: off when the session starts, on every page of the group; on through the dialog of the host, which names the cluster, its context and the namespace, and not before the dialog is answered; off when another installation is selected, when the dialog is left, and when the application is started again; each frame of a cluster with a gate of its own; nothing of it in the store, and nothing written to the cluster |
+| `velero-e2e-schedules` | The schedules Velero took, refused and has not read, with paused and validation as two facts; the last submission beside the newest backup; the history of a schedule, from the newest, on its line of time and in its list, with the backup that never started at the time it was created; the template and where its backups go; the way between a schedule and its backups in both directions; no way to edit, pause or run; the section in the details of the host, whose link leads to the view with the drawer gone and no error in the files of the log |
+| `velero-e2e-locations` | The storage locations with availability, access mode and default as three facts; the location the controller validates, which is not late, and the backups that name it, by how each ended; the synthetic ones, which are late; none and two marked default; a message of many lines; where a location points and the Secrets it names, by their names; what uses a location, and the way to it and back; the way from a backup, a restore and a schedule to their locations; the snapshot locations, with a phase that has the mark of what is not known, and one a synced backup names that the installation does not have, said absent by the list and by the workspace of the backup; no way to select, edit, delete or set as default; the sections in the details of the host, the link of each of the two kinds leading to its view with the drawer gone and no error in the files of the log |
+| `velero-e2e-scale` | A thousand backups and a thousand restores: the rows that are mounted, the time of the interactions, the state of each list when an object is opened and closed. At the validation target BACK-12 and REST-11 are over their budget, for a cause in the host that SPEC-0015 records: the list layout of the host filters its items again for every row it draws |
+| `velero-e2e-gate` | The gate of the writes: off when the session starts, on every page of the group; on through the dialog of the host, which names the cluster, its context and the namespace, and not before the dialog is answered; off when another installation is selected, when the dialog is left, and when the application is started again; each frame of a cluster with a gate of its own; on v2, every request bound to the frame it comes from by the address of the frame that a handler of the main process reads, a request of the second frame for the first cluster refused; nothing of it in the store, and nothing written to the cluster |
 | `velero-e2e-server` | The band of the server in the Overview: nothing asked of the cluster when the page opens, nor for a command that is not confirmed; the object shown before it is created, reached with the keyboard alone and left with Escape; the version and the plugins of the real server of the environment, against what the server wrote into the request, each plugin once; kept through a read and a visit to another page, and dropped with the installation; the answer and the confirmation in both themes, at every size; a request no server answers, said not answered after ten seconds and left as it was created; the refusal of the cluster to the reader of a part, with writes left on; what the API server counted of the requests, by verb and by code; the request the server processed, removed by the server five minutes after |
-| `velero-e2e-artifacts` | The tabs in the workspace of a backup and of a restore, on the real backup and the real restore of the installation and on the fixtures of the tabs. On the real operations: the five tabs in their order, as a list of tabs, with the tab in the address; nothing of a DownloadRequest created or read when a tab opens, by a click or by its address, nor for a confirmation that is left; the first state with writes off and on, and the confirmation with the object, reached and left with the keyboard alone; the four artifacts of each, loaded through a request of their own, which the cluster holds by the name the tab gave it, with the steps of a load, a load again as another request and a load cancelled as soon as its command is offered; the log in its lines, its levels, its search, its lines wrapped, a line copied and a hundred rows mounted at most, against the file the suite saved of it; the results against the counters of the status; the resource list, with the actions of a restore and the filter; the volume information of no volume; the log saved into a file through the dialog of the host, and nothing written when the dialog is left; the keys of the strip; the section in the details of the host; the tabs in both themes, at 900 by 650 and at twice the zoom, checked for what lies over something else, is wider than its room or is cut; what the API server counted of the requests, and each removed by the server before the suite ends. On the fixtures of the tabs: the log of the backup synced without one, a file the store does not have, said by the phase of a backup that ended, with no command to try again, and its results, resource list and volume information, which are the empty forms, said in the words of each viewer; the logs of the backup and of the restore that failed their validation, nothing written, through a request each; the results, the resources and the volumes of the backup synced with the artifacts made for the tabs, each message in its parts, the resources sorted with their counts and the filter, each volume with its details by the names the release writes; the load of its log cancelled once its request is in the cluster and asked again, with the steps in their order and the pages rising to the last; the log of 200,000 lines saved with the digest the fixtures counted, its levels, its searches, its long lines and the one across two pages, a hundred rows mounted at most; the measures of ten searches, ten filters and twenty scroll gestures on it, within their budgets, once sixty idle frames of the window say that a frame can be timed; another installation, where writes are off and nothing of the tabs is held, and in the installation of the views, with writes on for it, the backup whose storage location is not there, said before any request; the restore asked from a schedule that has no backup, nothing to ask for; and the reader of a part, as a second entry of the catalog, refused the creation. Twenty requests over the suite, each told to the guard by its name, written into once by the server and removed by it before the suite ends, and at the end what a failed case left in the installation of the views, which no server reads, removed with the one helper of the suites that deletes; what each tab is to show the suite reads in `tab-fixtures.json`, beside the reports. 47 cases |
+| `velero-e2e-artifacts` | The tabs in the workspace of a backup and of a restore, on the real backup and the real restore of the installation and on the fixtures of the tabs. On the real operations: the five tabs in their order, as a list of tabs, with the tab in the address; nothing of a DownloadRequest created or read when a tab opens, by a click or by its address, nor for a confirmation that is left; the first state with writes off and on, and the confirmation with the object, reached and left with the keyboard alone; the four artifacts of each, loaded through a request of their own, which the cluster holds by the name the tab gave it, with the steps of a load, a load again as another request and a load cancelled as soon as its command is offered; the log in its lines, its levels, its search, its lines wrapped, a line copied and a hundred rows mounted at most, against the file the suite saved of it; the results against the counters of the status; the resource list, with the actions of a restore and the filter; the volume information of no volume; the log saved into a file through the dialog of the host, and nothing written when the dialog is left; the keys of the strip; the section in the details of the host; the tabs in both themes, at 900 by 650 and at twice the zoom, checked for what lies over something else, is wider than its room or is cut; what the API server counted of the requests, and each removed by the server before the suite ends. On the fixtures of the tabs: the log of the backup synced without one, a file the store does not have, said by the phase of a backup that ended, with no command to try again, and its results, resource list and volume information, which are the empty forms, said in the words of each viewer; the logs of the backup and of the restore that failed their validation, nothing written, through a request each; the results, the resources and the volumes of the backup synced with the artifacts made for the tabs, each message in its parts, the resources sorted with their counts and the filter, each volume with its details by the names the release writes; the load of its log cancelled once its request is in the cluster and asked again, with the steps in their order and the pages rising to the last; the log of 200,000 lines saved with the digest the fixtures counted, its levels, its searches, its long lines and the one across two pages, a hundred rows mounted at most; the measures of ten searches, ten filters and twenty scroll gestures on it, within their budgets, once sixty idle frames of the window say that a frame can be timed; another installation, where writes are off and nothing of the tabs is held, and in the installation of the views, with writes on for it, the backup whose storage location is not there, said before any request; the restore asked from a schedule that has no backup, nothing to ask for; and the reader of a part, as a second entry of the catalog, refused the creation. On v2 as well: every load that ended with its text came through the tunnel, the kubectl the host prepared for the version of the cluster; the identity of the views that may not port-forward, as a third entry of the catalog, refused at the port-forward with the words that name `create` on `pods/portforward`, its request left in the cluster and no kubectl left; a disable and an enable from the Extensions page, after which the procedures are registered once each, writes are off until they are turned on, the file of the store is saved once for one change, and a load is one creation, one kubectl and one answer; the cluster disconnected in the catalog with a load in flight, its kubectl ended, nothing of the extension counted on its API server for a minute, the cluster still disconnected, and connected again, a new frame with writes off; no kubectl of the application after the refused port-forward, after the disable, after the disconnection and at the end; and the memory of the frame with the log of 200,000 lines placed whole. Twenty-four second gestures over the suite, each a request but a cancel that lands before the creation, each told to the guard by its name, written into once by the server and removed by it before the suite ends, and at the end what a failed case left in the installation of the views, which no server reads, removed with the one helper of the suites that deletes; what each tab is to show the suite reads in `tab-fixtures.json`, beside the reports. 51 cases |
 | `pre-review` | Every view, 35 of them, in both themes, at 1440x900, at 900x650 and at twice the zoom, checked for what lies over something else, does not fit, or is cut by what holds the page, and the eight views of the tabs by the check of a tab as well: a diagnostic tab with writes off, its confirmation, the log of the backup that failed its validation, which the store does not have, the resources of the real restore with their actions, the log of the synced backup loaded, searched and with a level chosen, the same with its lines wrapped, its results, and its volumes with a detail open; a page that stands still at the widths where its target bar goes to a second line, and at the ones where the bar of the log does; the journeys with the keyboard alone: the tabs from the way back, with the arrows, Home and End, Enter and the address, the command, the confirmation and the command that creates, the focus after a load, after a cancelled load and after a failure with no command to ask again, and the search by its label, with its count told to who does not see, against `tab-fixtures.json`, which it reads beside its reports. It tells its guard the requests it asks for, five, or six when its cancel lands after the creation, and waits for the server to remove them before its last case. Its reports are `pre-review-layout.json`, every layout with what the two checks found, and `pre-review-tabs.json`, the views with their requests, the facts of the journeys, the ledger and the items left to human judgment. 33 cases |
 
 The check of the layout, which every suite asks of the pages it shows, looks at
@@ -261,9 +312,12 @@ name, and never read whole: the status of a DownloadRequest the server processed
 carries the URL it signed.
 
 What is asked of the cluster is counted by the API server, not by the driver of
-the test: the requests of the host leave from its main process, where the driver
-does not see them. The suites read `apiserver_request_total` for the group of
-Velero. A list of backup storage locations in the whole cluster is what the
+the test: on v2 the reads of a frame of a cluster, the host's and the views' alike,
+leave from the frame through Chromium, to
+`https://<clusterId>.renderer.freelens.app:<port>/api-kube/...`, where the driver
+sees them, and the requests of the main processes of the host and of the extension
+leave where it does not; the API server counts them all. The suites read
+`apiserver_request_total` for the group of Velero. A list of backup storage locations in the whole cluster is what the
 discovery of the extension asks: the controllers of Velero ask for their own
 namespace, and what the control plane of the cluster asks of every kind is a
 watch, which the suites leave out. The count of that list says when the
@@ -282,12 +336,30 @@ twice in a ServerStatusRequest. The suite expects of it what the release does,
 and a release that lists them otherwise is one to read again.
 
 The application reads the kubeconfig of the user when nothing tells it otherwise.
-The profile of the suites is written before the first start with no kubeconfig to
-sync: the catalog holds the test cluster alone, which the suites assert before
-they open it, at every start. The screenshots are of the frame of that cluster,
-never of the window around it, and show synthetic data. The profile names the
-theme too: left to itself the application takes the one of the system, which is
-not the same on every machine.
+The profile of the suites is a folder under the temporary folder of the system,
+the one place where the host takes `<profile>/Freelens/home` as its home, and its
+store is written before the first start with the kubeconfig of the environment as
+the one file to sync, or the one of a reader for the suites of the readers: the
+catalog holds the test cluster alone, which the suites assert before they open it,
+at every start. On macOS the application is started with `CFFIXED_USER_HOME` in
+the profile, so that its logs are written there and not in the folder of the logs
+of the user. The screenshots are of the frame of that cluster, never of the window
+around it, and show synthetic data. The profile names the theme too: left to
+itself the application takes the one of the system, which is not the same on every
+machine. The files of the log of the host stay in the profile, and go with it.
+
+What collects the errors of a run reads the lines the host writes at the level of
+an error on the output of its process, and the console of the window; FND-10 and
+the checks of the host read the files of the log as well. Every such line fails
+the suite but a few, each said by its address or proven by its case: the record of
+a request of the proxy of the host that its client gave up on, which closing a
+drawer makes; a resource of the build of the host itself that the window failed to
+load, which a loaded machine was seen to make at a start; an answer 401, 403 or 404
+to a read of a frame of a cluster, which on
+v2 the browser writes in the console of the frame when an identity is refused a
+read, the host's own reads among them; and the record of a load of the window that
+did not end, with the code -3, which a disconnection writes when it takes the frame
+of the cluster out.
 
 When a suite closes the application it ends what the application started and
 left behind, the proxy of every cluster it opened among it: a machine that runs
@@ -419,13 +491,19 @@ they are of, and a hosted number is copied from its run, never assumed: on the
 machine of the runs of 2026-10-07 the case took about 4.6 s, the answers 51.1 ms
 at the 95th percentile of 250, the longest frame of a gesture 15.9 and 15.4 of 50
 in the two runs of the final code, 32 rows mounted of 100, an idle frame of 16.6
-ms at the median.
+ms at the median. On Freelens v2, with the lists of lines on react-window 2, in the
+run of the suite of T0.7 on the nightly of the validation target, on 2026-10-17:
+the answers 50.4 ms at the 95th percentile, the longest frame of a gesture 21.3 of
+50, 31 rows mounted, an idle frame of 16.7 ms at the median.
 
-Their [workflow](../../.github/workflows/views-tests.yaml) runs the suites and
-the pre-review on the hosted runner for every pull request, then removes the
-fixtures of the tabs with the cleanup of the fixtures and verifies the installation
-they leave. It uploads the directory of their screenshots and reports,
-`e2e-artifacts/`, and nothing else:
+Their [workflow](../../.github/workflows/views-tests.yaml) builds Freelens from
+source at the commit of the validation target, or takes the build the cache keeps
+for that commit, and runs every suite, the pre-review and FND-10 on the hosted
+runner for every pull request, in one run of the runner of `pnpm e2e:views`, within
+two hours; then, whatever the suites found, once the environment came up, it
+removes the fixtures of the tabs with the cleanup of the fixtures and verifies the
+installation they leave. It uploads the directory of their screenshots and reports,
+`e2e-artifacts/`, as `views`, and nothing else:
 the private state of the environment is elsewhere, and a test of the workflow
 fails if a path of it is ever named there.
 
@@ -682,12 +760,14 @@ resources only. No real environment is required for the release gate.
 ## Test Implementation Contract
 
 The scaffold has [source lifecycle tests](../../src/entrypoints.test.ts),
-[compiled-entry contracts](../../test/build.test.ts), and
-[process-specific host stubs](../../test/freelens-extensions.ts). Vitest v5.0.2 fails
-when no tests are selected; it does not import the host implementation in Node.
-The canonical command builds first and covers the tests the
-[architecture](ARCHITECTURE.md#dependencies) counts by what they
-are of, among them the [environment checks](../../test/environment.test.ts), the
+[compiled-entry contracts](../../test/build.test.ts), and the
+[stub of the SDK](../../test/freelens-extensions.ts) of the template, written from
+the source of the host at the validation target, which has a double for each name
+the tests reach and refuses any other, and records it. Vitest 5.0.4 fails when no
+tests are selected; it does not import the host implementation in Node.
+The canonical command builds first and covers every test of the unit run, which
+the [architecture](ARCHITECTURE.md#dependencies) counts, among them the
+[environment checks](../../test/environment.test.ts), the
 diagnostic contracts, the [operation states](../../src/common/operation.test.ts)
 and their [references](../../src/common/references.test.ts).
 The environment tests
@@ -704,19 +784,21 @@ imports to make an unsupported public call appear valid.
 
 The components of the host the views draw with are stood in for by
 [doubles](../../test/host-components.tsx), and its address by one in the
-[stubs](../../test/freelens-extensions.ts), written from the source of the host at
-the version the tests build against: the
-[directives](../../AGENTS.md#host-facts-that-cost-a-run-to-find) record what was
-read there, and where. A double does what the host does wherever a view depends
-on it: the address is one search, changed once for each parameter
-that is set; the input leaves the focus at Enter unless it is told not to; the
-tabs give a tab its role and make it a stop of the Tab key; the table draws its
-head and its rows and drops what is not a row, and a cell shows its title in
-place of what it holds; the virtual list measures its room once it is mounted,
-and draws no row before that nor while it has no room. A double that is kinder
-than the host hides a defect from every test that uses it: a list that drew its
-rows at once hid that the first line of a text is not there with its viewer. The
-tests of a component replace the components beside it; the tests of the
+[stubs](../../test/host-address.ts), written from the source of the host at the
+commit of the validation target, each naming the file and the lines it follows:
+the [directives](../../AGENTS.md#host-facts-that-cost-a-run-to-find) record the
+facts of the host and how each was found. A double does what the host does wherever a view
+depends on it: the address is one search, changed once for each parameter that is
+set; the input leaves the focus at Enter unless it is told not to; the tabs give a
+tab its role and make it a stop of the Tab key; the table draws its head and its
+rows and drops what is not a row, and a cell shows its title in place of what it
+holds; the list of the host draws its rows in a room that holds them, as the host
+draws them in its own tests. A double that is kinder than the host hides a defect
+from every test that uses it, and one refuses what it does not model where the
+extension would change what the host draws, with words that say to write it from
+the source of the host first; a component the host no longer gives, as the virtual
+list of v1, is refused by the stub. The tests of a component replace the
+components beside it; the tests of the
 [tabs with their viewers](../../src/renderer/pages/operation-artifacts.test.tsx)
 mount the pages with nothing of the extension replaced.
 
@@ -729,10 +811,10 @@ Established T0.3 commands, executed locally:
 
 - `pnpm type:check`, `pnpm lint:check`, `pnpm knip:check`, `pnpm test:unit`, and
   documentation checks using the established Trunk convention.
-- `pnpm build:production && pnpm clean:tgz && pnpm pack`, without a version bump;
-  `pnpm pack:dev` bumps a prerelease so that Freelens takes the rebuild.
-- `VITE_PRESERVE_MODULES=false pnpm test:unit` checks the production bundle form;
-  `pnpm exec vitest run src/entrypoints.test.ts` is the focused source check.
+- `pnpm build && pnpm clean:tgz && pnpm pack`, without a version bump;
+  `pnpm pack:dev` bumps a prerelease so that Freelens takes the rebuild. Since
+  T0.7 the build has one form, the one that is packed.
+- `pnpm exec vitest run src/entrypoints.test.ts` is the focused source check.
 
 The measure of the unit tests,
 [`artifact-log.measure.ts`](../../test/artifact-log.measure.ts), times the code of
@@ -741,8 +823,8 @@ the parser, the search, the filter by level, the search among the lines a filter
 leaves, the rows of a list of the lines and the lines of a text read without its
 levels, each twenty calls after five, within 250 milliseconds at the 95th
 percentile, every answer checked. It prints its times as one line, `VIEW-10 unit`,
-before anything is asserted, and it imports the source, which both forms of the
-unit run time alike; the hosted unit job asserts the same budget in both. Of 34
+before anything is asserted, and it imports the source; the hosted unit job asserts
+the same budget, in both forms of the build until T0.7 and in the one since. Of 34
 changes made on purpose, one at a time, while the measure was written, to the
 parsers, to the generators, to the keys and the counters of the fixtures and to
 the measure, 32 made a test fail: a search made to read its text twice, or three
@@ -837,9 +919,12 @@ The [local runner](../../e2e/scripts/local-demo.mts) and
 live readiness/authentication/isolation/ownership checks. Real backup/restore and
 status fixtures plus restricted identities and cleanup are implemented in
 [local-fixtures.mts](../../e2e/scripts/local-fixtures.mts) and the runner. The T0.6
-[download proof](../../e2e/scripts/local-download-proof.mts) exercises compiled main;
-packaged-app launchers remain later work. Knip declares the existing
-system `kubectl` as an external binary, not an npm dependency.
+[download proof](../../e2e/scripts/local-download-proof.mts) exercises the main
+bundle, with the [stand-ins of the host](../../e2e/scripts/local-host.mts) since
+T0.7; the packaged application is started by the helpers of
+[`integration/helpers`](../../integration/helpers/). Knip ignores the binaries no
+dependency provides: `yq`, which the workflows call, from mise, and `pgrep`, with
+which the helpers of the suites find what the application started.
 What the package bundles is in [the dependencies](DEPENDENCY-AUDIT.md).
 
 Build after tools that remove generated output. Before manual review, provide the
@@ -1028,9 +1113,21 @@ DownloadRequest execution or ServerStatusRequest was used. Overall T0.5 verdict:
 ## T0.6 Main Transport Proof
 
 Authorized and completed on 2026-09-25 against the existing official-image local
-lab. The implementation is main-only and activation stays inert. The runner loads
+lab. The implementation is main-only and activation stays inert. The runner loaded
 the actual compiled CommonJS main under Node with minimal host globals; this is
 not an actual Electron/IPC/catalog integration result.
+
+Since T0.7 the runner loads the main bundle of the extension for Freelens v2,
+`dist/main.js`, an ES
+module, under Node, with the [stand-ins of the host](../../e2e/scripts/local-host.mts)
+of D9 of SPEC-0015 for `Main.K8sApi` and `Main.Shell`, made from the isolated
+kubeconfig of the environment: the client of the stand-in takes the requests of
+the adapter to the API server, and the tunnel runs the pinned kubectl of the
+environment as `Main.Shell` would give the kubectl of the host. What the host adds,
+its proxy, its catalog and the kubectl it prepares for the cluster, is proven by the
+packaged suites. The direct worker runs in the Node container, where no kubectl is:
+it has the client of the stand-in and asks for no tunnel. The proof passed in its
+four modes on 2026-10-17, on Node 24.15.0 and again on Node 24.21.0.
 
 Since the slice of the request through the gate the proof calls the procedures of the
 main process as a frame of a cluster does, on a registrar of its own: it turns writes
@@ -1073,20 +1170,24 @@ The proof then runs as four identities of its own, each an account of the namesp
 the installation with a credential of ten minutes. One reads and may not create the
 request: it ends as forbidden at the creation. One creates the request and may read no
 Service and no Secret: it ends at the Service, with its request in the cluster, and,
-once the location refers to a Secret, at the certificate, with no request. One has the
-verb `create` alone for the port-forward: it ends at the port-forward. One has what
-the architecture lists for a download through the cluster: it downloads the log. The
-accounts and their roles are removed with the run.
+once the location refers to a Secret, at the certificate, with no request. The
+router has neither verb of `pods/portforward`: it ends at the port-forward, with its
+request in the cluster for the server to remove, and the last words of kubectl name
+`create`. The downloader has what the architecture lists for a download through the
+cluster, with `create` alone on `pods/portforward`, which forwards through the
+fallback of kubectl: it downloads the log. Until T0.7 the router had `create` alone
+and the downloader both verbs, as the WebSocket of the client of the extension
+needed them; the identities follow the kubectl of the host since the amendment of
+2026-10-16 of SPEC-0015. The accounts and their roles are removed with the run.
 
 ```sh
 pnpm test:unit
-VITE_PRESERVE_MODULES=false pnpm test:unit
 node e2e/scripts/local-demo.mts transport-proof --context kind-freelens-velero-dev
 ```
 
 The direct worker requires the unmodified official image
-`docker.io/library/node:24.15.0-bookworm-slim@sha256:4e6b70dd6cbfc88c8157ba19aa3d9f9cce6ba4703576d55459e45efcbc9c5f5d`,
-verified locally before use. Pulling this public artifact does not authorize a
+`docker.io/library/node:24.21.0-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20`,
+the Node of `.nvmrc`, verified locally before use. Pulling this public artifact does not authorize a
 cloud environment. The guarded runner checks its content and the owned node before
 starting a short-lived, capability-free, read-only-mounted container in that node's
 network namespace. It creates no relay Pod, host route or derived image. Existing
@@ -1164,9 +1265,11 @@ The default kubeconfig and original official image contents remain unchanged.
 
 The [transport support decision](ARCHITECTURE.md#t06-transport-support-decision)
 retains both authorized direct access and explicit Pod forwarding. Automatic
-endpoint resolution and actual-host authentication still need qualification, not
+endpoint resolution and actual-host authentication still needed qualification, not
 an implicit fallback. Overall T0.6 verdict: **PASS**. The actual-host acceptance
-check stays open until the integration test covers it.
+check was left to the integration test, FND-10, which covers it, on Freelens v2
+since T0.7; the route of the main process and the connection of the host were
+qualified later by SPEC-0010 and SPEC-0015.
 
 ## Capability Failures
 

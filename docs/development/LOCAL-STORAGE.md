@@ -8,7 +8,9 @@ upstream repairs are retired. T0.4 installation, authentication and isolation we
 verified on 2026-09-24. T0.5 ConfigMap backup/restore, multipart integrity and
 artifact/cleanup checks passed on 2026-09-25. T0.6 signed-download compatibility
 passed on the same day for the four log/results artifact kinds and explicit routes.
-Actual Freelens activation, all S3 features and PV/CSI recovery remain unverified.
+The activation in Freelens and the downloads of the packaged application were
+proven later, by the integration test and the suites of the views, on Freelens v2
+since T0.7. All S3 features and PV/CSI recovery remain unverified.
 The environment pins SeaweedFS 4.48 since 2026-10-04, in
 [local-manifests.mts](../../e2e/scripts/local-manifests.mts): the distribution
 reviewed below is 4.47. On 2026-10-06 the store of 4.48 took a body in each of the
@@ -19,7 +21,8 @@ three ways the client of the fixtures sends one, and held its whole length.
 Provide an authenticated S3 service inside the dedicated local kind environment for
 Velero backups and artifact downloads. The test backend is not a runtime dependency
 of the extension and does not constrain an operator's existing storage provider.
-Freelens and SDK compatibility remain exactly v1.10.3. Velero v1.18.4 and AWS plugin
+The compatibility reference of Freelens is v2, at the validation target of
+[SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md). Velero v1.18.4 and AWS plugin
 v1.14.4 remain the reviewed test pair; provider `aws` means use the S3 plugin, not
 permission to contact an AWS account.
 
@@ -71,7 +74,9 @@ deployment deliberately instead of inheriting the image's quick-start defaults:
   also binds gRPC 18333 alongside HTTP 8333; owned-node firewall rules reject 18333
   from outside the pod. Only S3 HTTP is reachable through the Service. Do not use
   host networking, public NodePort/Ingress or external load
-  balancers. Access from the desktop is through an owned loopback port-forward.
+  balancers. Access from the desktop is through a loopback port-forward that the
+  main process of the extension opens for one download: on Freelens v2 the
+  kubectl Freelens runs for the cluster, through the proxy of Freelens.
 - Disable unused SFTP, WebDAV, messaging and IAM control-plane services; disable
   Iceberg/Lance catalog ports explicitly. No administration UI is needed. Fix volume
   size/count, memory/CPU and storage limits instead of unbounded auto-sizing.
@@ -151,6 +156,10 @@ CA, HTTPS tunnel with referenced CA, and direct HTTPS with referenced CA, four
 artifacts per mode. The signature and HTTP Host negative checks reach the storage
 server; unknown CA fails TLS. Expiry, 404, bounds and cancellation have synthetic
 contract coverage rather than every case being induced against live storage.
+On 2026-10-17 the proof passed again in its four modes on the main bundle of the
+extension for Freelens v2, with the stand-ins of the host of SPEC-0015 and the tunnel opened
+by the pinned kubectl of the environment: 16 artifacts again, the altered
+signature and Host refused by the store and the unknown CA by TLS.
 
 The proof enables SeaweedFS's supported HTTPS listener on 8443 using temporary
 locally generated TLS resources. It does not change publicUrl, add forwarded-host
@@ -161,7 +170,7 @@ and the fixture-free verifier pass. The direct worker is an unmodified pinned
 official Node image, not a new storage workload. See
 [the procedure and limits](TESTING.md#t06-main-transport-proof).
 
-PV/CSI recovery, actual Electron integration and performance benchmarks remain unverified.
+PV/CSI recovery and performance benchmarks of the store remain unverified.
 Local derivative images are not selected. This is a local development lab only.
 
 Publishable documentation records this proposal and its own technical constraints,

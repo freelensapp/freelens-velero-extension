@@ -190,7 +190,7 @@ Read in the source of the host at the validation target and of the template at
 | `Main.Shell` gives, for a connected cluster, the kubectl Freelens runs for it, which it may download for the version of the cluster, and an environment whose `KUBECONFIG` reaches the cluster through Freelens, with the proxy setting of the cluster. It rejects a cluster that is not there or not connected; a disconnect removes the files of the environment, and a reaction on the state of the cluster tells it. A process an extension runs is given an explicit environment and an explicit working directory | [C15](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/docs/extensions/api.md#L992-L1084), [`getKubectlPath`](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/packages/core/src/extensions/main-api/shell.ts#L55-L84), [`getEnvironment`](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/packages/core/src/extensions/main-api/shell.ts#L119-L152), [a process](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/docs/extensions/binaries.md#L42-L54) |
 | `getAllClusters()` and `getClusterById()` of the catalog are observable in both processes; an entry has its identifier, its name, its kubeconfig path, its context name and its state, connecting, connected, disconnected or disconnecting | [C5](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/docs/extensions/api.md#L344-L390), [the entry](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/packages/core/src/extensions/common-api/cluster-types.ts#L13-L18), [its fields](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/packages/core/src/extensions/common-api/cluster-types.ts#L57-L67) |
 | `Main.Ipc.handle` types the event of its handler as the `IpcMainInvokeEvent` of Electron, which an extension names by importing its type from `electron`. The listener of `Renderer.Ipc` gets an event typed `unknown`, which it leaves alone. The host resets the instance of either with the disposers of the extension, which a disable runs after `onDeactivate` | [`handle`](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/packages/core/src/extensions/ipc/ipc-main.ts#L72-L88), [the type](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/docs/extensions/migrating-from-v1.md#L1511-L1517), [`listen`](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/packages/core/src/extensions/ipc/ipc-renderer.ts#L24-L59), [the event](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/docs/extensions/migrating-from-v1.md#L1591-L1603), [reset in main](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/packages/core/src/extensions/ipc/ipc-main.ts#L37), [in the renderer](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/packages/core/src/extensions/ipc/ipc-renderer.ts#L21), [the disable](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/packages/core/src/extensions/lens-extension.ts#L95-L110) |
-| The frame of a cluster is its own origin, `https://<clusterId>.renderer.freelens.app`, and the host reads the identifier of the cluster from that host | [The origin](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/packages/core/src/features/extensions/loader/main/register-scheme-as-privileged.injectable.ts#L27-L30), [the rule](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/packages/core/src/common/utils/cluster-id-url-parsing.ts#L14-L27) |
+| The frame of a cluster is its own origin, `https://<clusterId>.renderer.freelens.app`, which the packaged application writes with the port of its proxy, `https://<clusterId>.renderer.freelens.app:<port>`, and the host reads the identifier of the cluster from that host, once the port is taken off | [The origin](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/packages/core/src/features/extensions/loader/main/register-scheme-as-privileged.injectable.ts#L27-L30), [the rule](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/packages/core/src/common/utils/cluster-id-url-parsing.ts#L14-L27), [the window](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/packages/core/src/main/start-main-application/lens-window/application-window/create-application-window.injectable.ts#L38), [the frame](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/packages/core/src/common/utils/cluster-id-url-parsing.ts#L34-L36) |
 | Renderer code has no guarantee of Node or Electron, which it reaches only because the renderer has no isolation of its context. The view of the container of the host kept for an extension is no security boundary. All the extensions share one origin, since an origin for each would promise an isolation the host does not give | [The renderer](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/docs/extensions/api.md#L177-L185), [the container](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/docs/extensions/api.md#L578-L585), [the origin](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/docs/extensions/api.md#L1088-L1096) |
 | A `KubeApi` an extension creates registers itself with the host unless told not to. The host registers an API and a store for every version of a CRD the cluster serves, after the frame of the cluster has loaded the CRDs, so a component that reads them is an `observer` | [The registration](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/packages/core/src/extensions/common-api/k8s-api.ts#L69-L96), [the stores of the host](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/docs/extensions/migrating-from-v1.md#L1406-L1447) |
 | A registered component gets only the props the host renders it with: a page its parameters. `detailsFor` and `menuItemFor` tie a component to its kind, which the literals of `kind` and `apiVersion` make strict. `customResources` takes the kinds with pages of their own out of the Custom Resources tree while the extension is enabled, and nothing else | [The props](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/docs/extensions/api.md#L407-L412), [the helpers](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/docs/extensions/api.md#L422-L482), [`customResources`](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/docs/extensions/api.md#L484-L508) |
@@ -201,7 +201,7 @@ Read in the source of the host at the validation target and of the template at
 | The store of an extension stops saving when the extension is disabled, and is used again when it is enabled | [The store](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/packages/core/src/extensions/base-extension-store.ts#L82-L109) |
 | The template wraps every page, section of the details and menu item in an error boundary of its own, since the host has none around the drawer of the details or a menu item | [The boundaries](https://github.com/freelensapp/freelens-example-extension/blob/e9881f92d17683cec534a848ffd396db1fab6212/src/renderer/components/error-boundary.tsx#L65-L131), [their use](https://github.com/freelensapp/freelens-example-extension/blob/e9881f92d17683cec534a848ffd396db1fab6212/src/renderer/index.tsx#L30-L89) |
 | The template builds Freelens from source for its integration test, at `main`, and caches the build by the commit it was made from. Its unit tests run on a stub of the SDK, with Testing Library 16 | [The ref](https://github.com/freelensapp/freelens-example-extension/blob/e9881f92d17683cec534a848ffd396db1fab6212/.github/workflows/integration-tests.yaml#L26-L29), [the cache](https://github.com/freelensapp/freelens-example-extension/blob/e9881f92d17683cec534a848ffd396db1fab6212/.github/workflows/integration-tests.yaml#L115-L166), [the stub](https://github.com/freelensapp/freelens-example-extension/blob/e9881f92d17683cec534a848ffd396db1fab6212/vitest.config.ts#L29-L37), [Testing Library](https://github.com/freelensapp/freelens-example-extension/blob/e9881f92d17683cec534a848ffd396db1fab6212/package.json#L69-L70) |
-| The tag workflow of the template tags a prerelease version too, and its release workflow marks the GitHub release of a prerelease as a prerelease. The tag workflow of this repository tags `X.Y.Z` alone; its release workflow already publishes a version with a hyphen on `next` | [Tag](https://github.com/freelensapp/freelens-example-extension/blob/e9881f92d17683cec534a848ffd396db1fab6212/.github/workflows/tag.yaml#L42), [release](https://github.com/freelensapp/freelens-example-extension/blob/e9881f92d17683cec534a848ffd396db1fab6212/.github/workflows/release.yaml#L164), [this tag](../../.github/workflows/tag.yaml#L42), [this release](../../.github/workflows/release.yaml#L85-L86) |
+| The tag workflow of the template tags a prerelease version too, and its release workflow marks the GitHub release of a prerelease as a prerelease. The tag workflow of this repository tags `X.Y.Z` alone; its release workflow already publishes a version with a hyphen on `next` | [Tag](https://github.com/freelensapp/freelens-example-extension/blob/e9881f92d17683cec534a848ffd396db1fab6212/.github/workflows/tag.yaml#L42), [release](https://github.com/freelensapp/freelens-example-extension/blob/e9881f92d17683cec534a848ffd396db1fab6212/.github/workflows/release.yaml#L164), [this tag](https://github.com/freelensapp/freelens-velero-extension/blob/224315ce6f7545c16cf2ba49718e416fa016dcbe/.github/workflows/tag.yaml#L42), [this release](https://github.com/freelensapp/freelens-velero-extension/blob/224315ce6f7545c16cf2ba49718e416fa016dcbe/.github/workflows/release.yaml#L85-L86) |
 
 ### D1: The API Server From The Main Process
 
@@ -228,7 +228,7 @@ connected would start its proxy, and with it an authentication the operator did
 not ask for. The client of the host has no deadline of its own, and parses an
 answer whole before it gives it.
 
-**What goes.** The [identity of a context](../../src/main/context-identity.ts):
+**What goes.** The [identity of a context](https://github.com/freelensapp/freelens-velero-extension/blob/224315ce6f7545c16cf2ba49718e416fa016dcbe/src/main/context-identity.ts):
 the read of the kubeconfig, its digest, the credential plugins and the kinds of
 authentication it refused. The HTTPS client of the
 [adapter](../../src/main/diagnostic-kubernetes.ts), with its keep-alive agent.
@@ -385,7 +385,7 @@ rule on the test-only helpers of React; Renovate following the catalog of the ho
 as the configuration of the template does.
 
 **What goes.** electron-vite and its preload target, the
-[map of the globals of v1](../../build/host-globals.ts), the two forms of the
+[map of the globals of v1](https://github.com/freelensapp/freelens-velero-extension/blob/224315ce6f7545c16cf2ba49718e416fa016dcbe/build/host-globals.ts), the two forms of the
 build and their two runs of the unit tests, the `<style>` the views inject, the
 `paths` to the declarations of `@freelensapp/core`, and the rule that held React
 at 17.
@@ -732,3 +732,101 @@ With them the transport proof passed on 2026-10-17 in its four modes, with the
 stand-ins of the host of D9: the downloader downloaded through the cluster with
 `create` alone, and the router ended as forbidden at the port-forward, its
 request left in the cluster for the server to remove.
+
+**T0.7, local evidence of its branch, 2026-10-16 to 2026-10-17.** Steps 1 to 10
+were made in the order above, each in its own commits, and step 11 is the
+documents. Local runs are evidence for the pull request, not a status: the runs of
+CI of step 10 and of T0.8 are recorded when they are made.
+
+- **The gates of the head of step 10**, on Node 24.21.0 and pnpm 12.11.2: the
+  install frozen; the type check of the nine programs with no error; lint; the
+  build, which writes the five files of `dist/`; the unit run, 83 files and 2,588
+  tests with none failed, and the two measures after it within their budgets
+  (VIEW-10 unit, the parser at 122.5 ms at the 95th percentile; ADH-16, the
+  thousand schedules at 39.4 ms and one at 0.04 ms). Knip: its development pass
+  finds nothing; its production pass, with the `--files` of the template,
+  reports the two modules of T3.1 and T3.2, `schedule-adherence.ts` and
+  `schedule-signal.ts` of `src/common/`, which no bundle reaches before T3.3, so
+  `pnpm knip:check` and the step of Knip of the check workflow fail on them
+  until T3.3 imports them or the lead maintainer decides otherwise.
+- **HOST-01**: on the nightly v2.0.0-0-nightly-2026-10-16, its package checked
+  against its published checksum, the tarball installed from the Extensions page
+  is listed as Enabled, both entries load, and neither log has an error. On
+  Freelens 1.10.3 as released, once, on 2026-10-16, its package checked against
+  its published checksum: the same tarball is listed as Incompatible, its menu
+  offers Uninstall alone, no module of the extension is loaded in either process,
+  and no line of the extension is logged.
+- **The packaged suites on the nightly**, every suite in its last whole run, one at
+  a time, on 2026-10-17, at the head of step 9 on Node 24.15.0: overview 15 of 15, journey 19 of 19, restores 14 of 14,
+  schedules 14 of 14, locations 13 of 13, gate 7 of 7, with the second start in a
+  new profile, preferences 7 of 7, restricted 8 of 8, restricted-restores 7 of 7,
+  server 8 of 8, artifacts 51 of 51, pre-review 33 of 33, and FND-10 6 of 6; scale
+  5 of 7, by the exception below. After step 10, on Node 24.21.0: FND-10 with one
+  suite in one run of the runner of the views, 13 of 13, and the five sessions of
+  the integration test of the template, 3 of 3 each, and with FND-10, 6 files and
+  21 tests in one run. No error
+  of either process and no line at the level of an error in the files of the log,
+  but the kinds the collector leaves out by their address or their case.
+- **The checks proven packaged**: HOST-05 in the part of a server status, one
+  creation through the host counted on the API server as on Freelens 1; HOST-06, a
+  cluster disconnected with a load in flight, its kubectl ended, nothing of the
+  extension counted on its API server for a minute and the entry still
+  disconnected; HOST-08, every load that ended with its text through the tunnel,
+  with the kubectl the host prepared for the version of the cluster; HOST-09, no
+  kubectl of the application after a refused port-forward, a disable, a
+  disconnection and every suite; HOST-10, the identity with neither verb refused at
+  the port-forward with the words of the tab; HOST-12, the identifier of the frame,
+  of the catalog of the renderer and of the catalog of the main process equal, and
+  the reads of the views leaving from the frame, counted on the API server alike;
+  HOST-13, a disable and an enable, then one handler for each procedure, one
+  creation, one kubectl, one answer and one saving of the file of the store for one
+  change; HOST-14, GATE-12 with two frames and the address a handler of `Main.Ipc`
+  reads; HOST-15, the tabs of the group on every page, and the Custom Resources
+  tree without the five kinds while enabled and with them after a disable; HOST-16,
+  a section of the details that throws, kept in its place; HOST-18, VIEW-10 on the
+  log of 200,000 lines within its budgets, the answers at 50.4 ms and the longest
+  frame of a gesture at 21.3 ms at the 95th percentile, 31 rows mounted at most;
+  HOST-17, an allowance taken back through the main process, in the suite of the
+  preferences; HOST-11 in the suite of the tabs, the log of the real backup
+  through the tunnel and no part of a signed URL in its reports, beside the proof.
+- **The transport proof**, in its four modes, on 2026-10-17, on Node 24.15.0 and
+  again on Node 24.21.0 with the image of its helper moved to it: 16 artifacts, and
+  every identity at its step.
+- **Not yet proven**: the identity of an `exec` plugin of HOST-05 and scenario 9;
+  what only CI proves of HOST-20, the build of Freelens from source at the commit
+  of the validation target on the hosted runner and its cache; HOST-21 at the first
+  prerelease; HOST-02, HOST-24 and HOST-25 with T0.8; HOST-22 and HOST-23, the
+  reviews of the documents of step 11 and of the watch in the pull request. The
+  header of SPEC-0013, which REQ-217 names with T0.7, moves with its evidence at
+  T0.8, as REQ-219 says: a change of the order, for the lead maintainer to
+  confirm.
+
+The known exception, which the lead maintainer decides: BACK-12 and REST-11, the
+lists of a thousand backups and of a thousand restores, are over the budget of 250
+ms at the validation target, 940 and 1,003 ms at the 95th percentile in the last
+run, with 27 rows mounted, where Freelens 1.10.3 measured 109 and 91 ms. The cause
+is in the host: at the target the list layout of the host computes its filtered
+items again at every read, and reads them for every row it draws, so that one
+search filters the whole list a hundred times and more; the items stopped being
+computed in freelensapp/freelens#2254, which is in the target and not in 1.10.3.
+Neither the budgets, nor the data, nor the suite were changed, and nothing works
+around the host.
+
+Decided while implementing, inside the requirements: the words of a refused
+port-forward name the verb `create` on `pods/portforward`, which the amended
+REQ-137 makes the one the identity needs (REQ-205); the tag workflow tags
+`X.Y.Z` and `X.Y.Z-N` alone, stricter than the template's, so that a version
+such as `0.1.0-alpha.0` is not tagged (REQ-216); the workflow of the type check of
+the template is not added, since the check workflow already runs the type check of
+every program, a failure of which fails a step of its own, and the check of
+`mise.lock` of the template is added; the
+cleanup and the verification of the environment of the views run after the suites
+whatever the suites found; the collector of the suites leaves out the answers 401,
+403 and 404 to the reads of a frame of a cluster, which the browser writes in the
+console, and the record of a load of the window aborted by a disconnection, each by
+its address or proven by its case; HOST-06 holds the kubectl of the load once it
+is seen and lets it go after the disconnection, so that the load is in flight
+whatever the speed of the machine; and a defect of the port found by HOST-13, the
+state of the views made again between a disable and an enable with no way to the
+main process, is fixed in `onActivate` of the renderer, with a unit test seen
+failing without the fix (REQ-208).

@@ -113,6 +113,32 @@ the start of every milestone (and before every release of the extension):
 Behavior present only on the upstream main branch is design guidance, never
 a baseline capability.
 
+## Host drift watch
+
+Until Freelens 2.0.0 is released, the extension is built and tested against a
+commit of the main branch of Freelens, the validation target that
+[SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md) names, and follows the
+template of the organization, freelensapp/freelens-example-extension, which
+moves with it. Both change without a release. Before every slice and before
+every merge:
+
+1. Read what the main branch of freelensapp/freelens and the main branch of the
+   template changed since the commits last read: the extension API, its
+   documentation and the migration guide of the host, and the sources, the
+   build, the workflows and the configuration of the template.
+2. Take in first a change to what the extension uses: the slice goes on once
+   the change is in, with the pin of the validation target moved everywhere it
+   is written: the header of SPEC-0015; the one line of each workflow that
+   builds Freelens, which a unit test ties to that header; the SDK, pinned to
+   the nightly of that commit in `package.json` and in the build test; and every
+   document that names the commit or the nightly, which a search of the
+   repository for either finds. The move is recorded in SPEC-0015.
+3. Record the watch in the pull request: the commits read, what changed for
+   the extension, and what was taken in or why nothing was.
+
+The watch ends with Freelens 2.0.0: the pin of the SDK becomes a range of
+versions and the integration runs at the tag of the release.
+
 ## Working agreements
 
 - Branch names: short kebab-case (`add-backup-views`, `bootstrap-e2e`);
@@ -126,7 +152,10 @@ a baseline capability.
   workstation. Tags are created only by the tag workflow.
 - The version changes through the pull request of the version workflow only,
   never by hand in another pull request. The tag workflow tags a release
-  version, `X.Y.Z`: main carries a prerelease version between the releases.
+  version, `X.Y.Z`, and a prerelease of a line, `X.Y.Z-N`, and no other form
+  of a version. The release workflow publishes a version with a hyphen on the
+  npm tag `next` and marks its GitHub release as a prerelease, and any other on
+  `latest`.
 - External contributions follow the same spec-first loop; maintainers help
   contributors write the spec when needed.
 
