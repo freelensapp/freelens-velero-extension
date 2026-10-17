@@ -9223,6 +9223,26 @@ describe("platform of the test environment", () => {
     expect(workflow).toMatch(/^permissions:\n {2}contents: read$/m);
   });
 
+  it("tags X.Y.Z and its prereleases X.Y.Z-N, which the release publishes on next as prereleases, and X.Y.Z on latest", () => {
+    const read = (name: string) => readFileSync(new URL(`../.github/workflows/${name}`, import.meta.url), "utf8");
+    const release = read("release.yaml");
+    // The expression the tag workflow matches the version of package.json with, as bash reads it.
+    const tagged = new RegExp(/ =~ (\^\S+\$) \]\]/.exec(read("tag.yaml"))?.[1] ?? "(?!)");
+
+    expect(["0.1.0", "1.0.0", "1.0.0-0", "1.0.0-12", "10.20.30-4"].filter((version) => !tagged.test(version))).toEqual(
+      [],
+    );
+    expect(
+      ["0.1.0-alpha.0", "1.0.0-rc.1", "1.0.0-1-2", "1.0.0-", "1.0", "v1.0.0"].filter((version) => tagged.test(version)),
+    ).toEqual([]);
+    // The npm tag of the publication and of its two retries: a version with a hyphen goes to next.
+    expect(
+      release.match(/case "\$\{GITHUB_REF_NAME\}" in\n\s+\*-\*\) dist_tag=next;;\n\s+\*\) dist_tag=latest;;\n\s+esac/g),
+    ).toHaveLength(3);
+    // And its release on GitHub is a prerelease.
+    expect(release).toMatch(/\n\s+prerelease: \$\{\{ contains\(github\.ref_name, '-'\) \}\}\n/);
+  });
+
   it("builds Freelens for the views and for the integration at the validation target of SPEC-0015, named once", () => {
     const spec = readFileSync(new URL("../docs/specs/SPEC-0015-freelens-v2-host.md", import.meta.url), "utf8");
     const target = /^- \*\*Freelens validation target:\*\* freelensapp\/freelens `([0-9a-f]{40})`/m.exec(spec)?.[1];
