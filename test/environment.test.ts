@@ -1346,27 +1346,22 @@ describe("foundation fixture boundaries", () => {
     expect(rules("reader")).toEqual([reads]);
     // The requester creates the request and reads it, and reads no Secret and no Service.
     expect(rules("requester")).toEqual([reads, requests]);
-    // The router reads the Service, its endpoint slices and its Pod, and has the verb create alone for the
-    // port-forward, which is not what a port-forward over a WebSocket is asked with: it is refused there.
-    expect(rules("router")).toEqual([
+    // The router reads the Service, its endpoint slices and its Pod, and has no verb of the port-forward:
+    // the kubectl of the host is refused there, over a WebSocket and over the older protocol.
+    expect(rules("router")).toEqual([reads, requests, ...route]);
+    // The downloader has what the documentation lists for a download through the cluster, and no more: the
+    // verb create of the port-forward, which the kubectl of the host falls back to when the verb get it asks
+    // first over a WebSocket is refused.
+    expect(rules("downloader")).toEqual([
       reads,
       requests,
       ...route,
       { apiGroups: [""], resources: ["pods/portforward"], verbs: ["create"] },
     ]);
-    // The downloader has what the documentation lists for a download through the cluster, and no more: a
-    // port-forward over a WebSocket is asked of the API server with the verb get, and the releases that
-    // check the verb create as well ask for both.
-    expect(rules("downloader")).toEqual([
-      reads,
-      requests,
-      ...route,
-      { apiGroups: [""], resources: ["pods/portforward"], verbs: ["get", "create"] },
-    ]);
-    // None may read a Secret, delete or change anything, or read every kind; the reader and the requester
-    // have nothing of a port-forward.
+    // None may read a Secret, delete or change anything, or read every kind; the reader, the requester and
+    // the router have nothing of a port-forward.
     expect(JSON.stringify(identities)).not.toMatch(/secrets|delete|update|patch|"\*"/);
-    for (const name of ["reader", "requester"] as const)
+    for (const name of ["reader", "requester", "router"] as const)
       expect(JSON.stringify(identities[name])).not.toContain("portforward");
     expect(() => proofIdentities("", run)).toThrow();
   });

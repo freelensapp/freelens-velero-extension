@@ -414,7 +414,7 @@ describe("a kubectl that ends before its line", () => {
       expect(refused).toMatchObject({ code: "forbidden", verdict: undefined });
       expect(inspect(refused, { depth: 8, showHidden: true })).not.toContain(SENTINEL);
     }
-    // At the step of the port-forward, the words name the resource and the verbs.
+    // At the step of the port-forward, the words name the resource and the verb.
     const said = downloadFailure("forbidden", "forward", {
       artifact: "BackupLog",
       name: "nightly",
@@ -422,7 +422,7 @@ describe("a kubectl that ends before its line", () => {
       request: "nightly-request",
     });
 
-    expect(said.text).toContain("the verbs get and create on pods/portforward");
+    expect(said.text).toContain("the verb create on pods/portforward");
     expect(said.text).not.toContain(SENTINEL);
   });
 

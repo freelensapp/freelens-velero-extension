@@ -2392,9 +2392,9 @@ export function refusedFixtures(
 // The identities of the transport proof. Three may do what a download asks of the cluster up to one step,
 // and are refused at the next: the reader at the creation of the request; the requester at the read of the
 // Secret a location refers to, and at the read of the Service of the store; the router at the port-forward,
-// for which it has the verb create alone. The downloader has what the documentation lists for a download
-// through the cluster, and downloads. Each is an account of the namespace of the installation, of this
-// run, with a role of that namespace.
+// for which it has no verb. The downloader has what the documentation lists for a download through the
+// cluster, and downloads. Each is an account of the namespace of the installation, of this run, with a role
+// of that namespace.
 export function proofIdentities(
   owner: string,
   run: string,
@@ -2434,20 +2434,16 @@ export function proofIdentities(
   return {
     reader: identity("reader", [reads]),
     requester: identity("requester", [reads, requests]),
-    // A port-forward over a WebSocket is asked of the API server with the verb get; the releases that
-    // check the verb create for it as well ask for both. The verb create alone, which is what the older
-    // protocol asks with, is refused.
-    router: identity("router", [
-      reads,
-      requests,
-      ...route,
-      { apiGroups: [""], resources: ["pods/portforward"], verbs: ["create"] },
-    ]),
+    // The kubectl of the host asks a port-forward of the API server over a WebSocket first, with the verb
+    // get, and when that is refused falls back to the older protocol, with the verb create: create alone
+    // forwards, and the documentation lists it. An identity with neither verb is refused, and the last
+    // words of kubectl name create. The router has neither.
+    router: identity("router", [reads, requests, ...route]),
     downloader: identity("downloader", [
       reads,
       requests,
       ...route,
-      { apiGroups: [""], resources: ["pods/portforward"], verbs: ["get", "create"] },
+      { apiGroups: [""], resources: ["pods/portforward"], verbs: ["create"] },
     ]),
   };
 }

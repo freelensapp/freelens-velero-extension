@@ -231,10 +231,10 @@ describe("the words of a DownloadRequest that did not end with its file", () => 
     expect(downloadFailure("forbidden", "pod", created).text).toBe(
       `The cluster refused to read the Pod of the store: the route through the cluster needs the verb get on pods. ${stays}`,
     );
-    // A port-forward over a WebSocket is asked with the verb get, and the releases that check the verb
-    // create as well ask for both: the words name both.
+    // The kubectl of the host asks the verb get first, over a WebSocket, and falls back to the verb create:
+    // the words name the one it needs.
     expect(downloadFailure("forbidden", "forward", created).text).toBe(
-      `The cluster refused the port-forward to the Pod of the store: the route through the cluster needs the verbs get and create on pods/portforward. ${stays}`,
+      `The cluster refused the port-forward to the Pod of the store: the route through the cluster needs the verb create on pods/portforward. ${stays}`,
     );
     // A name that only may be a Service, which the cluster refused to say: the words do not call it one.
     expect(downloadFailure("forbidden", "service", { ...created, verdict: "candidate" }).text).toBe(
@@ -441,7 +441,7 @@ describe("the words of a DownloadRequest that did not end with its file", () => 
       text: "The port-forward to the Pod of the store could not be opened: kubectl ended before it was ready, or could not be run. The DownloadRequest nightly-0e7c5b7a-1111-4111-8111-000000000001 stays in velero-a until Velero removes it.",
     });
     expect(downloadFailure("forbidden", "forward", created).text).toBe(
-      "The cluster refused the port-forward to the Pod of the store: the route through the cluster needs the verbs get and create on pods/portforward. The DownloadRequest nightly-0e7c5b7a-1111-4111-8111-000000000001 stays in velero-a until Velero removes it.",
+      "The cluster refused the port-forward to the Pod of the store: the route through the cluster needs the verb create on pods/portforward. The DownloadRequest nightly-0e7c5b7a-1111-4111-8111-000000000001 stays in velero-a until Velero removes it.",
     );
   });
 

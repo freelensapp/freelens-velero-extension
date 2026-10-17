@@ -127,8 +127,8 @@ export function createdNothing(stage: string): boolean {
 
 // The reads of the route through the cluster, and what each asks of the identity: the tab says which was
 // refused, and what the tunnel needs.
-// A port-forward over a WebSocket is asked of the API server with the verb get, and the releases that
-// check the verb create for it as well ask for both.
+// The kubectl of the host asks a port-forward over a WebSocket first, with the verb get, and falls back to
+// the older protocol, with the verb create, when that is refused: create is what it needs.
 const ROUTE_READS: Record<string, { refused: string; needs: string }> = {
   service: { refused: "to read the Service of the store", needs: "the verb get on services" },
   endpoints: {
@@ -138,7 +138,7 @@ const ROUTE_READS: Record<string, { refused: string; needs: string }> = {
   pod: { refused: "to read the Pod of the store", needs: "the verb get on pods" },
   forward: {
     refused: "the port-forward to the Pod of the store",
-    needs: "the verbs get and create on pods/portforward",
+    needs: "the verb create on pods/portforward",
   },
 };
 // The words of each rule that denies a destination.
