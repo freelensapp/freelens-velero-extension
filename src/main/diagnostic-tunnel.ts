@@ -59,9 +59,11 @@ export const TUNNEL_BOUNDS = {
 const LOOPBACK = "127.0.0.1";
 // The port is taken once what follows it is there: a line cut inside its port is not read as a shorter one.
 const READY = /^Forwarding from 127\.0\.0\.1:(\d+) -> /m;
-// The refusal of the API server, as kubectl writes it: a port-forward is asked with the verb create, or
-// with get and create over a WebSocket.
-const PORT_FORWARD_REFUSED = /cannot (?:create|get) resource "pods\/portforward"/;
+// The refusal of the API server, as kubectl writes it at its default verbosity, which names the verb create:
+// kubectl 1.31 and later asks a port-forward over a WebSocket first, with the verb get, and when that is
+// refused falls back to the older protocol, with create, saying the refusal of get only at verbosity 4; an
+// earlier kubectl asks with create alone.
+const PORT_FORWARD_REFUSED = /cannot create resource "pods\/portforward"/;
 // A credential the cluster did not take, which says nothing of what the identity may do.
 const UNAUTHORIZED = /\bUnauthorized\b/;
 // How much of what kubectl writes is kept to read its refusal: the end of it.

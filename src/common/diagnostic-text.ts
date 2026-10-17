@@ -191,7 +191,7 @@ export function downloadFailure(code: FailureCode, stage: string, context: Downl
       // What the adapter refuses to send: nothing of it reached the cluster, at the creation either.
       return say(
         false,
-        `The request could not be written for the cluster: a name, or the credential it would carry, is not one that can be sent.${stage === "creation" ? ` ${none}` : left}`,
+        `The request could not be written for the cluster: a name is not one that can be sent.${stage === "creation" ? ` ${none}` : left}`,
       );
     case "cancelled":
       if (stage === "creation") return say(true, `The request was cancelled while it was created: ${mayBe}`);

@@ -399,21 +399,19 @@ describe("the end of kubectl", () => {
 });
 
 describe("a kubectl that ends before its line", () => {
-  it("says a refusal of the port-forward as forbidden, with the verbs the identity needs and nothing of what kubectl wrote", async () => {
-    for (const written of [REFUSED, REFUSED.replace("cannot create", "cannot get")]) {
-      const value = fixture();
-      const opening = value.tunnels.open(CLUSTER, POD, new AbortController().signal);
-      const child = await started(value);
+  it("says a refusal of the port-forward as forbidden, with the verb the identity needs and nothing of what kubectl wrote", async () => {
+    const value = fixture();
+    const opening = value.tunnels.open(CLUSTER, POD, new AbortController().signal);
+    const child = await started(value);
 
-      child.complain(written.slice(0, 40));
-      child.complain(written.slice(40));
-      child.exit(1);
-      const refused = await opening.catch((error: unknown) => error);
+    child.complain(REFUSED.slice(0, 40));
+    child.complain(REFUSED.slice(40));
+    child.exit(1);
+    const refused = await opening.catch((error: unknown) => error);
 
-      expect(refused).toBeInstanceOf(DiagnosticError);
-      expect(refused).toMatchObject({ code: "forbidden", verdict: undefined });
-      expect(inspect(refused, { depth: 8, showHidden: true })).not.toContain(SENTINEL);
-    }
+    expect(refused).toBeInstanceOf(DiagnosticError);
+    expect(refused).toMatchObject({ code: "forbidden", verdict: undefined });
+    expect(inspect(refused, { depth: 8, showHidden: true })).not.toContain(SENTINEL);
     // At the step of the port-forward, the words name the resource and the verb.
     const said = downloadFailure("forbidden", "forward", {
       artifact: "BackupLog",

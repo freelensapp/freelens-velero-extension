@@ -306,7 +306,7 @@ describe("the words of a DownloadRequest that did not end with its file", () => 
       "The request is not one the main process understands.",
     );
     expect(downloadFailure("validation", "creation", context).text).toBe(
-      "The request could not be written for the cluster: a name, or the credential it would carry, is not one that can be sent. No request was created.",
+      "The request could not be written for the cluster: a name is not one that can be sent. No request was created.",
     );
     expect(downloadFailure("validation", "certificate", context).text).toContain(
       "What the storage location says of its certificate is not something the extension can use",
