@@ -129,8 +129,12 @@ export default class VeleroRenderer extends Renderer.LensExtension {
   customResources = [Backup, Restore, Schedule, BackupStorageLocation, VolumeSnapshotLocation];
 
   // What the activation does is to open the store of the preferences and the way to the main process.
-  // Nothing is asked of a cluster, or of the main process, until a view asks.
+  // Nothing is asked of a cluster, or of the main process, until a view asks. The host runs onDeactivate
+  // before it takes the pages out, and a page it draws again in between makes the state of the views again,
+  // with no way to the main process: that state is let go here, before the host registers the pages of this
+  // activation, so that the first view after an enable makes its own, with the way of this activation.
   protected onActivate(): void {
+    releaseInstallation();
     PreferencesStore.getInstanceOrCreate<PreferencesStore>().loadExtension(this);
     VeleroIpcRenderer.createInstance(this);
   }

@@ -412,4 +412,36 @@ describe("activated, deactivated and activated again", () => {
     expect(ipcListenerCount(CHANNELS.gateChanged)).toBe(0);
     main.release();
   });
+
+  it("makes the state of the views of the next activation with its way to the main process, when a view was drawn while the extension was disabled", async () => {
+    const main = VeleroIpc.createInstance(anExtension("main") as never);
+
+    main.register(catalogEntries);
+    const first = Reflect.construct(VeleroRenderer, []) as HostExtensionStub;
+
+    await loaded(first);
+    await currentInstallation().openGate();
+    await first.disable();
+    // The host runs onDeactivate before it takes the pages out: a page it draws again in between makes the state
+    // of the views again, when there is no way to the main process. That state says so, and turns nothing on.
+    const between = currentInstallation();
+
+    await between.openGate();
+    expect([between.gate, between.gateFailure]).toEqual([
+      undefined,
+      "The views have no way to the main process of the extension: writes cannot be turned on.",
+    ]);
+    // Enabled again: the first view makes the state of the views with the way of this activation, which asks the
+    // gate and hears its changes, once.
+    const second = await loaded(Reflect.construct(VeleroRenderer, []) as HostExtensionStub);
+    const after = currentInstallation();
+
+    expect(after).not.toBe(between);
+    await after.openGate();
+    expect([after.gate?.writes, after.gateFailure]).toEqual([{ on: false }, undefined]);
+    expect(ipcListenerCount(CHANNELS.gateChanged)).toBe(1);
+    await second.disable();
+    expect(ipcListenerCount(CHANNELS.gateChanged)).toBe(0);
+    main.release();
+  });
 });
