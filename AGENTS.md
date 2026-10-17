@@ -275,29 +275,90 @@ source maps. `main` and `renderer` in `package.json` point at the two entries.
 
 ## Host Facts That Cost A Run To Find
 
+The facts of the host here are of Freelens v2 at the validation target, each
+proven there by the packaged suites, or read in the source of the host at that
+commit where it says so; the others are facts of Velero, of Kubernetes, of the
+test environment and of the process of this repository.
+
 - The views reach the cluster through `src/renderer/api/reader.ts` and through
-  nothing else. It sends `GET`. A state of a view comes from the status of an
-  answer, never from the text of an error.
-- A subclass of `KubeApi` does not keep its methods at run time. Do not add
-  methods to the `Api` classes: write a function.
-- The host writes the store of an extension from its main process. A store that
-  must be kept is opened in both processes, in `onActivate`.
-- An object built for a list of the host needs `metadata.selfLink`.
-- The requests of the host leave from its main process: the driver of the suites
-  does not see them. Count them on the API server, as the suites do.
+  nothing else: the client of the host for the cluster of the frame, with `GET`,
+  to the paths of the kinds of Velero alone. A state of a view comes from the
+  status of an answer, never from the text of an error. The suites see the reads
+  of the views leave from the frame, and the API server counts the same ones.
+- The reads of the frame of a cluster, the host's and the views' alike, leave from
+  the frame through Chromium, to `https://<clusterId>.renderer.freelens.app:<port>/api-kube/...`:
+  the driver of the suites sees them. The requests of the main process of the host
+  and of the extension it does not see. Count them on the API server, as the
+  suites do.
+- The browser writes in the console of the frame, at the level of an error, every
+  answer to a read of the frame that is not a success: a restricted identity that
+  opens a cluster makes about ten of them from the host's own reads. What the host
+  logs at the level of an error is a line that starts with `error:`, on the output
+  of its process as in its files; its proxy logs so every request its client gave
+  up on before the API server answered, which closing a drawer does. The collector
+  of the suites leaves out a 401, a 403 or a 404 to a read of the frame, by its
+  address, that record of the proxy, and a resource of the build of the host
+  that the window failed to load, by its address.
+- The host logs at the level of an error, as a window that failed to load, every
+  load in its window that did not end, the frames inside it included. A
+  disconnection takes the frame of the cluster out by emptying its address, which
+  aborts its load with the code -3, and a connection makes a new frame. The
+  collector leaves out that record with the code -3 alone.
+- The host writes the store of an extension from its main process, once for one
+  change, and says `[BASE-STORE]: saving <file>` each time; after a disable and an
+  enable it saves once for one change again. A store that must be kept is opened
+  in both processes, in `onActivate`.
+- A disable runs `onDeactivate` before the host takes the pages out, and an enable
+  runs `onActivate` before it registers them: a page drawn again in between makes
+  the state of the views again, with no way to the main process. `onActivate` of
+  the renderer lets go of such a state first.
+- An object built for a list of the host needs `metadata.selfLink`, read in the
+  source at the target (`packages/kube-object/src/kube-object.ts`, lines 115 to
+  120): the store of a list of the extension adds it, and the lists of the suites
+  mount their rows with it.
+- The list layout of the host at the validation target computes its filtered items
+  again at every read, and reads them for every row it draws: a search of a list of
+  a thousand rows filters the whole list a hundred times and more, and takes about
+  a second. BACK-12 and REST-11 are over their budget for it.
 - The application reads the kubeconfig of the user unless its profile says
-  otherwise, and takes the theme of the system. Start it with `startIsolated()`
-  of the helpers, never bare.
+  otherwise, and takes the theme of the system. Start it with `startIsolated()` of
+  the helpers, never bare: its profile is under `os.tmpdir()`, the one place where
+  the host takes `<profile>/Freelens/home` as its home, and its store names the
+  kubeconfig of the environment alone and the theme. On macOS the host writes its
+  logs to `~/Library/Logs/Freelens` unless `CFFIXED_USER_HOME` points elsewhere:
+  the helpers point it into the profile.
+- The host imports the main entry of an extension by its file URL, from the build
+  it manages in the profile. A dynamic `import()` inside `app.evaluate` is refused
+  by Node, and `process.mainModule.require` of the same file answers the module of
+  the host, from the cache of its ES module loader: FND-10 reaches the bundle so,
+  and proves it by the scripts the debugger of the process lists.
 - What passes on a machine of a developer may not end on the hosted runner. Give
   every step of a suite its own time, shorter than the one of its case, so that
   the step that does not end is the one that is reported.
 - The host gives its loader ten seconds to see an extension it unpacked, and on a
-  busy machine it gives up, for that application: the extension never appears, or
-  appears and stays disabled. The suites start the application
+  busy machine it gives up, for that application: it says that the installation
+  failed, and lists the extension Disabled. The suites start the application
   through `startWithExtension`, which starts it again in a new profile, once; the
-  file `e2e-artifacts/stall-the-host-once` makes the host give up on purpose.
-- Do not hide a list of the host with `display: none`: it loses its scroll. The
-  list behind a workspace is hidden with `visibility`.
+  file `e2e-artifacts/stall-the-host-once` makes the host give up on purpose, by
+  holding its main process thirteen seconds after the install is asked.
+- An install from a tarball shows a notification that nothing vouches for its
+  integrity, since no checksum was available for it, and installs it anyway: the
+  helpers close it. A new profile has a Terminal tab in the dock of the host.
+- The Extensions page names the command that enables a disabled extension
+  "Enabled", and the menu of a row of the catalog opens from
+  `icon-for-menu-actions-for-catalog-for-<id>`.
+- The host registers the handlers of an extension in the map of Electron as
+  `extensions@<digest>:<channel>`, and a handler reads the address of the frame
+  that asked as `https://<clusterId>.renderer.freelens.app:<port>`, with the port
+  of the proxy.
+- The host prepares in the profile the kubectl of the version of the cluster at
+  its first need, 1.34.12 for the cluster at 1.34.11 of the test environment, where
+  the nightly bundles 1.37.1: the first load through the tunnel in a new profile
+  waits for it.
+- A list of the host hidden with `display: none` reads a scroll of 0 while it is
+  hidden, and is back at its scroll when it is shown again. The list behind a
+  workspace is hidden with `visibility`, which the scale suite proves keeps the
+  scroll.
 - A view opened from another one is shown over the same list, on the same page:
   the views that are open are one parameter of the address, changed once for each
   change of what is shown. Open one with `openView`, never by setting a parameter
@@ -324,6 +385,14 @@ source maps. `main` and `renderer` in `package.json` point at the two entries.
   first entry of `clusterPageMenus` that leads to the page has a parent: the
   entries of the lists come before the entry of the group. A page does not render
   `TabLayout`: inside the one of the host it would have its margins twice.
+- The drawer of the details of the host closes on a click that reaches the
+  window, unless its default was prevented, the press began inside the drawer, or
+  the target is inside a drawer. A link of the host prevents the default, and so
+  does the link of a section of the extension, which is the `MaybeLink` of the
+  host, and the row of a list of the host opens its details with the default
+  prevented: a click on a row under an open drawer opens the view of the row and
+  leaves the drawer over it, and a way of the view closes the drawer as a click
+  outside does. No action of the extension opens the details of the host.
 - A fixture that a view of the milestone needs goes with the fixtures of the views,
   which `pnpm e2e:views` puts in place on an environment that is already up. The
   ones of the phases are put in place once, when the environment is created.
@@ -379,38 +448,31 @@ source maps. `main` and `renderer` in `package.json` point at the two entries.
   three ways the client of the fixtures sends one, and holds its whole length. A
   way is tried only when the ones before it failed: the files are sent in the
   first.
-- The source of the components of the host is in the package its types come
-  from: the source map `static/build/library/renderer.js.map` of
-  `@freelensapp/core` carries it. What follows of its address, its input, its
-  tabs and its table was read there, at v1.10.3, and so was that its list is
-  drawn inside the sizer of `react-virtualized-auto-sizer`, which the map does
-  not carry: what the sizer draws at first was read in that package, at 1.0.26,
-  and what the icon holds in `@freelensapp/icon`. These facts were read, and no
-  run found them. The doubles of `test/host-components.tsx` follow them for the
-  components, and the stub of `test/freelens-extensions.ts` for the address.
+- The source of the host is read at the commit of the validation target, in a
+  clone of freelensapp/freelens, with `git show <commit>:<path>`: the doubles of
+  `test/host-components.tsx`, the stub of `test/freelens-extensions.ts` and the
+  address of `test/host-address.ts` follow it, each naming the file and the lines
+  it follows. A double that is kinder than the host hides a defect from every test
+  that uses it, and the stub refuses a name of the SDK it has no double for.
 - The host changes the address once for each parameter it is asked to set, and
   sent to the address it is at it goes there and comes back, which is two
   changes. What a view shows by more than one parameter, as the views that are
   open and the tab of the last of them, is written into one search, and the host
   is sent there once and only when something changes. `openView`, `closeView`,
   `closeViews` and `showTab` of `src/renderer/navigation.ts` are the only
-  writers.
-- The virtual list of the host, given no `fixedHeight`, measures its room once it
-  is mounted: it draws no row at its first render, nor while its room has no
-  height. What waits for its first row, a focus or a measure, waits for the row
-  and not for the component that holds the list. The double of the tests does
-  the same: a double that drew its rows at once hid this from every test.
+  writers. The suites count one change of the address for every step.
 - The `Input` of the host leaves the focus at Enter unless it is given
-  `blurOnEnter={false}`. Its `SearchInput` takes the focus when it is mounted,
-  takes Ctrl or Cmd with F for the whole window, and clears itself at Escape. A
-  field of a view whose Enter is a command of its own is the `Input`, told to
-  keep the focus and named by `aria-labelledby`.
+  `blurOnEnter={false}`, and its `SearchInput` clears itself at Escape: both read
+  in the source at the target, which the doubles follow. The `SearchInput` takes
+  the focus when a list of the host is mounted, and takes Ctrl or Cmd with F for
+  the whole window. A field of a view whose Enter is a command of its own is the
+  `Input`, told to keep the focus and named by `aria-labelledby`.
 - `Tabs` and `Tab` of the host give a tab its role, a stop of the Tab key and its
   choice by a click, Enter and Space. They give the strip no role, say of no tab
   that it is selected, move nothing with the arrows, and do not prevent what the
-  browser does with Space by itself.
+  browser does with Space by itself, as read in the source at the target.
   `src/renderer/components/workspace-tabs.tsx` adds what they lack, and prevents
-  that.
+  that: the suite of the tabs and the pre-review press its keys.
 - The `Table` of the host draws its head and the rows it holds: what is not a
   `TableRow` is dropped, a fragment of rows as well, and its parts have no role.
   A `TableCell` that is given a `title` shows the title in place of what it
@@ -418,18 +480,15 @@ source maps. `main` and `renderer` in `package.json` point at the two entries.
 - The `Icon` of the host holds the name of its icon as its text, which a font
   draws as the icon. Beside the words of a command it is given `aria-hidden`, or
   the name of the command carries the name of the icon.
-- The `Checkbox` of the host is a label around its input, and the style of
-  `@freelensapp/core` at v1.10.3, `static/build/library/renderer.css`, gives the
-  input `display: none`: the Tab key does not reach it. A choice of a view that is
-  on or off by itself, as a level of a log, is a button that says with
-  `aria-pressed` whether it is made, drawn as the box of the host.
 - Escape leaves a view of one object from wherever the focus is in it, but for
   two places. A text field of a view takes the key with `escapeOfField`, clears
   what was typed and lets it go no further. The confirmation of a request takes
   it as well: it leaves the confirmation, and the view does not hear the key.
-- The main process asks `require("electron")` for the dialog of the host at the
-  moment a file is saved, never when its modules are loaded: the proofs of the
-  test environment load the main bundle under Node, where there is no host.
+- The main process imports `electron`, with `await import("electron")`, for the
+  dialog of the host at the moment a file is saved, never when its modules are
+  loaded: the build test and the proofs of the test environment load the main
+  bundle under Node, where there is no host. The suite of the tabs replaces the
+  dialog in the main process of the application and saves through it.
 - The panel of a tab names the request of a load from its confirmation on, and
   the main process reads the target and its storage location before it creates
   anything: a cancel clicked as soon as the panel names the request lands before
@@ -438,12 +497,11 @@ source maps. `main` and `renderer` in `package.json` point at the two entries.
   cancel then lands at the wait for the URL, and the request stays in the cluster
   until the server removes it.
 - The `Input` of the host takes `keyboard.type` with a delay of 20 milliseconds
-  between the keys and holds every character: the pre-review typed
-  `level=warning` into the search of a log so, and read it whole with its count.
-  For a controlled value it calls `onChange` at each key, and its one delay, of
-  500 milliseconds, sets a mark for the style: a measure that starts at the key
-  has nothing to split. The second fact was read in the source of the host, at
-  v1.10.3, and no run found it.
+  between the keys and holds every character: the pre-review types into the
+  search of a log so, and reads it whole with its count. For a controlled value it
+  calls `onChange` at each key, and its one delay, of 500 milliseconds, sets a
+  mark for the style, as read in the source at the target: a measure that starts
+  at the key has nothing to split.
 - A confirmation that is open, and the search, the level and the wrap of a loaded
   log, survive a change of theme through the preferences of the host: the
   pre-review carries them through its six layouts, two themes at three sizes,
@@ -452,18 +510,18 @@ source maps. `main` and `renderer` in `package.json` point at the two entries.
   step, which the extension writes from its own template and not in the language
   of the machine: no attribute carries them.
 - The widths at which the bar of a log goes to a second line depend on what the
-  bar shows: seven between 1440 and 720 pixels with a search and its count in it,
-  five without. A scan of them expects at least one, and pins none.
+  bar shows, a search and its count in it or not. A scan of them expects at least
+  one, and pins none.
 - The window of the packaged host at 1440 by 900 gives the list of a log a room of
-  208 pixels, ten lines and a part of one, where the viewer allows up to 1,560: 23
-  rows are mounted while it scrolls and 32 at its first lines, far under the bound
-  of 100. A measure of the frames of a scroll there is of a short list, and its
-  report says the room.
+  208 pixels, ten lines and a part of one, where the viewer allows up to 1,560:
+  31 rows are mounted at most while it scrolls, far under the bound of 100. A
+  measure of the frames of a scroll there is of a short list, and its report says
+  the room.
 - The display of the machine of the runs draws at 60 Hz: an idle frame is 16.7
   milliseconds, and no frame can be timed finer. A budget of 50 milliseconds for a
   frame is three refreshes; the gestures of the green runs drew within one or two.
 - The end of a scroll gesture is read from the rows mounted, both ends moved and
-  every line of the place mounted, never from the count the host keeps ready
+  every line of the place mounted, never from the count the list keeps ready
   around its room, and an end at an edge of the list that stays there has moved.
   A viewer made to keep two thousand rows ready on each side showed why: the last
   row kept ready was the last line before and after a notch near the end of the
