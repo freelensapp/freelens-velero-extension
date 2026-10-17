@@ -1987,7 +1987,7 @@ function runDirectProof(input: {
       .map((line) => JSON.parse(line) as { result?: unknown; nodeVersion?: string });
     const result = messages.find((message) => message.result);
 
-    requireCondition(result?.nodeVersion === "v24.15.0", "Direct proof runtime version differs");
+    requireCondition(result?.nodeVersion === "v24.21.0", "Direct proof runtime version differs");
     return result.result;
   } finally {
     const remaining = docker(["ps", "-aq", "--filter", `name=^${helper}$`]).trim();
