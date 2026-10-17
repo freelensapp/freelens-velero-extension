@@ -52,6 +52,9 @@ export const RESTORE_PHASES = [
 export const VIEW_READER = "views-reader";
 export const VIEW_READER_OF_RESTORES = "views-reader-of-restores";
 export const VIEW_WITHOUT_PORT_FORWARD = "views-without-port-forward";
+export const VIEW_OF_AN_EXEC_PLUGIN = "views-exec-plugin";
+// The version of the credential an `exec` plugin prints, which its kubeconfig names.
+export const EXEC_CREDENTIAL_VERSION = "client.authentication.k8s.io/v1";
 export const SCALE_BACKUPS = 1000;
 export const SCALE_RESTORES = 1000;
 
@@ -1371,6 +1374,41 @@ export function readerKubeconfig(config: KindConfig, token: string, namespace: s
   return reader;
 }
 
+// The files of the plugin of the identity whose kubeconfig takes its token from an `exec` plugin: the script
+// of the test environment, the file of the token in the private state, and the file of its runs there.
+export interface ExecPluginFiles {
+  script: string;
+  token: string;
+  runs: string;
+}
+
+// The kubeconfig of that identity: the one of the environment with its credential replaced by the plugin,
+// which the shell of the system runs with the two files of the private state, and the namespace the identity
+// reads as the one of its context. The kubeconfig holds no token, only where the plugin reads one.
+export function execPluginKubeconfig(config: KindConfig, plugin: ExecPluginFiles, namespace: string): KindConfig {
+  requireCondition(
+    config.users.length === 1 && config.contexts.length === 1 && config.clusters.length === 1,
+    "The kubeconfig of the environment has one target",
+  );
+  requireCondition(
+    [plugin.script, plugin.token, plugin.runs].every((file) => file.startsWith("/")),
+    "The files of the plugin are named by their absolute paths",
+  );
+  const kubeconfig = structuredClone(config);
+
+  kubeconfig.users[0].user = {
+    exec: {
+      apiVersion: EXEC_CREDENTIAL_VERSION,
+      command: "/bin/sh",
+      args: [plugin.script, plugin.token, plugin.runs],
+      interactiveMode: "Never",
+      provideClusterInfo: false,
+    },
+  };
+  kubeconfig.contexts[0].context = { ...kubeconfig.contexts[0].context, namespace };
+  return kubeconfig;
+}
+
 // What is placed by the clock is found by what it says of when it was placed. It is left as it is while it
 // is good, and put in place again when it is not: the objects of the namespace that are of this run are
 // removed, and the ones of now are created. Nothing else of the cluster is touched. What is answered says
@@ -2480,6 +2518,54 @@ export function viewIdentityWithoutPortForward(owner: string, run: string): Kube
         { apiGroups: ["velero.io"], resources: ["downloadrequests"], verbs: ["create", "get"] },
         { apiGroups: [""], resources: ["services", "pods"], verbs: ["get"] },
         { apiGroups: ["discovery.k8s.io"], resources: ["endpointslices"], verbs: ["list"] },
+      ],
+    },
+    {
+      apiVersion: "rbac.authorization.k8s.io/v1",
+      kind: "RoleBinding",
+      metadata,
+      roleRef: { apiGroup: "rbac.authorization.k8s.io", kind: "Role", name },
+      subjects: [{ kind: "ServiceAccount", name, namespace: DEMO_NAMESPACE }],
+    },
+  ];
+}
+
+// The identity of the views whose kubeconfig takes its token from an `exec` plugin, which the runner of the
+// suites makes for as long as they run: an account of the namespace of the installation, of the run, with a
+// role of that namespace. It has what the documentation lists for the writes and for a download through the
+// cluster: it reads what the views read of the installation, creates and reads the two requests the gate lets
+// through, reads the Service of the store, its endpoint slices and its Pod, and may create a port-forward. It
+// reads no Secret: the storage location of the demo refers to none for its certificate.
+export function viewIdentityOfAnExecPlugin(owner: string, run: string): KubeResource[] {
+  requireCondition(owner, "Fixture ownership is required");
+  fixtureNames(run);
+  const name = `${VIEW_OF_AN_EXEC_PLUGIN}-${run}`;
+  const metadata = {
+    name,
+    namespace: DEMO_NAMESPACE,
+    labels: { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" },
+  };
+
+  return [
+    { apiVersion: "v1", kind: "ServiceAccount", metadata, automountServiceAccountToken: false },
+    {
+      apiVersion: "rbac.authorization.k8s.io/v1",
+      kind: "Role",
+      metadata,
+      rules: [
+        {
+          apiGroups: ["velero.io"],
+          resources: ["backups", "restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"],
+          verbs: ["get", "list", "watch"],
+        },
+        {
+          apiGroups: ["velero.io"],
+          resources: ["downloadrequests", "serverstatusrequests"],
+          verbs: ["create", "get"],
+        },
+        { apiGroups: [""], resources: ["services", "pods"], verbs: ["get"] },
+        { apiGroups: ["discovery.k8s.io"], resources: ["endpointslices"], verbs: ["list"] },
+        { apiGroups: [""], resources: ["pods/portforward"], verbs: ["create"] },
       ],
     },
     {

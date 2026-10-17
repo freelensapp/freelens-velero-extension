@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
 import { describe, expect, it, vi } from "vitest";
@@ -43,6 +43,8 @@ import {
   CLEAR_STATES,
   clearTabFixtures,
   createViewFixtures,
+  EXEC_CREDENTIAL_VERSION,
+  execPluginKubeconfig,
   FIXTURE_LABEL,
   FIXTURE_MODE,
   fixtureArtifactPath,
@@ -100,10 +102,12 @@ import {
   tabRemovalWords,
   UNAVAILABLE_MESSAGE,
   unlikeTheTakenBackup,
+  VIEW_OF_AN_EXEC_PLUGIN,
   VIEW_READER,
   VIEW_READER_OF_RESTORES,
   VIEW_WITHOUT_PORT_FORWARD,
   viewFixtures,
+  viewIdentityOfAnExecPlugin,
   viewIdentityWithoutPortForward,
 } from "../e2e/scripts/local-fixtures.mts";
 import {
@@ -1399,6 +1403,44 @@ describe("foundation fixture boundaries", () => {
     expect(JSON.stringify(resources)).not.toMatch(/portforward|secrets|delete|update|patch|"\*"/);
     expect(() => viewIdentityWithoutPortForward("", run)).toThrow();
     expect(() => viewIdentityWithoutPortForward("synthetic-owner", "not-a-run")).toThrow();
+  });
+
+  it("makes the identity of the views whose token an exec plugin gives, with what the documentation lists for the writes and for a download through the cluster", () => {
+    const resources = viewIdentityOfAnExecPlugin("synthetic-owner", run);
+    const identity = `${VIEW_OF_AN_EXEC_PLUGIN}-${run}`;
+    const labels = { [OWNER_LABEL]: "synthetic-owner", [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" };
+
+    // An account of the namespace of the installation, of this run, with a role of that namespace and no role of
+    // the cluster, and no credential mounted anywhere.
+    expect(resources.map((resource) => resource.kind)).toEqual(["ServiceAccount", "Role", "RoleBinding"]);
+    for (const resource of resources)
+      expect(resource.metadata).toEqual({ name: identity, namespace: "velero-demo", labels });
+    expect(resources[0]).toMatchObject({ automountServiceAccountToken: false });
+    expect(resources[2]).toMatchObject({
+      roleRef: { apiGroup: "rbac.authorization.k8s.io", kind: "Role", name: identity },
+      subjects: [{ kind: "ServiceAccount", name: identity, namespace: "velero-demo" }],
+    });
+    // What the views read of the installation, the two requests the gate lets through, created and read, the
+    // route to the store, and the port-forward with the verb the documentation lists. No Secret, since the
+    // location of the demo refers to none, and nothing that deletes or changes.
+    expect((resources[1] as unknown as { rules: unknown[] }).rules).toEqual([
+      {
+        apiGroups: ["velero.io"],
+        resources: ["backups", "restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"],
+        verbs: ["get", "list", "watch"],
+      },
+      {
+        apiGroups: ["velero.io"],
+        resources: ["downloadrequests", "serverstatusrequests"],
+        verbs: ["create", "get"],
+      },
+      { apiGroups: [""], resources: ["services", "pods"], verbs: ["get"] },
+      { apiGroups: ["discovery.k8s.io"], resources: ["endpointslices"], verbs: ["list"] },
+      { apiGroups: [""], resources: ["pods/portforward"], verbs: ["create"] },
+    ]);
+    expect(JSON.stringify(resources)).not.toMatch(/secrets|delete|update|patch|"\*"/);
+    expect(() => viewIdentityOfAnExecPlugin("", run)).toThrow();
+    expect(() => viewIdentityOfAnExecPlugin("synthetic-owner", "not-a-run")).toThrow();
   });
 
   it("asks the controller to delete a backup of the fixtures, the real one, the refused one or one the store was given, and no other", () => {
@@ -8461,6 +8503,88 @@ describe("foundation fixture boundaries", () => {
     expect(config.contexts[0].context).not.toHaveProperty("namespace");
     expect(() => readerKubeconfig(config, "short", "velero-views-a1a2a3a4")).toThrow();
     expect(() => readerKubeconfig({ ...config, users: [...config.users, ...config.users] }, token, "x")).toThrow();
+  });
+
+  it("gives the identity of the exec plugin the kubeconfig of the environment with the plugin as its credential, which names the files of the plugin and holds no token", () => {
+    const config = {
+      "current-context": "kind-synthetic",
+      contexts: [{ name: "kind-synthetic", context: { cluster: "kind-synthetic", user: "kind-synthetic" } }],
+      clusters: [{ name: "kind-synthetic", cluster: { server: "https://127.0.0.1:6443" } }],
+      users: [{ name: "kind-synthetic", user: { "client-key-data": "synthetic", "client-certificate-data": "x" } }],
+    };
+    const plugin = {
+      script: "/synthetic/e2e/scripts/local-exec-credential.sh",
+      token: "/synthetic/state/views-exec-plugin-a1b2c3d4.token",
+      runs: "/synthetic/state/views-exec-plugin-a1b2c3d4.runs",
+    };
+    const kubeconfig = execPluginKubeconfig(config, plugin, "velero-demo");
+
+    // The plugin is run by the shell of the system with the two files, and prints a credential of the version
+    // of the API of today; nothing is asked of who runs it.
+    expect(EXEC_CREDENTIAL_VERSION).toBe("client.authentication.k8s.io/v1");
+    expect(kubeconfig.users).toEqual([
+      {
+        name: "kind-synthetic",
+        user: {
+          exec: {
+            apiVersion: EXEC_CREDENTIAL_VERSION,
+            command: "/bin/sh",
+            args: [plugin.script, plugin.token, plugin.runs],
+            interactiveMode: "Never",
+            provideClusterInfo: false,
+          },
+        },
+      },
+    ]);
+    expect(kubeconfig.contexts[0].context).toEqual({
+      cluster: "kind-synthetic",
+      user: "kind-synthetic",
+      namespace: "velero-demo",
+    });
+    expect(kubeconfig.clusters).toEqual(config.clusters);
+    expect(JSON.stringify(kubeconfig)).not.toMatch(/client-key-data|client-certificate-data|"token":/);
+    // The kubeconfig of the environment is left as it was.
+    expect(config.users[0].user).toHaveProperty("client-key-data");
+    expect(config.contexts[0].context).not.toHaveProperty("namespace");
+    expect(() => execPluginKubeconfig(config, { ...plugin, token: "plugin.token" }, "velero-demo")).toThrow();
+    expect(() =>
+      execPluginKubeconfig({ ...config, users: [...config.users, ...config.users] }, plugin, "velero-demo"),
+    ).toThrow();
+  });
+
+  it("runs the exec plugin of the test environment: the credential of its token, and in the file of its runs the name of the executable of the process that ran it, with nothing of the token there or on its error output", () => {
+    const directory = mkdtempSync(join(tmpdir(), "velero-exec-plugin-test-"));
+    const script = fileURLToPath(new URL("../e2e/scripts/local-exec-credential.sh", import.meta.url));
+    const token = ["eyJhbGciOiJSUzI1NiJ9", "eyJpc3MiOiJzeW50aGV0aWMifQ", "c2lnbmF0dXJl"].join(".");
+    const files = { token: join(directory, "plugin.token"), runs: join(directory, "plugin.runs") };
+    // Run as a plugin is, with nothing of the environment of who runs it: this process is its parent.
+    const runPlugin = () =>
+      spawnSync("/bin/sh", [script, files.token, files.runs], { env: {}, encoding: "utf8", timeout: 10_000 });
+    const parent = basename(realpathSync(process.execPath));
+
+    try {
+      writeFileSync(files.token, token, { mode: 0o600 });
+      writeFileSync(files.runs, "", { mode: 0o600 });
+      for (const result of [runPlugin(), runPlugin()]) {
+        expect([result.status, result.stderr]).toEqual([0, ""]);
+        expect(JSON.parse(result.stdout)).toEqual({
+          apiVersion: "client.authentication.k8s.io/v1",
+          kind: "ExecCredential",
+          status: { token },
+        });
+      }
+      // A line for each run, with the name of the executable of the process that ran it, and no path.
+      expect(readFileSync(files.runs, "utf8")).toBe(`${parent}\n${parent}\n`);
+      // What is not a token is not printed, and the run is recorded all the same.
+      writeFileSync(files.token, "not a token\n");
+      const refused = runPlugin();
+
+      expect([refused.status, refused.stdout, refused.stderr]).toEqual([1, "", ""]);
+      expect(readFileSync(files.runs, "utf8")).toBe(`${parent}\n${parent}\n${parent}\n`);
+      expect(readFileSync(files.runs, "utf8")).not.toContain("eyJ");
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it("refuses namespace cleanup with unrelated resources and binds backup deletion to its UID", () => {

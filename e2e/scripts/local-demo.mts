@@ -34,6 +34,8 @@ import {
   awaitRequestsRemoved,
   clearTabFixtures,
   createStaticFixtures,
+  type ExecPluginFiles,
+  execPluginKubeconfig,
   FIXTURE_LABEL,
   type FixtureRuntime,
   fixtureArtifactPaths,
@@ -56,6 +58,7 @@ import {
   VIEW_READER,
   VIEW_READER_OF_RESTORES,
   verifyStaticFixtures,
+  viewIdentityOfAnExecPlugin,
   viewIdentityWithoutPortForward,
 } from "./local-fixtures.mts";
 import {
@@ -141,6 +144,8 @@ const BIN = join(STATE, "bin");
 const KIND = join(BIN, "kind");
 const KUBECTL = join(BIN, "kubectl");
 const DEFAULT_KUBECONFIG = join(homedir(), ".kube", "config");
+// The credential plugin of the identity of the views whose kubeconfig takes its token from an `exec` plugin.
+const EXEC_PLUGIN = fileURLToPath(new URL("./local-exec-credential.sh", import.meta.url));
 
 function localDocker(): string {
   try {
@@ -2715,6 +2720,29 @@ function writeReaderKubeconfig(file: string, namespace: string, duration: string
   );
 }
 
+// The kubeconfig of the identity of the installation whose token an `exec` plugin gives, and the two files of
+// the plugin: the token, which lasts as long as it is asked, and the record of the runs of the plugin, empty.
+// The three are written in the private state and nowhere else, and the kubeconfig names the token by its file.
+function writeExecPluginKubeconfig(file: string, plugin: ExecPluginFiles, identity: string, duration: string): void {
+  const token = kubectl(
+    ["create", "token", identity, "--namespace", DEMO_NAMESPACE, `--duration=${duration}`],
+    undefined,
+    undefined,
+    false,
+  ).trim();
+
+  requireCondition(token.length > 100, "Local plugin credential was not generated");
+  writeFileSync(plugin.token, token, { mode: 0o600 });
+  writeFileSync(plugin.runs, "", { mode: 0o600 });
+  writeFileSync(
+    file,
+    JSON.stringify(
+      execPluginKubeconfig(JSON.parse(readFileSync(CONFIG, "utf8")) as KindConfig, plugin, DEMO_NAMESPACE),
+    ),
+    { mode: 0o600 },
+  );
+}
+
 // What each artifact of the tabs holds: the runner made the files the store was given and reads the ones the
 // server wrote, and counts both itself.
 function tabFacts(placed: ReturnType<typeof placeViewsAndTabs>): ReturnType<typeof tabFixtureFacts> {
@@ -2783,12 +2811,21 @@ function runViews(): void {
   // from the extension: they find it beside their reports.
   writeFileSync(join(artifacts, "tab-fixtures.json"), `${JSON.stringify(tabFacts(placed), null, 2)}\n`);
   // The identity that reads a part of the views lasts as long as the run may: its kubeconfig is in the private
-  // state, and goes when the run ends. So does the identity that may not port-forward, which is made for the
-  // run, an account of the namespace of the installation with its role, and goes with it.
+  // state, and goes when the run ends. So do the identity that may not port-forward and the one whose token an
+  // `exec` plugin gives, each made for the run, an account of the namespace of the installation with its role,
+  // and gone with it, the second with the files of its plugin: its token, and the record of its runs, which the
+  // suites read.
   const readerFile = join(STATE, `views-reader-${run}.json`);
   const secondFile = join(STATE, `views-reader-of-restores-${run}.json`);
   const forwardlessFile = join(STATE, `views-without-port-forward-${run}.json`);
   const forwardless = viewIdentityWithoutPortForward(journal.owner, run);
+  const pluginFile = join(STATE, `views-exec-plugin-${run}.json`);
+  const plugin: ExecPluginFiles = {
+    script: EXEC_PLUGIN,
+    token: join(STATE, `views-exec-plugin-${run}.token`),
+    runs: join(STATE, `views-exec-plugin-${run}.runs`),
+  };
+  const ofThePlugin = viewIdentityOfAnExecPlugin(journal.owner, run);
   let status: number | null;
 
   // What is written is removed whatever happens after it, the second file when the first was written
@@ -2798,6 +2835,8 @@ function runViews(): void {
     writeReaderKubeconfig(secondFile, names.views, "2h", VIEW_READER_OF_RESTORES);
     for (const resource of forwardless) applyOwned(resource);
     writeReaderKubeconfig(forwardlessFile, DEMO_NAMESPACE, "2h", forwardless[0].metadata.name);
+    for (const resource of ofThePlugin) applyOwned(resource);
+    writeExecPluginKubeconfig(pluginFile, plugin, ofThePlugin[0].metadata.name, "2h");
     // The suites start the application with their environment: what they need of this environment is named
     // here, and the home is the one of the caller, where its toolchain is.
     status = spawnSync(
@@ -2821,6 +2860,8 @@ function runViews(): void {
           E2E_READER_KUBECONFIG: readerFile,
           E2E_SECOND_READER_KUBECONFIG: secondFile,
           E2E_NO_PORT_FORWARD_KUBECONFIG: forwardlessFile,
+          E2E_EXEC_PLUGIN_KUBECONFIG: pluginFile,
+          E2E_EXEC_PLUGIN_RUNS: plugin.runs,
           E2E_KUBECTL: KUBECTL,
           E2E_CLUSTER_NAME: DEMO_CLUSTER,
           E2E_KUBE_CONTEXT: DEMO_CONTEXT,
@@ -2840,8 +2881,9 @@ function runViews(): void {
       },
     ).status;
   } finally {
-    for (const file of [readerFile, secondFile, forwardlessFile]) rmSync(file, { force: true });
-    removeAccounts(forwardless);
+    for (const file of [readerFile, secondFile, forwardlessFile, pluginFile, plugin.token, plugin.runs])
+      rmSync(file, { force: true });
+    removeAccounts([...forwardless, ...ofThePlugin]);
   }
   verifyTarget();
   requireCondition(status === 0, `The ${named} did not pass`);

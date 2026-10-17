@@ -158,6 +158,22 @@ export function withoutPortForwardKubeconfigPath(): string {
   return required("E2E_NO_PORT_FORWARD_KUBECONFIG");
 }
 
+/**
+ * The kubeconfig of the identity of the installation whose token an `exec` plugin of the test environment
+ * gives: it may do what the documentation lists for the writes and for a download through the cluster.
+ */
+export function execPluginKubeconfigPath(): string {
+  return required("E2E_EXEC_PLUGIN_KUBECONFIG");
+}
+
+/**
+ * The runs of that plugin so far, each by the name of the executable of the process that ran it, which the
+ * plugin writes in a file of the private state of the environment, one line for each run.
+ */
+export async function execPluginRuns(): Promise<string[]> {
+  return (await readFile(required("E2E_EXEC_PLUGIN_RUNS"), "utf8")).split("\n").filter(Boolean);
+}
+
 /** A list of the views, and the kind of what a row of it opens. */
 export interface ListOf {
   /** How the list and its page are found: `velero-<id>` and `velero-<id>-page`. */

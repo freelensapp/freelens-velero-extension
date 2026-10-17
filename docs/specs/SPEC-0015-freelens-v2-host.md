@@ -793,14 +793,34 @@ CI of step 10 and of T0.8 are recorded when they are made.
 - **The transport proof**, in its four modes, on 2026-10-17, on Node 24.15.0 and
   again on Node 24.21.0 with the image of its helper moved to it: 16 artifacts, and
   every identity at its step.
-- **Not yet proven**: the identity of an `exec` plugin of HOST-05 and scenario 9;
-  what only CI proves of HOST-20, the build of Freelens from source at the commit
-  of the validation target on the hosted runner and its cache; HOST-21 at the first
-  prerelease; HOST-02, HOST-24 and HOST-25 with T0.8; HOST-22 and HOST-23, the
-  reviews of the documents of step 11 and of the watch in the pull request. The
-  header of SPEC-0013, which REQ-217 names with T0.7, moves with its evidence at
-  T0.8, as REQ-219 says: a change of the order, for the lead maintainer to
-  confirm.
+- **HOST-05 and scenario 9, the identity of an `exec` plugin**, on 2026-10-17, on
+  Node 24.21.0, in the suite of the tabs on the nightly, 52 cases of 52 in 875.0
+  seconds. The runner of the suites makes, for as long as they run, an account of
+  the namespace of the installation with what the documentation lists for the
+  writes and for a download through the cluster, whose kubeconfig takes its token
+  from a script of the test environment,
+  [`local-exec-credential.sh`](../../e2e/scripts/local-exec-credential.sh), run by
+  the shell of the system: it prints an `ExecCredential` of
+  `client.authentication.k8s.io/v1` with the token of the account, which the runner
+  wrote in the private state of the environment and nowhere else, and adds to a
+  file of that state, at each of its runs, the name of the executable of the
+  process that ran it, and nothing of a token or of a kubeconfig. The account, its
+  kubeconfig, its token and that file go when the suites end. Opened through that
+  entry of the catalog, with writes on, the log of the real backup arrived with its
+  text through the tunnel, one creation was counted on the API server, no kubectl
+  of the application was left, and the plugin ran once, under
+  `freelens-k8s-proxy`, the proxy of the host: never under the main process of
+  the host, where the extension runs, nor under the kubectl of the tunnel, whose
+  kubeconfig the host writes with a user of its proxy and no plugin. A unit test of
+  the environment runs the script and finds its own process named in that file:
+  a run by any other process is named the same way.
+- **Not yet proven**: what only CI proves of HOST-20, the build of Freelens from
+  source at the commit of the validation target on the hosted runner and its
+  cache; HOST-21 at the first prerelease; HOST-02, HOST-24 and HOST-25 with T0.8;
+  HOST-22 and HOST-23, the reviews of the documents of step 11 and of the watch in
+  the pull request. The header of SPEC-0013, which REQ-217 names with T0.7, moves
+  with its evidence at T0.8, as REQ-219 says: a change of the order, for the lead
+  maintainer to confirm.
 
 The known exception, which the lead maintainer decides: BACK-12 and REST-11, the
 lists of a thousand backups and of a thousand restores, are over the budget of 250

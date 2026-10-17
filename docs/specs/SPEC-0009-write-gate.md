@@ -207,7 +207,7 @@ GATE-06.
 | GATE-05 | Unit | REQ-112 | Every field of every request with a wrong kind, a wrong form, an extra field, a request too large; every procedure answering a result and none raising, on every way of failing; the answers of every code without a URL, a header, a body or a path, checked with a sentinel |
 | GATE-06 | Unit/packaged | REQ-113 | The identifier read from the addresses the host writes, of the packaged application and of development; a request from the window; two frames of one window with their own keys; in the packaged application the frame of the second entry asking for the first, and reading or cancelling a write of the first: refused, and nothing of the write seen there |
 | GATE-07 | Unit | REQ-114 | An entry that is not there, a file that is not there, a context that is not in it; the adapter made once for a cluster and discarded when writes are turned off; no default kubeconfig read, proven with a home directory that holds one |
-| GATE-08 | Packaged | REQ-115 | Restated on 2026-10-16 as scenario 9 of SPEC-0015, which its HOST-05 proves: an identity of the views whose kubeconfig takes its token from an `exec` plugin creates its request and downloads, with the plugin run by the proxy of Freelens and none by the extension |
+| GATE-08 | Packaged | REQ-115 | Restated on 2026-10-16 as scenario 9 of SPEC-0015, which its HOST-05 proves: an identity of the views whose kubeconfig takes its token from an `exec` plugin creates its request and downloads, with the plugin run by the proxy of Freelens and none by the extension. Its evidence is named in [Amendments](#amendments) |
 | GATE-09 | Unit | REQ-116 | Restated on 2026-10-16: a change of the kubeconfig path or of the context name of the entry, or a state that is not connected, turns writes off, and no file is read |
 | GATE-10 | Component | REQ-117 | Every command that writes names its kind; the confirmation shows the object; no command says "load" alone |
 | GATE-11 | Packaged | REQ-118 | Writes on, the application closed and started again: off; the store of the preferences without a field of the gate |
@@ -362,3 +362,13 @@ context, the plugin that gives no credential and the command a plugin starts,
 describe the client of the extension that SPEC-0015 removed, and are kept as the
 record of this spec. The header and the evidence of this spec move to Freelens v2
 with T0.8.
+
+GATE-08, as restated, is proven by the case of the suite of the tabs that loads the
+log of the backup of the demo through the tunnel for an identity whose token an
+`exec` plugin gives, in
+[`velero-e2e-artifacts.tests.ts`](../../e2e/__tests__/velero-e2e-artifacts.tests.ts),
+green on the nightly of the validation target on 2026-10-17, as the
+[evidence of SPEC-0015](SPEC-0015-freelens-v2-host.md#evidence-and-deviations)
+records: writes turned on, the text arrived, one creation was counted on the API
+server, no kubectl was left, and the plugin ran under the proxy of Freelens alone,
+never under the extension or the kubectl of the tunnel.

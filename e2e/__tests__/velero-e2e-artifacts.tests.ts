@@ -84,10 +84,14 @@ const ORPHAN = `fixture-orphan-restore-${RUN}`;
 const VIEWS = cluster.E2E_VIEWS_NAMESPACE;
 const MISSING_LOCATION = "backup-missing-location";
 const OF_THE_READER = "views-daily-20260901030000";
-// The cluster as the catalog names it when it is opened through the kubeconfig of the reader of a part, and
-// through the one of the identity of the installation that may not port-forward.
+// The cluster as the catalog names it when it is opened through the kubeconfig of the reader of a part,
+// through the one of the identity of the installation that may not port-forward, and through the one of the
+// identity of the installation whose token an `exec` plugin gives.
 const SECOND_CONTEXT = "velero-e2e-reader";
 const THIRD_CONTEXT = "velero-e2e-no-port-forward";
+const FOURTH_CONTEXT = "velero-e2e-exec-plugin";
+// The executable of the proxy of the host, which authenticates a cluster with its kubeconfig.
+const HOST_PROXY = "freelens-k8s-proxy";
 // What the host says when it saves the store of the extension into its file.
 const STORE_SAVED = /\[BASE-STORE\]: saving \S*velero-preferences\.json/;
 // How far down the list of lines of a log places its rows at most, in pixels of the layout, as the viewer
@@ -113,15 +117,16 @@ const REMOVED_WITHIN = 12 * 60 * 1000;
 // How long the panel has to show the part of a load the main process runs for a step of that part to be
 // expected among the ones it showed: the views ask the main process where a load is four times a second.
 const WATCHABLE = 1000;
-// The second gestures the cases of the suite give, twenty-four: seventeen loads that end with their text, which
+// The second gestures the cases of the suite give, twenty-five: eighteen loads that end with their text, which
 // are the four tabs of the restore, the log of the backup twice and its other three tabs, the three empty
 // artifacts of the backup synced without its log, the results, the resources and the volumes of the backup
-// synced with its artifacts, its log, and the log of the backup once the extension was disabled and enabled
-// again; three that end as a file the store does not have, the log of the backup synced without one and the
-// logs of the two operations that failed their validation; one that ends at the port-forward, which its
-// identity may not ask; one whose cluster is disconnected while it runs; and two that are cancelled, the
-// results of the backup as soon as their load begins, and the large log once its request is in the cluster.
-const GESTURES = 24;
+// synced with its artifacts, its log, the log of the backup through the identity whose token an `exec` plugin
+// gives, and the log of the backup once the extension was disabled and enabled again; three that end as a file
+// the store does not have, the log of the backup synced without one and the logs of the two operations that
+// failed their validation; one that ends at the port-forward, which its identity may not ask; one whose cluster
+// is disconnected while it runs; and two that are cancelled, the results of the backup as soon as their load
+// begins, and the large log once its request is in the cluster.
+const GESTURES = 25;
 // The rows a list of lines mounts at most.
 const ROWS_BOUND = 100;
 // The characters a row shows of a line at most: a longer line is cut in its row, and whole in its copy.
@@ -3669,6 +3674,84 @@ describe("the log, the results, the resources and the volumes of an operation", 
   );
 
   it(
+    "loads the log of the backup of the demo through the tunnel for an identity whose token an exec plugin gives, which the proxy of the host runs, and neither the extension nor the kubectl of the tunnel does: its text, one creation, and no kubectl left",
+    async () => {
+      const running = application();
+      // A fourth entry of the catalog: the same cluster through the kubeconfig of the identity of the installation
+      // whose token an `exec` plugin of the test environment gives, with what the documentation lists for the
+      // writes and for a download through the cluster. Its context is renamed: the catalog tells the entries apart
+      // by it. The plugin writes the name of the executable of the process that runs it, at each of its runs, in a
+      // file of the private state of the environment: nothing ran it before this case.
+      const source = JSON.parse(await readFile(cluster.execPluginKubeconfigPath(), "utf8")) as {
+        contexts?: { name: string }[];
+        "current-context"?: string;
+      };
+
+      for (const context of source.contexts ?? []) context.name = FOURTH_CONTEXT;
+      source["current-context"] = FOURTH_CONTEXT;
+      const renamed = path.join(running.directory, "exec-plugin-kubeconfig.json");
+
+      await writeFile(renamed, JSON.stringify(source), { mode: 0o600 });
+      expect(await cluster.execPluginRuns()).toEqual([]);
+      const fourth = await cluster.publishKubeconfig(renamed, "velero-e2e-exec-plugin");
+
+      try {
+        await velero.navigateToCatalog(running.app);
+        await running.window.waitForSelector(`div.TableCell >> text='${FOURTH_CONTEXT}'`, { timeout: 60_000 });
+        const other = await cluster.openClusterFromCatalog(running.window, fourth, FOURTH_CONTEXT);
+
+        // The identity may not look for the installations of the whole cluster: the one of the demo is named.
+        await cluster.openPage(other, cluster.BACKUPS);
+        await cluster.configureInstallation(other, NAMESPACE);
+        await cluster.waitForList(other, cluster.BACKUPS);
+        await cluster.openWorkspace(other, NAMES.backup, cluster.BACKUPS);
+        await artifacts.shownAt(other, "backup", NAMES.backup, "summary");
+        await artifacts.openTab(other, "backup", "log");
+        await other.waitForSelector("[data-testid=velero-writes-on]", { timeout: 60_000 });
+        await cluster.turnWritesOn(other);
+        const earlier = cluster.requestCodes(RESOURCE);
+
+        await artifacts.ask(other, "backup", "log");
+        expect(await artifacts.confirmationOf(other, "backup", "log")).toMatchObject({
+          namespace: NAMESPACE,
+          cluster: `${FOURTH_CONTEXT} (context ${FOURTH_CONTEXT})`,
+        });
+        // The guard is told the request, which the server of the installation signs and removes as any other.
+        const { ended, moments } = await artifacts.runLoad(other, "backup", "log", told);
+
+        expect(ended).toBe("loaded");
+        const loaded = await artifacts.loadedFacts(other, "backup", "log");
+        const asked = since(earlier);
+
+        watch("backup", "log", moments);
+        // The request is in the cluster as the confirmation showed it, processed by the server, and the text
+        // came through the tunnel, which the kubectl of the host ran for the load.
+        expectRequest("backup", "log", loaded.request);
+        expectLoaded("backup", "log", loaded);
+        // One creation, the reads of the request by its name and what the server wrote into it: nothing else.
+        expect(Object.keys(asked).filter((key) => !["GET 200", "PATCH 200", "POST 201"].includes(key))).toEqual([]);
+        expect(asked["POST 201"]).toBe(1);
+        // No kubectl of the application runs: the one of the load ended with it.
+        expect(velero.kubectlForwards(running.app)).toEqual([]);
+        // The plugin was run, and by the proxy of the host alone: neither by the main process of the host, where
+        // the extension runs, nor by the kubectl of the tunnel, whose kubeconfig names the proxy and no plugin.
+        const runs = await cluster.execPluginRuns();
+
+        await report("artifact-runs-of-the-exec-plugin", { runs, route: loaded.route });
+        expect(runs.length).toBeGreaterThan(0);
+        expect([...new Set(runs)]).toEqual([HOST_PROXY]);
+        expect(await cluster.writesState(other)).toBe("on");
+        expect(await cluster.layoutProblems(other)).toEqual([]);
+        await cluster.captureScreenshot(other, "dark-artifact-exec-plugin");
+      } finally {
+        await velero.navigateToCatalog(running.app);
+        frame = await cluster.openClusterFromCatalog(running.window, kubeconfig);
+      }
+    },
+    TIMEOUT,
+  );
+
+  it(
     "keeps one of each thing through a disable and an enable from the Extensions page: writes off until they are turned on, the same procedures, the file of the store saved once for one change, and a load that is one creation, one kubectl and one answer",
     async () => {
       const running = application();
@@ -3952,7 +4035,7 @@ describe("the log, the results, the resources and the volumes of an operation", 
         await frame.waitForSelector("[data-testid=velero-writes][data-writes=off]", { timeout: 60_000 });
       }
       expect(await cluster.writesState(frame)).toBe("off");
-      // Last, what says that every case before this one gave its gesture: seventeen loads that end with their
+      // Last, what says that every case before this one gave its gesture: eighteen loads that end with their
       // text, three that end as a file the store does not have, one that ends at the port-forward, one whose
       // cluster is disconnected while it runs, and two that are cancelled, each a request of its own but for
       // the first cancelled one, which created one or none. A case that failed before its gesture is found
