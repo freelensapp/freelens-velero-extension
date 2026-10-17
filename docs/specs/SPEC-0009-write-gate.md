@@ -67,10 +67,12 @@ validation target, in `packages/core/src`:
 5. **P1, a request of another frame:** Given two clusters in the catalog, when a
    request that names the first arrives from the frame of the second, then it is
    refused, and the refusal is an answer with a code, not a raised text.
-6. **P2, a connection the adapter does not take:** Given a cluster whose
-   kubeconfig authenticates with a plugin the adapter does not run, when writes
-   are turned on, then the tabs say that the diagnostics of this cluster are not
-   available and why, and nothing is created.
+6. **P2, a credential plugin:** Given a cluster whose kubeconfig takes its
+   credential from an `exec` plugin, when writes are turned on and a log is
+   loaded, then the proxy of Freelens runs the plugin and the extension runs none:
+   the extension refuses no kind of authentication of its own. Restated on
+   2026-10-16 as scenario 9 of [SPEC-0015](SPEC-0015-freelens-v2-host.md), see
+   [Amendments](#amendments).
 7. **P2, refused by the API:** Given writes on and an identity that may not
    create the request, when the operator confirms, then the tab says that the
    cluster refused the creation, with what it needs, and writes stay on.
@@ -87,9 +89,9 @@ validation target, in `packages/core/src`:
 | REQ-111 | A change of the selected namespace, a frame that goes, turning writes off and the deactivation of the extension turn writes off, clear the confirmations and abort the writes in flight of that cluster on this side. The renderer drops what arrives of a generation that is not the current one | GATE-04 |
 | REQ-112 | Every request between the processes is a discriminated object, validated at run time in the process that receives it: every field of the kind and the form the contract gives it, names by the rules of the API, identifiers of the requests as UUIDs, the identifier of the cluster as the host writes it, a request of 64 KiB at most; a field that is not in the contract refuses the request. Every answer is a typed result: what was asked, or a code, the stage it failed at, whether it is safe to try again and words that are safe to show; a procedure never raises, since what is raised reaches the renderer as text. No raw error, no URL, no header, no body, no path of a file crosses between the processes, in either direction | GATE-05 |
 | REQ-113 | The main process takes the identifier of the cluster from the address of the frame a request comes from, with the rule the host writes it by, and refuses a request that names another cluster, and one that does not come from the frame of a cluster. The key of a sender is that identifier with the process and the frame identifiers of the frame: every frame of the one window has its own. The binding is checked at every step of a write, not once. The result of a write is the answer of the call that ran it, and the state of a write in flight is read by the frame that asked, by its request identifier; nothing of a write is broadcast, and a frame cannot read or cancel what another asked | GATE-06 |
-| REQ-114 | The main process resolves the cluster of a request from the catalog of the host, and takes the path of the kubeconfig and the name of the context from the entry of the catalog. An entry that is not there, a file that is not there or a context that is not in it refuse the request as a target that changed. No default kubeconfig, no current context of a file and no cluster the host shows are ever taken in their place. The adapter is one for each cluster, made when writes are turned on and discarded when they are turned off or the entry changes | GATE-07 |
-| REQ-115 | The adapter takes a context that authenticates with a client certificate, a token, or a plugin that gives a credential, which it runs as the client of Kubernetes runs it for the command line: the command the context names, with the environment of the host, within thirty seconds; its output is read for the credential and is never logged, kept or sent between the processes. A plugin that fails, that does not answer in time or whose output is not a credential refuses the write as forbidden, with words that name the plugin and nothing of its output. A context that names an authentication provider, a proxy, a user name and a password, or turns the verification of TLS off is refused, and the tabs say which of these the connection of the cluster has and that the writes of the extension are not available for it | GATE-08 |
-| REQ-116 | The identity of the cluster the adapter binds to is the entry of the context: the address of the server, its certificate authority and the credential of the user, read from the file before every request and compared with what was read when the adapter was made. A change of the entry refuses the request as a target that changed; a change elsewhere in the file, of another context, does not. The whole file is not the identity | GATE-09 |
+| REQ-114 | The main process resolves the cluster of a request from the catalog of the host, and takes the identifier of the cluster and its state from the entry of the catalog; the adapter is the client of the host for that identifier. An entry that is not there or not connected refuses the request as a target that changed. No default kubeconfig, no current context of a file and no cluster the host shows are ever taken in its place, as before. The adapter is one for each cluster, made when writes are turned on and discarded when they are turned off or the entry changes. Amended on 2026-10-16, see [Amendments](#amendments) | GATE-07 |
+| REQ-115 | Superseded on 2026-10-16, see [Amendments](#amendments). The proxy of Freelens authenticates as the connection of the host does, plugins included; the extension runs no plugin and refuses no kind of authentication. Scenario 6 and GATE-08 are restated as scenario 9 of [SPEC-0015](SPEC-0015-freelens-v2-host.md) | GATE-08 |
+| REQ-116 | Superseded on 2026-10-16, see [Amendments](#amendments). The identity of the cluster is the entry of the catalog by its identifier, with its kubeconfig path and its context name as the catalog gives them, and its state; the file is not read. A change of the path or of the context name, or a state that is not connected, turns writes off | GATE-09 |
 | REQ-117 | Every command that writes says what it creates, with the name of the kind, and never "load" or "read" alone. The confirmation of a write shows the object as it will be submitted: its kind, its name or the prefix of its generated name, its namespace, its labels and its target | GATE-10 |
 | REQ-118 | Nothing of the gate is kept between two sessions: the store of the preferences holds no enablement, no confirmation and no token | GATE-11 |
 | REQ-119 | The gate is seen refusing in the packaged application: with writes off a command creates nothing, which the API server counts; with writes on and no confirmation nothing; with both, one object. A frame of a second entry of the catalog is refused for the first. An identity that may not create is refused by the API, and the state says so | GATE-12 |
@@ -205,8 +207,8 @@ GATE-06.
 | GATE-05 | Unit | REQ-112 | Every field of every request with a wrong kind, a wrong form, an extra field, a request too large; every procedure answering a result and none raising, on every way of failing; the answers of every code without a URL, a header, a body or a path, checked with a sentinel |
 | GATE-06 | Unit/packaged | REQ-113 | The identifier read from the addresses the host writes, of the packaged application and of development; a request from the window; two frames of one window with their own keys; in the packaged application the frame of the second entry asking for the first, and reading or cancelling a write of the first: refused, and nothing of the write seen there |
 | GATE-07 | Unit | REQ-114 | An entry that is not there, a file that is not there, a context that is not in it; the adapter made once for a cluster and discarded when writes are turned off; no default kubeconfig read, proven with a home directory that holds one |
-| GATE-08 | Unit | REQ-115 | A context of each refused form, and the words of each; a certificate, a token and a plugin accepted, the plugin a script of the test that gives a credential; a plugin that fails, one that does not answer in thirty seconds on a fake clock, one whose output is not a credential: forbidden, with nothing of the output in the answer, checked with a sentinel in it |
-| GATE-09 | Unit | REQ-116 | The entry of the context changed in the file between two steps: refused; another context changed: not; a token of another context refreshed while a write polls: the write ends |
+| GATE-08 | Packaged | REQ-115 | Restated on 2026-10-16 as scenario 9 of SPEC-0015, which its HOST-05 proves: an identity of the views whose kubeconfig takes its token from an `exec` plugin creates its request and downloads, with the plugin run by the proxy of Freelens and none by the extension |
+| GATE-09 | Unit | REQ-116 | Restated on 2026-10-16: a change of the kubeconfig path or of the context name of the entry, or a state that is not connected, turns writes off, and no file is read |
 | GATE-10 | Component | REQ-117 | Every command that writes names its kind; the confirmation shows the object; no command says "load" alone |
 | GATE-11 | Packaged | REQ-118 | Writes on, the application closed and started again: off; the store of the preferences without a field of the gate |
 | GATE-12 | Packaged | REQ-119 | The counts of the API server for the creations of DownloadRequest: none with writes off, none without confirmation, one with both; the identity without the permission refused by the API and the state that says so |
@@ -258,7 +260,7 @@ Approved on 2026-09-30, as drafted, with the decision above, and implemented by
 are in the code and in its tests. The [gate](../../src/main/write-gate.ts), the
 [procedures](../../src/main/ipc.ts), the [contract](../../src/common/ipc.ts), the
 [rule of the frame](../../src/common/frame.ts) and the
-[identity of a context](../../src/main/context-identity.ts) are what the
+[identity of a context](https://github.com/freelensapp/freelens-velero-extension/blob/224315ce6f7545c16cf2ba49718e416fa016dcbe/src/main/context-identity.ts) are what the
 [architecture](../development/ARCHITECTURE.md#the-gate-and-the-way-between-the-processes)
 describes; the [target bar](../../src/renderer/components/target-bar.tsx) shows the
 state and opens the dialog of the host; the
@@ -317,3 +319,46 @@ confirmation and a cancellation of its own in the proof of T0.6; with the gate t
 would be a second authority beside it, and the design above says now that the gate
 holds them. The evidence is with [SPEC-0010](SPEC-0010-diagnostic-request-and-transport.md#evidence-and-deviations).
 
+## Amendments
+
+### 2026-10-16: The Freelens v2 Host
+
+Approved by the lead maintainer on 2026-10-16 with
+[SPEC-0015](SPEC-0015-freelens-v2-host.md), as the table of its
+[D1](SPEC-0015-freelens-v2-host.md#d1-the-api-server-from-the-main-process) says, and
+made by the pull request of T0.7. On Freelens v2 every request of the adapter goes
+through the client of the host, `Main.K8sApi.KubeJsonApi.forCluster`, which
+reaches the API server through the proxy of Freelens, with the identity of the
+connection of the host: the client the extension built from the kubeconfig went
+around that proxy, ran credential plugins a second time, and refused kinds of
+authentication the host takes. REQ-114 is amended, REQ-115 and REQ-116 are
+superseded, and scenario 6, GATE-08 and GATE-09 are restated, in the places above.
+What they said, as approved on 2026-09-30:
+
+| Item | Before the amendment |
+| --- | --- |
+| REQ-114 | The main process resolves the cluster of a request from the catalog of the host, and takes the path of the kubeconfig and the name of the context from the entry of the catalog. An entry that is not there, a file that is not there or a context that is not in it refuse the request as a target that changed. No default kubeconfig, no current context of a file and no cluster the host shows are ever taken in their place. The adapter is one for each cluster, made when writes are turned on and discarded when they are turned off or the entry changes |
+| REQ-115 | The adapter takes a context that authenticates with a client certificate, a token, or a plugin that gives a credential, which it runs as the client of Kubernetes runs it for the command line: the command the context names, with the environment of the host, within thirty seconds; its output is read for the credential and is never logged, kept or sent between the processes. A plugin that fails, that does not answer in time or whose output is not a credential refuses the write as forbidden, with words that name the plugin and nothing of its output. A context that names an authentication provider, a proxy, a user name and a password, or turns the verification of TLS off is refused, and the tabs say which of these the connection of the cluster has and that the writes of the extension are not available for it |
+| REQ-116 | The identity of the cluster the adapter binds to is the entry of the context: the address of the server, its certificate authority and the credential of the user, read from the file before every request and compared with what was read when the adapter was made. A change of the entry refuses the request as a target that changed; a change elsewhere in the file, of another context, does not. The whole file is not the identity |
+| Scenario 6 | P2, a connection the adapter does not take: given a cluster whose kubeconfig authenticates with a plugin the adapter does not run, when writes are turned on, then the tabs say that the diagnostics of this cluster are not available and why, and nothing is created |
+| GATE-08 | Unit: a context of each refused form, and the words of each; a certificate, a token and a plugin accepted, the plugin a script of the test that gives a credential; a plugin that fails, one that does not answer in thirty seconds on a fake clock, one whose output is not a credential: forbidden, with nothing of the output in the answer, checked with a sentinel in it |
+| GATE-09 | Unit: the entry of the context changed in the file between two steps: refused; another context changed: not; a token of another context refreshed while a write polls: the write ends |
+
+The rest of this spec is read with the amendment, and is not changed by it. GATE-07
+checks the amended REQ-114: its file that is not there and its context that is not
+in it are, on Freelens v2, an entry that is not there and one that is not
+connected, which HOST-06 of SPEC-0015 proves as well. The facts of the host of the
+Scope Baseline were read in Freelens v1.10.3, and left out two that hold there as on
+v2: an entry of the catalog has its state beside its path and its context, which
+the extension reads since this amendment, and the packaged application writes the
+address of the frame of a cluster with the port of its proxy. In the table of the
+procedures, `gate.state` says what
+the gate knows of the connection, and `gate.enable` refuses an entry that is not
+there or not connected, as a target that changed, and an adapter that cannot be
+made: there is no connection of the extension to refuse. The paragraph on the
+adapter given the path and the context, the decisions on the identity of a context
+and on the plugins for the credential, and in the evidence the identity of a
+context, the plugin that gives no credential and the command a plugin starts,
+describe the client of the extension that SPEC-0015 removed, and are kept as the
+record of this spec. The header and the evidence of this spec move to Freelens v2
+with T0.8.

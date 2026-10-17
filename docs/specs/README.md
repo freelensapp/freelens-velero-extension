@@ -130,7 +130,7 @@ This is document coverage, not test execution:
 | Safety and privacy | Local-only writes, exact targets, no implicit requests, synthetic evidence |
 | UI decisions | Native lists plus dedicated operation workspace, with non-happy and accessible states |
 | Source grounding | Every draft carries exact reviewed revisions and recon dependencies |
-| Honest status | SPEC-0001 is Approved with setup, fixture and compiled-main transport evidence; SPEC-0002 to SPEC-0008 are Verified; SPEC-0009 to SPEC-0012 are Verified since 2026-10-14, SPEC-0011 with the three pull requests of its task; SPEC-0013 and SPEC-0014 are Approved since 2026-10-14, and REQ-166 of SPEC-0013 is amended by the pull request of its second slice, for the review of the milestone to confirm; SPEC-0015 is Approved since 2026-10-16 |
+| Honest status | SPEC-0001 is Approved with setup, fixture and compiled-main transport evidence; SPEC-0002 to SPEC-0008 are Verified; SPEC-0009 to SPEC-0012 are Verified since 2026-10-14, SPEC-0011 with the three pull requests of its task; SPEC-0013 and SPEC-0014 are Approved since 2026-10-14, and REQ-166 of SPEC-0013 is amended by the pull request of its second slice, for the review of the milestone to confirm; SPEC-0015 is Approved since 2026-10-16; with the pull request of T0.7 it amends REQ-114 of SPEC-0009 and supersedes its REQ-115 and REQ-116, amends REQ-129, REQ-136 and REQ-137 of SPEC-0010, and changes how the lists of lines of SPEC-0011 are drawn, each recorded under the amendments of its spec, with the date 2026-10-16 |
 
 No blocking product preference is required to review these drafts. Fixture isolation
 and main transport have scoped local evidence. Actual-host authentication, IPC
