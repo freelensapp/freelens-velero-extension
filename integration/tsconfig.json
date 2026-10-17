@@ -4,16 +4,7 @@
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
     "types": ["node", "@freelensapp/extensions"]
   },
-  // The helpers, the integration test, and each suite of the views once it runs on
+  // The helpers, the integration test and the suites of the views, which run on
   // Freelens v2: the callbacks of an evaluate run in a page, hence the DOM.
-  "include": [
-    "./**/*.ts",
-    "../e2e/__tests__/velero-e2e-gate.tests.ts",
-    "../e2e/__tests__/velero-e2e-journey.tests.ts",
-    "../e2e/__tests__/velero-e2e-locations.tests.ts",
-    "../e2e/__tests__/velero-e2e-overview.tests.ts",
-    "../e2e/__tests__/velero-e2e-restores.tests.ts",
-    "../e2e/__tests__/velero-e2e-scale.tests.ts",
-    "../e2e/__tests__/velero-e2e-schedules.tests.ts"
-  ]
+  "include": ["./**/*.ts", "../e2e/__tests__/*.tests.ts"]
 }

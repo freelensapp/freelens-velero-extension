@@ -630,6 +630,14 @@ const CANCELED_PROXY_RECORD_PATTERN =
 const CANCELED_PROXY_START_PATTERN = /^\s*error:\s*┏[^\n]*Error while proxying request: context canceled/im;
 const HOST_ASSET_FAILURE_PATTERN = /^Failed to load resource: net::/;
 const HOST_ASSET_URL_PATTERN = /^https:\/\/renderer\.freelens\.app(:\d+)?\/build\//;
+// On Freelens v2 the reads of the frame of a cluster, the host's and the views' alike, leave from the frame through
+// the browser, which writes in its console, at the level of an error, every answer that is not a success as a
+// resource that failed to load. An answer of the API server that refuses a read to the identity, or has nothing
+// of what was read, is a state the one that read it shows: the host when a restricted identity opens a cluster,
+// the views for a family that is denied or not served. The line is of the browser, and says nothing of an error
+// of the application. Any other answer, as a request the API server could not take, stays an error.
+const REFUSED_READ_PATTERN = /^Failed to load resource: the server responded with a status of 40[134] /;
+const CLUSTER_READ_URL_PATTERN = /^https:\/\/[0-9a-f]+\.renderer\.freelens\.app(:\d+)?\/api-kube\//;
 
 /**
  * Collects everything that looks like an error while the app runs: renderer
@@ -693,6 +701,12 @@ export function createErrorCollector(): ErrorCollector {
     // startup with a TLS error. It is logged with its URL above, and it is not
     // something the extension did: it does not count as an extension error.
     if (HOST_ASSET_FAILURE_PATTERN.test(normalizedText) && HOST_ASSET_URL_PATTERN.test(message.location().url)) {
+      return;
+    }
+    // A read of the frame of a cluster that the API server refused to the identity or had nothing for: its URL is
+    // said beside it, and it is not counted as an error.
+    if (REFUSED_READ_PATTERN.test(normalizedText) && CLUSTER_READ_URL_PATTERN.test(message.location().url)) {
+      console.log(`[refused or not found by the cluster] ${message.location().url}`);
       return;
     }
 

@@ -15,9 +15,7 @@
     // the doubles, fixtures and measures of the tests, and the configuration of the measures
     "test/**/*.{ts,tsx}",
     // compiled by `type:check:environments` only, with no importer
-    "environment-tests/*.ts",
-    // the helpers of the suites of the views, some of them used by suites that are not run on Freelens v2 yet
-    "integration/helpers/*.ts"
+    "environment-tests/*.ts"
   ],
   "project": [
     "*.{js,mjs,ts}",
@@ -46,19 +44,7 @@
   // entry once it exists, and the `knip` script runs with --no-gitignore, so
   // after `pnpm build` knip would report what the bundle inlines from its
   // libraries, such as a binary a bundled library spawns.
-  //
-  // The suites of the views that do not run on Freelens v2 yet still import their
-  // functions from Jest and their helpers from a checkout of Freelens: each leaves
-  // this list when it is ported.
-  "ignore": [
-    "dist/**",
-    "e2e/__tests__/pre-review.tests.ts",
-    "e2e/__tests__/velero-e2e-artifacts.tests.ts",
-    "e2e/__tests__/velero-e2e-preferences.tests.ts",
-    "e2e/__tests__/velero-e2e-restricted-restores.tests.ts",
-    "e2e/__tests__/velero-e2e-restricted.tests.ts",
-    "e2e/__tests__/velero-e2e-server.tests.ts"
-  ],
+  "ignore": ["dist/**"],
 
   // Binaries that no dependency provides: yq, which the workflows call, comes
   // from mise (see mise.toml), electron-rebuild belongs to the Freelens checkout

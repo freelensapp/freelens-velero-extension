@@ -8,9 +8,9 @@
 // of one namespace. The source of a restore and the history of a schedule are
 // backups it cannot read: they are said denied, and are neither absent nor empty.
 
-import { expect } from "@jest/globals";
-import * as cluster from "../helpers/velero-cluster";
-import * as velero from "../helpers/velero-extension";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import * as cluster from "../../integration/helpers/velero-cluster";
+import * as velero from "../../integration/helpers/velero-extension";
 
 import type { Frame } from "playwright";
 
@@ -31,13 +31,20 @@ describe("restores with restricted access", () => {
     before = cluster.clusterSnapshot();
     let kubeconfig = "";
 
-    // The kubeconfig is in the profile before the install is asked, for each start of the application.
-    started = await velero.startWithExtension(async () => {
-      kubeconfig = await cluster.publishKubeconfig(
-        cluster.secondReaderKubeconfigPath(),
-        "velero-e2e-reader-of-restores",
-      );
-    });
+    // The kubeconfig is in the profile before the install is asked, for each start of the application. The
+    // store of the profile names the one of the reader as the only one the catalog syncs: the catalog holds
+    // the test cluster through it, and nothing else.
+    started = await velero.startWithExtension(
+      async () => {
+        kubeconfig = await cluster.publishKubeconfig(
+          cluster.secondReaderKubeconfigPath(),
+          "velero-e2e-reader-of-restores",
+        );
+      },
+      "Dark",
+      2,
+      [cluster.secondReaderKubeconfigPath()],
+    );
     await velero.dismissNotifications(started.window);
     await velero.navigateToCatalog(started.app);
     expect(await velero.catalogClusterCount(started.window)).toBe(1);
