@@ -746,9 +746,10 @@ CI of step 10 and of T0.8 are recorded when they are made.
   thousand schedules at 39.4 ms and one at 0.04 ms). Knip: its development pass
   finds nothing; its production pass, with the `--files` of the template,
   reports the two modules of T3.1 and T3.2, `schedule-adherence.ts` and
-  `schedule-signal.ts` of `src/common/`, which no bundle reaches before T3.3, so
-  `pnpm knip:check` and the step of Knip of the check workflow fail on them
-  until T3.3 imports them or the lead maintainer decides otherwise.
+  `schedule-signal.ts` of `src/common/`, which no bundle reaches before T3.3.
+  They are left out of the report of unused files alone, by `ignoreFiles` in
+  `knip.jsonc`, until T3.3 imports them and removes that entry, so
+  `pnpm knip:check` and the step of Knip of the check workflow pass.
 - **HOST-01**: on the nightly v2.0.0-0-nightly-2026-10-16, its package checked
   against its published checksum, the tarball installed from the Extensions page
   is listed as Enabled, both entries load, and neither log has an error. On

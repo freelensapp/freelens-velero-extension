@@ -46,6 +46,12 @@
   // libraries, such as a binary a bundled library spawns.
   "ignore": ["dist/**"],
 
+  // The pure modules of T3.1 and T3.2, the expected run of a schedule and its
+  // state, which only their unit tests import until T3.3 shows them in the views
+  // of a schedule: the production pass of `--files` would report them as
+  // unused. Left out of that report alone, and to be removed with T3.3.
+  "ignoreFiles": ["src/common/schedule-adherence.ts", "src/common/schedule-signal.ts"],
+
   // Binaries that no dependency provides: yq, which the workflows call, comes
   // from mise (see mise.toml), and pgrep, with which the helpers of the suites
   // find what the application started, belongs to the system.
