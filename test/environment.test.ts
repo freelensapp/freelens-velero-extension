@@ -9195,12 +9195,35 @@ describe("platform of the test environment", () => {
     expect(uploads).toHaveLength(1);
     expect(uploads[0][1]).toMatch(/\n?\s+path: e2e-artifacts\/\n/);
     expect(uploads[0][1].match(/path:/g)).toHaveLength(1);
-    // The only thing kept from a run is the application that was built, which holds nothing of a run.
-    expect(saved.map((match) => match[1])).toEqual(["freelens/freelens/dist"]);
+    // The only things kept from a run are the Electron the build downloaded and the application that was
+    // built, which hold nothing of a run.
+    expect(saved.map((match) => match[1])).toEqual(["~/.cache/electron", "freelens/freelens/dist"]);
     expect(workflow).not.toMatch(/\.local\/state|kubeconfig|credentials|operations\.log/);
     expect(workflow).toMatch(/if: always\(\)\n\s+run: node e2e\/scripts\/local-demo\.mts down --context/);
     expect(workflow).toContain("runs-on: ubuntu-24.04-arm");
     expect(workflow).toMatch(/^permissions:\n {2}contents: read$/m);
+  });
+
+  it("builds Freelens for the views and for the integration at the validation target of SPEC-0015, named once", () => {
+    const spec = readFileSync(new URL("../docs/specs/SPEC-0015-freelens-v2-host.md", import.meta.url), "utf8");
+    const target = /^- \*\*Freelens validation target:\*\* freelensapp\/freelens `([0-9a-f]{40})`/m.exec(spec)?.[1];
+
+    expect(target).toMatch(/^[0-9a-f]{40}$/);
+    for (const name of ["views-tests.yaml", "integration-tests.yaml"]) {
+      const workflow = readFileSync(new URL(`../.github/workflows/${name}`, import.meta.url), "utf8");
+
+      // The commit is written in one line of each workflow, and every step that needs it names that line.
+      expect([name, workflow.match(/\b[0-9a-f]{40}\b/g)]).toEqual([name, [target]]);
+      expect([name, workflow.match(/^ {2}freelens_ref: ([0-9a-f]{40})$/m)?.[1]]).toEqual([name, target]);
+      expect([name, workflow]).toEqual([
+        name,
+        expect.stringMatching(/repository: freelensapp\/freelens\n\s+ref: \$\{\{ env\.freelens_ref \}\}\n/),
+      ]);
+      // The build is cached by that commit, and by nothing else: not a version and not a branch.
+      const keys = [...workflow.matchAll(/key: ubuntu-24\.04-arm-electron-dist-([^\n]*)/g)].map((match) => match[1]);
+
+      expect([name, keys]).toEqual([name, [expect.stringMatching(/^\$\{\{ env\.freelens_ref \}\}$/)]]);
+    }
   });
 
   it("keeps the internal network wherever the host reaches the address of the node", () => {

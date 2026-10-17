@@ -47,10 +47,9 @@
   "ignore": ["dist/**"],
 
   // Binaries that no dependency provides: yq, which the workflows call, comes
-  // from mise (see mise.toml), electron-rebuild belongs to the Freelens checkout
-  // of the integration workflow, and pgrep, with which the helpers of the
-  // suites find what the application started, to the system.
-  "ignoreBinaries": ["electron-rebuild", "pgrep", "yq"],
+  // from mise (see mise.toml), and pgrep, with which the helpers of the suites
+  // find what the application started, belongs to the system.
+  "ignoreBinaries": ["pgrep", "yq"],
 
   "ignoreDependencies": [
     // host-provided modules. The bundle maps them onto

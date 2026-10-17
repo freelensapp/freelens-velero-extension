@@ -2660,7 +2660,7 @@ function fixtureRuntime(): FixtureRuntime {
   };
 }
 
-// The suites of the views run inside a checkout of Freelens, by its integration harness, against this
+// The suites of the views run from this repository, in the Freelens that FREELENS_APP names, against this
 // environment and its fixtures. They read the cluster and the application: they write to neither.
 // The fixtures the views and their tabs need beside the ones of the phases, put in place once: the objects of
 // the views, the files the store is given for the tabs, the operations the server refuses, and the wait for
@@ -2747,12 +2747,19 @@ function prepareDemo(): void {
 
 // The suites run from this repository, under its Vitest, and start the Freelens that FREELENS_APP names:
 // the nightly of the validation target on a machine of a developer, a build of the host from source in CI.
+// E2E_TEST_PATTERN names what is run: one name, or several separated by spaces, each a part of the names
+// of the files, as Vitest takes it. CI names every suite of the views and FND-10, in one run.
 function runViews(): void {
-  const pattern = process.env.E2E_TEST_PATTERN ?? "velero-e2e";
+  const suites = (process.env.E2E_TEST_PATTERN ?? "velero-e2e").split(/\s+/).filter(Boolean);
+  const pattern = suites.join("+");
+  const named = `${suites.length === 1 ? "suite" : "suites"} ${suites.join(", ")}`;
   const application = process.env.FREELENS_APP ?? "";
   const tarballs = readdirSync(process.cwd()).filter((name) => /^freelensapp-velero-extension-.+\.tgz$/.test(name));
 
-  requireCondition(/^[a-z0-9-]+$/.test(pattern), "The pattern of the suite is a name, not a path");
+  requireCondition(
+    suites.length > 0 && suites.every((suite) => /^[a-z0-9-]+$/.test(suite)),
+    "The pattern of the suites is a list of names, not of paths",
+  );
   requireCondition(
     application !== "" && existsSync(application),
     "FREELENS_APP names no application: the suites start the Freelens it names, see docs/development/TESTING.md",
@@ -2775,9 +2782,9 @@ function runViews(): void {
   // What the suites of the tabs expect of each artifact they load is told by the runner, and not copied
   // from the extension: they find it beside their reports.
   writeFileSync(join(artifacts, "tab-fixtures.json"), `${JSON.stringify(tabFacts(placed), null, 2)}\n`);
-  // The identity that reads a part of the views lasts as long as the suite: its kubeconfig is in the private
-  // state, and goes when the suite ends. So does the identity that may not port-forward, which is made for the
-  // suite, an account of the namespace of the installation with its role, and goes with it.
+  // The identity that reads a part of the views lasts as long as the run may: its kubeconfig is in the private
+  // state, and goes when the run ends. So does the identity that may not port-forward, which is made for the
+  // run, an account of the namespace of the installation with its role, and goes with it.
   const readerFile = join(STATE, `views-reader-${run}.json`);
   const secondFile = join(STATE, `views-reader-of-restores-${run}.json`);
   const forwardlessFile = join(STATE, `views-without-port-forward-${run}.json`);
@@ -2800,7 +2807,7 @@ function runViews(): void {
         ...(headless ? ["-a", "--server-args=-screen 0 1920x1200x24", "corepack"] : []),
         "pnpm",
         "test:integration",
-        pattern,
+        ...suites,
       ],
       {
         cwd: process.cwd(),
@@ -2827,7 +2834,9 @@ function runViews(): void {
           E2E_ARTIFACTS_DIR: artifacts,
         }),
         stdio: "inherit",
-        timeout: 3_600_000,
+        // Two hours, as long as the identities made for the run last: every suite of the views is one run in
+        // CI, and the ones that run last must still find them.
+        timeout: 7_200_000,
       },
     ).status;
   } finally {
@@ -2835,8 +2844,8 @@ function runViews(): void {
     removeAccounts(forwardless);
   }
   verifyTarget();
-  requireCondition(status === 0, `The suite ${pattern} did not pass`);
-  console.log(`PASS: the suite ${pattern} ran in Freelens against the fixtures; its artifacts are in ${artifacts}.`);
+  requireCondition(status === 0, `The ${named} did not pass`);
+  console.log(`PASS: the ${named} ran in Freelens against the fixtures; the artifacts are in ${artifacts}.`);
 }
 
 async function main(): Promise<void> {

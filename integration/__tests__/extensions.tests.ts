@@ -65,10 +65,17 @@ describe("extensions page tests", () => {
   beforeAll(
     async () => {
       errors.start();
-      started = await velero.startWithExtension(async (application) => {
-        errors.watch(application.window);
-        dispatchersBefore = await dispatchersOf(application.app);
-      });
+      // With no cluster: the store of the profile names no kubeconfig for the catalog to sync, also when
+      // the test runs beside the suites of the views, which are given the one of the environment.
+      started = await velero.startWithExtension(
+        async (application) => {
+          errors.watch(application.window);
+          dispatchersBefore = await dispatchersOf(application.app);
+        },
+        "Dark",
+        2,
+        [],
+      );
       ({ app, window } = started);
       await velero.dismissNotifications(window);
       const builds = path.join(started.directory, "Freelens", "extensions", SANITIZED);
