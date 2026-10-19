@@ -53,8 +53,8 @@ the [roadmap](docs/development/ROADMAP.md).
 - **Freelens v2.** The manifest declares `engines.freelens` as `^2.0.0`. Until
   Freelens 2.0.0 is released the extension is built and tested against a
   nightly of Freelens v2, the validation target of
-  [SPEC-0015](docs/specs/SPEC-0015-freelens-v2-host.md): v2.0.0-0-nightly-2026-10-16,
-  built from freelensapp/freelens `5e1870e97467edab81b856a4983483d0729db896`.
+  [SPEC-0015](docs/specs/SPEC-0015-freelens-v2-host.md): v2.0.0-0-nightly-2026-10-19,
+  built from freelensapp/freelens `2578fac5e9f6d2893129b6ba0d59b379fdf9d305`.
   Freelens 1 lists the package as Incompatible and runs none of its code.
 - **A Kubernetes cluster with Velero.** The reviewed versions are Velero
   v1.18.4 and its AWS plugin v1.14.4; the API is `velero.io/v1`, with

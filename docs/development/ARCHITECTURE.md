@@ -1,6 +1,6 @@
 # Architecture
 
-Date: 2026-10-17
+Date: 2026-10-19
 
 Status: the foundation is complete and the first views are in place: the discovery of
 the installation, the Backups, the Restores, the Schedules and the storage and
@@ -17,7 +17,7 @@ their specs start from.
 Authority: [directives](../../AGENTS.md), [roadmap](ROADMAP.md), and
 [versioned evidence](RECON-T0.1.md). The evidence report pins Velero v1.18.4 and the
 AWS plugin v1.14.4; the Freelens validation target is the one of SPEC-0015, the
-nightly v2.0.0-0-nightly-2026-10-16, built from freelensapp/freelens `5e1870e9`. A
+nightly v2.0.0-0-nightly-2026-10-19, built from freelensapp/freelens `2578fac5`. A
 reviewed version is not a compatibility claim for untested releases. Product
 behavior below requires spec approval.
 
@@ -243,7 +243,7 @@ host at the validation target:
 
 - An object of the API has no `selfLink` any more, and the host asks for one to
   build an object of a list
-  ([the check](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/packages/kube-object/src/kube-object.ts#L115-L120)).
+  ([the check](https://github.com/freelensapp/freelens/blob/2578fac5e9f6d2893129b6ba0d59b379fdf9d305/packages/kube-object/src/kube-object.ts#L115-L120)).
   The [store of the list](../../src/renderer/state/list-store.ts) adds it to the copy
   it gives to the host, and the lists of the suites mount their rows with it.
 - The host writes the store of an extension from its main process, and passes the
@@ -253,11 +253,11 @@ host at the validation target:
   it, and the host saves the file once for one change.
 - The host writes the file of a store key by key, from what the store gives it, and
   removes no key: one the store stops giving keeps in the file what it held
-  ([the save](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/packages/core/src/features/persistent-storage/main/persist-state-to-config.injectable.ts#L16-L22)).
+  ([the save](https://github.com/freelensapp/freelens/blob/2578fac5e9f6d2893129b6ba0d59b379fdf9d305/packages/core/src/features/persistent-storage/main/persist-state-to-config.injectable.ts#L16-L22)).
   A key that may become empty is always given, empty.
 - The search of the lists of the host waits 250 ms after the last key before it
   gives the list what was typed
-  ([the wait](https://github.com/freelensapp/freelens/blob/5e1870e97467edab81b856a4983483d0729db896/packages/core/src/renderer/components/input/search-input-url.tsx#L41)).
+  ([the wait](https://github.com/freelensapp/freelens/blob/2578fac5e9f6d2893129b6ba0d59b379fdf9d305/packages/core/src/renderer/components/input/search-input-url.tsx#L41)).
 
 The reader builds no `KubeApi` of its own: one that an extension creates registers
 itself with the host, and on v2 the reader has the client of the host instead.

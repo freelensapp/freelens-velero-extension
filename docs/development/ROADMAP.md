@@ -13,9 +13,9 @@ the end of each milestone.
 
 The compatibility reference is Freelens v2, at the validation target of
 [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md): the nightly
-v2.0.0-0-nightly-2026-10-16, built from freelensapp/freelens
-`5e1870e97467edab81b856a4983483d0729db896`, with `@freelensapp/extensions`
-2.0.0-0-nightly-2026-10-15 pinned exactly. The target moves with the
+v2.0.0-0-nightly-2026-10-19, built from freelensapp/freelens
+`2578fac5e9f6d2893129b6ba0d59b379fdf9d305`, with `@freelensapp/extensions`
+2.0.0-0-nightly-2026-10-19 pinned exactly. The target moves with the
 [host drift watch](PROCESS.md#host-drift-watch) until Freelens 2.0.0 is released.
 Velero is v1.18.4 with the AWS plugin v1.14.4 (see [RECON-T0.1.md](RECON-T0.1.md)).
 v1.0.0 ships for Freelens v2 and not for Freelens 1, which lists the package as

@@ -1,6 +1,6 @@
 # Testing Strategy
 
-Date: 2026-10-17
+Date: 2026-10-19
 
 Status: T0.3-T0.6 scaffold, environment, fixture and compiled-main transport checks
 pass. The [integration test](#integration-tests) covers the activation in Freelens.
@@ -8,8 +8,8 @@ The [end-to-end tests](#end-to-end-tests) bring the environment up on the hosted
 runner and on the machines of the contributors. Since T0.7 every packaged layer runs
 on Freelens v2, at the validation target of
 [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md): the nightly
-v2.0.0-0-nightly-2026-10-16 on the machines of the contributors, and Freelens built
-from source at its commit, `5e1870e97467edab81b856a4983483d0729db896`, in CI.
+v2.0.0-0-nightly-2026-10-19 on the machines of the contributors, and Freelens built
+from source at its commit, `2578fac5e9f6d2893129b6ba0d59b379fdf9d305`, in CI.
 
 This is a desktop Electron extension with renderer UI, main-process Kubernetes
 operations and object-storage transport. The binding safety/privacy rules are in
@@ -32,8 +32,8 @@ T0.3 used Node v24.15.0, pnpm v10.34.4 and the SDK of Freelens 1, and the
 manifest of the extension accepted the hosts compatible with Freelens 1. Electron/Playwright host launch, app
 installation, display support, fixture images and runtime authentication were then
 unverified and separately gated. No Kubernetes access occurred during scaffold
-checks. Since T0.7 the toolchain is Node 24.21.0 of `.nvmrc`, pnpm 12.11.2 and the
-SDK `@freelensapp/extensions` 2.0.0-0-nightly-2026-10-15, and the manifest declares
+checks. Since T0.7 the toolchain is Node 24.21.0 of `.nvmrc`, pnpm 12.14.0 and the
+SDK `@freelensapp/extensions` 2.0.0-0-nightly-2026-10-19, and the manifest declares
 `engines.freelens` as `^2.0.0`.
 
 T0.4 preflight confirmed the explicitly local Docker daemon and existing kind
@@ -212,8 +212,8 @@ file at a time, no retry), with the helpers of
 `FREELENS_APP` names, through `_electron.launch` of Playwright, which reaches the
 main process of the application as well as its window: a bundle, a folder or an
 executable, and never one installed in `/Applications`. On a machine of a
-developer it is the nightly of the validation target, v2.0.0-0-nightly-2026-10-16,
-built from `5e1870e9`, its download checked against the checksum the release
+developer it is the nightly of the validation target, v2.0.0-0-nightly-2026-10-19,
+built from `2578fac5`, its download checked against the checksum the release
 publishes beside it; in CI it is Freelens built from source at that commit, as the
 [views workflow](../../.github/workflows/views-tests.yaml) builds it, cached by the
 commit. On a Linux without a display the runner starts them under `xvfb-run`.
@@ -775,7 +775,7 @@ The scaffold has [source lifecycle tests](../../src/entrypoints.test.ts),
 [compiled-entry contracts](../../test/build.test.ts), and the
 [stub of the SDK](../../test/freelens-extensions.ts) of the template, written from
 the source of the host at the validation target, which has a double for each name
-the tests reach and refuses any other, and records it. Vitest 5.0.4 fails when no
+the tests reach and refuses any other, and records it. Vitest 5.0.5 fails when no
 tests are selected; it does not import the host implementation in Node.
 The canonical command builds first and covers every test of the unit run, which
 the [architecture](ARCHITECTURE.md#dependencies) counts, among them the

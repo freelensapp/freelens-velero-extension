@@ -63,9 +63,9 @@ reviewed. Scope and progress toward v1.0.0 are in `docs/development/ROADMAP.md`.
   must not delay a ready release or justify omitted requirements.
 - The validation target is the one of
   [SPEC-0015](docs/specs/SPEC-0015-freelens-v2-host.md): Freelens v2 at
-  freelensapp/freelens `5e1870e97467edab81b856a4983483d0729db896`, the base of the
-  nightly v2.0.0-0-nightly-2026-10-16, with the SDK `@freelensapp/extensions`
-  2.0.0-0-nightly-2026-10-15 pinned exactly, the version the tests build against.
+  freelensapp/freelens `2578fac5e9f6d2893129b6ba0d59b379fdf9d305`, the base of the
+  nightly v2.0.0-0-nightly-2026-10-19, with the SDK `@freelensapp/extensions`
+  2.0.0-0-nightly-2026-10-19 pinned exactly, the version the tests build against.
   `engines.freelens` is `^2.0.0`. Until Freelens 2.0.0 is released the target moves
   with the [host drift watch](docs/development/PROCESS.md#host-drift-watch), read
   before every slice and before every merge; then the pin of the SDK becomes a
@@ -713,7 +713,7 @@ must not be mapped.
 
 The libraries of the host are devDependencies at the versions of the catalog of
 the host, React and its DOM 19.3.1, MobX 7.0.6, the bindings 10.0.2, with their
-types, and `electron` 43.7.11 for its types alone; `@freelensapp/extensions` is
+types, and `electron` 43.8.0 for its types alone; `@freelensapp/extensions` is
 pinned exactly to the nightly of the validation target. pnpm runs with
 `strictPeerDependencies`: a library shared with the host outside the peer range of
 the SDK fails the install.
