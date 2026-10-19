@@ -38,7 +38,7 @@ jobs:
       - name: Set up mise
         uses: jdx/mise-action@v5
         with:
-          version: 2026.10.11 # datasource=github-releases depName=jdx/mise
+          version: 2026.10.12 # datasource=github-releases depName=jdx/mise
           install_args: yq
 
       - name: Setup node
@@ -204,6 +204,21 @@ jobs:
           restore-keys: |
             ubuntu-24.04-arm-turborepo-
 
+      # The binaries that ensure-binaries downloads in "Build extra resources",
+      # which Turborepo does not cache (see "Bundled Binary Versions" in
+      # Freelens's AGENTS.md). The build hashes every restored binary against
+      # the lock and downloads it again on a mismatch. Saved right after that
+      # step, as in Freelens's own integration tests workflow.
+      - name: Restore bundled binaries cache
+        id: binaries-cache-restore
+        if: steps.electron-build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: freelens/freelens/binaries
+          key: ubuntu-24.04-arm-binaries-${{ hashFiles('freelens/freelens/binaries.lock.json') }}
+          restore-keys: |
+            ubuntu-24.04-arm-binaries-
+
       - name: Install pnpm dependencies for app
         id: install-pnpm-app
         if: steps.electron-build-cache.outputs.cache-hit != 'true'
@@ -268,6 +283,13 @@ jobs:
         if: steps.electron-build-cache.outputs.cache-hit != 'true' && steps.build-resources-2.outcome == 'failure'
         working-directory: freelens
         run: pnpm --color=always build:resources
+
+      - name: Save bundled binaries cache
+        if: steps.electron-build-cache.outputs.cache-hit != 'true' && steps.binaries-cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: freelens/freelens/binaries
+          key: ${{ steps.binaries-cache-restore.outputs.cache-primary-key }}
 
       - name: Get electron-builder path
         if: steps.electron-build-cache.outputs.cache-hit != 'true'

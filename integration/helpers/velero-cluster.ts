@@ -1885,6 +1885,20 @@ export async function closeDetails(frame: Frame): Promise<void> {
   await frame.waitForSelector(".Drawer.KubeObjectDetails", { state: "hidden", timeout: ELEMENT_TIMEOUT });
 }
 
+/**
+ * Closes the details of the host with the close command of their drawer, as the pointer does. Escape goes to what
+ * has the focus, which in a view is the view, and a view leaves at Escape: the command reaches nothing under the
+ * drawer.
+ */
+export async function closeDetailsByItsCommand(frame: Frame): Promise<void> {
+  await frame
+    .locator(".Drawer.KubeObjectDetails")
+    .first()
+    .locator('.drawer-title > .Icon:has([data-icon-name="close"])')
+    .click({ timeout: ELEMENT_TIMEOUT });
+  await frame.waitForSelector(".Drawer.KubeObjectDetails", { state: "hidden", timeout: ELEMENT_TIMEOUT });
+}
+
 /** The parameter of the address that names the object whose details the host shows in its drawer. */
 const HOST_DETAILS = "kube-details";
 
@@ -1933,6 +1947,46 @@ export async function hostDetailsGone(frame: Frame): Promise<{ drawer: boolean; 
     )
     .catch(() => undefined);
   return hostDetailsShown(frame);
+}
+
+/** Where a click of the frame was when it reached the window, where the drawer of the host hears it. */
+export interface ClickAtWindow {
+  /** Whether its target was still in the page. */
+  connected: boolean;
+  /** Whether its target was inside a drawer. */
+  inDrawer: boolean;
+  /** Whether its default was prevented. */
+  prevented: boolean;
+}
+
+/**
+ * Watches the next click of the frame at the window, after the listeners the page had before, as the drawer of
+ * the host is: what the drawer was given to decide whether the click was outside it.
+ */
+export async function watchClickAtWindow(frame: Frame): Promise<void> {
+  await frame.evaluate(() => {
+    const page = window as unknown as { veleroClickAtWindow?: ClickAtWindow };
+
+    delete page.veleroClickAtWindow;
+    window.addEventListener(
+      "click",
+      (event) => {
+        const target = event.target as Element;
+
+        page.veleroClickAtWindow = {
+          connected: target.isConnected,
+          inDrawer: Boolean(target.closest?.(".Drawer")),
+          prevented: event.defaultPrevented,
+        };
+      },
+      { once: true },
+    );
+  });
+}
+
+/** The click `watchClickAtWindow` saw reach the window, or nothing when none did. */
+export async function clickAtWindow(frame: Frame): Promise<ClickAtWindow | undefined> {
+  return frame.evaluate(() => (window as unknown as { veleroClickAtWindow?: ClickAtWindow }).veleroClickAtWindow);
 }
 
 /**

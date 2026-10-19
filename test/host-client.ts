@@ -1,12 +1,12 @@
 // A stand-in of the client of the host for the API server of a cluster, `Main.K8sApi.KubeJsonApi.forCluster`,
 // written from the source of the host at the validation target,
-// packages/utility-features/json-api/src/json-api.ts at 5e1870e97467edab81b856a4983483d0729db896:
-// - `getResponse` (lines 139-157) gives the answer whatever its status: a structural answer with its status
+// packages/utility-features/json-api/src/json-api.ts at 2578fac5e9f6d2893129b6ba0d59b379fdf9d305:
+// - `getResponse` (lines 154-171) gives the answer whatever its status: a structural answer with its status
 //   and its body, which arrives as a stream and stops when the signal of the request is aborted;
-// - `get` and `post` (lines 159-173, 199-254) read the body whole and reject when the status is not 2xx: a
+// - `get` and `post` (lines 173-187, 213-268) read the body whole and reject when the status is not 2xx: a
 //   GET answered 403 with the body itself, the `Status` object or its text when it is not JSON, and every
 //   other failure with a `JsonApiErrorParsed`, which is not an `Error` and carries the body it parsed as
-//   `error`, with the messages `parseError` reads of it (lines 256-276); a request that gets no answer rejects
+//   `error`, with the messages `parseError` reads of it (lines 270-290); a request that gets no answer rejects
 //   with the error of the fetch.
 // Every request is recorded: the cluster it was made for, the call, the method, the path, the query, the
 // headers and the body, as the client was given them.

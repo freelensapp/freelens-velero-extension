@@ -2,7 +2,7 @@
 
 // The list of a kind as the host draws it: the host calls what the list gives it from its own derivations,
 // the getters of its list read inside its observers (packages/core/src/renderer/components/item-object-list/
-// list-layout.tsx lines 178 to 293 at the validation target), and keeps the items of a store of its own in
+// list-layout.tsx lines 178 to 296 at the validation target), and keeps the items of a store of its own in
 // one array it changes in place. What the extension gives carries what it needs from the render, and the
 // view follows the objects whatever array they come in.
 

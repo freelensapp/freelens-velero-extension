@@ -3841,8 +3841,8 @@ describe("the log, the results, the resources and the volumes of an operation", 
       const running = application();
       const identifier = cluster.frameClusterId(frame);
 
-      // Electron tells the host of every load in the window that does not end, which the host logs as a window that
-      // failed to load: the frame of a cluster disconnected here is taken out of the window, and its load aborted.
+      // Electron tells the host of every load in the window that does not end: the frame of a cluster disconnected
+      // here is taken out of the window, and its load aborted, which the host logs as a frame and not as an error.
       await velero.watchFailedLoads(running.app);
       // The other entries of the catalog the suite opened are disconnected first, as an operator leaves a cluster
       // it is done with: their views read their installation every fifteen seconds while they are shown, and the
@@ -3928,8 +3928,8 @@ describe("the log, the results, the resources and the volumes of an operation", 
       expect(await cluster.writesState(frame)).toBe("off");
       // One creation for the load, and nothing else of the requests.
       expect(since(earlier)["POST 201"]).toBe(1);
-      // What the host logged of the loads that did not end is of the frames the disconnections took out: each a
-      // frame inside the window, its load aborted, and none of the window itself.
+      // What Electron told the host of the loads that did not end is of the frames the disconnections took out:
+      // each a frame inside the window, its load aborted, and none of the window itself.
       const aborted = await velero.failedLoads(running.app);
 
       await report("artifact-loads-the-disconnections-ended", aborted);

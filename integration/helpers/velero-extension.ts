@@ -305,8 +305,7 @@ export async function hostLogErrors(app: ElectronApplication): Promise<Record<st
   for (const file of (await readdir(directory)).filter((name) => name.endsWith(".log")).sort()) {
     const text = (await readFile(path.join(directory, file), "utf8"))
       .replace(ANSI_ESCAPE_PATTERN, "")
-      .replace(CANCELED_PROXY_RECORD_PATTERN, "")
-      .replace(ABORTED_FRAME_RECORD_PATTERN, "");
+      .replace(CANCELED_PROXY_RECORD_PATTERN, "");
 
     found[file] = text
       .split("\n")
@@ -514,7 +513,8 @@ export interface FailedLoad {
 
 /**
  * Keeps, from now on, every load in the windows of the application that did not end, as Electron tells it to the
- * host, which logs each one at the level of an error as a window that failed to load.
+ * host, which logs a load of a window that failed at the level of an error, a load of a frame inside it that was
+ * aborted at the level of debugging, and a load of a frame that failed otherwise as a warning.
  */
 export async function watchFailedLoads(app: ElectronApplication): Promise<void> {
   await app.evaluate(({ BrowserWindow }) => {
@@ -841,13 +841,6 @@ const CANCELED_PROXY_RECORD_PATTERN =
   /^[^\n]*error:\s*┏[^\n]*Error while proxying request: context canceled[^\n]*\n(?:(?![^\n]*\b[a-z]+:\s*[┏▪])[^\n]*\n)*?[^\n]*error:\s*┗[^\n]*\n?/gim;
 const CANCELED_PROXY_START_PATTERN =
   /error:\s*┏[^\n]*Error while proxying request: context canceled[^\n]*(?:\n(?![^\n]*\b[a-z]+:\s*[┏▪┗])[^\n]*)*$/i;
-// The host logs at the level of an error every load in its window that did not end, the frames in it as well, as
-// a window that failed to load. The frame of a cluster it takes out when the cluster is disconnected is one: its
-// load is aborted, code -3, and nothing failed. The record spans from its opening line to its closing one, and one
-// whose closing line has not arrived yet is the last one of what was written.
-const ABORTED_FRAME_RECORD_PATTERN =
-  /^[^\n]*error:\s*┏[^\n]*\[CREATE-ELECTRON-WINDOW\]: Failed to load window "[^"\n]*"[^\n]*\n[^\n]*error:\s*┗[^\n]*\{ code: -3,[^\n]*\n?/gim;
-const ABORTED_FRAME_START_PATTERN = /error:\s*┏[^\n]*\[CREATE-ELECTRON-WINDOW\]: Failed to load window[^\n]*\n?$/;
 const HOST_ASSET_FAILURE_PATTERN = /^Failed to load resource: net::/;
 const HOST_ASSET_URL_PATTERN = /^https:\/\/renderer\.freelens\.app(:\d+)?\/build\//;
 // On Freelens v2 the reads of the frame of a cluster, the host's and the views' alike, leave from the frame through
@@ -891,13 +884,10 @@ export function createErrorCollector(): ErrorCollector {
       outputBuffer = outputBuffer.slice(-20_000);
     }
 
-    const normalizedOutput = outputBuffer
-      .replace(ANSI_ESCAPE_PATTERN, "")
-      .replace(CANCELED_PROXY_RECORD_PATTERN, "")
-      .replace(ABORTED_FRAME_RECORD_PATTERN, "");
+    const normalizedOutput = outputBuffer.replace(ANSI_ESCAPE_PATTERN, "").replace(CANCELED_PROXY_RECORD_PATTERN, "");
 
-    // A canceled-request record, or a record of a load that did not end, that is still arriving: wait for its end.
-    if (CANCELED_PROXY_START_PATTERN.test(normalizedOutput) || ABORTED_FRAME_START_PATTERN.test(normalizedOutput)) {
+    // A canceled-request record that is still arriving: wait for its end.
+    if (CANCELED_PROXY_START_PATTERN.test(normalizedOutput)) {
       return;
     }
 

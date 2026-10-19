@@ -635,7 +635,7 @@ describe("views of the first milestone", () => {
   );
 
   it(
-    "opens a view of its list under the details of the host, which a way of the view closes as a click outside does",
+    "opens a view of its list under the details of the host, which stay over the ways of the view until they are closed",
     async () => {
       // The details of the host over the page of the backups, as the host opens them: by the address.
       await cluster.showHostDetails(
@@ -655,21 +655,37 @@ describe("views of the first milestone", () => {
       expect(await cluster.addressViews(frame)).toEqual([`backup/${SCHEDULED}`]);
       expect(await cluster.hostDetailsShown(frame)).toEqual({ drawer: true, address: true });
       await cluster.captureScreenshot(frame, "dark-view-under-host-details");
-      // A way of the view is a click outside the drawer: the host closes it, and the view goes on to the
-      // schedule, with the views the address names.
+      // A way of the view draws the view it leads to in the place of this one before its click reaches the
+      // window: the target of the click is not in the page any more there, which the drawer of the host takes
+      // for no click outside it. The view goes on to the schedule, with the views the address names, and the
+      // drawer stays over it, with the address that names its object.
+      await cluster.watchClickAtWindow(frame);
       await cluster.followTo(frame, "schedule", "views-daily");
+      expect(await cluster.clickAtWindow(frame)).toEqual({ connected: false, inDrawer: false, prevented: false });
+      expect(await cluster.addressViews(frame)).toEqual([`backup/${SCHEDULED}`, "schedule/views-daily"]);
+      expect(await cluster.hostDetailsShown(frame)).toEqual({ drawer: true, address: true });
+      await cluster.captureScreenshot(frame, "dark-host-details-over-a-way-of-the-view");
+      // The operator closes the drawer with its command, and the views stay as the address names them. Escape
+      // would reach the view, which has the focus and leaves at Escape.
+      await cluster.closeDetailsByItsCommand(frame);
       expect(await cluster.hostDetailsGone(frame)).toEqual({ drawer: false, address: false });
       expect(await cluster.addressViews(frame)).toEqual([`backup/${SCHEDULED}`, "schedule/views-daily"]);
       await cluster.showList(frame);
       // The name of a row, which the keyboard reaches, keeps its click to itself: the drawer stays as well. The
-      // way back of the view, a command, is a click outside, and the drawer goes.
+      // way back of the view, a command, draws the list in the place of the view before its click reaches the
+      // window: the drawer stays over the list until it is closed.
       await cluster.showHostDetails(
         frame,
         `/apis/velero.io/v1/namespaces/${cluster.E2E_VIEWS_NAMESPACE}/backups/backup-inprogress`,
       );
       await cluster.openWorkspace(frame, "backup-inprogress");
       expect(await cluster.hostDetailsShown(frame)).toEqual({ drawer: true, address: true });
-      await frame.click("[data-testid=velero-back]");
+      await cluster.watchClickAtWindow(frame);
+      await cluster.closeWorkspace(frame);
+      expect(await cluster.clickAtWindow(frame)).toEqual({ connected: false, inDrawer: false, prevented: false });
+      expect(await cluster.shownView(frame)).toBeUndefined();
+      expect(await cluster.hostDetailsShown(frame)).toEqual({ drawer: true, address: true });
+      await cluster.closeDetailsByItsCommand(frame);
       expect(await cluster.hostDetailsGone(frame)).toEqual({ drawer: false, address: false });
       expect(await cluster.shownView(frame)).toBeUndefined();
       expect(Object.values(await velero.hostLogErrors(started.app)).flat()).toEqual([]);

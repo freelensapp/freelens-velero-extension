@@ -1,5 +1,5 @@
 // What stands for the components of the host in the tests of the views, written from their source at the
-// validation target, freelensapp/freelens at 5e1870e97467edab81b856a4983483d0729db896. Each draws the markup
+// validation target, freelensapp/freelens at 2578fac5e9f6d2893129b6ba0d59b379fdf9d305. Each draws the markup
 // the component of the host draws for the props the extension gives it, with the classes the host gives,
 // and does what it does with the events a test sends; each names the file and the lines it follows. What a
 // component does that no test can see, its styles and its layout, is not drawn, and what it would do with a
@@ -1066,7 +1066,7 @@ function NamespaceSelectFilter({ id }: Passed) {
 }
 
 // `KubeObjectListLayout` (packages/core/src/renderer/components/kube-object-list-layout/kube-object-list-layout.tsx
-// lines 92 to 297), the `ItemListLayout` it draws (item-object-list/list-layout.tsx lines 150 to 375), its head
+// lines 92 to 297), the `ItemListLayout` it draws (item-object-list/list-layout.tsx lines 150 to 378), its head
 // (header.tsx lines 35 to 92) and its content (content.tsx lines 311 to 598), as the extension gives them: a
 // store that is no store of the host, rows that only open a view, no box of a choice, no menu of a row.
 // - The head: the title, what is counted, the filter of the namespaces the host adds for a kind in a namespace,

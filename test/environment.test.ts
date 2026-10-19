@@ -9319,9 +9319,13 @@ describe("platform of the test environment", () => {
     expect(uploads).toHaveLength(1);
     expect(uploads[0][1]).toMatch(/\n?\s+path: e2e-artifacts\/\n/);
     expect(uploads[0][1].match(/path:/g)).toHaveLength(1);
-    // The only things kept from a run are the Electron the build downloaded and the application that was
-    // built, which hold nothing of a run.
-    expect(saved.map((match) => match[1])).toEqual(["~/.cache/electron", "freelens/freelens/dist"]);
+    // The only things kept from a run are the binaries the build of Freelens downloaded and checked against its
+    // lock, the Electron it downloaded and the application that was built, which hold nothing of a run.
+    expect(saved.map((match) => match[1])).toEqual([
+      "freelens/freelens/binaries",
+      "~/.cache/electron",
+      "freelens/freelens/dist",
+    ]);
     expect(workflow).not.toMatch(/\.local\/state|kubeconfig|credentials|operations\.log/);
     expect(workflow).toMatch(/if: always\(\)\n\s+run: node e2e\/scripts\/local-demo\.mts down --context/);
     expect(workflow).toContain("runs-on: ubuntu-24.04-arm");
@@ -9340,7 +9344,11 @@ describe("platform of the test environment", () => {
     expect(uploads).toHaveLength(1);
     expect(uploads[0][1]).toMatch(/\n?\s+path: e2e-artifacts\/\n/);
     expect(uploads[0][1].match(/path:/g)).toHaveLength(1);
-    expect(saved.map((match) => match[1])).toEqual(["~/.cache/electron", "freelens/freelens/dist"]);
+    expect(saved.map((match) => match[1])).toEqual([
+      "freelens/freelens/binaries",
+      "~/.cache/electron",
+      "freelens/freelens/dist",
+    ]);
     expect(workflow).not.toMatch(/\.local\/state|kubeconfig|credentials|operations\.log/);
     expect(workflow).toMatch(/if: always\(\)\n\s+run: pnpm --color=always e2e:cluster:down/);
     expect(workflow).toContain("runs-on: ubuntu-24.04-arm");

@@ -299,11 +299,13 @@ test environment and of the process of this repository.
   of the suites leaves out a 401, a 403 or a 404 to a read of the frame, by its
   address, that record of the proxy, and a resource of the build of the host
   that the window failed to load, by its address.
-- The host logs at the level of an error, as a window that failed to load, every
-  load in its window that did not end, the frames inside it included. A
-  disconnection takes the frame of the cluster out by emptying its address, which
-  aborts its load with the code -3, and a connection makes a new frame. The
-  collector leaves out that record with the code -3 alone.
+- The host logs a load in its window that did not end by where it was: a load of
+  the window itself at the level of an error, a load of a frame inside it at the
+  level of debugging when it was aborted, with the code -3, and as a warning
+  otherwise. A disconnection takes the frame of the cluster out by emptying its
+  address, which aborts its load with the code -3, and a connection makes a new
+  frame: the suite of the tabs reads in Electron that every load a disconnection
+  ended is of a frame, aborted.
 - The host writes the store of an extension from its main process, once for one
   change, and says `[BASE-STORE]: saving <file>` each time; after a disable and an
   enable it saves once for one change again. A store that must be kept is opened
@@ -316,10 +318,13 @@ test environment and of the process of this repository.
   source at the target (`packages/kube-object/src/kube-object.ts`, lines 115 to
   120): the store of a list of the extension adds it, and the lists of the suites
   mount their rows with it.
-- The list layout of the host at the validation target computes its filtered items
-  again at every read, and reads them for every row it draws: a search of a list of
-  a thousand rows filters the whole list a hundred times and more, and takes about
-  a second. BACK-12 and REST-11 are over their budget for it.
+- The list layout of the host computes its filtered items in a derivation of MobX,
+  once for every change of what `getItems` and its filters read, and its rows read
+  that one result, as read in the source at the target
+  (`item-object-list/list-layout.tsx`, lines 279 to 297): what `getItems` reads is
+  followed when it is observable, as the store of a list of the extension is,
+  computed from the read of the installation. The scale suite holds a search of a
+  list of a thousand rows to its budget.
 - The application reads the kubeconfig of the user unless its profile says
   otherwise, and takes the theme of the system. Start it with `startIsolated()` of
   the helpers, never bare: its profile is under `os.tmpdir()`, the one place where
@@ -386,13 +391,17 @@ test environment and of the process of this repository.
   entries of the lists come before the entry of the group. A page does not render
   `TabLayout`: inside the one of the host it would have its margins twice.
 - The drawer of the details of the host closes on a click that reaches the
-  window, unless its default was prevented, the press began inside the drawer, or
-  the target is inside a drawer. A link of the host prevents the default, and so
-  does the link of a section of the extension, which is the `MaybeLink` of the
-  host, and the row of a list of the host opens its details with the default
-  prevented: a click on a row under an open drawer opens the view of the row and
-  leaves the drawer over it, and a way of the view closes the drawer as a click
-  outside does. No action of the extension opens the details of the host.
+  window, unless its default was prevented, the press began inside the drawer, the
+  target is inside a drawer, or the target is not in the page any more, drawn
+  again by the click before the click reached the window. A link of the host
+  prevents the default, and so does the link of a section of the extension, which
+  is the `MaybeLink` of the host, and the row of a list of the host opens its
+  details with the default prevented: a click on a row under an open drawer opens
+  the view of the row and leaves the drawer over it. A way of the view, and its
+  way back, draw another view or the list in its place before their click reaches
+  the window: the drawer stays over what they open, with the address that names
+  its object, until it is closed, and the journey suite reads the target of such a
+  click at the window. No action of the extension opens the details of the host.
 - A fixture that a view of the milestone needs goes with the fixtures of the views,
   which `pnpm e2e:views` puts in place on an environment that is already up. The
   ones of the phases are put in place once, when the environment is created.
@@ -686,6 +695,13 @@ not visibly at all.
 - **No instance method on a kind.** The objects of the host do not have it.
 - **`this.props` of an `observer` class only in its render.** Read elsewhere, in
   a derivation of the host, it throws, and the host shows its crash page.
+- **A memo over the items of a store is keyed on what changes with them.** The
+  host keeps one observable array for a store and changes it in place, so a
+  `useMemo` keyed on `store.items` is computed once, and a view keeps the objects
+  it was opened with. An `observer` that reads the items in its render follows
+  them; a memo needs a key such as the identifiers and the `resourceVersion` of the
+  objects. The store of a list of the extension computes its items from the read
+  of the installation, which a new read replaces whole.
 - **Every page and section inside an error boundary.** Without it an error of a
   section replaces the whole cluster view.
 - **A cluster page gets the extension from its registration.** The host passes

@@ -1,6 +1,6 @@
 // What stands for the host in the tests: the API of `@freelensapp/extensions` as the host gives it on its global,
 // written from its source at the validation target, freelensapp/freelens at
-// 5e1870e97467edab81b856a4983483d0729db896, with a record of what was asked of it. Every part names the file
+// 2578fac5e9f6d2893129b6ba0d59b379fdf9d305, with a record of what was asked of it. Every part names the file
 // and the lines it follows. A namespace has the names it has a double for and refuses any other, recorded with
 // what the scaffold must not reach: a name the SDK of v2 does not export has no double, since a double of such a
 // name does not compile (the `satisfies` of each namespace below), so a component or a function the host
@@ -227,7 +227,7 @@ export function anExtension(process: "main" | "renderer"): HostExtensionStub {
 }
 
 // As the loader of the host runs an extension it made: its onActivate, awaited, then the extension enabled
-// (packages/core/src/extensions/extension-loader/extension-loader.ts lines 515 to 543 and 552 to 596).
+// (packages/core/src/extensions/extension-loader/extension-loader.ts lines 649 to 679 and 688 to 743).
 export async function loaded<Extension extends LensExtensionStub>(extension: Extension): Promise<Extension> {
   await extension.activate();
   await extension.enable();
@@ -508,7 +508,7 @@ class LensExtensionKubeObjectStub extends KubeObjectStub {
 }
 
 // An object of the host made from the data of the API as the API of the host makes it: with the link it gives an
-// object the API server gave none (packages/utility-features/kube-api/src/kube-api.ts lines 615 to 625), from the
+// object the API server gave none (packages/utility-features/kube-api/src/kube-api.ts lines 617 to 627), from the
 // base of its kind, its namespace and its name.
 export function hostObject<Kind>(
   kind: (abstract new (...args: never[]) => Kind) & { apiBase?: string },

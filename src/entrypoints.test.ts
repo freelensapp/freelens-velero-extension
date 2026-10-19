@@ -302,7 +302,7 @@ const CLUSTER = "synthetic-cluster";
 // A disable and an enable of the extension in one session, as the host makes them: the module stays, a new
 // instance of the extension is activated, and what the host gave the instance before was taken back by its
 // disposers after its onDeactivate (packages/core/src/extensions/lens-extension.ts lines 95 to 110 and
-// extension-loader/extension-loader.ts lines 547 to 600 at the validation target).
+// extension-loader/extension-loader.ts lines 683 to 748 at the validation target).
 describe("activated, deactivated and activated again", () => {
   beforeEach(() => {
     resetIpc();

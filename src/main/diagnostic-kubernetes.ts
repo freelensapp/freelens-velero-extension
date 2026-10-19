@@ -95,9 +95,10 @@ function labelOf(value: string): string {
   return `${value.slice(0, 57)}${createHash("sha256").update(value).digest("hex").slice(0, 6)}`;
 }
 
-// The query of a request, with only the parameters that have a value. The client of the host writes a key
-// with no value for a value that is undefined, which the API server reads as true for a boolean: no such key
-// is given to it. Nothing at all when no parameter is left.
+// The query of a request, with only the parameters that have a value. The API server reads a key with no
+// value as true for a boolean. The client of the host leaves a value that is undefined or null out of the
+// address, and writes an empty one as such a key: no parameter without a value is given to it. Nothing at
+// all when no parameter is left.
 export function queryOf(query: Readonly<Record<string, string | undefined>> = {}): Record<string, string> | undefined {
   const kept = Object.entries(query).filter(
     (entry): entry is [string, string] => typeof entry[1] === "string" && entry[1] !== "",
