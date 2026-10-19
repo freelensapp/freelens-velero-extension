@@ -5,7 +5,7 @@
 - **Milestone / tasks:** Foundation / T0.7, T0.8
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, unchanged
 - **Reviewed main:** not relevant: the subject of this spec is the host, and it reads or changes no behavior of Velero
-- **Freelens validation target:** freelensapp/freelens `5e1870e97467edab81b856a4983483d0729db896`, the base of the nightly v2.0.0-0-nightly-2026-10-16, with `@freelensapp/extensions` 2.0.0-0-nightly-2026-10-15; it moves with the host drift watch until Freelens 2.0.0 is released
+- **Freelens validation target:** freelensapp/freelens `2578fac5e9f6d2893129b6ba0d59b379fdf9d305`, the base of the nightly v2.0.0-0-nightly-2026-10-19, with `@freelensapp/extensions` 2.0.0-0-nightly-2026-10-19; it moves with the host drift watch until Freelens 2.0.0 is released
 - **Dependencies:** [local foundation](SPEC-0001-local-foundation.md); [test environment](SPEC-0004-test-environment-every-platform.md); [the write gate](SPEC-0009-write-gate.md); [the diagnostic request and its transport](SPEC-0010-diagnostic-request-and-transport.md); [the viewers](SPEC-0011-artifact-viewers.md); for the re-verification, the specs of M1 to M3, SPEC-0002 to SPEC-0012, and [the adherence of a schedule](SPEC-0013-schedule-adherence.md) for T3.1 and T3.2
 - **Approval:** Approved by the lead maintainer on 2026-10-16, as drafted. The version and release plan, D10, was decided by the lead maintainer the same day
 
@@ -916,22 +916,184 @@ CI of step 10 and of T0.8 are recorded when they are made.
   pull request waits for, so that the validation target moves once. Until then the
   facts above stay as they are at the target.
 
-The known exception, which the lead maintainer decides: BACK-12 and REST-11, the
-lists of a thousand backups and of a thousand restores, are over the budget of 250
-ms at the validation target, 940 and 1,003 ms at the 95th percentile in the last
-run, with 27 rows mounted, where Freelens 1.10.3 measured 109 and 91 ms. The cause
-is in the host: at the target the list layout of the host computes its filtered
-items again at every read, and reads them for every row it draws, so that one
-search filters the whole list a hundred times and more; the items stopped being
-computed in freelensapp/freelens#2254, which is in the target and not in 1.10.3.
-Neither the budgets, nor the data, nor the suite were changed, and nothing works
-around the host.
+- **The move of the pin, on 2026-10-19** (REQ-218, HOST-23). The validation target
+  moved from `5e1870e9` to `2578fac5e9f6d2893129b6ba0d59b379fdf9d305`, the base of the
+  nightly v2.0.0-0-nightly-2026-10-19, which its release names, seven commits after
+  the fix of the list layout of the host, freelensapp/freelens#2776, merged as
+  `aa03a84c`; the SDK `@freelensapp/extensions` 2.0.0-0-nightly-2026-10-19 is pinned
+  exactly, and its declarations carry the stores of that commit. The pin moved in the
+  header above, in the line `freelens_ref` of the workflows of the views and of the
+  integration, in the manifest and its build test, and in every document that named
+  the commit, the nightly or the SDK of before, but the history of the evidence. The
+  facts of the host above were read again at the new commit: 48 of the 54 ranges
+  their links cite, with the three of ARCHITECTURE, hold at the same lines; the
+  command of the Extensions page and the loader hold the same text at other lines;
+  the status of that page, read again, keeps its fact at its new lines; and of the
+  client of the API, `getResponse` and the other calls keep theirs at new lines, and
+  the query is written by a function of its own, which corrects the row of the
+  query. The stub and the doubles of the tests, which name the file and the lines of
+  the host they follow, were read again the same way: the client of the API, the
+  loader, `kube-api.ts` and the list layout take new lines, the behavior they model
+  unchanged, and every other file they cite is the same at both commits.
+
+  What goes with the move, from the record of 2026-10-17, is taken in: Electron
+  43.8.0 for its types, and the versions of the catalog of the host the tests take,
+  Vitest 5.0.5 and jsdom 30.1.3, with pnpm 12.14.0, the one of the host (`cb4b46ac`,
+  `229590f6`, `fb3eec54`, `58a3c133`); React and its DOM stay at 19.3.1, the peer
+  range of the SDK. The collector of the suites no longer leaves out the record of a
+  load aborted by a disconnection, which the host logs as a frame at the level of
+  debugging since `3295db4e`, and AGENTS.md and TESTING say so; the case of the
+  disconnection keeps reading in Electron that each of those loads is of a frame.
+  The comment of `queryOf` and the row of the query say that the client of the host
+  leaves a value that is undefined or null out of the address since `f535e42f`, and
+  still writes an empty one as a key with no value: the adapter keeps its rule of
+  REQ-202. The fact of AGENTS.md on the drawer gains the exception of `c4d61d98`, a
+  click whose target the click drew again before it reached the window; the comment
+  of the viewer of the volumes, read again, keeps its reason, a drawer that the host
+  closes on a click outside it; the checks of the clicks of the journey suite are
+  below. The workflows that build Freelens restore and save the binaries its build
+  downloads and checks against its lock since `90eec876`, as the template does since
+  `fc65fc3`: the binaries hold nothing of a run, and the tests of the workflows say
+  so.
+
+  The watch of the move, read on 2026-10-19: the main branch of the host from
+  `f95000fc` to `2578fac5`, twelve commits, and `b5169cd5` after it, and the one of
+  the template from `2eaedcd9` to `428be60c`, eight commits. What each changes for the
+  extension:
+  - `f2f53ee1` (freelensapp/freelens#2777): the main process is the only writer of
+    `isEnabled` of an extension; a command of the Extensions page asks it, and the
+    page follows the state it broadcasts. The helpers of the suites that install,
+    disable and enable the extension wait for the status of its row, which then says
+    what the main process applied, and the order of `onActivate`, `onDeactivate` and
+    the registrations in each process is the one of before: nothing to change, and
+    HOST-13, in the suite of the tabs, is the proof.
+  - `aa03a84c` (freelensapp/freelens#2776): the list layout of the host computes its
+    filtered items once for every change. BACK-12 and REST-11 pass, below. The fact
+    of AGENTS.md says what the layout computes: the store of a list of the extension
+    gives its items as a computed of the read of the installation, which the layout
+    follows.
+  - `a2dcf42c` (freelensapp/freelens#2788): the Extensions page says Failed to load
+    for an enabled extension whose code did not load in the main process or in the
+    window, and Enabled only for one whose code did. The checks of the suites on the
+    status of the extension, the install, FND-10, the disable and the enable, read
+    Enabled, Disabled or Incompatible, and each still says what it said; Enabled
+    says more. The host logs a load that failed at the level of an error, which the
+    collector of every suite fails on: nothing to change.
+  - `c97abd41` (freelensapp/freelens#2783) and `2578fac5` (freelensapp/freelens#2793):
+    the stores of the host apply the events of a watch once for each flush and
+    declare their order once, in a protected `sorting`. No class of the extension
+    extends `KubeObjectStore` or `ItemStore`, and the store of a list of the
+    extension is no store of the host: nothing changes, and the nine programs check
+    on the declarations of the new SDK.
+  - `1f5fecaf` (freelensapp/freelens#2784) and `c4b0d56b` (freelensapp/freelens#2791):
+    the proxy of Freelens keeps its connections to the process of the proxy of a
+    cluster alive, and builds its target again when that process has a new port, as
+    after a disconnection. Nothing of the extension changes; the suite of the tabs
+    disconnects a cluster and connects it again.
+  - `d77d2e13` (freelensapp/freelens#2780): the provenance of an installed extension,
+    in colour, unverified for a tarball; no suite reads it. `d8c88d39`
+    (freelensapp/freelens#2779): joi 18.3.0, with which the host validates the
+    kubeconfigs of its catalog; the suite of the tabs opens the four of the suites,
+    the one of an `exec` plugin among them.
+  - `3d2a6f36` and `fa713481`: the build of the host builds its tools before
+    `build:resources` and `build:binaries`, and makes the folder of its license; the
+    workflows here build Freelens before its resources, as before. `fb074271`: mise
+    2026.10.13 in the workflows of the host; the workflows here take the mise of the
+    template.
+  - After the target, `b5169cd5` (freelensapp/freelens#2795) starts the
+    notifications of a page of settings below its close button: nothing for the
+    extension or for the helpers, which close a notification by its own command.
+  - The template: `232853d` adds to its AGENTS.md that a memo over the items of a
+    store of the host is computed once, since the host changes its array in place.
+    The extension reads no store of the host: its lists take their items from the
+    store of a list of the extension, a computed of the read of the installation,
+    which a read replaces whole; the two caches keyed on an array, of the backups of
+    a schedule and of the latest time the objects of a read report, are keyed on the
+    items of a read, which nothing changes in place; the memos of the viewers are
+    keyed on the text of an artifact. No case was found, and the rule joins the
+    rules of AGENTS.md that fail silently. `72e06af`
+    (freelensapp/freelens-example-extension#390) takes the
+    dependencies of the host, as this move does, and `540a1b5` pnpm 12.14.0;
+    `eb8a673` mise 2026.10.12, `fc65fc3` the cache of the binaries and `de4759f` mise
+    in the workflows of Claude are taken in the workflows this repository has from
+    the template; `8192609` sets the install of the runner of Windows, where the
+    workflow here installs nothing; `428be60c` is the version of the template.
+
+  Decided while implementing, on 2026-10-19:
+  - The journey suite recorded, as the source of the host had it, that a way of a
+    view closes the drawer of the host as a click outside does. At the new target
+    that case failed, the drawer and the address of its object left over the view of
+    the schedule: a way draws the view it leads to in the place of the one it was in
+    before its click reaches the window, where the drawer now leaves alone a click
+    whose target is not in the page any more (`c4d61d98`). The case records the host
+    as it is: it reads at the window the target of the click of a way and of the way
+    back, out of the page and in no drawer, finds the drawer over what they opened,
+    with the address that names its object, and closes it by its close command, as
+    the pointer does: Escape would reach the view, which has the focus and leaves at
+    Escape. The extension does not close the details of the host for a way: a way
+    writes the parameters of the views alone, and the details are the host's.
+  - The Node of the host moved to 24.22.0 with Electron 43.8.0 in `cb4b46ac`, in its
+    `.nvmrc` and its `mise.toml`, which the record of 2026-10-17 does not name, and
+    the template took it in `72e06af`. This repository follows that Node with the
+    Renovate of the dependencies of Freelens, whose pull request moves the image of
+    the helpers of the test environment by hand and runs the transport proof: it is
+    not taken in this move, whose toolchain stays Node 24.21.0. The workflows build
+    Freelens with the Node of its own `.nvmrc`.
+
+  The evidence of the move, on Node 24.21.0 and pnpm 12.14.0: the install, then the
+  install frozen; the type check of the nine programs with no error; lint; the
+  build; the unit run, 83 files and 2,591 tests with none failed, and the two
+  measures within their budgets (VIEW-10 unit, the parser at 124.2 ms at the 95th
+  percentile; ADH-16, the thousand schedules at 43.1 ms and one at 0.05 ms); knip,
+  both passes with no finding; Trunk on the 34 files of the move, the lockfile left
+  out by its configuration, with no issue; and the pin of one workflow put back to
+  `5e1870e9`, which the test of the environment failed, then moved again. On the
+  nightly v2.0.0-0-nightly-2026-10-19, its package checked against its published
+  checksum,
+  one run of the runner of the views as CI runs it, every suite of the views, the
+  pre-review and FND-10: 14 files and 210 cases in 2,541 seconds, every one passed
+  but one case of the journey. The suite of the tabs 52 of 52, with HOST-13 and
+  HOST-06; the pre-review 33 of 33; the overview 15, the restores 14, the schedules
+  14, the locations 13, the server 8, the restricted 8, the restricted-restores 7,
+  the gate 7, the preferences 7, the scale 7, FND-10 6, and the journey 18 of 19.
+  The case that failed is the one of the drawer written for this move: it read at
+  the window the target of the click of the way out of the page, and the drawer
+  over the view, then closed the drawer with Escape, which the view heard as well;
+  with the drawer closed by its command the journey alone passed 19 of 19, in 72.6
+  seconds. VIEW-10 on the log of 200,000 lines: the answers at 55.7 ms and the
+  longest frame of a gesture at 22.5 ms at the 95th percentile, 31 rows mounted,
+  an idle frame of 16.9 ms at the median. FND-10 and the five sessions of the
+  integration test: 6 files and 21 cases, nothing left in the cluster. The
+  transport proof in its four modes: 16 artifacts, three identities refused at
+  their steps and the one with the documented permissions downloading. HOST-03 on
+  the new SDK: with React and its DOM at 19.3.0, in a copy of the manifest, the
+  lockfile and the workspace, pnpm stopped with `ERR_PNPM_PEER_DEP_ISSUES`, an
+  unmet peer of `@freelensapp/extensions` 2.0.0-0-nightly-2026-10-19 for each. A
+  first run of the journey and of the scale suites at the new target, on the code
+  before the move, had found the case of the drawer as it was written failing,
+  the drawer and the address of its object left over the view of the schedule. No
+  `freelens-k8s-proxy`, kubectl or Freelens of a run was left after it.
+
+The known exception of the target before the move, which the move resolved:
+BACK-12 and REST-11, the lists of a thousand backups and of a thousand restores,
+were over the budget of 250 ms at `5e1870e9`, 940 and 1,003 ms at the 95th
+percentile in its last run, with 27 rows mounted, where Freelens 1.10.3 measured
+109 and 91 ms. The cause was in the host: its list layout computed its filtered
+items again at every read, and read them for every row it drew, so that one search
+filtered the whole list a hundred times and more; the items stopped being computed
+in freelensapp/freelens#2254, and are computed once for every change since
+freelensapp/freelens#2776, which the new target has. Neither the budgets, nor the
+data, nor the suite were changed, and nothing works around the host. At the new
+target BACK-12 answers in 104 ms and REST-11 in 91 ms at the 95th percentile, with
+27 rows mounted, 342 and 333 ms from the key, which counts the 250 ms the search of
+the host waits; a first run of the suite at the new target, before the changes of
+the move, measured 97 and 93 ms.
 
 Decided while implementing, on 2026-10-17, as the order of T0.7 asks: this pull request is merged only with
 every check green on v2, so after the move of the pin to a commit of the host with
-the fix of its list layout. Until then a run of the job of the views is read case
-by case, and its failed cases must be exactly BACK-12 and REST-11: any other case
-that fails is a failure of the pull request.
+the fix of its list layout. Until the pin moved, on 2026-10-19, a run of the job of
+the views was read case by case, its failed cases exactly BACK-12 and REST-11;
+since then a run is read as a whole, and every case is to pass.
 
 Decided while implementing, inside the requirements: the words of a refused
 port-forward name the verb `create` on `pods/portforward`, which the amended
@@ -953,8 +1115,9 @@ every program, a failure of which fails a step of its own, and the check of
 cleanup and the verification of the environment of the views run after the suites
 whatever the suites found; the collector of the suites leaves out the answers 401,
 403 and 404 to the reads of a frame of a cluster, which the browser writes in the
-console, and the record of a load of the window aborted by a disconnection, each by
-its address or proven by its case; HOST-06 holds the kubectl of the load once it
+console, by their address, and until the move of the pin it left out as well the
+record of a load of a frame aborted by a disconnection, which the host logged then
+as a window that failed to load; HOST-06 holds the kubectl of the load once it
 is seen and lets it go after the disconnection, so that the load is in flight
 whatever the speed of the machine; and a defect of the port found by HOST-13, the
 state of the views made again between a disable and an enable with no way to the

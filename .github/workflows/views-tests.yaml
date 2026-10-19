@@ -16,7 +16,7 @@ env:
   # The commit of Freelens the suites run on: the validation target of
   # SPEC-0015. It moves only with that target, and this line is the one that
   # names it here.
-  freelens_ref: 5e1870e97467edab81b856a4983483d0729db896
+  freelens_ref: 2578fac5e9f6d2893129b6ba0d59b379fdf9d305
 
 jobs:
   # The views in Freelens built from source at the validation target, against
