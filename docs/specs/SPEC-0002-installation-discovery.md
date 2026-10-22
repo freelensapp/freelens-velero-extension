@@ -189,8 +189,8 @@ above describes for it, at the layers it names, which at `b5834444` are in
 `src/common/discovery.test.ts`, `src/renderer/state/installation.test.ts`,
 `src/renderer/components/entry.test.tsx`, `src/renderer/api/reader.test.ts` and
 `src/entrypoints.test.ts` in the unit run, and in the suites of the journey, of the
-Overview, of the preferences and of the reader of three kinds and the pre-review in
-the views run. Green on v2: DISC-01 to DISC-10 at the unit and component layers;
+Overview, of the preferences and of the restricted identity, and in the pre-review,
+in the views run. Green on v2: DISC-01 to DISC-10 at the unit and component layers;
 DISC-01 to DISC-08, DISC-10 and DISC-11 in the packaged application, DISC-02,
-DISC-03 and DISC-06 with the reader of three kinds, and DISC-11 in the pre-review.
+DISC-03 and DISC-06 with the restricted identity, and DISC-11 in the pre-review.
 No deviation was recorded, and v2 brings none.

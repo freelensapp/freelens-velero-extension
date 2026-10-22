@@ -298,11 +298,14 @@ which at `b5834444` are in `src/common/operation.test.ts`,
 `src/common/backup-view.test.ts`, `src/common/references.test.ts`,
 `src/renderer/pages/backups-page.test.tsx`, `src/renderer/api/reader.test.ts` and
 `src/entrypoints.test.ts` in the unit run, and in the suites of the journey, of the
-scale and of the reader of three kinds and the pre-review in the views run. Green on
+scale and of the restricted identity, and in the pre-review, in the views run. Green on
 v2: BACK-01 to BACK-05, BACK-07 to BACK-11, BACK-13 and BACK-14 at the unit and
 component layers; BACK-02, BACK-06 to BACK-09 and BACK-12 to BACK-14 in the packaged
-application, BACK-08 and BACK-13 with the reader of three kinds, and BACK-11 in the
-pre-review.
+application, BACK-08 and BACK-13 with the restricted identity, and BACK-11 in the
+pre-review. In the packaged application BACK-13 is the denied list of backups of the
+restricted identity and the empty list of the snapshot locations, which is the page
+every kind shares: at `b5834444` no packaged case shows an empty list of backups, and
+each of the five states is a case of the component layer.
 
 The measure of BACK-12, in the scale suite of the views run: 1,000 backups, 27 rows
 mounted at most, twenty interactions after five that warm the list, ten searches and
