@@ -1,4 +1,4 @@
-import { action, computed, makeObservable, observable, runInAction } from "mobx";
+import { action, computed, makeObservable, observable, observableRef, runInAction } from "mobx";
 import { withAllowance, withoutAllowance } from "../../common/allowances";
 import {
   apiAvailability,
@@ -145,14 +145,14 @@ export class Installation {
       refused: () => void this.openGate(),
     });
     makeObservable(this, {
-      api: observable.ref,
-      found: observable.ref,
-      preferences: observable.ref,
-      generation: observable.ref,
-      reads: observable.ref,
+      api: observableRef,
+      found: observableRef,
+      preferences: observableRef,
+      generation: observableRef,
+      reads: observableRef,
       asked: observable,
       asking: observable,
-      gate: observable.ref,
+      gate: observableRef,
       gateFailure: observable,
       allowanceFailure: observable,
       choices: computed,
@@ -453,6 +453,17 @@ export class Installation {
         this.watchers = 0;
       }
     };
+  }
+
+  // The extension is deactivated: the reads asked every so often stop, and what the views loaded or asked
+  // of the main process goes, a confirmation that waits and a request that runs with it. What arrives after
+  // is of a step that was dropped, and is not taken.
+  dispose(): void {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = undefined;
+    this.watchers = 0;
+    this.server.drop();
+    this.artifacts.drop();
   }
 
   // What is kept is changed from what the store holds now, and not from what this installation read of

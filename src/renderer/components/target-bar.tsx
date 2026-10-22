@@ -28,7 +28,7 @@ const REASONS: Partial<Record<ReadStatus, string>> = {
   failed: "could not be read",
 };
 
-// The words of every reason a connection is refused for are the ones the main process says.
+// The words of the reason a connection is not used for are the ones the main process says.
 export { CONNECTION_REASONS };
 
 export function readTime(time: number | undefined): string {
@@ -126,7 +126,7 @@ export const WritesControl = observer(({ installation }: { installation: Install
       ) : null}
       {/* What the main process holds of a connection it does not use, when the reason is not already said
           by the answer that was refused. */}
-      {!unknown && !installation.gateFailure && gate?.connection && !gate.connection.supported ? (
+      {!unknown && !installation.gateFailure && gate?.connection ? (
         <span className={styles.muted} data-testid="velero-writes-connection">
           {CONNECTION_REASONS[gate.connection.reason]}
         </span>

@@ -16,10 +16,9 @@ import {
   downloadRequestName,
   isArtifactTarget,
 } from "../common/ipc";
-import { CredentialPluginError } from "./context-identity.ts";
-import { type ArtifactRoute, DiagnosticError, downloadArtifact } from "./diagnostic-transport.ts";
+import { type ArtifactRoute, DiagnosticError, downloadArtifact } from "./diagnostic-transport";
 
-import type { DiagnosticKubernetes, DiagnosticObject } from "./diagnostic-kubernetes.ts";
+import type { DiagnosticKubernetes, DiagnosticObject } from "./diagnostic-kubernetes";
 
 export interface DiagnosticInput {
   // The identifier of the request of the views: the name of the DownloadRequest ends with it.
@@ -48,12 +47,7 @@ export interface DiagnosticOptions {
     input: Readonly<DiagnosticInput>,
     storage: DiagnosticObject,
     signal: AbortSignal,
-  ): Promise<{
-    route: ArtifactRoute;
-    close(): void | Promise<void>;
-    // Whether the cluster refused the port-forward of a route through it: known once a connection needed it.
-    refused?(): false | "permission" | "credential";
-  }>;
+  ): Promise<{ route: ArtifactRoute; close(): void | Promise<void> }>;
   // Told each step before it is taken, and the seconds waited while the URL is waited for.
   onStep?(stage: DownloadStage, count?: number): void;
   // Told the request once it is known to be in the cluster.
@@ -188,13 +182,9 @@ function untilStopped<Value>(
 }
 
 // The failure of the way for what was raised at a step: its code at that step. What was raised is not
-// written on: the adapter gives the same error to every request that waited for one run of the plugin of
-// the context, each of which is at a step of its own. What the way raised itself says its step already.
+// written on: it may be given to more than one waiting for it, each at a step of its own. What the way
+// raised itself says its step already.
 function failed(error: unknown, stage: DownloadStage): DiagnosticError {
-  if (error instanceof CredentialPluginError) {
-    if (error.stage !== undefined) return error;
-    return new CredentialPluginError(error.command, error.reason, stage);
-  }
   if (error instanceof DiagnosticError)
     return error.stage === undefined ? new DiagnosticError(error.code, stage, error.verdict, error.needs) : error;
   // What is not a code, raised while the request was created, says nothing of whether it was.
@@ -410,15 +400,6 @@ export async function runDownload(
     // handshake that failed for another reason nothing is said of the key: no certificate was refused.
     if (insecure && failure.verdict === "untrusted")
       failure = new DiagnosticError(failure.code, failure.stage, "insecure");
-    // A port-forward the cluster refused is what ended the download, and not a store that was not reached:
-    // to an identity that may not forward a port, or with a credential the cluster did not take.
-    const refusal =
-      failure.code !== "cancelled" && failure.verdict !== "whole" && failure.stage === "download"
-        ? routed?.refused?.()
-        : false;
-
-    if (refusal)
-      failure = new DiagnosticError("forbidden", "forward", refusal === "credential" ? "credential" : undefined);
   } finally {
     clearTimeout(timer);
     outer.removeEventListener("abort", cancelled);

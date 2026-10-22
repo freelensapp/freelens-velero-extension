@@ -1,41 +1,92 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema-jsonc.json",
 
+  // The extension is not a library: its entry points are the `main` and
+  // `renderer` manifest fields, which point at build output, and knip does not
+  // read `renderer` at all, so the sources are listed instead. The Vitest
+  // plugin adds vitest.config.ts, vitest.integration.config.ts and the test
+  // files.
   "entry": [
-    "out/{main,renderer}/index.js!",
-    "src/main/index.ts",
-    "src/renderer/index.tsx",
-    "src/**/*.test.{ts,tsx}",
+    "vite.config.mjs",
+    "src/main/index.ts!",
+    "src/renderer/index.tsx!",
+    // the Vitest alias for @freelensapp/extensions, which knip does not follow
+    "test/freelens-extensions.ts",
+    // the doubles, fixtures and measures of the tests, and the configuration of the measures
     "test/**/*.{ts,tsx}",
-    "electron.vite.config.ts",
-    "vitest.config.ts"
+    // compiled by `type:check:environments` only, with no importer
+    "environment-tests/*.ts"
   ],
   "project": [
-    "*.ts",
-    "build/**/*.ts",
-    "src/**/*.{ts,tsx}",
+    "*.{js,mjs,ts}",
+    "build/*.{mjs,ts}",
+    "environment-tests/*.ts",
+    "src/**/*.{css,ts,tsx}!",
+    // the CSS module declarations. TypeScript reaches them through
+    // allowArbitraryExtensions, while knip resolves `import styles from
+    // "./x.module.css"` to the stylesheet, so it would report them as unused
+    "!src/**/*.d.css.ts",
     "test/**/*.{ts,tsx}",
-    "e2e/scripts/**/*.mts",
-    "out/**/*.js!"
+    // the integration test, the suites of the views and their helpers
+    "integration/**/*.ts",
+    "e2e/__tests__/**/*.ts",
+    // the scripts of the test environment, which the scripts of package.json run
+    "e2e/scripts/**/*.mts"
   ],
 
-  // electron-rebuild belongs to the Freelens checkout of the integration workflow
-  "ignoreBinaries": ["electron-rebuild"],
+  // The Vite plugin adds the renderer entry of vite.config.mjs as an entry of
+  // its own, which is not a production one, and it replaces the
+  // `src/renderer/index.tsx!` above: the --production pass would then skip the
+  // whole renderer. vite.config.mjs is listed as an entry instead.
+  "vite": false,
+
+  // The build output. The `main` field of package.json makes dist/main.js an
+  // entry once it exists, and the `knip` script runs with --no-gitignore, so
+  // after `pnpm build` knip would report what the bundle inlines from its
+  // libraries, such as a binary a bundled library spawns.
+  "ignore": ["dist/**"],
+
+  // The pure modules of T3.1 and T3.2, the expected run of a schedule and its
+  // state, which only their unit tests import until T3.3 shows them in the views
+  // of a schedule: the production pass of `--files` would report them as
+  // unused. Left out of that report alone, and to be removed with T3.3.
+  "ignoreFiles": ["src/common/schedule-adherence.ts", "src/common/schedule-signal.ts"],
+
+  // Binaries that no dependency provides: yq, which the workflows call, comes
+  // from mise (see mise.toml), and pgrep, with which the helpers of the suites
+  // find what the application started, belongs to the system.
+  "ignoreBinaries": ["pgrep", "yq"],
+
   "ignoreDependencies": [
-    // Named by the paths of tsconfig.json only: the types of the host, which the resolution of the
-    // bundler does not find through the exports of the package.
-    "@freelensapp/core",
+    // host-provided modules. The bundle maps them onto
+    // globalThis.FreelensExtensionApi (see build/vite-plugin-host-modules.mjs),
+    // and Freelens installs no dependencies of an extension, so they are
+    // declared as devDependencies for their types alone, which the
+    // --production --strict pass reports as unlisted
+    "@freelensapp/extensions",
+    "@types/react",
+    "mobx",
+    "mobx-react",
+    "react",
     // The process the extension runs in, which the main process asks for the dialog of the host when a
-    // text is saved: it is of the host, is left out of the bundle, and is no dependency of the package.
+    // text is saved: it is of the host, is left out of the bundle, and is a devDependency for its types.
     "electron"
   ],
 
   "typescript": {
-    "config": ["tsconfig.json"]
+    // one program per runtime environment, one for the tests, one for the
+    // integration test and the suites of the views, one for the tooling files
+    // and one for the scripts of the test environment
+    "config": [
+      "src/main/tsconfig.json",
+      "src/renderer/tsconfig.json",
+      "src/common/tsconfig.json",
+      "src/tsconfig.json",
+      "integration/tsconfig.json",
+      "tsconfig.json",
+      "e2e/scripts/tsconfig.json"
+    ]
   },
-  // The configs are entries above. Left to its plugins, Knip takes the sources they
-  // name as production entries and asks for the host SDK among the dependencies.
-  "electron-vite": false,
-  "vite": false,
-  "vitest": false
+
+  "exclude": ["exports"]
 }

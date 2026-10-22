@@ -32,8 +32,8 @@ function fixture(initial: Allowances = {}) {
   let now = 1_700_000_000_000;
   const dispose = registerHandlers(registrar, {
     catalog: () => [
-      { id: "cluster-a", name: "demo", kubeConfigPath: "/synthetic/a", contextName: "kind-a" },
-      { id: "cluster-b", name: "other", kubeConfigPath: "/synthetic/b", contextName: "kind-b" },
+      { id: "cluster-a", name: "demo", kubeConfigPath: "/synthetic/a", contextName: "kind-a", status: "connected" },
+      { id: "cluster-b", name: "other", kubeConfigPath: "/synthetic/b", contextName: "kind-b", status: "connected" },
     ],
     allowances: {
       read: () => stored.allowances,
@@ -162,9 +162,14 @@ describe("the procedures of what the operator allows", () => {
 
   it("answers that nothing keeps an allowance where the store of the preferences is not there", async () => {
     const handlers = new Map<string, (event: IpcEvent, payload: unknown) => Promise<unknown>>();
+    // The cluster of the frame is in the catalog, connected: what is missing is the store alone.
     const dispose = registerHandlers(
       { handle: (channel, handler) => handlers.set(channel, handler), broadcast: () => undefined },
-      { catalog: () => [] },
+      {
+        catalog: () => [
+          { id: "cluster-a", name: "demo", kubeConfigPath: "/synthetic/a", contextName: "kind-a", status: "connected" },
+        ],
+      },
     );
     const grant = handlers.get(CHANNELS.allowanceGrant);
 

@@ -8,9 +8,9 @@
 // a history of backups, and the ones whose backups go where none is taken.
 // The suite reads the application and the cluster, and writes to neither.
 
-import { expect } from "@jest/globals";
-import * as cluster from "../helpers/velero-cluster";
-import * as velero from "../helpers/velero-extension";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import * as cluster from "../../integration/helpers/velero-cluster";
+import * as velero from "../../integration/helpers/velero-extension";
 
 import type { Frame } from "playwright";
 
@@ -625,6 +625,10 @@ describe("views of the schedules", () => {
       await frame.click("[data-testid=velero-schedule-details-link]");
       await frame.waitForSelector('[data-testid=velero-schedule-name] >> text="views-history"', { timeout: 60_000 });
       expect(await frame.locator("[data-testid=velero-schedules-page]").count()).toBe(1);
+      // The link leads to the view of the extension: the drawer is gone with the address that named the object,
+      // and neither the log of the main process nor the ones of the frames have an error.
+      expect(await cluster.hostDetailsGone(frame)).toEqual({ drawer: false, address: false });
+      expect(Object.values(await velero.hostLogErrors(started.app)).flat()).toEqual([]);
       expect((await cluster.history(frame)).rows).toEqual(HISTORY);
       await cluster.closeWorkspace(frame);
     },

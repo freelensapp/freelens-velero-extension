@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { virtualList } from "../../../test/host-components";
+import * as layout from "../../../test/list-layout";
 import { CONTENT } from "./artifact-viewer";
 import { ResourcesViewer } from "./resources-viewer";
 import styles from "./views.module.css";
+
+// The lists are laid out as a browser lays them out, in the room a test gives them.
+layout.layOutLists();
 
 // What stands for the lines of a text: they are of another part, and the viewer is checked for what it
 // gives them.
@@ -43,11 +46,9 @@ const ROW = 33;
 // The rows the table shows at least, where it has as many, and at most, which is its tallest room.
 const LEAST = 6;
 const MOST = 20;
-// The rows the list of the host mounts at most: the twenty of the tallest room and one that is cut, and
-// ten on each side.
+// The rows the list mounts at most: the twenty of the tallest room and one that is cut, and ten on each
+// side.
 const MOUNTED = 41;
-// The room the list of the tests measures when a test says nothing of it.
-const ROOM_OF_THE_TESTS = virtualList.room;
 const FILTER = "Filter by resource, namespace or name";
 const TYPED = "carries what was typed in its resource, its namespace or its name";
 
@@ -76,14 +77,13 @@ const room = () => {
 
 // The room of the rows is the tallest the table is given, unless a test says another.
 beforeEach(() => {
-  virtualList.room = MOST * ROW;
+  Object.assign(layout.room, { height: MOST * ROW, width: 0 });
 });
 
 afterEach(() => {
   cleanup();
   lines.given.length = 0;
   window.innerHeight = 768;
-  virtualList.room = ROOM_OF_THE_TESTS;
 });
 
 describe("the resource list of a backup", () => {
@@ -397,7 +397,7 @@ describe("the filter of a resource list", () => {
     render(<ResourcesViewer id="resources" text={BACKUP} of="Backup" />);
     expect(screen.getByLabelText(FILTER)).toBe(screen.getByTestId("resources-filter"));
     // The field keeps the focus when Enter is pressed in it, which the host would take from it.
-    screen.getByLabelText(FILTER).focus();
+    act(() => screen.getByLabelText(FILTER).focus());
     fireEvent.keyDown(screen.getByLabelText(FILTER), { key: "Enter" });
     expect(document.activeElement).toBe(screen.getByLabelText(FILTER));
     type("POD");
@@ -486,7 +486,7 @@ describe("the filter of a resource list", () => {
     expect(first).toBe(screen.getByTestId("resources-count"));
     expect(first?.contains(told)).toBe(true);
     expect(first?.tabIndex).toBe(-1);
-    first?.focus();
+    act(() => first?.focus());
     expect(document.activeElement).toBe(first);
   });
 
@@ -520,7 +520,7 @@ describe("a large resource list", () => {
     // The room is of twenty rows at most, which the view leaves here: the first is the first resource,
     // and thirty are mounted.
     expect(room()).toEqual([`${LEAST * ROW}px`, `${MOST * ROW}px`]);
-    expect(screen.getByTestId("resources-rows").style.height).toBe(`${MOST * ROW}px`);
+    expect(screen.getByTestId("resources-rows").parentElement).toBe(screen.getByTestId("resources-room"));
     expect(mounted()).toHaveLength(30);
     expect(rows()[0]).toEqual(["group-00.example/v1/Kind0", "2000 items"]);
     expect(rows()[1]).toEqual(["ns-0", "item-00000"]);
@@ -559,32 +559,26 @@ describe("a large resource list", () => {
   });
 
   it("gives its rows the room the view leaves, six of them at least and twenty at most, and counts nothing on the window", () => {
-    const viewer = () => <ResourcesViewer id="resources" text={LARGE} of="Backup" />;
-    const { rerender } = render(viewer());
-    const list = () => screen.getByTestId("resources-rows").style.height;
-    // The room the view leaves the rows, which the list of the host measures when it is drawn.
-    const leave = (rows: number) => {
-      virtualList.room = rows * ROW;
-      rerender(viewer());
-    };
+    render(<ResourcesViewer id="resources" text={LARGE} of="Backup" />);
+    // The room the view leaves the rows, which the list measures.
+    const leave = (rows: number) => layout.resize({ height: rows * ROW });
 
-    // The room of the rows is between the two, whatever the list of the host measures of it.
+    // The room of the rows is between the two, whatever the list measures of it.
     expect(room()).toEqual([`${LEAST * ROW}px`, `${MOST * ROW}px`]);
-    expect(list()).toBe(`${MOST * ROW}px`);
-    // The list of the host is given no height: it is as tall as the room it measures, and mounts the
-    // rows of that room. A view that leaves the room of nine rows shows nine, and one that leaves the
+    // The list is given no height: it is as tall as the room it measures, and mounts the rows of that room
+    // and ten after them. A view that leaves the room of nine rows shows nine, and one that leaves the
     // least shows six.
+    expect(screen.getByTestId("resources-rows").style.height).toBe("");
+    expect(mounted()).toHaveLength(MOST + 10);
     leave(9);
-    expect(list()).toBe(`${9 * ROW}px`);
     expect(mounted()).toHaveLength(19);
     leave(LEAST);
-    expect(list()).toBe(`${LEAST * ROW}px`);
     expect(mounted()).toHaveLength(LEAST + 10);
     // The window says nothing of the room: a window twice as tall, and one at twice the zoom, change
     // neither the bounds nor what is mounted.
     for (const height of [120, 325, 650, 4000]) {
       resize(height);
-      expect([height, room(), list()]).toEqual([height, [`${LEAST * ROW}px`, `${MOST * ROW}px`], `${LEAST * ROW}px`]);
+      expect([height, room(), mounted().length]).toEqual([height, [`${LEAST * ROW}px`, `${MOST * ROW}px`], LEAST + 10]);
     }
     expect(mounted().length).toBeLessThanOrEqual(MOUNTED);
     cleanup();

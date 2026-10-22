@@ -1,15 +1,16 @@
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { FIXTURE_LABEL, fixtureArtifactPath, fixtureNames } from "./local-fixtures.mts";
+import { type ProofHost, type ProofShell, startProofHost } from "./local-host.mts";
 import { DEMO_CONTEXT, DEMO_NAMESPACE, OWNER_LABEL, requireCondition, SUBNETS, subnetsOverlap } from "./local-kind.mts";
 import { type KubeResource, STORAGE_ENDPOINT } from "./local-manifests.mts";
 
 import type { AllowanceFor, Allowances } from "../../src/common/allowances.ts";
 import type { Answer, ArtifactPage, ArtifactValue, WriteConfirmAnswer } from "../../src/common/ipc.ts";
+import type { CatalogEntry } from "../../src/main/catalog.ts";
 import type { DiagnosticKind } from "../../src/main/diagnostic-kubernetes.ts";
 import type { HandlersDependencies } from "../../src/main/ipc.ts";
 
@@ -30,32 +31,35 @@ export interface DownloadProofContext {
   // The operations the server refused, when the proof asks for their artifacts as well: a backup and a
   // restore that failed their validation, and a restore without a backup.
   refused?: Record<"backup" | "restore" | "orphan", { name: string; uid: string }>;
+  // The kubectl of the environment and what it runs with, which stand in for the ones of the host; none
+  // where no kubectl is, for a proof that opens no tunnel.
+  shell?: ProofShell;
   assertCurrent(): void;
   record(kind: DiagnosticKind, identity: { name: string; uid: string }): void;
 }
 
-// The compiled main process, loaded where there is no host. It is given what it asks of the host when it
-// loads, as names and nothing under them: the proofs run its diagnostic code, which uses none of it, and
-// need no package installed.
-export function compiledDiagnostics(): typeof import("../../src/main/index.ts") {
-  const globals = globalThis as typeof globalThis & { LensExtensions?: unknown; Mobx?: unknown };
-  const previous = { sdk: globals.LensExtensions, state: globals.Mobx };
+type Main = typeof import("../../src/main/index.ts");
 
-  globals.LensExtensions = {
+// The bundle of the main process as it was built, an ES module, loaded where there is no host. It is given
+// on the global of the API of the host what it reads when it loads, as names and nothing under them: the
+// proofs run its diagnostic code, which uses none of it, and need no package installed. A module is loaded
+// once, and keeps what it read: the global is the stand-in while it loads, and is put back after.
+export async function compiledDiagnostics(): Promise<Main> {
+  // The global as the host would have it, and not as the declaration of the SDK types it.
+  const globals = globalThis as unknown as { FreelensExtensionApi?: unknown };
+  const previous = globals.FreelensExtensionApi;
+
+  globals.FreelensExtensionApi = {
     Main: { LensExtension: class {}, Ipc: class {} },
     Common: { Store: { ExtensionStore: class {} } },
     Renderer: {},
+    Mobx: {},
   };
-  globals.Mobx = {};
   try {
-    return createRequire(import.meta.url)(
-      fileURLToPath(new URL("../../out/main/index.js", import.meta.url)),
-    ) as typeof import("../../src/main/index.ts");
+    return (await import(new URL("../../dist/main.js", import.meta.url).href)) as Main;
   } finally {
-    if (previous.sdk === undefined) delete globals.LensExtensions;
-    else globals.LensExtensions = previous.sdk;
-    if (previous.state === undefined) delete globals.Mobx;
-    else globals.Mobx = previous.state;
+    if (previous === undefined) delete globals.FreelensExtensionApi;
+    else globals.FreelensExtensionApi = previous;
   }
 }
 
@@ -129,7 +133,27 @@ export function tlsProofResources(
   ];
 }
 
-type Main = ReturnType<typeof compiledDiagnostics>;
+// The entry of the cluster of a proof in a catalog of the proof, connected: the kubeconfig and the context
+// of the environment, which the main process does not read.
+function proofEntry(id: string, kubeconfig: string): CatalogEntry {
+  return { id, name: "proof", kubeConfigPath: kubeconfig, contextName: DEMO_CONTEXT, status: "connected" };
+}
+
+// The adapter of the main process for the cluster of a proof, through the client of the host the proof
+// stands in for. The target of the environment is checked before every request, as the catalog is.
+function proofAdapter(main: Main, entry: CatalogEntry, host: ProofHost, assertCurrent: () => void, labels = {}) {
+  return new main.DiagnosticKubernetes(
+    entry,
+    {
+      entry: () => {
+        assertCurrent();
+        return entry;
+      },
+      client: () => host.client(),
+    },
+    labels,
+  );
+}
 
 // The procedures of the main process, as the extension registers them with the host: a proof calls them as
 // a frame of the cluster does, with the gate, its confirmations and its tokens. The cluster is the one
@@ -140,25 +164,19 @@ function proofProcedures(
   main: Main,
   context: Pick<DownloadProofContext, "owner" | "run" | "assertCurrent">,
   kubeconfig: string,
+  host: ProofHost,
   dependencies: Partial<HandlersDependencies>,
 ) {
   const cluster = "velero-proof";
-  const catalog = [{ id: cluster, name: "proof", kubeConfigPath: kubeconfig, contextName: DEMO_CONTEXT }];
+  const catalog = [proofEntry(cluster, kubeconfig)];
   const gate = new main.WriteGate({
     catalog: () => catalog,
-    adapter: (entry, isCurrent) =>
-      new main.DiagnosticKubernetes(
-        { clusterId: entry.id, context: entry.contextName, kubeconfigPath: entry.kubeConfigPath },
-        () => {
-          context.assertCurrent();
-          return isCurrent();
-        },
-        {
-          "app.kubernetes.io/managed-by": "freelens-velero-extension",
-          [OWNER_LABEL]: context.owner,
-          [FIXTURE_LABEL]: context.run,
-        },
-      ),
+    adapter: (entry) =>
+      proofAdapter(main, entry, host, context.assertCurrent, {
+        "app.kubernetes.io/managed-by": "freelens-velero-extension",
+        [OWNER_LABEL]: context.owner,
+        [FIXTURE_LABEL]: context.run,
+      }),
   });
   const handlers = new Map<string, (event: unknown, payload: unknown) => Promise<unknown>>();
   const frame = { senderFrame: { url: `https://${cluster}.renderer.freelens.app:1/` }, processId: 1, frameId: 1 };
@@ -168,7 +186,7 @@ function proofProcedures(
         handlers.set(channel, handler as (event: unknown, payload: unknown) => Promise<unknown>),
       broadcast: () => undefined,
     },
-    { catalog: () => catalog, gate, ...dependencies },
+    { catalog: () => catalog, gate, tunnel: host.tunnel, ...dependencies },
   );
   // A call of a procedure, from the frame of the cluster of the proof. A failure says its code and its
   // step, which name nothing of the environment; its words are not printed.
@@ -240,15 +258,14 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
   refusedBeforeCreation: boolean;
   allowanceAsked: boolean;
 }> {
-  const main = compiledDiagnostics();
-  const api = new main.DiagnosticKubernetes(
-    { clusterId: context.owner, context: DEMO_CONTEXT, kubeconfigPath: context.kubeconfig },
-    () => {
-      context.assertCurrent();
-      return true;
-    },
-    { [OWNER_LABEL]: context.owner, [FIXTURE_LABEL]: context.run },
-  );
+  const main = await compiledDiagnostics();
+  const host = await startProofHost(context.kubeconfig, DEMO_CONTEXT, context.shell);
+  const api = proofAdapter(main, proofEntry(context.owner, context.kubeconfig), host, context.assertCurrent, {
+    [OWNER_LABEL]: context.owner,
+    [FIXTURE_LABEL]: context.run,
+  });
+  // The kubectl of the connections of the proof itself, every one of them killed with the proof.
+  const tunnels = new main.KubectlTunnels(host.tunnel);
   const names = fixtureNames(context.run);
   // The path of an artifact of an operation of this run: the four the proof asks for, and no other.
   const pathOf = (target: string, name: string) => {
@@ -284,7 +301,7 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
   const newConnection = async (signal: AbortSignal) =>
     context.direct
       ? { address: await podAddress(signal), port, close: async () => {} }
-      : main.openPodTunnel(api, { ...context.pod, namespace: DEMO_NAMESPACE, port }, signal);
+      : tunnels.open(context.owner, { ...context.pod, namespace: DEMO_NAMESPACE, port }, signal);
   // The paths the proof asks the store for: the artifacts of the real backup and of the real restore, and
   // the logs of the operations that failed their validation.
   const paths = new Set([
@@ -298,7 +315,7 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
   ]);
   // What the operator allowed, as the proof keeps it for the procedures that give it and take it back.
   let allowed: Allowances = {};
-  const { cluster, call, refusal, enable, release } = proofProcedures(main, context, context.kubeconfig, {
+  const { cluster, call, refusal, enable, release } = proofProcedures(main, context, context.kubeconfig, host, {
     allowances: {
       read: () => allowed,
       write: (next) => {
@@ -578,7 +595,8 @@ export async function runDownloadProof(context: DownloadProofContext): Promise<{
   } finally {
     controller.abort();
     release();
-    api.dispose();
+    tunnels.closeAll();
+    await host.close();
   }
 }
 
@@ -591,6 +609,8 @@ export interface IdentityProofContext {
   environment: string;
   // The step of a download the identity may not do; none for the identity that may do them all.
   stage?: "creation" | "certificate" | "service" | "forward";
+  // The kubectl of the environment and what it runs with, which stand in for the ones of the host.
+  shell: ProofShell;
   assertCurrent(): void;
   record(kind: DiagnosticKind, identity: { name: string; uid: string }): void;
 }
@@ -603,17 +623,30 @@ const AFTER_THE_CREATION = ["service", "forward"];
 // step, with nothing of a URL. Its request is in the cluster only when the step comes after the creation.
 // The identity that has what the documentation lists downloads the log through the cluster.
 export async function runIdentityProof(context: IdentityProofContext): Promise<{ stage: string; created: boolean }> {
-  const main = compiledDiagnostics();
+  const main = await compiledDiagnostics();
   const names = fixtureNames(context.run);
   const controller = new AbortController();
-  const environment = new main.DiagnosticKubernetes(
-    { clusterId: context.owner, context: DEMO_CONTEXT, kubeconfigPath: context.environment },
-    () => {
-      context.assertCurrent();
-      return true;
+  // The environment looks at what the identity left through a host of its own kubeconfig.
+  const environmentHost = await startProofHost(context.environment, DEMO_CONTEXT, context.shell);
+  const identityHost = await startProofHost(context.kubeconfig, DEMO_CONTEXT, context.shell).catch(
+    async (error: unknown) => {
+      await environmentHost.close();
+      throw error;
     },
   );
-  const { cluster, call, refusal, enable, release } = proofProcedures(main, context, context.kubeconfig, {});
+  const environment = proofAdapter(
+    main,
+    proofEntry(context.owner, context.environment),
+    environmentHost,
+    context.assertCurrent,
+  );
+  const { cluster, call, refusal, enable, release } = proofProcedures(
+    main,
+    context,
+    context.kubeconfig,
+    identityHost,
+    {},
+  );
 
   try {
     await enable();
@@ -664,7 +697,8 @@ export async function runIdentityProof(context: IdentityProofContext): Promise<{
   } finally {
     controller.abort();
     release();
-    environment.dispose();
+    await identityHost.close();
+    await environmentHost.close();
   }
 }
 

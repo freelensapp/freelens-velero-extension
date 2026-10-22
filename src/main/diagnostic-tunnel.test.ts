@@ -1,438 +1,532 @@
-import { randomBytes } from "node:crypto";
-import { once } from "node:events";
-import { createServer, type Server } from "node:https";
-import { createRequire } from "node:module";
-import { connect, Server as Listener } from "node:net";
-import { setTimeout as delay } from "node:timers/promises";
-import { KubeConfig } from "@kubernetes/client-node/dist/config.js";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { type WebSocket, WebSocketServer } from "ws";
-import { createTlsFixture } from "../../test/tls-fixture";
-import { downloadArtifact } from "./diagnostic-transport";
-import { openPodTunnel } from "./diagnostic-tunnel";
+// The tunnel to the Pod of the store on a fake `spawn`: the kubectl and the environment the host gives, the
+// line of readiness and its port, the bounds of time, every way kubectl is killed, and what a kubectl that
+// ends before its line says, with nothing of what it wrote.
 
-let certificates: Awaited<ReturnType<typeof createTlsFixture>>;
-let server: Server;
-let websocketServer: WebSocketServer;
-let configuration: KubeConfig;
-let requests: { url?: string; authorization?: string }[] = [];
-let stream = Buffer.alloc(0);
-let streaming: WebSocket | undefined;
+import { EventEmitter } from "node:events";
+import { inspect } from "node:util";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { downloadFailure } from "../common/diagnostic-text";
+import { DiagnosticError } from "./diagnostic-transport";
+import { KubectlTunnels, type PodTarget, TUNNEL_BOUNDS, type TunnelHost } from "./diagnostic-tunnel";
+import type { ChildProcess, SpawnOptions } from "node:child_process";
 
-const FRAME = 32 * 1024;
-const pending = () => streaming?.bufferedAmount ?? 0;
+const CLUSTER = "cluster-a";
+const POD: PodTarget = { namespace: "velero", name: "seaweedfs-0", uid: "pod-uid", port: 8333 };
+const KUBECTL = "/synthetic/freelens/binaries/kubectl";
+const ENVIRONMENT = { KUBECONFIG: "/synthetic/freelens/kubeconfigs/cluster-a", PATH: "/synthetic/freelens/binaries" };
+const FOLDER = "/synthetic/extensions/velero";
+const SENTINEL = "PRIVATE-SENTINEL-OF-KUBECTL";
+const REFUSED = `error: error upgrading connection: pods "seaweedfs-0" is forbidden: User "system:serviceaccount:velero:${SENTINEL}" cannot create resource "pods/portforward" in API group "" in the namespace "velero"\n`;
 
-beforeAll(async () => {
-  certificates = await createTlsFixture();
-  server = createServer(certificates);
-  // The API server of the test refuses the port-forward to the Pod named refused, as it does for an
-  // identity that may not create one.
-  websocketServer = new WebSocketServer({
-    server,
-    verifyClient: (info: { req: { url?: string } }, done: (allowed: boolean, code?: number) => void) =>
-      info.req.url?.includes("/pods/failing/")
-        ? done(false, 500)
-        : info.req.url?.includes("/pods/unknown/")
-          ? done(false, 401)
-          : done(!info.req.url?.includes("/pods/refused/"), 403),
+// A kubectl that writes what a test tells it to, and ends as a test tells it to: when it is told to, only
+// when it is killed for good, or never.
+class FakeKubectl extends EventEmitter {
+  readonly stdout = new EventEmitter();
+  readonly stderr = new EventEmitter();
+  pid: number | undefined = 4242;
+  readonly signals: string[] = [];
+  ends: "term" | "kill" | "never" = "term";
+  exited = false;
+
+  kill(signal: NodeJS.Signals = "SIGTERM"): boolean {
+    this.signals.push(signal);
+    if (this.ends === "term" || (this.ends === "kill" && signal === "SIGKILL")) this.exit(null, signal);
+    return true;
+  }
+
+  exit(code: number | null, signal: string | null = null): void {
+    if (this.exited) return;
+    this.exited = true;
+    this.emit("exit", code, signal);
+    this.emit("close", code, signal);
+  }
+
+  say(text: string): void {
+    this.stdout.emit("data", Buffer.from(text));
+  }
+
+  complain(text: string): void {
+    this.stderr.emit("data", Buffer.from(text));
+  }
+
+  // A command that cannot be started: no process, an error, and no exit.
+  failToStart(): void {
+    this.pid = undefined;
+    this.emit("error", Object.assign(new Error(`spawn ${KUBECTL} ENOENT ${SENTINEL}`), { code: "ENOENT" }));
+    this.emit("close", -2, null);
+  }
+}
+
+function fixture(options: { prepare?: () => Promise<void>; shellRejects?: boolean; spawnThrows?: boolean } = {}) {
+  const children: { command: string; args: string[]; options: SpawnOptions; child: FakeKubectl }[] = [];
+  const spawn = vi.fn((command: string, args: string[], spawnOptions: SpawnOptions) => {
+    if (options.spawnThrows) throw new Error(`spawn failed ${SENTINEL}`);
+    const child = new FakeKubectl();
+
+    children.push({ command, args, options: spawnOptions, child });
+    return child as unknown as ChildProcess;
   });
-  websocketServer.on("connection", (socket, request) => {
-    requests.push({ url: request.url, authorization: request.headers.authorization });
-    socket.send(Buffer.from([0, 141, 32]));
-    socket.send(Buffer.from([1, 141, 32]));
-    if (request.url?.includes("/pods/stream/")) {
-      // The pod answers with the whole payload and closes at once.
-      streaming = socket;
-      for (let offset = 0; offset < stream.length; offset += FRAME)
-        socket.send(Buffer.concat([Buffer.from([0]), stream.subarray(offset, offset + FRAME)]));
-      socket.close();
-      return;
-    }
-    // A pod that takes what it is sent and answers nothing.
-    if (request.url?.includes("/pods/silent/")) return;
-    socket.on("message", (message) => socket.send(message));
+  const state: { status: string | undefined } = { status: "connected" };
+  const watchers = new Set<(status: string | undefined) => void>();
+  const shell = async (value: unknown) => {
+    await options.prepare?.();
+    if (options.shellRejects) throw new Error(`The cluster ${CLUSTER} is not connected`);
+    return value;
+  };
+  const host: TunnelHost = {
+    kubectl: vi.fn((clusterId: string) => shell(KUBECTL).then((value) => (clusterId ? (value as string) : ""))),
+    environment: vi.fn((clusterId: string) =>
+      shell(ENVIRONMENT).then((value) => (clusterId ? (value as Record<string, string>) : {})),
+    ),
+    entry: (clusterId) =>
+      state.status === undefined
+        ? undefined
+        : { id: clusterId, name: "demo", kubeConfigPath: "/synthetic/a", contextName: "kind-a", status: state.status },
+    // As a reaction of MobX with fireImmediately: told the state now, then at each change.
+    watchStatus: (_clusterId, listener) => {
+      watchers.add(listener);
+      listener(state.status);
+      return () => watchers.delete(listener);
+    },
+    cwd: () => FOLDER,
+  };
+  const hooks: (() => void)[] = [];
+  const unhooked: (() => void)[] = [];
+  const tunnels = new KubectlTunnels(host, spawn, (listener) => {
+    hooks.push(listener);
+    return () => unhooked.push(listener);
   });
-  server.listen(0, "127.0.0.1");
-  await once(server, "listening");
-  const address = server.address();
-
-  if (!address || typeof address === "string") throw new Error("Missing local websocket listener");
-  configuration = new KubeConfig();
-  configuration.loadFromString(
-    JSON.stringify({
-      apiVersion: "v1",
-      kind: "Config",
-      "current-context": "test",
-      contexts: [{ name: "test", context: { cluster: "test", user: "test" } }],
-      clusters: [
-        {
-          name: "test",
-          cluster: {
-            server: `https://127.0.0.1:${address.port}`,
-            "certificate-authority-data": Buffer.from(certificates.ca).toString("base64"),
-          },
-        },
-      ],
-      users: [{ name: "test", user: { token: "synthetic" } }],
-    }),
-  );
-});
-afterAll(async () => {
-  for (const client of websocketServer?.clients ?? []) client.terminate();
-  websocketServer?.close();
-  server?.closeAllConnections();
-  if (server) await new Promise<void>((resolve) => server.close(() => resolve()));
-  await certificates?.dispose();
-});
-
-describe("owned Kubernetes pod tunnel", () => {
-  const target = { namespace: "fixture", name: "storage", uid: "pod-uid", port: 8333 };
-  const api = (name = "storage") => ({
-    configuration,
-    assertCurrent: () => {},
-    read: async () => ({
-      metadata: { namespace: "fixture", name, uid: "pod-uid" },
-      spec: { containers: [{ ports: [{ containerPort: 8333 }] }] },
-      status: { conditions: [{ type: "Ready", status: "True" }] },
-    }),
-  });
-  const compiled = () => {
-    const globals = globalThis as typeof globalThis & { LensExtensions?: unknown; Mobx?: unknown };
-    const previous = { sdk: globals.LensExtensions, state: globals.Mobx };
-    const load = createRequire(import.meta.url);
-
-    // What the bundle asks of the host when it loads: its SDK, with the IPC of the main process, and its
-    // state library.
-    globals.LensExtensions = {
-      Main: { LensExtension: class {}, Ipc: class {} },
-      Common: { Store: { ExtensionStore: class {} } },
-      Renderer: {},
-    };
-    globals.Mobx = load("mobx");
-    try {
-      return (load("../../out/main/index.js") as { openPodTunnel: typeof openPodTunnel }).openPodTunnel;
-    } finally {
-      if (previous.sdk === undefined) delete globals.LensExtensions;
-      else globals.LensExtensions = previous.sdk;
-      if (previous.state === undefined) delete globals.Mobx;
-      else globals.Mobx = previous.state;
-    }
+  const status = (next: string | undefined) => {
+    state.status = next;
+    for (const watcher of [...watchers]) watcher(next);
   };
 
-  it.each(["source", "compiled"])(
-    "forwards through the %s implementation and releases sockets/listener",
-    async (mode) => {
-      const open = mode === "compiled" ? compiled() : openPodTunnel;
+  return { tunnels, host, spawn, children, status, watchers, hooks, unhooked };
+}
 
-      requests = [];
-      const tunnel = await open(api(), target, new AbortController().signal);
-      const socket = connect(tunnel.port, tunnel.address);
+// What a promise ended with, or that it has not ended.
+async function outcome(promise: Promise<unknown>): Promise<unknown> {
+  let result: unknown = "pending";
 
-      try {
-        await once(socket, "connect");
-        const response = once(socket, "data");
-        socket.write("synthetic-port-forward");
-        expect((await response)[0].toString()).toBe("synthetic-port-forward");
-        expect(requests).toEqual([
-          { url: "/api/v1/namespaces/fixture/pods/storage/portforward?ports=8333", authorization: "Bearer synthetic" },
-        ]);
-      } finally {
-        socket.destroy();
-        await tunnel.close();
-      }
-      const refused = connect(tunnel.port, tunnel.address);
-
-      await expect(once(refused, "connect")).rejects.toMatchObject({ code: "ECONNREFUSED" });
+  promise.then(
+    (value) => {
+      result = value;
+    },
+    (error: unknown) => {
+      result = error;
     },
   );
+  for (let turn = 0; turn < 10; turn += 1) await Promise.resolve();
+  return result;
+}
 
-  it.each(["source", "compiled"])(
-    "delivers the whole stream through the %s implementation when the pod side closes first",
-    async (mode) => {
-      const open = mode === "compiled" ? compiled() : openPodTunnel;
+// Lets what waits for a promise go on, without moving the clock.
+async function flush(): Promise<void> {
+  for (let turn = 0; turn < 20; turn += 1) await Promise.resolve();
+}
 
-      stream = randomBytes(8 * 1024 ** 2);
-      const tunnel = await open(api("stream"), { ...target, name: "stream" }, new AbortController().signal);
-      const socket = connect(tunnel.port, tunnel.address);
-      const received: Buffer[] = [];
-      const failures: unknown[] = [];
+// Lets the preparation and the spawn happen, without moving the clock.
+async function started(value: ReturnType<typeof fixture>, count = 1): Promise<FakeKubectl> {
+  await flush();
+  expect(value.children).toHaveLength(count);
+  return value.children[count - 1].child;
+}
 
-      try {
-        socket.on("error", (error) => failures.push(error));
-        // A consumer slower than the pod: it stops after every chunk.
-        socket.on("data", (chunk: Buffer) => {
-          received.push(chunk);
-          socket.pause();
-          setTimeout(() => socket.resume(), 1);
-        });
-        await once(socket, "close");
-        expect(failures).toEqual([]);
-        expect(Buffer.concat(received).equals(stream)).toBe(true);
-      } finally {
-        socket.destroy();
-        await tunnel.close();
-      }
-    },
-    60_000,
-  );
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
-  it("holds the pod side back while the consumer does not read", async () => {
-    stream = randomBytes(48 * 1024 ** 2);
-    streaming = undefined;
-    const tunnel = await openPodTunnel(api("stream"), { ...target, name: "stream" }, new AbortController().signal);
-    const socket = connect(tunnel.port, tunnel.address);
-    let received = 0;
+describe("the tunnel to the Pod of the store", () => {
+  it("runs the kubectl the host gives for the cluster, with its environment as a whole and the folder of the extension, for a port-forward to the Pod", async () => {
+    const value = fixture();
+    const opening = value.tunnels.open(CLUSTER, POD, new AbortController().signal);
+    const child = await started(value);
+    const [run] = value.children;
 
-    try {
-      socket.pause();
-      await once(socket, "connect");
-      await delay(500);
-      // Nothing can take 48 MiB while the consumer is still: what is left waits on the side of the pod.
-      expect(pending()).toBeGreaterThan(16 * 1024 ** 2);
-      socket.on("data", (chunk: Buffer) => {
-        received += chunk.length;
-      });
-      socket.resume();
-      await once(socket, "close");
-      expect(received).toBe(stream.length);
-    } finally {
-      socket.destroy();
-      await tunnel.close();
-    }
-  }, 60_000);
-
-  // The listener of a tunnel, which the tunnel keeps to itself: the one that was told to listen last.
-  const withListener = async (open: typeof openPodTunnel, name = "storage") => {
-    const listen = vi.spyOn(Listener.prototype, "listen");
-
-    try {
-      const tunnel = await open(api(name), { ...target, name }, new AbortController().signal);
-
-      return { tunnel, listener: listen.mock.contexts.at(-1) as Listener };
-    } finally {
-      listen.mockRestore();
-    }
-  };
-  // What a listener raises when the process has no descriptor left for the connection it is given.
-  const exhausted = () => Object.assign(new Error("accept EMFILE"), { code: "EMFILE", syscall: "accept" });
-
-  it.each(["source", "compiled"])(
-    "ends the tunnel of the %s implementation when its listener fails, and raises nothing",
-    async (mode) => {
-      const arrived = once(websocketServer, "connection");
-      const { tunnel, listener } = await withListener(mode === "compiled" ? compiled() : openPodTunnel);
-      const socket = connect(tunnel.port, tunnel.address);
-
-      try {
-        await once(socket, "connect");
-        const response = once(socket, "data");
-
-        socket.write("synthetic-port-forward");
-        expect((await response)[0].toString()).toBe("synthetic-port-forward");
-        const [pod] = (await arrived) as [WebSocket];
-        const gone = Promise.all([once(socket, "close"), once(pod, "close")]);
-
-        // Nobody but the tunnel hears its listener: an error nobody hears is raised to the whole process.
-        expect(() => listener.emit("error", exhausted())).not.toThrow();
-        // The local socket and the connection to the pod are closed, and the listener with them.
-        await gone;
-        await tunnel.close();
-        expect(listener.listening).toBe(false);
-      } finally {
-        socket.destroy();
-        await tunnel.close();
-      }
-      const refused = connect(tunnel.port, tunnel.address);
-
-      await expect(once(refused, "connect")).rejects.toMatchObject({ code: "ECONNREFUSED" });
-    },
-  );
-
-  it.each(["http", "https"])(
-    "ends a download over %s through it as transport-unreachable when its listener fails",
-    async (scheme) => {
-      const arrived = once(websocketServer, "connection");
-      const { tunnel, listener } = await withListener(openPodTunnel, "silent");
-      const origin = `${scheme}://storage.example.invalid:8333`;
-      const pending = downloadArtifact(
-        `${origin}/artifact?signature=synthetic`,
-        {
-          origin,
-          pathname: "/artifact",
-          address: tunnel.address,
-          port: tunnel.port,
-          mode: "tunnel",
-          allowHttp: true,
-          ca: certificates.ca,
-        },
-        new AbortController().signal,
-      ).catch((error: unknown) => error);
-
-      try {
-        // The request, or the first message of its handshake, is on its way to a pod that answers nothing.
-        await arrived;
-        expect(() => listener.emit("error", exhausted())).not.toThrow();
-        expect(await pending).toMatchObject({ code: "transport-unreachable" });
-      } finally {
-        await tunnel.close();
-      }
-    },
-  );
-
-  it("says that the port-forward was refused when the API server refuses it, and that it was not when it was made", async () => {
-    const signal = new AbortController().signal;
-    const tunnel = await openPodTunnel(api("refused"), { ...target, name: "refused" }, signal);
-
-    // Nothing was asked of the API server yet: the port-forward is made when a connection needs it.
-    expect(tunnel.refused()).toBe(false);
-    const socket = connect(tunnel.port, tunnel.address);
-
-    socket.on("error", () => undefined);
-    await once(socket, "close");
-    expect(tunnel.refused()).toBe("permission");
-    await tunnel.close();
-    // A credential the API server does not take is a refusal of another kind: it says nothing of what the
-    // identity may do.
-    const unknown = await openPodTunnel(api("unknown"), { ...target, name: "unknown" }, signal);
-    const turned = connect(unknown.port, unknown.address);
-
-    turned.on("error", () => undefined);
-    await once(turned, "close");
-    expect(unknown.refused()).toBe("credential");
-    await unknown.close();
-    // A download through it ends as a connection that was lost, and the tunnel says why.
-    const origin = "http://storage.example.invalid:8333";
-    const again = await openPodTunnel(api("refused"), { ...target, name: "refused" }, signal);
-    const failed = await downloadArtifact(
-      `${origin}/artifact?signature=synthetic`,
-      { origin, pathname: "/artifact", address: again.address, port: again.port, mode: "tunnel", allowHttp: true },
-      signal,
-    ).catch((error: unknown) => error);
-
-    expect(failed).toMatchObject({ code: "transport-unreachable" });
-    expect(again.refused()).toBe("permission");
-    await again.close();
-    // An API server that fails is not one that refuses: the connection ends, and nothing says a refusal.
-    const failing = await openPodTunnel(api("failing"), { ...target, name: "failing" }, signal);
-    const lost = connect(failing.port, failing.address);
-
-    lost.on("error", () => undefined);
-    await once(lost, "close");
-    expect(failing.refused()).toBe(false);
-    await failing.close();
-    // A port-forward that was made, and whose Pod then closes, was not refused.
-    const made = await openPodTunnel(api(), target, signal);
-    const kept = connect(made.port, made.address);
-
-    kept.write("synthetic");
-    await once(kept, "data");
-    kept.destroy();
-    expect(made.refused()).toBe(false);
-    await made.close();
+    expect(value.host.kubectl).toHaveBeenCalledWith(CLUSTER);
+    expect(value.host.environment).toHaveBeenCalledWith(CLUSTER);
+    expect(run.command).toBe(KUBECTL);
+    expect(run.args).toEqual([
+      "port-forward",
+      "--address",
+      "127.0.0.1",
+      "--namespace",
+      "velero",
+      "pod/seaweedfs-0",
+      ":8333",
+    ]);
+    // The environment of the host is the whole environment of kubectl, and nothing of the process is added.
+    expect(run.options.env).toEqual(ENVIRONMENT);
+    expect(run.options.cwd).toBe(FOLDER);
+    expect(run.options.stdio).toEqual(["ignore", "pipe", "pipe"]);
+    expect(run.options.shell).toBeUndefined();
+    child.say("Forwarding from 127.0.0.1:41821 -> 8333\n");
+    await expect(opening).resolves.toMatchObject({ address: "127.0.0.1", port: 41821 });
   });
 
-  it("ends as transport-unreachable when its listener cannot listen, and leaves nothing open", async () => {
-    // A listener that fails where it would have begun to listen. The wait for it ends with that error
-    // whether or not anything else hears the listener: what proves that its errors are heard is the
-    // listener that fails after it listens, above.
-    const listen = vi.spyOn(Listener.prototype, "listen").mockImplementation(function (this: Listener) {
-      process.nextTick(() =>
-        this.emit("error", Object.assign(new Error("listen EADDRNOTAVAIL"), { code: "EADDRNOTAVAIL" })),
-      );
-      return this;
-    });
+  it("is ready on the line of kubectl for the loopback, and reads its port from that line", async () => {
+    const value = fixture();
+    const opening = value.tunnels.open(CLUSTER, POD, new AbortController().signal);
+    const child = await started(value);
 
-    try {
-      await expect(openPodTunnel(api(), target, new AbortController().signal)).rejects.toMatchObject({
-        code: "transport-unreachable",
-      });
-      expect((listen.mock.contexts.at(-1) as Listener).listening).toBe(false);
-    } finally {
-      listen.mockRestore();
-    }
+    // A line of another address, and a line cut in two, before its port and inside it: not ready until the
+    // port is whole.
+    child.say("Forwarding from [::1]:41821 -> 8333\n");
+    child.say("Forwarding from 127.0.0.1:");
+    expect(await outcome(opening)).toBe("pending");
+    child.say("390");
+    expect(await outcome(opening)).toBe("pending");
+    child.say("17 -> 8333\nHandling connection for 39017\n");
+    await expect(opening).resolves.toMatchObject({ address: "127.0.0.1", port: 39017 });
+    // A port that is no port is not taken.
+    const other = fixture();
+    const refused = other.tunnels.open(CLUSTER, POD, new AbortController().signal);
+
+    (await started(other)).say("Forwarding from 127.0.0.1:70000 -> 8333\n");
+    await expect(refused).rejects.toMatchObject({ code: "transport-unreachable" });
   });
 
-  it("refuses changed pod identities and undeclared ports before opening a listener", async () => {
-    await expect(
-      openPodTunnel(api(), { ...target, uid: "recreated" }, new AbortController().signal),
-    ).rejects.toMatchObject({ code: "target-changed" });
-    await expect(openPodTunnel(api(), { ...target, port: 1234 }, new AbortController().signal)).rejects.toMatchObject({
-      code: "target-changed",
-    });
+  it("waits fifteen seconds for its line, counted from the end of the preparation and not before", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    // The host takes a minute to prepare the kubectl of the version of the cluster.
+    const value = fixture({ prepare: () => new Promise((resolve) => setTimeout(resolve, 60_000)) });
+    const opening = value.tunnels.open(CLUSTER, POD, new AbortController().signal);
+    const ended = opening.catch((error: unknown) => error);
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    const child = await started(value);
+
+    await vi.advanceTimersByTimeAsync(TUNNEL_BOUNDS.readyMs - 1);
+    expect(await outcome(opening)).toBe("pending");
+    expect(child.signals).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await ended).toMatchObject({ code: "deadline" });
+    // It is killed at its bound.
+    expect(child.signals).toEqual(["SIGTERM"]);
+    expect(value.tunnels.count).toBe(0);
+    expect(TUNNEL_BOUNDS.readyMs).toBe(15_000);
+    expect(
+      downloadFailure("deadline", "forward", {
+        artifact: "BackupLog",
+        name: "nightly",
+        namespace: "velero",
+        request: "r",
+      }).text,
+    ).toContain("was not ready in fifteen seconds");
   });
 
-  it("closes an unused listener on abort", async () => {
+  it("starts nothing for an abort before kubectl runs, and kills it for an abort before its line", async () => {
+    // Before the open: the host is asked nothing.
+    const before = fixture();
     const controller = new AbortController();
-    const tunnel = await openPodTunnel(api(), target, controller.signal);
 
     controller.abort();
-    await tunnel.close();
-    const refused = connect(tunnel.port, tunnel.address);
+    await expect(before.tunnels.open(CLUSTER, POD, controller.signal)).rejects.toMatchObject({ code: "cancelled" });
+    expect(before.host.kubectl).not.toHaveBeenCalled();
+    // While kubectl is prepared: it is not started once it is.
+    let prepared: () => void = () => undefined;
+    const preparation = new Promise<void>((resolve) => {
+      prepared = resolve;
+    });
+    const preparing = fixture({ prepare: () => preparation });
+    const stopped = new AbortController();
+    const opening = preparing.tunnels.open(CLUSTER, POD, stopped.signal);
 
-    await expect(once(refused, "connect")).rejects.toMatchObject({ code: "ECONNREFUSED" });
+    await flush();
+    expect(preparing.host.kubectl).toHaveBeenCalled();
+    stopped.abort();
+    prepared();
+    await expect(opening).rejects.toMatchObject({ code: "cancelled" });
+    expect(preparing.spawn).not.toHaveBeenCalled();
+    // Once it runs, before its line: it is killed.
+    const running = fixture();
+    const third = new AbortController();
+    const waiting = running.tunnels.open(CLUSTER, POD, third.signal);
+    const child = await started(running);
+
+    third.abort();
+    await expect(waiting).rejects.toMatchObject({ code: "cancelled" });
+    expect(child.signals).toEqual(["SIGTERM"]);
+    await flush();
+    expect(running.tunnels.count).toBe(0);
+  });
+});
+
+describe("the end of kubectl", () => {
+  it("kills kubectl when the tunnel is closed, and when its operation is stopped after the line", async () => {
+    const value = fixture();
+    const first = value.tunnels.open(CLUSTER, POD, new AbortController().signal);
+    const one = await started(value);
+
+    one.say("Forwarding from 127.0.0.1:41821 -> 8333\n");
+    const tunnel = await first;
+
+    expect(value.tunnels.count).toBe(1);
+    await expect(tunnel.close()).resolves.toBeUndefined();
+    expect(one.signals).toEqual(["SIGTERM"]);
+    expect(value.tunnels.count).toBe(0);
+    // Closed again: nothing more is sent to it.
+    await tunnel.close();
+    expect(one.signals).toEqual(["SIGTERM"]);
+    // The operation stopped after the line, whatever stopped it.
+    const operation = new AbortController();
+    const second = value.tunnels.open(CLUSTER, POD, operation.signal);
+    const two = await started(value, 2);
+
+    two.say("Forwarding from 127.0.0.1:41822 -> 8333\n");
+    await second;
+    operation.abort();
+    expect(two.signals).toEqual(["SIGTERM"]);
+    await flush();
+    expect(value.tunnels.count).toBe(0);
   });
 
-  it("cancels an in-flight WebSocket handshake and closes both ends", async () => {
-    const stalled = createServer(certificates);
-    const incoming = once(stalled, "upgrade");
+  it("kills every kubectl when the procedures are let go, and starts none after", async () => {
+    const value = fixture();
+    const ready = value.tunnels.open(CLUSTER, POD, new AbortController().signal);
+    const one = await started(value);
 
-    stalled.listen(0, "127.0.0.1");
-    await once(stalled, "listening");
-    const address = stalled.address();
+    one.say("Forwarding from 127.0.0.1:41821 -> 8333\n");
+    await ready;
+    const waiting = value.tunnels.open(CLUSTER, POD, new AbortController().signal).catch((error: unknown) => error);
+    const two = await started(value, 2);
 
-    if (!address || typeof address === "string") throw new Error("Missing stalled listener");
-    const selected = new KubeConfig();
+    expect(value.tunnels.count).toBe(2);
+    value.tunnels.closeAll();
+    expect([one.signals, two.signals]).toEqual([["SIGTERM"], ["SIGTERM"]]);
+    expect(await waiting).toMatchObject({ code: "cancelled" });
+    await flush();
+    expect(value.tunnels.count).toBe(0);
+    // The hook of the exit of the process goes with them, and nothing is started any more.
+    expect(value.unhooked).toEqual(value.hooks);
+    await expect(value.tunnels.open(CLUSTER, POD, new AbortController().signal)).rejects.toMatchObject({
+      code: "cancelled",
+    });
+    expect(value.children).toHaveLength(2);
+  });
 
-    const exported = JSON.parse(configuration.exportConfig()) as { clusters: { cluster: { server: string } }[] };
+  it("kills every kubectl that runs when the process exits, with a hook put once", async () => {
+    const value = fixture();
 
-    exported.clusters[0].cluster.server = `https://127.0.0.1:${address.port}`;
-    selected.loadFromString(JSON.stringify(exported));
-    const controller = new AbortController();
-    const tunnel = await openPodTunnel({ ...api(), configuration: selected }, target, controller.signal);
-    const socket = connect(tunnel.port, tunnel.address);
+    expect(value.hooks).toEqual([]);
+    const first = value.tunnels.open(CLUSTER, POD, new AbortController().signal);
+    const one = await started(value);
 
-    try {
-      const [, handshake] = await incoming;
-      // The peer may observe the cancellation as a reset before the close.
-      handshake.on("error", () => {});
-      const closed = new Promise<void>((resolve) => handshake.once("close", () => resolve()));
+    one.say("Forwarding from 127.0.0.1:41821 -> 8333\n");
+    await first;
+    void value.tunnels.open(CLUSTER, POD, new AbortController().signal).catch(() => undefined);
+    const two = await started(value, 2);
 
-      controller.abort();
-      await tunnel.close();
-      await closed;
-    } finally {
-      socket.destroy();
-      await tunnel.close();
-      stalled.closeAllConnections();
-      await new Promise<void>((resolve) => stalled.close(() => resolve()));
+    expect(value.hooks).toHaveLength(1);
+    value.hooks[0]();
+    expect([one.signals, two.signals]).toEqual([["SIGTERM"], ["SIGTERM"]]);
+    await flush();
+    expect(value.tunnels.count).toBe(0);
+  });
+
+  it("kills kubectl when the cluster leaves the connected state, before its line and after it", async () => {
+    // Before its line: the opening ends as a target that changed, said as such.
+    const before = fixture();
+    const opening = before.tunnels.open(CLUSTER, POD, new AbortController().signal);
+    const one = await started(before);
+
+    before.status("disconnecting");
+    await expect(opening).rejects.toMatchObject({ code: "target-changed", verdict: "disconnected" });
+    expect(one.signals).toEqual(["SIGTERM"]);
+    // After its line: kubectl is killed, and the reaction is let go with it.
+    const after = fixture();
+    const ready = after.tunnels.open(CLUSTER, POD, new AbortController().signal);
+    const two = await started(after);
+
+    two.say("Forwarding from 127.0.0.1:41821 -> 8333\n");
+    await ready;
+    expect(after.watchers.size).toBe(1);
+    after.status("connected");
+    expect(two.signals).toEqual([]);
+    after.status("disconnected");
+    expect(two.signals).toEqual(["SIGTERM"]);
+    await flush();
+    expect(after.watchers.size).toBe(0);
+    expect(after.tunnels.count).toBe(0);
+    // A cluster that went from the catalog, and one that is not connected when kubectl starts.
+    const gone = fixture();
+    const third = gone.tunnels.open(CLUSTER, POD, new AbortController().signal);
+
+    await started(gone);
+    gone.status(undefined);
+    await expect(third).rejects.toMatchObject({ code: "target-changed", verdict: "absent" });
+    const late = fixture();
+    const fourth = late.tunnels.open(CLUSTER, POD, new AbortController().signal);
+
+    // The cluster leaves the connected state between the preparation and the start: kubectl is killed as
+    // soon as it starts.
+    late.status("connecting");
+    await expect(fourth).rejects.toMatchObject({ code: "target-changed", verdict: "disconnected" });
+    expect(late.children[0]?.child.signals).toEqual(["SIGTERM"]);
+    await flush();
+    expect(late.tunnels.count).toBe(0);
+  });
+
+  it("says a kubectl that has not exited five seconds after it was told to, and kills it for good", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    for (const ends of ["kill", "never"] as const) {
+      const value = fixture();
+      const opening = value.tunnels.open(CLUSTER, POD, new AbortController().signal);
+      const child = await started(value);
+
+      child.ends = ends;
+      child.say("Forwarding from 127.0.0.1:41821 -> 8333\n");
+      const tunnel = await opening;
+      const closing = tunnel.close().catch((error: unknown) => error);
+
+      await vi.advanceTimersByTimeAsync(TUNNEL_BOUNDS.exitMs - 1);
+      expect(child.signals).toEqual(["SIGTERM"]);
+      await vi.advanceTimersByTimeAsync(1);
+      // Said as what was opened to reach the store that did not close in time.
+      const said = await closing;
+
+      expect(said).toBeInstanceOf(DiagnosticError);
+      expect(said).toMatchObject({ code: "transport-unreachable", stage: "release" });
+      expect(child.signals).toEqual(["SIGTERM", "SIGKILL"]);
+      // One that ends when it is killed for good is not one of the extension any more; one that does not end
+      // at all is still counted.
+      await flush();
+      expect(value.tunnels.count).toBe(ends === "kill" ? 0 : 1);
+    }
+    expect(TUNNEL_BOUNDS.exitMs).toBe(5_000);
+  });
+});
+
+describe("a kubectl that ends before its line", () => {
+  it("says a refusal of the port-forward as forbidden, with the verb the identity needs and nothing of what kubectl wrote", async () => {
+    const value = fixture();
+    const opening = value.tunnels.open(CLUSTER, POD, new AbortController().signal);
+    const child = await started(value);
+
+    child.complain(REFUSED.slice(0, 40));
+    child.complain(REFUSED.slice(40));
+    child.exit(1);
+    const refused = await opening.catch((error: unknown) => error);
+
+    expect(refused).toBeInstanceOf(DiagnosticError);
+    expect(refused).toMatchObject({ code: "forbidden", verdict: undefined });
+    expect(inspect(refused, { depth: 8, showHidden: true })).not.toContain(SENTINEL);
+    // At the step of the port-forward, the words name the resource and the verb.
+    const said = downloadFailure("forbidden", "forward", {
+      artifact: "BackupLog",
+      name: "nightly",
+      namespace: "velero",
+      request: "nightly-request",
+    });
+
+    expect(said.text).toContain("the verb create on pods/portforward");
+    expect(said.text).not.toContain(SENTINEL);
+  });
+
+  it("says a credential the cluster did not take as such, and any other end, or a kubectl that cannot be run, as a store that was not reached", async () => {
+    const ends: unknown[] = [];
+
+    for (const end of [
+      (child: FakeKubectl) => {
+        child.complain(`error: You must be logged in to the server (Unauthorized) ${SENTINEL}\n`);
+        child.exit(1);
+      },
+      (child: FakeKubectl) => {
+        child.complain(
+          `error: unable to forward port because pod is not running. Current status=Pending ${SENTINEL}\n`,
+        );
+        child.exit(1);
+      },
+      (child: FakeKubectl) => child.exit(0),
+      (child: FakeKubectl) => child.failToStart(),
+    ]) {
+      const value = fixture();
+      const opening = value.tunnels.open(CLUSTER, POD, new AbortController().signal);
+
+      end(await started(value));
+      ends.push(await opening.catch((error: unknown) => error));
+      await flush();
+      expect(value.tunnels.count).toBe(0);
+    }
+    expect(ends).toMatchObject([
+      { code: "forbidden", verdict: "credential" },
+      { code: "transport-unreachable" },
+      { code: "transport-unreachable" },
+      { code: "transport-unreachable" },
+    ]);
+    // A spawn that raises at once.
+    const raising = fixture({ spawnThrows: true });
+
+    ends.push(await raising.tunnels.open(CLUSTER, POD, new AbortController().signal).catch((error: unknown) => error));
+    expect(ends[4]).toMatchObject({ code: "transport-unreachable" });
+    expect(inspect(ends, { depth: 8, showHidden: true })).not.toContain(SENTINEL);
+    expect(
+      downloadFailure("transport-unreachable", "forward", {
+        artifact: "BackupLog",
+        name: "nightly",
+        namespace: "velero",
+        request: "nightly-request",
+      }).text,
+    ).toContain("The port-forward to the Pod of the store could not be opened");
+  });
+
+  it("says a kubectl the host does not give, for a cluster not there or not connected, as a target that changed, and starts nothing", async () => {
+    const ends: unknown[] = [];
+
+    for (const status of [undefined, "disconnected", "connecting", "connected"]) {
+      const value = fixture({ shellRejects: true });
+
+      value.status(status);
+      ends.push(await value.tunnels.open(CLUSTER, POD, new AbortController().signal).catch((error: unknown) => error));
+      expect(value.spawn).not.toHaveBeenCalled();
+    }
+    // A cluster that is connected, for which the host still gives none, has no kubectl to run.
+    expect(ends).toMatchObject([
+      { code: "target-changed", verdict: "absent" },
+      { code: "target-changed", verdict: "disconnected" },
+      { code: "target-changed", verdict: "disconnected" },
+      { code: "transport-unreachable" },
+    ]);
+  });
+
+  it("refuses a Pod that is not one before anything is run", async () => {
+    for (const pod of [
+      { ...POD, name: "--address=0.0.0.0" },
+      { ...POD, name: "Seaweedfs" },
+      { ...POD, namespace: "-n" },
+      { ...POD, port: 0 },
+      { ...POD, port: 65_536 },
+      { ...POD, port: 8333.5 },
+    ]) {
+      const value = fixture();
+
+      await expect(value.tunnels.open(CLUSTER, pod, new AbortController().signal)).rejects.toMatchObject({
+        code: "validation",
+      });
+      expect(value.host.kubectl).not.toHaveBeenCalled();
     }
   });
 
-  it("cancels while the local listener is still opening", async () => {
-    const controller = new AbortController();
-    const operation = openPodTunnel(api(), target, controller.signal);
-    const cancelled = expect(operation).rejects.toMatchObject({ code: "cancelled" });
+  it("keeps what kubectl writes in the main process, and reads it to its end", async () => {
+    const consoles = (["log", "info", "warn", "error", "debug"] as const).map((name) =>
+      vi.spyOn(console, name).mockImplementation(() => undefined),
+    );
+    const value = fixture();
+    const opening = value.tunnels.open(CLUSTER, POD, new AbortController().signal);
+    const child = await started(value);
 
-    queueMicrotask(() => controller.abort());
-    await cancelled;
-  }, 1000);
+    child.complain(`a warning of kubectl ${SENTINEL}\n`);
+    child.say("Forwarding from 127.0.0.1:41821 -> 8333\n");
+    const tunnel = await opening;
 
-  it("does not create a listener after cancellation during pod lookup", async () => {
-    const controller = new AbortController();
-    const base = api();
-
-    await expect(
-      openPodTunnel(
-        {
-          ...base,
-          read: async () => {
-            controller.abort();
-            return base.read();
-          },
-        },
-        target,
-        controller.signal,
-      ),
-    ).rejects.toMatchObject({ code: "cancelled" });
+    // After its line kubectl is still read, so that it never waits for room to write.
+    expect(child.stdout.listenerCount("data")).toBeGreaterThan(0);
+    expect(child.stderr.listenerCount("data")).toBeGreaterThan(0);
+    child.say(`Handling connection for 41821 ${SENTINEL}\n`);
+    child.complain(`E1016 an error occurred forwarding 41821 -> 8333 ${SENTINEL}\n`);
+    await tunnel.close();
+    expect(inspect(tunnel, { depth: 8, showHidden: true })).not.toContain(SENTINEL);
+    for (const spy of consoles) expect(spy).not.toHaveBeenCalled();
   });
 });

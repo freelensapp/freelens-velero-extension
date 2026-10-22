@@ -1,4 +1,4 @@
-import { action, computed, makeObservable, observable, runInAction } from "mobx";
+import { action, computed, makeObservable, observable, observableRef, runInAction } from "mobx";
 import { notTheText } from "../../common/artifact-text";
 import { downloadFailure } from "../../common/diagnostic-text";
 import { ARTIFACT_HOLD_MS, ARTIFACT_TEXT_BOUND, failure } from "../../common/ipc";
@@ -94,11 +94,11 @@ export class ArtifactLoad {
   constructor(dependencies: ArtifactLoadDependencies) {
     this.dependencies = dependencies;
     makeObservable(this, {
-      step: observable.ref,
+      step: observableRef,
       held: observable,
       heldUntil: observable,
       expired: observable,
-      saving: observable.ref,
+      saving: observableRef,
       savable: computed,
       shown: computed,
       leave: action,

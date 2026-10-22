@@ -2,7 +2,8 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { listProps } from "../../../test/host-components";
+import { hostObject } from "../../../test/freelens-extensions";
+import { drawerNames, drawerValue, listProps } from "../../../test/host-components";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { BACKUP_PHASES } from "../../common/phases";
 import { Backup } from "../api/kinds";
@@ -318,7 +319,7 @@ describe("workspace of a backup", () => {
     await waitFor(() => expect(screen.queryByTestId("velero-backup-workspace")).toBeNull());
     expect(document.activeElement?.getAttribute("data-backup-row")).toBe("nightly-2");
     // The operator goes on at once: the row does not take back what it was given.
-    screen.getByTestId("velero-refresh").focus();
+    act(() => screen.getByTestId("velero-refresh").focus());
     await new Promise((resolve) => setTimeout(resolve, 600));
     expect(document.activeElement).toBe(screen.getByTestId("velero-refresh"));
   });
@@ -471,10 +472,10 @@ describe("details of the host", () => {
     });
 
     return render(
-      <BackupDetails object={new Backup(resource as never)} extension={extension} installation={installation} />,
+      <BackupDetails object={hostObject(Backup, resource)} extension={extension} installation={installation} />,
     );
   };
-  const item = (name: string) => document.querySelector(`[data-name="${name}"] .value`)?.textContent;
+  const item = (name: string) => drawerValue(name);
 
   it("reads the backup as the views do, and leads to the workspace of the installation selected", async () => {
     mount(answers(), chosen(A));
@@ -517,17 +518,13 @@ describe("details of the host", () => {
       writer: main,
     });
 
-    render(
-      <BackupDetails object={new Backup(finalizing as never)} extension={extension} installation={installation} />,
-    );
+    render(<BackupDetails object={hostObject(Backup, finalizing)} extension={extension} installation={installation} />);
     expect(screen.getByTestId("velero-backup-details-artifacts").textContent).toBe(
       "The log, the results, the resource list and the volume information of this backup are in its workspace, each loaded there when it is asked for. None of them is loaded here.",
     );
     expect(item("Diagnostics")).toBe(screen.getByTestId("velero-backup-details-artifacts").textContent);
     // The way there is the one to the workspace, which follows what the details say of it.
-    const section = [...screen.getByTestId("velero-backup-details").querySelectorAll(".DrawerItem")].map((part) =>
-      part.getAttribute("data-name"),
-    );
+    const section = drawerNames(screen.getByTestId("velero-backup-details"));
 
     expect(section.slice(-2)).toEqual(["Diagnostics", "Workspace"]);
     expect(screen.getByTestId("velero-backup-details-link").getAttribute("href")).toBe(

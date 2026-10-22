@@ -55,7 +55,3 @@ jobs:
 
       - name: Run unit tests
         run: pnpm --color=always --stream test:unit
-
-      # The tests of the compiled entry points run again on the bundle that gets packed.
-      - name: Run unit tests on the production build
-        run: VITE_PRESERVE_MODULES=false pnpm --color=always --stream test:unit

@@ -2,7 +2,6 @@
 // before a connection is made, on a cluster of the test and a resolver of the test.
 
 import { describe, expect, it, vi } from "vitest";
-import { CredentialPluginError } from "./context-identity";
 import { type RouteDependencies, resolveRoute } from "./diagnostic-route";
 import { DiagnosticError } from "./diagnostic-transport";
 
@@ -59,7 +58,9 @@ function fixture(options: { lookups?: Record<string, string[]>; allowed?: string
   };
   const asked: string[] = [];
   const api = {
-    assertCurrent: vi.fn(),
+    assertCurrent: vi.fn(() => {
+      asked.push("catalog");
+    }),
     read: vi.fn(async (kind: string, namespace: string, name: string): Promise<DiagnosticObject> => {
       asked.push(`read ${kind} ${namespace}/${name}`);
       if (state.refuse === kind) throw new DiagnosticError("forbidden");
@@ -73,14 +74,12 @@ function fixture(options: { lookups?: Record<string, string[]>; allowed?: string
       if (state.refuse === kind) throw new DiagnosticError("forbidden");
       return state.slices as DiagnosticObject[];
     }),
-    authenticatedConfiguration: vi.fn(async () => ({ synthetic: "configuration" }) as never),
   };
   const close = vi.fn();
-  const tunnel = vi.fn(async (_api: unknown, _pod: unknown, _signal: AbortSignal) => ({
-    address: "127.0.0.1",
-    port: 40_123,
-    close,
-  }));
+  const tunnel = vi.fn(async (_pod: unknown, _signal: AbortSignal) => {
+    asked.push("kubectl");
+    return { address: "127.0.0.1", port: 40_123, close };
+  });
   const lookup = vi.fn(async (host: string) => {
     const found = options.lookups?.[host];
 
@@ -92,7 +91,7 @@ function fixture(options: { lookups?: Record<string, string[]>; allowed?: string
     api: api as never,
     allowed: (what, origin, place) => allowances.has(`${what} ${origin}${what === "origin" ? ` ${place}` : ""}`),
     lookup,
-    tunnel: tunnel as never,
+    tunnel,
   };
   const resolve = (url: string, storage: DiagnosticObject, signal = new AbortController().signal) =>
     resolveRoute(url, input, storage, signal, dependencies);
@@ -132,21 +131,21 @@ describe("the route to a store that is a Service of the cluster", () => {
       // Plain HTTP through the tunnel needs no allowance.
       allowHttp: true,
     });
+    // The cluster is looked at in the catalog before kubectl is asked for.
     expect(value.asked).toEqual([
       "read Service storage/seaweedfs",
       "list EndpointSlice storage/seaweedfs",
       "read Pod storage/seaweedfs-0",
+      "catalog",
+      "kubectl",
     ]);
     // The port of the URL is the one of the Service; the tunnel goes to the port of the Pod it names.
-    expect(value.tunnel.mock.calls[0][1]).toEqual({
+    expect(value.tunnel.mock.calls[0][0]).toEqual({
       namespace: "storage",
       name: "seaweedfs-0",
       uid: "pod-uid",
       port: 9333,
     });
-    // The client of the port-forward is given the configuration the adapter authenticated, and its reads.
-    expect(value.api.authenticatedConfiguration).toHaveBeenCalledTimes(1);
-    expect(value.tunnel.mock.calls[0][0]).toMatchObject({ configuration: { synthetic: "configuration" } });
     // A name of that form is never resolved on this machine.
     expect(value.lookup).not.toHaveBeenCalled();
     expect(value.close).not.toHaveBeenCalled();
@@ -230,7 +229,7 @@ describe("the route to a store that is a Service of the cluster", () => {
       },
     ];
     await value.resolve(SERVICE_URL, inCluster);
-    expect(value.tunnel.mock.calls[0][1]).toMatchObject({ name: "seaweedfs-0", uid: "pod-uid", port: 9333 });
+    expect(value.tunnel.mock.calls[0][0]).toMatchObject({ name: "seaweedfs-0", uid: "pod-uid", port: 9333 });
   });
 
   it("denies a Pod that is not ready or does not listen on the port, and one made again since the slice was written", async () => {
@@ -302,7 +301,7 @@ describe("the route to a store that is a Service of the cluster", () => {
       const value = service(targetPort);
 
       await value.resolve(SERVICE_URL, inCluster);
-      expect([targetPort, value.tunnel.mock.calls[0][1]]).toEqual([
+      expect([targetPort, value.tunnel.mock.calls[0][0]]).toEqual([
         targetPort,
         { namespace: "storage", name: "seaweedfs-0", uid: "pod-uid", port },
       ]);
@@ -381,22 +380,52 @@ describe("the route to a store that is a Service of the cluster", () => {
       expect([kind, await value.refused(SERVICE_URL, inCluster)]).toEqual([kind, { code: "forbidden", stage }]);
     }
     value.state.refuse = undefined;
-    // The port-forward itself, and the plugin of the context that gives no credential for it.
-    value.tunnel.mockRejectedValueOnce(new DiagnosticError("forbidden"));
-    expect(await value.refused(SERVICE_URL, inCluster)).toEqual({ code: "forbidden", stage: "forward" });
-    const shared = new CredentialPluginError("/usr/local/bin/kubelogin", "deadline");
-
-    value.api.authenticatedConfiguration.mockRejectedValueOnce(shared);
-    const raised = await value.resolve(SERVICE_URL, inCluster).catch((error: unknown) => error);
-
-    expect(raised).toBeInstanceOf(CredentialPluginError);
-    expect(raised).toMatchObject({ command: "kubelogin", reason: "deadline", stage: "forward" });
-    // What was raised is not written on.
-    expect(shared.stage).toBeUndefined();
+    // The port-forward itself, refused by the cluster, and every other way kubectl ends before it is ready:
+    // each at the step of the port-forward, with what it says.
+    for (const [raised, said] of [
+      [new DiagnosticError("forbidden"), { code: "forbidden", stage: "forward" }],
+      [
+        new DiagnosticError("forbidden", undefined, "credential"),
+        { code: "forbidden", stage: "forward", verdict: "credential" },
+      ],
+      [
+        new DiagnosticError("target-changed", undefined, "disconnected"),
+        { code: "target-changed", stage: "forward", verdict: "disconnected" },
+      ],
+      [new DiagnosticError("transport-unreachable"), { code: "transport-unreachable", stage: "forward" }],
+      [new DiagnosticError("deadline"), { code: "deadline", stage: "forward" }],
+    ] as const) {
+      value.tunnel.mockRejectedValueOnce(raised);
+      expect(await value.refused(SERVICE_URL, inCluster)).toEqual(said);
+      // What was raised is not written on.
+      expect(raised.stage).toBeUndefined();
+    }
     // A Service of that form that is not there is said so, and nothing is resolved in its place.
     value.state.service = undefined;
     expect(await value.refused(SERVICE_URL, inCluster)).toEqual({ code: "not-found", stage: "service" });
     expect(value.lookup).not.toHaveBeenCalled();
+  });
+
+  it("asks for no kubectl for a cluster that is not connected any more, and reaches no store of the cluster without a tunnel", async () => {
+    const value = fixture();
+
+    value.api.assertCurrent.mockImplementationOnce(() => {
+      throw new DiagnosticError("target-changed", undefined, "disconnected");
+    });
+    expect(await value.refused(SERVICE_URL, inCluster)).toEqual({
+      code: "target-changed",
+      stage: "forward",
+      verdict: "disconnected",
+    });
+    expect(value.tunnel).not.toHaveBeenCalled();
+    // Procedures that were given no tunnel do not reach a store inside the cluster.
+    const without = fixture();
+    const raised = await resolveRoute(SERVICE_URL, input, inCluster, new AbortController().signal, {
+      api: without.api as never,
+      allowed: () => false,
+    }).catch((error: unknown) => error);
+
+    expect(raised).toMatchObject({ code: "transport-unreachable", stage: "forward" });
   });
 });
 

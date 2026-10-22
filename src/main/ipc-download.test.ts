@@ -6,15 +6,14 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { CHANNELS, readAnswer, readArtifactPage, readArtifactValue } from "../common/ipc";
 import { ArtifactHolder } from "./artifact-holder";
-import { CredentialPluginError } from "./context-identity";
 import { DiagnosticError } from "./diagnostic-transport";
 import { downloadFailureOf, registerHandlers } from "./ipc";
 import { WriteGate } from "./write-gate";
 
 import type { Allowances } from "../common/allowances";
+import type { CatalogEntry } from "./catalog";
 import type { DiagnosticObject } from "./diagnostic-kubernetes";
 import type { IpcEvent, Registrar } from "./ipc";
-import type { CatalogEntry } from "./write-gate";
 
 const FRAME_A: IpcEvent = {
   senderFrame: { url: "https://cluster-a.renderer.freelens.app:1234/" },
@@ -43,8 +42,8 @@ function fixture(
   } = {},
 ) {
   const catalog: CatalogEntry[] = [
-    { id: "cluster-a", name: "demo", kubeConfigPath: "/synthetic/a", contextName: "kind-a" },
-    { id: "cluster-b", name: "other", kubeConfigPath: "/synthetic/b", contextName: "kind-b" },
+    { id: "cluster-a", name: "demo", kubeConfigPath: "/synthetic/a", contextName: "kind-a", status: "connected" },
+    { id: "cluster-b", name: "other", kubeConfigPath: "/synthetic/b", contextName: "kind-b", status: "connected" },
   ];
   const handlers = new Map<string, (event: IpcEvent, payload: unknown) => Promise<unknown>>();
   const broadcasts: unknown[] = [];
@@ -89,7 +88,6 @@ function fixture(
   };
   const gate = new WriteGate({
     catalog: () => catalog,
-    connection: () => ({ supported: true, credential: "token" }),
     adapter: () => adapter as never,
   });
   const holder = new ArtifactHolder();
@@ -784,14 +782,14 @@ describe("the procedures of a DownloadRequest", () => {
       stage: "download",
       text: expect.stringContaining(`The DownloadRequest nightly-${missing} stays in velero`),
     });
-    // The plugin of the context that gave no credential is said as its own failure.
-    adapter.read.mockRejectedValueOnce(new CredentialPluginError("/usr/local/bin/kubelogin", "failed"));
+    // A cluster that left the connected state is said as such.
+    adapter.read.mockRejectedValueOnce(new DiagnosticError("target-changed", undefined, "disconnected"));
     await expect(run(await confirm())).resolves.toMatchObject({
       ok: false,
-      code: "request-failed",
+      code: "target-changed",
       stage: "target",
-      retry: true,
-      text: expect.stringContaining("The credential plugin kubelogin of the context did not give a credential"),
+      retry: false,
+      text: expect.stringContaining("The cluster is not connected in Freelens"),
     });
     dispose();
   });

@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
 import { describe, expect, it, vi } from "vitest";
@@ -43,6 +43,8 @@ import {
   CLEAR_STATES,
   clearTabFixtures,
   createViewFixtures,
+  EXEC_CREDENTIAL_VERSION,
+  execPluginKubeconfig,
   FIXTURE_LABEL,
   FIXTURE_MODE,
   fixtureArtifactPath,
@@ -100,9 +102,13 @@ import {
   tabRemovalWords,
   UNAVAILABLE_MESSAGE,
   unlikeTheTakenBackup,
+  VIEW_OF_AN_EXEC_PLUGIN,
   VIEW_READER,
   VIEW_READER_OF_RESTORES,
+  VIEW_WITHOUT_PORT_FORWARD,
   viewFixtures,
+  viewIdentityOfAnExecPlugin,
+  viewIdentityWithoutPortForward,
 } from "../e2e/scripts/local-fixtures.mts";
 import {
   assertEgressRules,
@@ -1346,29 +1352,95 @@ describe("foundation fixture boundaries", () => {
     expect(rules("reader")).toEqual([reads]);
     // The requester creates the request and reads it, and reads no Secret and no Service.
     expect(rules("requester")).toEqual([reads, requests]);
-    // The router reads the Service, its endpoint slices and its Pod, and has the verb create alone for the
-    // port-forward, which is not what a port-forward over a WebSocket is asked with: it is refused there.
-    expect(rules("router")).toEqual([
+    // The router reads the Service, its endpoint slices and its Pod, and has no verb of the port-forward:
+    // the kubectl of the host is refused there, over a WebSocket and over the older protocol.
+    expect(rules("router")).toEqual([reads, requests, ...route]);
+    // The downloader has what the documentation lists for a download through the cluster, and no more: the
+    // verb create of the port-forward, which the kubectl of the host falls back to when the verb get it asks
+    // first over a WebSocket is refused.
+    expect(rules("downloader")).toEqual([
       reads,
       requests,
       ...route,
       { apiGroups: [""], resources: ["pods/portforward"], verbs: ["create"] },
     ]);
-    // The downloader has what the documentation lists for a download through the cluster, and no more: a
-    // port-forward over a WebSocket is asked of the API server with the verb get, and the releases that
-    // check the verb create as well ask for both.
-    expect(rules("downloader")).toEqual([
-      reads,
-      requests,
-      ...route,
-      { apiGroups: [""], resources: ["pods/portforward"], verbs: ["get", "create"] },
-    ]);
-    // None may read a Secret, delete or change anything, or read every kind; the reader and the requester
-    // have nothing of a port-forward.
+    // None may read a Secret, delete or change anything, or read every kind; the reader, the requester and
+    // the router have nothing of a port-forward.
     expect(JSON.stringify(identities)).not.toMatch(/secrets|delete|update|patch|"\*"/);
-    for (const name of ["reader", "requester"] as const)
+    for (const name of ["reader", "requester", "router"] as const)
       expect(JSON.stringify(identities[name])).not.toContain("portforward");
     expect(() => proofIdentities("", run)).toThrow();
+  });
+
+  it("makes the identity of the views that may not port-forward, which reads, creates its request and reads the route, and has no verb of the port-forward", () => {
+    const resources = viewIdentityWithoutPortForward("synthetic-owner", run);
+    const identity = `${VIEW_WITHOUT_PORT_FORWARD}-${run}`;
+    const labels = { [OWNER_LABEL]: "synthetic-owner", [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" };
+
+    // An account of the namespace of the installation, of this run, with a role of that namespace and no role of
+    // the cluster, and no credential mounted anywhere.
+    expect(resources.map((resource) => resource.kind)).toEqual(["ServiceAccount", "Role", "RoleBinding"]);
+    for (const resource of resources)
+      expect(resource.metadata).toEqual({ name: identity, namespace: "velero-demo", labels });
+    expect(resources[0]).toMatchObject({ automountServiceAccountToken: false });
+    expect(resources[2]).toMatchObject({
+      roleRef: { apiGroup: "rbac.authorization.k8s.io", kind: "Role", name: identity },
+      subjects: [{ kind: "ServiceAccount", name: identity, namespace: "velero-demo" }],
+    });
+    // What the views read of the installation, the request a download creates and reads, and the route to the
+    // store: the Service, its endpoint slices and its Pod. Neither verb of the port-forward, get nor create, no
+    // Secret, and nothing that deletes or changes.
+    expect((resources[1] as unknown as { rules: unknown[] }).rules).toEqual([
+      {
+        apiGroups: ["velero.io"],
+        resources: ["backups", "restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"],
+        verbs: ["get", "list", "watch"],
+      },
+      { apiGroups: ["velero.io"], resources: ["downloadrequests"], verbs: ["create", "get"] },
+      { apiGroups: [""], resources: ["services", "pods"], verbs: ["get"] },
+      { apiGroups: ["discovery.k8s.io"], resources: ["endpointslices"], verbs: ["list"] },
+    ]);
+    expect(JSON.stringify(resources)).not.toMatch(/portforward|secrets|delete|update|patch|"\*"/);
+    expect(() => viewIdentityWithoutPortForward("", run)).toThrow();
+    expect(() => viewIdentityWithoutPortForward("synthetic-owner", "not-a-run")).toThrow();
+  });
+
+  it("makes the identity of the views whose token an exec plugin gives, with what the documentation lists for the writes and for a download through the cluster", () => {
+    const resources = viewIdentityOfAnExecPlugin("synthetic-owner", run);
+    const identity = `${VIEW_OF_AN_EXEC_PLUGIN}-${run}`;
+    const labels = { [OWNER_LABEL]: "synthetic-owner", [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" };
+
+    // An account of the namespace of the installation, of this run, with a role of that namespace and no role of
+    // the cluster, and no credential mounted anywhere.
+    expect(resources.map((resource) => resource.kind)).toEqual(["ServiceAccount", "Role", "RoleBinding"]);
+    for (const resource of resources)
+      expect(resource.metadata).toEqual({ name: identity, namespace: "velero-demo", labels });
+    expect(resources[0]).toMatchObject({ automountServiceAccountToken: false });
+    expect(resources[2]).toMatchObject({
+      roleRef: { apiGroup: "rbac.authorization.k8s.io", kind: "Role", name: identity },
+      subjects: [{ kind: "ServiceAccount", name: identity, namespace: "velero-demo" }],
+    });
+    // What the views read of the installation, the two requests the gate lets through, created and read, the
+    // route to the store, and the port-forward with the verb the documentation lists. No Secret, since the
+    // location of the demo refers to none, and nothing that deletes or changes.
+    expect((resources[1] as unknown as { rules: unknown[] }).rules).toEqual([
+      {
+        apiGroups: ["velero.io"],
+        resources: ["backups", "restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"],
+        verbs: ["get", "list", "watch"],
+      },
+      {
+        apiGroups: ["velero.io"],
+        resources: ["downloadrequests", "serverstatusrequests"],
+        verbs: ["create", "get"],
+      },
+      { apiGroups: [""], resources: ["services", "pods"], verbs: ["get"] },
+      { apiGroups: ["discovery.k8s.io"], resources: ["endpointslices"], verbs: ["list"] },
+      { apiGroups: [""], resources: ["pods/portforward"], verbs: ["create"] },
+    ]);
+    expect(JSON.stringify(resources)).not.toMatch(/secrets|delete|update|patch|"\*"/);
+    expect(() => viewIdentityOfAnExecPlugin("", run)).toThrow();
+    expect(() => viewIdentityOfAnExecPlugin("synthetic-owner", "not-a-run")).toThrow();
   });
 
   it("asks the controller to delete a backup of the fixtures, the real one, the refused one or one the store was given, and no other", () => {
@@ -8433,6 +8505,88 @@ describe("foundation fixture boundaries", () => {
     expect(() => readerKubeconfig({ ...config, users: [...config.users, ...config.users] }, token, "x")).toThrow();
   });
 
+  it("gives the identity of the exec plugin the kubeconfig of the environment with the plugin as its credential, which names the files of the plugin and holds no token", () => {
+    const config = {
+      "current-context": "kind-synthetic",
+      contexts: [{ name: "kind-synthetic", context: { cluster: "kind-synthetic", user: "kind-synthetic" } }],
+      clusters: [{ name: "kind-synthetic", cluster: { server: "https://127.0.0.1:6443" } }],
+      users: [{ name: "kind-synthetic", user: { "client-key-data": "synthetic", "client-certificate-data": "x" } }],
+    };
+    const plugin = {
+      script: "/synthetic/e2e/scripts/local-exec-credential.sh",
+      token: "/synthetic/state/views-exec-plugin-a1b2c3d4.token",
+      runs: "/synthetic/state/views-exec-plugin-a1b2c3d4.runs",
+    };
+    const kubeconfig = execPluginKubeconfig(config, plugin, "velero-demo");
+
+    // The plugin is run by the shell of the system with the two files, and prints a credential of the version
+    // of the API of today; nothing is asked of who runs it.
+    expect(EXEC_CREDENTIAL_VERSION).toBe("client.authentication.k8s.io/v1");
+    expect(kubeconfig.users).toEqual([
+      {
+        name: "kind-synthetic",
+        user: {
+          exec: {
+            apiVersion: EXEC_CREDENTIAL_VERSION,
+            command: "/bin/sh",
+            args: [plugin.script, plugin.token, plugin.runs],
+            interactiveMode: "Never",
+            provideClusterInfo: false,
+          },
+        },
+      },
+    ]);
+    expect(kubeconfig.contexts[0].context).toEqual({
+      cluster: "kind-synthetic",
+      user: "kind-synthetic",
+      namespace: "velero-demo",
+    });
+    expect(kubeconfig.clusters).toEqual(config.clusters);
+    expect(JSON.stringify(kubeconfig)).not.toMatch(/client-key-data|client-certificate-data|"token":/);
+    // The kubeconfig of the environment is left as it was.
+    expect(config.users[0].user).toHaveProperty("client-key-data");
+    expect(config.contexts[0].context).not.toHaveProperty("namespace");
+    expect(() => execPluginKubeconfig(config, { ...plugin, token: "plugin.token" }, "velero-demo")).toThrow();
+    expect(() =>
+      execPluginKubeconfig({ ...config, users: [...config.users, ...config.users] }, plugin, "velero-demo"),
+    ).toThrow();
+  });
+
+  it("runs the exec plugin of the test environment: the credential of its token, and in the file of its runs the name of the executable of the process that ran it, with nothing of the token there or on its error output", () => {
+    const directory = mkdtempSync(join(tmpdir(), "velero-exec-plugin-test-"));
+    const script = fileURLToPath(new URL("../e2e/scripts/local-exec-credential.sh", import.meta.url));
+    const token = ["eyJhbGciOiJSUzI1NiJ9", "eyJpc3MiOiJzeW50aGV0aWMifQ", "c2lnbmF0dXJl"].join(".");
+    const files = { token: join(directory, "plugin.token"), runs: join(directory, "plugin.runs") };
+    // Run as a plugin is, with nothing of the environment of who runs it: this process is its parent.
+    const runPlugin = () =>
+      spawnSync("/bin/sh", [script, files.token, files.runs], { env: {}, encoding: "utf8", timeout: 10_000 });
+    const parent = basename(realpathSync(process.execPath));
+
+    try {
+      writeFileSync(files.token, token, { mode: 0o600 });
+      writeFileSync(files.runs, "", { mode: 0o600 });
+      for (const result of [runPlugin(), runPlugin()]) {
+        expect([result.status, result.stderr]).toEqual([0, ""]);
+        expect(JSON.parse(result.stdout)).toEqual({
+          apiVersion: "client.authentication.k8s.io/v1",
+          kind: "ExecCredential",
+          status: { token },
+        });
+      }
+      // A line for each run, with the name of the executable of the process that ran it, and no path.
+      expect(readFileSync(files.runs, "utf8")).toBe(`${parent}\n${parent}\n`);
+      // What is not a token is not printed, and the run is recorded all the same.
+      writeFileSync(files.token, "not a token\n");
+      const refused = runPlugin();
+
+      expect([refused.status, refused.stdout, refused.stderr]).toEqual([1, "", ""]);
+      expect(readFileSync(files.runs, "utf8")).toBe(`${parent}\n${parent}\n${parent}\n`);
+      expect(readFileSync(files.runs, "utf8")).not.toContain("eyJ");
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("refuses namespace cleanup with unrelated resources and binds backup deletion to its UID", () => {
     const namespace = fixtureNames(run).source;
     const resource = {
@@ -9165,12 +9319,82 @@ describe("platform of the test environment", () => {
     expect(uploads).toHaveLength(1);
     expect(uploads[0][1]).toMatch(/\n?\s+path: e2e-artifacts\/\n/);
     expect(uploads[0][1].match(/path:/g)).toHaveLength(1);
-    // The only thing kept from a run is the application that was built, which holds nothing of a run.
-    expect(saved.map((match) => match[1])).toEqual(["freelens/freelens/dist"]);
+    // The only things kept from a run are the binaries the build of Freelens downloaded and checked against its
+    // lock, the Electron it downloaded and the application that was built, which hold nothing of a run.
+    expect(saved.map((match) => match[1])).toEqual([
+      "freelens/freelens/binaries",
+      "~/.cache/electron",
+      "freelens/freelens/dist",
+    ]);
     expect(workflow).not.toMatch(/\.local\/state|kubeconfig|credentials|operations\.log/);
     expect(workflow).toMatch(/if: always\(\)\n\s+run: node e2e\/scripts\/local-demo\.mts down --context/);
     expect(workflow).toContain("runs-on: ubuntu-24.04-arm");
     expect(workflow).toMatch(/^permissions:\n {2}contents: read$/m);
+  });
+
+  it("uploads from the integration tests their screenshots, and nothing of the state", () => {
+    // What the workflow does, without what it says of itself in its comments.
+    const workflow = readFileSync(new URL("../.github/workflows/integration-tests.yaml", import.meta.url), "utf8")
+      .split("\n")
+      .filter((line) => !line.trimStart().startsWith("#"))
+      .join("\n");
+    const uploads = [...workflow.matchAll(/uses: actions\/upload-artifact@[^\n]+\n\s+with:\n((?:\s{10,}[^\n]+\n)+)/g)];
+    const saved = [...workflow.matchAll(/uses: actions\/cache\/save@[^\n]+\n\s+with:\n\s+path: ([^\n]+)/g)];
+
+    expect(uploads).toHaveLength(1);
+    expect(uploads[0][1]).toMatch(/\n?\s+path: e2e-artifacts\/\n/);
+    expect(uploads[0][1].match(/path:/g)).toHaveLength(1);
+    expect(saved.map((match) => match[1])).toEqual([
+      "freelens/freelens/binaries",
+      "~/.cache/electron",
+      "freelens/freelens/dist",
+    ]);
+    expect(workflow).not.toMatch(/\.local\/state|kubeconfig|credentials|operations\.log/);
+    expect(workflow).toMatch(/if: always\(\)\n\s+run: pnpm --color=always e2e:cluster:down/);
+    expect(workflow).toContain("runs-on: ubuntu-24.04-arm");
+    expect(workflow).toMatch(/^permissions:\n {2}contents: read$/m);
+  });
+
+  it("tags X.Y.Z and its prereleases X.Y.Z-N, which the release publishes on next as prereleases, and X.Y.Z on latest", () => {
+    const read = (name: string) => readFileSync(new URL(`../.github/workflows/${name}`, import.meta.url), "utf8");
+    const release = read("release.yaml");
+    // The expression the tag workflow matches the version of package.json with, as bash reads it.
+    const tagged = new RegExp(/ =~ (\^\S+\$) \]\]/.exec(read("tag.yaml"))?.[1] ?? "(?!)");
+
+    expect(["0.1.0", "1.0.0", "1.0.0-0", "1.0.0-12", "10.20.30-4"].filter((version) => !tagged.test(version))).toEqual(
+      [],
+    );
+    expect(
+      ["0.1.0-alpha.0", "1.0.0-rc.1", "1.0.0-1-2", "1.0.0-", "1.0", "v1.0.0"].filter((version) => tagged.test(version)),
+    ).toEqual([]);
+    // The npm tag of the publication and of its two retries: a version with a hyphen goes to next.
+    expect(
+      release.match(/case "\$\{GITHUB_REF_NAME\}" in\n\s+\*-\*\) dist_tag=next;;\n\s+\*\) dist_tag=latest;;\n\s+esac/g),
+    ).toHaveLength(3);
+    // And its release on GitHub is a prerelease.
+    expect(release).toMatch(/\n\s+prerelease: \$\{\{ contains\(github\.ref_name, '-'\) \}\}\n/);
+  });
+
+  it("builds Freelens for the views and for the integration at the validation target of SPEC-0015, named once", () => {
+    const spec = readFileSync(new URL("../docs/specs/SPEC-0015-freelens-v2-host.md", import.meta.url), "utf8");
+    const target = /^- \*\*Freelens validation target:\*\* freelensapp\/freelens `([0-9a-f]{40})`/m.exec(spec)?.[1];
+
+    expect(target).toMatch(/^[0-9a-f]{40}$/);
+    for (const name of ["views-tests.yaml", "integration-tests.yaml"]) {
+      const workflow = readFileSync(new URL(`../.github/workflows/${name}`, import.meta.url), "utf8");
+
+      // The commit is written in one line of each workflow, and every step that needs it names that line.
+      expect([name, workflow.match(/\b[0-9a-f]{40}\b/g)]).toEqual([name, [target]]);
+      expect([name, workflow.match(/^ {2}freelens_ref: ([0-9a-f]{40})$/m)?.[1]]).toEqual([name, target]);
+      expect([name, workflow]).toEqual([
+        name,
+        expect.stringMatching(/repository: freelensapp\/freelens\n\s+ref: \$\{\{ env\.freelens_ref \}\}\n/),
+      ]);
+      // The build is cached by that commit, and by nothing else: not a version and not a branch.
+      const keys = [...workflow.matchAll(/key: ubuntu-24\.04-arm-electron-dist-([^\n]*)/g)].map((match) => match[1]);
+
+      expect([name, keys]).toEqual([name, [expect.stringMatching(/^\$\{\{ env\.freelens_ref \}\}$/)]]);
+    }
   });
 
   it("keeps the internal network wherever the host reaches the address of the node", () => {

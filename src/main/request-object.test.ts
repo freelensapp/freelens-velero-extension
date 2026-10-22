@@ -1,18 +1,16 @@
 // What the views show of a request before it is created is what the cluster is sent: the whole way, from
-// the client of the views through the IPC of the host, the gate and the adapter of the main process, to
-// an API server of the test that keeps every request it receives.
+// the client of the views through the IPC of the host, the gate and the adapter of the main process, and
+// the client of the host for the cluster, to an API server of the test that keeps every request it
+// receives.
 
 import { randomUUID } from "node:crypto";
-import { once } from "node:events";
-import { writeFile } from "node:fs/promises";
-import { createServer, type Server } from "node:https";
-import { join } from "node:path";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { hostCatalog, resetIpc } from "../../test/freelens-extensions";
-import { createTlsFixture } from "../../test/tls-fixture";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { anExtension, hostCatalog, hostCluster, resetIpc } from "../../test/freelens-extensions";
+import { answered, fakeHostClient, type HostRequest, statusOf } from "../../test/host-client";
 import { REQUEST_LABELS, REQUEST_PREFIX } from "../common/ipc";
 import { VeleroIpcRenderer } from "../renderer/api/ipc";
-import { catalogEntries, VeleroIpc } from "./ipc";
+import { catalogEntries, hostDependencies } from "./host";
+import { VeleroIpc } from "./ipc";
 
 const CLUSTER = "synthetic-cluster";
 const CONTEXT = "kind-synthetic";
@@ -28,97 +26,70 @@ const PROCESSED = {
   ],
 };
 
-let certificates: Awaited<ReturnType<typeof createTlsFixture>>;
-let server: Server;
-let kubeconfig: string;
 let main: VeleroIpc;
 let renderer: VeleroIpcRenderer;
-// What the API server of the test was sent, and what it does with a creation.
-const received: { method?: string; path?: string; body?: unknown }[] = [];
 let refuseCreation = false;
 let reads = 0;
 
-beforeAll(async () => {
-  certificates = await createTlsFixture();
-  server = createServer(certificates, async (request, response) => {
-    const chunks: Buffer[] = [];
+// The API server of the test, behind the client of the host: a creation, and the reads of the request it
+// created, which the server processes at the second.
+function server(request: HostRequest) {
+  const object = {
+    apiVersion: "velero.io/v1",
+    kind: "ServerStatusRequest",
+    metadata: { name: `${REQUEST_PREFIX}abcde`, namespace: NAMESPACE, uid: "request-uid" },
+    spec: {},
+  };
 
-    for await (const chunk of request) chunks.push(Buffer.from(chunk));
-    const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : undefined;
+  if (request.method === "POST" && request.path === REQUESTS)
+    return refuseCreation ? answered(403, statusOf(403, "Forbidden")) : answered(201, object);
+  if (request.method === "GET" && request.path === `${REQUESTS}/${object.metadata.name}`) {
+    reads += 1;
+    // The server has not looked at the request the first time it is read.
+    return answered(200, reads > 1 ? { ...object, status: PROCESSED } : object);
+  }
+  return answered(404, statusOf(404, "NotFound"));
+}
 
-    received.push({ method: request.method, path: request.url, ...(body === undefined ? {} : { body }) });
-    if (request.headers.authorization !== "Bearer synthetic-token") {
-      response.writeHead(401).end();
-      return;
-    }
-    const object = {
-      apiVersion: "velero.io/v1",
-      kind: "ServerStatusRequest",
-      metadata: { name: `${REQUEST_PREFIX}abcde`, namespace: NAMESPACE, uid: "request-uid" },
-      spec: {},
-    };
-
-    if (request.method === "POST" && request.url === REQUESTS) {
-      if (refuseCreation) response.writeHead(403).end();
-      else response.writeHead(201).end(JSON.stringify(object));
-      return;
-    }
-    if (request.method === "GET" && request.url === `${REQUESTS}/${object.metadata.name}`) {
-      reads += 1;
-      // The server has not looked at the request the first time it is read.
-      response.end(JSON.stringify(reads > 1 ? { ...object, status: PROCESSED } : object));
-      return;
-    }
-    response.writeHead(404).end();
-  });
-  server.listen(0, "127.0.0.1");
-  await once(server, "listening");
-  const address = server.address();
-
-  if (!address || typeof address === "string") throw new Error("Missing API fixture listener");
-  kubeconfig = join(certificates.directory, "kubeconfig.json");
-  await writeFile(
-    kubeconfig,
-    JSON.stringify({
-      apiVersion: "v1",
-      kind: "Config",
-      contexts: [{ name: CONTEXT, context: { cluster: "synthetic", user: "synthetic" } }],
-      clusters: [
-        {
-          name: "synthetic",
-          cluster: {
-            server: `https://127.0.0.1:${address.port}`,
-            "certificate-authority-data": Buffer.from(certificates.ca).toString("base64"),
-          },
-        },
-      ],
-      users: [{ name: "synthetic", user: { token: "synthetic-token" } }],
-    }),
-    { mode: 0o600 },
-  );
-});
+let host = fakeHostClient(server);
+// What the API server of the test was sent.
+const received = () =>
+  host.requests.map((request) => ({
+    method: request.method,
+    path: request.path,
+    ...(request.body === undefined ? {} : { body: request.body }),
+  }));
 
 beforeEach(() => {
-  received.length = 0;
   refuseCreation = false;
   reads = 0;
+  host = fakeHostClient(server);
   resetIpc();
-  hostCatalog.clusters = [{ id: CLUSTER, name: "synthetic", kubeConfigPath: kubeconfig, contextName: CONTEXT }];
-  main = VeleroIpc.createInstance({} as never);
-  main.register(catalogEntries);
-  renderer = VeleroIpcRenderer.createInstance({} as never);
+  // No file is behind the path of the catalog: the extension reads no kubeconfig.
+  hostCatalog.clusters = [
+    {
+      id: CLUSTER,
+      name: "synthetic",
+      kubeConfigPath: "/synthetic/kubeconfig",
+      contextName: CONTEXT,
+      status: "connected",
+    },
+  ];
+  hostCluster.forCluster = host.forCluster;
+  main = VeleroIpc.createInstance(anExtension("main") as never);
+  // The procedures as the extension registers them, with what it takes of the host.
+  main.register(
+    catalogEntries,
+    hostDependencies(() => "/synthetic/extensions/velero/package.json"),
+  );
+  renderer = VeleroIpcRenderer.createInstance(anExtension("renderer") as never);
 });
 
 afterEach(() => {
   main.release();
   hostCatalog.clusters = undefined;
+  hostCluster.forCluster = undefined;
   resetIpc();
-});
-
-afterAll(async () => {
-  server?.closeAllConnections();
-  if (server) await new Promise<void>((resolve) => server.close(() => resolve()));
-  await certificates?.dispose();
 });
 
 // Turns writes on and confirms one ServerStatusRequest, as the band of the server does with its two gestures.
@@ -140,10 +111,10 @@ describe("the object of a request, as the cluster is sent it", () => {
     const token = await confirmed();
 
     // Turning writes on and confirming a write ask the cluster nothing.
-    expect(received).toEqual([]);
+    expect(received()).toEqual([]);
     const answer = await renderer.runServerStatus(CLUSTER, NAMESPACE, token, randomUUID());
 
-    expect(received[0]).toEqual({
+    expect(received()[0]).toEqual({
       method: "POST",
       path: REQUESTS,
       body: {
@@ -164,22 +135,38 @@ describe("the object of a request, as the cluster is sent it", () => {
       },
     });
     // One creation, then the reads of the request by the name the API gave it; nothing is deleted or changed.
-    expect(received.map((request) => `${request.method} ${request.path}`)).toEqual([
+    expect(received().map((request) => `${request.method} ${request.path}`)).toEqual([
       `POST ${REQUESTS}`,
       `GET ${REQUESTS}/${REQUEST_PREFIX}abcde`,
       `GET ${REQUESTS}/${REQUEST_PREFIX}abcde`,
     ]);
+    // Every request went through the client of the host for the cluster of the request, and nothing else.
+    expect(host.requests.map((request) => [request.cluster, request.call])).toEqual([
+      [CLUSTER, "getResponse"],
+      [CLUSTER, "getResponse"],
+      [CLUSTER, "getResponse"],
+    ]);
+  });
+
+  it("sends nothing to a cluster that left the connected state, and says so", async () => {
+    const token = await confirmed();
+
+    hostCatalog.clusters = hostCatalog.clusters?.map((cluster) => ({ ...cluster, status: "disconnecting" }));
+    const answer = await renderer.runServerStatus(CLUSTER, NAMESPACE, token, randomUUID());
+
+    expect(answer).toMatchObject({ ok: false, code: "target-changed", stage: "catalog" });
+    expect(received()).toEqual([]);
   });
 
   it("runs once for a confirmation: the token of a write that ran creates nothing more", async () => {
     const token = await confirmed();
 
     await renderer.runServerStatus(CLUSTER, NAMESPACE, token, randomUUID());
-    const posted = received.filter((request) => request.method === "POST").length;
+    const posted = received().filter((request) => request.method === "POST").length;
     const again = await renderer.runServerStatus(CLUSTER, NAMESPACE, token, randomUUID());
 
     expect(again).toMatchObject({ ok: false, code: "forbidden", stage: "confirmation" });
-    expect(received.filter((request) => request.method === "POST")).toHaveLength(posted);
+    expect(received().filter((request) => request.method === "POST")).toHaveLength(posted);
   });
 
   it("says that the cluster refused the creation, with the kind and the verb it needs, and leaves writes on", async () => {
@@ -195,7 +182,7 @@ describe("the object of a request, as the cluster is sent it", () => {
       retry: false,
       text: "The cluster refused the creation of a ServerStatusRequest: the identity needs the verb create on serverstatusrequests of the namespace.",
     });
-    expect(received.map((request) => request.method)).toEqual(["POST"]);
+    expect(received().map((request) => request.method)).toEqual(["POST"]);
     expect(await renderer.state(CLUSTER)).toMatchObject({
       ok: true,
       value: { writes: { on: true, namespace: NAMESPACE } },

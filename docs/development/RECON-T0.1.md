@@ -15,7 +15,7 @@ contacted, no environment data were collected, and no upstream code was executed
 | Velero release | `v1.18.4`, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, since the drift watch of 2026-10-13; the types were written from `v1.18.2`, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8` | [Release](https://github.com/velero-io/velero/releases/tag/v1.18.4), [source](https://github.com/velero-io/velero/tree/4ee1e79a7aed367fd9b767b8219ec65bd0c96892) |
 | Velero main comparison | `60163e0827e72658bb6546165a727300170e628b` | [Immutable comparison source](https://github.com/velero-io/velero/tree/60163e0827e72658bb6546165a727300170e628b) |
 | AWS object-store plugin | `v1.14.4`, `7373ae03525ce743a4f95f13a8fa9f56c7b8f551`, since the drift watch of 2026-10-13; reviewed first as `v1.14.2`, `5463822fd77bc1c2a1151ee76c830ad979ff2781` | [Release](https://github.com/velero-io/velero-plugin-for-aws/releases/tag/v1.14.4), [compatibility](https://github.com/velero-io/velero-plugin-for-aws/blob/5463822fd77bc1c2a1151ee76c830ad979ff2781/README.md) |
-| Freelens host | `v1.10.3`, `3da74415bff57a77c6e08cb5f538191ce87bac17` | Local Git tag inspection; [versioned source](https://github.com/freelensapp/freelens/tree/3da74415bff57a77c6e08cb5f538191ce87bac17) |
+| Freelens host | Freelens v2, `2578fac5e9f6d2893129b6ba0d59b379fdf9d305`, the base of the nightly v2.0.0-0-nightly-2026-10-19, with `@freelensapp/extensions` 2.0.0-0-nightly-2026-10-19: the validation target of [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md) since 2026-10-16, moved by the [host drift watch](PROCESS.md#host-drift-watch) until Freelens 2.0.0 is released; reviewed first as `v1.10.3`, `3da74415bff57a77c6e08cb5f538191ce87bac17`, by local Git tag inspection | [Source of the target](https://github.com/freelensapp/freelens/tree/2578fac5e9f6d2893129b6ba0d59b379fdf9d305), [source of the first review](https://github.com/freelensapp/freelens/tree/3da74415bff57a77c6e08cb5f538191ce87bac17) |
 
 The release endpoints reported Velero v1.18.2 and the AWS plugin v1.14.2 as the
 latest stable releases at inspection time; both were published on 2026-06-26. On
@@ -215,7 +215,21 @@ history or permissions. A cron parser alone cannot establish the health signal.
 
 ## Freelens Integration Boundary
 
-Versioned source confirms the following in the pinned host:
+On Freelens v2 the boundary is the one
+[SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#what-the-host-and-the-template-say)
+read in the source of the validation target, and its decisions D1 to D8 follow
+from it. In short: both processes reach a catalog cluster through
+`KubeJsonApi.forCluster`, by path, through the proxy of Freelens, which posts any
+object as well, so the create-only adapter is the client of the host and no
+client of the extension; `Main.Shell` gives the kubectl Freelens runs for a
+connected cluster and its environment, which the tunnel runs; a section of the
+details and a menu item are tied to their kind by `detailsFor` and
+`menuItemFor`; `customResources` takes the kinds with pages of their own out of
+the Custom Resources tree; the virtual list is no longer part of the extension
+API. What follows was read for T0.1 in the host of that date, v1.10.3, and is
+kept as the record of that review.
+
+Versioned source confirmed the following in the host of T0.1:
 
 - [KubeObjectMenu](https://github.com/freelensapp/freelens/blob/3da74415bff57a77c6e08cb5f538191ce87bac17/packages/core/src/renderer/components/kube-object-menu/kube-object-menu.tsx)
   exposes editable/removable controls. The
@@ -423,6 +437,16 @@ download through the cluster does with the WebSocket handler of the client:
 | Fact | Source |
 | --- | --- |
 | A port-forward over a WebSocket begins with an HTTP `GET`, which the API server authorizes as the verb `get` on `pods/portforward`; the older protocol posts, and is authorized as `create`. From Kubernetes 1.35 the gate `AuthorizePodWebsocketUpgradeCreatePermission`, beta and on by default, checks the verb `create` for the upgrade as well. An identity needs both verbs to forward a port on either side of that release. In the test environment, at 1.34, an identity with `create` alone is refused at the port-forward, and one with both downloads | [The description of the gate](https://github.com/kubernetes/website/blob/main/content/en/docs/reference/command-line-tools-reference/feature-gates/AuthorizePodWebsocketUpgradeCreatePermission.md), read on 2026-10-04; the identities of the transport proof |
+
+With Freelens v2 the tunnel is no longer the WebSocket handler of a client of the
+extension: it is `kubectl port-forward`, the kubectl Freelens runs for the
+cluster, through the proxy of Freelens (D2 of
+[SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#d2-the-tunnel-to-the-object-store)).
+What that kubectl asks, found in step 9 of T0.7 on 2026-10-16:
+
+| Fact | Source |
+| --- | --- |
+| kubectl 1.31 and later asks the port-forward over a WebSocket first, with the verb `get` on `pods/portforward`, and falls back to the older protocol, with the verb `create`, when the upgrade is refused. So `create` alone forwards, through the fallback, and on the API server of the test environment, at 1.34, only an identity with neither verb is refused, with last words that name `create`; from Kubernetes 1.35, where the upgrade asks `create` as well, an identity with `get` alone is refused too. A refused `get` may show in the audit log of the cluster before the fallback. The permission the documentation lists for the tunnel is `create` on `pods/portforward` | The pinned kubectl of the test environment, v1.33.4, against its cluster at v1.34.11, with three temporary accounts that had `create` alone, `get` alone or neither: forwarded after the fallback, forwarded over the WebSocket, refused before the line of readiness. The [amendment](../specs/SPEC-0015-freelens-v2-host.md#evidence-and-deviations) of SPEC-0015 of the same day, and the transport proof of 2026-10-17 in its four modes |
 
 ### With The Tabs Of An Operation, 2026-10-05
 

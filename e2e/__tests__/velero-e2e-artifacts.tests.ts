@@ -48,10 +48,10 @@
 import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import * as path from "node:path";
-import { expect } from "@jest/globals";
-import * as artifacts from "../helpers/velero-artifacts";
-import * as cluster from "../helpers/velero-cluster";
-import * as velero from "../helpers/velero-extension";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import * as artifacts from "../../integration/helpers/velero-artifacts";
+import * as cluster from "../../integration/helpers/velero-cluster";
+import * as velero from "../../integration/helpers/velero-extension";
 
 import type { Frame } from "playwright";
 
@@ -84,8 +84,21 @@ const ORPHAN = `fixture-orphan-restore-${RUN}`;
 const VIEWS = cluster.E2E_VIEWS_NAMESPACE;
 const MISSING_LOCATION = "backup-missing-location";
 const OF_THE_READER = "views-daily-20260901030000";
-// The cluster as the catalog names it when it is opened through the kubeconfig of the reader of a part.
+// The cluster as the catalog names it when it is opened through the kubeconfig of the reader of a part,
+// through the one of the identity of the installation that may not port-forward, and through the one of the
+// identity of the installation whose token an `exec` plugin gives.
 const SECOND_CONTEXT = "velero-e2e-reader";
+const THIRD_CONTEXT = "velero-e2e-no-port-forward";
+const FOURTH_CONTEXT = "velero-e2e-exec-plugin";
+// The executable of the proxy of the host, which authenticates a cluster with its kubeconfig.
+const HOST_PROXY = "freelens-k8s-proxy";
+// What the host says when it saves the store of the extension into its file.
+const STORE_SAVED = /\[BASE-STORE\]: saving \S*velero-preferences\.json/;
+// How far down the list of lines of a log places its rows at most, in pixels of the layout, as the viewer
+// counts it: the rows of a text taller than that, at the ratio of the window, are left out of the list.
+const PLACED = 33_000_000;
+// How long a cluster that was disconnected is watched for a request of the extension.
+const DISCONNECTED_FOR = 60_000;
 const FAMILIES: Record<artifacts.Operation, string> = { backup: "backups", restore: "restores" };
 const LISTS: Record<artifacts.Operation, cluster.ListOf> = { backup: cluster.BACKUPS, restore: cluster.RESTORES };
 // The labels the extension gives a DownloadRequest: who created it, and the identifier of the request of the views.
@@ -104,14 +117,16 @@ const REMOVED_WITHIN = 12 * 60 * 1000;
 // How long the panel has to show the part of a load the main process runs for a step of that part to be
 // expected among the ones it showed: the views ask the main process where a load is four times a second.
 const WATCHABLE = 1000;
-// The second gestures the cases of the suite give, twenty-one: sixteen loads that end with their text, which
+// The second gestures the cases of the suite give, twenty-five: eighteen loads that end with their text, which
 // are the four tabs of the restore, the log of the backup twice and its other three tabs, the three empty
 // artifacts of the backup synced without its log, the results, the resources and the volumes of the backup
-// synced with its artifacts, and its log; three that end as a file the store does not have, the log of the
-// backup synced without one and the logs of the two operations that failed their validation; and two that
-// are cancelled, the results of the backup as soon as their load begins, and the large log once its request
-// is in the cluster.
-const GESTURES = 21;
+// synced with its artifacts, its log, the log of the backup through the identity whose token an `exec` plugin
+// gives, and the log of the backup once the extension was disabled and enabled again; three that end as a file
+// the store does not have, the log of the backup synced without one and the logs of the two operations that
+// failed their validation; one that ends at the port-forward, which its identity may not ask; one whose cluster
+// is disconnected while it runs; and two that are cancelled, the results of the backup as soon as their load
+// begins, and the large log once its request is in the cluster.
+const GESTURES = 25;
 // The rows a list of lines mounts at most.
 const ROWS_BOUND = 100;
 // The characters a row shows of a line at most: a longer line is cut in its row, and whole in its copy.
@@ -3311,6 +3326,74 @@ describe("the log, the results, the resources and the volumes of an operation", 
   );
 
   it(
+    "measures the memory of the window that draws the log of 200,000 lines, at its first line, at its middle and once every row of it is placed, and says what the bound of its list allows in that window",
+    async () => {
+      const running = application();
+      const synced = facts.synced.log;
+      // The viewer as it starts: the rows it placed are the ones of its first lines. The list keeps the place
+      // of every row it placed, up to the furthest, which is what grows as it is scrolled.
+      const first = await freshLog(SYNCED);
+      const ratio = await frame.evaluate(() => window.devicePixelRatio || 1);
+      const atFirst = await velero.frameMemory(running.app, running.window, frame);
+      const middle = await artifacts.scrollLogTo(frame, "backup", Math.floor(synced.lines / 2));
+      const atMiddle = await velero.frameMemory(running.app, running.window, frame);
+      const last = await artifacts.scrollLogTo(frame, "backup", synced.lines);
+      const atLast = await velero.frameMemory(running.app, running.window, frame);
+      // The rows the list has room for, in this window: the ones placed no further down than the browser
+      // places anything, at the ratio of the window. The log is the longest text of the fixtures.
+      const bound = Math.floor(PLACED / Math.max(1, ratio) / artifacts.LINE_HEIGHT);
+      const placed = last.rows;
+      const perRow = (bytes: number) => Math.round((bytes / Math.max(1, placed - first.mounted.length)) * 10) / 10;
+      const heapGrew = atLast.heap.usedBytes - atFirst.heap.usedBytes;
+      const processGrew = (atLast.process.workingSetKB - atFirst.process.workingSetKB) * 1024;
+      const measured = {
+        lines: synced.lines,
+        rows: placed,
+        ratio,
+        bound,
+        ownProcess: atLast.ownProcess,
+        mounted: { first: first.mounted.length, middle: middle.mounted.length, last: last.mounted.length },
+        heapBytes: { first: atFirst.heap.usedBytes, middle: atMiddle.heap.usedBytes, last: atLast.heap.usedBytes },
+        workingSetKB: {
+          first: atFirst.process.workingSetKB,
+          middle: atMiddle.process.workingSetKB,
+          last: atLast.process.workingSetKB,
+          peak: atLast.process.peakWorkingSetKB,
+        },
+        // What the places of the rows hold, from what grew between the first line and the last, for each row
+        // placed, and what that is at the bound of the list in this window and in a window of ratio one.
+        perPlacedRow: { heapBytes: perRow(heapGrew), workingSetBytes: perRow(processGrew) },
+        atTheBound: {
+          rows: bound,
+          heapBytes: Math.round(perRow(heapGrew) * bound),
+          workingSetBytes: Math.round(perRow(processGrew) * bound),
+        },
+        atTheBoundOfRatioOne: {
+          rows: Math.floor(PLACED / artifacts.LINE_HEIGHT),
+          heapBytes: Math.round(perRow(heapGrew) * Math.floor(PLACED / artifacts.LINE_HEIGHT)),
+        },
+      };
+
+      console.log(`MEMORY ${JSON.stringify(measured)}`);
+      await report("artifact-memory-of-the-longest-list", measured);
+      // Nothing of the memory is a budget: it is measured, for the review. What is asserted is what the
+      // measure is of: the log whole in the list, a hundred rows mounted at most at each of the three places.
+      expect([
+        placed,
+        last.mounted.includes(synced.lines),
+        middle.mounted.includes(Math.floor(synced.lines / 2)),
+      ]).toEqual([synced.lines, true, true]);
+      expect([first, middle, last].map((shown) => shown.mounted.length).filter((count) => count > ROWS_BOUND)).toEqual(
+        [],
+      );
+      expect(
+        [atFirst, atMiddle, atLast].every((taken) => taken.heap.usedBytes > 0 && taken.process.workingSetKB > 0),
+      ).toBe(true);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "turns writes off when another installation is selected, and holds nothing of the tabs back in the installation of the demo; and says in the installation of the views, with writes on for it, that the storage location of a backup is not there, before any request, with no command and nothing counted",
     async () => {
       const held = loads[of("backup", "log", SYNCED)];
@@ -3506,6 +3589,356 @@ describe("the log, the results, the resources and the volumes of an operation", 
   );
 
   it(
+    "says that the cluster refused the port-forward to an identity that may neither get nor create pods/portforward, at the port-forward, with the verb it needs, and leaves no kubectl running",
+    async () => {
+      const running = application();
+      const id = (part?: artifacts.PanelPart) => artifacts.PARTS.panel("backup", "log", part);
+      // A third entry of the catalog: the same cluster through the kubeconfig of the identity of the installation
+      // that may read what a download reads, create its request and read the route to the store, and has no verb
+      // of the port-forward. Its context is renamed: the catalog tells the entries apart by it.
+      const source = JSON.parse(await readFile(cluster.withoutPortForwardKubeconfigPath(), "utf8")) as {
+        contexts?: { name: string }[];
+        "current-context"?: string;
+      };
+
+      for (const context of source.contexts ?? []) context.name = THIRD_CONTEXT;
+      source["current-context"] = THIRD_CONTEXT;
+      const renamed = path.join(running.directory, "no-port-forward-kubeconfig.json");
+
+      await writeFile(renamed, JSON.stringify(source), { mode: 0o600 });
+      const third = await cluster.publishKubeconfig(renamed, "velero-e2e-no-port-forward");
+
+      try {
+        await velero.navigateToCatalog(running.app);
+        await running.window.waitForSelector(`div.TableCell >> text='${THIRD_CONTEXT}'`, { timeout: 60_000 });
+        const other = await cluster.openClusterFromCatalog(running.window, third, THIRD_CONTEXT);
+
+        // The identity may not look for the installations of the whole cluster: the one of the demo is named.
+        await cluster.openPage(other, cluster.BACKUPS);
+        await cluster.configureInstallation(other, NAMESPACE);
+        await cluster.waitForList(other, cluster.BACKUPS);
+        await cluster.openWorkspace(other, NAMES.backup, cluster.BACKUPS);
+        await artifacts.shownAt(other, "backup", NAMES.backup, "summary");
+        await artifacts.openTab(other, "backup", "log");
+        await other.waitForSelector("[data-testid=velero-writes-on]", { timeout: 60_000 });
+        await cluster.turnWritesOn(other);
+        const earlier = cluster.requestCodes(RESOURCE);
+
+        await artifacts.ask(other, "backup", "log");
+        expect(await artifacts.confirmationOf(other, "backup", "log")).toMatchObject({
+          namespace: NAMESPACE,
+          cluster: `${THIRD_CONTEXT} (context ${THIRD_CONTEXT})`,
+        });
+        // The guard is told the request: the cluster creates it for this identity, in the installation of the
+        // demo, whose server signs it and removes it ten minutes after, as any other of the suite.
+        const { ended, moments, request } = await artifacts.runLoad(other, "backup", "log", told);
+
+        expect(ended).toBe("failed");
+        expect(await artifacts.failureOf(other, "backup", "log")).toEqual({
+          code: "forbidden",
+          stage: "forward",
+          text: artifacts.WORDS.forbiddenForward(request, NAMESPACE),
+        });
+        // The reads of the route were allowed, and the creation: no step after the port-forward was seen.
+        const steps = artifacts.stepsSeen(moments);
+
+        expect([
+          steps,
+          artifacts.inTheOrder(steps, artifacts.STEPS.backup),
+          steps.some((step) => ["download", "delivery", "pages"].includes(step)),
+        ]).toEqual([steps, true, false]);
+        // The request is in the cluster as the confirmation showed it, and the server processed it.
+        expectRequest("backup", "log", request);
+        expect(since(earlier)["POST 201"]).toBe(1);
+        // Asking again as it was asked would be refused again: the one command takes the tab back to its first
+        // state, and has the focus.
+        const state = await artifacts.panelState(other, "backup", "log");
+
+        expect([state.step, state.viewer, state.commands]).toEqual(["failed", false, [id("begin")]]);
+        expect(await artifacts.said(other, id("notAgain"))).toBe(artifacts.WORDS.notAgain);
+        expect(await artifacts.attribute(other, id("failure"), "data-ended")).toBe("fault");
+        expect(await cluster.focusOn(other, id("begin"))).toBe(id("begin"));
+        // No kubectl of the application runs: the one that was refused ended before its line of readiness.
+        expect(velero.kubectlForwards(running.app)).toEqual([]);
+        // The refusal is of the cluster, not of the gate: writes stay on.
+        await other.waitForTimeout(NOTHING);
+        expect(await cluster.writesState(other)).toBe("on");
+        expect(await cluster.layoutProblems(other)).toEqual([]);
+        await cluster.captureScreenshot(other, "dark-artifact-port-forward-refused");
+      } finally {
+        await velero.navigateToCatalog(running.app);
+        frame = await cluster.openClusterFromCatalog(running.window, kubeconfig);
+      }
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "loads the log of the backup of the demo through the tunnel for an identity whose token an exec plugin gives, which the proxy of the host runs, and neither the extension nor the kubectl of the tunnel does: its text, one creation, and no kubectl left",
+    async () => {
+      const running = application();
+      // A fourth entry of the catalog: the same cluster through the kubeconfig of the identity of the installation
+      // whose token an `exec` plugin of the test environment gives, with what the documentation lists for the
+      // writes and for a download through the cluster. Its context is renamed: the catalog tells the entries apart
+      // by it. The plugin writes the name of the executable of the process that runs it, at each of its runs, in a
+      // file of the private state of the environment: nothing ran it before this case.
+      const source = JSON.parse(await readFile(cluster.execPluginKubeconfigPath(), "utf8")) as {
+        contexts?: { name: string }[];
+        "current-context"?: string;
+      };
+
+      for (const context of source.contexts ?? []) context.name = FOURTH_CONTEXT;
+      source["current-context"] = FOURTH_CONTEXT;
+      const renamed = path.join(running.directory, "exec-plugin-kubeconfig.json");
+
+      await writeFile(renamed, JSON.stringify(source), { mode: 0o600 });
+      expect(await cluster.execPluginRuns()).toEqual([]);
+      const fourth = await cluster.publishKubeconfig(renamed, "velero-e2e-exec-plugin");
+
+      try {
+        await velero.navigateToCatalog(running.app);
+        await running.window.waitForSelector(`div.TableCell >> text='${FOURTH_CONTEXT}'`, { timeout: 60_000 });
+        const other = await cluster.openClusterFromCatalog(running.window, fourth, FOURTH_CONTEXT);
+
+        // The identity may not look for the installations of the whole cluster: the one of the demo is named.
+        await cluster.openPage(other, cluster.BACKUPS);
+        await cluster.configureInstallation(other, NAMESPACE);
+        await cluster.waitForList(other, cluster.BACKUPS);
+        await cluster.openWorkspace(other, NAMES.backup, cluster.BACKUPS);
+        await artifacts.shownAt(other, "backup", NAMES.backup, "summary");
+        await artifacts.openTab(other, "backup", "log");
+        await other.waitForSelector("[data-testid=velero-writes-on]", { timeout: 60_000 });
+        await cluster.turnWritesOn(other);
+        const earlier = cluster.requestCodes(RESOURCE);
+
+        await artifacts.ask(other, "backup", "log");
+        expect(await artifacts.confirmationOf(other, "backup", "log")).toMatchObject({
+          namespace: NAMESPACE,
+          cluster: `${FOURTH_CONTEXT} (context ${FOURTH_CONTEXT})`,
+        });
+        // The guard is told the request, which the server of the installation signs and removes as any other.
+        const { ended, moments } = await artifacts.runLoad(other, "backup", "log", told);
+
+        expect(ended).toBe("loaded");
+        const loaded = await artifacts.loadedFacts(other, "backup", "log");
+        const asked = since(earlier);
+
+        watch("backup", "log", moments);
+        // The request is in the cluster as the confirmation showed it, processed by the server, and the text
+        // came through the tunnel, which the kubectl of the host ran for the load.
+        expectRequest("backup", "log", loaded.request);
+        expectLoaded("backup", "log", loaded);
+        // One creation, the reads of the request by its name and what the server wrote into it: nothing else.
+        expect(Object.keys(asked).filter((key) => !["GET 200", "PATCH 200", "POST 201"].includes(key))).toEqual([]);
+        expect(asked["POST 201"]).toBe(1);
+        // No kubectl of the application runs: the one of the load ended with it.
+        expect(velero.kubectlForwards(running.app)).toEqual([]);
+        // The plugin was run, and by the proxy of the host alone: neither by the main process of the host, where
+        // the extension runs, nor by the kubectl of the tunnel, whose kubeconfig names the proxy and no plugin.
+        const runs = await cluster.execPluginRuns();
+
+        await report("artifact-runs-of-the-exec-plugin", { runs, route: loaded.route });
+        expect(runs.length).toBeGreaterThan(0);
+        expect([...new Set(runs)]).toEqual([HOST_PROXY]);
+        expect(await cluster.writesState(other)).toBe("on");
+        expect(await cluster.layoutProblems(other)).toEqual([]);
+        await cluster.captureScreenshot(other, "dark-artifact-exec-plugin");
+      } finally {
+        await velero.navigateToCatalog(running.app);
+        frame = await cluster.openClusterFromCatalog(running.window, kubeconfig);
+      }
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "keeps one of each thing through a disable and an enable from the Extensions page: writes off until they are turned on, the same procedures, the file of the store saved once for one change, and a load that is one creation, one kubectl and one answer",
+    async () => {
+      const running = application();
+      const identifier = cluster.frameClusterId(frame);
+      const procedures = async () => {
+        const channels = await velero.watchHandlers(running.app);
+
+        await velero.stopWatchingHandlers(running.app);
+        return channels.map((channel) => channel.slice(channel.indexOf(":") + 1)).sort();
+      };
+      // One change of the store, the installation that is chosen, and the savings of its file the host says.
+      const savedFor = async (namespace: string) => {
+        const saves = velero.countOutput(STORE_SAVED);
+
+        try {
+          await cluster.selectInstallation(frame, namespace);
+          await artifacts.until(
+            `The store is saved for the installation ${namespace}`,
+            async () => saves.count(),
+            (count) => count > 0,
+          );
+          // The host writes a store as soon as it changes: what would come of a second saving comes at once.
+          await frame.waitForTimeout(3000);
+          return saves.count();
+        } finally {
+          saves.stop();
+        }
+      };
+      const stored = async () => {
+        const [file] = await velero.storedPreferences(running.directory);
+
+        return (file?.content as { selected?: Record<string, string> } | undefined)?.selected?.[identifier];
+      };
+
+      // Before the disable: the procedures of the extension, and the savings of one change, which the extension
+      // asks of the host once.
+      await cluster.openBackups(frame);
+      const before = await procedures();
+
+      expect([await savedFor(VIEWS), await stored()]).toEqual([1, VIEWS]);
+      expect([await savedFor(NAMESPACE), await stored()]).toEqual([1, NAMESPACE]);
+      await writesOn();
+      // Disabled from the Extensions page: no kubectl of the application runs after it.
+      await velero.disableExtension(running.app, running.window);
+      expect(velero.kubectlForwards(running.app)).toEqual([]);
+      await velero.enableExtension(running.app, running.window);
+      await velero.navigateToCatalog(running.app);
+      frame = await cluster.openClusterFromCatalog(running.window, kubeconfig);
+      await cluster.openBackups(frame);
+      // Enabled again: the same procedures, each once, writes off for the installation the store kept, until they
+      // are turned on, and one saving of the file for one change, as before.
+      expect(await procedures()).toEqual(before);
+      expect(new Set(before).size).toBe(before.length);
+      await frame.waitForSelector("[data-testid=velero-writes][data-writes=off]", { timeout: 60_000 });
+      expect((await cluster.target(frame)).namespace).toBe(NAMESPACE);
+      expect([await savedFor(VIEWS), await stored()]).toEqual([1, VIEWS]);
+      expect([await savedFor(NAMESPACE), await stored()]).toEqual([1, NAMESPACE]);
+      expect(await cluster.writesState(frame)).toBe("off");
+      // A load of the large log of the synced backup, whose kubectl runs long enough to be seen: one creation
+      // counted, one kubectl seen while it ran and none after, and one answer of the procedure that runs it.
+      await open("backup", "log", SYNCED);
+      await cluster.turnWritesOn(frame);
+      await velero.watchHandlers(running.app);
+      const seen = new Set<number>();
+      const look = setInterval(() => {
+        for (const kubectl of velero.kubectlForwards(running.app)) seen.add(kubectl);
+      }, 100);
+
+      try {
+        await loadOf("backup", "log", SYNCED);
+      } finally {
+        clearInterval(look);
+      }
+      const answered = (await velero.handledRequests(running.app)).filter((call) => call.channel === "write.run");
+
+      await velero.stopWatchingHandlers(running.app);
+      expect([...seen].length).toBe(1);
+      expect(velero.kubectlForwards(running.app)).toEqual([]);
+      expect(answered.map((call) => call.answer)).toEqual(["ok"]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "ends the kubectl of a load in flight when its cluster is disconnected in the catalog, turns writes off, and asks nothing of the cluster until it is connected again",
+    async () => {
+      const running = application();
+      const identifier = cluster.frameClusterId(frame);
+
+      // Electron tells the host of every load in the window that does not end: the frame of a cluster disconnected
+      // here is taken out of the window, and its load aborted, which the host logs as a frame and not as an error.
+      await velero.watchFailedLoads(running.app);
+      // The other entries of the catalog the suite opened are disconnected first, as an operator leaves a cluster
+      // it is done with: their views read their installation every fifteen seconds while they are shown, and the
+      // API server would count those reads with what is looked for here.
+      for (const entry of await velero.mainCatalog(running.app)) {
+        if (entry.id !== identifier && entry.status === "connected") {
+          await velero.disconnectInCatalog(running.app, running.window, entry.id);
+        }
+      }
+      await velero.navigateToCatalog(running.app);
+      frame = await cluster.openClusterFromCatalog(running.window, kubeconfig);
+      // The large log, whose load lasts longest, with writes on.
+      await open("backup", "log", SYNCED);
+      await writesOn();
+      const earlier = cluster.requestCodes(RESOURCE);
+
+      await artifacts.ask(frame, "backup", "log");
+      await artifacts.clickOn(frame, artifacts.PARTS.panel("backup", "log", "confirmCreate"));
+      // The kubectl of the load is held where it is as soon as it runs, as a slow link would hold it: the load is
+      // on its way through the tunnel while the cluster is disconnected. It is let go once the cluster is not
+      // connected any more, which the extension told it to end at.
+      const held = await artifacts.until(
+        "A kubectl of the application runs for the load",
+        async () => velero.kubectlForwards(running.app),
+        (found) => found.length > 0,
+        60_000,
+      );
+
+      try {
+        for (const kubectl of held) process.kill(kubectl, "SIGSTOP");
+      } catch {
+        throw new Error("The load ended before its kubectl could be held: nothing was in flight to disconnect");
+      }
+      try {
+        // The request of the load is in the cluster: the guard is told its name.
+        const created = cluster
+          .downloadRequests(NAMESPACE)
+          .map((request) => request.name)
+          .filter((name) => !ledger.asked().includes(name));
+
+        expect(created).toHaveLength(1);
+        told(created[0]);
+        await velero.disconnectInCatalog(running.app, running.window, identifier);
+      } finally {
+        for (const kubectl of held) {
+          try {
+            process.kill(kubectl, "SIGCONT");
+          } catch {
+            // It ended already.
+          }
+        }
+      }
+      // kubectl ends: within the five seconds the extension gives it, and a margin.
+      await artifacts.until(
+        "The kubectl of the load ended",
+        async () => velero.kubectlForwards(running.app),
+        (left) => left.length === 0,
+        15_000,
+      );
+      // A minute with the cluster disconnected: it stays so, and nothing of the extension reaches its API server,
+      // no request of a DownloadRequest and no read of a family. What the server of the installation writes into
+      // the requests it holds, and its removals of them, are its own.
+      const requested = cluster.requestCodes(RESOURCE);
+      const families = cluster.apiRequests();
+
+      await new Promise((resolve) => setTimeout(resolve, DISCONNECTED_FOR));
+      expect((await velero.mainCatalog(running.app)).find((entry) => entry.id === identifier)?.status).toBe(
+        "disconnected",
+      );
+      expect(askedSince(requested)).toEqual({});
+      expect(
+        Object.keys(cluster.counted(cluster.familyReads(families), cluster.familyReads(cluster.apiRequests()))).filter(
+          (key) => !key.startsWith("WATCH "),
+        ),
+      ).toEqual([]);
+      expect(velero.kubectlForwards(running.app)).toEqual([]);
+      // Connected again by the operator, from the catalog: the frame of the cluster is a new one, writes are off
+      // in it, and the views read the installation again.
+      frame = await cluster.openClusterFromCatalog(running.window, kubeconfig);
+      await cluster.openBackups(frame);
+      await cluster.waitForBackups(frame);
+      await frame.waitForSelector("[data-testid=velero-writes][data-writes=off]", { timeout: 60_000 });
+      expect(await cluster.writesState(frame)).toBe("off");
+      // One creation for the load, and nothing else of the requests.
+      expect(since(earlier)["POST 201"]).toBe(1);
+      // What Electron told the host of the loads that did not end is of the frames the disconnections took out:
+      // each a frame inside the window, its load aborted, and none of the window itself.
+      const aborted = await velero.failedLoads(running.app);
+
+      await report("artifact-loads-the-disconnections-ended", aborted);
+      expect(aborted.filter((load) => load.mainFrame || load.code !== -3)).toEqual([]);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "shows a step that only the main process tells in one load of the suite at least, and in every load whose part in the main process was shown for a second or longer",
     async () => {
       // The views ask the main process where a load is four times a second, and draw by themselves the wait
@@ -3602,10 +4035,11 @@ describe("the log, the results, the resources and the volumes of an operation", 
         await frame.waitForSelector("[data-testid=velero-writes][data-writes=off]", { timeout: 60_000 });
       }
       expect(await cluster.writesState(frame)).toBe("off");
-      // Last, what says that every case before this one gave its gesture: sixteen loads that end with their
-      // text, three that end as a file the store does not have and two that are cancelled, each a request
-      // of its own but for the first cancelled one, which created one or none. A case that failed before
-      // its gesture is found here, after everything else was read.
+      // Last, what says that every case before this one gave its gesture: eighteen loads that end with their
+      // text, three that end as a file the store does not have, one that ends at the port-forward, one whose
+      // cluster is disconnected while it runs, and two that are cancelled, each a request of its own but for
+      // the first cancelled one, which created one or none. A case that failed before its gesture is found
+      // here, after everything else was read.
       expect(["the second gestures of the suite", gestures]).toEqual(["the second gestures of the suite", GESTURES]);
       expect(asked.length).toBeGreaterThanOrEqual(GESTURES - 1);
       expect(asked.length).toBeLessThanOrEqual(GESTURES);

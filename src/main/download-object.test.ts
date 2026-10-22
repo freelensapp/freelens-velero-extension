@@ -1,30 +1,32 @@
 // What the views show of a DownloadRequest before it is created is what the cluster is sent, and the text
 // of its artifact comes back in pages: the whole way, from the client of the views through the IPC of the
-// host, the gate and the adapter of the main process, to an API server of the test that keeps every
-// request it receives. The store is not in this test: the route and the download are given by it.
+// host, the gate and the adapter of the main process, and the client of the host for the cluster, to an
+// API server of the test that keeps every request it receives. The store is not in this test: the route and
+// the download are given by it.
 
 import { randomUUID } from "node:crypto";
-import { once } from "node:events";
-import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
-import { createServer, type Server } from "node:https";
-import Module from "node:module";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  anExtension,
   type HostExtensionStub,
   hostCatalog,
+  hostCluster,
   ipcBroadcasts,
   ipcFrame,
   ipcHandlers,
   resetIpc,
 } from "../../test/freelens-extensions";
-import { createTlsFixture } from "../../test/tls-fixture";
+import { answered, fakeHostClient, type HostReply, type HostRequest, statusOf } from "../../test/host-client";
 import { CHANNELS, DIAGNOSTIC_REQUEST_LABEL, PAGE_BOUND, REQUEST_LABELS } from "../common/ipc";
 import { PreferencesStore } from "../common/preferences-store";
 import { VeleroIpcRenderer } from "../renderer/api/ipc";
 import { DiagnosticError } from "./diagnostic-transport";
+import { catalogEntries, hostDependencies } from "./host";
 import VeleroMain from "./index";
-import { catalogEntries, VeleroIpc } from "./ipc";
+import { VeleroIpc } from "./ipc";
 
 import type { SaveDialog } from "./artifact-save";
 import type { ArtifactRoute } from "./diagnostic-transport";
@@ -39,14 +41,10 @@ const ORIGIN = "https://storage.synthetic.invalid";
 const SENTINEL = "PRIVATE-SENTINEL-OF-THE-SIGNATURE";
 const LOG = 'time="2026-09-30T10:00:00Z" level=info msg="Backup completed"\n';
 
-let certificates: Awaited<ReturnType<typeof createTlsFixture>>;
-let server: Server;
-let kubeconfig: string;
+let directory: string;
 let main: VeleroIpc;
 let renderer: VeleroIpcRenderer;
-// What the API server of the test was sent, what it keeps of the requests it was sent, and what it does
-// with a creation.
-const received: { method?: string; path?: string; body?: unknown }[] = [];
+// What the API server of the test keeps of the requests it was sent, and what it does with a creation.
 const requests = new Map<string, { object: Record<string, unknown>; reads: number }>();
 let refuseCreation = false;
 // Whether the controller of the test signs a URL for the requests it is sent.
@@ -63,99 +61,67 @@ function objectOf(kind: string, name: string, uid: string, spec: Record<string, 
   return { apiVersion: "velero.io/v1", kind, metadata: { name, namespace: NAMESPACE, uid }, spec };
 }
 
+// The API server of the test, behind the client of the host.
+function server(request: HostRequest): HostReply {
+  const path = request.path;
+  const body = request.body as { metadata: { name: string } } | undefined;
+
+  if (request.method === "POST" && path === `${API}/downloadrequests` && body) {
+    if (refuseCreation) return answered(403, statusOf(403, "Forbidden"));
+    const object = { ...body, metadata: { ...body.metadata, uid: `uid-of-${body.metadata.name}` } };
+
+    requests.set(body.metadata.name, { object, reads: 0 });
+    return answered(201, object);
+  }
+  if (request.method !== "GET") return answered(405, statusOf(405, "MethodNotAllowed"));
+  if (path === `${API}/backups/${BACKUP.name}`)
+    return answered(200, objectOf("Backup", BACKUP.name, BACKUP.uid, { storageLocation: "default" }));
+  if (path === `${API}/restores/${RESTORE.name}`)
+    return answered(200, objectOf("Restore", RESTORE.name, RESTORE.uid, { backupName: BACKUP.name }));
+  if (path === `${API}/backupstoragelocations/default`)
+    return answered(
+      200,
+      objectOf("BackupStorageLocation", "default", "location-uid", {
+        provider: "aws",
+        objectStorage: { bucket: "synthetic" },
+      }),
+    );
+  if (path.startsWith(`${API}/downloadrequests/`)) {
+    const kept = requests.get(path.slice(`${API}/downloadrequests/`.length));
+
+    if (!kept) return answered(404, statusOf(404, "NotFound"));
+    kept.reads += 1;
+    // The server has not looked at the request the first time it is read: it signs at the second.
+    return answered(
+      200,
+      signs && kept.reads > 1
+        ? {
+            ...kept.object,
+            status: {
+              phase: "Processed",
+              downloadURL: `${ORIGIN}/synthetic/backups/${BACKUP.name}/file.gz?X-Amz-Signature=${SENTINEL}`,
+              expiration: new Date(Date.now() + 600_000).toISOString(),
+            },
+          }
+        : kept.object,
+    );
+  }
+  return answered(404, statusOf(404, "NotFound"));
+}
+
+let host = fakeHostClient(server);
+// What the API server of the test was sent.
+const received = () =>
+  host.requests.map((request) => ({
+    method: request.method,
+    path: request.path,
+    ...(request.body === undefined ? {} : { body: request.body }),
+  }));
+// The folder of the extension, as the host gives its package.
+const MANIFEST = "/synthetic/extensions/velero/package.json";
+
 beforeAll(async () => {
-  certificates = await createTlsFixture();
-  server = createServer(certificates, async (request, response) => {
-    const chunks: Buffer[] = [];
-
-    for await (const chunk of request) chunks.push(Buffer.from(chunk));
-    const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : undefined;
-
-    received.push({ method: request.method, path: request.url, ...(body === undefined ? {} : { body }) });
-    if (request.headers.authorization !== "Bearer synthetic-token") {
-      response.writeHead(401).end();
-      return;
-    }
-    const path = request.url ?? "";
-
-    if (request.method === "POST" && path === `${API}/downloadrequests`) {
-      if (refuseCreation) {
-        response.writeHead(403).end();
-        return;
-      }
-      const object = { ...body, metadata: { ...body.metadata, uid: `uid-of-${body.metadata.name}` } };
-
-      requests.set(body.metadata.name, { object, reads: 0 });
-      response.writeHead(201).end(JSON.stringify(object));
-      return;
-    }
-    if (request.method !== "GET") {
-      response.writeHead(405).end();
-      return;
-    }
-    if (path === `${API}/backups/${BACKUP.name}`)
-      response.end(JSON.stringify(objectOf("Backup", BACKUP.name, BACKUP.uid, { storageLocation: "default" })));
-    else if (path === `${API}/restores/${RESTORE.name}`)
-      response.end(JSON.stringify(objectOf("Restore", RESTORE.name, RESTORE.uid, { backupName: BACKUP.name })));
-    else if (path === `${API}/backupstoragelocations/default`)
-      response.end(
-        JSON.stringify(
-          objectOf("BackupStorageLocation", "default", "location-uid", {
-            provider: "aws",
-            objectStorage: { bucket: "synthetic" },
-          }),
-        ),
-      );
-    else if (path.startsWith(`${API}/downloadrequests/`)) {
-      const kept = requests.get(path.slice(`${API}/downloadrequests/`.length));
-
-      if (!kept) {
-        response.writeHead(404).end();
-        return;
-      }
-      kept.reads += 1;
-      // The server has not looked at the request the first time it is read: it signs at the second.
-      response.end(
-        JSON.stringify(
-          signs && kept.reads > 1
-            ? {
-                ...kept.object,
-                status: {
-                  phase: "Processed",
-                  downloadURL: `${ORIGIN}/synthetic/backups/${BACKUP.name}/file.gz?X-Amz-Signature=${SENTINEL}`,
-                  expiration: new Date(Date.now() + 600_000).toISOString(),
-                },
-              }
-            : kept.object,
-        ),
-      );
-    } else response.writeHead(404).end();
-  });
-  server.listen(0, "127.0.0.1");
-  await once(server, "listening");
-  const address = server.address();
-
-  if (!address || typeof address === "string") throw new Error("Missing API fixture listener");
-  kubeconfig = join(certificates.directory, "kubeconfig.json");
-  await writeFile(
-    kubeconfig,
-    JSON.stringify({
-      apiVersion: "v1",
-      kind: "Config",
-      contexts: [{ name: CONTEXT, context: { cluster: "synthetic", user: "synthetic" } }],
-      clusters: [
-        {
-          name: "synthetic",
-          cluster: {
-            server: `https://127.0.0.1:${address.port}`,
-            "certificate-authority-data": Buffer.from(certificates.ca).toString("base64"),
-          },
-        },
-      ],
-      users: [{ name: "synthetic", user: { token: "synthetic-token" } }],
-    }),
-    { mode: 0o600 },
-  );
+  directory = await mkdtemp(join(tmpdir(), "velero-download-object-"));
 });
 
 // The route and the download of the test, which stand in the place of the store.
@@ -179,28 +145,32 @@ const STORE: NonNullable<Parameters<VeleroIpc["register"]>[1]> = {
   },
 };
 
-// The procedures as the extension registers them, with the route and the download of the test in place
-// of the store.
+// The procedures as the extension registers them, with what it takes of the host, and the route and the
+// download of the test in place of the store.
 function register(): void {
-  main = VeleroIpc.createInstance({} as never);
-  main.register(catalogEntries, STORE);
+  main = VeleroIpc.createInstance(anExtension("main") as never);
+  main.register(catalogEntries, { ...hostDependencies(() => MANIFEST), ...STORE });
 }
 
-// The module of Electron is not there where the tests run. What the main process requires of it at a
-// save is what a test puts in its place, as a suite does in the application: until what is returned is
-// called, the dialog of the host is the one the test answers.
-function withDialog(dialog: SaveDialog): () => void {
-  const loader = Module as unknown as { _load(request: string, ...more: unknown[]): unknown };
-  const load = loader._load;
+// The module of Electron is not there where the tests run. What the main process imports of it at a save
+// is what a test puts in its place, as a suite does in the application: until what is returned is called,
+// the dialog of the host is the one the test answers. Were the real module ever loaded, it would find no
+// application to download.
+async function withDialog(dialog: SaveDialog): Promise<() => void> {
+  vi.stubEnv("ELECTRON_OVERRIDE_DIST_PATH", join(directory, "no-electron"));
+  vi.doMock("electron", () => ({ dialog, default: { dialog } }));
+  const electron = await import("electron");
 
-  loader._load = (request, ...more) => (request === "electron" ? { dialog } : load.call(loader, request, ...more));
+  // The module a later import is given is the one of the test.
+  expect(electron.dialog).toBe(dialog);
   return () => {
-    loader._load = load;
+    vi.doUnmock("electron");
+    vi.unstubAllEnvs();
   };
 }
 
 beforeEach(() => {
-  received.length = 0;
+  host = fakeHostClient(server);
   requests.clear();
   routed.length = 0;
   downloaded.length = 0;
@@ -210,21 +180,30 @@ beforeEach(() => {
   signs = true;
   storeFails = undefined;
   resetIpc();
-  hostCatalog.clusters = [{ id: CLUSTER, name: "synthetic", kubeConfigPath: kubeconfig, contextName: CONTEXT }];
+  // No file is behind the path of the catalog: the extension reads no kubeconfig.
+  hostCatalog.clusters = [
+    {
+      id: CLUSTER,
+      name: "synthetic",
+      kubeConfigPath: "/synthetic/kubeconfig",
+      contextName: CONTEXT,
+      status: "connected",
+    },
+  ];
+  hostCluster.forCluster = host.forCluster;
   register();
-  renderer = VeleroIpcRenderer.createInstance({} as never);
+  renderer = VeleroIpcRenderer.createInstance(anExtension("renderer") as never);
 });
 
 afterEach(() => {
   main.release();
   hostCatalog.clusters = undefined;
+  hostCluster.forCluster = undefined;
   resetIpc();
 });
 
 afterAll(async () => {
-  server?.closeAllConnections();
-  if (server) await new Promise<void>((resolve) => server.close(() => resolve()));
-  await certificates?.dispose();
+  await rm(directory, { recursive: true, force: true });
 });
 
 // Turns writes on and confirms one artifact of one target, as a tab does with its two gestures.
@@ -236,7 +215,7 @@ async function confirmed(target: typeof BACKUP | typeof RESTORE, artifact: Param
   return confirmation.value.token;
 }
 
-const sent = () => received.map((request) => `${request.method} ${request.path}`);
+const sent = () => received().map((request) => `${request.method} ${request.path}`);
 
 describe("the object of a DownloadRequest, as the cluster is sent it", () => {
   it("names the label of the identifier of a request, beside the one of the extension", () => {
@@ -248,11 +227,11 @@ describe("the object of a DownloadRequest, as the cluster is sent it", () => {
     const request = randomUUID();
 
     // Turning writes on and confirming a write ask the cluster nothing.
-    expect(received).toEqual([]);
+    expect(received()).toEqual([]);
     const answer = await renderer.runDownload(CLUSTER, NAMESPACE, BACKUP, "BackupLog", token, request);
     const name = `${BACKUP.name}-${request}`;
 
-    expect(received.find((entry) => entry.method === "POST")).toEqual({
+    expect(received().find((entry) => entry.method === "POST")).toEqual({
       method: "POST",
       path: `${API}/downloadrequests`,
       body: {
@@ -302,7 +281,7 @@ describe("the object of a DownloadRequest, as the cluster is sent it", () => {
       `GET ${API}/restores/${RESTORE.name}`,
       `POST ${API}/downloadrequests`,
     ]);
-    expect(received.find((entry) => entry.method === "POST")?.body).toMatchObject({
+    expect(received().find((entry) => entry.method === "POST")?.body).toMatchObject({
       spec: { target: { kind: "RestoreResults", name: RESTORE.name } },
     });
   });
@@ -338,7 +317,7 @@ describe("the object of a DownloadRequest, as the cluster is sent it", () => {
     expect(await renderer.release(CLUSTER, request)).toEqual({ ok: true, value: null });
     expect(await renderer.page(CLUSTER, request, 0)).toMatchObject({ ok: false, code: "not-found", stage: "delivery" });
     // Nothing of this asked the cluster again.
-    expect(received.filter((entry) => entry.method === "POST")).toHaveLength(1);
+    expect(received().filter((entry) => entry.method === "POST")).toHaveLength(1);
   });
 
   it("carries the signed URL in no answer, no status and no broadcast", async () => {
@@ -361,7 +340,7 @@ describe("the object of a DownloadRequest, as the cluster is sent it", () => {
     const again = await renderer.runDownload(CLUSTER, NAMESPACE, BACKUP, "BackupLog", token, randomUUID());
 
     expect(again).toMatchObject({ ok: false, code: "forbidden", stage: "confirmation" });
-    expect(received.filter((entry) => entry.method === "POST")).toHaveLength(1);
+    expect(received().filter((entry) => entry.method === "POST")).toHaveLength(1);
   });
 
   it("creates one request for a run that is sent again while it runs", async () => {
@@ -374,7 +353,7 @@ describe("the object of a DownloadRequest, as the cluster is sent it", () => {
 
     expect(first).toMatchObject({ ok: true });
     expect(second).toEqual(first);
-    expect(received.filter((entry) => entry.method === "POST")).toHaveLength(1);
+    expect(received().filter((entry) => entry.method === "POST")).toHaveLength(1);
   });
 
   it("does not run for another artifact than the one that was confirmed", async () => {
@@ -382,7 +361,7 @@ describe("the object of a DownloadRequest, as the cluster is sent it", () => {
     const answer = await renderer.runDownload(CLUSTER, NAMESPACE, BACKUP, "BackupResults", token, randomUUID());
 
     expect(answer).toMatchObject({ ok: false, code: "forbidden", stage: "confirmation" });
-    expect(received).toEqual([]);
+    expect(received()).toEqual([]);
   });
 
   it("says that the cluster refused the creation, with the kind and the verb it needs, and leaves writes on", async () => {
@@ -398,7 +377,7 @@ describe("the object of a DownloadRequest, as the cluster is sent it", () => {
       retry: false,
       text: "The cluster refused the creation of a DownloadRequest: the identity needs the verb create on downloadrequests of the namespace.",
     });
-    expect(received.filter((entry) => entry.method === "POST")).toHaveLength(1);
+    expect(received().filter((entry) => entry.method === "POST")).toHaveLength(1);
     expect(routed).toEqual([]);
     expect(await renderer.state(CLUSTER)).toMatchObject({
       ok: true,
@@ -459,10 +438,10 @@ describe("the object of a DownloadRequest, as the cluster is sent it", () => {
   it("saves a text into the file the operator chooses in the dialog of the host, as the extension is activated, and writes no other", async () => {
     main.release();
     resetIpc();
-    const folder = await mkdtemp(join(certificates.directory, "saved-"));
+    const folder = await mkdtemp(join(directory, "saved-"));
     // The dialogs the host was asked for, with what each was told, which the test answers as the operator.
     const dialogs: { told: unknown; answer: (chosen: { canceled: boolean; filePath?: string }) => void }[] = [];
-    const restoreDialog = withDialog({
+    const restoreDialog = await withDialog({
       showSaveDialog: (told) => new Promise((answer) => dialogs.push({ told, answer })),
     });
     const opened = (count: number) => vi.waitFor(() => expect(dialogs).toHaveLength(count));
@@ -516,8 +495,8 @@ describe("the object of a DownloadRequest, as the cluster is sent it", () => {
       expect(await late).toMatchObject({ ok: false, code: "not-found", stage: "delivery" });
       expect(await readdir(folder)).toEqual(["chosen by the operator.log"]);
       // None of it asked the cluster for anything more than the download did.
-      expect(received.filter((entry) => entry.method === "POST")).toHaveLength(1);
-      expect([...new Set(received.map((entry) => entry.method))].sort()).toEqual(["GET", "POST"]);
+      expect(received().filter((entry) => entry.method === "POST")).toHaveLength(1);
+      expect([...new Set(received().map((entry) => entry.method))].sort()).toEqual(["GET", "POST"]);
     } finally {
       extension.disable();
       registering.mockRestore();
@@ -564,8 +543,8 @@ describe("the object of a DownloadRequest, as the cluster is sent it", () => {
     expect(await running).toMatchObject({ ok: false, code: "cancelled", stage: "wait" });
     // Both requests are in the cluster of the test, as they were created: nothing removed or changed them.
     expect([...requests.keys()].sort()).toEqual([`${BACKUP.name}-${missing}`, `${BACKUP.name}-${waited}`].sort());
-    expect(received.filter((entry) => entry.method === "POST")).toHaveLength(2);
-    expect([...new Set(received.map((entry) => entry.method))].sort()).toEqual(["GET", "POST"]);
+    expect(received().filter((entry) => entry.method === "POST")).toHaveLength(2);
+    expect([...new Set(received().map((entry) => entry.method))].sort()).toEqual(["GET", "POST"]);
   });
 
   it("finds the route by itself as the extension is activated, and asks the operator for an origin the location does not give", async () => {
@@ -591,7 +570,7 @@ describe("the object of a DownloadRequest, as the cluster is sent it", () => {
       });
       expect(JSON.stringify(answer)).not.toContain(SENTINEL);
       // The request was created, and nothing was connected to.
-      expect(received.filter((entry) => entry.method === "POST")).toHaveLength(1);
+      expect(received().filter((entry) => entry.method === "POST")).toHaveLength(1);
       expect(requests.has(`${BACKUP.name}-${request}`)).toBe(true);
       expect(downloaded).toEqual([]);
       // Allowed through the procedure of the extension, for the cluster of the frame, it is kept by the

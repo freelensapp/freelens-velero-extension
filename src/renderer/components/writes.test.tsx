@@ -220,8 +220,8 @@ describe("the writes in the target bar", () => {
     expect(screen.queryByTestId("velero-writes-failure")).toBeNull();
   });
 
-  it("says which connection the writes cannot use, when the main process says so", async () => {
-    mount(gateClient({ supported: false, reason: "proxy" }));
+  it("says that the writes cannot use the connection, when the main process says so", async () => {
+    const installation = mount(gateClient({ supported: false, reason: "unusable" }));
 
     await waitFor(() => expect(screen.getByTestId("velero-writes-on")).toBeTruthy());
     fireEvent.click(screen.getByTestId("velero-writes-on"));
@@ -229,11 +229,19 @@ describe("the writes in the target bar", () => {
       await confirmDialogs[0].ok?.();
     });
     // The main process refused: writes are off, which is known, with the reason, and can be asked again.
-    await waitFor(() => expect(screen.getByTestId("velero-writes-failure").textContent).toContain("proxy"));
+    await waitFor(() =>
+      expect(screen.getByTestId("velero-writes-failure").textContent).toBe(CONNECTION_REASONS.unusable),
+    );
     expect(screen.getByTestId("velero-writes").getAttribute("data-writes")).toBe("off");
     expect(screen.getByTestId("velero-writes-state").textContent).toBe("Off");
     expect(screen.getByTestId("velero-writes-on")).toBeTruthy();
     expect(screen.queryByTestId("velero-writes-connection")).toBeNull();
+    // Asked again, the main process says what it holds of the connection, which the bar says once more.
+    await act(async () => {
+      await installation.openGate();
+    });
+    expect(screen.queryByTestId("velero-writes-failure")).toBeNull();
+    expect(screen.getByTestId("velero-writes-connection").textContent).toBe(CONNECTION_REASONS.unusable);
   });
 
   it("says that writes cannot be turned on when the views have no way to the main process", async () => {
@@ -243,11 +251,11 @@ describe("the writes in the target bar", () => {
     expect(screen.queryByTestId("velero-writes-on")).toBeNull();
   });
 
-  it("gives words to every reason a connection is refused for", () => {
-    const reasons = CONNECTION_REASON_NAMES;
-
-    expect(Object.keys(CONNECTION_REASONS).sort()).toEqual([...reasons].sort());
-    for (const reason of reasons) expect(CONNECTION_REASONS[reason].length).toBeGreaterThan(20);
-    expect(CONNECTION_REASONS["insecure-tls"]).toContain("never");
+  it("gives words to the one reason a connection is not used for: the extension refuses no form of a kubeconfig", () => {
+    expect(CONNECTION_REASON_NAMES).toEqual(["unusable"]);
+    expect(Object.keys(CONNECTION_REASONS)).toEqual(["unusable"]);
+    expect(CONNECTION_REASONS.unusable).toBe(
+      "The connection of this cluster is not one the writes of the extension can use.",
+    );
   });
 });

@@ -123,6 +123,14 @@
   overflow-wrap: anywhere;
 }
 
+/* The error a page or a section of the details threw, in the place of the part that threw it. */
+.errorMessage {
+  margin-bottom: 12px;
+  color: var(--colorError);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .choices {
   display: flex;
   flex-direction: column;
@@ -1233,7 +1241,7 @@
 }
 
 /* The viewer of the log, and the lines of a text that is shown as its lines: a bar with the search, the
-   levels and the choice to wrap, and under it the list of the lines, which is the one of the host. */
+   levels and the choice to wrap, and under it the list of the lines, which react-window windows. */
 .lines {
   /* The words for who does not see are placed here, and not in what scrolls the viewer. */
   position: relative;
@@ -1364,15 +1372,15 @@
   outline-offset: 2px;
 }
 
+/* The part of the list that scrolls, which react-window draws: it takes what the list leaves it. The room
+   of its scrollbar is kept when there is none: the columns of a wrapped line are counted on the width that
+   is left, which a scrollbar that comes and goes would change at every count. It is drawn on a layer of
+   its own: its rows are moved, and not drawn again, while it is scrolled. */
 .linesRows {
   flex: 1 1 auto;
   min-height: 0;
-}
-
-/* The room of the scrollbar is kept when there is none: the columns of a wrapped line are counted on the
-   width that is left, which a scrollbar that comes and goes would change at every count. */
-.linesRows :global(.list) {
   scrollbar-gutter: stable;
+  will-change: transform;
 }
 
 /* A row is as wide as its line when the line is wider than the room: the list is scrolled sideways, and
@@ -1624,8 +1632,8 @@
   color: var(--textColorSecondary);
 }
 
-/* The viewer of a resource list: what the list holds in words, its filter, and its rows in the virtual
-   list of the host, under the head of the tables of the host. */
+/* The viewer of a resource list: what the list holds in words, its filter, and its rows windowed by
+   react-window, under the head of the tables of the host. */
 .resources {
   /* What is said to who does not see is placed here, and not in what holds the view, which it would
      make taller than its room. */
@@ -1737,14 +1745,14 @@
 }
 
 /* The room of the rows: what is left of the room of the view, between the least and the most the viewer
-   sets for the rows it has. The list of the host measures it, and is as tall. */
+   sets for the rows it has. The list measures it, and is as tall. */
 .resourcesTable > .resourcesRows {
   display: flex;
   flex: 1 1 0;
   flex-direction: column;
 }
 
-.resourcesRows > :global(.VirtualList) {
+.resourcesRows > .resourcesList {
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -1756,13 +1764,15 @@
   scrollbar-gutter: stable;
 }
 
-/* The part the list of the host scrolls. The room of its scrollbar is kept when there is none: a row is
-   as wide with it as without it. It is reached with the keyboard, and says so. */
-.resourcesTable :global(.VirtualList .list) {
+/* The part of the list that scrolls, which react-window draws. The room of its scrollbar is kept when
+   there is none: a row is as wide with it as without it. It is drawn on a layer of its own, as the part
+   that scrolls the lines is. It is reached with the keyboard, and says so. */
+.resourcesTable .resourcesList {
   scrollbar-gutter: stable;
+  will-change: transform;
 }
 
-.resourcesTable :global(.VirtualList .list:focus-visible) {
+.resourcesTable .resourcesList:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: -2px;
 }

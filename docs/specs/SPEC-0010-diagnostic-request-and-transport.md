@@ -100,15 +100,15 @@ verification of TLS turned off, which v1.0.0 does not offer.
 | REQ-126 | The origin of the signed URL must be one the location gives. With `publicUrl` set, or else `s3Url` set: that origin, or, when `s3ForcePathStyle` is not true, the same scheme and port with the host `<bucket>.<host of that URL>`, which is how the SDK of the plugin addresses a bucket the plugin does not force into the path. With neither and the provider of AWS: HTTPS, a host under `amazonaws.com` or `amazonaws.com.cn` on a boundary of its labels, and the bucket as the first label of the host or the first segment of the path; the hosts of the other partitions are not known and go to the allowance. Any other origin is allowed only after the operator allowed it for that cluster, that location and that origin, in words that show the origin. A URL with user information, a fragment, or a scheme that is not HTTP or HTTPS is refused | DIAG-07 |
 | REQ-127 | The path of the signed URL must be the key of the target in the layout of the store: `/<prefix>/<key>` when the bucket is in the host, `/<bucket>/<prefix>/<key>` when it is in the path, the prefix being the one of the location, empty or not. The log of a backup is asked and nothing else is fetched with its URL | DIAG-08 |
 | REQ-128 | A host name that is not of a Service of the cluster is resolved on this machine, once; every address it resolves to is checked in its canonical form, and the connection is made to the first that is allowed, with the host and the server name of the URL. Unspecified, link-local, multicast, the addresses of the metadata services of the clouds, `169.254.0.0/16`, `fe80::/10`, `fd00:ec2::/32`, `168.63.129.16` and the name `metadata.google.internal`, and loopback outside a tunnel are refused, with or without an allowance. A private address, of `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `100.64.0.0/10`, `198.18.0.0/15` or `fc00::/7`, is allowed only after the operator allowed it for that cluster and that origin | DIAG-09 |
-| REQ-129 | A host name of the form `<name>.<namespace>.svc`, with or without the domain of the cluster after it, is a Service of the cluster and is never resolved on this machine. A bare `<name>`, or `<name>.<namespace>`, is a Service when one of that name is in that namespace or in the one of the installation, and is refused as ambiguous when it resolves on this machine as well. A Service is reached through a tunnel: the Service is read, the port of the URL matched to one of its ports and followed to its target port, by number or by name; the endpoint slices of the Service read, one address that is ready and names a Pod chosen; the Pod read and checked ready, with the container port the target port names; and a port-forward the extension opens through the API server to that Pod, with the identity of the kubeconfig. The listener is on the loopback of this machine, for one connection, and is closed with the operation. The host, the path, the query and the server name of the URL are kept; only the socket changes destination. A Service without a ready endpoint, a port that is not one of its, or a Pod without that port end as destination-denied with the reason | DIAG-10 |
+| REQ-129 | A host name of the form `<name>.<namespace>.svc`, with or without the domain of the cluster after it, is a Service of the cluster and is never resolved on this machine. A bare `<name>`, or `<name>.<namespace>`, is a Service when one of that name is in that namespace or in the one of the installation, and is refused as ambiguous when it resolves on this machine as well. A Service is reached through a tunnel: the Service is read, the port of the URL matched to one of its ports and followed to its target port, by number or by name; the endpoint slices of the Service read, one address that is ready and names a Pod chosen; the Pod read and checked ready, with the container port the target port names; and a port-forward to that Pod, the kubectl of D2 of [SPEC-0015](SPEC-0015-freelens-v2-host.md#d2-the-tunnel-to-the-object-store), through the proxy of Freelens, with the identity of the connection of the host; its listener is kubectl's, on `127.0.0.1`, and is closed with the operation. The host, the path, the query and the server name of the URL are kept; only the socket changes destination. A Service without a ready endpoint, a port that is not one of its, or a Pod without that port end as destination-denied with the reason. Amended on 2026-10-16, see [Amendments](#amendments) | DIAG-10 |
 | REQ-130 | Plain HTTP directly from this machine is allowed only after the operator allowed it for that cluster and that origin, and the state says that the connection is not encrypted. Plain HTTP through the tunnel is allowed, and the state says that the bytes travel inside the connection to the API server and inside the cluster. No download ever falls back from HTTPS to HTTP | DIAG-11 |
 | REQ-131 | TLS is verified with the certificates the host trusts, the ones of the runtime and of the system, and the certificate of the location: the key of the Secret the reference names first, read in the main process, in the namespace of the location, and discarded after; the inline one only when there is no reference, as the release does. The key `insecureSkipTLSVerify` of the location is not honored, and the state says so when the verification fails. A Secret the identity may not read, a key that is not in it, a value that is not a certificate end as tls-invalid, and no connection is made without verification | DIAG-12 |
 | REQ-132 | What the operator allows, an origin, a private address, plain HTTP, is kept in the store of the preferences for that cluster and that origin, with the time, shown in the target bar under the connections, and taken back from there. It is asked in the tab, in words that show the origin, and never assumed; it holds no credential and no URL | DIAG-13 |
 | REQ-133 | The bounds are 16 MiB of compressed bytes and 64 MiB decompressed, ten seconds to connect, fifteen of silence, 120 for the whole operation; two operations run at once in the process, the others wait and can be cancelled while they wait. A bound that is reached ends the operation with payload-too-large or deadline and delivers nothing of it. The decoded text is held by the main process for the view that asked it, given to the renderer in pages of 4 MiB at most, and released when the view lets it go or after ten minutes: one copy in each process at most. Cancellation and the end of an operation close the connection, the decoder, the tunnel and its listener; a route that does not close in five seconds is reported as such and does not hold a slot | DIAG-14 |
 | REQ-134 | The signed URL, its query, the headers, the bodies of the answers of the API and of the store, and the paths of files appear in no result, no error, no message between the processes, no log of the console and no test report. A sentinel of the URL is looked for in every one of them | DIAG-15 |
 | REQ-135 | The main process deletes no request. The controller writes an expiration ten minutes ahead when it takes the request, and again when it signs the URL, and removes the request at its next pass after that, within a minute; a request the server never saw carries no expiration and stays. The state says so. A creation whose answer was lost is reconciled by reading the request by its name; a second creation is never sent for it, and a request that cannot be found ends as submission-unknown with the name | DIAG-16 |
-| REQ-136 | What the proof of T0.6 left is closed, each with a test seen failing before the change: a creation refused before the connection is transport-unreachable and not an unknown submission; the trust is the one of the host; an API server at an IPv6 address; the rules on the addresses in canonical form, with the two metadata addresses above; the label of the name of a backup cut as Velero cuts it; one keep-alive agent for each adapter; the identity of the context of SPEC-0009; a field that is not a string refused; the close of a route bounded; a listener with a handler of its errors; a synchronous failure of a request turned into a code; every code of a TLS failure; a URL with the port of its scheme or a host in capitals; a location with both certificates, of which the reference wins; the endpoint slices in place of the endpoints; the key of a sender as SPEC-0009 defines it | DIAG-17 |
-| REQ-137 | The proof of T0.6 stays green in the four modes it has, HTTP through the tunnel, HTTPS through the tunnel with the inline and with the referenced certificate, direct HTTPS with the referenced certificate. The packaged application downloads the four artifacts of the real backup and of the real restore of the demo through the tunnel, and the artifacts of a backup synced from the store; the identities of the demo end as forbidden at the step each may not do: the creation of the request, the read of the Secret, the read of the Service, the port-forward. The permissions the tunnel needs beside the kinds of Velero, `get` on services and pods, `list` on endpointslices, `create` on `pods/portforward`, are the ones the documentation of v1.0.0 lists | DIAG-18 |
+| REQ-136 | What the proof of T0.6 left is closed, each with a test seen failing before the change: a creation that got no answer reconciled by its name, as an unknown submission; the trust is the one of the host; the rules on the addresses in canonical form, with the two metadata addresses above; the label of the name of a backup cut as Velero cuts it; a field that is not a string refused; the close of a route bounded; a listener with a handler of its errors; a synchronous failure of a request turned into a code; every code of a TLS failure; a URL with the port of its scheme or a host in capitals; a location with both certificates, of which the reference wins; the endpoint slices in place of the endpoints; the key of a sender as SPEC-0009 defines it. Amended on 2026-10-16, see [Amendments](#amendments) | DIAG-17 |
+| REQ-137 | The proof of T0.6 stays green in the four modes it has, HTTP through the tunnel, HTTPS through the tunnel with the inline and with the referenced certificate, direct HTTPS with the referenced certificate. The packaged application downloads the four artifacts of the real backup and of the real restore of the demo through the tunnel, and the artifacts of a backup synced from the store; the identities of the demo end as forbidden at the step each may not do: the creation of the request, the read of the Secret, the read of the Service, the port-forward. The permissions of the tunnel are the ones the kubectl of the host asks, proven with the identities of the test environment, and the list of the architecture follows them where they differ: beside the kinds of Velero, `get` on services and pods, `list` on endpointslices, and `create` on `pods/portforward`, which every kubectl uses. kubectl 1.31 and later asks `get` first, over a WebSocket, and falls back to `create` when it is refused, so `get` is asked first and not needed. The permission the documentation of v1.0.0 lists for the tunnel is `create` on `pods/portforward`; with kubectl 1.31 and later a refused `get` may show in the audit log of the cluster before the fallback, and an operator who wants to avoid it grants `get` as well. The identities of the test environment: the downloader, with `create` alone, forwards; the router, with neither verb, is refused at the port-forward, where the last words of kubectl name `create`. The other identities are refused at the same steps. Amended on 2026-10-16, see [Amendments](#amendments) | DIAG-18 |
 
 ## Design
 
@@ -604,3 +604,59 @@ with which object is not there.
 Since the tabs the main process has a second use for a text it holds, the command
 that saves it: what a saving writes, and when it writes nothing, is in the evidence
 of SPEC-0011.
+
+## Amendments
+
+### 2026-10-16: The Freelens v2 Host
+
+Approved by the lead maintainer on 2026-10-16 with
+[SPEC-0015](SPEC-0015-freelens-v2-host.md), as the tables of its
+[D1](SPEC-0015-freelens-v2-host.md#d1-the-api-server-from-the-main-process) and
+[D2](SPEC-0015-freelens-v2-host.md#d2-the-tunnel-to-the-object-store) say, and made by
+the pull request of T0.7. On Freelens v2 the requests of the adapter go through the
+client of the host, through the proxy of Freelens, and the tunnel is
+`kubectl port-forward --address 127.0.0.1` of the Pod of the store, run by the main
+process with the kubectl and the environment `Main.Shell` gives for the cluster, so
+that the port-forward goes through the proxy of Freelens as well: the extension
+keeps no connection of its own to an API server. REQ-129 and REQ-136 are amended in
+the places above.
+
+| Item | Before the amendment |
+| --- | --- |
+| REQ-129 | The part of the tunnel: a port-forward the extension opens through the API server to that Pod, with the identity of the kubeconfig. The listener is on the loopback of this machine, for one connection, and is closed with the operation |
+| REQ-136 | Among the items of what the proof of T0.6 left: a creation refused before the connection is transport-unreachable and not an unknown submission; an API server at an IPv6 address; one keep-alive agent for each adapter; the identity of the context of SPEC-0009 |
+
+These items went with the connection of the adapter, and their tests with them. A
+creation that got no answer is reconciled by its name, as an unknown submission: the
+extension does not see the connection of the host, and cannot tell a creation that
+was not sent from one whose answer was lost. The other items of REQ-136 stay as
+they are; its listener with a handler of its errors was the listener of the tunnel
+of the extension, which on Freelens v2 is the one of kubectl.
+
+### 2026-10-16: The Permission Of The Port-Forward
+
+Approved by the lead maintainer on 2026-10-16, as the
+[evidence](SPEC-0015-freelens-v2-host.md#evidence-and-deviations) of SPEC-0015
+records it with what step 9 of T0.7 found: kubectl asks a port-forward of the API
+server over a WebSocket first, with the verb `get` on `pods/portforward`, and falls
+back to the older protocol, with the verb `create`, when the upgrade is refused, so
+that `create` alone forwards, and on the API server of the test environment, at
+1.34, only an identity with neither verb is refused; from Kubernetes 1.35, where
+the upgrade asks `create` as well, an identity with `get` alone is refused too.
+REQ-137 is amended in the place above, as the row of REQ-137 in the table of D2 of
+SPEC-0015 says. What it said of the permissions, as approved on 2026-09-30:
+
+| Item | Before the amendment |
+| --- | --- |
+| REQ-137 | The permissions the tunnel needs beside the kinds of Velero, `get` on services and pods, `list` on endpointslices, `create` on `pods/portforward`, are the ones the documentation of v1.0.0 lists |
+
+The rest of this spec is read with the two amendments, and is not changed by them.
+The safety of the design and the reuse of the service, the adapter, the transport and
+the tunnel of T0.6 describe the client of the extension and its listener: on
+Freelens v2 the identity is the one of the connection of the host, and the tunnel is
+the kubectl of the host. DIAG-17 keeps one test for each item of REQ-136 as it reads
+now. DIAG-18 checks the identities at their steps with the amended REQ-137. The
+deviation of the evidence of T2.4 that a port-forward needs the verbs `get` and
+`create` was of the WebSocket of the client of the extension: with the kubectl of
+the host, `create` alone forwards, and the words of a refused port-forward name
+`create`. The header and the evidence of this spec move to Freelens v2 with T0.8.

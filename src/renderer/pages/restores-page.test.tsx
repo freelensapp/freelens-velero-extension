@@ -2,8 +2,8 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { addressChanges } from "../../../test/freelens-extensions";
-import { listProps } from "../../../test/host-components";
+import { addressChanges, hostObject } from "../../../test/freelens-extensions";
+import { drawerNames, drawerValue, listProps } from "../../../test/host-components";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { RESTORE_PHASES } from "../../common/phases";
 import { Restore } from "../api/kinds";
@@ -849,7 +849,7 @@ describe("workspace of a restore", () => {
 
     // A click on a text gives the focus to what holds it and can have it: the view, not the page.
     expect(workspace.getAttribute("tabindex")).toBe("-1");
-    workspace.focus();
+    act(() => workspace.focus());
     expect(document.activeElement).toBe(workspace);
     fireEvent.keyDown(document.activeElement as Element, { key: "Escape" });
     await waitFor(() => expect(screen.queryByTestId("velero-restore-workspace")).toBeNull());
@@ -1005,10 +1005,10 @@ describe("details of the host for a restore", () => {
     });
 
     return render(
-      <RestoreDetails object={new Restore(resource as never)} extension={extension} installation={installation} />,
+      <RestoreDetails object={hostObject(Restore, resource)} extension={extension} installation={installation} />,
     );
   };
-  const item = (name: string) => document.querySelector(`[data-name="${name}"] .value`)?.textContent;
+  const item = (name: string) => drawerValue(name);
 
   it("reads the restore as the views do, and leads to the workspace of the installation selected", async () => {
     mount(answers(), chosen(A));
@@ -1057,7 +1057,7 @@ describe("details of the host for a restore", () => {
       },
     });
 
-    render(<RestoreDetails object={new Restore(waiting as never)} extension={extension} installation={installation} />);
+    render(<RestoreDetails object={hostObject(Restore, waiting)} extension={extension} installation={installation} />);
     expect(screen.queryByTestId("velero-restore-details-link")).toBeNull();
     expect(screen.getByTestId("velero-restore-details-elsewhere").textContent).toContain(A);
     // The namespace of the restore is named and selected in the views, with the details still open.
@@ -1098,15 +1098,13 @@ describe("details of the host for a restore", () => {
       writer: main,
     });
 
-    render(<RestoreDetails object={new Restore(waiting as never)} extension={extension} installation={installation} />);
+    render(<RestoreDetails object={hostObject(Restore, waiting)} extension={extension} installation={installation} />);
     expect(screen.getByTestId("velero-restore-details-artifacts").textContent).toBe(
       "The log, the results, the resource list and the volume information of this restore are in its workspace, each loaded there when it is asked for. None of them is loaded here.",
     );
     expect(item("Diagnostics")).toBe(screen.getByTestId("velero-restore-details-artifacts").textContent);
     // The way there is the one to the workspace, which follows what the details say of it.
-    const section = [...screen.getByTestId("velero-restore-details").querySelectorAll(".DrawerItem")].map((part) =>
-      part.getAttribute("data-name"),
-    );
+    const section = drawerNames(screen.getByTestId("velero-restore-details"));
 
     expect(section.slice(-2)).toEqual(["Diagnostics", "Workspace"]);
     expect(screen.getByTestId("velero-restore-details-link").getAttribute("href")).toBe(

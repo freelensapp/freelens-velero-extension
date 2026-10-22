@@ -36,10 +36,13 @@ jobs:
         run: |
           echo "version=$(yq -r .version package.json)" >> $GITHUB_OUTPUT
 
+      # A version X.Y.Z, or a prerelease X.Y.Z-N of the line of SPEC-0015 (D10),
+      # which the release workflow publishes on the npm tag `next` and marks as
+      # a prerelease on GitHub. No other form of a version is tagged.
       - name: Check if version is release
         id: check-version
         run: |
-          if [[ "${{ steps.package-json.outputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          if [[ "${{ steps.package-json.outputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?$ ]]; then
             echo "is_release=true" >> $GITHUB_OUTPUT
           else
             echo "is_release=false" >> $GITHUB_OUTPUT

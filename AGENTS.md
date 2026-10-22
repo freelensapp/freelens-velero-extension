@@ -17,8 +17,11 @@ The foundation, the first milestone and the second milestone are in place and
 reviewed. Scope and progress toward v1.0.0 are in `docs/development/ROADMAP.md`.
 
 - **Language**: TypeScript 7.0.2
-- **Runtime**: Node.js >= 22.12.0, Freelens >= 1.10.3
-- **Package manager**: pnpm 10.x (locked)
+- **Runtime**: Freelens >= 2.0.0, the extension API v2 (`engines.freelens` `^2.0.0`)
+- **Toolchain**: Node.js 24.21.0, yq and cosign (`mise.toml` with `mise.lock`; Node
+  also in `.nvmrc`)
+- **Package manager**: pnpm 12.x (`packageManager`, run through corepack), with
+  strict peer dependencies
 - **License**: MIT
 
 ## Licensing and provenance constraints (critical)
@@ -58,9 +61,16 @@ reviewed. Scope and progress toward v1.0.0 are in `docs/development/ROADMAP.md`.
 - Deliver the complete agreed v1.0.0 as soon as possible, without compromising
   quality, scope, safety, usability, or required validation. Calendar estimates
   must not delay a ready release or justify omitted requirements.
-- The validation target is Freelens v1.10.3 with SDK v1.10.3, the version the
-  tests build against. `engines.freelens` is `^1.10.3`. Another major version of
-  Freelens needs its own spec and its own verification.
+- The validation target is the one of
+  [SPEC-0015](docs/specs/SPEC-0015-freelens-v2-host.md): Freelens v2 at
+  freelensapp/freelens `2578fac5e9f6d2893129b6ba0d59b379fdf9d305`, the base of the
+  nightly v2.0.0-0-nightly-2026-10-19, with the SDK `@freelensapp/extensions`
+  2.0.0-0-nightly-2026-10-19 pinned exactly, the version the tests build against.
+  `engines.freelens` is `^2.0.0`. Until Freelens 2.0.0 is released the target moves
+  with the [host drift watch](docs/development/PROCESS.md#host-drift-watch), read
+  before every slice and before every merge; then the pin of the SDK becomes a
+  range. Another major version of Freelens needs its own spec and its own
+  verification.
 - Optimize for an excellent operational UI: truthful status, fast diagnosis,
   efficient navigation, and safe actions, integrated with Freelens.
 - Do not mention individuals or include comparisons with other software in any
@@ -83,7 +93,8 @@ This repository is developed spec-first. Before implementing anything, read:
 
 - `docs/development/PROCESS.md`: the spec-driven workflow (spec before code,
   docs updated in the same PR, manual-testing escalation to the lead maintainer,
-  milestone review gate).
+  milestone review gate, the upstream drift watch of Velero and the host drift
+  watch of Freelens and of the template).
 - `docs/development/ROADMAP.md`: scope and progress toward v1.0.0. It is the
   single source of truth for both.
 - `docs/development/ARCHITECTURE.md`: process ownership, target identity, the
@@ -197,7 +208,7 @@ Rules that hold on top of the process:
 
 ```bash
 # Type checking
-pnpm type:check
+pnpm type:check           # The nine programs: main, renderer, tests, tooling, integration, scripts, environments
 
 # Linting & formatting
 pnpm biome:check          # TypeScript, JS, JSON (biome)
@@ -209,7 +220,7 @@ pnpm lint:check           # Alias for biome:check
 pnpm lint:fix             # Alias for biome:fix
 
 # Dependencies
-pnpm knip:check           # Run after a build with separate modules
+pnpm knip:check           # Unused files, unused and unlisted dependencies (knip)
 
 # Tests
 pnpm test:unit            # Builds first, then vitest, then the measures alone
@@ -218,71 +229,141 @@ pnpm e2e                  # Fixtures and transport proof against that cluster
 pnpm e2e:cluster:down     # Removes the cluster, its network and its state
 pnpm demo:up              # The cluster with the fixtures left in place
 pnpm demo:views           # What the views need beside them, and where the kubeconfigs of the demo are
-pnpm e2e:views            # The suites of the views in a packaged Freelens, against the fixtures
+pnpm e2e:views            # The suites of the views in the Freelens FREELENS_APP names, against the fixtures
 pnpm pre-review           # Both themes, the sizes of the window, the zoom and the keyboard
+pnpm e2e:integration      # FND-10 and a session for each of the five kinds, in the Freelens FREELENS_APP names
 
 # Build
-pnpm build                # Type check, then electron-vite, separate modules
-pnpm build:production     # Production build, single file per entry point
+pnpm build                # Both Vite runs, renderer then main, without the type check
+pnpm dev                  # Both Vite runs in watch mode, for a directory install
 
 # Pack for testing
-pnpm pack:dev             # Bump prerelease version, production build, and create .tgz for install in Freelens app
-pnpm build:production && pnpm clean:tgz && pnpm pack   # The same without the bump
+pnpm pack:dev             # Bump prerelease version, build, and create .tgz for install in Freelens app
+pnpm build && pnpm clean:tgz && pnpm pack   # The same without the bump
 
 # Clean
-pnpm clean                # Clean out/
-pnpm clean:all            # Clean everything (node_modules, out, tgz)
+pnpm clean                # Clean dist/
+pnpm clean:all            # Clean everything (dist, dts, node_modules, tgz)
 ```
 
 ## Architecture
 
 ```text
 src/
-  main/index.ts             # Extension entry point (main process, Node.js)
-  main/diagnostic-*.ts      # Create-only Kubernetes adapter, DownloadRequest service, transport, pod tunnel
-  renderer/index.tsx        # Extension entry point (renderer process, Chromium): pages, sidebar, details
+  main/index.ts             # Extension entry point (main process, Node.js): the store, the procedures on Main.Ipc
+  main/host.ts              # What the main process takes of the host: its catalog, the client of its proxy, its kubectl
+  main/diagnostic-*.ts      # Create-only adapter on the client of the host, DownloadRequest service, transport, route, kubectl tunnel
+  renderer/index.tsx        # Extension entry point (renderer process, Chromium): pages, sidebar, details, customResources
   renderer/api/             # The kinds of Velero, and the reader: the only place that reaches the cluster
   renderer/state/           # What the views of a cluster know of an installation, and the store of a list
-  renderer/components/      # Target bar, states before a view, the page of a list, the frame of a view, status, styles
+  renderer/components/      # Target bar, states before a view, the page of a list, the frame of a view, error boundaries, styles
   renderer/pages/           # The list of each kind, and the view of one object of it
   renderer/details/         # What is added to the details the host shows of a kind
   renderer/navigation.ts    # The pages, the entries of the sidebar, and the views the address names
   common/                   # Pure helpers on plain data, and the store of the preferences
-build/host-globals.ts       # Maps what the host provides to the globals it provides it under
-integration/                # Playwright test of the installation, and the helpers of the suites of the views
-test/                       # Vitest stubs for the host and its components, build and environment tests
-e2e/scripts/                # Disposable kind cluster with Velero and S3, fixtures, transport proof
-e2e/__tests__/              # The suites of the views, run inside a Freelens that was built
+build/                      # Vite plugins of the template: modules of the host, standard decorators, CSS module declarations
+environment-tests/          # Probes of the programs of each process, which fail on an API of another environment
+integration/                # FND-10, a session for each of the five kinds, and the helpers of the suites of the views
+test/                       # The stub of the SDK, the doubles of the host, the build and environment tests, the measures
+e2e/scripts/                # Disposable kind cluster with Velero and S3, fixtures, transport proof, stand-ins of the host
+e2e/__tests__/              # The suites of the views, run in the Freelens that FREELENS_APP names
 docs/                       # Development docs and one spec per feature
 ```
 
-Build output goes to `out/`.
+Build output goes to `dist/`: `main.js`, `renderer.js` and `renderer.css`, with
+source maps. `main` and `renderer` in `package.json` point at the two entries.
 
 ## Host Facts That Cost A Run To Find
 
+The facts of the host here are of Freelens v2 at the validation target, each
+proven there by the packaged suites, or read in the source of the host at that
+commit where it says so; the others are facts of Velero, of Kubernetes, of the
+test environment and of the process of this repository.
+
 - The views reach the cluster through `src/renderer/api/reader.ts` and through
-  nothing else. It sends `GET`. A state of a view comes from the status of an
-  answer, never from the text of an error.
-- A subclass of `KubeApi` does not keep its methods at run time. Do not add
-  methods to the `Api` classes: write a function.
-- The host writes the store of an extension from its main process. A store that
-  must be kept is opened in both processes, in `onActivate`.
-- An object built for a list of the host needs `metadata.selfLink`.
-- The requests of the host leave from its main process: the driver of the suites
-  does not see them. Count them on the API server, as the suites do.
+  nothing else: the client of the host for the cluster of the frame, with `GET`,
+  to the paths of the kinds of Velero alone. A state of a view comes from the
+  status of an answer, never from the text of an error. The suites see the reads
+  of the views leave from the frame, and the API server counts the same ones.
+- The reads of the frame of a cluster, the host's and the views' alike, leave from
+  the frame through Chromium, to `https://<clusterId>.renderer.freelens.app:<port>/api-kube/...`:
+  the driver of the suites sees them. The requests of the main process of the host
+  and of the extension it does not see. Count them on the API server, as the
+  suites do.
+- The browser writes in the console of the frame, at the level of an error, every
+  answer to a read of the frame that is not a success: a restricted identity that
+  opens a cluster makes about ten of them from the host's own reads. What the host
+  logs at the level of an error is a line that starts with `error:`, on the output
+  of its process as in its files; its proxy logs so every request its client gave
+  up on before the API server answered, which closing a drawer does. The collector
+  of the suites leaves out a 401, a 403 or a 404 to a read of the frame, by its
+  address, that record of the proxy, and a resource of the build of the host
+  that the window failed to load, by its address.
+- The host logs a load in its window that did not end by where it was: a load of
+  the window itself at the level of an error, a load of a frame inside it at the
+  level of debugging when it was aborted, with the code -3, and as a warning
+  otherwise. A disconnection takes the frame of the cluster out by emptying its
+  address, which aborts its load with the code -3, and a connection makes a new
+  frame: the suite of the tabs reads in Electron that every load a disconnection
+  ended is of a frame, aborted.
+- The host writes the store of an extension from its main process, once for one
+  change, and says `[BASE-STORE]: saving <file>` each time; after a disable and an
+  enable it saves once for one change again. A store that must be kept is opened
+  in both processes, in `onActivate`.
+- A disable runs `onDeactivate` before the host takes the pages out, and an enable
+  runs `onActivate` before it registers them: a page drawn again in between makes
+  the state of the views again, with no way to the main process. `onActivate` of
+  the renderer lets go of such a state first.
+- An object built for a list of the host needs `metadata.selfLink`, read in the
+  source at the target (`packages/kube-object/src/kube-object.ts`, lines 115 to
+  120): the store of a list of the extension adds it, and the lists of the suites
+  mount their rows with it.
+- The list layout of the host computes its filtered items in a derivation of MobX,
+  once for every change of what `getItems` and its filters read, and its rows read
+  that one result, as read in the source at the target
+  (`item-object-list/list-layout.tsx`, lines 279 to 297): what `getItems` reads is
+  followed when it is observable, as the store of a list of the extension is,
+  computed from the read of the installation. The scale suite holds a search of a
+  list of a thousand rows to its budget.
 - The application reads the kubeconfig of the user unless its profile says
-  otherwise, and takes the theme of the system. Start it with `startIsolated()`
-  of the helpers, never bare.
+  otherwise, and takes the theme of the system. Start it with `startIsolated()` of
+  the helpers, never bare: its profile is under `os.tmpdir()`, the one place where
+  the host takes `<profile>/Freelens/home` as its home, and its store names the
+  kubeconfig of the environment alone and the theme. On macOS the host writes its
+  logs to `~/Library/Logs/Freelens` unless `CFFIXED_USER_HOME` points elsewhere:
+  the helpers point it into the profile.
+- The host imports the main entry of an extension by its file URL, from the build
+  it manages in the profile. A dynamic `import()` inside `app.evaluate` is refused
+  by Node, and `process.mainModule.require` of the same file answers the module of
+  the host, from the cache of its ES module loader: FND-10 reaches the bundle so,
+  and proves it by the scripts the debugger of the process lists.
 - What passes on a machine of a developer may not end on the hosted runner. Give
   every step of a suite its own time, shorter than the one of its case, so that
   the step that does not end is the one that is reported.
 - The host gives its loader ten seconds to see an extension it unpacked, and on a
-  busy machine it gives up, for that application: the extension never appears, or
-  appears and stays disabled. The suites start the application
+  busy machine it gives up, for that application: it says that the installation
+  failed, and lists the extension Disabled. The suites start the application
   through `startWithExtension`, which starts it again in a new profile, once; the
-  file `e2e-artifacts/stall-the-host-once` makes the host give up on purpose.
-- Do not hide a list of the host with `display: none`: it loses its scroll. The
-  list behind a workspace is hidden with `visibility`.
+  file `e2e-artifacts/stall-the-host-once` makes the host give up on purpose, by
+  holding its main process thirteen seconds after the install is asked.
+- An install from a tarball shows a notification that nothing vouches for its
+  integrity, since no checksum was available for it, and installs it anyway: the
+  helpers close it. A new profile has a Terminal tab in the dock of the host.
+- The Extensions page names the command that enables a disabled extension
+  "Enabled", and the menu of a row of the catalog opens from
+  `icon-for-menu-actions-for-catalog-for-<id>`.
+- The host registers the handlers of an extension in the map of Electron as
+  `extensions@<digest>:<channel>`, and a handler reads the address of the frame
+  that asked as `https://<clusterId>.renderer.freelens.app:<port>`, with the port
+  of the proxy.
+- The host prepares in the profile the kubectl of the version of the cluster at
+  its first need, 1.34.12 for the cluster at 1.34.11 of the test environment, where
+  the nightly bundles 1.37.1: the first load through the tunnel in a new profile
+  waits for it.
+- A list of the host hidden with `display: none` reads a scroll of 0 while it is
+  hidden, and is back at its scroll when it is shown again. The list behind a
+  workspace is hidden with `visibility`, which the scale suite proves keeps the
+  scroll.
 - A view opened from another one is shown over the same list, on the same page:
   the views that are open are one parameter of the address, changed once for each
   change of what is shown. Open one with `openView`, never by setting a parameter
@@ -309,6 +390,18 @@ Build output goes to `out/`.
   first entry of `clusterPageMenus` that leads to the page has a parent: the
   entries of the lists come before the entry of the group. A page does not render
   `TabLayout`: inside the one of the host it would have its margins twice.
+- The drawer of the details of the host closes on a click that reaches the
+  window, unless its default was prevented, the press began inside the drawer, the
+  target is inside a drawer, or the target is not in the page any more, drawn
+  again by the click before the click reached the window. A link of the host
+  prevents the default, and so does the link of a section of the extension, which
+  is the `MaybeLink` of the host, and the row of a list of the host opens its
+  details with the default prevented: a click on a row under an open drawer opens
+  the view of the row and leaves the drawer over it. A way of the view, and its
+  way back, draw another view or the list in its place before their click reaches
+  the window: the drawer stays over what they open, with the address that names
+  its object, until it is closed, and the journey suite reads the target of such a
+  click at the window. No action of the extension opens the details of the host.
 - A fixture that a view of the milestone needs goes with the fixtures of the views,
   which `pnpm e2e:views` puts in place on an environment that is already up. The
   ones of the phases are put in place once, when the environment is created.
@@ -364,38 +457,31 @@ Build output goes to `out/`.
   three ways the client of the fixtures sends one, and holds its whole length. A
   way is tried only when the ones before it failed: the files are sent in the
   first.
-- The source of the components of the host is in the package its types come
-  from: the source map `static/build/library/renderer.js.map` of
-  `@freelensapp/core` carries it. What follows of its address, its input, its
-  tabs and its table was read there, at v1.10.3, and so was that its list is
-  drawn inside the sizer of `react-virtualized-auto-sizer`, which the map does
-  not carry: what the sizer draws at first was read in that package, at 1.0.26,
-  and what the icon holds in `@freelensapp/icon`. These facts were read, and no
-  run found them. The doubles of `test/host-components.tsx` follow them for the
-  components, and the stub of `test/freelens-extensions.ts` for the address.
+- The source of the host is read at the commit of the validation target, in a
+  clone of freelensapp/freelens, with `git show <commit>:<path>`: the doubles of
+  `test/host-components.tsx`, the stub of `test/freelens-extensions.ts` and the
+  address of `test/host-address.ts` follow it, each naming the file and the lines
+  it follows. A double that is kinder than the host hides a defect from every test
+  that uses it, and the stub refuses a name of the SDK it has no double for.
 - The host changes the address once for each parameter it is asked to set, and
   sent to the address it is at it goes there and comes back, which is two
   changes. What a view shows by more than one parameter, as the views that are
   open and the tab of the last of them, is written into one search, and the host
   is sent there once and only when something changes. `openView`, `closeView`,
   `closeViews` and `showTab` of `src/renderer/navigation.ts` are the only
-  writers.
-- The virtual list of the host, given no `fixedHeight`, measures its room once it
-  is mounted: it draws no row at its first render, nor while its room has no
-  height. What waits for its first row, a focus or a measure, waits for the row
-  and not for the component that holds the list. The double of the tests does
-  the same: a double that drew its rows at once hid this from every test.
+  writers. The suites count one change of the address for every step.
 - The `Input` of the host leaves the focus at Enter unless it is given
-  `blurOnEnter={false}`. Its `SearchInput` takes the focus when it is mounted,
-  takes Ctrl or Cmd with F for the whole window, and clears itself at Escape. A
-  field of a view whose Enter is a command of its own is the `Input`, told to
-  keep the focus and named by `aria-labelledby`.
+  `blurOnEnter={false}`, and its `SearchInput` clears itself at Escape: both read
+  in the source at the target, which the doubles follow. The `SearchInput` takes
+  the focus when a list of the host is mounted, and takes Ctrl or Cmd with F for
+  the whole window. A field of a view whose Enter is a command of its own is the
+  `Input`, told to keep the focus and named by `aria-labelledby`.
 - `Tabs` and `Tab` of the host give a tab its role, a stop of the Tab key and its
   choice by a click, Enter and Space. They give the strip no role, say of no tab
   that it is selected, move nothing with the arrows, and do not prevent what the
-  browser does with Space by itself.
+  browser does with Space by itself, as read in the source at the target.
   `src/renderer/components/workspace-tabs.tsx` adds what they lack, and prevents
-  that.
+  that: the suite of the tabs and the pre-review press its keys.
 - The `Table` of the host draws its head and the rows it holds: what is not a
   `TableRow` is dropped, a fragment of rows as well, and its parts have no role.
   A `TableCell` that is given a `title` shows the title in place of what it
@@ -403,18 +489,15 @@ Build output goes to `out/`.
 - The `Icon` of the host holds the name of its icon as its text, which a font
   draws as the icon. Beside the words of a command it is given `aria-hidden`, or
   the name of the command carries the name of the icon.
-- The `Checkbox` of the host is a label around its input, and the style of
-  `@freelensapp/core` at v1.10.3, `static/build/library/renderer.css`, gives the
-  input `display: none`: the Tab key does not reach it. A choice of a view that is
-  on or off by itself, as a level of a log, is a button that says with
-  `aria-pressed` whether it is made, drawn as the box of the host.
 - Escape leaves a view of one object from wherever the focus is in it, but for
   two places. A text field of a view takes the key with `escapeOfField`, clears
   what was typed and lets it go no further. The confirmation of a request takes
   it as well: it leaves the confirmation, and the view does not hear the key.
-- The main process asks `require("electron")` for the dialog of the host at the
-  moment a file is saved, never when its modules are loaded: the proofs of the
-  test environment load the main bundle under Node, where there is no host.
+- The main process imports `electron`, with `await import("electron")`, for the
+  dialog of the host at the moment a file is saved, never when its modules are
+  loaded: the build test and the proofs of the test environment load the main
+  bundle under Node, where there is no host. The suite of the tabs replaces the
+  dialog in the main process of the application and saves through it.
 - The panel of a tab names the request of a load from its confirmation on, and
   the main process reads the target and its storage location before it creates
   anything: a cancel clicked as soon as the panel names the request lands before
@@ -423,12 +506,11 @@ Build output goes to `out/`.
   cancel then lands at the wait for the URL, and the request stays in the cluster
   until the server removes it.
 - The `Input` of the host takes `keyboard.type` with a delay of 20 milliseconds
-  between the keys and holds every character: the pre-review typed
-  `level=warning` into the search of a log so, and read it whole with its count.
-  For a controlled value it calls `onChange` at each key, and its one delay, of
-  500 milliseconds, sets a mark for the style: a measure that starts at the key
-  has nothing to split. The second fact was read in the source of the host, at
-  v1.10.3, and no run found it.
+  between the keys and holds every character: the pre-review types into the
+  search of a log so, and reads it whole with its count. For a controlled value it
+  calls `onChange` at each key, and its one delay, of 500 milliseconds, sets a
+  mark for the style, as read in the source at the target: a measure that starts
+  at the key has nothing to split.
 - A confirmation that is open, and the search, the level and the wrap of a loaded
   log, survive a change of theme through the preferences of the host: the
   pre-review carries them through its six layouts, two themes at three sizes,
@@ -437,18 +519,18 @@ Build output goes to `out/`.
   step, which the extension writes from its own template and not in the language
   of the machine: no attribute carries them.
 - The widths at which the bar of a log goes to a second line depend on what the
-  bar shows: seven between 1440 and 720 pixels with a search and its count in it,
-  five without. A scan of them expects at least one, and pins none.
+  bar shows, a search and its count in it or not. A scan of them expects at least
+  one, and pins none.
 - The window of the packaged host at 1440 by 900 gives the list of a log a room of
-  208 pixels, ten lines and a part of one, where the viewer allows up to 1,560: 23
-  rows are mounted while it scrolls and 32 at its first lines, far under the bound
-  of 100. A measure of the frames of a scroll there is of a short list, and its
-  report says the room.
+  208 pixels, ten lines and a part of one, where the viewer allows up to 1,560:
+  31 rows are mounted at most while it scrolls, far under the bound of 100. A
+  measure of the frames of a scroll there is of a short list, and its report says
+  the room.
 - The display of the machine of the runs draws at 60 Hz: an idle frame is 16.7
   milliseconds, and no frame can be timed finer. A budget of 50 milliseconds for a
   frame is three refreshes; the gestures of the green runs drew within one or two.
 - The end of a scroll gesture is read from the rows mounted, both ends moved and
-  every line of the place mounted, never from the count the host keeps ready
+  every line of the place mounted, never from the count the list keeps ready
   around its room, and an end at an edge of the list that stays there has moved.
   A viewer made to keep two thousand rows ready on each side showed why: the last
   row kept ready was the last line before and after a notch near the end of the
@@ -458,13 +540,25 @@ Build output goes to `out/`.
 
 - Use renderer APIs for CRD lists/details/forms and main for privileged operations,
   signed-URL downloads, cancellation, and any approved port-forwarding.
-- Use the host's Kubernetes connection for ordinary object access. Direct tunnels
-  need the explicitly selected cluster's original kubeconfig and context; failure
-  must not fall back to another cluster or default kubeconfig.
+- Use the host's Kubernetes connection for every object access, in both
+  processes: the client of the host, `KubeJsonApi.forCluster` of the cluster of
+  the frame or of the request, through the proxy of Freelens. The extension reads
+  no kubeconfig, runs no credential plugin and keeps no client and no connection
+  of its own to an API server. Ask nothing of a cluster whose entry in the catalog
+  is not connected: the proxy would connect it.
+- A direct tunnel is the kubectl the host gives for the explicitly selected
+  cluster, `Main.Shell.getKubectlPath`, run by the main process with
+  `Main.Shell.getEnvironment` as its whole environment and the folder of the
+  extension as its working directory, for one operation, and killed when it ends,
+  is cancelled, the extension is deactivated, the process exits or the cluster
+  leaves the connected state. A failure never falls back to another cluster, a
+  default kubeconfig or a client of the extension's own.
 - Validate IPC at runtime and bind operations, results, and cancellation to their
   initiating cluster, namespace, object, and renderer request.
-- Use host-provided React, MobX, extension APIs, icons, and theme tokens. Follow the
-  host's actual React version, not APIs requiring a newer runtime.
+- Use the React 19, MobX 7, extension APIs, icons, and theme tokens the host
+  provides, one copy of each: the build reads the libraries of the host from
+  `globalThis.FreelensExtensionApi`. Follow the host's actual versions, not APIs
+  requiring a newer runtime.
 - Prefer native components where they fit the operator's task. Purpose-built views,
   visualizations, and interaction patterns are valid design choices when they improve
   comprehension, navigation, efficiency, or safety. Native layouts are not mandatory.
@@ -482,58 +576,204 @@ Build output goes to `out/`.
 
 ## CRD KubeObject Pattern
 
-K8s object classes MUST use `static readonly` properties for metadata. **Instance methods do NOT work and MUST NOT be used.** The Freelens host reads properties from the class constructor statically, instance methods are not available at runtime because the host creates plain object copies of the K8s resource data, not instances of the extension's class. This means:
+The kinds are the pattern of the template of the organization, as D7 of
+[SPEC-0015](docs/specs/SPEC-0015-freelens-v2-host.md#d7-the-registrations) takes
+it: one subclass of `Renderer.K8sApi.LensExtensionKubeObject` for each kind, in
+[`src/renderer/api/kinds.ts`](src/renderer/api/kinds.ts). The host reads the
+metadata of a kind from the class, through `static readonly` properties. The
+objects it hands to the extension from its own store, in a section of the details
+or a menu item, are instances of the host's `KubeObject`, not of the extension's
+class, so the methods of `KubeObject` itself are there and a method the subclass
+defines is not, and calling it throws; the lists of this repository are given the
+objects the store of a list of the extension makes, and the views read them with
+the same helpers. So:
 
-- **Allowed**: `object.spec?.someField`, `object.status?.phase`, direct property access on typed `spec`/`status` interfaces
-- **Allowed**: pure helper functions that take the object or its fields
-- **Forbidden**: `object.someMethod()`, instance methods will never exist at runtime
-- **Forbidden**: `typeof (object as any).someMethod === "function" ? ...`, anti-pattern that always falls through to the fallback path
-- **Forbidden**: `as any`, use typed `Spec`/`Status` interfaces
+- **Metadata**: `static readonly` `kind`, `namespaced`, `apiBase` and `crd`, with
+  `crd.apiVersions` listing every version the cluster serves, `velero.io/v1` for
+  the five kinds of today.
+- **Instance type**: `declare kind` and `declare apiVersion`, with the kind and the
+  version as literals, which tie a section of the details made with `detailsFor`,
+  and a menu item made with `menuItemFor`, to its kind. `declare` emits nothing: a
+  field would be defined after the constructor of the host gave the object its
+  data, and would reset them.
+- **Per-object logic**: a pure helper function that takes the object or its
+  fields, in `src/common/`.
+- **Fields**: read `object.spec` and `object.status` through the typed `Spec` and
+  `Status` interfaces of `src/common/types.ts`.
+- **Forbidden**: instance methods on the subclass; a fallback such as
+  `typeof (object as any).someMethod === "function" ? ...`, which always takes the
+  fallback; `as any`.
+- **No `KubeApi` and no `KubeObjectStore` subclass**: the template exports them for
+  the types of its list page; here no class extends them, since the views read the
+  cluster through the reader and the lists of the host through the store of a list
+  of the extension. A `KubeApi` the extension creates registers itself with the
+  host. A store of the host, where one is needed, is the one it registers for a
+  served version, read with `getStore()` in the render of an `observer`: the host
+  registers the APIs of a CRD after the frame of the cluster has loaded the CRDs.
 
 ```typescript
-export class Backup extends Renderer.K8sApi.LensExtensionKubeObject<
-  Renderer.K8sApi.KubeObjectMetadata,
-  BackupStatus,
-  BackupSpec
-> {
+export class Backup extends Renderer.K8sApi.LensExtensionKubeObject<Metadata, BackupStatus, BackupSpec> {
+  declare kind: "Backup";
+  declare apiVersion: "velero.io/v1";
+
   static readonly kind = "Backup";
   static readonly namespaced = true;
-  static readonly apiBase = "/apis/velero.io/v1/backups";
-  static readonly crd: BackupKubeObjectCRD = {
-    apiVersions: ["velero.io/v1"],
+  static readonly apiBase = `/apis/${VELERO_API_VERSION}/backups`;
+  static readonly crd: VeleroCrd = {
+    apiVersions: [VELERO_API_VERSION],
     plural: "backups",
     singular: "backup",
     shortNames: [],
     title: "Backups",
   };
 }
-
-// Also export Api and Store classes (always needed):
-export class BackupApi extends Renderer.K8sApi.KubeApi<Backup> {}
-export class BackupStore extends Renderer.K8sApi.KubeObjectStore<Backup, BackupApi> {}
 ```
 
-Each CRD file exports three classes: the KubeObject, the KubeApi, and the KubeObjectStore.
+`src/renderer/index.tsx` registers the section of the details of each kind with
+`Renderer.K8sApi.detailsFor(<class>, { priority, Details })`, which takes the kind
+and the versions from the class and checks the section against it, and lists the
+five classes in `customResources`: while the extension is enabled the Custom
+Resources tree of the cluster leaves them out, where they would be listed a second
+time beside the pages of the group of Velero, and lists them again once it is
+disabled. A kind with a page of its own joins `customResources` with its page; a
+kind the extension only decorates stays out of it.
+
+## Renderer Components
+
+- Every page and every section of the details renders inside an `ErrorBoundary`
+  of [`src/renderer/components/error-boundary.tsx`](src/renderer/components/error-boundary.tsx),
+  the template's: a class component of the React of the host with
+  `getDerivedStateFromError` and `componentDidCatch`, which logs what its children
+  throw while React draws them, with the name of the extension, and draws the
+  error page of the extension in place of a page or a section, and nothing in
+  place of a menu item. The host has no boundary around its drawer of the details
+  or a menu item: an error there would replace the whole cluster view with the
+  crash page of the host.
+  - The boundary is applied where the registrations are made: `clusterPages` and
+    `kubeObjectDetailItems` are mapped through `withPageErrorBoundary` and
+    `withDetailsErrorBoundary`, each taking `this` and a registration, so that an
+    entry added to a field is wrapped as well; a menu item a later spec adds goes
+    through `withMenuItemErrorBoundary`. Each field is annotated with its type from
+    `Renderer.LensExtension`, since the mapping refers to `this`.
+  - A `try`/`catch` around the call of a component is not enough: a child throws
+    when React draws it, and a callback of the list of the host throws when the
+    host calls it from its own render.
+  - The boundary has no decorator and no `observer`: it reads no observable.
+- The host renders a cluster page with `params` alone: a page that needs the
+  extension gets it from its registration, `Page: () => <OverviewPage extension={this} />`,
+  and a section of the details gets the object alone, and the extension from its
+  registration as well.
+- An `observer` reads its props in its render. A callback the host calls from its
+  own derivations, `getItems` or `customizeHeader` of the list, carries the values
+  it needs from the render.
+- The views import their CSS module for the class names only, and inject no
+  `<style>`: the rules reach the page through `dist/renderer.css`, which the host
+  links. The declarations of the CSS module are written by the renderer build and
+  committed.
+
+## Rules That Fail Silently
+
+Each of these compiles when it is broken, and breaks the extension at run time or
+not visibly at all.
+
+- **The React and the MobX of the host, one copy each.** Import `react`,
+  `react-dom`, `mobx` and `mobx-react` by their bare names: the build reads them
+  from the host, and fails on the ways a second copy gets in. A second React throws
+  `invalid hook call`; a second MobX throws nothing, and the host never reacts to
+  its observables.
+- **Standard decorators.** An observable field that is decorated is
+  `@observable accessor`, and no class calls `makeObservable(this)` without its
+  annotations; `observableRef` replaces `observable.ref`. A class whose instances
+  are serialized, as the store of the preferences, keeps plain fields with an
+  annotation map.
+- **No Node or Electron in renderer and common code.** They are not there in the
+  renderer. The build fails on an import, `pnpm type:check` on a global.
+- **One stylesheet, `dist/renderer.css`.** Any other name, or a second one, leaves
+  the extension unstyled.
+- **One program of TypeScript for each environment.** Each has only the `lib` and
+  the `types` of its runtime; the environment tests fail on a leak.
+- **No instance method on a kind.** The objects of the host do not have it.
+- **`this.props` of an `observer` class only in its render.** Read elsewhere, in
+  a derivation of the host, it throws, and the host shows its crash page.
+- **A memo over the items of a store is keyed on what changes with them.** The
+  host keeps one observable array for a store and changes it in place, so a
+  `useMemo` keyed on `store.items` is computed once, and a view keeps the objects
+  it was opened with. An `observer` that reads the items in its render follows
+  them; a memo needs a key such as the identifiers and the `resourceVersion` of the
+  objects. The store of a list of the extension computes its items from the read
+  of the installation, which a new read replaces whole.
+- **Every page and section inside an error boundary.** Without it an error of a
+  section replaces the whole cluster view.
+- **A cluster page gets the extension from its registration.** The host passes
+  `params` alone.
+- **The test helpers of React only in the tests.** `React.act`, which
+  `react-dom/test-utils` and Testing Library call, is not in the production build
+  of React that the host runs, so the call throws in the host: the lint rule
+  refuses them, and Vitest, outside the tests.
+
+Neither `pnpm build` nor `pnpm dev` runs the type check: `pnpm type:check` does.
 
 ## Key Dependencies (provided by Freelens host at runtime)
 
-`@freelensapp/extensions` is NOT bundled: `build/host-globals.ts` maps it to
-`global.LensExtensions`. MobX is mapped to `global.Mobx` in both processes;
-React, its DOM, its JSX runtime and the bindings of MobX for React are mapped in
-the renderer. They are development dependencies pinned at the versions of the
-host, and a build test fails when one of them is found in the output. A library
-of the host that no source imports yet gets its mapping when one does.
+The host publishes its singletons on `globalThis.FreelensExtensionApi`, each
+process the ones it has: React, its DOM, its JSX runtime, MobX, the bindings of
+MobX for React and the editor in the renderer, MobX alone in the main process.
+[`build/vite-plugin-host-modules.mjs`](build/vite-plugin-host-modules.mjs), the
+template's, replaces a bare import of one of them with a module that reads it from
+that global, with the named exports of the copy installed as a devDependency, so
+that an import of a name the version of the host lacks fails the build; it fails as
+well on a module of the host the process does not publish, and on a subpath the
+host does not publish. `@freelensapp/extensions` is a shim of three lines that
+reads `Common`, `Main` and `Renderer` from the same global: it is bundled, and
+must not be mapped.
 
-Other dependencies ARE bundled into the extension output. Today the main
-bundle carries `@kubernetes/client-node` and `ws`.
+The libraries of the host are devDependencies at the versions of the catalog of
+the host, React and its DOM 19.3.1, MobX 7.0.6, the bindings 10.0.2, with their
+types, and `electron` 43.8.0 for its types alone; `@freelensapp/extensions` is
+pinned exactly to the nightly of the validation target. pnpm runs with
+`strictPeerDependencies`: a library shared with the host outside the peer range of
+the SDK fails the install.
 
-- Import the Kubernetes client by its files (`dist/config.js`,
-  `dist/web-socket-handler.js`), never from its root: the root bundles every
-  generated API client. These imports are tied to the pinned version: run the
-  adapter and tunnel tests before changing it.
-- undici never enters the main bundle: `build/undici-stub.ts` stands in for it.
-  The real module installs a dispatcher for the whole process when it loads,
-  which inside Freelens is the process of the host. A build test guards this.
+What the code needs at run time and the host does not provide is bundled, since
+the host installs nothing for an extension. The v2 rule of the template: a
+third-party library a bundle carries is declared in `dependencies`, the modules of
+the host in `devDependencies`. Today `dependencies` holds react-window alone, at
+the version of the catalog of the host, which windows the lines of a log and the
+resources viewer in the renderer. The main bundle carries no library: it reaches
+the API server through the client of the host and opens the tunnel with the kubectl
+of the host, and takes `electron` with `await import("electron")` at the moment a
+file is saved. What the package bundles is in
+[DEPENDENCY-AUDIT.md](docs/development/DEPENDENCY-AUDIT.md).
+
+## Workflows
+
+The hosted checks run on every pull request and on main, on synthetic data only:
+
+- `check.yaml`: the build, the type check of the nine programs, lint and Knip.
+- `trunk-check.yaml`: Trunk on every file.
+- `unit-tests.yaml`: `pnpm test:unit`, the build first, then the tests and the
+  measures alone.
+- `integration-tests.yaml`: FND-10 and the five sessions of the integration test,
+  in Freelens built from source at the commit of the validation target, on the
+  disposable kind cluster `pnpm e2e:cluster:up` makes, taken down whatever happens.
+- `views-tests.yaml`: every suite of the views, the pre-review and FND-10, in one
+  run of the runner of `pnpm e2e:views`, in Freelens built at the same commit,
+  against the fixtures of `pnpm demo:up`; then the cleanup of the fixtures and the
+  verification of the environment.
+- `e2e-tests.yaml`: the environment brought up, the fixtures and the transport
+  proof, and the environment taken down.
+- `osv-scanner.yaml`, and `mise-lock-check.yaml` for a pull request that changes
+  `.nvmrc`, `mise.toml` or `mise.lock`.
+
+The two workflows that build Freelens name the commit once, in `freelens_ref`,
+and cache the build by it and by nothing else; a unit test ties that line to the
+header of [SPEC-0015](docs/specs/SPEC-0015-freelens-v2-host.md), so the pin moves
+in both places with the host drift watch. A release is `npm-version.yaml`, which
+opens the pull request of the version, `tag.yaml`, which tags the version `X.Y.Z`
+or `X.Y.Z-N` once that pull request is merged, and `release.yaml`, which builds
+the tag and publishes a version with a hyphen on the npm tag `next`, released on
+GitHub as a prerelease, and any other on `latest`. The daily maintenance workflows
+and Renovate open their pull requests on branches named `automated/*`.
 
 ## Code Style
 
@@ -582,9 +822,10 @@ Code shared between both processes goes to `src/common/`.
 
 ### Changes Not Appearing
 
-1. Check that files are not in ignored output directories (`out/`, `node_modules/`)
+1. Check that files are not in ignored output directories (`dist/`, `node_modules/`)
 2. Clean and rebuild: `pnpm clean && pnpm build`
-3. Reinstall the extension in Freelens (or restart the app in dev mode)
+3. Reinstall an extension installed from a tarball, or restart Freelens after a
+   change to `main` or `renderer` in `package.json`
 
 ### Build Failures
 
@@ -598,7 +839,7 @@ Code shared between both processes goes to `src/common/`.
 1. Open Freelens DevTools and check the Console tab for renderer errors
 2. Check the terminal where Freelens was launched for main process errors
 3. Look for stack traces with file:line numbers
-4. Validate both with `pnpm type:check` **and** `pnpm build:production`, runtime failures can appear only in bundled `out/` code
+4. Validate both with `pnpm type:check` **and** `pnpm build`, runtime failures can appear only in the bundled code of `dist/`, which the build test loads
 
 ## Best Practices
 
@@ -606,7 +847,7 @@ Code shared between both processes goes to `src/common/`.
 2. **Test changes** before committing
 3. **Run validation before committing:** `pnpm lint:fix && pnpm type:check && pnpm test:unit`
 4. **For Markdown and YAML:** run `pnpm trunk:fix`
-5. **Check both build forms** when the main bundle changes: `pnpm test:unit` and `VITE_PRESERVE_MODULES=false pnpm test:unit`
+5. **Read the host drift watch** before a slice and before a merge, until Freelens 2.0.0 is released: see `docs/development/PROCESS.md`
 
 ## GitHub Actions (Claude Code Action) Rules
 

@@ -1,6 +1,6 @@
 # Architecture
 
-Date: 2026-10-06
+Date: 2026-10-19
 
 Status: the foundation is complete and the first views are in place: the discovery of
 the installation, the Backups, the Restores, the Schedules and the storage and
@@ -8,13 +8,18 @@ snapshot locations, read only; the gate of the writes, with the way between the
 processes; the request for an artifact, with its transport and its route; and the
 tabs that show an artifact in the workspace of a backup and of a restore, proven by
 their unit and component tests and by a suite in the packaged application on the
-real backup and the real restore of the test environment. The actions are not
-implemented: their sections below are the design their specs start from.
+real backup and the real restore of the test environment. Since T0.7 the extension
+runs on the extension API of Freelens v2
+([SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md)), and what follows describes
+it there. The actions are not implemented: their sections below are the design
+their specs start from.
 
 Authority: [directives](../../AGENTS.md), [roadmap](ROADMAP.md), and
-[versioned evidence](RECON-T0.1.md). The evidence report pins Velero v1.18.4,
-AWS plugin v1.14.4, and Freelens v1.10.3. A reviewed version is not a compatibility
-claim for untested releases. Product behavior below requires spec approval.
+[versioned evidence](RECON-T0.1.md). The evidence report pins Velero v1.18.4 and the
+AWS plugin v1.14.4; the Freelens validation target is the one of SPEC-0015, the
+nightly v2.0.0-0-nightly-2026-10-19, built from freelensapp/freelens `2578fac5`. A
+reviewed version is not a compatibility claim for untested releases. Product
+behavior below requires spec approval.
 
 ## Boundaries
 
@@ -23,86 +28,115 @@ to an operator's cluster. Velero and its storage plugin already run there.
 
 ```mermaid
 flowchart LR
-  Renderer[Renderer: operator views and CRD stores] --> Host[Freelens Kubernetes connection]
+  Renderer[Renderer: operator views and their reader] --> Host[Freelens: the proxy of its connection]
   Renderer --> IPC[Validated IPC requests]
   IPC --> Main[Main: target binding and operation policy]
   Main --> Host
-  Main --> Direct[Explicit-context Kubernetes adapter]
   Host --> Kubernetes[Kubernetes API]
-  Direct --> Kubernetes
   Main --> Transport[Bounded artifact transport]
   Transport --> Store[Object storage]
-  Transport --> Forward[Optional local port-forward]
-  Forward --> Kubernetes
+  Transport --> Forward[Optional port-forward: the kubectl of the host]
+  Forward --> Host
 ```
 
 | Area | Owns | Must not own |
 | --- | --- | --- |
 | Renderer | Native lists, dedicated operation workspace, navigation, forms, local presentation state | Kubeconfig/credentials, signed URLs, direct network downloads, write authorization |
 | Common | Typed DTOs, runtime-validation contracts, pure phase/progress/reference helpers | Electron/React side effects, sockets, file access, unscoped global state |
-| Main | Target resolution, create-only operations, write policy, request ownership, artifacts, cancellation, transport | Arbitrary renderer-supplied URLs, kubeconfig paths, raw manifests, or cluster fallbacks |
+| Main | Target resolution, create-only operations, write policy, request ownership, artifacts, cancellation, transport, the kubectl of a tunnel | Arbitrary renderer-supplied URLs, kubeconfig paths, raw manifests, cluster fallbacks, or a client, a kubeconfig or a credential of its own |
 
-Use the host-provided React 17, MobX and extension APIs. Start from the official
-example's build conventions; align SDK and runtime to the pinned host in T0.3.
-Select additional dependency versions explicitly and lock them during scaffold.
-Prefer established libraries for Kubernetes, runtime validation, and cron parsing.
-Do not introduce a new application framework or a parallel state-management system.
+Use the React 19, MobX 7 and extension APIs the host provides, one copy of each,
+and the build conventions of the template of the organization,
+freelensapp/freelens-example-extension, the reference template of the extension
+API. Select
+additional dependency versions explicitly and lock them. Prefer established
+libraries for runtime validation, windowing and cron parsing; reach the cluster
+through the host and through nothing of the extension's own. Do not introduce a
+new application framework or a parallel state-management system.
 
-### Scaffold Progress
+### The Build And The Checks
 
-T0.3 establishes a prerelease package built against SDK v1.10.3, using the official
-example's pnpm/TypeScript/electron-vite conventions. The manifest accepts the hosts
-compatible with v1.10.3; Freelens v2 is explicitly outside the current compatibility
-target. Biome, Knip and Trunk run through `pnpm dlx` at the exact versions the
-scripts name, as in the other extensions.
+The manifest, the toolchain and the build are the ones of the template of the
+organization since T0.7 (D6 of SPEC-0015): `engines.freelens` is `^2.0.0`, which
+Freelens 1 lists as Incompatible before any code runs; the package is an ES
+module, `"type": "module"`, with its entries `dist/main.js` and
+`dist/renderer.js` and `files` `dist/**/*`; `@freelensapp/extensions` is pinned
+exactly to the nightly of the validation target until Freelens 2.0.0 is released.
+Biome, Knip and Trunk run through `pnpm dlx` at the exact versions the scripts
+name, as in the other extensions.
 Activation asks nothing of a cluster, in either process. Both open the store of the
-preferences; the renderer registers the pages of the Backups, of the Restores, of
-the Schedules, of the Backup Storage Locations and of the Volume Snapshot
-Locations, their entries of the sidebar and the sections it adds to the details
-the host shows of each of the five kinds.
-T0.6 additionally exports the main diagnostic modules for compiled contract tests;
-no service, request or IPC handler is registered on activation.
-The renderer is built through electron-vite's preload target to produce the CommonJS
-module the host expects. A [build adapter](../../build/host-globals.ts) maps what the
-host provides to the globals it provides it under, without loading or bundling any of
-it: the SDK in both processes, MobX in both, React, its DOM and its JSX runtime and
-the bindings of MobX for React in the renderer. A build test fails when one of them is
-found in the output.
+preferences; the main process registers its procedures on an instance of
+`Main.Ipc` made for the activation, and the renderer registers the pages of the
+Overview, of the Backups, of the Restores, of the Schedules, of the Backup Storage
+Locations and of the Volume Snapshot Locations, their entries of the sidebar, the
+sections it adds to the details the host shows of each of the five kinds, made with
+`detailsFor`, and the five kinds as `customResources`, which the Custom Resources
+tree of the cluster leaves out while the extension is enabled. Every page and
+section is drawn inside an
+[error boundary](../../src/renderer/components/error-boundary.tsx) of the template,
+since the host has none around its drawer of the details. The main entry also
+exports its diagnostic modules, for the build test and the transport proof.
 
-Source lifecycle tests use process-specific host stubs that reject Kubernetes,
-catalog and IPC access. Compiled-entry tests load the actual generated CommonJS
-modules against those stubs. The canonical unit command builds first so these checks
-cannot pass against missing output; focused source tests may run directly in Vitest.
-This contract test does not substitute for installation into real Freelens.
-Type checking and build are explicitly chained in the scripts: the selected pnpm
-configuration does not execute implicit pre/post hooks, so correctness cannot depend
-on prebuild or pretest hooks running.
-Knip development checks source dependencies; its strict production mode checks the
-compiled main/renderer entries. The host SDK is a development-only type/build input,
-not an extension runtime dependency to install or bundle.
-The SDK's permissive type peer otherwise resolves to React 19 declarations. Pin
-React 17 declarations explicitly to match the selected host, and the libraries the
-host provides at the versions it provides them: they are what the tests of the views
-run against, and none of them is installed with the extension.
-The declarations of the SDK come from `@freelensapp/core`, a development dependency
-the paths of `tsconfig.json` point to: without it the resolution of the bundler takes
-the JavaScript of the SDK and leaves its types out.
-Generated entries are included explicitly in production analysis despite Git ignores.
+`pnpm build` is two runs of Vite 8, in library mode, as ESM: the renderer for the
+browser, with nothing external, where an import of a module of Node or of Electron
+fails the build; the main process for Node, with the modules of Node and
+`electron` external.
+The [plugin of the modules of the host](../../build/vite-plugin-host-modules.mjs)
+replaces a bare import of React, its DOM, its JSX runtime, MobX or the bindings of
+MobX for React with a module that reads it from `globalThis.FreelensExtensionApi`,
+where the host publishes them; the main process takes MobX alone from it. The shim
+of the SDK is bundled. The build writes exactly one stylesheet, `dist/renderer.css`, which the
+host links next to the renderer entry: the views import their CSS module for its
+class names only and inject no style. There is one build form, the one that is
+packed.
+
+There is one program of TypeScript for each process, main and renderer, each with
+the code of common, one for the tests, one for the tooling, one for the integration
+test and the suites, one for the scripts of the test environment, which Node runs
+by stripping their types, and the three of the environment tests of the template,
+which fail when a type of Node reaches the renderer or common, or one of the DOM
+reaches main or common: nine, which `pnpm type:check` runs and the build does not.
+A lint rule refuses `act`, `react-dom/test-utils`, Testing Library and Vitest in
+code that is not a test.
+
+The unit and component tests run on the [stub of the SDK](../../test/freelens-extensions.ts)
+of the template, grown as the tests need, and on the
+[doubles of the components of the host](../../test/host-components.tsx), written
+from the source of the host at the commit of the validation target, each naming
+the file and the line it follows, with Testing Library 16 on React 19. The
+canonical unit command builds first, so that the [build test](../../test/build.test.ts)
+reads the files the build wrote and loads both bundles: `dist/main.js` under Node
+with a stand-in of the API of the host, the renderer bundle through the module
+runner of Vitest, with the stub as the API of the host. The unit tests do not
+substitute for the installation into a real Freelens. The scripts chain their
+steps explicitly: the selected pnpm configuration runs no implicit pre and post
+hooks. Knip development checks the source dependencies; its production pass reads
+the sources of each bundle and counts `dependencies` alone, which is why the one
+library the renderer bundles, react-window, is declared there. pnpm 12 runs with
+strict peer dependencies, so that a library shared with the host outside the peer
+range of the SDK fails the install.
 
 The hosted checks are the ones of the other extensions of the organization, on
-every pull request and on main: production build, type check, lint and Knip; Trunk;
-the unit tests, on the build with separate modules and on the production build;
-the integration tests, which install the packed production build in a Freelens
-v1.10.3 built for the purpose; the end-to-end tests, which bring the test
-environment up on the runner, run the fixtures and the transport proof and take
-it down; the tests of the views, which run their suites in that Freelens against
-the fixtures of that environment; OSV-Scanner. They run on synthetic data only. Renovate and the daily maintenance
-workflows of the organization (npm audit, npm dedupe, Biome migrate, Trunk upgrade)
-open their pull requests on branches named `automated/*`. A release is three
-workflows: the version workflow opens the pull request that sets the version, the
-tag workflow tags main when that pull request is merged, the release workflow
-builds the production bundle from the tag, publishes it to npm and attaches the
-tarball, its checksums and its software bill of materials to the GitHub release.
+every pull request and on main: the build, the type check, lint and Knip; Trunk;
+the unit tests; the integration tests, FND-10 and a session for each of the five
+kinds of the template's integration test, which install the packed build in a
+Freelens built from source at the commit of the validation target, on a disposable
+kind cluster of the scripts of this repository; the end-to-end tests, which bring
+the test environment up on the runner, run the fixtures and the transport proof
+and take it down; the tests of the views, which run every suite, the pre-review
+and FND-10 in a Freelens built from source at the same commit against the fixtures
+of that environment, the build cached by the commit and not by a version, as the
+integration tests cache it; OSV-Scanner; and, on a pull request that changes
+`.nvmrc`, `mise.toml` or `mise.lock`, the check of `mise.lock`. They run on
+synthetic data only. Renovate and the daily maintenance workflows of the
+organization (npm audit, npm dedupe, Biome migrate, Trunk upgrade) open their pull
+requests on branches named `automated/*`. A release is three workflows: the version
+workflow opens the pull request that sets the version, the tag workflow tags main
+when that pull request is merged, a version `X.Y.Z` or a prerelease `X.Y.Z-N`, and
+the release workflow builds the bundle from the tag, publishes it to npm, on `next`
+for a version with a hyphen and on `latest` otherwise, and attaches the tarball,
+its checksums and its software bill of materials to the GitHub release, marked as
+a prerelease for a version with a hyphen.
 
 ### Dependencies
 
@@ -110,50 +144,17 @@ The graph carries no override and no patch. What is bundled, what only builds, a
 the history of the overrides of the first weeks are in
 [DEPENDENCY-AUDIT.md](DEPENDENCY-AUDIT.md).
 
-T0.6 adds exact official packages `@kubernetes/client-node` 2.0.0 and `ws` 8.21.3,
-plus `@types/ws` 8.18.1. The first two are main runtime libraries bundled from
-development declarations; the host SDK/React remain external. The client is
-imported by its distributed files, `dist/config.js` and `dist/web-socket-handler.js`,
-never from its root, which would bundle every generated API client. These deep
-imports are version-pinned and tested, not a host private API. Revalidate them
-before changing the client version. The main build replaces undici with
-[a stub](../../build/undici-stub.ts): the client imports it for API clients this
-extension never calls, and the real module installs a dispatcher for the whole
-process when it loads, which inside Freelens is the process of the host. Supported
-`WS_NO_*` build defines disable optional native accelerators without patching the
-library. The 2291 tests of the unit run, on the separate modules and on the
-production build, are 17 of the scaffold, 215 of the environment and its fixtures,
-the fixtures of the tabs among them, 168 of the diagnostic contracts, 152 of the
-operation states and of their stages, 56 of the rules of the discovery, 206 of what
-the views show of a backup, of a restore and of a schedule, of what they refer to
-and of the views in the address, 141 of what they show of a location, of its
-durations and of what uses it, 38 of what the Overview says of an installation and
-of the line of time, 33 of the state of an installation and of its reader, 225 of
-the components, 131 of the gate of the writes, of the way between the processes and
-of the credential of a context, 96 of the version of the server: its comparison, its
-plugins, the state of its request, its band, the confirmation of one write and the
-object the cluster is sent, 122 of the request for an artifact: its way, its words,
-its text in pages, its saving, its procedures and the object the cluster is sent,
-244 of the addresses a download connects to: their written forms, their ranges and
-what an IPv6 address carries, 59 of the route to the store: the origin and the path
-of a signed URL, the Service of the cluster, the name of this machine, what the
-operator allows and the store that keeps it, and 388 of the tabs of an operation:
-129 of the four parsers and of the words of the tabs, 40 of the load of an artifact
-and of the loads of a view, 7 of the tab in the address, 6 of the file a text is
-saved into, 179 of the strip, of the panel, of the lists of lines, of the four
-viewers and of Escape in a text field, and 27 of the two workspaces with their tabs.
-The third pull request of the tabs adds no test to that count, 73 files and 2,291
-tests in the unit run of its final runs of 2026-10-07: the words of a storage
-location that is not there changed assertions in two files, and the hardening of
-three tests of earlier pull requests under the load of the whole run changed their
-measures and their times and none in count; the run of both build forms on the
-final head, later that evening, gave the same count, 73 files and 2,291 tests
-passed in each, and the measure after them.
-The measure of the code of a log runs after them, alone. The integration test covers
-the installation in the host, the suites of the views what the views do in it.
-The electron-vite warning about a missing standalone renderer
-configuration is expected: this extension intentionally builds its renderer through
-the preload target, whose generated entry is covered by the bundle tests.
+Since T0.7 the bundles carry one library, react-window 2.3.4, the version of the
+catalog of the host, in the renderer, for the lines of a log and the rows of the
+resources viewer (D8 of SPEC-0015).
+The main bundle carries none: the client of Kubernetes, `ws` and the stub of undici
+of T0.6 went with the client of the extension, since the main process reaches the
+API server through the client of the host and forwards a port with the kubectl of
+the host. The unit run of the head of T0.7, on 2026-10-17, is 83 files and 2,588
+tests, on the stub of the SDK of v2 and on the doubles written from the source of
+the host at the validation target; the measures of the code of a log and of the
+adherence of a schedule run after them, alone. The integration test covers the
+installation in the host, the suites of the views what the views do in it.
 
 ### Lessons Adopted From The Other Extensions
 
@@ -191,9 +192,10 @@ the preload target, whose generated entry is covered by the bundle tests.
 
 ### Reads And Discovery
 
-Use renderer CRD stores and public `Main.K8s` reads where their response and error
-contracts are sufficient. Model classes expose static metadata and typed spec/status;
-derive behavior with pure helpers rather than extension-specific instance methods.
+Read through the client of the host, `KubeJsonApi.forCluster` of the cluster, whose
+answer gives its status whatever it is. Model classes expose static metadata and
+typed spec/status; derive behavior with pure helpers rather than extension-specific
+instance methods.
 
 Opening Velero inspects only the selected cluster. CRD/API discovery establishes
 API availability, not that a controller is healthy. A permitted BSL list suggests
@@ -209,9 +211,9 @@ installs. Do not scan every catalog cluster or hard-code `velero` as the only ch
 | BSL list is empty or unavailable | Installation namespace may still be configured |
 | Generic host error with no reliable status | Unknown/error, never guessed 403 or 404 |
 
-If precise API discovery/status codes need the direct main adapter, use the same
-explicit target contract below and document the path; do not parse English error
-strings. Do not create SelfSubjectAccessReview, diagnostic requests, or other API
+If precise API discovery/status codes need the main process, use its adapter, the
+client of the host for the cluster of the request, with the same target contract
+below, and document the path; do not parse English error strings. Do not create SelfSubjectAccessReview, diagnostic requests, or other API
 objects merely to render read-only views. A not-yet-tested write permission is
 unknown, not granted; the actual API decision is authoritative.
 
@@ -219,10 +221,15 @@ unknown, not granted; the actual API decision is authoritative.
 
 The views read through the connection of the host to the cluster they are shown
 for, and through nothing else. The [reader](../../src/renderer/api/reader.ts) asks
-the request object of a `KubeApi` of the host for the response itself, which carries
-the status of the answer: the states of the table above come from that number, never
-from the text of an error. It sends `GET` and no other verb, and it is the only place
-of the renderer that reaches the cluster.
+the client of the host for the cluster of its frame,
+`Renderer.K8sApi.KubeJsonApi.forCluster(<cluster>).getResponse`, which gives the
+answer whatever its status, as a structural answer of the host and not a `Response`
+of the DOM: the states of the table above come from its status, never from the text
+of an error. It sends `GET` and no other verb, to the paths of the kinds of Velero
+alone, creates no `KubeApi` and registers nothing with the host, and it is the only
+place of the renderer that reaches the cluster. On v2 the reads leave from the frame
+of the cluster, through Chromium, to the origin of the frame, and the host's proxy
+takes them to the API server, where the guard of the suites counts them.
 
 | Read | When | Path |
 | --- | --- | --- |
@@ -230,24 +237,30 @@ of the renderer that reaches the cluster.
 | Where the installations may be | The same | The backup storage locations of the cluster |
 | The five families of the installation | A namespace is selected, every 15 seconds while a view is open, or the operator reads again | The lists of the selected namespace |
 
-Facts of the host the design rests on, each one found by asking the packaged
-application:
+Facts of the host the design rests on, found by asking the packaged application on
+Freelens 1 and proven again on v2, by the packaged suites or in the source of the
+host at the validation target:
 
-- A subclass of `KubeApi` does not keep its methods: the constructor of the host
-  answers with an object of its own. The reader is a function, and it builds a
-  plain `KubeApi` to take the connection from.
 - An object of the API has no `selfLink` any more, and the host asks for one to
-  build an object of a list. The [store of the list](../../src/renderer/state/list-store.ts)
-  adds it to the copy it gives to the host.
+  build an object of a list
+  ([the check](https://github.com/freelensapp/freelens/blob/2578fac5e9f6d2893129b6ba0d59b379fdf9d305/packages/kube-object/src/kube-object.ts#L115-L120)).
+  The [store of the list](../../src/renderer/state/list-store.ts) adds it to the copy
+  it gives to the host, and the lists of the suites mount their rows with it.
 - The host writes the store of an extension from its main process, and passes the
   changes between its windows. The [store of the preferences](../../src/common/preferences-store.ts)
-  is opened in both processes: opened in the renderer alone, what the operator
-  chose was never written.
+  is opened in both processes, in `onActivate`: opened in the renderer alone, what
+  the operator chose was never written. On v2 the suite of the preferences proves
+  it, and the host saves the file once for one change.
 - The host writes the file of a store key by key, from what the store gives it, and
-  removes no key: one the store stops giving keeps in the file what it held. A key
-  that may become empty is always given, empty.
+  removes no key: one the store stops giving keeps in the file what it held
+  ([the save](https://github.com/freelensapp/freelens/blob/2578fac5e9f6d2893129b6ba0d59b379fdf9d305/packages/core/src/features/persistent-storage/main/persist-state-to-config.injectable.ts#L16-L22)).
+  A key that may become empty is always given, empty.
 - The search of the lists of the host waits 250 ms after the last key before it
-  gives the list what was typed.
+  gives the list what was typed
+  ([the wait](https://github.com/freelensapp/freelens/blob/2578fac5e9f6d2893129b6ba0d59b379fdf9d305/packages/core/src/renderer/components/input/search-input-url.tsx#L41)).
+
+The reader builds no `KubeApi` of its own: one that an extension creates registers
+itself with the host, and on v2 the reader has the client of the host instead.
 
 The [state of an installation](../../src/renderer/state/installation.ts) is one for
 each frame, which is the frame of one cluster, and is created when the first view
@@ -541,13 +554,15 @@ which is then shown as its [lines](../../src/renderer/components/artifact-lines.
 under a note. The log keeps the text as it was given and, beside it, two numbers
 for each line, where it begins and its level: the lines a filter leaves and the
 ones a search finds are found when they are asked for, and a line is made of the
-text for a row that is mounted and for no other. The lines are in the virtual
-list of the host, which is given the height of every row and measures none: a row
-is as tall as the lines it takes, counted from the characters of the line and
-the columns of the room, and a hundred rows are mounted at most. The words a
-search found are marked in the rows that are mounted, and take no room. The
-resources are in the virtual list of the host as well, under the head of its
-tables; the volumes are a table of the host; the results are headed lists that
+text for a row that is mounted and for no other. The lines are windowed by
+react-window 2, which the extension bundles at the version of the catalog of the
+host, since v2 offers its virtual list to extensions no more (D8 of SPEC-0015); the
+list is given the height of every row and measures none: a row is as tall as the
+lines it takes, counted from the characters of the line and the columns of the
+room, and a hundred rows are mounted at most. The words a search found are marked
+in the rows that are mounted, and take no room. The resources are windowed by
+react-window 2 as well, under the head of the tables of the host; the volumes are
+a table of the host; the results are headed lists that
 show two hundred messages at a time. The view that shows a tab is a column: its
 panel takes what the title and the tabs leave of the room of the view, and the
 list of lines, or the rows of the resources, take what the panel leaves, between
@@ -555,16 +570,15 @@ a least and a most of their own, so that a list is whole in the room it is read
 in. Nothing is counted on the window: where the target bar leaves the view less
 than the room of a list, the page is scrolled.
 
-The tabs rest on three facts of the host, which the
-[directives](../../AGENTS.md#host-facts-that-cost-a-run-to-find) record with where
-each was read. Its virtual list, given no height, draws no row at its first
-render: the first line of a text is there a moment after its viewer, and the
-panel, which gives it the focus, waits for it. Its input leaves the focus at
-Enter unless it is told not to, and its search input takes the focus when it is
-mounted and a shortcut of the whole window: the fields of the viewers are the
-input, told to keep the focus. Its checkbox hides its input, which the Tab key
-then does not reach: the levels of a log and the wrap of its lines are commands
-that say whether they are chosen, drawn as its box.
+The tabs rest on facts of the host, which the
+[directives](../../AGENTS.md#host-facts-that-cost-a-run-to-find) record. Its input
+leaves the focus at Enter unless it is told not
+to, and its search input takes the focus when it is mounted and a shortcut of the
+whole window: the fields of the viewers are the input, told to keep the focus. The
+panel gives the first line of a text the focus once its row is drawn, and waits for
+the row, not for the viewer. The levels of a log and the wrap of its lines are
+commands that say whether they are chosen, with `aria-pressed`, drawn as the box of
+the checkbox of the host, so that the Tab key reaches each of them.
 
 The [suite of the tabs](../../e2e/__tests__/velero-e2e-artifacts.tests.ts) drives
 them in a packaged Freelens, on the real backup and the real restore of the test
@@ -579,14 +593,23 @@ the backups through the server, as the
 
 ### Create-Only Adapter Decision
 
-The pinned public `Main.K8s` does not export generic execute/create. Its apply helper
-can update existing objects and cannot be assumed to support generateName safely.
+On Freelens v2 the client of the host, `Main.K8sApi.KubeJsonApi.forCluster(clusterId)`,
+reaches the API server of a catalog cluster through the proxy of Freelens, which
+authenticates as the connection of the host does, credential plugins included, and
+applies the proxy setting of the cluster; it posts any object, by path, and its
+`getResponse` gives the answer whatever its status. The apply helpers of the
+extension API can update existing objects, and are not used.
 
-Product decision: a small main-only adapter using `@kubernetes/client-node` and the
-catalog entry's original kubeConfigPath plus contextName. Resolve both in main,
-require the named context to exist, and fail closed if the file, context, or current
-catalog identity does not match. Never load a default kubeconfig, choose an active
-or first cluster, accept a path from renderer, or fall back through the proxy.
+Product decision (D1 of [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#d1-the-api-server-from-the-main-process)):
+the create-only adapter of the main process is the client of the host for the
+cluster of the request, and nothing else. The extension reads no kubeconfig, runs
+no credential plugin, refuses no kind of authentication of its own, and keeps no
+client and no connection of its own to an API server. Resolve the cluster from the
+catalog of the host in main, by the identifier of the frame, and fail closed when
+its entry is not there or is not connected: the proxy does not look at the state
+of a cluster, and a request to one that is not connected would connect it, with an
+authentication the operator did not ask for. Never take a default kubeconfig, an
+active or first cluster, or a path from the renderer.
 
 - Create uses a namespaced POST, never apply or PUT. Build allowlisted object types
   from validated operation parameters in main; do not expose a generic CRUD IPC API.
@@ -597,47 +620,47 @@ or first cluster, accept a path from renderer, or fall back through the proxy.
   operation rather than creating duplicates. Do not blindly retry POST after an
   ambiguous connection loss: report an unknown submission result and reconcile the
   identified request before another user-approved attempt.
-- Use read requests to poll the created object. If cancellation cannot be propagated
-  through the selected client version, the adapter must own an abortable transport;
-  a rejected timeout promise alone is insufficient.
+- Use read requests to poll the created object. The client of the host has no
+  deadline of its own, so the adapter aborts every request through a signal of its
+  own; a rejected timeout promise alone is insufficient.
 - For CRD patches, request explicit merge/JSON patch semantics. The host's default
   strategic patch is unsuitable. Use resourceVersion or JSON-patch tests for
   conflict-sensitive changes, and never replace the whole object from stale UI state.
-- Future kubeconfig auth-provider/exec integration must use only the explicitly
-  selected existing configuration. Do not invent login fallbacks, store tokens,
-  log configuration, or send credentials across IPC. The T0.6 proof deliberately
-  rejects these plugins, proxies, basic authentication and insecure TLS; it accepts
-  explicit client certificates or tokens only. This limitation is not a reduction
-  of the later connection-integration requirements.
+- Do not invent login fallbacks, store tokens, log configuration, or send
+  credentials across IPC: the connection of the host is the identity, and the
+  extension never sees its credential.
 
-The implemented [adapter](../../src/main/diagnostic-kubernetes.ts) uses the official
-client for explicit kubeconfig/authentication and owns abortable native HTTPS
-GET/POST calls: 10-second deadline, 4 MiB JSON bound, verified TLS and no upsert.
-It checks the file hash/context before and after requests and validates exact
-namespace/name plus UID presence on reads. A malformed or lost POST response has
-an unknown submission outcome, not an automatic retry. The service reconciles only
-the named DownloadRequest and checks its ownership/target before reuse.
+The implemented [adapter](../../src/main/diagnostic-kubernetes.ts) asks every
+request through `getResponse` of the client of the host, the creations too, so that
+every status is read from the answer: a 10-second deadline through a signal of its
+own, 4 MiB of an answer counted as its body arrives, header names in lowercase,
+which the client merges into its own key by key, no query parameter without a
+value, and no upsert. What a call rejects with is read by its shape, the `Status`
+body of a read refused with 403, an error the client parsed with its status, or the
+error of the fetch when no answer came, and never as an `Error` it is not. Before
+every request it reads the entry of the cluster in the catalog of the host, and
+refuses one that is not there, not connected, or whose kubeconfig path or context
+name changed since writes were turned on, before anything is sent; it reads the
+entry again once the cluster answered, and drops the answer of a cluster that
+changed meanwhile. It validates exact namespace/name plus UID presence on reads.
 
-A creation is unknown only when it may have reached the server. The adapter knows
-that a request went on a connection by the end of the handshake on its socket, and
-not by what Node says of the headers, which it says sent before any connection: a
-connection that was refused, a certificate that was not trusted and a handshake that
-did not end in time are a creation that was not sent, and are said so. A request
-Node refuses to make, for a credential no header takes or a certificate with a key
-that is not its own, is refused as one that cannot be written, with nothing of the
-credential in what is said. The adapter keeps its connections between its requests,
-so that the reads of a wait do not each pay a handshake: four at most for each
-client certificate, each closed after two seconds without a request, and all of them
-when the gate lets the adapter go, which it does every time writes go off. The agent
-is given nothing of TLS: a request goes only on a connection made with its own
-certificate and key. An API server at an IPv6 address is reached, and the label of
-the name of a backup is cut as the release cuts it.
+A creation that got no answer, from a fetch that failed, the deadline, an answer
+that cannot be read or is too large, or a 5xx, is an unknown submission, never an
+automatic retry: the extension does not see the connection of the host, and cannot
+tell a creation that was not sent from one whose answer was lost. The service
+reconciles it by reading the named DownloadRequest, and checks its ownership and
+target before reuse. The label of the name of a backup is cut as the release cuts
+it.
 
-T0.6 proves certificate authentication, actual generated ServerStatusRequest names
-and 409 preservation on local kind; token/refusal/cancellation and ambiguous POST
-cases have loopback coverage. Actual catalog resolution, credential-plugin execution
-and Electron sender authentication remain unverified. No private host API or default
-kubeconfig fallback is used.
+T0.6 proved certificate authentication, actual generated ServerStatusRequest names
+and 409 preservation on local kind, with the client of the extension of that time.
+On v2 the transport proof runs the same main code with stand-ins of the host made
+from the isolated kubeconfig of the test environment (D9 of SPEC-0015), and the
+packaged suites prove what the host adds, its proxy, its catalog and its kubectl:
+the creations of a DownloadRequest and of a ServerStatusRequest counted on the API
+server, a cluster disconnected with a load in flight left disconnected, and the
+binding to the frame that a handler of the main process reads. No private host API
+and no default kubeconfig is used.
 
 ## IPC, Errors, And Write Policy
 
@@ -665,10 +688,12 @@ An unknown underlying error remains unknown, not a fabricated storage diagnosis.
 The [gate](../../src/main/write-gate.ts) is held by the main process, one for each
 cluster: off when the session starts, on for one namespace of the cluster after a
 confirmation that names the context of the entry of the catalog and the namespace,
-off again when the namespace changes, when the entry of the catalog goes or changes
-its file or its context, when the frame that turned it on goes, when the operator
-turns it off, and when the extension is deactivated. A connection the adapter does
-not take refuses to turn writes on, with the reason. Every write is confirmed for one exact target with a token bound to the
+off again when the namespace changes, when the entry of the catalog goes, changes
+its kubeconfig path or its context name, or leaves the connected state, when the
+frame that turned it on goes, when the operator turns it off, and when the extension
+is deactivated. A cluster whose entry is not there or is not connected refuses to
+turn writes on, as a target that changed, and an adapter that cannot be made
+refuses it with that reason. Every write is confirmed for one exact target with a token bound to the
 frame that asked, good for thirty seconds and for one use; a cluster has at most 32
 confirmations that wait and 16 writes that run. The renderer shows a mirror of what
 the main process answered and decides nothing.
@@ -677,11 +702,18 @@ The [procedures](../../src/main/ipc.ts) are the ones of the
 [contract](../../src/common/ipc.ts): every request is read by its reader, which
 refuses a field the contract does not know, a form it does not give and a request
 beyond 64 KiB; every answer is a result, with a code, a stage, whether it is safe to
-try again and words that are safe to show; a procedure never raises. The sender of a
+try again and words that are safe to show; a procedure never raises. The procedures
+are a subclass of `Main.Ipc`, made in `onActivate` and reset in `onDeactivate`, and
+the event of a handler is typed as the `IpcMainInvokeEvent` of Electron, so that
+the compiler checks what is read of it. The sender of a
 request is the frame it comes from: its cluster is read from the address of the frame
 with the [rule of the host](../../src/common/frame.ts), and its key is that cluster
-with the process and the frame identifiers of the frame. A request that names another
-cluster, or that comes from the window of the host, is refused. The frame of a write
+with the process and the frame identifiers of the frame. The packaged application
+writes the address of the frame of a cluster as
+`https://<clusterId>.renderer.freelens.app:<port>`, with the port of its proxy,
+and the identifier is the first label of the host once the port is taken off, as
+the host reads it; in development the host is `<clusterId>.localhost`. A request
+that names another cluster, or that comes from the window of the host, is refused. The frame of a write
 is checked again at the creation, four times a second while the write runs, and
 before its result: a write whose frame went is aborted. The result of a write
 is the answer of the call that ran it; its progress is read by the frame that asked,
@@ -690,24 +722,29 @@ broadcasts only that the gate of a cluster changed for a reason of its own, the 
 of the catalog, the connection or the frame that turned writes on, and looks at the
 catalog and at that frame every five seconds while writes are on somewhere.
 
-A cluster is resolved from the catalog of the host, by the identifier of its frame:
-the path of its kubeconfig and the name of its context are the ones of the entry, and
-no default kubeconfig, current context or shown cluster is ever taken in their place.
-The [identity](../../src/main/context-identity.ts) of the cluster is the entry of
-the context, the address of the server, its certificate authority and the credential
-of the user, with the content of the files they name: it is read again before every
-request of the adapter and compared by its digest, so that a change of another
-context of the same file does not stop a write. The adapter takes a client
-certificate, a token, or a plugin that gives a credential, which it runs as the
-client of Kubernetes runs it for the command line, within thirty seconds, and reads
-for the credential alone: the command is killed at its bound and when the write is
-cancelled, runs once for the requests that wait together and again after a 401, and
-its failure is said as its own, by the name of its command, never as a refusal of
-the cluster. The user a context impersonates is part of the entry and goes with the
-credential. The adapter refuses an authentication provider, a proxy, a user name
-with a password, a verification of TLS turned off and an impersonation of groups, of
-a uid or of extra fields, which the client cannot send, and the gate says which. A
-ServerStatusRequest and a DownloadRequest are the two writes the gate lets through.
+A cluster is resolved from the catalog of the host, by the identifier of its frame,
+and must be an entry of the catalog of the main process, connected; no default
+kubeconfig, current context or shown cluster is ever taken in its place. The
+identity of the cluster is its [entry](../../src/main/catalog.ts) in the catalog,
+by its identifier, with the path of its kubeconfig and the name of its context as
+the catalog gives them, and its state: the extension reads no file, so a file that
+another tool rewrites does not stop a write, and a change of the path or of the
+context name, or a state that is not connected, turns writes off. The catalog is
+read before every request of the adapter, and its state is watched by a reaction
+on the catalog of the host. The proxy of Freelens authenticates as the connection
+of the host does, credential plugins included: the extension runs no plugin and
+refuses no kind of authentication, and what the identity may not do is what the
+cluster refuses. A ServerStatusRequest and a DownloadRequest are the two writes the
+gate lets through.
+
+The trust model of Freelens v2 (D5 of SPEC-0015), which the binding lives in: the
+boundary of v2 is between the extensions and the application, not between
+extensions. The renderer has no isolation of its context, every extension shares
+one origin, and the view of the container of the host kept for an extension is no
+security boundary. The binding proves that a request came from the frame of that
+cluster, not that the code of this extension sent it. The main process enforces
+what it can see: the frame, the cluster, the namespace, the token of a confirmation
+and the bounds. This was true on Freelens 1 as well; v2 says it.
 
 A DownloadRequest is confirmed for one artifact of one target: the artifact is part
 of what the token stands for, so that the confirmation of the log of a backup does
@@ -818,8 +855,7 @@ gate, and decides nothing of who may ask. Its steps are the ones the contract na
 the queue, the target, the backup of a restore, the storage location, the
 certificate, the target once more, the creation, the wait, the route, the download,
 the delivery and the release; a failure says the step it ended at, and what was
-raised is never written on, since the adapter gives one error to every request that
-waited for the same plugin. The step of the creation is the creation alone, so that
+raised is never written on. The step of the creation is the creation alone, so that
 what ends at it says what is known of the request: nothing was created, it may be in
 the cluster, or it is not known. What the way finds by itself is told from what a
 read of the cluster ends with, which has the same code at the same step: a request
@@ -836,7 +872,11 @@ and is the last check before a byte is sent. It trusts what the host trusts, the
 authorities the runtime lists as its defaults and the ones of the system, with the
 certificate of the location beside them and never in their place; the key of a
 location that turns the verification off is read by the way only to say that it is not
-honored. The address of a route is read into its numbers by [pure
+honored. A direct download leaves this machine through Node `https`, as on Freelens 1:
+it follows neither the proxy preference nor the certificate preferences of Freelens,
+and a store this machine reaches only through a proxy is said not reached (REQ-206,
+[D3 of SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#d3-the-transport)). The
+address of a route is read into its numbers by [pure
 rules](../../src/common/artifact-address.ts), so that no written form of an address is
 another address to them: what is unspecified, link-local, multicast or the address of
 a metadata service is never connected to, in IPv4, in IPv6 and carried by an IPv6
@@ -852,11 +892,12 @@ the file arrives is a store that was not reached, and not a file that cannot be 
 A certificate that was refused is told from a handshake that failed for another
 reason, as of a store that does not speak TLS at its port, and the words send the
 operator to the certificate of the location only for the first. Through a tunnel the
-connection that is made is the one to the listener of this process: there a connection
-the system says was lost during the handshake is a store the tunnel did not reach. The
-listener of the [tunnel](../../src/main/diagnostic-tunnel.ts) hears its own errors,
-which end the tunnel and never the process. A storage location that carries a
-certificate and refers to one is read as the release reads it: the reference is taken.
+connection that is made is the one to the listener kubectl opened on the loopback:
+there a connection the system says was lost during the handshake is a store the
+tunnel did not reach. The kubectl of the [tunnel](../../src/main/diagnostic-tunnel.ts)
+is a process the main process runs for one download, and what ends it ends the
+tunnel and never the process. A storage location that carries a certificate and
+refers to one is read as the release reads it: the reference is taken.
 
 The [route](../../src/main/diagnostic-route.ts) to the store is found by the main
 process, from the URL the server signed and from the storage location it was signed
@@ -871,8 +912,23 @@ is a Service of the cluster and is never resolved on this machine: the Service i
 read, the port of the URL matched to one of its ports, its endpoint slices read for an
 endpoint that is ready and is a Pod, the Pod read and checked as one the Service
 selects, the port followed to its target port in that Pod, and a port-forward opened
-to it through the API server, to a listener on the loopback of this machine for one
-connection. A slice says which Pod answers, and nothing else is taken from it. A bare
+to it: `kubectl port-forward --address 127.0.0.1` of that Pod and port, run by the
+main process with the kubectl `Main.Shell.getKubectlPath` gives for the cluster, the
+environment `Main.Shell.getEnvironment` gives for it as its whole environment, and
+the folder of the extension as its working directory (D2 of SPEC-0015). That
+environment reaches the cluster through the proxy of Freelens, with the identity of
+the connection of the host and the proxy setting of the cluster. kubectl chooses
+the local port, and the tunnel is ready when kubectl writes `Forwarding from
+127.0.0.1:<port>`, within fifteen seconds counted once kubectl is prepared; the
+preparation, which may download the kubectl of the version of the cluster, counts
+toward the 120 seconds of the operation. The listener is kubectl's: it takes every
+connection of this machine to its port while it is open, for one download, and it
+is closed with the operation. kubectl is killed when its operation ends, on a
+cancel, when the extension is deactivated, when the main process exits, and when the
+cluster leaves the connected state; one that has not exited five seconds after it
+was told to is said, and holds no place. What kubectl writes is read in the main
+process and crosses between the processes in no form. A slice says which Pod
+answers, and nothing else is taken from it. A bare
 name is a Service when one of that name is there, a name of this machine otherwise,
 and refused when it is both. Any other name is resolved on this machine, once, and the
 connection is made to the first of its addresses that is allowed, with the host and
@@ -885,14 +941,21 @@ back. The store is one the host passes between its windows: in the main process 
 window sends of the allowances is not taken, and the procedures, which check which
 frame asks, are the only way to them.
 
-A download through the cluster asks of the identity of the kubeconfig, beside the
-kinds of Velero it reads and the DownloadRequest it creates and reads: `get` on
-services and on pods, `list` on the endpointslices of `discovery.k8s.io`, `get` and
+A download through the cluster asks of the identity of the connection of the host,
+beside the kinds of Velero it reads and the DownloadRequest it creates and reads:
+`get` on services and on pods, `list` on the endpointslices of `discovery.k8s.io`,
 `create` on `pods/portforward`, and `get` on the Secret a storage location refers to
-for its certificate. A port-forward over a WebSocket is asked of the API server with
-the verb `get`, and the releases of Kubernetes that check the verb `create` for it as
-well ask for both: `create` alone is refused. What the identity may not do ends the
-download as forbidden, at the step that was refused.
+for its certificate. The permission of the port-forward is `create`, which every
+kubectl uses (REQ-137 of SPEC-0010 as
+[D2 of SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#d2-the-tunnel-to-the-object-store)
+amends it, decided on 2026-10-16): kubectl 1.31 and later asks the port-forward over a
+WebSocket first, with the verb `get`, and falls back to the older protocol, with
+`create`, when it is refused, so `get` is asked first and not needed. With those
+versions a refused `get` may show in the audit log of the cluster before the
+fallback; an operator who wants to avoid it grants `get` as well. An identity with
+neither verb is refused at the port-forward. What the identity may not do ends the
+download as forbidden, at the step that was refused, and the words of a refused
+port-forward name `create` on `pods/portforward`.
 
 Stream with backpressure and explicit decompression limits; parsing/rendering also
 needs bounded memory. A limit stops the operation with an explicit incomplete/error
@@ -955,8 +1018,13 @@ automatic service discovery or that every cluster endpoint is reachable.
   It is a test runner, not an extension workload or derived image. The production
   product must report unreachable routes honestly until its resolver is qualified.
 
-The compiled CommonJS main is exercised under Node with minimal host stubs, not
-inside Electron. Failure/expiry/404 and byte/deadline cases have contract-server
+With Freelens v2 the forwarding of the second item is the kubectl of the host, as
+the route above says: the listener of one connection, the WebSocket of the client
+and the relay between them went with the client of the extension in T0.7, and the
+rest of the decision stands. The main bundle, an ES module since T0.7, is
+exercised under Node with the stand-ins of the host of SPEC-0015, not inside
+Electron; FND-10 downloads an artifact with it inside the main process of the host.
+Failure/expiry/404 and byte/deadline cases have contract-server
 coverage; not every negative is induced against the live controller/store.
 See [the evidence matrix](TESTING.md#t06-main-transport-proof). No feature gate or
 actual-host acceptance is closed merely by exporting these modules.

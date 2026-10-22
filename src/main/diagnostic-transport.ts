@@ -9,24 +9,10 @@ import { canonicalAddress, classifyAddress, isMetadataName } from "../common/art
 import { ARTIFACT_TEXT_BOUND } from "../common/ipc";
 
 import type { AllowanceFor } from "../common/allowances";
+import type { DiagnosticCode } from "../common/diagnostic-code";
 import type { DownloadVerdict } from "../common/diagnostic-text";
 
-export type DiagnosticCode =
-  | "validation"
-  | "forbidden"
-  | "not-found"
-  | "conflict"
-  | "cancelled"
-  | "deadline"
-  | "submission-unknown"
-  | "artifact-missing"
-  | "artifact-invalid"
-  | "transport-unreachable"
-  | "tls-invalid"
-  | "destination-denied"
-  | "payload-too-large"
-  | "request-failed"
-  | "target-changed";
+export type { DiagnosticCode };
 
 // A way an operation ends that is not its result: a code, and the step it ended at when what raised it
 // knows it. Its message is the code and nothing of what caused it.

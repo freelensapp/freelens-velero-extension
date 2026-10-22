@@ -21,10 +21,20 @@ export interface VeleroCrd extends Renderer.K8sApi.LensExtensionKubeObjectCRD {
 
 type Metadata = Renderer.K8sApi.KubeObjectMetadata;
 
-// The host reads the static fields of these classes and hands over plain copies of the objects: a method of
-// an instance would not be there at run time. What is derived from an object is in the helpers of common.
+// The kinds of Velero, as the host reads them: the static fields of each class, for the version the cluster
+// serves. The objects the host hands over are its own, made from the data of the API, so a method of an
+// instance would not be there at run time: what is derived from an object is in the helpers of common. The
+// instance `kind` and `apiVersion` are declared as the literals of each class, which ties a section of the
+// details to its kind (`detailsFor`), and `declare` emits nothing: a field would be defined after the
+// constructor of the host gave the object its data, and would reset them (docs/extensions/api.md, C6, lines
+// 474 to 483 at the validation target). No class here extends `KubeApi` or `KubeObjectStore`: the views
+// read the cluster through the reader, and the lists of the host through the store of a list of the
+// extension.
 
 export class Backup extends Renderer.K8sApi.LensExtensionKubeObject<Metadata, BackupStatus, BackupSpec> {
+  declare kind: "Backup";
+  declare apiVersion: "velero.io/v1";
+
   static readonly kind = "Backup";
   static readonly namespaced = true;
   static readonly apiBase = `/apis/${VELERO_API_VERSION}/backups`;
@@ -37,10 +47,10 @@ export class Backup extends Renderer.K8sApi.LensExtensionKubeObject<Metadata, Ba
   };
 }
 
-export class BackupApi extends Renderer.K8sApi.KubeApi<Backup> {}
-export class BackupStore extends Renderer.K8sApi.KubeObjectStore<Backup, BackupApi> {}
-
 export class Restore extends Renderer.K8sApi.LensExtensionKubeObject<Metadata, RestoreStatus, RestoreSpec> {
+  declare kind: "Restore";
+  declare apiVersion: "velero.io/v1";
+
   static readonly kind = "Restore";
   static readonly namespaced = true;
   static readonly apiBase = `/apis/${VELERO_API_VERSION}/restores`;
@@ -53,10 +63,10 @@ export class Restore extends Renderer.K8sApi.LensExtensionKubeObject<Metadata, R
   };
 }
 
-export class RestoreApi extends Renderer.K8sApi.KubeApi<Restore> {}
-export class RestoreStore extends Renderer.K8sApi.KubeObjectStore<Restore, RestoreApi> {}
-
 export class Schedule extends Renderer.K8sApi.LensExtensionKubeObject<Metadata, ScheduleStatus, ScheduleSpec> {
+  declare kind: "Schedule";
+  declare apiVersion: "velero.io/v1";
+
   static readonly kind = "Schedule";
   static readonly namespaced = true;
   static readonly apiBase = `/apis/${VELERO_API_VERSION}/schedules`;
@@ -69,14 +79,14 @@ export class Schedule extends Renderer.K8sApi.LensExtensionKubeObject<Metadata, 
   };
 }
 
-export class ScheduleApi extends Renderer.K8sApi.KubeApi<Schedule> {}
-export class ScheduleStore extends Renderer.K8sApi.KubeObjectStore<Schedule, ScheduleApi> {}
-
 export class BackupStorageLocation extends Renderer.K8sApi.LensExtensionKubeObject<
   Metadata,
   BackupStorageLocationStatus,
   BackupStorageLocationSpec
 > {
+  declare kind: "BackupStorageLocation";
+  declare apiVersion: "velero.io/v1";
+
   static readonly kind = "BackupStorageLocation";
   static readonly namespaced = true;
   static readonly apiBase = `/apis/${VELERO_API_VERSION}/backupstoragelocations`;
@@ -89,17 +99,14 @@ export class BackupStorageLocation extends Renderer.K8sApi.LensExtensionKubeObje
   };
 }
 
-export class BackupStorageLocationApi extends Renderer.K8sApi.KubeApi<BackupStorageLocation> {}
-export class BackupStorageLocationStore extends Renderer.K8sApi.KubeObjectStore<
-  BackupStorageLocation,
-  BackupStorageLocationApi
-> {}
-
 export class VolumeSnapshotLocation extends Renderer.K8sApi.LensExtensionKubeObject<
   Metadata,
   VolumeSnapshotLocationStatus,
   VolumeSnapshotLocationSpec
 > {
+  declare kind: "VolumeSnapshotLocation";
+  declare apiVersion: "velero.io/v1";
+
   static readonly kind = "VolumeSnapshotLocation";
   static readonly namespaced = true;
   static readonly apiBase = `/apis/${VELERO_API_VERSION}/volumesnapshotlocations`;
@@ -111,9 +118,3 @@ export class VolumeSnapshotLocation extends Renderer.K8sApi.LensExtensionKubeObj
     title: "Volume Snapshot Locations",
   };
 }
-
-export class VolumeSnapshotLocationApi extends Renderer.K8sApi.KubeApi<VolumeSnapshotLocation> {}
-export class VolumeSnapshotLocationStore extends Renderer.K8sApi.KubeObjectStore<
-  VolumeSnapshotLocation,
-  VolumeSnapshotLocationApi
-> {}

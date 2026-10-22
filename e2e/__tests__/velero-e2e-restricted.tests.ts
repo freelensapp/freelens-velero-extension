@@ -8,9 +8,9 @@
 // and nothing of the rest of the cluster. What it cannot read is said, and is
 // neither an empty list nor a count of zero.
 
-import { expect } from "@jest/globals";
-import * as cluster from "../helpers/velero-cluster";
-import * as velero from "../helpers/velero-extension";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import * as cluster from "../../integration/helpers/velero-cluster";
+import * as velero from "../../integration/helpers/velero-extension";
 
 import type { Frame } from "playwright";
 
@@ -29,10 +29,17 @@ describe("views with restricted access", () => {
     before = cluster.clusterSnapshot();
     let kubeconfig = "";
 
-    // The kubeconfig is in the profile before the install is asked, for each start of the application.
-    started = await velero.startWithExtension(async () => {
-      kubeconfig = await cluster.publishKubeconfig(cluster.readerKubeconfigPath(), "velero-e2e-reader");
-    });
+    // The kubeconfig is in the profile before the install is asked, for each start of the application. The
+    // store of the profile names the one of the reader as the only one the catalog syncs: the catalog holds
+    // the test cluster through it, and nothing else.
+    started = await velero.startWithExtension(
+      async () => {
+        kubeconfig = await cluster.publishKubeconfig(cluster.readerKubeconfigPath(), "velero-e2e-reader");
+      },
+      "Dark",
+      2,
+      [cluster.readerKubeconfigPath()],
+    );
     await velero.dismissNotifications(started.window);
     await velero.navigateToCatalog(started.app);
     expect(await velero.catalogClusterCount(started.window)).toBe(1);

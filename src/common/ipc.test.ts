@@ -6,6 +6,7 @@ import {
   downloadRequestName,
   PAGE_BOUND,
   REQUEST_BOUND,
+  REQUEST_STAGES,
   readAllowanceRequest,
   readAnswer,
   readArtifactPage,
@@ -441,23 +442,45 @@ describe("the answers between the processes", () => {
 
   it("reads the state of the gate, on and off, with the connection when it is there", () => {
     const off = { cluster: { id: cluster, name: "demo", context: "kind-demo" }, writes: { on: false } };
-    const on = {
-      ...off,
-      writes: { on: true, namespace: "velero", since: 1700000000000 },
-      connection: { supported: true, credential: "token" },
-    };
+    const on = { ...off, writes: { on: true, namespace: "velero", since: 1700000000000 } };
 
     expect(readGateState(off)).toEqual(off);
     expect(readGateState(on)).toEqual(on);
-    expect(readGateState({ ...off, connection: { supported: false, reason: "proxy" } })).toEqual({
+    expect(readGateState({ ...off, connection: { supported: false, reason: "unusable" } })).toEqual({
       ...off,
-      connection: { supported: false, reason: "proxy" },
+      connection: { supported: false, reason: "unusable" },
     });
     expect(readGateState({ ...off, writes: { on: true } })).toBeUndefined();
     expect(readGateState({ ...off, writes: { on: false, namespace: "x" } })).toBeUndefined();
     expect(readGateState({ ...off, connection: { supported: false, reason: "other" } })).toBeUndefined();
-    expect(readGateState({ ...off, connection: { supported: true } })).toBeUndefined();
     expect(readGateState({ ...off, cluster: { id: cluster, name: "demo" } })).toBeUndefined();
+  });
+
+  it("reads nothing of a connection the main process can no longer say: a credential it takes, or a form of a kubeconfig it refuses", () => {
+    const off = { cluster: { id: cluster, name: "demo", context: "kind-demo" }, writes: { on: false } };
+
+    // The writes go through the client of the host: the main process names no credential and refuses no form
+    // of a kubeconfig, and what says one is not an answer of the contract.
+    for (const connection of [
+      { supported: true, credential: "token" },
+      { supported: true, credential: "plugin" },
+      { supported: true },
+      ...[
+        "entry",
+        "file",
+        "context",
+        "auth-provider",
+        "proxy",
+        "basic",
+        "insecure-tls",
+        "no-credential",
+        "impersonation",
+      ].map((reason) => ({ supported: false, reason })),
+      { supported: false, reason: "unusable", credential: "token" },
+    ]) {
+      expect(readGateState({ ...off, connection })).toBeUndefined();
+    }
+    expect(REQUEST_STAGES).toEqual({ creation: "creation", wait: "wait" });
   });
 
   it("reads the status of a write and the answer of the server", () => {

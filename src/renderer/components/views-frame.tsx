@@ -3,7 +3,6 @@ import React from "react";
 import { VIEWS } from "../../common/views";
 import { closeView, closeViews, openViews } from "../navigation";
 import { EntryState } from "./entry-state";
-import { Styles } from "./styles";
 import { Coverage, TargetBar } from "./target-bar";
 import styles from "./views.module.css";
 
@@ -82,11 +81,11 @@ function ViewsFrameView({ id, title, installation, families, earlier, view, orig
   const first = path[0];
   const ready = installation.entry.state === "ready";
   const content = React.useRef<HTMLDivElement>(null);
-  const opened = React.useRef<ViewTarget>();
+  const opened = React.useRef<ViewTarget | undefined>(undefined);
   // What was last pointed at, or reached with the keyboard, in the page, and when.
-  const pointed = React.useRef<{ element: HTMLElement; at: number }>();
+  const pointed = React.useRef<{ element: HTMLElement; at: number } | undefined>(undefined);
   // What the first view of a way was opened from.
-  const from = React.useRef<HTMLElement>();
+  const from = React.useRef<HTMLElement | undefined>(undefined);
   const shown = open ? `${open.kind}/${open.name}` : "";
 
   React.useEffect(() => {
@@ -156,46 +155,44 @@ function ViewsFrameView({ id, title, installation, families, earlier, view, orig
   };
 
   // The host lays the page out, with the tabs of the group over it: a layout of the host inside that
-  // one would give the page its margins twice, and less room than it has.
+  // one would give the page its margins twice, and less room than it has. The rules of the classes are in
+  // the stylesheet of the extension, which the host links: the page carries none of its own.
   return (
-    <>
-      <Styles />
-      <div className={styles.page} data-testid={`velero-${id}-page`}>
-        <TargetBar installation={installation} />
-        <Coverage
-          installation={installation}
-          families={open ? [...VIEWS[open.kind].reads] : families}
-          earlier={open ? [] : earlier}
-        />
-        {ready ? (
-          <div className={styles.content}>
-            {/* What opens a view is remembered when it is pointed at, or reached with the keyboard. */}
-            <div
-              ref={content}
-              className={`${styles.content} ${open ? styles.behind : ""}`}
-              aria-hidden={open ? true : undefined}
-              onClickCapture={remember}
-              onKeyDownCapture={remember}
-            >
-              {children(now)}
-            </div>
-            {open ? (
-              <div className={styles.over}>
-                {view({
-                  installation,
-                  target: open,
-                  now,
-                  back: before ? `${VIEWS[before.kind].title} / ${before.name}` : title,
-                  onBack: closeView,
-                })}
-              </div>
-            ) : null}
+    <div className={styles.page} data-testid={`velero-${id}-page`}>
+      <TargetBar installation={installation} />
+      <Coverage
+        installation={installation}
+        families={open ? [...VIEWS[open.kind].reads] : families}
+        earlier={open ? [] : earlier}
+      />
+      {ready ? (
+        <div className={styles.content}>
+          {/* What opens a view is remembered when it is pointed at, or reached with the keyboard. */}
+          <div
+            ref={content}
+            className={`${styles.content} ${open ? styles.behind : ""}`}
+            aria-hidden={open ? true : undefined}
+            onClickCapture={remember}
+            onKeyDownCapture={remember}
+          >
+            {children(now)}
           </div>
-        ) : (
-          <EntryState installation={installation} />
-        )}
-      </div>
-    </>
+          {open ? (
+            <div className={styles.over}>
+              {view({
+                installation,
+                target: open,
+                now,
+                back: before ? `${VIEWS[before.kind].title} / ${before.name}` : title,
+                onBack: closeView,
+              })}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <EntryState installation={installation} />
+      )}
+    </div>
   );
 }
 

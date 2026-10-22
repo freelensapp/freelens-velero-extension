@@ -2,7 +2,8 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { listProps } from "../../../test/host-components";
+import { hostObject } from "../../../test/freelens-extensions";
+import { drawerValue, listProps } from "../../../test/host-components";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { NOTES } from "../../common/schedule-view";
 import { Schedule } from "../api/kinds";
@@ -1068,10 +1069,10 @@ describe("details of the host for a schedule", () => {
     });
 
     return render(
-      <ScheduleDetails object={new Schedule(resource as never)} extension={extension} installation={installation} />,
+      <ScheduleDetails object={hostObject(Schedule, resource)} extension={extension} installation={installation} />,
     );
   };
-  const item = (name: string) => document.querySelector(`[data-name="${name}"] .value`)?.textContent;
+  const item = (name: string) => drawerValue(name);
 
   it("reads the schedule as the views do, and leads to the workspace of the installation selected", async () => {
     mount(answers(), chosen(A));

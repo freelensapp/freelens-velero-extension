@@ -368,17 +368,17 @@ describe("the band of the server", () => {
 
     await opened();
     await writesOn();
-    part("create").focus();
+    act(() => part("create").focus());
     fireEvent.click(part("create"));
     await waitFor(() => expect(maybe("confirm")).toBeTruthy());
     // The confirmation itself: the key that asked is not the one that confirms.
     await waitFor(() => expect(focused()).toBe("velero-overview-server-confirm"));
-    part("confirm-back").focus();
+    act(() => part("confirm-back").focus());
     fireEvent.click(part("confirm-back"));
     await waitFor(() => expect(focused()).toBe("velero-overview-server-create"));
     fireEvent.click(part("create"));
     await waitFor(() => expect(focused()).toBe("velero-overview-server-confirm"));
-    part("confirm-create").focus();
+    act(() => part("confirm-create").focus());
     fireEvent.click(part("confirm-create"));
     await waitFor(() => expect(main.runs()).toHaveLength(1));
     await main.answer({ ok: true, value: VALUE });
@@ -399,7 +399,7 @@ describe("the band of the server", () => {
     expect(status.getAttribute("role")).toBe("status");
     expect(status.textContent).toBe("");
     main.hold();
-    part("create").focus();
+    act(() => part("create").focus());
     fireEvent.click(part("create"));
     await waitFor(() => expect(part("body").getAttribute("data-step")).toBe("asking"));
     expect(status.textContent).toBe("Asking the main process for the confirmation of the request.");
@@ -409,7 +409,7 @@ describe("the band of the server", () => {
     await main.confirm();
     await waitFor(() => expect(focused()).toBe("velero-overview-server-confirm"));
     expect(status.textContent).toBe("");
-    part("confirm-create").focus();
+    act(() => part("confirm-create").focus());
     fireEvent.click(part("confirm-create"));
     await waitFor(() => expect(part("body").getAttribute("data-step")).toBe("running"));
     expect(status.textContent).toBe(RUNNING);
@@ -445,10 +445,10 @@ describe("the band of the server", () => {
     await writesOn();
     await read(main);
     // A request that fails: what is shown of the version is of the read before.
-    part("create").focus();
+    act(() => part("create").focus());
     fireEvent.click(part("create"));
     await waitFor(() => expect(focused()).toBe("velero-overview-server-confirm"));
-    part("confirm-create").focus();
+    act(() => part("confirm-create").focus());
     fireEvent.click(part("confirm-create"));
     await waitFor(() => expect(main.runs()).toHaveLength(2));
     await main.answer(DEADLINE);
@@ -457,7 +457,7 @@ describe("the band of the server", () => {
     // A confirmation that is left.
     fireEvent.click(part("create"));
     await waitFor(() => expect(focused()).toBe("velero-overview-server-confirm"));
-    part("confirm-back").focus();
+    act(() => part("confirm-back").focus());
     fireEvent.click(part("confirm-back"));
     await waitFor(() => expect(focused()).toBe("velero-overview-server-create"));
   });
@@ -468,7 +468,7 @@ describe("the band of the server", () => {
     await opened();
     await writesOn();
     await ask(main);
-    screen.getByTestId("velero-refresh").focus();
+    act(() => screen.getByTestId("velero-refresh").focus());
     await main.answer({ ok: true, value: VALUE });
     await waitFor(() => expect(maybe("version")).toBeTruthy());
     expect(focused()).toBe("velero-refresh");
@@ -762,7 +762,6 @@ describe("the band of the server", () => {
     ["target-changed", "wait", "created", "The cluster or the installation changed while the request was made."],
     ["transport-unreachable", "creation", "none", "The API server of the cluster could not be reached."],
     ["tls-invalid", "creation", "none", "The certificate of the API server of the cluster is not trusted."],
-    ["request-failed", "credential", "none", "The credential plugin kubelogin of the context did not give one."],
     ["request-failed", "way", "unknown", "The main process did not answer."],
     ["validation", "answer", "unknown", "The main process answered with what the views do not understand."],
   ] as const)(

@@ -1,18 +1,22 @@
-import { once } from "node:events";
-import { createServer, type Socket } from "node:net";
-import { Writable } from "node:stream";
-import { WebSocketHandler } from "@kubernetes/client-node/dist/web-socket-handler.js";
-import WebSocket from "ws";
-import { DiagnosticError } from "./diagnostic-transport.ts";
+// The tunnel to the Pod of the store: `kubectl port-forward --address 127.0.0.1 --namespace <namespace>
+// pod/<pod> :<port>`, run by the main process with the kubectl the host runs for the cluster, the
+// environment the host gives for it as its whole environment, and the folder of the extension as its working
+// directory. The environment reaches the cluster through the proxy of Freelens, with the identity of the
+// connection of the host: the extension runs no credential plugin of its own.
+//
+// kubectl reads the Pod and opens its stream to the API server before it writes its line of readiness,
+// `Forwarding from 127.0.0.1:<port>`, whose port is the one the transport connects to. The wait for that line
+// is counted once kubectl is prepared: the host may download the kubectl of the version of the cluster
+// first, which counts toward the bound of the whole operation and not toward this one. A refusal of the API
+// server ends kubectl before the line, and is read from what kubectl writes, which stays in the main process.
+//
+// No tunnel outlives what it was opened for: kubectl is killed when its operation ends or is cancelled, when
+// the extension is deactivated, when the process exits, and when the cluster leaves the connected state. A
+// kubectl that has not exited some seconds after it was told to is killed for good and said.
 
-import type { DiagnosticKubernetes } from "./diagnostic-kubernetes.ts";
-
-// Bytes of the pod that may wait for the local socket before the WebSocket is paused.
-const PENDING_BYTES = 256 * 1024;
-
-// Whether the API server refused a port-forward, and how: to an identity that may not forward a port,
-// or because it did not take the credential, which says nothing of what the identity may do.
-export type PortForwardRefusal = false | "permission" | "credential";
+import { type ChildProcess, type SpawnOptions, spawn as spawnProcess } from "node:child_process";
+import { type CatalogEntry, CONNECTED, refusalOf } from "./catalog";
+import { DiagnosticError } from "./diagnostic-transport";
 
 export interface PodTarget {
   namespace: string;
@@ -21,149 +25,285 @@ export interface PodTarget {
   port: number;
 }
 
-export async function openPodTunnel(
-  api: Pick<DiagnosticKubernetes, "configuration" | "read" | "assertCurrent">,
-  pod: PodTarget,
-  signal: AbortSignal,
-): Promise<{ address: string; port: number; close(): Promise<void>; refused(): PortForwardRefusal }> {
-  api.assertCurrent();
-  if (signal.aborted) throw new DiagnosticError("cancelled");
-  if (!Number.isInteger(pod.port) || pod.port < 1 || pod.port > 65535) throw new DiagnosticError("validation");
-  const selected = await api.read("Pod", pod.namespace, pod.name, signal);
-  if (signal.aborted) throw new DiagnosticError("cancelled");
-  const containers = selected.spec?.containers as { ports?: { containerPort: number }[] }[] | undefined;
-  const conditions = selected.status?.conditions as { type: string; status: string }[] | undefined;
+export interface PodTunnel {
+  address: string;
+  port: number;
+  // Kills kubectl and waits for it to exit: one that has not exited within its bound is said.
+  close(): Promise<void>;
+}
 
-  if (
-    selected.metadata.uid !== pod.uid ||
-    selected.metadata.name !== pod.name ||
-    selected.metadata.namespace !== pod.namespace ||
-    !conditions?.some((condition) => condition.type === "Ready" && condition.status === "True") ||
-    !containers?.some((container) => container.ports?.some((port) => port.containerPort === pod.port))
-  )
-    throw new DiagnosticError("target-changed");
-  const sockets = new Set<Socket>();
-  const websockets = new Set<WebSocket>();
-  let used = false;
-  let closing: Promise<void> | undefined;
-  // Whether the API server refused the port-forward to the identity of the kubeconfig. The port-forward is
-  // made when the connection that needs it arrives: what goes through the listener then ends as a
-  // connection that was lost, and this says why.
-  let refused: PortForwardRefusal = false;
-  const server = createServer((socket) => {
-    if (used || signal.aborted) {
-      socket.destroy();
-      return;
+// What the tunnel asks of the host for a cluster.
+export interface TunnelHost {
+  // The kubectl the host runs for the cluster, `Main.Shell.getKubectlPath(clusterId)`.
+  kubectl(clusterId: string): Promise<string>;
+  // The environment the host gives for the cluster, `Main.Shell.getEnvironment(clusterId)`.
+  environment(clusterId: string): Promise<Record<string, string>>;
+  // The entry of the cluster in the catalog of the host, which says why the host gave no kubectl.
+  entry(clusterId: string): CatalogEntry | undefined;
+  // Told the state of the cluster now and whenever it changes, until what it returns is called: a reaction
+  // on `Main.Catalog.getClusterById(clusterId)?.status`.
+  watchStatus(clusterId: string, listener: (status: string | undefined) => void): () => void;
+  // The folder of the extension, the working directory of kubectl.
+  cwd(): string;
+}
+
+export type Spawn = (command: string, args: string[], options: SpawnOptions) => ChildProcess;
+
+export const TUNNEL_BOUNDS = {
+  // From the end of the preparation of kubectl to its line of readiness.
+  readyMs: 15_000,
+  // From the moment kubectl is told to end to the moment it is said not to have.
+  exitMs: 5_000,
+} as const;
+
+const LOOPBACK = "127.0.0.1";
+// The port is taken once what follows it is there: a line cut inside its port is not read as a shorter one.
+const READY = /^Forwarding from 127\.0\.0\.1:(\d+) -> /m;
+// The refusal of the API server, as kubectl writes it at its default verbosity, which names the verb create:
+// kubectl 1.31 and later asks a port-forward over a WebSocket first, with the verb get, and when that is
+// refused falls back to the older protocol, with create, saying the refusal of get only at verbosity 4; an
+// earlier kubectl asks with create alone.
+const PORT_FORWARD_REFUSED = /cannot create resource "pods\/portforward"/;
+// A credential the cluster did not take, which says nothing of what the identity may do.
+const UNAUTHORIZED = /\bUnauthorized\b/;
+// How much of what kubectl writes is kept to read its refusal: the end of it.
+const KEPT = 16 * 1024;
+const LABEL = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
+const SUBDOMAIN = /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/;
+
+function kept(text: string): string {
+  return text.length > KEPT ? text.slice(text.length - KEPT) : text;
+}
+
+// How kubectl that ended before its line of readiness ended: a refusal of the port-forward, a credential
+// the cluster did not take, or anything else. Nothing of what it wrote is in what is raised.
+function endOf(written: string): DiagnosticError {
+  if (PORT_FORWARD_REFUSED.test(written)) return new DiagnosticError("forbidden");
+  if (UNAUTHORIZED.test(written)) return new DiagnosticError("forbidden", undefined, "credential");
+  return new DiagnosticError("transport-unreachable");
+}
+
+function isPod(pod: PodTarget): boolean {
+  return (
+    typeof pod?.namespace === "string" &&
+    pod.namespace.length <= 63 &&
+    LABEL.test(pod.namespace) &&
+    typeof pod.name === "string" &&
+    pod.name.length <= 253 &&
+    SUBDOMAIN.test(pod.name) &&
+    Number.isInteger(pod.port) &&
+    pod.port >= 1 &&
+    pod.port <= 65535
+  );
+}
+
+// The kubectl of the extension: one for each tunnel, and every one of them killed when the procedures are
+// let go, when the extension is deactivated, and when the process exits.
+export class KubectlTunnels {
+  private readonly running = new Set<{ stop(): Promise<boolean> }>();
+  private closed = false;
+  private unhook?: () => void;
+
+  constructor(
+    private readonly host: TunnelHost,
+    private readonly spawn: Spawn = spawnProcess,
+    // Where the hook of the exit of the process is put, and what takes it away.
+    private readonly onExit: (listener: () => void) => () => void = (listener) => {
+      process.once("exit", listener);
+      return () => process.removeListener("exit", listener);
+    },
+  ) {}
+
+  // How many kubectl of the extension have not exited.
+  get count(): number {
+    return this.running.size;
+  }
+
+  // Every kubectl told to end, and no other started: the extension is deactivated. What does not end within
+  // its bound is killed for good.
+  closeAll(): void {
+    this.closed = true;
+    for (const run of [...this.running]) void run.stop();
+    this.unhook?.();
+    this.unhook = undefined;
+  }
+
+  async open(clusterId: string, pod: PodTarget, signal: AbortSignal): Promise<PodTunnel> {
+    // An abort before kubectl runs starts nothing.
+    if (signal.aborted || this.closed) throw new DiagnosticError("cancelled");
+    if (!isPod(pod)) throw new DiagnosticError("validation");
+    let kubectl: string;
+    let environment: Record<string, string>;
+
+    try {
+      [kubectl, environment] = await Promise.all([this.host.kubectl(clusterId), this.host.environment(clusterId)]);
+    } catch {
+      // The host gives no kubectl for a cluster that is not there or not connected: a target that changed,
+      // as the catalog says it now. Otherwise kubectl cannot be had.
+      const refused = refusalOf(this.entryOf(clusterId));
+
+      throw refused
+        ? new DiagnosticError("target-changed", undefined, refused)
+        : new DiagnosticError("transport-unreachable");
     }
-    used = true;
-    sockets.add(socket);
-    socket.pause();
-    socket.on("error", () => socket.destroy());
-    let websocket: WebSocket | undefined;
-    const fail = () => {
-      socket.destroy();
-      websocket?.terminate();
+    if (signal.aborted || this.closed) throw new DiagnosticError("cancelled");
+    if (typeof kubectl !== "string" || !kubectl || typeof environment !== "object" || environment === null)
+      throw new DiagnosticError("transport-unreachable");
+    let child: ChildProcess;
+
+    try {
+      child = this.spawn(
+        kubectl,
+        ["port-forward", "--address", LOOPBACK, "--namespace", pod.namespace, `pod/${pod.name}`, `:${pod.port}`],
+        { cwd: this.host.cwd(), env: environment, stdio: ["ignore", "pipe", "pipe"], windowsHide: true },
+      );
+    } catch {
+      throw new DiagnosticError("transport-unreachable");
+    }
+    return this.follow(child, clusterId, signal);
+  }
+
+  private entryOf(clusterId: string): CatalogEntry | undefined {
+    try {
+      return this.host.entry(clusterId);
+    } catch {
+      return undefined;
+    }
+  }
+
+  private hook(): void {
+    if (this.unhook) return;
+    this.unhook = this.onExit(() => {
+      for (const run of this.running) void run.stop();
+    });
+  }
+
+  // kubectl from its start to its end: ready on its line, or ended with what ended it; killed at every end.
+  private follow(child: ChildProcess, clusterId: string, signal: AbortSignal): Promise<PodTunnel> {
+    let exited = false;
+    // kubectl exited, or never started.
+    const ended = new Promise<void>((resolve) => {
+      child.once("exit", () => {
+        exited = true;
+        resolve();
+      });
+      child.once("error", () => {
+        if (child.pid !== undefined) return;
+        exited = true;
+        resolve();
+      });
+    });
+    let stopping: Promise<boolean> | undefined;
+    // Tells kubectl to end, and waits for it: what has not exited within its bound is killed for good, and is
+    // said not to have exited.
+    const stop = (): Promise<boolean> => {
+      stopping ??= (async () => {
+        if (exited) return true;
+        try {
+          child.kill("SIGTERM");
+        } catch {
+          // It ended already.
+        }
+        let late: ReturnType<typeof setTimeout> | undefined;
+        const inTime = await Promise.race([
+          ended.then(() => true),
+          new Promise<false>((resolve) => {
+            late = setTimeout(() => resolve(false), TUNNEL_BOUNDS.exitMs);
+          }),
+        ]);
+
+        clearTimeout(late);
+        if (!inTime)
+          try {
+            child.kill("SIGKILL");
+          } catch {
+            // Nothing more can be done of it.
+          }
+        return inTime;
+      })();
+      return stopping;
     };
-    // One chunk at a time reaches the socket; the rest waits here, up to the bound above.
-    const output = new Writable({
-      highWaterMark: PENDING_BYTES,
-      write(chunk: Buffer, _encoding, callback) {
-        socket.write(chunk, callback);
-      },
-    });
-    const handler = new WebSocketHandler(api.configuration, (uri, protocols, options) => {
-      api.assertCurrent();
-      if (signal.aborted || socket.destroyed) throw new DiagnosticError("cancelled");
-      websocket = new WebSocket(uri, protocols, {
-        ...options,
-        rejectUnauthorized: true,
-        handshakeTimeout: 10_000,
-        maxPayload: 16 * 1024 ** 2,
-        perMessageDeflate: false,
-      });
-      websockets.add(websocket);
-      websocket.on("error", () => socket.destroy());
-      // An answer that is not the one of a port-forward: heard here, it is not raised as an error. A
-      // refusal of the API server is kept, and the connection ends either way.
-      websocket.on("unexpected-response", (request, response) => {
-        if (response.statusCode === 403) refused = "permission";
-        else if (response.statusCode === 401) refused = "credential";
-        request.destroy();
-        socket.destroy();
-      });
-      websocket.once("close", () => {
-        if (websocket) websockets.delete(websocket);
-        // The pod side is done: deliver what still waits, then close.
-        output.end();
-      });
-      return websocket;
-    });
+    const run = { stop };
+    let ready = false;
+    let settled = false;
+    let written = "";
+    let stdout = "";
+    const afterReady = () => void stop();
+    let unwatch: () => void = () => undefined;
 
-    output.once("finish", () => socket.end());
-    output.on("error", fail);
-    output.on("drain", () => websocket?.resume());
-    socket.once("close", () => {
-      sockets.delete(socket);
-      output.destroy();
-      websocket?.terminate();
+    this.running.add(run);
+    this.hook();
+    void ended.then(() => {
+      this.running.delete(run);
+      signal.removeEventListener("abort", afterReady);
+      unwatch();
     });
-    // Channel 0 carries the data of the only port and channel 1 its errors; each opens with the port number.
-    const opening = [true, true];
+    return new Promise<PodTunnel>((resolve, reject) => {
+      // The first end is the one that is said; kubectl is killed at every one. The end is said before
+      // kubectl is told to end, which may tell of its own end at once.
+      const fail = (error: DiagnosticError) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          signal.removeEventListener("abort", aborted);
+          reject(error);
+        }
+        void stop();
+      };
+      const aborted = () => fail(new DiagnosticError("cancelled"));
+      // The wait for the line of readiness, from the moment kubectl was prepared and started.
+      const timer = setTimeout(() => fail(new DiagnosticError("deadline")), TUNNEL_BOUNDS.readyMs);
 
-    handler
-      .connect(
-        `/api/v1/namespaces/${encodeURIComponent(pod.namespace)}/pods/${encodeURIComponent(pod.name)}/portforward?ports=${pod.port}`,
-        null,
-        (channel, content) => {
-          if (channel > 1) return false;
-          const data = opening[channel] ? content.subarray(2) : content;
+      signal.addEventListener("abort", aborted, { once: true });
+      // What kubectl writes is read for its line of readiness and for its refusal, and nothing else is done
+      // with it: it is read to its end, so that kubectl never waits for room to write.
+      child.stdout?.on("data", (chunk: Buffer | string) => {
+        if (ready || settled) return;
+        stdout = kept(stdout + String(chunk));
+        const line = READY.exec(stdout);
 
-          opening[channel] = false;
-          if (channel === 1) {
-            if (data.length) fail();
-          } else if (data.length && !output.write(data)) websocket?.pause();
-          return true;
-        },
-      )
-      .then((connected) => {
-        if (signal.aborted || socket.destroyed) {
-          websocket?.terminate();
+        if (!line) return;
+        const port = Number(line[1]);
+
+        if (!Number.isInteger(port) || port < 1 || port > 65535) {
+          fail(new DiagnosticError("transport-unreachable"));
           return;
         }
-        WebSocketHandler.handleStandardInput(connected, socket, 0);
-        socket.resume();
-      })
-      .catch(fail);
-  });
-  const close = () => {
-    if (closing) return closing;
-    signal.removeEventListener("abort", abort);
-    for (const socket of sockets) socket.destroy();
-    for (const socket of websockets) socket.terminate();
-    closing = new Promise<void>((resolve) => server.close(() => resolve()));
-    return closing;
-  };
-  const abort = () => {
-    void close();
-  };
-
-  signal.addEventListener("abort", abort, { once: true });
-  // Nobody else hears the listener, and an error nobody hears is an exception of the whole process, which
-  // is the one of the host. An error it raises after it listens, as when no descriptor is left for the
-  // connection it is given, ends the tunnel: what went through it ends as a store that was not reached.
-  server.on("error", abort);
-  server.listen(0, "127.0.0.1");
-  try {
-    await once(server, "listening", { signal });
-    api.assertCurrent();
-    if (signal.aborted) throw new DiagnosticError("cancelled");
-    const address = server.address();
-
-    if (!address || typeof address === "string") throw new DiagnosticError("transport-unreachable");
-    return { address: "127.0.0.1", port: address.port, close, refused: () => refused };
-  } catch (error) {
-    await close();
-    if (signal.aborted) throw new DiagnosticError("cancelled");
-    throw error instanceof DiagnosticError ? error : new DiagnosticError("transport-unreachable");
+        ready = true;
+        settled = true;
+        stdout = "";
+        written = "";
+        clearTimeout(timer);
+        signal.removeEventListener("abort", aborted);
+        // Ready: the operation that ends, whatever the end, still kills it.
+        signal.addEventListener("abort", afterReady, { once: true });
+        resolve({
+          address: LOOPBACK,
+          port,
+          close: async () => {
+            if (!(await stop())) throw new DiagnosticError("transport-unreachable", "release");
+          },
+        });
+      });
+      child.stderr?.on("data", (chunk: Buffer | string) => {
+        if (!ready) written = kept(written + String(chunk));
+      });
+      child.once("error", () => fail(new DiagnosticError("transport-unreachable")));
+      // Ended before its line: by a refusal of the cluster, or for another reason. What it wrote is read
+      // once it is all there.
+      child.once("close", () =>
+        fail(signal.aborted || this.closed ? new DiagnosticError("cancelled") : endOf(written)),
+      );
+      // The cluster leaves the connected state, or the catalog: kubectl is killed, whenever it is.
+      try {
+        unwatch = this.host.watchStatus(clusterId, (status) => {
+          if (status === CONNECTED) return;
+          fail(new DiagnosticError("target-changed", undefined, status === undefined ? "absent" : "disconnected"));
+        });
+      } catch {
+        fail(new DiagnosticError("transport-unreachable"));
+      }
+      if (exited) unwatch();
+    });
   }
 }

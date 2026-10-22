@@ -5,7 +5,7 @@
 - **Milestone / tasks:** M4 / T3.1, T3.2, T3.3
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`
 - **Reviewed main:** `c111008912919e6a1a4127b2a0b8a641ee2dad80`
-- **Freelens validation target:** v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`
+- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `2578fac5e9f6d2893129b6ba0d59b379fdf9d305`, the base of the nightly v2.0.0-0-nightly-2026-10-19, which moves with the host drift watch until Freelens 2.0.0 is released; T3.1 and T3.2 were implemented against v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and the evidence of their checks moves to v2 at T0.8, while T3.3 is implemented on v2
 - **Dependencies:** [Schedules](SPEC-0006-schedule-read-only.md), [states and Backups](SPEC-0003-backup-read-only.md), [the Overview](SPEC-0008-overview.md), [target discovery](SPEC-0002-installation-discovery.md)
 - **Approval:** Approved by the lead maintainer on 2026-10-14, as drafted, with the one disagreement of the independent review decided as the spec says: two offsets of one installation are a change of daylight saving time (REQ-162)
 
