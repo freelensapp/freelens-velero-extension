@@ -5,7 +5,7 @@
 - **Milestone / tasks:** M4 / T3.1, T3.2, T3.3
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`
 - **Reviewed main:** `c111008912919e6a1a4127b2a0b8a641ee2dad80`
-- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `2578fac5e9f6d2893129b6ba0d59b379fdf9d305`, the base of the nightly v2.0.0-0-nightly-2026-10-19, which moves with the host drift watch until Freelens 2.0.0 is released; T3.1 and T3.2 were implemented against v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and the evidence of their checks moves to v2 at T0.8, while T3.3 is implemented on v2
+- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `2578fac5e9f6d2893129b6ba0d59b379fdf9d305`, the base of the nightly v2.0.0-0-nightly-2026-10-19, which moves with the host drift watch until Freelens 2.0.0 is released; T3.1 and T3.2 were implemented against v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and the evidence of their checks moved to v2 at T0.8, while T3.3 is implemented on v2
 - **Dependencies:** [Schedules](SPEC-0006-schedule-read-only.md), [states and Backups](SPEC-0003-backup-read-only.md), [the Overview](SPEC-0008-overview.md), [target discovery](SPEC-0002-installation-discovery.md)
 - **Approval:** Approved by the lead maintainer on 2026-10-14, as drafted, with the one disagreement of the independent review decided as the spec says: two offsets of one installation are a change of daylight saving time (REQ-162)
 
@@ -751,3 +751,18 @@ the backups made after it, and not known from one made before it or failing sinc
 that read; the durations are written as the views write every duration, "2h 14m", and one under a second as such,
 where the examples of the design (L224-L230) write "2 h 14 min". SPEC-0006 keeps its Success Criteria (L157-L158),
 which the views of T3.3 make untrue.
+
+T0.8, the checks of T3.1 and T3.2 on Freelens v2, on 2026-10-22, in CI on main at `b5834444`, the merge of the pull
+request of T0.7 of [SPEC-0015](SPEC-0015-freelens-v2-host.md) (#83), where every run passed: Unit tests
+39816205144, on the hosted runner `ubuntu-24.04-arm`, its image 20261021.157.7, with Node 24.21.0, pnpm 12.14.0,
+the SDK `@freelensapp/extensions` 2.0.0-0-nightly-2026-10-19, TypeScript 7.0.2 and Vitest 5.0.5: `pnpm test:unit`,
+the build, then 83 files and 2,591 tests, every one passed, then the two measures. ADH-01 to ADH-08 at the unit
+layer are green on v2: the `describe` blocks of `src/common/schedule-adherence.test.ts`, 177 tests, carry ADH-01,
+ADH-02, ADH-03 and ADH-08, and the ones of `src/common/schedule-signal.test.ts`, 79 tests, carry ADH-03 to ADH-08,
+and every test of both passed. The measure of the unit run of ADH-16, `test/schedule-adherence.measure.ts`, printed
+`ADH-16 unit`: 1,000 schedules of 898 expressions, the offset derived from 1,010 backups, none not known, ten held
+and ten at every look, the thousand signals with their words in 29.3 ms at the 95th percentile, of 250, 22.3 at the
+median and 70.6 on the first call, one schedule in 0.03 ms, of 2, 8,775 runs counted and 72 schedules at the bound
+of the count. T3.3 is not implemented: the component and packaged parts of ADH-03 to ADH-08, ADH-09 to ADH-15,
+ADH-16 in the packaged application and ADH-17 stay as they are. The deviations of the two slices recorded above
+hold on v2 as they are; v2 brings no other.

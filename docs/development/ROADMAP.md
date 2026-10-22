@@ -67,8 +67,8 @@ Status values: `Planned`, `Draft` (the spec is written, not approved),
 | Activation of the packed extension in a packaged Freelens, as an integration test | FND-10 | [SPEC-0001](../specs/SPEC-0001-local-foundation.md) | Done |
 | Test environment on Linux and macOS, x64 and ARM64, and in the hosted checks | | [SPEC-0004](../specs/SPEC-0004-test-environment-every-platform.md) | Done |
 | Release workflows | | | Done |
-| Move to the extension API of Freelens v2: manifest and build, the main process through the host, the way between the processes, registrations, components, tests and documents, in one pull request | T0.7 | [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md) | In PR |
-| Every check of M1 to M3 and of T3.1 and T3.2 green on Freelens v2 in CI on main, with the pre-review on both themes and a gallery for the review | T0.8 | [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md) | Approved |
+| Move to the extension API of Freelens v2: manifest and build, the main process through the host, the way between the processes, registrations, components, tests and documents, in one pull request | T0.7 | [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md) | Done |
+| Every check of M1 to M3 and of T3.1 and T3.2 green on Freelens v2 in CI on main, with the pre-review on both themes and a gallery for the review | T0.8 | [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md) | In PR |
 
 The T0.4 to T0.6 evidence is in [TESTING.md](TESTING.md). It covers the
 scaffold, the readiness of the infrastructure, a workload of synthetic

@@ -5,7 +5,7 @@
 - **Milestone / tasks:** M3 / T2.1, T2.2, T2.4, each its own slice
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, since the drift watch of 2026-10-13; written against v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`; reviewed AWS plugin v1.14.4, `7373ae03525ce743a4f95f13a8fa9f56c7b8f551`, since the same date; written against v1.14.2, `5463822fd77bc1c2a1151ee76c830ad979ff2781`
 - **Reviewed main:** `e5d9354ddf7607e0bad3ebc7744a4964c24b489a`, for the phase Failed of a DownloadRequest, which no release has
-- **Freelens validation target:** v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`
+- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `2578fac5e9f6d2893129b6ba0d59b379fdf9d305`, the base of the nightly v2.0.0-0-nightly-2026-10-19, which moves with the host drift watch until Freelens 2.0.0 is released; this spec was implemented and first verified on v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and verified again on v2 at T0.8
 - **Dependencies:** [local foundation](SPEC-0001-local-foundation.md), whose T0.6 is the service, the adapter, the transport and the tunnel this spec wires to the host; [the write gate](SPEC-0009-write-gate.md); [states and Backups](SPEC-0003-backup-read-only.md); [Restores](SPEC-0005-restore-read-only.md); [locations](SPEC-0007-locations-read-only.md)
 - **Approval:** Approved by the lead maintainer on 2026-09-30, as drafted
 
@@ -604,6 +604,57 @@ with which object is not there.
 Since the tabs the main process has a second use for a text it holds, the command
 that saves it: what a saving writes, and when it writes nothing, is in the evidence
 of SPEC-0011.
+
+### On Freelens v2, T0.8
+
+Written on 2026-10-22. The run that made the checks of this spec green on Freelens
+v2 is CI on main at `b5834444`, the merge of the pull request of T0.7 of
+[SPEC-0015](SPEC-0015-freelens-v2-host.md) (#83), where every run passed, on the
+hosted runner `ubuntu-24.04-arm`: Unit tests 39816205144, 83 files and 2,591 tests,
+every one passed, then the two measures; Views tests 39816205139, every suite of the
+views, the pre-review and FND-10 in one run of the runner of `pnpm e2e:views`, 14
+files and 210 cases, every one passed; Integration tests 39816205035, 6 files and 21
+cases, every one passed; and E2E tests 39816205162, the fixtures and the transport
+proof in its four modes, which passed. The unit tests and the views ran on the image
+20261021.157.7 of the runner, the integration and the end-to-end tests on
+20261012.149.1. In the jobs of the views and of the integration Freelens was built
+from source at freelensapp/freelens `2578fac5e9f6d2893129b6ba0d59b379fdf9d305`, the
+commit of the validation target, with Electron 43.8.0 and the Node of its `.nvmrc`,
+24.22.0; the extension was built and tested with Node 24.21.0, pnpm 12.14.0, the SDK
+`@freelensapp/extensions` 2.0.0-0-nightly-2026-10-19 and Vitest 5.0.5.
+
+The cases carry no ID of a check: each check is proven by the cases and the proof
+the evidence of the slices above describes for it, at the layers it names, read with
+the two amendments of 2026-10-16 below, which at `b5834444` are in
+`src/main/diagnostic-service.test.ts`, `src/main/diagnostic-kubernetes.test.ts`,
+`src/main/diagnostic-transport.test.ts`, `src/main/diagnostic-route.test.ts`,
+`src/main/diagnostic-tunnel.test.ts`, `src/main/ipc-download.test.ts`,
+`src/main/download-object.test.ts`, `src/main/ipc-allowance.test.ts`,
+`src/main/artifact-holder.test.ts`, `src/common/artifact-origin.test.ts`,
+`src/common/artifact-address.test.ts`, `src/common/allowances.test.ts`,
+`src/common/diagnostic-text.test.ts` and
+`src/renderer/components/allowances.test.tsx` in the unit run; in the transport
+proof of the E2E run, which downloaded 16 artifacts directly over HTTPS, once the
+private address was allowed, and through the tunnels over HTTP and over HTTPS with
+the inline and the referenced certificate, passed its negative checks of the
+signature, the host and the certificate authority, found no log in the store for the
+backup and the restore that failed their validation, created no request for the
+restore without a backup, refused three identities at their steps, the creation, the
+Service and the certificate, and the port-forward, and downloaded with the one that
+has the documented permissions; and in the suites of the tabs and of the preferences
+in the views run, whose reports carry no part of a signed URL.
+
+Green on v2: DIAG-01 to DIAG-17 at the unit and component layers; DIAG-03, DIAG-06,
+DIAG-09 to DIAG-12, DIAG-15, DIAG-16 and DIAG-18 by the proof; DIAG-02, DIAG-06,
+DIAG-07, DIAG-10, DIAG-11, DIAG-13, DIAG-15 and DIAG-18 in the packaged application.
+As on v1.10.3, DIAG-07 for the forms of a URL beyond the one of the demo, DIAG-12
+for a store over TLS and a Secret the identity may not read, and DIAG-13 for an
+allowance asked in a tab are proven by the proof and at the unit and component
+layers, and in no packaged case: they need the storage location of the demo changed,
+as the slices above say. The deviations of v2 are the two amendments of 2026-10-16
+below, of REQ-129 and REQ-136 for the host and of REQ-137 for the permission of the
+port-forward, each approved by the lead maintainer on 2026-10-16 as it says;
+DIAG-10, DIAG-17 and DIAG-18 check the amended requirements. v2 brings no other.
 
 ## Amendments
 
