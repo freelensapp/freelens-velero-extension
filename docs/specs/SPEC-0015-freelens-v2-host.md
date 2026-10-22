@@ -1,6 +1,6 @@
 # SPEC-0015: The Freelens v2 Host
 
-- **Status:** Approved
+- **Status:** Implemented
 - **Date:** 2026-10-16
 - **Milestone / tasks:** Foundation / T0.7, T0.8
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, unchanged
@@ -1172,3 +1172,28 @@ a store: its one store, the preferences, holds the namespaces, the window of the
 Overview and what the operator allowed the downloads, an origin, a kind and a
 storage location for each, and the token of a confirmation goes over `invoke` and
 into no store. Nothing changes for the extension.
+
+**T0.8, 2026-10-22: the review gate** (REQ-220, HOST-25, with HOST-22). The
+pre-review ran on Freelens v2 in the views run on main at `b5834444`, 39816205139,
+in both themes, at 1440 by 900, at 900 by 650 and at a zoom of 200%: 33 cases of 33,
+its reports in the artifact of the run. The lead maintainer reviewed the move on
+2026-10-22, on a gallery of 99 screenshots of that run, and approved it:
+
+- every page and view of the group shows on Freelens v2 what it showed on Freelens
+  1.10.3 at the review of M1 to M3, in both themes, at 900 by 650 and at a zoom of
+  200%;
+- the details of the host that stay open over a view opened by a way of the view,
+  since freelensapp/freelens `c4d61d98`, stay as the host draws them: no action of
+  the extension closes them;
+- the steps of the manual review above are taken as proven by the packaged checks:
+  a disable and an enable followed by a load by HOST-13 and a disconnection while a
+  log loads by HOST-06, both green in that run, and Freelens 1.10.3 listing the
+  tarball as Incompatible by HOST-01, of 2026-10-16.
+
+A search of the documents at `2ecb7bdd` finds 1.10.3 on 45 lines, each the history
+of an evidence, a header that says where a spec was first verified, the recon of its
+date or the checksum of the release HOST-01 installed: none names it as the
+reference (HOST-22). With #89 the headers and the evidence of the specs of M1 to M3
+and SPEC-0013 name v2 (HOST-24). The spec is Implemented: T0.7 and T0.8 are on main,
+and T3.3 resumes on v2. Verified waits for every check of its table to be proven,
+HOST-21 among them, at the first prerelease, when the lead maintainer asks for it.
