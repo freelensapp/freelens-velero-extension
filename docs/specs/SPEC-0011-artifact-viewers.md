@@ -5,7 +5,7 @@
 - **Milestone / tasks:** M3 / T2.3, in three pull requests
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, since the drift watch of 2026-10-13; written against v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
 - **Reviewed main:** `e5d9354ddf7607e0bad3ebc7744a4964c24b489a`
-- **Freelens validation target:** v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`
+- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `2578fac5e9f6d2893129b6ba0d59b379fdf9d305`, the base of the nightly v2.0.0-0-nightly-2026-10-19, which moves with the host drift watch until Freelens 2.0.0 is released; this spec was implemented and first verified on v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and verified again on v2 at T0.8
 - **Dependencies:** [the write gate](SPEC-0009-write-gate.md), [the request and its transport](SPEC-0010-diagnostic-request-and-transport.md), [states and Backups](SPEC-0003-backup-read-only.md), [Restores](SPEC-0005-restore-read-only.md)
 - **Approval:** Approved by the lead maintainer on 2026-09-30, as drafted
 
@@ -1883,6 +1883,61 @@ to the methods a backup writes, and confirmed what the decision on the requests
 covers. What the pre-review leaves to human judgment, at 900 by 650 and at twice the
 zoom, with the contrast, the key Escape and the long lines, stays open until it is
 looked at; the spec is Verified once that is recorded.
+
+### On Freelens v2, T0.8
+
+Written on 2026-10-22. The run that made the checks of this spec green on Freelens
+v2 is CI on main at `b5834444`, the merge of the pull request of T0.7 of
+[SPEC-0015](SPEC-0015-freelens-v2-host.md) (#83), where every run passed, on the
+hosted runner `ubuntu-24.04-arm`: Unit tests 39816205144, 83 files and 2,591 tests,
+every one passed, then the two measures; Views tests 39816205139, every suite of the
+views, the pre-review and FND-10 in one run of the runner of `pnpm e2e:views`, 14
+files and 210 cases, every one passed; Integration tests 39816205035, 6 files and 21
+cases, every one passed; and E2E tests 39816205162, the fixtures and the transport
+proof in its four modes, which passed. The unit tests and the views ran on the image
+20261021.157.7 of the runner, the integration and the end-to-end tests on
+20261012.149.1. In the jobs of the views and of the integration Freelens was built
+from source at freelensapp/freelens `2578fac5e9f6d2893129b6ba0d59b379fdf9d305`, the
+commit of the validation target, with Electron 43.8.0 and the Node of its `.nvmrc`,
+24.22.0; the extension was built and tested with Node 24.21.0, pnpm 12.14.0, the SDK
+`@freelensapp/extensions` 2.0.0-0-nightly-2026-10-19 and Vitest 5.0.5.
+
+The cases carry no ID of a check but VIEW-10, which the case of the measures and the
+measure of the unit run print: each check is proven by the cases the evidence of the
+three pull requests above describes for it, at the layers it names, read with the
+amendment of 2026-10-16 below, which at `b5834444` are in
+`src/common/artifact-log.test.ts`, `src/common/artifact-text.test.ts`,
+`src/common/artifact-results.test.ts`, `src/common/artifact-resources.test.ts`,
+`src/common/artifact-volumes.test.ts`, the tests of the panel, of the lines and of
+the viewers in `src/renderer/components/`,
+`src/renderer/pages/operation-tabs.test.tsx`,
+`src/renderer/pages/operation-artifacts.test.tsx`, the tests of the loads in
+`src/renderer/state/`, `src/main/artifact-save.test.ts` and
+`src/main/ipc-download.test.ts` in the unit run, with the measure
+`test/artifact-log.measure.ts` after it, and in the suite of the tabs and the
+pre-review in the views run. Green on v2: VIEW-01 to VIEW-11 and VIEW-13 at the unit
+and component layers, VIEW-10 with the measure of the unit run; VIEW-01 to VIEW-08,
+VIEW-10, VIEW-11, VIEW-13 and VIEW-14 in the packaged application, VIEW-10 with the
+case of the measures, and VIEW-12 in the pre-review.
+
+The measures of VIEW-10. In the case of the measures of the views run, on the log of
+200,000 lines, 49,143,988 bytes: the answers of ten searches and ten filters at 47.1
+ms at the 95th percentile, against the budget of 250 ms, the searches at 45.6 and
+the filters at 53.9, the slowest 53.9; the longest frame of each of twenty scroll
+gestures at 21.1 ms at the 95th percentile, against the budget of 50 ms, the slowest
+30.9; 31 rows mounted at most, of 100; and an idle frame of 16.6 ms at the median of
+sixty, under the 25 ms above which a frame cannot be timed. In the measure of the
+unit run, on 500,000 lines, every series within its budget of 250 ms at the 95th
+percentile: the parser at 81.2 ms, the search at 48.2, the filter by level at 2.1,
+the search among the lines a filter leaves at 50.3, the rows of a list at 25, 23.5
+and 18.3 for the lines not wrapped and wrapped at 120 and at 40 columns, and the
+lines of a text at 30.7.
+
+The deviation of v2 is the amendment of 2026-10-16 below, the lists of lines and the
+resources viewer windowed by react-window 2 in place of the virtual list of the
+host, approved by the lead maintainer on 2026-10-16 with SPEC-0015; the budgets of
+REQ-147 measured again in the packaged Freelens v2 are its acceptance, and are
+above. v2 brings no other.
 
 ## Amendments
 

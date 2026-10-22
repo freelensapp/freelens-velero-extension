@@ -5,7 +5,7 @@
 - **Milestone / tasks:** M3 / T4.1
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, since the drift watch of 2026-10-13; written against v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
 - **Reviewed main:** `e5d9354ddf7607e0bad3ebc7744a4964c24b489a`, for the phase Failed of a DownloadRequest, which no release has
-- **Freelens validation target:** v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`
+- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `2578fac5e9f6d2893129b6ba0d59b379fdf9d305`, the base of the nightly v2.0.0-0-nightly-2026-10-19, which moves with the host drift watch until Freelens 2.0.0 is released; this spec was implemented and first verified on v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and verified again on v2 at T0.8
 - **Dependencies:** [local foundation](SPEC-0001-local-foundation.md), whose T0.6 is the create-only adapter and the service this gate is enforced in; [target discovery](SPEC-0002-installation-discovery.md); the [architecture](../development/ARCHITECTURE.md#ipc-errors-and-write-policy)
 - **Approval:** Approved by the lead maintainer on 2026-09-30, as drafted, with the open question of REQ-115 decided: the adapter runs the plugin a context names for its credential
 
@@ -318,6 +318,45 @@ of the diagnostics given the gate in place of its own enablement. The service ke
 confirmation and a cancellation of its own in the proof of T0.6; with the gate they
 would be a second authority beside it, and the design above says now that the gate
 holds them. The evidence is with [SPEC-0010](SPEC-0010-diagnostic-request-and-transport.md#evidence-and-deviations).
+
+**T0.8, 2026-10-22: the checks on Freelens v2.** The run that made the checks of
+this spec green on Freelens v2 is CI on main at `b5834444`, the merge of the pull
+request of T0.7 of [SPEC-0015](SPEC-0015-freelens-v2-host.md) (#83), where every run
+passed, on the hosted runner `ubuntu-24.04-arm`: Unit tests 39816205144, 83 files
+and 2,591 tests, every one passed, then the two measures; Views tests 39816205139,
+every suite of the views, the pre-review and FND-10 in one run of the runner of
+`pnpm e2e:views`, 14 files and 210 cases, every one passed; Integration tests
+39816205035, 6 files and 21 cases, every one passed; and E2E tests 39816205162, the
+fixtures and the transport proof in its four modes, which passed. The unit tests and
+the views ran on the image 20261021.157.7 of the runner, the integration and the
+end-to-end tests on 20261012.149.1. In the jobs of the views and of the integration
+Freelens was built from source at freelensapp/freelens
+`2578fac5e9f6d2893129b6ba0d59b379fdf9d305`, the commit of the validation target,
+with Electron 43.8.0 and the Node of its `.nvmrc`, 24.22.0; the extension was built
+and tested with Node 24.21.0, pnpm 12.14.0, the SDK `@freelensapp/extensions`
+2.0.0-0-nightly-2026-10-19 and Vitest 5.0.5.
+
+The cases carry no ID of a check: each check is proven by the cases the evidence
+above describes for it, at the layers it names, read with the amendment of
+2026-10-16 below, which at `b5834444` are in `src/main/write-gate.test.ts`,
+`src/main/ipc.test.ts`, `src/main/ipc.host.test.ts`, `src/main/host.test.ts`,
+`src/main/diagnostic-kubernetes.test.ts`, `src/common/ipc.test.ts`,
+`src/common/frame.test.ts`, `src/renderer/state/gate.test.ts`,
+`src/renderer/components/writes.test.tsx` and
+`src/renderer/components/write-confirmation.test.tsx` in the unit run, beside the
+build test, which finds no reader of a kubeconfig in the bundle of the main process,
+and in the suites of the gate, of the band of the server and of the tabs in the
+views run. Green on v2: GATE-01 to GATE-07, GATE-09 and GATE-10 at the unit and
+component layers; GATE-01, GATE-02, GATE-04, GATE-06, GATE-08 and GATE-10 to GATE-12
+in the packaged application. GATE-07 checks the amended REQ-114, an entry of the
+catalog that is not there or not connected; GATE-08, restated as scenario 9 of
+SPEC-0015, is the case of the suite of the tabs that loads the log of the backup of
+the demo for the identity whose token an `exec` plugin gives, which ran once, under
+the proxy of the host; GATE-09, restated, is the gate that turns writes off when the
+path or the context name of the entry changes, or its state is not connected, with
+no file read. The deviation of v2 is that amendment, REQ-114 amended and REQ-115 and
+REQ-116 superseded, approved by the lead maintainer on 2026-10-16 with SPEC-0015; v2
+brings no other.
 
 ## Amendments
 

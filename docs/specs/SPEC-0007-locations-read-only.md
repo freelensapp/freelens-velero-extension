@@ -5,7 +5,7 @@
 - **Milestone / tasks:** M2 / T1.6
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, since the drift watch of 2026-10-13; written against v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
 - **Reviewed main:** `60163e0827e72658bb6546165a727300170e628b`
-- **Freelens validation target:** v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`
+- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `2578fac5e9f6d2893129b6ba0d59b379fdf9d305`, the base of the nightly v2.0.0-0-nightly-2026-10-19, which moves with the host drift watch until Freelens 2.0.0 is released; this spec was implemented and first verified on v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and verified again on v2 at T0.8
 - **Dependencies:** [target discovery](SPEC-0002-installation-discovery.md), [states and Backups](SPEC-0003-backup-read-only.md)
 - **Approval:** Approved by the lead maintainer on 2026-09-28, as drafted
 
@@ -282,3 +282,31 @@ the packaged application by the pre-review pass, with the keyboard alone where t
 criteria ask for it; the lead maintainer judged its report and its screenshots, in
 both themes, and approved. Verdict: approved, with what was decided while
 implementing accepted as it is and the two deviations above approved. No finding was recorded.
+
+**T0.8, 2026-10-22: the checks on Freelens v2.** The run that made the checks of
+this spec green on Freelens v2 is CI on main at `b5834444`, the merge of the pull
+request of T0.7 of [SPEC-0015](SPEC-0015-freelens-v2-host.md) (#83), where every run
+passed, on the hosted runner `ubuntu-24.04-arm`: Unit tests 39816205144, 83 files
+and 2,591 tests, every one passed, then the two measures; Views tests 39816205139,
+every suite of the views, the pre-review and FND-10 in one run of the runner of
+`pnpm e2e:views`, 14 files and 210 cases, every one passed; Integration tests
+39816205035, 6 files and 21 cases, every one passed; and E2E tests 39816205162, the
+fixtures and the transport proof in its four modes, which passed. The unit tests and
+the views ran on the image 20261021.157.7 of the runner, the integration and the
+end-to-end tests on 20261012.149.1. In the jobs of the views and of the integration
+Freelens was built from source at freelensapp/freelens
+`2578fac5e9f6d2893129b6ba0d59b379fdf9d305`, the commit of the validation target,
+with Electron 43.8.0 and the Node of its `.nvmrc`, 24.22.0; the extension was built
+and tested with Node 24.21.0, pnpm 12.14.0, the SDK `@freelensapp/extensions`
+2.0.0-0-nightly-2026-10-19 and Vitest 5.0.5.
+
+The cases carry no ID of a check: each check is proven by the cases the evidence
+above describes for it, at the layers it names, which at `b5834444` are in
+`src/common/location-view.test.ts`, `src/common/go-duration.test.ts`,
+`src/common/location-users.test.ts`, `src/renderer/pages/locations-page.test.tsx`
+and `src/renderer/api/reader.test.ts` in the unit run, and in the suites of the
+locations and of the two readers and the pre-review in the views run. Green on v2:
+LOC-01 to LOC-13 and LOC-15 at the unit and component layers; LOC-01 to LOC-12,
+LOC-14 and LOC-15 in the packaged application, LOC-09, LOC-10 and LOC-15 with the
+two readers, and LOC-14 in the pre-review as well. The two deviations recorded above
+hold on v2 as they are; v2 brings no other.
