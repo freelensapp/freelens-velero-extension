@@ -1123,3 +1123,52 @@ whatever the speed of the machine; and a defect of the port found by HOST-13, th
 state of the views made again between a disable and an enable with no way to the
 main process, is fixed in `onActivate` of the renderer, with a unit test seen
 failing without the fix (REQ-208).
+
+**T0.8, 2026-10-22: HOST-02 and the host drift watch** (REQ-197, REQ-218). CI on
+main at `b5834444`, the merge of the pull request of T0.7 (#83), on its push: every
+job that ran passed, on the hosted runner `ubuntu-24.04-arm` but the scan of
+OSV-Scanner, on `ubuntu-latest`, whose image was ubuntu-24.04.
+
+| Workflow and run | Job | Result | What it ran |
+| --- | --- | --- | --- |
+| Check, 39816205179 | check | success | The build; the type check of the nine programs; lint, 261 files; knip, both passes |
+| Trunk Check, 39816205127 | Trunk Check | success | 323 files checked, one note that blocks nothing |
+| Unit tests, 39816205144 | unit tests | success | 83 files and 2,591 tests, every one passed; then the two measures within their budgets: VIEW-10 unit, its slowest series the parser at 81.2 ms at the 95th percentile, of 250, and ADH-16 unit, the thousand schedules in 29.3 ms, of 250, and one in 0.03 ms, of 2 |
+| Integration tests, 39816205035 | integration tests with Freelens v2 | success | Freelens built from source at `2578fac5`, its build not in the cache by that commit on main; 6 files and 21 cases, FND-10 6 and each of the five kinds 3 |
+| E2E tests, 39816205162 | e2e tests | success | The environment brought up; the fixtures; the transport proof in its four modes, 16 artifacts, three identities refused at their steps and the one with the documented permissions downloading; the environment taken down |
+| Views tests, 39816205139 | views in Freelens v2 | success | Freelens built from source at `2578fac5`, the first build of its resources failing to download helm and the step of its retry passing; in one run of the runner of the views, 14 files and 210 cases, every one passed, in 2,322 seconds: the tabs 52, the pre-review 33, the journey 19, the Overview 15, the restores 14, the schedules 14, the locations 13, the server 8, the reader of three kinds 8, the second reader 7, the gate 7, the preferences 7, the scale 7 and FND-10 6; then the fixtures removed and the environment they leave verified, the reports uploaded and the environment taken down |
+| OSV-Scanner, 39816205884 | OSV scan scheduled / osv-scan | success | The 285 packages of the lockfile, no issue |
+| OSV-Scanner, 39816205884 | OSV scan PR | skipped | The job of a pull request, skipped on a push |
+
+HOST-02 is green on v2: every check of SPEC-0002 to SPEC-0012, ADH-01 to ADH-08 at
+the unit layer and the measure of the unit run of ADH-16 passed in these runs, at
+the layers the evidence of its spec records for it, with the cases and the measures;
+and in every suite of the views the case that compares what the API server holds and
+counted of the kinds of Velero before and after the suite passed. The header and the
+evidence of those eleven specs move to Freelens v2 with this pull request, which is
+what HOST-24 reviews.
+
+The host drift watch read before this slice, on 2026-10-22: the main branch of the
+host at `3534b57a`, after `2578fac5`, the validation target, and the one of the
+template at `3f5296dc`. The newest `@freelensapp/extensions` on npm is still
+2.0.0-0-nightly-2026-10-19: the nightlies of 2026-10-20 and 2026-10-21 were not
+published there. The SDK is pinned to the nightly of the commit of the target, as
+PROCESS says, so the target stays at `2578fac5`, and the commits of the host after
+it are read with the next move of the pin. The template's `3f5296d` adds to its
+skill of the port that the way between the renderer and the main process is IPC,
+`Main.Ipc.handle` and `Renderer.Ipc.invoke`, for short exchanges of a request and
+its answer, and a local HTTP server for a stream or the bulk of the traffic, since
+`Ipc.broadcast` reaches every frame of every window; and that a secret goes over
+`invoke`, not into an `ExtensionStore`. Read in the code at `b5834444`, the
+extension does so already: it broadcasts one channel, `gate.changed`, with the
+identifier of the cluster whose gate of the writes changed and no data
+([`src/main/ipc.ts`](../../src/main/ipc.ts), line 195), on which the frame asks the
+state of its gate again over `invoke`; it holds the text of an artifact in the main
+process for the frame that asked for it, which pulls it over `invoke` page by page,
+each page `PAGE_BOUND`, 4 MiB, at most
+([`src/main/artifact-holder.ts`](../../src/main/artifact-holder.ts),
+[`src/common/ipc.ts`](../../src/common/ipc.ts), line 101); and it keeps no secret in
+a store: its one store, the preferences, holds the namespaces, the window of the
+Overview and what the operator allowed the downloads, an origin, a kind and a
+storage location for each, and the token of a confirmation goes over `invoke` and
+into no store. Nothing changes for the extension.
