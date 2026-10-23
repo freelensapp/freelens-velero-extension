@@ -492,6 +492,29 @@ test environment and of the process of this repository.
   `TableRow` is dropped, a fragment of rows as well, and its parts have no role.
   A `TableCell` that is given a `title` shows the title in place of what it
   holds.
+- A list of the host orders its rows by the callback of the column: a value, or
+  values it compares one after the other, each with `<` and then `===`, and it
+  reverses every comparison in the second order a click gives. The first click on
+  a column orders it `asc`, the next one on the same column `desc`. An `undefined`
+  or a `NaN` compares as greater both ways and breaks the order: a callback never
+  answers one, and none knows the direction it is asked for, so what is last in
+  one order is first in the other. Read in the source at the target
+  (`packages/core/src/renderer/components/table/sorting.ts`, lines 11 to 56;
+  `table.tsx`, lines 226 to 236; `packages/utility-features/utilities/src/sort-compare.ts`,
+  lines 22 to 49).
+- `WithTooltip` of the host puts what it holds in the label of a flat badge that
+  expands, and its tip, a date written by `LocaleDate` when it is given a `Date`,
+  in the tooltip of the badge, which shows when the badge is pointed at, as read
+  in the source at the target (`packages/core/src/renderer/components/with-tooltip/with-tooltip.tsx`,
+  lines 19 to 37): a test reads a tip by pointing at it, and a cell that cuts its
+  words at the end of its room holds the badge. How the badges of the next run and
+  of the adherence lay out at the widths of their columns: ADHERENCE-PR1-PENDING.
+- The renderer of the host reads the cluster with the `fetch` of Chromium, to the
+  origin of the frame, as read in the source at the target
+  (`packages/core/src/renderer/fetch/browser-fetch.injectable.ts`): an answer is of
+  the same origin, and the reader reads its header Date. Whether the header of the
+  API server reaches the frame through the proxies of the host, or one of them
+  writes its own: ADHERENCE-PR1-PENDING.
 - The `Icon` of the host holds the name of its icon as its text, which a font
   draws as the icon. Beside the words of a command it is given `aria-hidden`, or
   the name of the command carries the name of the icon.

@@ -766,3 +766,62 @@ median and 70.6 on the first call, one schedule in 0.03 ms, of 2, 8,775 runs cou
 of the count. T3.3 is not implemented: the component and packaged parts of ADH-03 to ADH-08, ADH-09 to ADH-15,
 ADH-16 in the packaged application and ADH-17 stay as they are. The deviations of the two slices recorded above
 hold on v2 as they are; v2 brings no other.
+
+T3.3, the first of its four pull requests: the adherence in the list, the view of a schedule and the details of the
+host, on Freelens v2 at the validation target, on 2026-10-23, on the machine of the runs (macOS, Node 24.21.0, pnpm
+12.14.0, TypeScript 7.0.2, Vitest 5.0.5, Biome 2.5.15, Trunk launcher 1.3.4). `pnpm type:check`, exit 0; `pnpm
+lint:check`, exit 0; `pnpm test:unit`, exit 0, 85 files and 2,631 tests, then the two measures, the one of ADH-16 as
+before, the thousand signals in 41.3 ms at the 95th percentile of 250; the same with
+`VITE_PRESERVE_MODULES=false`; `pnpm knip:check`, exit 0; `pnpm trunk:check --all`, exit 0. The pull request adds two
+files and 40 tests to the 83 files and 2,591 tests of main, with the zone of the machine fourteen hours east of UTC in
+the tests of the views as in the ones of the signal, and every word they assert read from the words of the module: 12 of
+the reader, the header Date read with the middle of the request, absent, not a date in each of seven forms, on a refused
+answer, beside a body that is no object and from headers that cannot be read, with the Deployment of the server among
+the paths it refuses (ADH-07, ADH-13); 4 of the state, the offset kept when the backups fail and once its backup is
+gone, carried with its change and dropped with the installation, and the time of the API server from the newest answer
+that listed, kept when a read fails, of no late answer (ADH-07, ADH-14); 16 of the list, the view and the details, the
+columns, the cells and their tips for a schedule of each of the eight states, the order by the next run, the runs of
+each state from the earliest, and by adherence, through the order of the host both ways, the search, the cells empty
+until the backups were answered once and said, with why, when the backups are refused, a schedule due that is overdue at
+a tick with no read, the reads of the schedules and of the backups failing each apart, the rows of the next installation
+computed with nothing of the one before, no timer left, the words of the clocks over the list and in the band with and
+without the time of the API server, and the items of the details agreeing with the row for each state, with the date of
+the host beside an instant, asking nothing, saying the age of the read they compute with once no view of the extension
+asks again, and computing a schedule of another namespace with nothing of the installation the views read (ADH-07,
+ADH-09 to ADH-11, ADH-14, SCHED-03 restated); 6 of the band, each line present and absent for each state, the grace
+under the states it applies to, each sentence of what holds the submissions once, with the ways to the backup of the
+submission, the newer one, the newest one and the one that holds (ADH-08, ADH-10); 2 of the stylesheet, the columns each
+width gives up, and the five that stay (ADH-09). ADH-15 at the component layer: each mark beside its word, the icon
+hidden from who does not see it. Twenty changes were made on purpose to the code, on a copy of the tree, and nineteen
+each made a test fail: the rank left out of the order by the next run; the offset kept when another installation is
+selected; the time of the API server taken before the generation is checked, from an answer that refused the read, and
+both values held as deep observables; the details of a schedule of another namespace given the context of the
+installation selected, and their clock left running; the cells drawn while the backups load; the sentence in the search;
+the clocks said over a list where no object is ahead; the band left in the restated check of the view; the line of the
+hold always drawn; the way to the newer backup left out; the grace left out; the clock of an answer taken at its end; a
+header that is not written as HTTP writes a date taken, and the header of a refused answer left out; the expression kept
+under 640 pixels; and the last submission back under the class of a start. The twentieth, a cell of null while the
+backups load, is refused by the type check: the host draws a cell of null as an empty cell under its column, as its
+double does, so no test sees it. After the independent review of the branch eleven more were made, and each made a test
+fail: the instant left out of the order by the next run; the details of another namespace given the context of an
+installation that reads one; a refusal of the backups not counted as an answer; the note of a hold not known, and the
+sentences of the backup that holds and of how many more do, said again under the next run; the grace said under every
+state; the age of the read never said, and said only when no view is open; the state left saying that a view is open
+once the last one closed; the date of the host left out of the details; and the header read where headers that throw
+lose the answer. The suite of the schedules is restated, and run in the packaged application with the second phase of
+the pull request: ADHERENCE-PR1-PENDING (the run, the answer of the header of ADH-07, the room of the list at each edge
+and the widths of the window it was reached at). Precisions of the slice, none a change of what a requirement asks: of
+REQ-168, the ones that have no next run are last in the first order a click gives and first in the second, since the
+host reverses the whole order and no callback knows the direction, and Not known comes before None; the cells and the
+items say nothing, and the band says that the backups of the installation are being read, until those backups were
+answered once: the state Loading of the design names the schedules, and the views wait for the backups as well; the
+details of a schedule of a namespace that is not the one the installation reads compute with nothing read of its
+installation, no backup, no offset and no time of its API server, and never read the cluster; the search holds the word
+of the state, the text of the next run and the notes, and not the sentence; the grace is one sentence under the line of
+the next run, from its constant, said of the states whose run is expected or held. A precision of REQ-170, made in this
+pull request, to be confirmed at the review of the fourth milestone: the host draws its details where no view of the
+extension is, and the views ask the installation again only while one of them is open, so the details compute with the
+last read of the views and, when no view is open or that read of the backups is older than the period of the reads, say
+its age in a sentence of the module, as the stale words do, "Computed with the backups of the installation as they were
+read 12m ago, when a view of Velero was last open."; beside an instant they give its date as the host writes one, as the
+band does.
