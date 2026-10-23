@@ -30,9 +30,13 @@ export const TITLES: Record<Family, string> = {
 };
 
 // An answer of the API: its status and, when it has one, its body. `status` is absent when there was none.
+// When the answer carried the time it was written at, `date` is that time and `at` the clock of this machine
+// in the middle of the request: the two are given together, or neither is.
 export interface Answer {
   status?: number;
   body?: unknown;
+  date?: number;
+  at?: number;
 }
 
 export type ApiAvailability =

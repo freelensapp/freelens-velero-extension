@@ -13,6 +13,7 @@ import {
 } from "../../common/discovery";
 import { PATHS } from "../../common/paths";
 import { emptyRead, failed, failedStatus, loading, succeeded } from "../../common/read-state";
+import { keepOffset } from "../../common/schedule-signal";
 import { readWindow } from "../../common/window";
 import { ArtifactLoads } from "./artifact-loads";
 import { ServerStatus } from "./server-status";
@@ -32,6 +33,7 @@ import type {
 } from "../../common/discovery";
 import type { GateState } from "../../common/ipc";
 import type { FamilyRead } from "../../common/read-state";
+import type { ApiServerTime, ServerOffset } from "../../common/schedule-signal";
 import type {
   BackupResource,
   BackupStorageLocationResource,
@@ -98,6 +100,14 @@ export class Installation {
   reads: Reads = emptyReads();
   // When the families of the selected namespace were last asked, whatever they answered.
   asked?: number;
+  // The offset of the zone of the Velero server, derived from the backups of the submissions of the
+  // installation that is read and kept for as long as it is the one (SPEC-0013, REQ-162): it stays known once
+  // the backup it was read in is gone. Another installation has another server, and starts with none.
+  serverOffset?: ServerOffset;
+  // The time of the API server, from the newest answer of the families of the installation that is read that
+  // carried it, beside the clock of this machine then. A read that fails keeps it: the difference of two
+  // clocks does not go with a read.
+  serverTime?: ApiServerTime;
   // The reads that were asked and did not end: what the cluster serves, where the installations are, and
   // the families.
   asking = 0;
@@ -151,6 +161,8 @@ export class Installation {
       generation: observableRef,
       reads: observableRef,
       asked: observable,
+      serverOffset: observableRef,
+      serverTime: observableRef,
       asking: observable,
       gate: observableRef,
       gateFailure: observable,
@@ -493,6 +505,8 @@ export class Installation {
     this.generation = { cluster: this.cluster.id, namespace, number: this.generation.number + 1 };
     this.reads = emptyReads();
     this.asked = undefined;
+    this.serverOffset = undefined;
+    this.serverTime = undefined;
     this.server.drop();
     this.artifacts.drop();
     this.dropWrites(left);
@@ -509,6 +523,9 @@ export class Installation {
   private async readFamiliesOf(asked: Generation): Promise<void> {
     if (!asked.namespace) return;
     const families = FAMILIES.filter((family) => familyStatus(this.api, family, "idle") !== "not-served");
+    // The newest time of the API server among the answers of this read that listed what was asked. An answer
+    // that refused or failed may have been written by what stands between the views and the API server.
+    let newest: ApiServerTime | undefined;
 
     runInAction(() => {
       this.reads = {
@@ -525,21 +542,34 @@ export class Installation {
           // cancelled and answered all the same.
           if (!current(this.generation, asked)) return;
           const items = (answer.body as { items?: unknown } | undefined)?.items;
-          const read =
-            typeof answer.status === "number" && answer.status >= 200 && answer.status < 300 && Array.isArray(items)
-              ? succeeded(
-                  // Only the objects of the namespace that was asked: the answer is not trusted for it.
-                  (items as Resource[]).filter((item) => item?.metadata?.namespace === asked.namespace),
-                  this.dependencies.now(),
-                )
-              : failed(this.reads[family], failedStatus(answer.status));
+          const listed =
+            typeof answer.status === "number" && answer.status >= 200 && answer.status < 300 && Array.isArray(items);
+          const read = listed
+            ? succeeded(
+                // Only the objects of the namespace that was asked: the answer is not trusted for it.
+                (items as Resource[]).filter((item) => item?.metadata?.namespace === asked.namespace),
+                this.dependencies.now(),
+              )
+            : failed(this.reads[family], failedStatus(answer.status));
 
           this.reads = { ...this.reads, [family]: read };
+          if (listed && answer.date !== undefined && answer.at !== undefined && (!newest || answer.at > newest.at)) {
+            newest = { date: answer.date, at: answer.at };
+          }
         });
       }),
     );
     runInAction(() => {
-      if (current(this.generation, asked)) this.asked = this.dependencies.now();
+      if (!current(this.generation, asked)) return;
+      this.asked = this.dependencies.now();
+      // What the read of the families of this installation gives of the zone of its server and of the time of
+      // its API server. The offset is the object that was kept when nothing changed: who holds it is told of a
+      // change only when there is one.
+      this.serverOffset = keepOffset(this.serverOffset, {
+        schedules: this.read("schedules"),
+        backups: this.read("backups"),
+      });
+      if (newest && (!this.serverTime || newest.at >= this.serverTime.at)) this.serverTime = newest;
     });
   }
 }

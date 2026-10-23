@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { forbiddenAccesses, hostCalls, hostViews } from "../../../test/freelens-extensions";
 import { FAMILIES } from "../../common/discovery";
 import { PATHS } from "../../common/paths";
@@ -8,19 +8,37 @@ import { clusterReader } from "./reader";
 // was given.
 const taken: string[] = [];
 const asked: { call: string; args: unknown[] }[] = [];
-// What the next answers are, by path: a status and a text.
-let answers: Record<string, { status: number; text: string }> = {};
-// What was read of each answer.
+// What the next answers are, by path: a status, a text, the headers of the answer, and the time the request
+// takes, by which the clock of the test moves before it answers.
+interface Given {
+  status: number;
+  text: string;
+  headers?: Record<string, string>;
+  // Headers that throw when one is asked.
+  broken?: boolean;
+  took?: number;
+}
+let answers: Record<string, Given> = {};
+// What was read of each answer, and the names of the headers asked of it.
 const read: string[] = [];
+const headersAsked: string[] = [];
 
 // The answer of the client of the host, as its declaration has it (FetchResponse, structural, and not a
 // `Response` of the DOM): every member a reader may read is there, and what is read is recorded.
-function answerOf(status: number, text: string) {
+function answerOf({ status, text, headers = {}, broken = false }: Given) {
+  // The headers of an answer are found by their name, whatever its case, as the ones of a fetch are.
+  const byName = new Map(Object.entries(headers).map(([name, value]) => [name.toLowerCase(), value]));
   const answer = {
     ok: status >= 200 && status < 300,
     status,
     statusText: "",
-    headers: { get: () => null },
+    headers: {
+      get: (name: string) => {
+        headersAsked.push(name);
+        if (broken) throw new Error("The headers of this answer cannot be read");
+        return byName.get(name.toLowerCase()) ?? null;
+      },
+    },
     body: null,
     text: async () => text,
     json: async () => JSON.parse(text),
@@ -49,7 +67,8 @@ function fakeClient(cluster: string) {
           if (property !== "getResponse") throw new Error(`not asked of a reader: ${String(property)}`);
           const answer = answers[args[0] as string] ?? { status: 404, text: "404 page not found\n" };
 
-          return answerOf(answer.status, answer.text);
+          if (answer.took !== undefined) vi.setSystemTime(Date.now() + answer.took);
+          return answerOf(answer);
         };
       },
     },
@@ -62,6 +81,7 @@ beforeEach(() => {
   taken.length = 0;
   asked.length = 0;
   read.length = 0;
+  headersAsked.length = 0;
   answers = {};
   hostViews.forCluster = (cluster) => {
     taken.push(cluster);
@@ -71,7 +91,10 @@ beforeEach(() => {
 
 afterEach(() => {
   hostViews.forCluster = undefined;
+  vi.useRealTimers();
 });
+
+const ASKED = Date.parse("2026-10-15T12:00:00.000Z");
 
 describe("reader of the cluster of a frame", () => {
   it("asks the client of the host for its cluster, with GET and the path alone: no query, no header", async () => {
@@ -110,7 +133,7 @@ describe("reader of the cluster of a frame", () => {
     expect(taken).toEqual(["cluster-a"]);
   });
 
-  it("gives the status and the body of the answer, and reads of it the status and the text alone", async () => {
+  it("gives the status and the body of the answer, and reads of it the status, the text and the header Date alone", async () => {
     const list = { kind: "BackupList", items: [{ metadata: { name: "nightly", namespace: "velero-demo" } }] };
     const refused = { kind: "Status", apiVersion: "v1", status: "Failure", reason: "Forbidden", code: 403 };
 
@@ -122,7 +145,8 @@ describe("reader of the cluster of a frame", () => {
 
     expect(await reader(PATHS.family("backups", "velero-demo"))).toEqual({ status: 200, body: list });
     expect(await reader(PATHS.family("restores", "velero-demo"))).toEqual({ status: 403, body: refused });
-    expect([...new Set(read)].sort()).toEqual(["status", "text"]);
+    expect([...new Set(read)].sort()).toEqual(["headers", "status", "text"]);
+    expect(headersAsked).toEqual(["date", "date"]);
   });
 
   it("gives the status alone where the body is not one, and never a state from the text", async () => {
@@ -187,6 +211,10 @@ describe("reader of the cluster of a frame", () => {
       "/apis/velero.io/v2/backups",
       "/apis/velero.io.example/v1/backups",
       "/apis/apps/v1/deployments",
+      // The Deployment of the server, where a time zone could be set: the zone is derived, never read there.
+      "/apis/apps/v1/namespaces/velero-demo/deployments",
+      "/apis/apps/v1/namespaces/velero-demo/deployments/velero",
+      "/apis/velero.io/v1/../../apps/v1/namespaces/velero-demo/deployments/velero",
       "apis/velero.io/v1/backups",
       " /apis/velero.io/v1/backups",
       "/apis/velero.io/v1/backups\n",
@@ -202,5 +230,104 @@ describe("reader of the cluster of a frame", () => {
     for (const name of ["", "Velero", "../velero", "velero/backups", "velero?watch=true"]) {
       expect(() => PATHS.family("backups", name)).toThrow("Not the name of a namespace");
     }
+  });
+});
+
+describe("the time of the API server, in the header Date of an answer", () => {
+  it("is the second it names and half a second, beside the clock of this machine in the middle of the request", async () => {
+    vi.setSystemTime(ASKED);
+    // The request took 400 ms; the header names the second three seconds after it was asked.
+    answers = {
+      [PATHS.family("schedules", "velero-demo")]: {
+        status: 200,
+        text: '{"items":[]}',
+        headers: { Date: "Thu, 15 Oct 2026 12:00:03 GMT" },
+        took: 400,
+      },
+    };
+    expect(await clusterReader("cluster-a")(PATHS.family("schedules", "velero-demo"))).toEqual({
+      status: 200,
+      body: { items: [] },
+      date: Date.parse("2026-10-15T12:00:03.500Z"),
+      at: Date.parse("2026-10-15T12:00:00.200Z"),
+    });
+  });
+
+  it("is nothing when the answer carries no header Date", async () => {
+    vi.setSystemTime(ASKED);
+    answers = { [PATHS.family("schedules", "velero-demo")]: { status: 200, text: '{"items":[]}', took: 50 } };
+    expect(await clusterReader("cluster-a")(PATHS.family("schedules", "velero-demo"))).toEqual({
+      status: 200,
+      body: { items: [] },
+    });
+  });
+
+  it.each([
+    ["a text", "yesterday"],
+    ["an instant of another form", "2026-10-15T12:00:03Z"],
+    ["a date in another zone", "Thu, 15 Oct 2026 12:00:03 CEST"],
+    ["a day of the week that is not the one of the date", "Fri, 15 Oct 2026 12:00:03 GMT"],
+    ["a day that is not in the month", "Thu, 31 Sep 2026 12:00:03 GMT"],
+    ["an hour that is not in the day", "Thu, 15 Oct 2026 25:00:03 GMT"],
+    ["nothing", ""],
+  ])("is nothing when the header Date is %s", async (_case, header) => {
+    vi.setSystemTime(ASKED);
+    answers = {
+      [PATHS.family("schedules", "velero-demo")]: {
+        status: 200,
+        text: '{"items":[]}',
+        headers: { Date: header },
+        took: 50,
+      },
+    };
+    expect(await clusterReader("cluster-a")(PATHS.family("schedules", "velero-demo"))).toEqual({
+      status: 200,
+      body: { items: [] },
+    });
+  });
+
+  it("is given with an answer that refused the read as well: the reader says what the answer carried", async () => {
+    vi.setSystemTime(ASKED);
+    answers = {
+      [PATHS.family("backups", "velero-demo")]: {
+        status: 403,
+        text: '{"kind":"Status"}',
+        headers: { date: "Thu, 15 Oct 2026 11:59:58 GMT" },
+        took: 20,
+      },
+    };
+    expect(await clusterReader("cluster-a")(PATHS.family("backups", "velero-demo"))).toEqual({
+      status: 403,
+      body: { kind: "Status" },
+      date: Date.parse("2026-10-15T11:59:58.500Z"),
+      at: Date.parse("2026-10-15T12:00:00.010Z"),
+    });
+  });
+
+  it("is nothing when the headers of the answer cannot be read, which takes nothing of its status and its body", async () => {
+    answers = {
+      [PATHS.family("schedules", "velero-demo")]: { status: 200, text: '{"items":[]}', broken: true, took: 50 },
+    };
+    expect(await clusterReader("cluster-a")(PATHS.family("schedules", "velero-demo"))).toEqual({
+      status: 200,
+      body: { items: [] },
+    });
+  });
+
+  it("is given with an answer whose body is not an object", async () => {
+    vi.setSystemTime(ASKED);
+    answers = {
+      [PATHS.discovery]: {
+        status: 503,
+        text: "the cluster is not reachable",
+        headers: { Date: "Thu, 15 Oct 2026 12:00:00 GMT" },
+        took: 0,
+      },
+    };
+    expect(await clusterReader("cluster-a")(PATHS.discovery)).toEqual({
+      status: 503,
+      date: Date.parse("2026-10-15T12:00:00.500Z"),
+      at: ASKED,
+    });
   });
 });

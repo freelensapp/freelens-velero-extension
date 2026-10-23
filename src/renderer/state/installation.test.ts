@@ -1,4 +1,6 @@
+import { isObservable } from "mobx";
 import { describe, expect, it, vi } from "vitest";
+import { HOUR, scheduleObject, submissionOf } from "../../../test/adherence-builders";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { Installation } from "./installation";
 
@@ -522,6 +524,130 @@ describe("an installation that is being read", () => {
     await Promise.all([state.refresh(), state.refresh()]);
     expect(state.reading).toBe(false);
     expect(state.asking).toBe(0);
+  });
+});
+
+describe("the zone of the Velero server and the time of the API server", () => {
+  const SUBMITTED = Date.parse("2026-10-14T03:00:41Z");
+  // An installation whose server is two hours east of UTC: the backup of the last submission of its schedule
+  // is named with the wall clock of the server.
+  const nightly = (lastBackup: number) => scheduleObject("nightly", "velero-a", { lastBackup });
+  const one = (schedules: Answer, backups: Answer) => ({
+    ...two,
+    [LOCATIONS]: list(object("default", "velero-a")),
+    [path("schedules", "velero-a")]: schedules,
+    [path("backups", "velero-a")]: backups,
+  });
+
+  it("keeps the offset a read derives, and keeps it when the backups fail and once its backup is gone", async () => {
+    const answers: Record<string, Answer> = one(
+      list(nightly(SUBMITTED)),
+      list(submissionOf("nightly", "velero-a", SUBMITTED, 120)),
+    );
+    const { state } = installation(answers);
+
+    expect(state.serverOffset).toBeUndefined();
+    await state.open();
+    const kept = state.serverOffset;
+
+    expect(kept).toMatchObject({ minutes: 120, schedule: "nightly", submission: SUBMITTED });
+    // A plain value, as the signal gives it: who holds it compares it as the object it is, and nothing inside it is
+    // observed.
+    expect(isObservable(kept)).toBe(false);
+    // The backups fail: the offset stays, the very object, and who holds it is told of no change.
+    answers[path("backups", "velero-a")] = { status: 500 };
+    await state.refresh();
+    expect(state.serverOffset).toBe(kept);
+    // The backup expired: nothing gives the offset any more, and it stays known.
+    answers[path("backups", "velero-a")] = list();
+    await state.refresh();
+    expect(state.serverOffset).toBe(kept);
+    // Read again as it was: the same evidence keeps the same object.
+    answers[path("backups", "velero-a")] = list(submissionOf("nightly", "velero-a", SUBMITTED, 120));
+    await state.refresh();
+    expect(state.serverOffset).toBe(kept);
+  });
+
+  it("carries a change of the offset between two submissions", async () => {
+    const later = SUBMITTED + 24 * HOUR;
+    const answers: Record<string, Answer> = one(
+      list(nightly(SUBMITTED)),
+      list(submissionOf("nightly", "velero-a", SUBMITTED, 120)),
+    );
+    const { state } = installation(answers);
+
+    await state.open();
+    // A day later the server submits with its clock an hour back, as a change of daylight saving time does.
+    answers[path("schedules", "velero-a")] = list(nightly(later));
+    answers[path("backups", "velero-a")] = list(submissionOf("nightly", "velero-a", later, 60));
+    await state.refresh();
+    expect(state.serverOffset).toMatchObject({
+      minutes: 60,
+      submission: later,
+      changed: { minutes: 120, schedule: "nightly", submission: SUBMITTED },
+    });
+  });
+
+  it("drops the offset and the time of the API server with the installation, and takes none of a late answer", async () => {
+    let answer: (value: Answer) => void = () => undefined;
+    const late = new Promise<Answer>((resolve) => {
+      answer = resolve;
+    });
+    const answers: Record<string, Answer | (() => Promise<Answer>)> = {
+      ...two,
+      [path("schedules", "velero-a")]: { ...list(nightly(SUBMITTED)), date: 9000, at: 1000 },
+      [path("backups", "velero-a")]: {
+        ...list(submissionOf("nightly", "velero-a", SUBMITTED, 120)),
+        date: 9000,
+        at: 1000,
+      },
+    };
+    const { state } = installation(answers, { selected: { "cluster-a": "velero-a" }, configured: {} });
+
+    await state.open();
+    expect(state.serverOffset?.minutes).toBe(120);
+    expect(state.serverTime).toEqual({ date: 9000, at: 1000 });
+    // The backups of velero-a are asked again and answer late, after velero-b is selected.
+    answers[path("backups", "velero-a")] = () => late;
+    const reading = state.refresh();
+
+    await vi.waitFor(() => expect(state.read("backups").reading).toBe(true));
+    state.select("velero-b");
+    expect(state.serverOffset).toBeUndefined();
+    expect(state.serverTime).toBeUndefined();
+    await vi.waitFor(() => expect(state.read("backups").status).toBe("ready"));
+    answer({ ...list(submissionOf("nightly", "velero-a", SUBMITTED, 120)), date: 99_000, at: 2000 });
+    await reading;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(state.namespace).toBe("velero-b");
+    expect(state.serverOffset).toBeUndefined();
+    expect(state.serverTime).toBeUndefined();
+  });
+
+  it("takes the time of the API server from the newest answer that listed, and keeps it when a read fails", async () => {
+    const answers: Record<string, Answer> = {
+      ...one({ ...list(nightly(SUBMITTED)), date: 5000, at: 2000 }, { ...list(), date: 7000, at: 3000 }),
+      // An answer that refused the read may be written by what stands between: its time is not taken.
+      [path("restores", "velero-a")]: { status: 403, date: 99_000, at: 4000 },
+    };
+    const { state } = installation(answers);
+
+    await state.open();
+    expect(state.serverTime).toEqual({ date: 7000, at: 3000 });
+    expect(isObservable(state.serverTime)).toBe(false);
+    // A read that fails, or that carries no time, leaves the time that was taken.
+    for (const family of ["backups", "restores", "schedules", "storageLocations", "snapshotLocations"] as Family[]) {
+      answers[path(family, "velero-a")] = { status: 500, date: 50_000, at: 9000 };
+    }
+    await state.refresh();
+    expect(state.serverTime).toEqual({ date: 7000, at: 3000 });
+    answers[path("schedules", "velero-a")] = list(nightly(SUBMITTED));
+    await state.refresh();
+    expect(state.serverTime).toEqual({ date: 7000, at: 3000 });
+    // A newer answer that listed gives the time.
+    answers[path("schedules", "velero-a")] = { ...list(nightly(SUBMITTED)), date: 20_000, at: 12_000 };
+    await state.refresh();
+    expect(state.serverTime).toEqual({ date: 20_000, at: 12_000 });
   });
 });
 
