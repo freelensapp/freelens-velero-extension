@@ -1,12 +1,13 @@
 # Specifications
 
-Date: 2026-10-22
+Date: 2026-10-23
 
 Status: SPEC-0001 is Approved; SPEC-0002 to SPEC-0012 are Verified, SPEC-0009 to
 SPEC-0012 since 2026-10-14, when the lead maintainer approved the review of the
 third milestone, held on 2026-10-13; SPEC-0013 and SPEC-0014 are Approved since
 2026-10-14; SPEC-0015, Approved on 2026-10-16, is Implemented since 2026-10-22,
-when the lead maintainer approved the review of T0.8.
+when the lead maintainer approved the review of T0.8; SPEC-0016 is a Draft since
+2026-10-23.
 
 The [roadmap](../development/ROADMAP.md) owns scope and progress; the
 [process](../development/PROCESS.md) owns approvals and review gates.
@@ -33,8 +34,9 @@ slice per task even when a spec covers several closely related tasks.
 | [SPEC-0013: The adherence of a schedule](SPEC-0013-schedule-adherence.md) | T3.1, T3.2, T3.3 | REQ-160 through REQ-176 | Approved | T3.1, the grammar and the computation: 177 tests, 159 of the grammar of the parser of the reviewed release, of which 112 accepted expressions with their next runs in UTC, in Rome and in New York across the changes of daylight saving time of 2026 (22 of the five fields, 9 of the two day fields both restricted, 22 of the names, of Sunday as 7 and of the ranges that wrap, 15 of the descriptors, 44 of the zones and of the changes, the midnight a zone skips among them), 8 of the expressions with no instant and of a zone that is not known, 34 refusals with the words the controller writes, 5 of the sources of the rows, of the length, of the sets and of the parse kept by text; 9 of the expected run, of its anchor, of due and of the count with its bound, with the daily and the interval cases of the tests of the release; 4 of the zone an expression names, used whatever zone is given beside it; 4 of the backup of the last submission; 1 of the plain values; the measure of the signals of a thousand schedules, alone after the tests, 14.2 ms at the 95th percentile of 250 and one schedule in 0.03 of 2 on the machine of the runs. T3.2, the states and their words: 79 tests with the clock as an argument and the zone of the machine fourteen hours east of UTC, 22 of the offset of the server read in the name of the backup of a submission and kept for the session, and of the clocks of this machine and of the cluster, 57 of the states by the clock the lateness is counted by, the one of the cluster when its API server gives its time, of the pause, the refusal and the phases Velero has not read, gated before the expression as reads that throw prove, of each state of what is not known with its mark and its words, of a cluster ahead that never keeps a schedule from being said overdue, of the last observed run and of the order by adherence, every word read from the words of the module; changes made on purpose to the module, fifteen before the independent review and sixteen after it, each made a test fail; REQ-166 amended so that a cluster ahead bounds nothing that is said overdue; a zone with an empty name, quoted or not, said refused, with REQ-066 and SCHED-03 of SPEC-0006 restated; the measure of the whole signals with their words of a thousand schedules, 42.7 ms at the 95th percentile of 250 and one schedule in 0.04 of 2 on the machine of the runs. The four surfaces are T3.3 |
 | [SPEC-0014: Read-only repositories, pod volume operations and data movement](SPEC-0014-repositories-and-data-movement.md) | T5.1, T5.2 | REQ-177 through REQ-195 | Approved | None yet |
 | [SPEC-0015: The Freelens v2 host](SPEC-0015-freelens-v2-host.md) | T0.7, T0.8 | REQ-196 through REQ-220 | Implemented | T0.7 and T0.8 on main: CI on main at `b5834444` green in every job, on Freelens built at the validation target, the unit run of 83 files and 2,591 tests, the packaged suites, the pre-review and FND-10, the five sessions of the integration test and the transport proof in its four modes (HOST-02); the headers and the evidence of the specs of M1 to M3 and SPEC-0013 on v2 with #89 (HOST-24); the review of the lead maintainer on 2026-10-22 (HOST-25); HOST-01 on the nightly of the validation target and once on Freelens 1.10.3; HOST-21 at the first prerelease |
+| [SPEC-0016: Create a Schedule](SPEC-0016-create-a-schedule.md) | T4.7 | REQ-221 through REQ-243 | Draft | None yet |
 
-Next unallocated requirement ID: REQ-221. IDs are unique across this project;
+Next unallocated requirement ID: REQ-244. IDs are unique across this project;
 references in test tables do not redefine a requirement. Do not allocate IDs to
 unwritten future specs or reuse an ID for a different requirement after approval.
 
@@ -46,7 +48,7 @@ specifications. Draft each at its next design gate, informed by the local proof.
 | Scope | Roadmap owner | Dependency |
 | --- | --- | --- |
 | Schedule adherence | T3.1 through T3.3 | SPEC-0013, approved: the grammar of the cron library of the reviewed release and the observed history |
-| Individual actions | T4.2 through T4.6 | The write gate of SPEC-0009, exact previews and per-action tests |
+| Individual actions | T4.2 through T4.7 | The write gate of SPEC-0009, exact previews and per-action tests; SPEC-0016, a draft, for T4.7 |
 | Secondary kinds | T5.1, T5.2 | SPEC-0014, approved: the same evidence and permission contracts, read only |
 | Release readiness, docs and media | T6.1 through T6.5 | All agreed features Verified; release on the lead maintainer's go |
 
@@ -126,12 +128,12 @@ This is document coverage, not test execution:
 | --- | --- |
 | Scope and exclusions | Each spec names its roadmap tasks and deferred owners |
 | User outcomes | Prioritized Given/When/Then journeys and observable success criteria |
-| Requirement identity | 37 unique sequential IDs across the three drafts; the four drafts of the second milestone add 58, REQ-050 to REQ-107, and the four of the third 52, REQ-108 to REQ-159, and the two of the fourth 36, REQ-160 to REQ-195, and the draft of the Freelens v2 host 25, REQ-196 to REQ-220, each with one check |
+| Requirement identity | 37 unique sequential IDs across the three drafts; the four drafts of the second milestone add 58, REQ-050 to REQ-107, and the four of the third 52, REQ-108 to REQ-159, and the two of the fourth 36, REQ-160 to REQ-195, and the draft of the Freelens v2 host 25, REQ-196 to REQ-220, and the draft of the creation of a Schedule 23, REQ-221 to REQ-243, each with one check |
 | Test traceability | Every requirement has a named acceptance check and test layer |
 | Safety and privacy | Local-only writes, exact targets, no implicit requests, synthetic evidence |
 | UI decisions | Native lists plus dedicated operation workspace, with non-happy and accessible states |
 | Source grounding | Every draft carries exact reviewed revisions and recon dependencies |
-| Honest status | SPEC-0001 is Approved with setup, fixture and compiled-main transport evidence; SPEC-0002 to SPEC-0008 are Verified; SPEC-0009 to SPEC-0012 are Verified since 2026-10-14, SPEC-0011 with the three pull requests of its task; SPEC-0013 and SPEC-0014 are Approved since 2026-10-14, and REQ-166 of SPEC-0013 is amended by the pull request of its second slice, for the review of the milestone to confirm; SPEC-0015 is Implemented since 2026-10-22, after T0.7 and the review of T0.8; with the pull request of T0.7 it amends REQ-114 of SPEC-0009 and supersedes its REQ-115 and REQ-116, amends REQ-129, REQ-136 and REQ-137 of SPEC-0010, and changes how the lists of lines of SPEC-0011 are drawn, each recorded under the amendments of its spec, with the date 2026-10-16 |
+| Honest status | SPEC-0001 is Approved with setup, fixture and compiled-main transport evidence; SPEC-0002 to SPEC-0008 are Verified; SPEC-0009 to SPEC-0012 are Verified since 2026-10-14, SPEC-0011 with the three pull requests of its task; SPEC-0013 and SPEC-0014 are Approved since 2026-10-14, and REQ-166 of SPEC-0013 is amended by the pull request of its second slice, for the review of the milestone to confirm; SPEC-0015 is Implemented since 2026-10-22, after T0.7 and the review of T0.8; with the pull request of T0.7 it amends REQ-114 of SPEC-0009 and supersedes its REQ-115 and REQ-116, amends REQ-129, REQ-136 and REQ-137 of SPEC-0010, and changes how the lists of lines of SPEC-0011 are drawn, each recorded under the amendments of its spec, with the date 2026-10-16; SPEC-0016 is a Draft since 2026-10-23, with no approval recorded |
 
 No blocking product preference is required to review these drafts. Fixture isolation
 and main transport have scoped local evidence. Actual-host authentication, IPC
