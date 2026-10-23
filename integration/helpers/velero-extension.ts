@@ -311,7 +311,12 @@ export async function hostLogErrors(app: ElectronApplication): Promise<Record<st
 
     found[file] = text
       .split("\n")
-      .filter((line) => /^\s*error:/i.test(line) && !LATEST_VERSION_LINE_PATTERN.test(line))
+      .filter(
+        (line) =>
+          /^\s*error:/i.test(line) &&
+          !CANCELED_PROXY_LINE_PATTERN.test(line) &&
+          !LATEST_VERSION_LINE_PATTERN.test(line),
+      )
       .map((line) => line.slice(0, 300));
   }
   return found;
@@ -843,6 +848,8 @@ const CANCELED_PROXY_RECORD_PATTERN =
   /^[^\n]*error:\s*┏[^\n]*Error while proxying request: context canceled[^\n]*\n(?:(?![^\n]*\b[a-z]+:\s*[┏▪])[^\n]*\n)*?[^\n]*error:\s*┗[^\n]*\n?/gim;
 const CANCELED_PROXY_START_PATTERN =
   /error:\s*┏[^\n]*Error while proxying request: context canceled[^\n]*(?:\n(?![^\n]*\b[a-z]+:\s*[┏▪┗])[^\n]*)*$/i;
+// In the file of the log the same record is one line, as the proxy wrote it.
+const CANCELED_PROXY_LINE_PATTERN = /^\s*error:[^\n]*Error while proxying request: context canceled\s*$/i;
 // The welcome page of the host asks the npm registry for the latest version of
 // the host, with a limit of five seconds, and the main process logs at the level
 // of an error an answer that does not come: a state of the network of the
