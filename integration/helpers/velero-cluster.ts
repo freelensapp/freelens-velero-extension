@@ -678,11 +678,18 @@ export async function veleroSidebarEntries(frame: Frame): Promise<Record<string,
  */
 export async function openPage(frame: Frame, of: ListOf): Promise<void> {
   const group = sidebarItemTestId("velero");
+  // The host keeps a group of the sidebar open or closed across the starts of a
+  // profile, and a click on its entry closes it when it is open. The entries of
+  // the extension appear only once the host enables it for the cluster, so the
+  // group is read when its arrow is there: a click decided before that can
+  // close a group the host opens as it was left.
+  const arrow = `[data-testid="expand-icon-for-${group}"]`;
 
-  if ((await frame.$(`[data-parent-id-test="${group}"]`)) === null) {
+  await frame.waitForSelector(arrow, { timeout: ELEMENT_TIMEOUT });
+  if ((await frame.$(`${arrow} [data-icon-name="keyboard_arrow_down"]`)) !== null) {
     await clickSidebarItem(frame, sidebarLinkTestId("velero"));
-    await frame.waitForSelector(`[data-parent-id-test="${group}"]`, { timeout: ELEMENT_TIMEOUT });
   }
+  await frame.waitForSelector(`[data-parent-id-test="${group}"]`, { timeout: ELEMENT_TIMEOUT });
   await clickSidebarItem(frame, sidebarLinkTestId(of.menu));
 
   try {
