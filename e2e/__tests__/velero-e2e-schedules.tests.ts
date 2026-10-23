@@ -5,8 +5,10 @@
 
 // The Schedules, in a packaged Freelens, against the fixtures of the test
 // environment: the schedules Velero took, refused and has not read, one with
-// a history of backups, and the ones whose backups go where none is taken.
-// The suite reads the application and the cluster, and writes to neither.
+// a history of backups, the ones whose backups go where none is taken, and
+// the adherence of each, its next run computed by the suite from the object
+// and the clock. The suite reads the application and the cluster, and writes
+// to neither.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as cluster from "../../integration/helpers/velero-cluster";
@@ -31,8 +33,87 @@ const text = (value: string) => value.replace(/\s+/g, " ").trim();
 const NOTHING = 1500;
 const MENU = ".Menu .MenuItem";
 const DIALOG = '[data-testid="confirmation-dialog"], .Dialog, .ConfirmDialog';
-// No view of a schedule says when it should have run: that is what the adherence will establish.
+// No view of a schedule says when it should have run but where its adherence is said: the cells of the next run
+// and of the adherence in the list, the band of its view, and two items of the details of the host.
 const EXPECTATION = /next run|overdue|missed|expected run|is late|should have/i;
+const HOUR = 60 * 60 * 1000;
+// What a schedule is said to be by its run: due for five minutes after it, overdue after that.
+const GRACE = 5 * 60 * 1000;
+// The order by adherence, from what needs a hand first.
+const WEIGHTS: Record<string, number> = {
+  overdue: 0,
+  held: 1,
+  due: 2,
+  "at-every-look": 3,
+  "not-known": 4,
+  awaited: 5,
+  refused: 6,
+  paused: 7,
+};
+const LABELS: Record<string, string> = { awaited: "Awaited", due: "Due", overdue: "Overdue" };
+// The schedules of the installation of the views whose zone no backup gives, and the paused ones.
+const NOT_KNOWN = [
+  "schedule-new",
+  "schedule-unread",
+  "views-daily",
+  "views-history",
+  "views-to-archive",
+  "views-to-default",
+  "views-to-removed",
+];
+const PAUSED = ["schedule-skipping", "schedule-unread-paused"];
+
+// The wall clock of Europe/Rome at an instant, by the Intl of the machine of the suite.
+function inRome(instant: number): { date: string; minute: string; second: string } {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/Rome",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(instant)
+      .map((part) => [part.type, part.value]),
+  );
+
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    minute: `${parts.hour}:${parts.minute}`,
+    second: parts.second,
+  };
+}
+
+// The first run of `CRON_TZ=Europe/Rome 30 2 * * *` after an instant, as the controller counts it: the first 02:30
+// of the wall clock of Europe/Rome after it, the first of the two on the day the hour repeats.
+function halfPastTwoInRome(after: number): number {
+  for (let day = after - 12 * HOUR; day < after + 72 * HOUR; day += 12 * HOUR) {
+    const { date } = inRome(day);
+    const [year, month, dayOfMonth] = date.split("-").map(Number);
+    const runs = [2, 1]
+      .map((offset) => Date.UTC(year, month - 1, dayOfMonth, 2 - offset, 30))
+      .filter((run) => run > after && inRome(run).date === date && inRome(run).minute === "02:30");
+
+    if (runs.length) return Math.min(...runs);
+  }
+  throw new Error(`No 02:30 of Europe/Rome in the three days after ${new Date(after).toISOString()}`);
+}
+
+// The states a schedule whose run is at `run` may be said in by a page read between two clocks: the clock of the
+// page is a tick of up to five seconds before the read, and the read may be fifteen seconds old.
+function statesAround(run: number, before: number, after: number): string[] {
+  const at = (clock: number) => (clock <= run ? "awaited" : clock - run > GRACE ? "overdue" : "due");
+
+  return [...new Set([at(before - 20_000), at(after)])];
+}
+
+// A time as the band writes it in UTC: to the second, with the name of the zone.
+function inUtc(time: string): string {
+  return `${new Date(time).toISOString().slice(0, 19).replace("T", " ")} UTC`;
+}
 
 describe("views of the schedules", () => {
   let started: velero.StartedApplication;
@@ -94,17 +175,44 @@ describe("views of the schedules", () => {
       await cluster.expectCells(SCHEDULES, frame, "schedule-enabled", {
         schedule: "0 0 1 1 *",
         paused: "Not paused",
-        started: "Not reported",
+        next: "Not known",
+        adherence: "Not known",
+        submitted: "Not reported",
         newest: "None that exists",
         phase: "Enabled",
       });
-      await cluster.expectCells(SCHEDULES, frame, "schedule-paused", { paused: "Paused", phase: "Enabled" });
+      await cluster.expectCells(SCHEDULES, frame, "schedule-paused", {
+        paused: "Paused",
+        next: "None",
+        adherence: "Paused",
+        phase: "Enabled",
+      });
       await cluster.expectCells(SCHEDULES, frame, "schedule-invalid", {
         schedule: "invalid-synthetic-cron",
         paused: "Paused",
+        next: "None",
+        adherence: "Paused",
         phase: "Failed validation",
       });
-      expect(await frame.locator("[data-testid=velero-schedules]").innerText()).not.toMatch(EXPECTATION);
+      // No run is said of a schedule that is paused, whatever its validation; a schedule of five fields whose zone
+      // no backup of the installation gives is not known, with its reason.
+      expect(await cluster.rowAdherence(frame, "schedule-enabled")).toEqual({
+        next: "not-known",
+        state: "not-known",
+        mark: "not-known",
+        reason: "no-offset",
+      });
+      for (const name of ["schedule-paused", "schedule-invalid"]) {
+        expect([name, await cluster.rowAdherence(frame, name)]).toEqual([
+          name,
+          { next: "none", state: "paused", mark: "paused", reason: "" },
+        ]);
+      }
+      expect(
+        await cluster.wordsOutside(frame, "[data-testid=velero-schedules]", ".TableCell.next, .TableCell.adherence"),
+      ).not.toMatch(EXPECTATION);
+      // No object of the installation reports a time after the clock of this machine: nothing is said over the list.
+      expect(await frame.locator("[data-testid=velero-schedules-note]").count()).toBe(0);
       // Every page of the group has the tabs of the group, and the layout of the host once.
       expect((await frame.locator(".TabLayout .Tabs .Tab").allInnerTexts()).map(text)).toEqual([
         "Overview",
@@ -134,7 +242,20 @@ describe("views of the schedules", () => {
       expect(await workspace.locator("[data-testid=velero-schedule-messages]").innerText()).toContain(
         "Synthetic invalid schedule",
       );
-      expect(await workspace.innerText()).not.toMatch(EXPECTATION);
+      // Paused before its validation: the band says the pause, and nothing else of the view says a run.
+      const band = await cluster.adherenceBand(frame);
+
+      expect(band.state).toBe("paused");
+      expect(band.lines.next).toContain(
+        "Paused: no run is expected until it is resumed. Velero refused its expression when it last read it, which is before the pause.",
+      );
+      expect(
+        await cluster.wordsOutside(
+          frame,
+          "[data-testid=velero-schedule-workspace]",
+          "[data-testid=velero-schedule-adherence]",
+        ),
+      ).not.toMatch(EXPECTATION);
       await cluster.captureScreenshot(frame, "dark-schedule-invalid");
       await cluster.closeWorkspace(frame);
     },
@@ -150,6 +271,19 @@ describe("views of the schedules", () => {
       await cluster.expectCells(SCHEDULES, frame, "schedule-unread-paused", {
         paused: "Paused",
         phase: "Not reported",
+      });
+      // Of what Velero has not read no run is said: not known while it is not paused, none while it is.
+      for (const name of ["schedule-new", "schedule-unread"]) {
+        expect([name, await cluster.rowAdherence(frame, name)]).toEqual([
+          name,
+          { next: "not-known", state: "not-known", mark: "not-known", reason: "not-read" },
+        ]);
+      }
+      expect(await cluster.rowAdherence(frame, "schedule-unread-paused")).toEqual({
+        next: "none",
+        state: "paused",
+        mark: "paused",
+        reason: "",
       });
       // What Velero has not validated does not carry the mark of what it took.
       expect(
@@ -172,6 +306,20 @@ describe("views of the schedules", () => {
         "Velero does not read a schedule while it is paused: its validation and its errors are the ones written before the pause.",
         "When Velero reads the schedule again it writes the time of that reading as the last skipped, sets skip immediately back to no, and counts the next run from that time.",
       ]);
+      // Paused, and what a resume would do is not known: the zone its expression is read in is the one of the
+      // server, which no backup of the installation gives. Its submission is not among the backups that exist.
+      const band = await cluster.adherenceBand(frame);
+
+      expect(band.state).toBe("paused");
+      expect(band.order).toEqual(["next", "zone", "observed", "clocks"]);
+      expect(band.lines.next).toContain(
+        "Paused: no run is expected until it is resumed. Whether Velero would submit a backup at once when it is resumed is not known, since the time zone of the Velero server is not known.",
+      );
+      expect(band.lines.zone).toMatch(/^Not known: the one of the Velero server/);
+      expect(band.lines.observed).toContain(
+        "Last submission 2026-08-01 00:00:00 UTC: its backup is not among the backups that exist",
+      );
+      expect(band.ways).toEqual([]);
       await cluster.captureScreenshot(frame, "dark-schedule-paused");
       await cluster.closeWorkspace(frame);
 
@@ -285,7 +433,58 @@ describe("views of the schedules", () => {
       ).toBe(submitted.stdout.trim());
       expect(status).toMatch(/SKIP IMMEDIATELY No/i);
       expect(await workspace.innerText()).toContain("These are the backups that exist now");
-      expect(await workspace.innerText()).not.toMatch(EXPECTATION);
+      // Its backups are not named as Velero names the backup of a submission: the zone of the server is not
+      // derived from them, and the backup of the last submission is not among the ones that exist. The newest
+      // backup, views-history-0, was created first and is the submission's time: it is named as the newest that
+      // exists. The other backups of the history are created after it, in its second or in a later one: when some
+      // are after the submission, the newest of those is named first, as a backup that is not a submission.
+      const band = await cluster.adherenceBand(frame);
+      const listed = cluster.kubectlE2E(
+        "get",
+        "backups.velero.io",
+        "--namespace",
+        cluster.E2E_VIEWS_NAMESPACE,
+        "--selector",
+        "velero.io/schedule-name=views-history",
+        "-o",
+        'jsonpath={range .items[*]}{.metadata.name}={.metadata.creationTimestamp}{"\\n"}{end}',
+      );
+
+      expect(listed.status).toBe(0);
+      const after = listed.stdout
+        .trim()
+        .split("\n")
+        .map((line) => line.split("="))
+        .filter(
+          ([name, created]) => name !== "views-history-0" && Date.parse(created) > Date.parse(submitted.stdout.trim()),
+        )
+        .map(([name]) => `velero-open-backup-${name}`);
+
+      expect(band.state).toBe("not-known");
+      expect(band.order).toEqual(["next", "zone", "anchor", "observed", "clocks"]);
+      expect(band.lines.next).toContain(
+        "Not known: the expression names no time zone, and the one of the Velero server is not read.",
+      );
+      expect(band.lines.anchor).toBe(`The last submission, ${inUtc(submitted.stdout.trim())}`);
+      expect(band.lines.observed).toContain(
+        `Last submission ${inUtc(submitted.stdout.trim())}: its backup is not among the backups that exist`,
+      );
+      expect(band.lines.observed).toContain("The newest backup of the schedule that exists is views-history-0.");
+      expect(band.ways.at(-1)).toBe("velero-open-backup-views-history-0");
+      if (after.length) {
+        expect(band.ways).toHaveLength(2);
+        expect(after).toContain(band.ways[0]);
+        expect(band.lines.observed).toContain("is not a submission of the schedule");
+      } else {
+        expect(band.ways).toHaveLength(1);
+      }
+      expect(
+        await cluster.wordsOutside(
+          frame,
+          "[data-testid=velero-schedule-workspace]",
+          "[data-testid=velero-schedule-adherence]",
+        ),
+      ).not.toMatch(EXPECTATION);
       expect(await cluster.notices(frame, [])).toEqual({});
       expect(await cluster.layoutProblems(frame, SCHEDULES)).toEqual([]);
       await cluster.captureScreenshot(frame, "dark-schedule-workspace");
@@ -455,6 +654,69 @@ describe("views of the schedules", () => {
   );
 
   it(
+    "says the next run of a schedule that names its zone, counted from its creation, in its row and in its band",
+    async () => {
+      // Velero has submitted nothing of it: its run is the first 02:30 of Europe/Rome after its creation, and it
+      // is awaited until then, due for the grace after it and overdue after that.
+      const created = cluster.kubectlE2E(
+        "get",
+        "schedules.velero.io",
+        "views-zoned",
+        "--namespace",
+        cluster.E2E_VIEWS_NAMESPACE,
+        "-o",
+        "jsonpath={.metadata.creationTimestamp}",
+      );
+
+      expect(created.status).toBe(0);
+      const creation = Date.parse(created.stdout.trim());
+      const run = halfPastTwoInRome(creation);
+      const ran = inRome(run);
+      const before = Date.now();
+      const row = await cluster.rowAdherence(frame, "views-zoned");
+      const cells = await cluster.cellsOf(SCHEDULES, frame, "views-zoned");
+
+      expect(row.next).toBe("at");
+      expect(statesAround(run, before, Date.now())).toContain(row.state);
+      expect(cells.adherence).toBe(LABELS[row.state]);
+      expect(cells.next).toMatch(row.state === "awaited" ? /^in \d/ : / ago$/);
+
+      await cluster.openWorkspace(frame, "views-zoned", SCHEDULES);
+      const shown = Date.now();
+      const band = await cluster.adherenceBand(frame);
+      const begun = inRome(creation);
+
+      expect(statesAround(run, shown, Date.now())).toContain(band.state);
+      expect(band.order).toEqual(["next", "zone", "anchor", "observed", "passed", "clocks"]);
+      // The run in the zone of the expression, with its date when it is not the day of the clock there.
+      const forms = [...new Set([shown - 20_000, Date.now()].map((clock) => inRome(clock).date))].map((day) =>
+        day === ran.date ? "02:30 Europe/Rome" : `02:30 Europe/Rome on ${ran.date}`,
+      );
+
+      expect([band.lines.next, forms.some((form) => new RegExp(`${form}[.,]`).test(band.lines.next))]).toEqual([
+        band.lines.next,
+        true,
+      ]);
+      expect(band.lines.next).toMatch(/A schedule is due for \S+ after its expected run, and overdue after that/);
+      expect(band.lines.zone).toBe("Europe/Rome, named by the expression");
+      expect(band.lines.anchor).toBe(
+        `The creation of the schedule, ${begun.date} ${begun.minute}:${begun.second} Europe/Rome`,
+      );
+      expect(band.lines.observed).toBe("No submission is written in the schedule.");
+      expect(band.lines.passed).toMatch(
+        band.state === "awaited" ? /^None yet: the expected run is ahead$/ : /^\d+ expected runs? passed/,
+      );
+      // ADHERENCE-PR1-PENDING: the words of the clocks as the answer of the header Date makes them.
+      expect(band.lines.clocks).not.toBe("");
+      expect(band.ways).toEqual([]);
+      expect(await cluster.layoutProblems(frame, SCHEDULES)).toEqual([]);
+      await cluster.captureScreenshot(frame, "dark-schedule-adherence");
+      await cluster.closeWorkspace(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "leads from a backup to its schedule and back, over the list of the backups",
     async () => {
       await cluster.openBackups(frame);
@@ -479,6 +741,48 @@ describe("views of the schedules", () => {
       await cluster.closeWorkspace(frame);
       await cluster.openPage(frame, SCHEDULES);
       await cluster.waitForList(frame, SCHEDULES);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "orders by the next run and by adherence, both ways, and finds the schedules of a state by its word",
+    async () => {
+      // The rows of the list, in their order once the head of a column is clicked.
+      const ordered = async (column: string, expected: string[]) => {
+        const deadline = Date.now() + 10_000;
+        let names: string[] = [];
+
+        await frame.click(`[data-testid=velero-schedules] .TableHead .TableCell.${column}`);
+        do {
+          names = await cluster.mounted(frame, SCHEDULES);
+          if (names.join() === expected.join()) break;
+          await frame.waitForTimeout(250);
+        } while (Date.now() < deadline);
+        return names;
+      };
+      // By the next run: the instants from the earliest, then what is not known, then what has none, each by name.
+      // The second click reverses all of it.
+      const byNext = ["views-zoned", ...NOT_KNOWN, ...PAUSED];
+
+      expect(await ordered("next", byNext)).toEqual(byNext);
+      expect(await ordered("next", [...byNext].reverse())).toEqual([...byNext].reverse());
+      // By adherence: what needs a hand first, what is not known before what is on time, the paused ones last.
+      const zoned = await cluster.rowAdherence(frame, "views-zoned");
+      const before = WEIGHTS[zoned.state] < WEIGHTS["not-known"];
+      const byAdherence = [
+        ...(before ? ["views-zoned"] : []),
+        ...NOT_KNOWN,
+        ...(before ? [] : ["views-zoned"]),
+        ...PAUSED,
+      ];
+
+      expect(await ordered("adherence", byAdherence)).toEqual(byAdherence);
+      expect(await ordered("adherence", [...byAdherence].reverse())).toEqual([...byAdherence].reverse());
+      // The word of a state finds the schedules in it, and the sentence of the state is not searched.
+      expect([...(await cluster.search(frame, "Not known", SCHEDULES))].sort()).toEqual(NOT_KNOWN);
+      expect([...(await cluster.search(frame, "derived from the backup of a last submission", SCHEDULES))]).toEqual([]);
+      await cluster.search(frame, "", SCHEDULES);
     },
     TIMEOUT,
   );
@@ -520,6 +824,84 @@ describe("views of the schedules", () => {
       expect(back.first).toBe(state.first);
       expect(Math.abs(back.columns.name - state.columns.name)).toBeLessThanOrEqual(1);
       await cluster.search(frame, "", SCHEDULES);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "gives its room to the columns that say what a schedule does, at each width where a column gives its own",
+    async () => {
+      const all = [
+        "name",
+        "installation",
+        "schedule",
+        "paused",
+        "next",
+        "adherence",
+        "submitted",
+        "newest",
+        "phase",
+        "age",
+      ];
+      const without = (...gone: string[]) => all.filter((column) => !gone.includes(column));
+      let width = 1440;
+      let zoom = 1;
+      // The window is set so that the room of the list is the one asked, by the difference measured; with the
+      // window zoomed out when it cannot be made wide enough for it within the screen, and zoomed in when it cannot
+      // be made narrow enough.
+      const roomOf = async (room: number) => {
+        for (const factor of [1, 0.8, 2]) {
+          if (factor !== zoom) {
+            zoom = factor;
+            await velero.setZoom(started.app, zoom);
+          }
+          for (let tries = 0; tries < 4; tries += 1) {
+            const now = await cluster.listRoom(frame, SCHEDULES);
+
+            if (Math.round(now) === room) return;
+            width += Math.round((room - now) * zoom);
+            const inner = await frame.evaluate(() => window.innerWidth);
+
+            await velero.setWindowSize(started.app, width, 900);
+            await frame
+              .waitForFunction((before) => window.innerWidth !== before, inner, { timeout: 5_000 })
+              .catch(() => undefined);
+          }
+        }
+        throw new Error(`The room of the list of the schedules could not be made ${room} pixels`);
+      };
+      const shown: Record<number, string[]> = {};
+
+      // The window and the zoom are given back whatever happens: every later case reads the window of 1440 by 900.
+      try {
+        for (const edge of [1200, 1000, 760, 640]) {
+          for (const room of [edge + 1, edge]) {
+            await roomOf(room);
+            shown[room] = (await cluster.columnsOf(SCHEDULES, frame)).shown;
+          }
+        }
+        // ADHERENCE-PR1-PENDING: the widths of the window and the zoom each room was reached at.
+        expect(shown).toEqual({
+          1201: without(),
+          1200: without("installation"),
+          1001: without("installation"),
+          1000: without("installation", "age"),
+          761: without("installation", "age"),
+          760: without("installation", "submitted", "newest", "age"),
+          641: without("installation", "submitted", "newest", "age"),
+          640: without("installation", "schedule", "submitted", "newest", "age"),
+        });
+        expect(await cluster.layoutProblems(frame, SCHEDULES)).toEqual([]);
+      } finally {
+        await velero.setZoom(started.app, 1);
+        await velero.setWindowSize(started.app, 1440, 900);
+        await frame.waitForFunction(() => window.innerWidth > 1000, undefined, { timeout: 60_000 });
+      }
+      // In a window of 1440 the next run, the adherence and the last submission are read whole, in any language.
+      expect(
+        (await cluster.columnsOf(SCHEDULES, frame)).cut.filter((column) => ["next", "adherence"].includes(column)),
+      ).toEqual([]);
+      expect(await cluster.tooWide(SCHEDULES, frame, cluster.WORDS_OF_A_SCHEDULE)).toEqual([]);
     },
     TIMEOUT,
   );
@@ -593,6 +975,21 @@ describe("views of the schedules", () => {
   it(
     "gives the details of the host the same reading, and a way to the workspace for the installation selected",
     async () => {
+      const created = cluster.kubectlE2E(
+        "get",
+        "schedules.velero.io",
+        "views-zoned",
+        "--namespace",
+        cluster.E2E_VIEWS_NAMESPACE,
+        "-o",
+        "jsonpath={.metadata.creationTimestamp}",
+      );
+
+      expect(created.status).toBe(0);
+      const run = halfPastTwoInRome(Date.parse(created.stdout.trim()));
+      const listedAt = Date.now();
+      const listed = await cluster.rowAdherence(frame, "views-zoned");
+
       await cluster.navigate(frame, "/crd/velero.io/schedules");
       await cluster.selectHostNamespace(frame, cluster.E2E_VIEWS_NAMESPACE);
       const details = await cluster.hostDetails(
@@ -602,9 +999,30 @@ describe("views of the schedules", () => {
         "Not paused",
         "CRON_TZ=Europe/Rome 30 2 * * *",
         "Europe/Rome, named by the expression",
+        "Next run",
+        "Adherence",
+      );
+      const drawer = "[data-testid=velero-schedule-details]";
+      const said = await frame.locator(drawer).evaluate((element) => ({
+        next: element.querySelector("[data-next]")?.getAttribute("data-next") ?? "",
+        state: element.querySelector("[data-adherence]")?.getAttribute("data-adherence") ?? "",
+      }));
+      const ran = inRome(run);
+      const forms = [...new Set([listedAt - 20_000, Date.now()].map((clock) => inRome(clock).date))].map((day) =>
+        day === ran.date ? "02:30 Europe/Rome" : `02:30 Europe/Rome on ${ran.date}`,
       );
 
-      expect(details).not.toMatch(EXPECTATION);
+      // The details say what the row says, with the clock of their own: the same run, in a state of the span.
+      expect(said.next).toBe(listed.next);
+      expect(statesAround(run, listedAt, Date.now())).toEqual(expect.arrayContaining([listed.state, said.state]));
+      expect([details, forms.some((form) => new RegExp(`${form}[.,]`).test(details))]).toEqual([details, true]);
+      // Outside the two items nothing says when the schedule should have run, and the first is named Next run.
+      expect(
+        (await cluster.wordsOutside(frame, drawer, "[data-next], [data-adherence], [data-adherence-words]")).replace(
+          "Next run",
+          "",
+        ),
+      ).not.toMatch(EXPECTATION);
       expect(await frame.locator("[data-testid=velero-schedule-details-link]").count()).toBe(1);
       await cluster.captureScreenshot(frame, "dark-host-details-schedule");
       await cluster.closeDetails(frame);
@@ -618,6 +1036,11 @@ describe("views of the schedules", () => {
       expect(await frame.locator("[data-testid=velero-schedule-details-elsewhere]").innerText()).toContain(
         cluster.E2E_STATIC_NAMESPACE,
       );
+      // Of an installation that is not the one selected nothing was read: paused comes before anything it would
+      // need of it.
+      expect(
+        await frame.locator("[data-testid=velero-schedule-details] [data-adherence]").getAttribute("data-adherence"),
+      ).toBe("paused");
       await cluster.closeDetails(frame);
 
       await cluster.selectHostNamespace(frame, cluster.E2E_VIEWS_NAMESPACE);

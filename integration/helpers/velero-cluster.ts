@@ -903,6 +903,58 @@ export async function expectCells(
   return cells;
 }
 
+/** What a row of the schedules says of the adherence of its schedule, by the attributes of its two cells. */
+export interface RowAdherence {
+  // The kind of the next run: an instant, none, or not known.
+  next: string;
+  state: string;
+  mark: string;
+  // Why the state is not known, when it is not.
+  reason: string;
+}
+
+/**
+ * What the row of a schedule says of its adherence. The two cells say nothing
+ * until the backups of the installation were answered once: it waits for them.
+ */
+export async function rowAdherence(frame: Frame, name: string): Promise<RowAdherence> {
+  const row = tableRow(frame, name, SCHEDULES);
+
+  await row.locator(".TableCell.adherence [data-adherence]").waitFor({ state: "attached", timeout: ELEMENT_TIMEOUT });
+  return row.evaluate((element) => {
+    const mark = element.querySelector(".TableCell.adherence [data-adherence]");
+
+    return {
+      next: element.querySelector(".TableCell.next [data-next]")?.getAttribute("data-next") ?? "",
+      state: mark?.getAttribute("data-adherence") ?? "",
+      mark: mark?.getAttribute("data-mark") ?? "",
+      reason: mark?.getAttribute("data-reason") ?? "",
+    };
+  });
+}
+
+/**
+ * The room of a list, which the rules of the stylesheet give its columns by:
+ * the width of the inside of the part they measure, in pixels of the page.
+ */
+export async function listRoom(frame: Frame, of: ListOf): Promise<number> {
+  return frame
+    .locator(list(of))
+    .first()
+    .evaluate((element) => {
+      // The part the rules measure is the one that holds the list as a container, or the list itself.
+      let holder: HTMLElement | null = element as HTMLElement;
+
+      while (holder && getComputedStyle(holder).getPropertyValue("container-type") !== "inline-size") {
+        holder = holder.parentElement;
+      }
+      const measured = holder ?? (element as HTMLElement);
+      const style = getComputedStyle(measured);
+
+      return measured.clientWidth - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight);
+    });
+}
+
 /**
  * The columns the list shows, by their names, and the ones whose words do not
  * fit their cell in a row that is mounted: a value that is cut is read in the
@@ -986,6 +1038,17 @@ export const WORDS_OF_AN_OPERATION = {
   progress: ["1000 / 1000 (100%)", "Not reported"],
   started: ["12/31/2026, 12:59:59 PM", "31.12.2026, 23:59:59", "31/12/2026, 23:59:59"],
   duration: ["26d 23h so far", "End not reported"],
+};
+
+/**
+ * What the columns of a schedule that say when it runs hold whole in a list
+ * with the room for them, in any language: the next run, the word of its
+ * adherence beside its mark, and the last submission, a date.
+ */
+export const WORDS_OF_A_SCHEDULE = {
+  next: ["in 364d 23h", "29d 23h ago", "Not known"],
+  adherence: ["At every look", "Not known", "Overdue"],
+  submitted: WORDS_OF_AN_OPERATION.started,
 };
 
 /** The names of the objects a list has mounted, in the order it shows them. */
@@ -2402,6 +2465,81 @@ export async function wordsOf(frame: Frame, selector: string): Promise<string> {
       });
       return said;
     });
+}
+
+/**
+ * What a part of a page says in words, as it is read, with some of its parts
+ * left out: the names of its marks are not words of it either.
+ */
+export async function wordsOutside(frame: Frame, selector: string, left: string): Promise<string> {
+  return frame
+    .locator(selector)
+    .first()
+    .evaluate((element, left) => {
+      const out = [...element.querySelectorAll<HTMLElement>(`${left}, .Icon`)];
+      const shown = out.map((part) => part.style.display);
+
+      for (const part of out) part.style.display = "none";
+      const said = (element as HTMLElement).innerText.replace(/\s+/g, " ").trim();
+
+      out.forEach((part, index) => {
+        part.style.display = shown[index];
+      });
+      return said;
+    }, left);
+}
+
+/** The band of the adherence of the schedule whose view is open. */
+export interface AdherenceBand {
+  state: string;
+  // The lines it draws, in their order, and what each says, its marks hidden.
+  order: string[];
+  lines: Record<string, string>;
+  // The views its words lead to, by the names of their ways.
+  ways: string[];
+}
+
+/**
+ * The band of the adherence of the schedule whose view is open, once it says
+ * the adherence: while the backups of the installation were never answered it
+ * says only that it waits for them.
+ */
+export async function adherenceBand(frame: Frame): Promise<AdherenceBand> {
+  const band = frame.locator("[data-testid=velero-schedule-workspace] [data-testid=velero-schedule-adherence]");
+  const deadline = Date.now() + ELEMENT_TIMEOUT;
+
+  await band.waitFor({ state: "visible", timeout: ELEMENT_TIMEOUT });
+  while ((await band.getAttribute("data-adherence")) === "loading" && Date.now() < deadline) {
+    await frame.waitForTimeout(250);
+  }
+  if ((await band.getAttribute("data-adherence")) === "loading") {
+    throw new Error("The band of the adherence still waits for the backups of the installation");
+  }
+  return band.evaluate((element) => {
+    const icons = [...element.querySelectorAll<HTMLElement>(".Icon")];
+    const shown = icons.map((icon) => icon.style.display);
+
+    for (const icon of icons) icon.style.display = "none";
+    const rows = [...element.querySelectorAll<HTMLElement>("tr[data-line]")];
+    const lines = Object.fromEntries(
+      rows.map((row) => [
+        row.getAttribute("data-line") ?? "",
+        (row.querySelector<HTMLElement>("td")?.innerText ?? "").replace(/\s+/g, " ").trim(),
+      ]),
+    );
+
+    icons.forEach((icon, index) => {
+      icon.style.display = shown[index];
+    });
+    return {
+      state: element.getAttribute("data-adherence") ?? "",
+      order: rows.map((row) => row.getAttribute("data-line") ?? ""),
+      lines,
+      ways: [...element.querySelectorAll("[data-testid^=velero-open-]")].map(
+        (way) => way.getAttribute("data-testid") ?? "",
+      ),
+    };
+  });
 }
 
 /** The label the extension gives to every request it creates. */
