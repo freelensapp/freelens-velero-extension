@@ -1329,6 +1329,7 @@ export const hostComponents = {
   Input,
   KubeObjectAge,
   KubeObjectListLayout,
+  LocaleDate,
   MaybeLink,
   Select,
   Spinner,

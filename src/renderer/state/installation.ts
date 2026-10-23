@@ -89,6 +89,9 @@ function emptyReads(): Reads {
   return Object.fromEntries(FAMILIES.map((family) => [family, emptyRead<Resource>()])) as Reads;
 }
 
+// How often the views ask the families of the installation again, while one of them is open.
+export const READ_EVERY = 15_000;
+
 // What the views of one cluster know of Velero: what the API serves, where the installations may be, which
 // one was chosen and what was read of it. Nothing is asked before a view is opened.
 export class Installation {
@@ -122,6 +125,9 @@ export class Installation {
   // What Velero wrote into its storage of the backup or the restore whose view is open, when the operator
   // asked for it: the loads of its tabs.
   readonly artifacts: ArtifactLoads;
+  // Whether a view of the extension is open, so that the families are asked again every so often: what is
+  // drawn where no view is, as the details of the host, says how old what it computed with is once none is.
+  watched = false;
   private readonly dependencies: InstallationDependencies;
   private watchers = 0;
   private timer?: ReturnType<typeof setInterval>;
@@ -164,6 +170,7 @@ export class Installation {
       serverOffset: observableRef,
       serverTime: observableRef,
       asking: observable,
+      watched: observable,
       gate: observableRef,
       gateFailure: observable,
       allowanceFailure: observable,
@@ -454,16 +461,21 @@ export class Installation {
   }
 
   // A view that is open asks again every so often, for as long as it is: the last one that closes stops it.
-  watch(interval = 15_000): () => void {
+  watch(interval = READ_EVERY): () => void {
     this.watchers += 1;
+    runInAction(() => {
+      this.watched = true;
+    });
     if (!this.timer) this.timer = setInterval(() => void this.readFamilies(), interval);
     return () => {
       this.watchers -= 1;
-      if (this.watchers <= 0 && this.timer) {
-        clearInterval(this.timer);
-        this.timer = undefined;
-        this.watchers = 0;
-      }
+      if (this.watchers > 0) return;
+      if (this.timer) clearInterval(this.timer);
+      this.timer = undefined;
+      this.watchers = 0;
+      runInAction(() => {
+        this.watched = false;
+      });
     };
   }
 
@@ -474,6 +486,9 @@ export class Installation {
     if (this.timer) clearInterval(this.timer);
     this.timer = undefined;
     this.watchers = 0;
+    runInAction(() => {
+      this.watched = false;
+    });
     this.server.drop();
     this.artifacts.drop();
   }

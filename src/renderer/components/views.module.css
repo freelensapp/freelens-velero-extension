@@ -477,7 +477,9 @@
     min-width: calc(16ch + 16px);
   }
 
-  .list :global(.TableCell.started) {
+  /* The last submission of a schedule is a time as the start of an operation is. */
+  .list :global(.TableCell.started),
+  .list :global(.TableCell.submitted) {
     min-width: calc(20.5ch + 16px);
   }
 
@@ -488,6 +490,15 @@
   /* How long ago a location was validated, with the mark of a validation that is late. */
   .list :global(.TableCell.validated) {
     min-width: calc(12ch + 40px);
+  }
+
+  /* When a schedule runs next, and the word of its adherence with its mark. */
+  .list :global(.TableCell.next) {
+    min-width: calc(13ch + 16px);
+  }
+
+  .list :global(.TableCell.adherence) {
+    min-width: calc(13ch + 40px);
   }
 }
 
@@ -614,10 +625,55 @@
   flex-grow: 0.9;
 }
 
+.list :global(.TableCell.submitted) {
+  flex-grow: 1.6;
+}
+
+.list :global(.TableCell.next) {
+  flex-grow: 1.1;
+}
+
+.list :global(.TableCell.adherence) {
+  flex-grow: 1.2;
+}
+
+/* What a schedule submitted and the newest of its backups are both in the band of its view: in a narrow room
+   they give theirs to the next run and the adherence, which say what they said of a schedule at a glance, and
+   then the expression does. The name, paused, the next run, the adherence and the validation stay. */
 @container (max-width: 760px) {
+  .list :global(.TableCell.submitted),
   .list :global(.TableCell.newest) {
     display: none;
   }
+}
+
+@container (max-width: 640px) {
+  .list :global(.TableCell.schedule) {
+    display: none;
+  }
+}
+
+/* The words of a cell of the adherence of a schedule, cut at the end of its room: the whole is in the tip. */
+.cellWords {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The band of the adherence of a schedule: a line for each fact, its name and its sentences, which wrap. */
+.adherence th {
+  width: 11em;
+  white-space: normal;
+}
+
+.adherenceState {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 4px 12px;
 }
 
 /* The newest backup of a schedule in its row: its name, which is cut when it is long, and its mark. */

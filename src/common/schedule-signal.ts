@@ -478,6 +478,8 @@ export const SIGNAL_WORDS = {
         : `the run of the expression in the hour it repeats is expected twice, at ${first} and again at ${second}`
     }.`,
   due: (run: string, ago: string) => `Due: expected at ${run}, ${ago} ago. Velero looks at a schedule once a minute.`,
+  // The grace in words, from its constant: the band says it under the next run (REQ-169).
+  grace: `A schedule is due for ${formatDuration(GRACE)} after its expected run, and overdue after that: Velero looks at a schedule once a minute and submits at its first look after the run.`,
   overdue: (by: string, run: string, from: string, passed: string) =>
     `Overdue by ${by}: expected at ${run}. Counted from ${from}, with no submission since; ${passed}. Velero may not be at work, or may not be able to list the backups.`,
   passed: (count: number, beyond: boolean) =>
@@ -557,6 +559,11 @@ export const SIGNAL_WORDS = {
   holdNotKnown: (reason: string) =>
     `Whether a backup of the schedule holds the submissions is not known, since ${reason}.`,
   schedulesStale: (ago: string, since: string) => `Computed from the schedules as they were read ${ago} ago: ${since}.`,
+  // What is drawn where no view of the extension is, as the details of the host, computes with the read of the
+  // views, which is asked again only while one of them is open: its age, when none is or it is older than the
+  // period of the reads.
+  readOfTheViews: (ago: string, closed: boolean) =>
+    `Computed with the backups of the installation as they were read ${ago} ago${closed ? ", when a view of Velero was last open" : ""}.`,
   backupsStale: (ago: string, since: string) =>
     `What holds the submissions is read in the backups as they were read ${ago} ago: ${since}.`,
   // What is said of a family whose items are of an earlier read, by what the last read answered.
@@ -628,6 +635,11 @@ function pad(value: number, length = 2): string {
 // A duration as the views write it, and one under a second as that, where the views would write none.
 function span(milliseconds: number): string {
   return milliseconds < SECOND ? SIGNAL_WORDS.underASecond : formatDuration(milliseconds);
+}
+
+// How long ago an instant was, by a clock, in the words of a duration of the signal.
+export function agoText(at: number, now: number): string {
+  return span(Math.max(0, now - at));
 }
 
 // An offset from UTC, as the words write it.

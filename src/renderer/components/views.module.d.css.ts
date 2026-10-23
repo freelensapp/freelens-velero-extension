@@ -55,6 +55,9 @@ declare const classNames: {
   readonly list: "list";
   readonly rowLink: "rowLink";
   readonly link: "link";
+  readonly cellWords: "cellWords";
+  readonly adherence: "adherence";
+  readonly adherenceState: "adherenceState";
   readonly newest: "newest";
   readonly warning: "warning";
   readonly strip: "strip";

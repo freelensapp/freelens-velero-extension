@@ -2,13 +2,18 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { scheduleObject, submissionOf } from "../../../test/adherence-builders";
 import { hostObject } from "../../../test/freelens-extensions";
 import { drawerValue, listProps } from "../../../test/host-components";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
+import { formatDuration } from "../../common/duration";
+import { adherenceContext, agoText, clocksOf, SIGNAL_WORDS, scheduleSignal } from "../../common/schedule-signal";
 import { NOTES } from "../../common/schedule-view";
 import { Schedule } from "../api/kinds";
+import { adherenceTip, BAND_WORDS } from "../components/adherence";
 import { ScheduleDetails } from "../details/schedule-details";
 import { closeViews, openView, openViews } from "../navigation";
+import { adherenceOf, unreadAdherence } from "../state/adherence";
 import { Installation } from "../state/installation";
 import { BackupsPage } from "./backups-page";
 import { SchedulesPage } from "./schedules-page";
@@ -16,6 +21,11 @@ import { SchedulesPage } from "./schedules-page";
 import type { Renderer } from "@freelensapp/extensions";
 
 import type { Answer, Family, Preferences } from "../../common/discovery";
+import type { ScheduleResource } from "../../common/types";
+
+// The zone of the machine the tests run on is one no case below is computed or written in, fourteen hours east
+// of UTC, as in the tests of the signal: a word of the adherence written in it would fail.
+process.env.TZ = "Pacific/Kiritimati";
 
 const DISCOVERY = "/apis/velero.io/v1";
 const LOCATIONS = "/apis/velero.io/v1/backupstoragelocations";
@@ -141,6 +151,43 @@ function answers(more: Answers = {}): Answers {
   };
 }
 
+// The four schedules of the fixtures and, beside them, one of each state they lack: one overdue by an hour, one
+// due by two minutes, one whose run of an hour ago a backup in progress holds, and one whose expression has no
+// instant, which Velero submits at every look.
+function eachState() {
+  const enabled = (name: string, expression: string, lastBackup: string) =>
+    object(
+      "Schedule",
+      name,
+      A,
+      { schedule: expression, skipImmediately: false, template },
+      { phase: "Enabled", lastBackup },
+    );
+  const all = [
+    nightly,
+    paused,
+    invalid,
+    unread,
+    enabled("late", "TZ=UTC 0 11 * * *", "2026-09-09T11:00:00Z"),
+    enabled("tick", "TZ=UTC 58 11 * * *", "2026-09-09T11:58:00Z"),
+    enabled("holding", "TZ=UTC 0 11 * * *", "2026-09-09T11:00:00Z"),
+    enabled("look", "TZ=UTC 0 0 30 2 *", "2026-09-10T11:59:00Z"),
+  ];
+  const inProgress = object(
+    "Backup",
+    "holding-20260909110000",
+    A,
+    template,
+    { phase: "InProgress", startTimestamp: "2026-09-09T11:00:02Z" },
+    { ...of("holding"), created: "2026-09-09T11:00:01Z" },
+  );
+
+  return {
+    all,
+    table: answers({ [path("schedules", A)]: list(...all), [path("backups", A)]: list(...backups, inProgress) }),
+  };
+}
+
 function mount(table: Answers, preferences: Preferences = emptyPreferences(), page = SchedulesPage) {
   const asked: string[] = [];
   const clock = { now: NOW };
@@ -209,17 +256,122 @@ describe("list of the schedules", () => {
       "namespace",
       "schedule",
       "paused",
+      "next",
+      "adherence",
       "submitted",
       "newest",
       "validation",
+      "age",
+    ]);
+    expect(columns.map((column) => column.className)).toEqual([
+      "name",
+      "installation",
+      "schedule",
+      "paused",
+      "next",
+      "adherence",
+      "submitted",
+      "newest",
+      "phase",
       "age",
     ]);
     expect(Object.keys(props.sortingCallbacks as object).sort()).toEqual(columns.map((column) => column.sortBy).sort());
     expect(screen.queryByTestId("velero-coverage")).toBeNull();
   });
 
-  it("is searched by what every column shows but the age, which the host writes", async () => {
+  // The order by the next run, as the host sorts by the callbacks of a column when its head is
+  // clicked, and in the other way at the second click.
+  it("orders by the next run as the host sorts by its callback: the instants, then Not known, then None", async () => {
     mount(answers(), chosen(A));
+    await waitFor(() => expect(rows()).toHaveLength(4));
+    const props = listProps.get("veleroSchedulesTable") ?? {};
+    const items = (props.getItems as () => unknown[])();
+    const callbacks = props.sortingCallbacks as Record<string, (item: unknown) => unknown>;
+
+    // No callback gives the host what it cannot compare.
+    for (const item of items) {
+      for (const column of ["next", "adherence"]) {
+        for (const value of [callbacks[column](item)].flat()) {
+          expect(value).not.toBeUndefined();
+          expect(Number.isNaN(value)).toBe(false);
+        }
+      }
+    }
+    const head = (column: string) => document.querySelector(`.TableHead .TableCell.${column}`) as HTMLElement;
+
+    fireEvent.click(head("next"));
+    expect(rows()).toEqual(["nightly", "fresh", "broken", "weekly"]);
+    fireEvent.click(head("next"));
+    expect(rows()).toEqual(["weekly", "broken", "fresh", "nightly"]);
+  });
+
+  it("orders the runs of each state from the earliest, two of one instant by name, then Not known, then None", async () => {
+    const { all, table } = eachState();
+
+    mount(table, chosen(A));
+    await waitFor(() => expect(rows()).toHaveLength(all.length));
+    const head = document.querySelector(".TableHead .TableCell.next") as HTMLElement;
+    // holding and late were both expected at 11:00 and tick at 11:58, nightly runs tomorrow at three in Rome; fresh
+    // is not known; broken, look and weekly have none.
+    const order = ["holding", "late", "tick", "nightly", "fresh", "broken", "look", "weekly"];
+
+    fireEvent.click(head);
+    expect(rows()).toEqual(order);
+    fireEvent.click(head);
+    expect(rows()).toEqual([...order].reverse());
+  });
+
+  it("orders by adherence: the weight of the state, then the expected run, then the name, and back", async () => {
+    const enabled = (name: string, expression: string, lastBackup: string) =>
+      object(
+        "Schedule",
+        name,
+        A,
+        { schedule: expression, skipImmediately: false, template },
+        { phase: "Enabled", lastBackup },
+      );
+    // Overdue by an hour, due by two minutes, and two awaited at the same instant, whose names decide.
+    const more = [
+      enabled("late", "TZ=UTC 0 11 * * *", "2026-09-09T11:00:00Z"),
+      enabled("tick", "TZ=UTC 58 11 * * *", "2026-09-09T11:58:00Z"),
+      enabled("soon-b", "TZ=UTC 0 13 * * *", "2026-09-09T13:00:00Z"),
+      enabled("soon-a", "TZ=UTC 0 13 * * *", "2026-09-09T13:00:00Z"),
+    ];
+    const all = [nightly, paused, invalid, unread, ...more];
+    const { installation } = mount(answers({ [path("schedules", A)]: list(...all) }), chosen(A));
+
+    await waitFor(() => expect(rows()).toHaveLength(all.length));
+    const context = adherenceOf(installation, NOW);
+    const signals = Object.fromEntries(
+      all.map((resource) => [resource.metadata.name, scheduleSignal(resource as unknown as ScheduleResource, context)]),
+    );
+    const key = (name: string): [number, number, string] => [signals[name].weight, signals[name].measure ?? 0, name];
+    const before = (one: [number, number, string], other: [number, number, string]) =>
+      one[0] < other[0] || (one[0] === other[0] && (one[1] < other[1] || (one[1] === other[1] && one[2] < other[2])));
+    const head = document.querySelector(".TableHead .TableCell.adherence") as HTMLElement;
+
+    fireEvent.click(head);
+    const ordered = rows() as string[];
+
+    for (let index = 1; index < ordered.length; index++) {
+      expect([ordered[index - 1], ordered[index], before(key(ordered[index - 1]), key(ordered[index]))]).toEqual([
+        ordered[index - 1],
+        ordered[index],
+        true,
+      ]);
+    }
+    // What the fixtures give the order to decide: six weights, two of one weight by their expected run, and two of
+    // one weight and one expected run by their names.
+    expect(new Set(all.map((resource) => signals[resource.metadata.name].weight)).size).toBe(6);
+    expect(signals["soon-a"].weight).toBe(signals.nightly.weight);
+    expect(signals["soon-a"].measure).not.toBe(signals.nightly.measure);
+    expect(key("soon-a").slice(0, 2)).toEqual(key("soon-b").slice(0, 2));
+    fireEvent.click(head);
+    expect(rows()).toEqual([...ordered].reverse());
+  });
+
+  it("is searched by what every column shows but the age, which the host writes", async () => {
+    const { installation } = mount(answers(), chosen(A));
     await waitFor(() => expect(rows()).toHaveLength(4));
     const props = listProps.get("veleroSchedulesTable") ?? {};
     const items = (props.getItems as () => { getName(): string }[])();
@@ -227,12 +379,17 @@ describe("list of the schedules", () => {
     const searched = (props.searchFilters as ((item: unknown) => string[])[]).flatMap((filter) => filter(nightly));
 
     // One text for each column, as the cell of the column shows it without its mark.
-    for (const column of ["installation", "schedule", "paused", "started"]) {
+    for (const column of ["installation", "schedule", "paused", "submitted"]) {
       expect(cell("nightly", column)).not.toBe("");
       expect([column, searched]).toEqual([column, expect.arrayContaining([cell("nightly", column)])]);
     }
     expect(searched).toContain("nightly");
     expect(searched).toContain("Enabled");
+    // Of the adherence: the word of the state, the text of the next run and the notes, and not the sentence.
+    const signal = scheduleSignal(nightly as unknown as ScheduleResource, adherenceOf(installation, NOW));
+
+    expect(searched).toEqual(expect.arrayContaining([signal.label, signal.next.text, ...signal.notes]));
+    expect(searched).not.toContain(signal.words);
     // The newest backup by its name and by how it ended.
     const newest = cell("nightly", "newest") ?? "";
 
@@ -271,16 +428,43 @@ describe("list of the schedules", () => {
     expect(newest?.textContent).toContain("nightly-20260910");
     expect(newest?.textContent).toContain("1 validation error");
     expect(newest?.querySelector("[data-signal]")?.getAttribute("data-signal")).toBe("failure");
-    expect(cell("nightly", "started")).toBe(new Date("2026-09-10T01:00:00Z").toLocaleString());
+    expect(cell("nightly", "submitted")).toBe(new Date("2026-09-10T01:00:00Z").toLocaleString());
     expect(cell("weekly", "newest")).toContain("weekly-20260830");
     expect(row("weekly").querySelector(".TableCell.newest [data-signal]")?.getAttribute("data-signal")).toBe("none");
     expect(cell("broken", "newest")).toBe("None that exists");
-    expect(cell("broken", "started")).toBe("Not reported");
+    expect(cell("broken", "submitted")).toBe("Not reported");
   });
 
   it("does not say that a schedule has no backup when the backups cannot be read", async () => {
-    mount(answers({ [path("backups", A)]: { status: 403 } }), chosen(A));
+    const { installation } = mount(answers({ [path("backups", A)]: { status: 403 } }), chosen(A));
     await waitFor(() => expect(rows()).toHaveLength(4));
+    // A refusal is an answer: the next run and the adherence are said, and what needs the backups says why it is
+    // not known, where a read that never ended says nothing.
+    const said = (resource: object) =>
+      scheduleSignal(resource as unknown as ScheduleResource, adherenceOf(installation, NOW));
+    const fixtures: [string, object][] = [
+      ["nightly", nightly],
+      ["weekly", paused],
+      ["broken", invalid],
+      ["fresh", unread],
+    ];
+
+    for (const [name, resource] of fixtures) {
+      expect([
+        name,
+        cell(name, "next"),
+        row(name).querySelector("[data-adherence]")?.getAttribute("data-adherence"),
+      ]).toEqual([name, said(resource).next.text, said(resource).state]);
+    }
+    const ofNightly = said(nightly);
+    const hold = ofNightly.hold?.state === "not-known" ? SIGNAL_WORDS.holdNotKnown(ofNightly.hold.reason) : "";
+
+    expect(ofNightly.notes).toContain(hold);
+    const pointed = row("nightly").querySelector(".TableCell.adherence [id^='tooltip_target_']") as HTMLElement;
+
+    fireEvent.mouseEnter(pointed);
+    expect(screen.getByRole("tooltip").textContent).toContain(hold);
+    fireEvent.mouseLeave(pointed);
     for (const name of ["nightly", "weekly", "broken"]) {
       expect(cell(name, "newest")).toBe("Not known");
       expect(row(name).querySelector("[data-newest]")?.getAttribute("data-newest")).toBe("unknown");
@@ -293,12 +477,103 @@ describe("list of the schedules", () => {
 
     expect(within(workspace).getByTestId("velero-schedule-history").getAttribute("data-history")).toBe("inaccessible");
     expect(notice("backups")).toContain("denied");
+    // The band draws its lines, and the line of the hold says why it is not known.
+    const band = within(workspace).getByTestId("velero-schedule-adherence");
+
+    expect(band.getAttribute("data-adherence")).toBe(ofNightly.state);
+    expect(band.querySelector('[data-line="held"] td')?.textContent).toBe(hold);
   });
 
-  it("shows no time that no object reports", async () => {
-    mount(answers(), chosen(A));
+  // SCHED-03 as SPEC-0013 restates it: what the list computes from an expression is the next run and the
+  // adherence the signal gives for the reads of the installation and the clock, in their two columns, and
+  // nothing else of the list is.
+  it("shows no time that no object reports but the next run and the adherence the signal computes", async () => {
+    const { installation } = mount(answers(), chosen(A));
+
     await waitFor(() => expect(rows()).toHaveLength(4));
-    expect(screen.getByTestId("velero-schedules").textContent).not.toMatch(/next|overdue|missed|expected|late\b/i);
+    const context = adherenceOf(installation, NOW);
+    const kinds: Record<string, string> = {};
+
+    for (const resource of [nightly, paused, invalid, unread]) {
+      const signal = scheduleSignal(resource as unknown as ScheduleResource, context);
+
+      kinds[resource.metadata.name] = signal.next.kind;
+      expect(signal.next.text).toMatch(/\S/);
+      expect(cell(resource.metadata.name, "next")).toBe(signal.next.text);
+      expect(cell(resource.metadata.name, "adherence")).toContain(signal.label);
+    }
+    // The expression that names its zone has an instant; the paused and the refused ones have none, and the one
+    // Velero never read says why its run is not known.
+    expect(kinds).toEqual({ nightly: "at", weekly: "none", broken: "none", fresh: "not-known" });
+    const outside = screen.getByTestId("velero-schedules").cloneNode(true) as HTMLElement;
+
+    for (const computed of outside.querySelectorAll(".TableCell.next, .TableCell.adherence")) computed.remove();
+    expect(outside.textContent).not.toMatch(/next|overdue|missed|expected|late\b/i);
+  });
+
+  // On the four schedules of the fixtures: the cells say what the signal says, and their tips are the ones
+  // the host shows to who points at them: the instant of a run as the host writes a date, the reason of a run that
+  // is None or Not known, the sentence and the notes of the adherence.
+  it("says in the cells and their tips what the signal says of a schedule of each state", async () => {
+    const { all, table } = eachState();
+    const { installation } = mount(table, chosen(A));
+
+    await waitFor(() => expect(rows()).toHaveLength(all.length));
+    const context = adherenceOf(installation, NOW);
+    const tipOf = (target: Element | null | undefined) => {
+      const pointed = target?.querySelector("[id^='tooltip_target_']") as HTMLElement;
+
+      fireEvent.mouseEnter(pointed);
+      const tip = screen.getByRole("tooltip").textContent;
+
+      fireEvent.mouseLeave(pointed);
+      expect(screen.queryByRole("tooltip")).toBeNull();
+      return tip;
+    };
+
+    const states = new Set<string>();
+
+    for (const resource of all) {
+      const name = resource.metadata.name;
+      const signal = scheduleSignal(resource as unknown as ScheduleResource, context);
+      const next = row(name).querySelector(".TableCell.next");
+
+      states.add(signal.state);
+      const adherence = row(name).querySelector(".TableCell.adherence");
+
+      expect(next?.querySelector("[data-next]")?.getAttribute("data-next")).toBe(signal.next.kind);
+      expect(tipOf(next)).toBe(
+        signal.next.kind === "at" ? `${new Date(signal.next.at).toISOString().slice(0, 19)}Z` : signal.next.why,
+      );
+      const mark = adherence?.querySelector("[data-adherence]");
+
+      expect(mark?.getAttribute("data-adherence")).toBe(signal.state);
+      expect(mark?.getAttribute("data-mark")).toBe(signal.mark);
+      expect(mark?.textContent).toContain(signal.label);
+      expect(tipOf(adherence)).toBe(adherenceTip(signal));
+    }
+    expect([...states].sort()).toEqual(
+      ["at-every-look", "awaited", "due", "held", "not-known", "overdue", "paused", "refused"].sort(),
+    );
+  });
+
+  // The cells of the adherence are there and say nothing until the backups are answered.
+  it("says nothing of the next run and the adherence until the backups were answered once", async () => {
+    let answer: (value: Answer) => void = () => undefined;
+    const pending = new Promise<Answer>((resolve) => {
+      answer = resolve;
+    });
+
+    mount(answers({ [path("backups", A)]: () => pending }), chosen(A));
+    await waitFor(() => expect(rows()).toHaveLength(4));
+    for (const name of ["nightly", "weekly", "broken", "fresh"]) {
+      expect(cell(name, "next")).toBe("");
+      expect(cell(name, "adherence")).toBe("");
+      expect(cell(name, "paused")).not.toBe("");
+    }
+    await act(async () => answer(list(...backups)));
+    await waitFor(() => expect(cell("nightly", "next")).not.toBe(""));
+    expect(cell("nightly", "adherence")).not.toBe("");
   });
 
   it.each([
@@ -419,6 +694,175 @@ describe("list of the schedules", () => {
     expect(shown()).toEqual(before);
   });
 
+  it("computes the rows of the next installation with nothing of the one before, its late answer included", async () => {
+    // Velero of A submitted an hourly schedule an hour ago, with its clock two hours east of UTC, and its API server
+    // writes its answers two minutes ahead of this machine.
+    const submitted = NOW - 60 * 60_000;
+    const hourly = scheduleObject("hourly", A, { expression: "0 * * * *", lastBackup: submitted });
+    const ofA = (date: number) => ({
+      schedules: { ...list(nightly, paused, invalid, unread, hourly), date, at: NOW },
+      backups: { ...list(...backups, submissionOf("hourly", A, submitted, 120)), date, at: NOW },
+    });
+    const first = ofA(NOW + 120_000);
+    const { installation, table } = mount(
+      answers({ [path("schedules", A)]: first.schedules, [path("backups", A)]: first.backups }),
+      chosen(A),
+    );
+
+    await waitFor(() => expect(rows()).toHaveLength(5));
+    const kept = installation.serverOffset;
+
+    expect(kept?.minutes).toBe(120);
+    expect(installation.serverTime?.date).toBe(NOW + 120_000);
+    // A is read again: its schedules answer at once, with the time of its API server, and its backups once B is
+    // selected.
+    let answer: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+
+    table[path("schedules", A)] = ofA(NOW + 600_000).schedules;
+    table[path("backups", A)] = async () => {
+      await held;
+      return ofA(NOW + 600_000).backups;
+    };
+    let read: Promise<void> = Promise.resolve();
+
+    act(() => {
+      read = installation.refresh();
+    });
+    await waitFor(() =>
+      expect([Boolean(installation.read("schedules").reading), Boolean(installation.read("backups").reading)]).toEqual([
+        false,
+        true,
+      ]),
+    );
+    fireEvent.change(screen.getByLabelText("Velero namespace"), { target: { value: B } });
+    await waitFor(() => expect(rows()).toEqual(["nightly"]));
+    const ofB = () => row("nightly").querySelector("[data-adherence]");
+    const shown = () => [ofB()?.getAttribute("data-adherence"), ofB()?.getAttribute("data-reason")];
+    // The schedule of B reads its expression in the zone of its own server, which none of its backups gives.
+    const reads = { schedules: installation.read("schedules"), backups: installation.read("backups") };
+    const own = scheduleSignal(reads.schedules.items[0], adherenceContext(reads, NOW));
+
+    expect([own.state, own.reason]).toEqual(["not-known", "no-offset"]);
+    // With the offset of A it would be computed, and said otherwise.
+    expect(scheduleSignal(reads.schedules.items[0], adherenceContext(reads, NOW, kept)).state).not.toBe("not-known");
+    expect(shown()).toEqual(["not-known", "no-offset"]);
+    expect([installation.serverOffset, installation.serverTime]).toEqual([undefined, undefined]);
+    await act(async () => {
+      answer();
+      await read;
+    });
+    expect(rows()).toEqual(["nightly"]);
+    expect(shown()).toEqual(["not-known", "no-offset"]);
+    expect([installation.serverOffset, installation.serverTime]).toEqual([undefined, undefined]);
+  });
+
+  it("goes from due to overdue at a tick of its clock, with no read in between", async () => {
+    vi.useFakeTimers({ now: NOW });
+    // Its run of today was two minutes ago, and Velero has not submitted it yet: due, within the grace.
+    const tick = object(
+      "Schedule",
+      "tick",
+      A,
+      { schedule: "TZ=UTC 58 11 * * *", skipImmediately: false, template },
+      { phase: "Enabled", lastBackup: "2026-09-09T11:58:00Z" },
+    );
+    // Each family of the installation is answered once: the reads after the first never end.
+    const once = (answer: Answer) => {
+      let given = false;
+
+      return () => {
+        if (given) return new Promise<Answer>(() => undefined);
+        given = true;
+        return Promise.resolve(answer);
+      };
+    };
+
+    mount(
+      answers({
+        [path("schedules", A)]: once(list(nightly, paused, invalid, unread, tick)),
+        [path("backups", A)]: once(list(...backups)),
+      }),
+      chosen(A),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    const state = () => row("tick").querySelector("[data-adherence]")?.getAttribute("data-adherence");
+
+    expect(state()).toBe("due");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4 * 60_000);
+    });
+    expect(state()).toBe("overdue");
+  });
+
+  it("says that the schedules, or the backups, could not be read again, each apart", async () => {
+    vi.useFakeTimers({ now: NOW });
+    const table = answers();
+    let failing: Family | undefined;
+    const answered = (family: Family) => () =>
+      Promise.resolve(failing === family ? { status: 500 } : (table[path(family, A)] as Answer));
+    const { installation } = mount(
+      answers({ [path("schedules", A)]: answered("schedules"), [path("backups", A)]: answered("backups") }),
+      chosen(A),
+    );
+    const notes = () =>
+      scheduleSignal(nightly as unknown as ScheduleResource, adherenceOf(installation, Date.now())).notes;
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(notes()).toEqual([]);
+    // The clock of the views ticks every five seconds from the first drawing: the times are whole ticks, so that
+    // the words of the row are of the same instant as the ones computed here.
+    failing = "schedules";
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(19_999);
+    });
+    const ofSchedules = notes();
+    // How long ago a family was last read, as the signal says it beside what could not be read since then.
+    const ago = (family: Family) => formatDuration(Date.now() - (installation.read(family).lastSuccess ?? Number.NaN));
+
+    expect(ofSchedules).toContain(SIGNAL_WORDS.schedulesStale(ago("schedules"), SIGNAL_WORDS.since.failed));
+    failing = "backups";
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000);
+    });
+    const ofBackups = notes();
+
+    expect(ofBackups).toContain(SIGNAL_WORDS.backupsStale(ago("backups"), SIGNAL_WORDS.since.failed));
+    expect(ofBackups).not.toEqual(ofSchedules);
+    // The row says it in the tip of its adherence, as the band does under the next run.
+    const pointed = row("nightly").querySelector(".TableCell.adherence [id^='tooltip_target_']") as HTMLElement;
+
+    fireEvent.mouseEnter(pointed);
+    for (const note of ofBackups) expect(screen.getByRole("tooltip").textContent).toContain(note);
+    fireEvent.mouseLeave(pointed);
+  });
+
+  it("leaves no timer once the view of a schedule, with its band, and the list close", async () => {
+    vi.useFakeTimers({ now: NOW });
+    const { view } = mount(answers(), chosen(A));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    act(() => openView({ kind: "schedule", name: "nightly" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(screen.getByTestId("velero-schedule-adherence").getAttribute("data-adherence")).toBe("awaited");
+    act(() => closeViews());
+    view.unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("stops asking when the view closes", async () => {
     vi.useFakeTimers();
     const { asked, view } = mount(answers(), chosen(A));
@@ -445,9 +889,71 @@ describe("list of the schedules", () => {
   });
 });
 
+// The words of the clocks: over the list only when an object of the installation reports a time after the clock of
+// this machine, in the band of a schedule always, and with the time of the API server when an answer carried it.
+describe("clocks of the adherence", () => {
+  const clocksLine = (workspace: HTMLElement) =>
+    within(workspace).getByTestId("velero-schedule-adherence").querySelector('[data-line="clocks"] td')?.textContent;
+
+  it("says nothing over the list when no object is ahead, and the clocks in the band", async () => {
+    const { installation } = mount(answers(), chosen(A));
+
+    await waitFor(() => expect(rows()).toHaveLength(4));
+    const { clocks } = adherenceOf(installation, NOW);
+
+    expect([clocks.ahead, clocks.server]).toEqual([0, undefined]);
+    expect(screen.queryByTestId("velero-schedules-note")).toBeNull();
+    expect(clocksLine(await open("nightly"))).toBe(clocks.words);
+  });
+
+  it("says over the list that an object is ahead of this machine, in the words of the band", async () => {
+    const ahead = object(
+      "Schedule",
+      "ahead",
+      A,
+      { schedule: "0 5 * * *", skipImmediately: false, template },
+      { phase: "Enabled" },
+      { created: "2026-09-10T12:10:00Z" },
+    );
+    const { installation } = mount(
+      answers({ [path("schedules", A)]: list(nightly, paused, invalid, unread, ahead) }),
+      chosen(A),
+    );
+
+    await waitFor(() => expect(rows()).toHaveLength(5));
+    const { clocks } = adherenceOf(installation, NOW);
+
+    expect(clocks.ahead).toBe(10 * 60_000);
+    expect(screen.getByTestId("velero-schedules-note").textContent).toContain(clocks.words);
+    expect(clocksLine(await open("nightly"))).toBe(clocks.words);
+  });
+
+  it("counts by the time of the API server when the answers carried it, and says so in the band only", async () => {
+    // The API server is two minutes ahead of this machine, and no object is.
+    const server = { date: NOW + 120_000, at: NOW };
+    const { installation } = mount(
+      answers({
+        [path("schedules", A)]: { ...list(nightly, paused, invalid, unread), ...server },
+        [path("backups", A)]: { ...list(...backups), ...server },
+      }),
+      chosen(A),
+    );
+
+    await waitFor(() => expect(rows()).toHaveLength(4));
+    expect(installation.serverTime).toEqual(server);
+    const { clocks } = adherenceOf(installation, NOW);
+    const without = clocksOf({ schedules: installation.read("schedules"), backups: installation.read("backups") }, NOW);
+
+    expect([clocks.server, clocks.cluster]).toEqual([120_000, NOW + 120_000]);
+    expect(clocks.words).not.toBe(without.words);
+    expect(screen.queryByTestId("velero-schedules-note")).toBeNull();
+    expect(clocksLine(await open("nightly"))).toBe(clocks.words);
+  });
+});
+
 describe("workspace of a schedule", () => {
-  it("shows what Velero says of the schedule, and computes nothing from its expression", async () => {
-    const { asked } = mount(answers(), chosen(A));
+  it("shows what Velero says of the schedule, and computes from its expression only its band of the adherence", async () => {
+    const { asked, installation } = mount(answers(), chosen(A));
 
     await waitFor(() => expect(rows()).toHaveLength(4));
     const before = asked.length;
@@ -467,7 +973,18 @@ describe("workspace of a schedule", () => {
     expect(status.textContent).toContain(A);
     expect(within(workspace).queryByTestId("velero-schedule-notes")).toBeNull();
     expect(within(workspace).queryByTestId("velero-schedule-messages")).toBeNull();
-    expect(workspace.textContent).not.toMatch(/next run|overdue|missed|expected run|is late/i);
+    // What the view computes from the expression is in the band of the adherence, and nowhere else (SCHED-03
+    // as SPEC-0013 restates it).
+    const band = within(workspace).getByTestId("velero-schedule-adherence");
+
+    expect(band.getAttribute("data-adherence")).toBe(
+      scheduleSignal(nightly as unknown as ScheduleResource, adherenceOf(installation, NOW)).state,
+    );
+    expect(band.textContent).toMatch(/next run/i);
+    const outside = workspace.cloneNode(true) as HTMLElement;
+
+    outside.querySelector('[data-testid="velero-schedule-adherence"]')?.remove();
+    expect(outside.textContent).not.toMatch(/next run|overdue|missed|expected run|is late/i);
     expect(asked).toHaveLength(before);
     expect(document.activeElement).toBe(screen.getByTestId("velero-back"));
     expect(screen.getByTestId("velero-back").textContent).toContain("Schedules");
@@ -1080,7 +1597,7 @@ describe("details of the host for a schedule", () => {
     const shown = {
       paused: cell("weekly", "paused"),
       expression: cell("weekly", "schedule"),
-      submitted: cell("weekly", "started"),
+      submitted: cell("weekly", "submitted"),
     };
 
     cleanup();
@@ -1094,7 +1611,121 @@ describe("details of the host for a schedule", () => {
     expect(screen.getByTestId("velero-schedule-details-link").getAttribute("href")).toBe(
       "/extension/freelensapp--velero-extension/schedules?view=schedule%2Fweekly",
     );
-    expect(document.body.textContent).not.toMatch(/next run|overdue|missed/i);
+    // The views never read this installation, and no namespace is the one it reads: the adherence is computed
+    // with nothing of it, and says so.
+    const signal = scheduleSignal(paused as unknown as ScheduleResource, unreadAdherence(NOW));
+
+    expect(item("Next run")).toBe(signal.next.text);
+    expect(item("Adherence")).toContain(signal.label);
+    expect(item("Adherence")).toContain(signal.words);
+  });
+
+  it("says the next run and the adherence of the row of each state, with what the views read, and asks nothing", async () => {
+    const { all, table } = eachState();
+    const { installation, asked } = mount(table, chosen(A));
+
+    await waitFor(() => expect(rows()).toHaveLength(all.length));
+    const shown = Object.fromEntries(
+      all.map(({ metadata: { name } }) => [
+        name,
+        { next: cell(name, "next"), adherence: row(name).querySelector("[data-adherence]")?.textContent },
+      ]),
+    );
+    const before = asked.length;
+
+    cleanup();
+    for (const resource of all) {
+      const drawn = render(
+        <ScheduleDetails object={hostObject(Schedule, resource)} extension={extension} installation={installation} />,
+      );
+      const signal = scheduleSignal(resource as unknown as ScheduleResource, adherenceOf(installation, NOW));
+      const drawer = screen.getByTestId("velero-schedule-details");
+
+      expect(drawer.querySelector("[data-next]")?.textContent).toBe(shown[resource.metadata.name].next);
+      // Beside an instant, its date as the host writes one.
+      expect(drawer.querySelector("[data-host-time]")?.textContent ?? null).toBe(
+        signal.next.kind === "at"
+          ? `${BAND_WORDS.hostTime} ${new Date(signal.next.at).toISOString().slice(0, 19)}Z`
+          : null,
+      );
+      expect(item("Adherence")).toContain(shown[resource.metadata.name].adherence);
+      expect(item("Adherence")).toContain(signal.words);
+      drawn.unmount();
+    }
+    expect(asked).toHaveLength(before);
+  });
+
+  it("says how old the read of the backups is when no view asks again, or when it is older than their period", async () => {
+    const { installation, view } = mount(answers(), chosen(A));
+
+    await waitFor(() => expect(rows()).toHaveLength(4));
+    const read = installation.read("backups").lastSuccess ?? Number.NaN;
+    const words = () =>
+      screen.getByTestId("velero-schedule-details").querySelector("[data-adherence-words]")?.textContent ?? "";
+    const drawn = (now: number) => {
+      vi.setSystemTime(now);
+      return render(
+        <ScheduleDetails object={hostObject(Schedule, nightly)} extension={extension} installation={installation} />,
+      );
+    };
+
+    // The list is open, and asks again every period: a read of now is not said.
+    expect(installation.watched).toBe(true);
+    let details = drawn(NOW);
+
+    for (const closed of [true, false]) {
+      expect(words()).not.toContain(SIGNAL_WORDS.readOfTheViews(agoText(read, NOW), closed));
+    }
+    details.unmount();
+    // Older than the period while a view is open: its age is said.
+    details = drawn(NOW + 20_000);
+    expect(words()).toContain(SIGNAL_WORDS.readOfTheViews(agoText(read, NOW + 20_000), false));
+    details.unmount();
+    // The last view closes and the reads stop: twelve minutes later the details say how old what they computed
+    // with is, and why.
+    view.unmount();
+    expect(installation.watched).toBe(false);
+    drawn(NOW + 12 * 60_000);
+    expect(words()).toContain(SIGNAL_WORDS.readOfTheViews(agoText(read, NOW + 12 * 60_000), true));
+  });
+
+  it("computes a schedule of another namespace with nothing of the installation the views read", async () => {
+    // The views read A, whose server is two hours east of UTC by the backup of a submission of A.
+    const submitted = NOW - 60 * 60_000;
+    const hourly = scheduleObject("hourly", A, { expression: "0 * * * *", lastBackup: submitted });
+    const own = submissionOf("hourly", A, submitted, 120);
+    const { installation } = mount(
+      answers({
+        [path("schedules", A)]: list(nightly, paused, invalid, unread, hourly),
+        [path("backups", A)]: list(...backups, own),
+      }),
+      chosen(A),
+    );
+
+    await waitFor(() => expect(installation.serverOffset?.minutes).toBe(120));
+    // A schedule of B whose expression names no zone: with what was read of A it would be computed, with the
+    // offset of the server of A.
+    const ofB = scheduleObject("nightly", B, { expression: "0 1 * * *" });
+
+    expect(scheduleSignal(ofB, adherenceOf(installation, NOW)).state).not.toBe("not-known");
+    render(<ScheduleDetails object={hostObject(Schedule, ofB)} extension={extension} installation={installation} />);
+    const mark = screen.getByTestId("velero-schedule-details").querySelector("[data-adherence]");
+
+    expect([mark?.getAttribute("data-adherence"), mark?.getAttribute("data-reason")]).toEqual([
+      "not-known",
+      "no-offset",
+    ]);
+    expect(item("Adherence")).not.toContain("UTC+02:00");
+    expect(item("Adherence")).not.toContain(own.metadata.name);
+  });
+
+  it("has a clock of its own, which ends with the details", () => {
+    vi.useFakeTimers({ now: NOW });
+    const drawn = details(paused, chosen(A));
+
+    expect(vi.getTimerCount()).toBe(1);
+    drawn.unmount();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("gives no link to a schedule of a namespace that is not the one selected", () => {
@@ -1102,5 +1733,10 @@ describe("details of the host for a schedule", () => {
     expect(screen.queryByTestId("velero-schedule-details-link")).toBeNull();
     expect(screen.getByTestId("velero-schedule-details-elsewhere").textContent).toContain(A);
     expect(item("Validation errors")).toBe("invalid schedule: expected exactly 5 fields, found 2");
+    // Of a namespace the installation does not read, the adherence is computed with nothing of its installation.
+    const signal = scheduleSignal(invalid as unknown as ScheduleResource, unreadAdherence(NOW));
+
+    expect(item("Next run")).toBe(signal.next.text);
+    expect(item("Adherence")).toContain(signal.label);
   });
 });

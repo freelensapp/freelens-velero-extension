@@ -40,14 +40,17 @@ export interface ListDefinition<View extends { name: string }> {
   columns: Column[];
   // What a row shows of an object, with what was read of the installation for what the object refers to.
   view(resource: Resource, now: number, installation: Installation): View;
-  sorting: Record<string, (view: View) => string | number>;
+  // What a column orders by: a value, or values the host compares one after the other. The host compares
+  // each with `<` and reverses all of them in the second order a click gives: none is undefined or NaN.
+  sorting: Record<string, (view: View) => string | number | (string | number)[]>;
   search(view: View): string[];
   // The cells after the name, one for each column after the first.
   cells(view: View, item: HostObject): ReactElement[];
   // The other families a row is made from: the list says when what it shows of them is of an earlier read.
   uses?: Family[];
-  // What is to be said of the list as a whole, which no row says: over the list, in words.
-  notes?(installation: Installation): string[];
+  // What is to be said of the list as a whole, which no row says: over the list, in words, with the clock of
+  // the rows.
+  notes?(installation: Installation, now: number): string[];
 }
 
 export { useNow } from "./views-frame";
@@ -69,7 +72,7 @@ function FamilyListView<View extends { name: string }>({ definition, installatio
     Object.entries(definition.sorting).map(([column, order]) => [column, (item: HostObject) => order(view(item))]),
   );
   const read = installation.read(family);
-  const notes = hasItems(read) ? (definition.notes?.(installation) ?? []) : [];
+  const notes = hasItems(read) ? (definition.notes?.(installation, now) ?? []) : [];
 
   // A list that was never read has no rows to show and no count: what it is instead is said by the notice.
   if (
