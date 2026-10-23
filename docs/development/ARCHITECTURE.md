@@ -1139,6 +1139,27 @@ logs; cleanup lists metadata only and suppresses request DELETE response bodies.
   Do not label a preview as a dry run or a guarantee of every object affected.
 - Pause/resume includes an explicit immediate-run policy. Backup deletion creates
   one DeleteBackupRequest and checks its errors; Processed alone is not success.
+- Creating a Schedule is a write through the gate of SPEC-0009, off by default,
+  session-only, scoped to the cluster and the namespace of the installation, with
+  a confirmation that names both. Main builds the Schedule from the validated
+  parameters of the form, as a kind the adapter allowlists, and creates it with a
+  namespaced POST into the namespace of the selected installation only, with no
+  generic CRUD IPC. The name is a DNS-1123 subdomain the operator gives; a name
+  collision (409) leaves the existing Schedule as it is and is shown as a conflict;
+  a submission whose answer is not known is reconciled by reading the named
+  Schedule, never retried blindly.
+- The review before the submission shows the exact object main posts, verbatim,
+  and what it means: no backup at the creation, the first one at the first instant
+  of the expression after it; the next expected runs in the zone of the
+  expression, with the grammar and the parser of SPEC-0013; the warning of an
+  expression with no zone when the zone of the installation is not known, never
+  the zone of the desktop; `paused`, `skipImmediately` and
+  `useOwnerReferencesInBackup` written explicitly, each with its meaning. After the
+  submission the Schedule is read back, and its state is the phase the controller
+  writes, Enabled or FailedValidation with its errors: the answer of the creation
+  is not the success of the schedule. Editing a Schedule is not in v1.0.0, whose
+  only patches are pause and resume. The details are in
+  [SPEC-0016](../specs/SPEC-0016-create-a-schedule.md).
 
 These constraints preserve the agreed feature scope. Detailed action specs are
 authored before their respective implementation steps, not implicitly approved here.
