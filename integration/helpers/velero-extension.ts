@@ -295,8 +295,9 @@ export async function logDirectory(app: ElectronApplication): Promise<string> {
 /**
  * The lines at the level of an error in each file of the log of the host: the one of its main process, the
  * one of the window and the one of each frame of a cluster, which the renderer sends to the main process.
- * The record of a request of the proxy that its client gave up on is left out, as the collector of errors
- * leaves it out of the output. A line is given cut, as a failure message needs it.
+ * The record of a request of the proxy that its client gave up on, and the one of the check of the host for its
+ * own latest version that got no answer, are left out, as the collector of errors leaves them out of the output.
+ * A line is given cut, as a failure message needs it.
  */
 export async function hostLogErrors(app: ElectronApplication): Promise<Record<string, string[]>> {
   const directory = await logDirectory(app);
@@ -305,11 +306,12 @@ export async function hostLogErrors(app: ElectronApplication): Promise<Record<st
   for (const file of (await readdir(directory)).filter((name) => name.endsWith(".log")).sort()) {
     const text = (await readFile(path.join(directory, file), "utf8"))
       .replace(ANSI_ESCAPE_PATTERN, "")
-      .replace(CANCELED_PROXY_RECORD_PATTERN, "");
+      .replace(CANCELED_PROXY_RECORD_PATTERN, "")
+      .replace(LATEST_VERSION_RECORD_PATTERN, "");
 
     found[file] = text
       .split("\n")
-      .filter((line) => /^\s*error:/i.test(line))
+      .filter((line) => /^\s*error:/i.test(line) && !LATEST_VERSION_LINE_PATTERN.test(line))
       .map((line) => line.slice(0, 300));
   }
   return found;
@@ -841,6 +843,17 @@ const CANCELED_PROXY_RECORD_PATTERN =
   /^[^\n]*error:\s*┏[^\n]*Error while proxying request: context canceled[^\n]*\n(?:(?![^\n]*\b[a-z]+:\s*[┏▪])[^\n]*\n)*?[^\n]*error:\s*┗[^\n]*\n?/gim;
 const CANCELED_PROXY_START_PATTERN =
   /error:\s*┏[^\n]*Error while proxying request: context canceled[^\n]*(?:\n(?![^\n]*\b[a-z]+:\s*[┏▪┗])[^\n]*)*$/i;
+// The welcome page of the host asks the npm registry for the latest version of
+// the host, with a limit of five seconds, and the main process logs at the level
+// of an error an answer that does not come: a state of the network of the
+// machine, which says nothing of the application or of the extension. On the
+// output it is a record of several lines, as the one above; in the file of the
+// log it is one line.
+const LATEST_VERSION_RECORD_PATTERN =
+  /^[^\n]*error:\s*┏[^\n]*\[GET-LATEST-VERSION\]: Failed to fetch latest version[^\n]*\n(?:(?![^\n]*\b[a-z]+:\s*[┏▪])[^\n]*\n)*?[^\n]*error:\s*┗[^\n]*\n?/gim;
+const LATEST_VERSION_START_PATTERN =
+  /error:\s*┏[^\n]*\[GET-LATEST-VERSION\]: Failed to fetch latest version[^\n]*(?:\n(?![^\n]*\b[a-z]+:\s*[┏▪┗])[^\n]*)*$/i;
+const LATEST_VERSION_LINE_PATTERN = /^\s*error:\s*\[GET-LATEST-VERSION\]: Failed to fetch latest version\b/i;
 const HOST_ASSET_FAILURE_PATTERN = /^Failed to load resource: net::/;
 const HOST_ASSET_URL_PATTERN = /^https:\/\/renderer\.freelens\.app(:\d+)?\/build\//;
 // On Freelens v2 the reads of the frame of a cluster, the host's and the views' alike, leave from the frame through
@@ -884,10 +897,13 @@ export function createErrorCollector(): ErrorCollector {
       outputBuffer = outputBuffer.slice(-20_000);
     }
 
-    const normalizedOutput = outputBuffer.replace(ANSI_ESCAPE_PATTERN, "").replace(CANCELED_PROXY_RECORD_PATTERN, "");
+    const normalizedOutput = outputBuffer
+      .replace(ANSI_ESCAPE_PATTERN, "")
+      .replace(CANCELED_PROXY_RECORD_PATTERN, "")
+      .replace(LATEST_VERSION_RECORD_PATTERN, "");
 
-    // A canceled-request record that is still arriving: wait for its end.
-    if (CANCELED_PROXY_START_PATTERN.test(normalizedOutput)) {
+    // A record left out that is still arriving: wait for its end.
+    if (CANCELED_PROXY_START_PATTERN.test(normalizedOutput) || LATEST_VERSION_START_PATTERN.test(normalizedOutput)) {
       return;
     }
 
