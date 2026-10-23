@@ -426,7 +426,13 @@ test environment and of the process of this repository.
   `position: relative`. The check of the layout of the suites finds it.
 - The entry of a group of the sidebar opens the group, in the host: it leads to no
   page when it has entries under it. The page it names is the one it is marked
-  with.
+  with. A click on it closes a group that is open, and the host keeps a group
+  open or closed across the starts of a profile (read in `sidebar-item.tsx` of the
+  host at the target). The entries of the extension appear only once the host
+  enables it for the cluster, so a suite reads the arrow of the group,
+  `expand-icon-for-<id>`, once it is there, and clicks only a closed group: a
+  click decided before the entries appear closed the group the host had opened as
+  it was left, on a runner, after a restart.
 - `innerText` reads the words as they are drawn, in capitals where the style
   writes them so, and `textContent` reads them with nothing between two parts.
   A suite reads the words of a part with `innerText` and its marks hidden, and

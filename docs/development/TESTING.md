@@ -357,8 +357,10 @@ an error on the output of its process, and the console of the window; FND-10 and
 the checks of the host read the files of the log as well. Every such line fails
 the suite but a few, each said by its address or proven by its case: the record of
 a request of the proxy of the host that its client gave up on, which closing a
-drawer makes; a resource of the build of the host itself that the window failed to
-load, which a loaded machine was seen to make at a start; an answer 401, 403 or 404
+drawer makes; the record of the check of the host for its own latest version, which
+its welcome page asks of the npm registry with a limit of five seconds, when the
+network of the machine gives no answer in time; a resource of the build of the
+host itself that the window failed to load, which a loaded machine was seen to make at a start; an answer 401, 403 or 404
 to a read of a frame of a cluster, which on
 v2 the browser writes in the console of the frame when an identity is refused a
 read, the host's own reads among them. A load of a frame that a disconnection
