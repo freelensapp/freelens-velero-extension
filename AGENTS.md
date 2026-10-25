@@ -492,6 +492,56 @@ test environment and of the process of this repository.
   `TableRow` is dropped, a fragment of rows as well, and its parts have no role.
   A `TableCell` that is given a `title` shows the title in place of what it
   holds.
+- A list of the host orders its rows by the callback of the column: a value, or
+  values it compares one after the other, each with `<` and then `===`, and it
+  reverses every comparison in the second order a click gives. The first click on
+  a column orders it `asc`, the next one on the same column `desc`. An `undefined`
+  or a `NaN` compares as greater both ways and breaks the order: a callback never
+  answers one, and none knows the direction it is asked for, so what is last in
+  one order is first in the other. Read in the source at the target
+  (`packages/core/src/renderer/components/table/sorting.ts`, lines 11 to 56;
+  `table.tsx`, lines 226 to 236; `packages/utility-features/utilities/src/sort-compare.ts`,
+  lines 22 to 49).
+- `WithTooltip` of the host puts what it holds in the label of a flat badge that
+  expands, and its tip, a date written by `LocaleDate` when it is given a `Date`,
+  in the tooltip of the badge, which shows when the badge is pointed at, as read
+  in the source at the target (`packages/core/src/renderer/components/with-tooltip/with-tooltip.tsx`,
+  lines 19 to 37): a test reads a tip by pointing at it, and a cell that cuts its
+  words at the end of its room holds the badge. A cell of the host is a flex box
+  that clips what is wider than it
+  (`packages/core/src/renderer/components/table/table-cell.scss`, lines 11 to 18): a
+  plain span of words in a cell is cut where the room ends, with no ellipsis and no
+  tip, so the words of a cell that can be cut are in the badge. The badge goes in a
+  flex box of its own (`.cellWords`), not in a block: around a badge in a block the
+  line of the block is drawn, and the words of the next run and of the adherence sat
+  1.7 pixels above the words of the other cells of their row, at every width, as
+  measured in the packaged application. The suite of the schedules checks, in a
+  window of 1440 by 900 and at each edge of the room of the list, that no cell is
+  clipped and that the words of every cell sit on the line of their row
+  (`columnsOf`, `misalignedWords`).
+- The renderer of the host reads the cluster with the `fetch` of Chromium, to the
+  origin of the frame, as read in the source at the target
+  (`packages/core/src/renderer/fetch/browser-fetch.injectable.ts`): an answer is of
+  the same origin, and the reader reads its header Date. The header the frame reads
+  is the one of the API server, as read in the source at the target and in what it
+  bundles. The proxy of the host passes the answer on with http-proxy-3 2.0.1, which
+  copies every header of it but the hop-by-hop `transfer-encoding`, and `connection`
+  and `keep-alive` on HTTP/2 (`dist/lib/http-proxy/passes/web-outgoing.js`, lines 56
+  to 61 and 139 to 149), and Node, 24.22.0 in the Electron 43.8.0 of the target, as
+  the packaged application reports it, writes a Date only for an answer that has
+  none (`lib/internal/http2/core.js`, lines 2690 to 2701, and
+  `lib/_http_outgoing.js`, lines 503 and 504, for HTTP/1.1). freelens-k8s-proxy
+  v1.9.1 passes it on with the proxy handler of kubectl (`main.go`, line 80;
+  `k8s.io/kubectl` v0.37.1, `pkg/proxy/proxy_server.go`, line 214), which for a
+  request that is not an upgrade is the reverse proxy of Go (`k8s.io/apimachinery`
+  v0.37.1, `pkg/util/proxy/upgradeaware.go`, line 258): it copies every header but
+  the hop-by-hop ones (`net/http/httputil/reverseproxy.go` of Go 1.27.2, lines 364
+  to 374 and 584 to 590), and the server of Go writes a Date only when its handler
+  set none (`net/http/server.go`, line 1503). On the test environment the header
+  arrives with the headers only the API server writes beside it, `audit-id` and
+  `x-kubernetes-pf-flowschema-uid`; its value alone cannot say who wrote it there,
+  since the clock of the node of kind is 31 to 34 milliseconds from the one of the
+  machine.
 - The `Icon` of the host holds the name of its icon as its text, which a font
   draws as the icon. Beside the words of a command it is given `aria-hidden`, or
   the name of the command carries the name of the icon.

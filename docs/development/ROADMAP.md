@@ -170,7 +170,7 @@ tests had run green in CI on main with the reviewed release moved to v1.18.4.
 | --- | --- | --- | --- |
 | Expected runs from the cron expression, `status.lastBackup` and the newest matching Backup | T3.1 | [SPEC-0013](../specs/SPEC-0013-schedule-adherence.md) | Done |
 | Grace periods, paused, new and invalid schedules, timezone and daylight saving, skipped runs, clock skew, incomplete history, limited RBAC | T3.2 | [SPEC-0013](../specs/SPEC-0013-schedule-adherence.md) | Done |
-| Next expected run, last observed run and overdue state in list, detail and overview, with the reason | T3.3 | [SPEC-0013](../specs/SPEC-0013-schedule-adherence.md) | Approved |
+| Next expected run, last observed run and overdue state in list, detail and overview, with the reason | T3.3 | [SPEC-0013](../specs/SPEC-0013-schedule-adherence.md) | In PR |
 | BackupRepository, PodVolumeBackup and PodVolumeRestore views | T5.1 | [SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md) | Approved |
 | DataUpload and DataDownload views with progress and relationships | T5.2 | [SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md) | Approved |
 
@@ -180,6 +180,16 @@ controlled clock; then T3.2 and T3.3, the states and the four surfaces; then T5.
 the repositories and the pod volume operations; then T5.2, the data movement.
 T3.3 and the rest of the milestone resume on Freelens v2 after T0.8, as
 [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md) says.
+
+The four surfaces, T3.3, are four pull requests, in this order: the adherence of a
+schedule in its list, its view and the details of the host, with the time of the
+API server read and kept, their unit and component tests, and the suite of the
+schedules restated on the fixtures that exist; the Overview, with the rule of
+what is overdue, held or submitted at every look and the count of what is not
+known; the fixtures of the adherence, placed by the clock, and a schedule the
+controller validates; and the suite of the adherence on those fixtures, with the
+measures and the pre-review, whose evidence makes SPEC-0013 Implemented. The row
+of T3.3 is In PR from the first of them and is Done with the last.
 
 Exit of M4: tests with a controlled clock and packaged UI scenarios establish
 the accuracy of the adherence signal, including its uncertainty states.

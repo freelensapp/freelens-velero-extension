@@ -110,7 +110,7 @@ Proposed primary columns, with responsive hiding only for secondary fields:
 | --- | --- |
 | Backup | Name, installation namespace, phase, errors/warnings, item progress, started, duration, storage, age |
 | Restore | Name, installation namespace, source backup/schedule, phase, errors/warnings, item progress, started, duration |
-| Schedule | Name, installation namespace, cron, paused, last submission, latest observed backup, validation state, age |
+| Schedule | Name, installation namespace, cron, paused, next run, adherence, last submission, latest observed backup, validation state, age |
 | BSL | Name, installation namespace, availability, access mode, default, provider, last validation, last sync |
 | VSL | Name, installation namespace, provider, reported phase or unknown, age |
 
@@ -120,8 +120,20 @@ room, in this order: the installation namespace in a list narrower than 1,200
 pixels, the age under 1,000, the storage, the source and the duration under 760,
 the start under 640. Of the locations, the provider and the last sync go under
 760 and the last validation under 640: availability, access mode and default
-stay. The installation is the first to go because it is the same in
-every row and the target bar says it. In a list of 1,000 pixels or more what an
+stay. Of the schedules, the last submission and the newest backup go under 760 and
+the expression under 640, since the view of a schedule has all three, the band of
+its status the expression and the last submission, its history the newest backup:
+the name, paused, the next run, the adherence and the validation stay. Paused, the
+next run, the word of the adherence with its mark and the last submission have the
+room of their words in a list of 1,000 pixels or more, as measured in the packaged
+application at each edge and in a window of 1440 by 900; in a narrower one they are
+cut at the end of their room, and read whole in their tip. The name, the expression,
+the newest backup and the validation share what is left: of the newest backup the
+name is cut first, and then how it ended, with its tip. In every list the age, shown
+from 1,000 pixels, holds there whole every age the host writes, up to 2y364d; its
+tip is the time of the creation. The installation is the first to go because it is
+the same in every row and the target bar says it.
+In a list of 1,000 pixels or more what an
 operation says of a failure, its progress, its start and its duration have the
 room of their words, in whatever way the language of the operator writes a date:
 a window of 1440 by 900 shows them whole, and the name, the source, the phase and
@@ -133,7 +145,8 @@ they were, with that a validation is late beside its age, and when they were is
 in the tip and in the view of the location. What is said of a list as a whole is
 over the list, in words: that no storage location is marked default, that more
 than one is, that the phase of a snapshot location is not one the release stands
-behind.
+behind, that the clock of the cluster is ahead of this machine, which an object of
+the installation of the schedules says.
 Prefer semantic missing values such as Unknown or Not reported over an unexplained
 dash. Relative times have absolute timezone-aware values in tooltips; duration
 updates stop only for terminal evidence.
@@ -156,8 +169,10 @@ commands open the explicit Velero operation, not an unrestricted YAML editor.
 ## Purpose-Built Views
 
 - Recent-operation history places actual operations by start time with known duration
-  and outcome. Use a list fallback and accessible details; gaps are not labelled
-  missed runs until the schedule-adherence contract can establish that fact.
+  and outcome. Use a list fallback and accessible details; a gap is never labelled a
+  missed run. What a schedule was expected to do is said beside the history, in the
+  band of its adherence: the next run with its state, a line for each fact, and the
+  grace in words, with the marks of the states each beside its word.
 - The Overview is bands without frames, in the order an operator would look: what
   was read, what needs attention beside the newest completed backup and what is in
   flight, the recent operations, the schedules beside the storage. At 1,000 pixels

@@ -10,12 +10,14 @@ import { isStale } from "../../common/read-state";
 import { scheduleRestores, templateReferences } from "../../common/references";
 import { countsText, holdsSubmissions, scheduleHistory } from "../../common/schedule-history";
 import { NOTES, ownedText, pausedText, scheduleView, zoneText } from "../../common/schedule-view";
+import { AdherenceBand } from "../components/adherence";
 import { HistoryStrip } from "../components/history-strip";
 import { Phase, Signal, time } from "../components/status";
 import styles from "../components/views.module.css";
 import { focusFirst } from "../components/views-frame";
 import { Fact, NotShown, Restores, Stale, Target, ViewLink, Workspace } from "../components/workspace";
 import { openView } from "../navigation";
+import { adherenceOf, backupsAnswered } from "../state/adherence";
 
 import type { TemplateReferences } from "../../common/references";
 import type { History } from "../../common/schedule-history";
@@ -214,8 +216,9 @@ export interface ScheduleWorkspaceProps {
 }
 
 // One schedule, read only: whether Velero took its expression, whether it is paused, when it last asked for
-// a backup and how the backups it made ended. Nothing here is computed from the expression: no next run, no
-// run that was expected, nothing overdue. That needs what the schedule adherence establishes.
+// a backup and how the backups it made ended; then its adherence, the next run with its state, computed from
+// the expression and the reads of the installation by the clock of the views as the schedule adherence
+// establishes it; then the history of its backups, where nothing is drawn where no backup is.
 export const ScheduleWorkspace = observer(({ installation, name, now, back, onBack }: ScheduleWorkspaceProps) => {
   const namespace = installation.namespace ?? "";
   const read = installation.read("schedules");
@@ -302,6 +305,11 @@ export const ScheduleWorkspace = observer(({ installation, name, now, back, onBa
           </ul>
         </>
       ) : null}
+
+      <AdherenceBand
+        schedule={schedule}
+        context={backupsAnswered(installation) ? adherenceOf(installation, now) : undefined}
+      />
 
       <h3 className={styles.sectionTitle}>History</h3>
       {history.state === "listed" ? (

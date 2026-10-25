@@ -229,7 +229,15 @@ of an error. It sends `GET` and no other verb, to the paths of the kinds of Vele
 alone, creates no `KubeApi` and registers nothing with the host, and it is the only
 place of the renderer that reaches the cluster. On v2 the reads leave from the frame
 of the cluster, through Chromium, to the origin of the frame, and the host's proxy
-takes them to the API server, where the guard of the suites counts them.
+takes them to the API server, where the guard of the suites counts them. Of an
+answer it reads the status, the text and the header Date, and nothing else: since
+the first pull request of T3.3 an answer carries the time the header says it was
+written at, half a second after the second the header names, beside the clock of
+this machine in the middle of the request, or neither when the header is missing or
+is not a date written as HTTP writes one. The answer is of the origin of the frame,
+so the header can be read, and it is the one of the API server: the proxies of the
+host keep the header of the answer they pass on, as AGENTS.md says with the lines of
+their source.
 
 | Read | When | Path |
 | --- | --- | --- |
@@ -270,6 +278,23 @@ answer is taken only if the generation it was asked for is still the current one
 and only the objects of the namespace that was asked are kept of it. The host lists
 are given a store that selects nothing and removes nothing, with
 `subscribeStores` off: the extension reads, the host draws.
+
+The state also holds two values of the installation it reads, for the adherence of
+its schedules ([SPEC-0013](../specs/SPEC-0013-schedule-adherence.md)): the offset of
+the zone of the Velero server that the schedules and the backups give, taken when
+the families of a read were all answered and kept once the backup it was read in is
+gone, the very object when nothing changed; and the time of the API server, from
+the newest answer of the read that listed what was asked, kept when a read fails.
+Both are of the generation: a new one starts with neither, and an answer of the one
+before brings neither. What the views share of the adherence for a read and a tick
+of their clock is made once for the installation from the reads as they are stored,
+the two values and the clock ([the context](../../src/renderer/state/adherence.ts)):
+the rows of the list, the band of a schedule and the details of the host ask for it
+at every drawing, and nothing of it is computed while the backups were never
+answered. The state says as well whether a view of the extension is open, so that the
+families are asked again every 15 seconds: the details of the host, which the host
+draws where no view of the extension is, compute with the last read of the views,
+and say its age when no view is open or when it is older than that period.
 
 The watch of the host is not used for these views. A list every 15 seconds while a
 view is open costs five requests, shows a failed read as such, with what was read
@@ -402,15 +427,16 @@ with the clock as an argument: the parser of the reviewed release written from i
 rules, the next instant in the zone of the expression, read through Intl and never
 from the desktop, the anchor the controller counts from, the expected run and the
 bounded count of the runs that passed, and the backup of the last submission among
-the backups that exist; the views that show them are the later slices of the
-milestone. The [signal of a schedule](../../src/common/schedule-signal.ts) is
+the backups that exist; the list, the view of a schedule and the details of the host
+show them since the first pull request of T3.3, and the Overview with the second.
+The [signal of a schedule](../../src/common/schedule-signal.ts) is
 computed from them and from what was read of the installation, with the clock as
 an argument, the pause and the phase read before anything of the expression: the
 state of the schedule, awaited, due, overdue, held, at every look, not known, no
 run or paused, with its mark, its weight in the order of a list and its words,
 written once for every view; the offset of the zone of the server, read in the
-name of the backup of the newest submission of the installation and kept for the
-session as a plain value the views hold and give back with each read, so that it
+name of the backup of the newest submission of the installation and kept by the
+state of the installation as a plain value given back with each read, so that it
 stays known once that backup expires; the backup that holds the submissions; the
 last observed run; and the clocks of this machine and of the cluster.
 

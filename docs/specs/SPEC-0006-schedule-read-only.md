@@ -24,7 +24,11 @@ three Schedule phases, New, Enabled and FailedValidation, and that
 `status.lastBackup` records a submission, not a completion. The adherence of a
 schedule, which is its expected runs, its next run and what is overdue, is the
 fourth milestone (T3.1 to T3.3): this slice shows what the objects say and the
-backups that exist, and computes nothing from the cron expression.
+backups that exist, and computes nothing from the cron expression. Since the first
+pull request of T3.3 the list, the workspace and the section in the details of the
+host also say the adherence of [SPEC-0013](SPEC-0013-schedule-adherence.md), which
+is computed from the expression, in two columns, a band and two items of their own;
+what this spec shows is unchanged beside them.
 
 Included: the list of the Schedules, the workspace of a schedule with the history
 of its backups, the section in the details of the host, and the way between a
@@ -56,9 +60,9 @@ backup now (M5).
 
 | ID | Contract | Acceptance check |
 | --- | --- | --- |
-| REQ-064 | List the schedules of the selected installation in the native list with the columns name, installation, schedule, paused, last submission, newest backup, validation and age, each with a stable ID, an order and a part in the search; keep the state of the list when a schedule is opened and closed | SCHED-01 |
+| REQ-064 | List the schedules of the selected installation in the native list with the columns name, installation, schedule, paused, last submission, newest backup, validation and age, each with a stable ID, an order and a part in the search; keep the state of the list when a schedule is opened and closed. Since the first pull request of T3.3 the next run and the adherence of [SPEC-0013](SPEC-0013-schedule-adherence.md) (REQ-168) come after paused, and the last submission has a class of its own | SCHED-01 |
 | REQ-065 | Open a dedicated read-only workspace from a row, and add a compact section to the details the host shows of a Schedule; both read through the same helpers | SCHED-02 |
-| REQ-066 | Show the cron expression as it is written, with its time zone prefix when it has one; when it has none, say that the time zone is the one of the Velero server, which the view does not read; say of a prefix with an empty name that the reviewed release refuses it. The view of a schedule computes no next run, no expected run and no overdue state: since the pull request of T3.2 they are the adherence of [SPEC-0013](SPEC-0013-schedule-adherence.md), which derives the zone of the server or says that it is not known | SCHED-03 |
+| REQ-066 | Show the cron expression as it is written, with its time zone prefix when it has one; when it has none, say that the time zone is the one of the Velero server, which the view does not read; say of a prefix with an empty name that the reviewed release refuses it. The view of a schedule computes no next run, no expected run and no overdue state: since the pull request of T3.2 they are the adherence of [SPEC-0013](SPEC-0013-schedule-adherence.md), which derives the zone of the server or says that it is not known, and since the first pull request of T3.3 the list, the view and the details say them only in the two cells, the band and the two items of the adherence (REQ-168 to REQ-170) | SCHED-03 |
 | REQ-067 | Keep paused and phase as two facts. Say of a paused schedule that Velero does not read it while it is paused, so its phase and its validation errors are the ones written before the pause. Say of a schedule that reports no phase that Velero has not read it yet and, when it is paused, that it will not until it is resumed. Show `status.lastSkipped` when the object carries it. Say `skipImmediately` in words when it is true: when Velero reads the schedule again it skips the run that is due and records the time in last skipped | SCHED-04 |
 | REQ-068 | Name `status.lastBackup` the last submission, never the last backup or the last success; show beside it the newest backup of the schedule that exists, with its phase and its failure | SCHED-05 |
 | REQ-069 | The history of a schedule is the backups of the same namespace that carry its name in the label `velero.io/schedule-name`, each with the state and the evidence the helpers give. The time of an operation is its start time when the object reports one and its creation time when it does not: the reviewed release writes no start time into an operation that failed its validation or has not started, and the view says which of the two times it shows. The history goes from the newest by the time of the operation, equal times by name. It says that it holds the backups that exist now. A distance between two backups is never named a missed run | SCHED-06 |
@@ -96,6 +100,7 @@ The workspace, from the top:
 | Way back and name | Schedules, or the view it was opened from | The address |
 | Status | Validation, paused, the expression and its time zone, last submission, last skipped, whether the backups are owned by the schedule, age, installation and cluster | `spec`, `status` |
 | Validation errors | Each error as reported; absent when there is none | `status.validationErrors` |
+| Adherence | Since the first pull request of T3.3, the band of [SPEC-0013](SPEC-0013-schedule-adherence.md) (REQ-169): the next run with its state, the zone, the time it is counted from, the last observed run, what holds the submissions, the expected runs passed and the clocks | The expression, the schedule, the backups read of the installation and the clocks |
 | History | The strip and, under it, the list of the same backups | The backups read of the installation |
 | Template | What each backup is asked to include, where it goes and how long it is kept | `spec.template` |
 | Restores | The restores that name the schedule | The restores read of the installation |
@@ -139,7 +144,7 @@ second reader is the one of the [Restores](SPEC-0005-restore-read-only.md#tests)
 | --- | --- | --- | --- |
 | SCHED-01 | Packaged app | REQ-064 | Search, order and resize; a schedule opened and closed leaves the list where it was |
 | SCHED-02 | Component/packaged | REQ-065 | A row opens the workspace; the details of the host agree on paused, validation, expression and last submission |
-| SCHED-03 | Unit/component | REQ-066 | Five fields, a descriptor, `TZ=` and `CRON_TZ=` prefixes, an empty and an invalid expression: shown as written, a prefix with an empty name said refused, and no time computed from any by the view of a schedule; the times the adherence computes are checked by [SPEC-0013](SPEC-0013-schedule-adherence.md#tests), since the pull request of T3.2 |
+| SCHED-03 | Unit/component | REQ-066 | Five fields, a descriptor, `TZ=` and `CRON_TZ=` prefixes, an empty and an invalid expression: shown as written, a prefix with an empty name said refused, and no time computed from any by the view of a schedule; the times the adherence computes are checked by [SPEC-0013](SPEC-0013-schedule-adherence.md#tests), since the pull request of T3.2, and since the first pull request of T3.3 none is said outside the cells, the band and the items of the adherence |
 | SCHED-04 | Unit/component/packaged | REQ-067 | Enabled, paused with Enabled, paused with FailedValidation, New, no phase, paused with no phase, an unknown phase: two facts each, and the words of each; `skipImmediately` true, false and not set; a last skipped time |
 | SCHED-05 | Unit/component | REQ-068 | A last submission with a newest backup that failed, with one in flight, with none that exists |
 | SCHED-06 | Unit/component/packaged | REQ-069 | Backups of two schedules and of none, equal times, a newest backup with no start time: it is the first, at its creation time, and said so; no word for the distances |
@@ -155,7 +160,10 @@ second reader is the one of the [Restores](SPEC-0005-restore-read-only.md#tests)
 ## Success Criteria
 
 All 14 checks pass before this spec is Verified. No view of a schedule shows a time
-that no object reports.
+that no object reports. Since the first pull request of T3.3 the next run and the
+adherence that [SPEC-0013](SPEC-0013-schedule-adherence.md) computes are said in the
+two cells of the list, the band of the view and the two items of the details, and
+nowhere else.
 
 Manual review: with the synthetic schedules, tell which one is paused, which one is
 invalid and how the last backups of one went; follow a backup and come back.
@@ -202,7 +210,7 @@ the [Restores](SPEC-0005-restore-read-only.md).
 | --- | --- |
 | SCHED-01 | Component: every column has its order and its part in the search, the age apart, which the host writes. Packaged: a search, an order by the expression read from the rows, a column made wider; a schedule opened and closed leaves them as they were |
 | SCHED-02 | Component and packaged: a row opens the workspace; the details of the host show the same validation, paused, expression and time zone, and lead to the workspace for the installation selected. Packaged: the API server counts no read of the five families while a schedule is opened between two reads of the installation |
-| SCHED-03 | Unit: five fields, descriptors, the two prefixes of a time zone, what only looks like a prefix, the name of a time zone as the release takes it, one that is empty and the one of the server named as such, an empty and an invalid expression, shown as written. Unit and component: no time in a view that no object reports, and never the time zone of the desktop. Packaged: the expression Velero refused, and the one that names its time zone |
+| SCHED-03 | Unit: five fields, descriptors, the two prefixes of a time zone, what only looks like a prefix, the name of a time zone as the release takes it, one that is empty and the one of the server named as such, an empty and an invalid expression, shown as written. Unit and component: no time in a view that no object reports, and never the time zone of the desktop. Packaged: the expression Velero refused, and the one that names its time zone. Restated with the first pull request of T3.3: component, the list says nothing of a run outside the cells of the next run and of the adherence, each computed by the signal, and the view nothing outside its band; packaged, the same of the list, the view and the details of the host on the fixtures that exist, a run said of the schedule that names its zone and none of the paused, refused and not read ones, green in the packaged application on 2026-10-25 |
 | SCHED-04 | Unit: the three phases, no phase, a phase that is not known; paused from the spec alone; what skipping does, and the last skipped time. Component and packaged: paused and validation as two cells and two facts; the schedules Velero has not read, paused and not; what Velero wrote of the skip into a schedule it read |
 | SCHED-05 | Unit and component: a last submission beside a newest backup that failed its validation, beside one in progress, beside none that exists. Packaged: the two as two cells of the list, and a last submission that is the time the newest backup was created |
 | SCHED-06 | Unit: the backups of two schedules and of none, of two namespaces, equal times, a newest backup with no start time, a backup whose time is after the clock; did not start said by the phase, and not by a start that is missing; no word for the distance between two backups. Component and packaged: the history from the newest, the newest at the time it was created and said so, the line of time with one mark for two backups that are close, and no mark drawn over another |
