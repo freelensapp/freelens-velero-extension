@@ -636,9 +636,10 @@ cluster of the request, and nothing else. The extension reads no kubeconfig, run
 no credential plugin, refuses no kind of authentication of its own, and keeps no
 client and no connection of its own to an API server. Resolve the cluster from the
 catalog of the host in main, by the identifier of the frame, and fail closed when
-its entry is not there or is not connected: the proxy does not look at the state
-of a cluster, and a request to one that is not connected would connect it, with an
-authentication the operator did not ask for. Never take a default kubeconfig, an
+its entry is not there or is not connected: since freelensapp/freelens `cd07118f`
+the proxy of the host answers a request to a cluster that is not connected 503, but an
+upgrade, as the port-forward of the tunnel, still starts the proxy of that cluster,
+with an authentication the operator did not ask for. Never take a default kubeconfig, an
 active or first cluster, or a path from the renderer.
 
 - Create uses a namespaced POST, never apply or PUT. Build allowlisted object types
@@ -947,7 +948,13 @@ main process with the kubectl `Main.Shell.getKubectlPath` gives for the cluster,
 environment `Main.Shell.getEnvironment` gives for it as its whole environment, and
 the folder of the extension as its working directory (D2 of SPEC-0015). That
 environment reaches the cluster through the proxy of Freelens, with the identity of
-the connection of the host and the proxy setting of the cluster. kubectl chooses
+the connection of the host and the proxy setting of the cluster. It carries as well
+the token the proxy of Freelens asks of every request, which the credential of its
+kubeconfig, the subcommand `credential` of freelens-k8s-proxy, reads there
+([the kubeconfig](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/main/kubeconfig-manager/kubeconfig-manager.ts#L177-L191),
+[the token](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/main/kube-tools/kube-tools.ts#L119-L122),
+[the check](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/main/freelens-proxy/freelens-proxy.ts#L447-L461)): a
+kubectl given less than that environment is refused by the proxy. kubectl chooses
 the local port, and the tunnel is ready when kubectl writes `Forwarding from
 127.0.0.1:<port>`, within fifteen seconds counted once kubectl is prepared; the
 preparation, which may download the kubectl of the version of the cluster, counts

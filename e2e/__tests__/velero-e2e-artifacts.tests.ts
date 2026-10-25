@@ -3734,7 +3734,9 @@ describe("the log, the results, the resources and the volumes of an operation", 
         // No kubectl of the application runs: the one of the load ended with it.
         expect(velero.kubectlForwards(running.app)).toEqual([]);
         // The plugin was run, and by the proxy of the host alone: neither by the main process of the host, where
-        // the extension runs, nor by the kubectl of the tunnel, whose kubeconfig names the proxy and no plugin.
+        // the extension runs, nor by the kubectl of the tunnel, whose kubeconfig names the proxy of the host and,
+        // as its credential, the subcommand `credential` of freelens-k8s-proxy, which gives the token of that proxy
+        // from the environment the host gives kubectl, and never the plugin of the cluster.
         const runs = await cluster.execPluginRuns();
 
         await report("artifact-runs-of-the-exec-plugin", { runs, route: loaded.route });

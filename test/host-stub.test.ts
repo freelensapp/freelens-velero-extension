@@ -17,6 +17,7 @@ import {
   Renderer,
   resetIpc,
 } from "./freelens-extensions";
+import { answered, fakeHostClient } from "./host-client";
 
 // The declaration of the SDK of the validation target, whose namespaces list the names they export.
 const declaration = readFileSync(resolve("node_modules/@freelensapp/extensions/dist/extension-api.d.ts"), "utf8");
@@ -202,5 +203,17 @@ describe("the doubles of the host", () => {
     expect(() => Kind.getStore()).toThrow(
       "API for Kind is not for CRD and misses metainfo. Extension won't work correctly.",
     );
+  });
+
+  it("send the method of a request to a cluster as the client of the host is given it, and GET when it is given none", async () => {
+    const host = fakeHostClient(() => answered(200, {}));
+    const client = host.forCluster("synthetic-cluster");
+
+    await client.getResponse("/apis/velero.io/v1");
+    await client.getResponse("/apis/velero.io/v1", undefined, { method: "POST" });
+    // A method in lower case, which the types of the host refuse, goes out as it is written: `fetch` sends a
+    // `patch` as it is, and the API server refuses it.
+    await client.getResponse("/apis/velero.io/v1", undefined, { method: "patch" as never });
+    expect(host.requests.map((request) => request.method)).toEqual(["GET", "POST", "patch"]);
   });
 });

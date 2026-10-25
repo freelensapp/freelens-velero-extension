@@ -13,9 +13,9 @@ export interface CatalogEntry {
   status: string;
 }
 
-// The proxy of the host does not look at the state of a cluster: a request to one that is not connected
-// starts its proxy, and with it an authentication the operator did not ask for. Nothing is asked of a
-// cluster in any other state than this one.
+// The proxy of the host answers a request to a cluster that is not connected 503, since freelensapp/freelens
+// cd07118f, but an upgrade, as the port-forward of the tunnel, still starts the proxy of that cluster, and with
+// it an authentication the operator did not ask for. Nothing is asked of a cluster in any other state.
 export const CONNECTED = "connected";
 
 // Why nothing is asked of a cluster: its entry is not in the catalog, or it is not connected.

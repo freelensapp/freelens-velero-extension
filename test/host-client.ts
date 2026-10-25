@@ -2,14 +2,17 @@
 // written from the source of the host at the validation target,
 // packages/utility-features/json-api/src/json-api.ts at 7801fb10a5f20af308093b39e5f79cd6e8c3461d:
 // - `getResponse` (lines 154-171) gives the answer whatever its status: a structural answer with its status
-//   and its body, which arrives as a stream and stops when the signal of the request is aborted;
+//   and its body, which arrives as a stream and stops when the signal of the request is aborted; it sends the
+//   method it is given as it is given, and `GET` when it is given none (line 162), and the methods it takes are
+//   in upper case only (packages/utility-features/json-api/src/fetch.ts lines 69 to 84), since `fetch` sends a
+//   method that is not one of the six it knows as it is written;
 // - `get` and `post` (lines 173-187, 213-268) read the body whole and reject when the status is not 2xx: a
 //   GET answered 403 with the body itself, the `Status` object or its text when it is not JSON, and every
 //   other failure with a `JsonApiErrorParsed`, which is not an `Error` and carries the body it parsed as
 //   `error`, with the messages `parseError` reads of it (lines 270-290); a request that gets no answer rejects
 //   with the error of the fetch.
 // Every request is recorded: the cluster it was made for, the call, the method, the path, the query, the
-// headers and the body, as the client was given them.
+// headers and the body, as the client was given them: a method in lower case is recorded as it is.
 
 export interface HostRequest {
   cluster: string;
@@ -30,8 +33,11 @@ export type HostReply =
   | { reject: unknown }
   | { hang: true };
 
+// The methods of a request, in upper case only, as the client of the host takes them.
+type Method = "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE" | "OPTIONS";
+
 type Init = {
-  method?: string;
+  method?: Method;
   headers?: Record<string, string>;
   body?: string;
   signal?: AbortSignal | null;
@@ -227,7 +233,7 @@ export function fakeHostClient(reply: (request: HostRequest) => HostReply | Prom
 
   const forCluster = (cluster: string) => ({
     getResponse: (path: string, params?: { query?: Record<string, unknown> }, init?: Init) =>
-      answer(recorded(cluster, "getResponse", path, params, init, (init?.method ?? "GET").toUpperCase())),
+      answer(recorded(cluster, "getResponse", path, params, init, init?.method ?? "GET")),
     get: async (path: string, params?: { query?: Record<string, unknown> }, init?: Init) =>
       parsed(await answer(recorded(cluster, "get", path, params, init, "GET")), "GET"),
     post: async (path: string, params?: { query?: Record<string, unknown>; data?: unknown }, init?: Init) =>

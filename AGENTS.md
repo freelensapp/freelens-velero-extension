@@ -360,6 +360,17 @@ test environment and of the process of this repository.
   its first need, 1.34.12 for the cluster at 1.34.11 of the test environment, where
   the nightly bundles 1.37.1: the first load through the tunnel in a new profile
   waits for it.
+- The kubeconfig in the environment `Main.Shell.getEnvironment` gives for a cluster
+  names the proxy of the host, and as its user the subcommand `credential` of
+  freelens-k8s-proxy, which gives the token of that proxy from `FREELENS_PROXY_TOKEN`
+  of the same environment; the proxy refuses with 403 a request that carries no
+  token, as read in the source at the target
+  (`packages/core/src/main/kubeconfig-manager/kubeconfig-manager.ts`, lines 177 to
+  191; `packages/core/src/main/kube-tools/kube-tools.ts`, lines 119 to 122;
+  `packages/core/src/main/freelens-proxy/freelens-proxy.ts`, lines 447 to 461). The
+  tunnel gives kubectl that environment whole: the plugin of the kubeconfig of a
+  cluster runs in freelens-k8s-proxy alone, as the suite of the tabs proves with the
+  identity of an `exec` plugin.
 - A list of the host hidden with `display: none` reads a scroll of 0 while it is
   hidden, and is back at its scroll when it is shown again. The list behind a
   workspace is hidden with `visibility`, which the scale suite proves keeps the
@@ -611,7 +622,9 @@ test environment and of the process of this repository.
   the frame or of the request, through the proxy of Freelens. The extension reads
   no kubeconfig, runs no credential plugin and keeps no client and no connection
   of its own to an API server. Ask nothing of a cluster whose entry in the catalog
-  is not connected: the proxy would connect it.
+  is not connected: since freelensapp/freelens `cd07118f` the proxy of the host
+  answers a request to it 503, but an upgrade, as the port-forward of the tunnel,
+  still starts the proxy of that cluster, and with it its authentication.
 - A direct tunnel is the kubectl the host gives for the explicitly selected
   cluster, `Main.Shell.getKubectlPath`, run by the main process with
   `Main.Shell.getEnvironment` as its whole environment and the folder of the
