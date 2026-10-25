@@ -896,6 +896,9 @@ export interface ScheduleSignal {
   words: string;
   // What is said beside it: the derived offset, the hold not known, a read of before.
   notes: string[];
+  // The words that say that the signal was computed with a derived offset, and that the offset changed when it did:
+  // among the notes, and apart from them for what says them without the others, as an item of the Overview does.
+  derived?: string[];
   next: NextRun;
   // The lines of the band, for a schedule whose expression is read.
   zone?: ZoneLine;
@@ -912,6 +915,7 @@ interface Parts {
   reason?: NotKnownReason;
   words: string;
   notes?: string[];
+  derived?: string[];
   next: NextRun;
   zone?: ZoneLine;
   anchor?: Anchor & { words: string };
@@ -922,7 +926,7 @@ interface Parts {
 }
 
 function signalOf(parts: Parts, context: AdherenceContext): ScheduleSignal {
-  const { state, notes = [], late = false, ...rest } = parts;
+  const { state, notes = [], late = false, derived = [], ...rest } = parts;
   const schedules = context.reads.schedules;
   const stale = isStale(schedules)
     ? [
@@ -941,6 +945,7 @@ function signalOf(parts: Parts, context: AdherenceContext): ScheduleSignal {
     weight: SIGNAL_WEIGHTS[state],
     ...(parts.expected && ["awaited", "due", "overdue", "held"].includes(state) ? { measure: parts.expected.at } : {}),
     notes: [...notes, ...stale],
+    ...(derived.length ? { derived } : {}),
     late,
   };
 }
@@ -1133,8 +1138,9 @@ function enabledSignal(schedule: ScheduleResource, context: AdherenceContext): S
     at: run.at,
     text: run.due ? SIGNAL_WORDS.ago(ago) : ahead,
   };
-  const notes = [...derivedNotes(zone, name), ...holdNotes(hold, context)];
-  const common = { next, zone: line, anchor: anchored, expected, hold, notes };
+  const derived = derivedNotes(zone, name);
+  const notes = [...derived, ...holdNotes(hold, context)];
+  const common = { next, zone: line, anchor: anchored, expected, hold, notes, derived };
 
   if (hold.state === "held") {
     const words = [
@@ -1210,9 +1216,9 @@ function pausedSignal(schedule: ScheduleResource, phase: ScheduleState, context:
 
   if (run.kind === "at-every-look") return everyLook();
   if (run.kind !== "expected") return unknown(SIGNAL_WORDS.why["no-anchor"]);
-  const notes = derivedNotes(zone, schedule.metadata.name);
+  const derived = derivedNotes(zone, schedule.metadata.name);
   const at = runText(written, run.at, clock);
-  const more = { zone: line, notes };
+  const more = { zone: line, notes: derived, derived };
 
   if (schedule.spec?.skipImmediately === true) {
     return done(
@@ -1248,7 +1254,7 @@ function pausedSignal(schedule: ScheduleResource, phase: ScheduleState, context:
   return done(
     { would: "submit", due: run.at, skip },
     `${skip === false ? SIGNAL_WORDS.resume.submit(at) : SIGNAL_WORDS.resume.submitUnlessServer(at)} ${SIGNAL_WORDS.resume.skipMoves} ${SIGNAL_WORDS.resume.asNow}`,
-    { ...more, hold, notes: [...notes, ...holdNotes(hold, context)] },
+    { ...more, hold, notes: [...derived, ...holdNotes(hold, context)] },
   );
 }
 
