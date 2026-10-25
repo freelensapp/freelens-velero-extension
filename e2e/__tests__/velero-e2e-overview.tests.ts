@@ -351,8 +351,15 @@ describe("overview of an installation", () => {
       const shown = await cluster.overview(frame);
 
       expect(shown.window).toBe("7d");
-      expect(shown.summary).toBe("14 items in what was read.");
+      // Nine schedules name no zone and no backup of the installation gives the one of the server, and Velero has
+      // not read one: the adherence of the ten is not known. It is said, with the items, and none of them is an
+      // item of A11; the families that were not read are another line, and there is none.
+      expect(shown.summary).toBe("14 items in what was read. The adherence of 10 schedules is not known.");
       expect(shown.unchecked).toEqual([]);
+      expect(shown.notKnown).toEqual({ count: 10, reasons: { "not-read": 1, "no-offset": 9 } });
+      expect(await words("[data-testid=velero-overview-attention] [data-adherence-unknown]")).toBe(
+        "Schedules The adherence of 10 schedules is not known, which is not that they need nothing. Not read by Velero yet: 1. The time zone of the Velero server not known: 9.",
+      );
       // Ten at a time: what is first is read first, and the ones that follow are asked for.
       expect(shown.items).toEqual(ITEMS.slice(0, 10));
       expect(text(await frame.locator("[data-testid=velero-overview-attention-more]").innerText())).toBe(
@@ -609,12 +616,53 @@ describe("overview of an installation", () => {
         "overview-schedule-09",
       ]);
       expect(await words("[data-testid=velero-overview-schedules-others]")).toBe("2 more in the list of the schedules");
+      // The next run and the adherence after Paused, as the list says them: none for the paused schedule and for
+      // the refused one, not known for the others.
       expect(await words('[data-testid=velero-overview-schedules-list] [data-line="overview-schedule-05"]')).toBe(
-        "overview-schedule-05 Enabled Paused None among the backups that exist",
+        "overview-schedule-05 Enabled Paused None Paused None among the backups that exist",
       );
       expect(await words('[data-testid=velero-overview-schedules-list] [data-line="overview-schedule-07"]')).toMatch(
-        /^overview-schedule-07 Failed validation Not paused scheduled-8h completed /,
+        /^overview-schedule-07 Failed validation Not paused None No run scheduled-8h completed /,
       );
+      expect(shown.adherence).toEqual({
+        ...Object.fromEntries(
+          shown.schedules.map((name) => [
+            name,
+            { next: "not-known", state: "not-known", mark: "not-known", reason: "no-offset" },
+          ]),
+        ),
+        "overview-schedule-05": { next: "none", state: "paused", mark: "paused", reason: "" },
+        "overview-schedule-07": { next: "none", state: "refused", mark: "refused", reason: "" },
+        "overview-schedule-11": { next: "not-known", state: "not-known", mark: "not-known", reason: "not-read" },
+      });
+      // The cells of the lines, in the window of 1440 by 900: what each table shows, what it cuts with an ellipsis
+      // and a tip, written before anything is asserted; then that no words are clipped with no ellipsis and no tip,
+      // and that every word sits on the line of its row.
+      const lines = [
+        ["schedules", cluster.SCHEDULE_LINES],
+        ["storage", cluster.STORAGE_LINES],
+      ] as const;
+      const report: Record<string, unknown> = {};
+
+      for (const [id, table] of lines) {
+        report[id] = {
+          ...(await cluster.columnsOf(table, frame)),
+          misaligned: await cluster.misalignedWords(table, frame),
+        };
+      }
+      await cluster.writeReport("overview-lines", report);
+      expect((await cluster.columnsOf(cluster.SCHEDULE_LINES, frame)).shown).toEqual([
+        "Schedule",
+        "Validation",
+        "Paused",
+        "Next run",
+        "Adherence",
+        "Newest completed backup",
+      ]);
+      for (const [id, table] of lines) {
+        expect([id, (await cluster.columnsOf(table, frame)).clipped]).toEqual([id, []]);
+        expect([id, await cluster.misalignedWords(table, frame)]).toEqual([id, []]);
+      }
       expect(shown.storage).toEqual(["overview-default", "overview-silent", "overview-unavailable"]);
       expect(await frame.locator("[data-testid=velero-overview-storage-others]").count()).toBe(0);
       expect(await words('[data-testid=velero-overview-storage-list] [data-line="overview-default"]')).toMatch(
@@ -651,6 +699,12 @@ describe("overview of an installation", () => {
         await cluster.openPage(frame, OVERVIEW);
         await cluster.overview(frame);
       }
+      // The line of the schedules whose adherence is not known leads to their list, where each says why.
+      await frame.click("[data-testid=velero-overview-adherence-unknown]");
+      await frame.waitForSelector(`[data-testid=velero-${cluster.SCHEDULES.id}-page]`, { timeout: 60_000 });
+      expect((await cluster.target(frame)).namespace).toBe(cluster.E2E_OVERVIEW_NAMESPACE);
+      await cluster.openPage(frame, OVERVIEW);
+      await cluster.overview(frame);
       const attention = "[data-testid=velero-overview-attention]";
 
       // An item leads to its object, and to the other object its reason names.
@@ -888,6 +942,30 @@ describe("overview of an installation", () => {
       const rules: Record<string, string[]> = {};
       // What the rule of the default names in each installation.
       const defaults: Record<string, string[]> = {};
+      // The schedules of each installation whose adherence is not known, by reason, as the fixtures are made: no
+      // backup of them gives the zone of the server, and Velero has read none of the ones of the views that report
+      // no phase or New. The installation of the two defaults has no schedule.
+      const unknown: Record<string, Record<string, number>> = {
+        [cluster.E2E_STATIC_NAMESPACE]: { "no-offset": 1 },
+        [cluster.E2E_VIEWS_NAMESPACE]: { "not-read": 2, "no-offset": 5 },
+        [cluster.E2E_DEFAULTS_NAMESPACE]: {},
+        [cluster.E2E_OVERVIEW_NAMESPACE]: { "not-read": 1, "no-offset": 9 },
+      };
+      // The schedule of the views that names its zone, of which Velero submits nothing: its run is the first 02:30
+      // of Europe/Rome after its creation, and it is overdue some minutes after, an item of A11 from then on.
+      const created = cluster.kubectlE2E(
+        "get",
+        "schedules.velero.io",
+        "views-zoned",
+        "--namespace",
+        cluster.E2E_VIEWS_NAMESPACE,
+        "-o",
+        "jsonpath={.metadata.creationTimestamp}",
+      );
+
+      expect(created.status).toBe(0);
+      const run = cluster.halfPastTwoInRome(Date.parse(created.stdout.trim()));
+      let zoned = false;
 
       for (const namespace of [
         cluster.E2E_STATIC_NAMESPACE,
@@ -907,16 +985,38 @@ describe("overview of an installation", () => {
         // The five families are read in any order: what needs attention is shown whole once they all are.
         await cluster.overview(frame);
         await showEvery("attention");
+        const read = Date.now();
         const shown = await cluster.overview(frame);
+        const count = Object.values(unknown[namespace]).reduce((all, one) => all + one, 0);
 
         rules[namespace] = [...new Set(shown.items.map(([rule]) => rule))].sort();
         defaults[namespace] = shown.items.filter(([rule]) => rule === "A4").map(([, name]) => name);
         expect([namespace, await cluster.valuesOfTheWhole(frame)]).toEqual([namespace, []]);
         expect([namespace, await cluster.layoutProblems(frame, OVERVIEW)]).toEqual([namespace, []]);
+        // The count of the items, and of how many schedules the adherence is not known when there are some.
         expect([namespace, shown.summary]).toEqual([
           namespace,
-          `${shown.items.length} item${shown.items.length === 1 ? "" : "s"} in what was read.`,
+          [
+            `${shown.items.length} item${shown.items.length === 1 ? "" : "s"} in what was read.`,
+            count ? `The adherence of ${count} schedule${count === 1 ? "" : "s"} is not known.` : "",
+          ]
+            .filter(Boolean)
+            .join(" "),
         ]);
+        expect([namespace, shown.notKnown]).toEqual([
+          namespace,
+          count ? { count, reasons: unknown[namespace] } : undefined,
+        ]);
+        if (namespace === cluster.E2E_VIEWS_NAMESPACE) {
+          const line = shown.adherence["views-zoned"];
+
+          // Its line is in a state the run and the clock give; it is an item exactly when it is overdue, at the
+          // edge of the grace as well, since its line and its item are of one drawing.
+          expect(cluster.statesAround(run, read, Date.now())).toContain(line?.state);
+          zoned = shown.items.some(([rule, name]) => rule === "A11" && name === "views-zoned");
+          expect([line?.state, zoned]).toEqual([line?.state, line?.state === "overdue"]);
+          expect(shown.items.filter(([rule, name]) => rule === "A11" && name !== "views-zoned")).toEqual([]);
+        }
       }
       // The installation of the phases marks no location default: the item is of no single location,
       // and leads to their list. The one of the two defaults marks one that is read-only: the item is
@@ -924,9 +1024,10 @@ describe("overview of an installation", () => {
       expect(defaults[cluster.E2E_STATIC_NAMESPACE]).toEqual(["Default storage location"]);
       expect(defaults[cluster.E2E_DEFAULTS_NAMESPACE]).toEqual(["defaults-older"]);
       expect(defaults[cluster.E2E_OVERVIEW_NAMESPACE]).toEqual([]);
-      // Every rule gave an item on the cluster, in one installation or in another.
+      // Every rule gave an item on the cluster, in one installation or in another: A11 when the schedule of the
+      // views that names its zone is overdue, which it is from some minutes after its first run.
       expect([...new Set(Object.values(rules).flat())].sort()).toEqual(
-        ["A1", "A10", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9"].sort(),
+        ["A1", "A10", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", ...(zoned ? ["A11"] : [])].sort(),
       );
     },
     TIMEOUT,
