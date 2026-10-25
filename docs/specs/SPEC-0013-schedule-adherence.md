@@ -809,19 +809,33 @@ sentences of the backup that holds and of how many more do, said again under the
 state; the age of the read never said, and said only when no view is open; the state left saying that a view is open
 once the last one closed; the date of the host left out of the details; and the header read where headers that throw
 lose the answer. The suite of the schedules is restated, and run in the packaged application with the second phase of
-the pull request: ADHERENCE-PR1-PENDING (the run, the answer of the header of ADH-07, the room of the list at each edge
-and the widths of the window it was reached at). Precisions of the slice, none a change of what a requirement asks: of
-REQ-168, the ones that have no next run are last in the first order a click gives and first in the second, since the
-host reverses the whole order and no callback knows the direction, and Not known comes before None; the cells and the
-items say nothing, and the band says that the backups of the installation are being read, until those backups were
-answered once: the state Loading of the design names the schedules, and the views wait for the backups as well; the
-details of a schedule of a namespace that is not the one the installation reads compute with nothing read of its
-installation, no backup, no offset and no time of its API server, and never read the cluster; the search holds the word
-of the state, the text of the next run and the notes, and not the sentence; the grace is one sentence under the line of
-the next run, from its constant, said of the states whose run is expected or held. A precision of REQ-170, made in this
-pull request, to be confirmed at the review of the fourth milestone: the host draws its details where no view of the
-extension is, and the views ask the installation again only while one of them is open, so the details compute with the
-last read of the views and, when no view is open or that read of the backups is older than the period of the reads, say
-its age in a sentence of the module, as the stale words do, "Computed with the backups of the installation as they were
-read 12m ago, when a view of Velero was last open."; beside an instant they give its date as the host writes one, as the
-band does.
+the pull request, on the nightly of the validation target and the environment of the repository, on 2026-10-25: its 17
+cases, every suite of the views with them, 174 cases in 12 files, and the pre-review, 33 cases, green. The header Date
+of ADH-07 reaches the frame through the client of the host and through a plain fetch, with the headers the API server
+writes beside it, `audit-id` and the ones of its priority and fairness, and it is the one of the API server, as
+AGENTS.md says with the lines of the source of the proxies of the host: the band compares the clocks by the clock of the
+cluster, within a second of the one of the machine there, the clock of the node of kind being 34 milliseconds from it,
+and the suite asserts the form of that sentence. Each edge of the room of the list, from 1,201 to 640 pixels, was
+reached at the zoom of 1, with a window 323 pixels wider than the room, from 1,524 to 963 pixels, on a screen of 1,792
+by 1,003 pixels; the report of the case keeps them for each run. The run found two faults of the list, at every width:
+the words of the next run and of the adherence sat 1.7 pixels above the words of their row, since their badge was in a
+block, and Not paused was clipped with no ellipsis and no tip, since a cell of the host clips a plain span where its
+room ends. The badge is in a flex box, paused is in the badge of the host, and in a list of 1,000 pixels or more paused
+and the age hold their words whole, the newest backup giving up a little of its room and how it ended cut with its tip
+rather than clipped; in a window of 1440 by 900 paused, the next run, the adherence, the last submission and the age are
+read whole. Two checks of the suite, no words clipped and no words off the line of their row, at each edge and at 1440
+by 900, and a test of the stylesheet, the columns that hold their words whole from 1,000 pixels, each fail on the
+stylesheet before the correction. Precisions of the slice, none a change of what a requirement asks: of REQ-168, the
+ones that have no next run are last in the first order a click gives and first in the second, since the host reverses
+the whole order and no callback knows the direction, and Not known comes before None; the cells and the items say
+nothing, and the band says that the backups of the installation are being read, until those backups were answered once:
+the state Loading of the design names the schedules, and the views wait for the backups as well; the details of a
+schedule of a namespace that is not the one the installation reads compute with nothing read of its installation, no
+backup, no offset and no time of its API server, and never read the cluster; the search holds the word of the state, the
+text of the next run and the notes, and not the sentence; the grace is one sentence under the line of the next run, from
+its constant, said of the states whose run is expected or held. A precision of REQ-170, made in this pull request, to be
+confirmed at the review of the fourth milestone: the host draws its details where no view of the extension is, and the
+views ask the installation again only while one of them is open, so the details compute with the last read of the views
+and, when no view is open or that read of the backups is older than the period of the reads, say its age in a sentence
+of the module, as the stale words do, "Computed with the backups of the installation as they were read 12m ago, when a
+view of Velero was last open."; beside an instant they give its date as the host writes one, as the band does.

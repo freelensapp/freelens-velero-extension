@@ -22,6 +22,25 @@ function hiddenBelow(): Map<number, Set<string>> {
   return hidden;
 }
 
+// The columns a rule of the room of a list gives a width of their own from a width up: each `@container` block of
+// `min-width` whose rules give cells a `min-width`, read from the stylesheet as it is written.
+function wholeFrom(): Map<number, Set<string>> {
+  const text = readFileSync(join(process.cwd(), "src", "renderer", "components", "views.module.css"), "utf8");
+  const whole = new Map<number, Set<string>>();
+
+  for (const block of text.matchAll(/@container \(min-width: (\d+)px\) \{([\s\S]*?)\n\}/g)) {
+    const width = Number(block[1]);
+
+    for (const rule of block[2].matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+      if (!/min-width:\s*calc\(/.test(rule[2])) continue;
+      for (const cell of rule[1].matchAll(/\.TableCell\.([a-z-]+)/g)) {
+        whole.set(width, (whole.get(width) ?? new Set()).add(cell[1]));
+      }
+    }
+  }
+  return whole;
+}
+
 describe("room of the list of the schedules", () => {
   const classes = SCHEDULES.columns.map((column) => column.className);
   // What a list of the schedules shows in a room of a width: the classes of its columns no rule hides there.
@@ -51,5 +70,18 @@ describe("room of the list of the schedules", () => {
     for (const width of [320, 520, 640, 760, 1000, 1200]) {
       expect(shownAt(width)).toEqual(expect.arrayContaining(["name", "paused", "next", "adherence", "phase"]));
     }
+  });
+
+  it("gives paused, the next run, the adherence, the last submission and the age the room of their words from 1,000", () => {
+    const whole = wholeFrom();
+
+    expect([...whole.keys()]).toContain(1000);
+    expect(classes.filter((name) => whole.get(1000)?.has(name))).toEqual([
+      "paused",
+      "next",
+      "adherence",
+      "submitted",
+      "age",
+    ]);
   });
 });
