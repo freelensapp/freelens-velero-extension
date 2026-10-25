@@ -187,7 +187,12 @@ commands open the explicit Velero operation, not an unrestricted YAML editor.
   is a way to an object or to a list. What needs attention is in four groups,
   in this order: what is in flight, the storage, the schedules, what ended. The
   storage is by name, and the others from the newest: the order does not change
-  while the operator reads. What is in flight has half the page, and is
+  while the operator reads. Before the items are what the rules did not look at
+  and then the schedules whose adherence is not known, how many for each reason,
+  with the way to their list: none of them is an item, the line says that this is
+  not that they need nothing, and the summary over the items says how many they
+  are. The line of a schedule has its next run and its adherence after paused, as
+  its list has them. What is in flight has half the page, and is
   two lines for each operation: its name, its kind and for how long it has been
   at work, then where it is, what it carries and how many of its items are done.
   When it started is what the elapsed time says to who points at it. The recent
