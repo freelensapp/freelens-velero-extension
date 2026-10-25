@@ -191,17 +191,17 @@ the accuracy of the adherence signal, including its uncertainty states.
 | Ground rules of the write actions | | | Planned |
 | Backup now from a schedule | T4.2 | | Planned |
 | Create backup form, followed by a review of the exact request | T4.3 | | Planned |
-| Create schedule form, followed by a review of the exact request | T4.7 | [SPEC-0016](../specs/SPEC-0016-create-a-schedule.md) | Planned |
+| Create schedule form, followed by a review of the exact request | T4.7 | [SPEC-0016](../specs/SPEC-0016-create-a-schedule.md) | Approved |
 | Restore from backup or schedule, with namespace mappings and existing-resource policy | T4.4 | | Planned |
 | Pause and resume of a schedule, with explicit `skipImmediately` behavior | T4.5 | | Planned |
 | Delete one backup through `DeleteBackupRequest`, with double confirmation | T4.6 | | Planned |
 
 Creating a Schedule is in v1.0.0, decided by the lead maintainer on 2026-10-23:
-T4.7, whose spec is [SPEC-0016](../specs/SPEC-0016-create-a-schedule.md). The order
-of the slices of the milestone is T4.2, T4.3, T4.7, T4.4, T4.5, T4.6. T4.7 comes
-right after T4.3 because the template of a Schedule is the spec of a Backup: the
-form of the template is shared, with two wrappers, one for a Backup and one for a
-Schedule.
+T4.7, whose spec is [SPEC-0016](../specs/SPEC-0016-create-a-schedule.md), approved
+by the lead maintainer on 2026-10-25. The order of the slices of the milestone is
+T4.2, T4.3, T4.7, T4.4, T4.5, T4.6. T4.7 comes right after T4.3 because the template
+of a Schedule is the spec of a Backup: the form of the template is shared, with two
+wrappers, one for a Backup and one for a Schedule.
 
 Editing a Schedule stays out of v1.0.0, decided by the lead maintainer on
 2026-10-23, and is deferred to the next minor: the adapter is create-only

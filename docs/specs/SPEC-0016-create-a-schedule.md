@@ -1,13 +1,13 @@
 # SPEC-0016: Create A Schedule
 
-- **Status:** Draft
+- **Status:** Approved
 - **Date:** 2026-10-23
 - **Milestone / tasks:** M5 / T4.7
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`
 - **Reviewed main:** not relevant: the creation rests on the reviewed release alone, and behavior present only on the main branch of Velero is design guidance, never a baseline capability ([upstream drift watch](../development/PROCESS.md#upstream-drift-watch))
 - **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `2578fac5e9f6d2893129b6ba0d59b379fdf9d305`, the base of the nightly v2.0.0-0-nightly-2026-10-19, which moves with the host drift watch until Freelens 2.0.0 is released
 - **Dependencies:** [the write gate](SPEC-0009-write-gate.md), [the diagnostic request](SPEC-0010-diagnostic-request-and-transport.md), whose creation through the adapter is the pattern of this one, [Schedules](SPEC-0006-schedule-read-only.md), [locations](SPEC-0007-locations-read-only.md), [the adherence of a schedule](SPEC-0013-schedule-adherence.md), [the Freelens v2 host](SPEC-0015-freelens-v2-host.md); the spec of T4.3, not drafted yet, which owns the form of the template of a backup
-- **Approval:** Pending
+- **Approval:** Approved by the lead maintainer on 2026-10-25, as drafted, with D11 decided as the draft proposed: the form refuses an expression the parser refuses; D3 to D8 confirmed, and the amendments of D12 approved with this spec
 
 Governed by [AGENTS.md](../../AGENTS.md). A completed draft is not approval to
 implement.
@@ -483,14 +483,14 @@ No step by hand is needed beyond the review of the milestone.
   controller reads a new schedule at its creation, so the phase comes within
   seconds, and the views go on reading it after.
 
-- **D11, an expression the parser refuses, pending the approval of the lead
-  maintainer (REQ-226, REQ-242).** The form refuses it (D7), so the schedule the
-  controller refuses in the Kubernetes integration is sent through the procedure of
-  the main process and not through the form; in the application, the refusal of
-  Velero is reached by a zone the server does not know or by a server of another
-  version. The other way is a form that lets the expression through with a warning,
-  at the price of a Schedule the extension can neither edit nor delete, which the
-  details of the host can. The lead maintainer chooses at the approval.
+- **D11, an expression the parser refuses, decided by the lead maintainer at the
+  approval on 2026-10-25 (REQ-226, REQ-242).** The form refuses it (D7), so the
+  schedule the controller refuses in the Kubernetes integration is sent through the
+  procedure of the main process and not through the form; in the application, the
+  refusal of Velero is reached by a zone the server does not know or by a server of
+  another version. The other way is a form that lets the expression through with a
+  warning, at the price of a Schedule the extension can neither edit nor delete,
+  which the details of the host can; it was not taken.
 - **D12, the amendments the slice brings.** SCHED-11 of SPEC-0006, as
   [the amendment](#the-amendment-of-spec-0006) says, and the procedures of SPEC-0009,
   as D8 says, each recorded under the amendments of its spec with the pull request

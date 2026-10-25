@@ -47,7 +47,7 @@ replaced. Changing it clears write confirmation and isolates all subsequent data
 | Backup/Restore lists | Native sortable, searchable, virtualized tables | Fast scanning and familiar selection/navigation |
 | Backup/Restore operation | Dedicated full-width workspace with summary and diagnostic tabs | Enough room for scope, progress, structured failures and logs |
 | Schedule/BSL/VSL | Native table and a read-only workspace of the extension, shorter than the one of an operation | The details of the host carry the edit and the delete of the host; one way in and one way back for every kind |
-| Overview | Unframed summary bands and compact recent-operation history | Show attention items, coverage and ongoing work without a decorative dashboard |
+| Overview | Unframed summary bands and compact recent-operation history | Show attention items and ongoing work without a decorative dashboard; the panels of the backup coverage are deferred after v1.0.0 |
 | Recovery form | Guided source -> scope -> policy -> review flow | Keep consequential choices explicit and reviewable |
 
 The Backups row opens its dedicated operation route. Provide a clear back link and
@@ -95,9 +95,12 @@ file the operator chooses in the dialog of the host.
   carry the meaning without color. Use host semantic tokens in both themes.
 - BSL availability and access mode are separate fields. VSL status can be absent;
   show that limitation instead of assuming a healthy provider.
-- Overview health includes data coverage and last-success time. A failed read is not
-  zero failures. A successful backup does not prove recoverability, full workload
-  coverage, or absence of application-consistency problems.
+- Overview health includes the last-success time. The panels of the backup coverage,
+  which would show which namespaces and volumes the schedules and the backups of an
+  installation cover, are [deferred after v1.0.0](ROADMAP.md#deferred-after-v100). A
+  failed read is not zero failures. A successful backup does not prove
+  recoverability, full workload coverage, or absence of application-consistency
+  problems.
 
 ## Lists And Details
 
