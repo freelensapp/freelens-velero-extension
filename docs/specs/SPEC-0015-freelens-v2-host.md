@@ -5,7 +5,7 @@
 - **Milestone / tasks:** Foundation / T0.7, T0.8
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, unchanged
 - **Reviewed main:** not relevant: the subject of this spec is the host, and it reads or changes no behavior of Velero
-- **Freelens validation target:** freelensapp/freelens `2578fac5e9f6d2893129b6ba0d59b379fdf9d305`, the base of the nightly v2.0.0-0-nightly-2026-10-19, with `@freelensapp/extensions` 2.0.0-0-nightly-2026-10-19; it moves with the host drift watch until Freelens 2.0.0 is released
+- **Freelens validation target:** freelensapp/freelens `7801fb10a5f20af308093b39e5f79cd6e8c3461d`, the base of the nightly v2.0.0-0-nightly-2026-10-25, with `@freelensapp/extensions` 2.0.0-0-nightly-2026-10-25; it moves with the host drift watch until Freelens 2.0.0 is released
 - **Dependencies:** [local foundation](SPEC-0001-local-foundation.md); [test environment](SPEC-0004-test-environment-every-platform.md); [the write gate](SPEC-0009-write-gate.md); [the diagnostic request and its transport](SPEC-0010-diagnostic-request-and-transport.md); [the viewers](SPEC-0011-artifact-viewers.md); for the re-verification, the specs of M1 to M3, SPEC-0002 to SPEC-0012, and [the adherence of a schedule](SPEC-0013-schedule-adherence.md) for T3.1 and T3.2
 - **Approval:** Approved by the lead maintainer on 2026-10-16, as drafted. The version and release plan, D10, was decided by the lead maintainer the same day
 
@@ -1197,3 +1197,217 @@ reference (HOST-22). With #89 the headers and the evidence of the specs of M1 to
 and SPEC-0013 name v2 (HOST-24). The spec is Implemented: T0.7 and T0.8 are on main,
 and T3.3 resumes on v2. Verified waits for every check of its table to be proven,
 HOST-21 among them, at the first prerelease, when the lead maintainer asks for it.
+
+**The move of the pin, on 2026-10-25** (REQ-218, HOST-23). The validation target
+moved from `2578fac5` to `7801fb10a5f20af308093b39e5f79cd6e8c3461d`, the base of the
+nightly v2.0.0-0-nightly-2026-10-25, which its release names; the SDK
+`@freelensapp/extensions` 2.0.0-0-nightly-2026-10-25 is pinned exactly, and its
+declarations carry what that commit changed of them: the methods of the client of the
+API in upper case, the key that clears the error page of the host, and the type of a
+component of the host that the `observer` of mobx-react wraps, in place of the one of
+mobx-react-lite. Its peers are the ones of before, each optional: React and its DOM
+`^19.3.1`, MobX `^7.0.6`, mobx-react `^10.0.2`, the editor `^0.57.0`, which the
+extension does not use, and Electron `>=43.0.0`. The pin moved in the header above,
+in the line `freelens_ref` of the workflows of the views and of the integration, in
+the manifest and its build test, and in every document that named the commit, the
+nightly or the SDK of before, but the history of the evidence and the records of the
+moves; Electron 43.8.3, for its types, and vite 8.3.5 take the versions of the
+catalog of the host (`0b7e17a2`, `06e462c0`), as Renovate does for the libraries the
+host has. The pull request of Renovate of the dependencies of Freelens moves the same
+three, and Node to 24.22.0 and Biome to 2.6.2, which stay in it, after this move. The
+facts of the host above were read again at the new commit: of the 54 ranges their
+links cite, with the three of ARCHITECTURE, 50 hold their text at the same lines; the
+loader holds the same text at line 783, and the catalog its react-window at line 120;
+and the client of the API holds the facts of `getResponse` and of the other calls at
+the same lines, which now write its methods in upper case. The stub and the doubles
+of the tests were read again the same way: the loader takes new lines in the stub and
+in the test of the entry points, the catalog new lines in the build test, the client
+of the API the same lines with its methods, and every other file they cite is the
+same at both commits.
+
+The watch of the move, read on 2026-10-25: the main branch of the host from
+`2578fac5` to `7801fb10`, forty-two commits, and three after it, to `a05be692`; the
+main branch of the template is still at `3f5296dc`, the commit the watch of
+2026-10-22 read. What each changes for the extension:
+- `a50886d1` (freelensapp/freelens#2799): a tarball of an extension that is
+  installed is installed again, or in place of the one installed, after a
+  confirmation of the host, which disables the extension and waits until the main
+  process and the frame have taken it down; the loader gains that wait and a
+  channel for it, and changes in actions of MobX the set of the extensions it is
+  loading. An install into a profile with no extension takes the way of before,
+  to the unpacking, where the host still gives its loader ten seconds to see the
+  extension: the helpers of the suites install into a new profile alone, and read
+  the page for the same states, so nothing changes there. The stub and the test of
+  the entry points name the lines of the loader again, 737 to 767 and 776 to 833,
+  and 771 to 840: the order they follow, `onActivate` awaited and then the
+  extension enabled, and the disposers after `onDeactivate`, is the one of before.
+- The proxies between the frame and the API server: `df8f2092`
+  (freelensapp/freelens#2823) and `3534b57a` (freelensapp/freelens#2835) bundle
+  freelens-k8s-proxy 1.10.0 and then 2.0.0, which takes its settings from variables
+  `FREELENS_PROXY_*` under subcommands and adds the subcommand `credential`;
+  `ba1a36b5` (freelensapp/freelens#2829) names the server of that proxy a manager, a
+  name the extension does not use; `cd07118f` (freelensapp/freelens#2830) has the
+  main process talk HTTP/2 to that proxy, on the fetch path of http-proxy-3, and has
+  the proxy of Freelens ask a token of every request to a cluster or to its own API:
+  the frames carry it in a cookie, the main process in a header, and kubectl, helm
+  and the terminal take it through the credential of the kubeconfig the host writes,
+  the subcommand `credential` of freelens-k8s-proxy, from `FREELENS_PROXY_TOKEN` of
+  the environment `Main.Shell.getEnvironment` gives; the same commit has the proxy of
+  Freelens answer 503 a request to a cluster that is not connected, with a `Status`
+  that says so, and start nothing for it, where it started the proxy of that cluster,
+  while an upgrade, a port-forward among them, still starts it whatever the state of
+  the cluster; `c2ec917e` (freelensapp/freelens#2842) forwards no `Origin` of a frame
+  to the cluster; `308af9dd` (freelensapp/freelens#2849) takes http-proxy-3 2.0.2;
+  and `d9afb215` (freelensapp/freelens#2846) tests that proxy in the host alone. The
+  chain of the header Date was read again at the new commit and probed, below. The
+  tunnel gives kubectl the environment of the host whole (REQ-203), and with it the
+  token: the suite of the tabs loaded every artifact through the tunnel, the identity
+  of an `exec` plugin among them, whose plugin ran in freelens-k8s-proxy alone, as D2
+  says of the plugin of an identity. The kubectl of the tunnel runs as its credential
+  the subcommand of the host, which reads no kubeconfig and makes no request, and
+  prints the token of the proxy of Freelens. The comment of the case of the `exec`
+  plugin said that the kubeconfig of that kubectl names no plugin, and says now that
+  it names that subcommand; AGENTS.md and ARCHITECTURE say what the environment of
+  `Main.Shell` carries, with the lines of the host. REQ-201 stays as it is: the main
+  process reads the state of the cluster before every request, and refuses one that
+  is not connected with its own words, before anything leaves. D1 gave as a reason
+  that a request to a cluster that is not connected starts its proxy, which since
+  that commit holds of an upgrade alone, as the tunnel is: the row of the facts above
+  on reaching a catalog cluster says it, with the lines of the host, beside the guide
+  of the host, which still says that the proxy does not look at the state of the
+  cluster, and so do AGENTS.md, ARCHITECTURE and two comments of the main process.
+  The record of a request of the proxy that its client gave up on keeps its words:
+  freelens-k8s-proxy 2.0.0 writes it with the proxy handler of kubectl v0.37.1, as
+  1.9.1 did, and the collector of the suites leaves it out as before.
+- `a4752de8` (freelensapp/freelens#2848): the main process of the host asks a
+  server for no Brotli and refuses an answer encoded with it, for a defect of the
+  decoder of Brotli of the Node of Electron. The transport of the extension asks
+  for `identity` and decodes gzip alone (`src/main/diagnostic-transport.ts`), and
+  its requests to the API server go through the client of the host: nothing
+  changes.
+- `b40b623b` (freelensapp/freelens#2852): the client of the host sends its methods
+  in upper case and passes on the one it is given as it is given, and the SDK
+  types them in upper case only. The reads of the views send `GET`
+  (`src/renderer/api/reader.ts`, line 57), and the adapter of the main process
+  `GET` and `POST`, as the tests of the reader and of the adapter assert, and the
+  nine programs check on the new declarations. The double of the client in
+  `test/host-client.ts` wrote a method in upper case whatever it was given; it
+  records it now as it is given, as the host sends it, and a test of the doubles
+  says so, seen failing on the double of before.
+- `52f6869e` (freelensapp/freelens#2854), after `b5169cd5`
+  (freelensapp/freelens#2795) of the record of 2026-10-19: the notifications start
+  below the close button only on a page that has one, the Extensions page and the
+  preferences, and at the top elsewhere, as at the target of before.
+  `dismissNotifications` of the helpers closes every notification and that page by
+  their close commands, with a click that does not wait for what lies over them,
+  and nothing lies over the close button of the page now: every suite ran through
+  it.
+- `0d8c3339` (freelensapp/freelens#2808): the host clears the error page of a page
+  that crashed when the address changes, through a key of its boundary that the
+  SDK declares. The extension uses no boundary of the host: it wraps its pages, its
+  sections and its menu items in boundaries of its own (REQ-211), and HOST-16, in
+  the journey suite, keeps the error of a section in its place.
+- `97f28410` (freelensapp/freelens#2807): the host keeps mobx-react at the version
+  of its catalog and drops mobx-react-lite, which the extension never imports; the
+  build test finds in the bundles no package but the shim of the SDK and
+  react-window.
+- `643dd192` and `0b7e17a2` (freelensapp/freelens#2822, freelensapp/freelens#2832),
+  Electron 43.8.1 and 43.8.3, and `06e462c0` (freelensapp/freelens#2833), vite
+  8.3.5: taken, above.
+- `103c9a4b` (freelensapp/freelens#2811), undici 8.12.3, the `fetch` of the main
+  process of the host, in the chain below; `d28a29bd` (freelensapp/freelens#2821),
+  `@kubernetes/client-node` 2.0.1, which the bundle does not carry (REQ-203);
+  `8b451c67` (freelensapp/freelens#2834), electron-builder 26.18.0, with which the
+  workflows here build Freelens at the target; `088d0851` and `54b61e13`
+  (freelensapp/freelens#2845, freelensapp/freelens#2856), node-pty of the
+  terminal: nothing to take.
+- `8cafbd81`: the workflow of the host that migrates the configuration of Biome
+  pushes its commit to the branch of the pull request of Renovate, as the one of
+  the template does since `f7a7a5c`; the workflow here is of an earlier form, which
+  this move leaves as it is. `7801fb10` (freelensapp/freelens#2850), the commit of
+  the target, takes Biome 2.6.2, which formats the styles of the host and changes
+  none of their rules.
+- The other eighteen, nothing for the extension: the terminal and its shells
+  (`c099a093`, `4761d1e4`, `ad380c3e`, `db449d89`), the views of Helm and a chart
+  of the cluster (`bc5e50ab`, `8094c4cc`), the icons of the installers (`a2c624ca`),
+  the build and the development on Windows (`aaca11a4`, `5a8b90c4`), the tests of
+  the host (`5e1656d4`), its security policy, its runners and its workflows
+  (`b2b602e9`, `1eb06fd9`, `1d654d4a`, `a29356e1`, `261f97f8`), and its instructions
+  for agents (`c20c37c6`, `6ff7610b`, `b1d74d61`).
+- After the target: `7477dbf9` (freelensapp/freelens#2857), chart.js 4.6.1, a
+  dependency of the SDK the extension does not use; `b70f1d89`
+  (freelensapp/freelens#2837), pnpm 12.15.0, which this repository takes from the
+  host with the next move; `a05be692`, the configuration of Trunk and of Biome of
+  the host.
+
+The chain of the header Date at the new target, read in the source and in what the
+application bundles: the proxy of the main process takes a read of the frame on
+`/api-kube` to the freelens-k8s-proxy of the cluster, on the fetch path of
+http-proxy-3 2.0.2, the version the lockfile of the host resolves, with the `fetch`
+of undici 8.12.3 and its pool of HTTP/2; http-proxy-3 passes on every header of the
+answer of `fetch` but the hop-by-hop ones, the host changes none but the `location`
+of a redirect, and Node 24.22.0, in the Electron 43.8.3 of the application, writes a
+Date only for an answer that has none. freelens-k8s-proxy 2.0.0, which the
+application bundles, built with Go 1.27.3, the Go of its `go.mod`, passes the answer
+of the API server on with the proxy handler of kubectl, which copies every header but
+the hop-by-hop ones, and the server of Go writes a Date only for an answer whose
+handler set none, on HTTP/2 as on HTTP/1.1. AGENTS.md gives the files and the lines
+of each, and ARCHITECTURE the route and the target of the host. A probe in the frame
+of the packaged application, on the nightly of the target, read five answers through
+the client of the host and five through a `fetch` of its own, to `/api-kube/version`:
+each carried the header Date, beside `audit-id`, `x-kubernetes-pf-flowschema-uid` and
+`x-kubernetes-pf-prioritylevel-uid`, which only the API server writes, and named the
+second in which its read began and ended; the band of the schedule said that times
+are compared by the clock of the cluster. The clock of the node of kind was 30 to 34
+milliseconds from the one of the machine, at the median of each of three series of
+measures, so the value of the header cannot tell who wrote it; the headers beside it
+can. The probe was not committed.
+
+Decided while implementing, on 2026-10-25:
+- The double of the client of the host records the method of a request as it is
+  given, as the host sends it since `b40b623b`, and no longer in upper case
+  whatever it is given: a method in lower case, which `fetch` sends as it is
+  written and the API server refuses for a `PATCH`, would be seen by the tests of
+  the adapter.
+- AGENTS.md and ARCHITECTURE say what the environment of `Main.Shell` carries
+  since `cd07118f`, the token of the proxy of Freelens and the subcommand that
+  gives it to kubectl, with the lines of the host; the extension passes that
+  environment whole already, and no behavior changes.
+- The reasons of D1 and D2 keep their words, and this record says what holds of
+  them at the new target: the one of D1, that a request to a cluster that is not
+  connected starts its proxy, holds since `cd07118f` of an upgrade alone, as the
+  port-forward of the tunnel is; the one of D2, that a credential plugin runs once,
+  in the proxy, and never in the kubectl of the extension, holds of the plugin of
+  the identity, while that kubectl runs the subcommand `credential` of the host for
+  the token of its proxy. Both decisions stand as they are.
+
+The evidence of the move, on Node 24.21.0 and pnpm 12.14.0: the install, then the
+install frozen; the type check of the nine programs with no error; lint, 266 files;
+the unit run, 85 files and 2,633 tests with none failed, and the two measures within
+their budgets (VIEW-10 unit, the parser at 160.8 ms at the 95th percentile; ADH-16,
+the thousand schedules at 46.2 ms and one at 0.04 ms); the build with
+`VITE_PRESERVE_MODULES=false`, the five files of `dist/` byte for byte the ones of
+the build of the unit run; knip, both passes with no finding; Trunk on the 38 files
+of the move, the lockfile left out by its configuration, with no issue; and the pin
+of one workflow put back to `2578fac5`, which the test of the environment failed,
+then moved again. HOST-03 on the new SDK: with React and its DOM at 19.3.0, in a copy
+of the manifest, the lockfile and the workspace, pnpm stopped with
+`ERR_PNPM_PEER_DEP_ISSUES`, an unmet peer of `@freelensapp/extensions`
+2.0.0-0-nightly-2026-10-25 for each. On the nightly v2.0.0-0-nightly-2026-10-25, its
+package checked against its published checksum, with Electron 43.8.3, Node 24.22.0
+and freelens-k8s-proxy 2.0.0 inside, one at a time and nothing else heavy beside
+them: `pnpm e2e:views`, every suite of the views in one run, 12 files and 174 cases,
+every one passed, in 1,854 seconds: the tabs 52, with HOST-13, HOST-06 and the
+identity of an `exec` plugin, the journey 19, the schedules 17, the Overview 15, the
+restores 14, the locations 13, the server 8, the reader of three kinds 8, the second
+reader 7, the gate 7, the preferences 7 and the scale 7; `pnpm pre-review`, 33 cases
+of 33 in 727 seconds; and `pnpm e2e:integration`, FND-10 and the five sessions of the
+integration test, 6 files and 21 cases, every one passed, nothing left in the
+cluster. VIEW-10 on the log of 200,000 lines: the answers at 63 ms and the longest
+frame of a gesture at 25.1 ms at the 95th percentile, 31 rows mounted, an idle frame
+of 16.7 ms at the median; BACK-12 and REST-11 at 113 and 98 ms at the 95th
+percentile, with 27 rows mounted; OVER-12 at 27 ms. The two comments of the main
+process were corrected after the run of the views: the pre-review and the integration
+ran the code of the commits, whose bundles are the ones of the run of the views byte
+for byte but the map of the main process. No `freelens-k8s-proxy`, kubectl or
+Freelens of a run was left after it.

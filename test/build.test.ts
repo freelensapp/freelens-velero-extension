@@ -44,9 +44,9 @@ const MAIN = resolve("dist/main.js");
 const RENDERER = resolve("dist/renderer.js");
 
 // The nightly of the validation target of SPEC-0015, and the versions of the catalog of the host at that commit
-// (pnpm-workspace.yaml of freelensapp/freelens at 2578fac5e9f6d2893129b6ba0d59b379fdf9d305, lines 11 to 17, 57
-// and 121).
-const SDK = "2.0.0-0-nightly-2026-10-19";
+// (pnpm-workspace.yaml of freelensapp/freelens at 7801fb10a5f20af308093b39e5f79cd6e8c3461d, lines 11 to 17, 56
+// and 120).
+const SDK = "2.0.0-0-nightly-2026-10-25";
 const HOST_LIBRARIES = {
   react: "19.3.1",
   "react-dom": "19.3.1",
@@ -54,7 +54,7 @@ const HOST_LIBRARIES = {
   "@types/react-dom": "19.3.0",
   mobx: "7.0.6",
   "mobx-react": "10.0.2",
-  electron: "43.8.0",
+  electron: "43.8.3",
 };
 const REACT_WINDOW = "2.3.4";
 
