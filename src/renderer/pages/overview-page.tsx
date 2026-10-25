@@ -15,7 +15,9 @@ import {
   GROUP_TITLES,
   inFlight,
   locationLines,
+  NOT_KNOWN_WORDS,
   newestCompleted,
+  notKnownCount,
   recent,
   STALE_WORDS,
   scheduleLines,
@@ -24,6 +26,7 @@ import {
 } from "../../common/overview";
 import { pausedText } from "../../common/schedule-view";
 import { VIEWS } from "../../common/views";
+import { AdherenceCell, NextRunText } from "../components/adherence";
 import { Availability } from "../components/location-parts";
 import { OperationLines, operationKey } from "../components/operation-lines";
 import { Phase, Signal, time } from "../components/status";
@@ -31,6 +34,7 @@ import styles from "../components/views.module.css";
 import { focusFirst, ViewsFrame } from "../components/views-frame";
 import { ViewLink } from "../components/workspace";
 import { openView, PAGES, pageUrl } from "../navigation";
+import { adherenceOf, backupsAnswered } from "../state/adherence";
 import { currentInstallation } from "../state/context";
 import { OpenView } from "./open-view";
 import { ValidationMark } from "./schedule-workspace";
@@ -39,7 +43,14 @@ import { ServerBand } from "./server-band";
 import type { ReactNode } from "react";
 
 import type { Unread } from "../../common/location-users";
-import type { AttentionItem, NewestCompleted, Operation, OverviewReads, Unchecked } from "../../common/overview";
+import type {
+  AttentionItem,
+  NewestCompleted,
+  NotKnownCount,
+  Operation,
+  OverviewReads,
+  Unchecked,
+} from "../../common/overview";
 import type { ViewKind } from "../../common/views";
 import type { Installation } from "../state/installation";
 
@@ -197,6 +208,28 @@ function NotChecked({ line, ways }: { line: Unchecked; ways: Ways }) {
         <div className={styles.factNote}>
           {line.reason}. {line.missing}.
         </div>
+      </div>
+    </li>
+  );
+}
+
+// The schedules whose adherence is not known (REQ-171 of SPEC-0013), with how many there are for each reason: none
+// of them is an item, and that is not that they need nothing. The line leads to the list of the schedules, where
+// the tip of each says why.
+function NotKnown({ counts, count, ways }: { counts: NotKnownCount[]; count: number; ways: Ways }) {
+  return (
+    <li className={styles.overviewItem} data-adherence-unknown={count}>
+      <Icon material="help_outline" small aria-hidden />
+      <div>
+        <ListLink ways={ways} kind="schedule" id="velero-overview-adherence-unknown">
+          {TITLES.schedules}
+        </ListLink>
+        <div className={styles.factNote}>{NOT_KNOWN_WORDS.line(count)}</div>
+        {counts.map((counted) => (
+          <div key={counted.reason} className={styles.factNote} data-reason={counted.reason} data-count={counted.count}>
+            {NOT_KNOWN_WORDS.reason(counted.reason, counted.count)}
+          </div>
+        ))}
       </div>
     </li>
   );
@@ -373,11 +406,15 @@ export const Overview = observer(({ installation, now, ways }: OverviewProps) =>
     setAttended(1);
     setFlown(1);
   }, [namespace]);
-  const found = attention(reads, now, window);
+  // What the views share of the adherence of the schedules for a read and a tick of their clock: nothing while the
+  // backups of the installation were never answered, when the list says nothing of the adherence either.
+  const adherence = backupsAnswered(installation) ? adherenceOf(installation, now) : undefined;
+  const found = attention(reads, now, window, adherence);
+  const unknown = notKnownCount(found);
   const flying = inFlight(reads, now);
   const last = recent(reads, now, window);
   const completed = newestCompleted(reads.backups, now);
-  const schedules = scheduleLines(reads, now, found);
+  const schedules = scheduleLines(reads, now, found, adherence);
   const locations = locationLines(reads, now, found);
   const chosen = shown ? new Set(shown) : undefined;
   const listed = chosen ? last.items.filter((operation) => chosen.has(operationKey(operation))) : last.items;
@@ -396,12 +433,14 @@ export const Overview = observer(({ installation, now, ways }: OverviewProps) =>
           <p className={styles.stateText} data-testid="velero-overview-attention-summary">
             {attentionSummary(found)}
           </p>
-          {found.items.length || found.unchecked.length ? (
+          {found.items.length || found.unchecked.length || unknown ? (
             <ul className={styles.overviewItems}>
-              {/* What could not be checked is said first: it is what the items that follow do not cover. */}
+              {/* What could not be checked is said first: it is what the items that follow do not cover. Then the
+                  schedules whose adherence is not known, which are not among them. */}
               {found.unchecked.map((line) => (
                 <NotChecked key={line.family} line={line} ways={ways} />
               ))}
+              {unknown ? <NotKnown counts={found.notKnown ?? []} count={unknown} ways={ways} /> : null}
               {found.items.slice(0, attended * PAGE).map((item) => (
                 <Item key={`${item.rule}/${item.kind}/${item.name ?? ""}`} item={item} ways={ways} />
               ))}
@@ -538,7 +577,7 @@ export const Overview = observer(({ installation, now, ways }: OverviewProps) =>
         />
       </Band>
 
-      <div className={styles.overviewRow}>
+      <div className={styles.overviewLines}>
         <Band id="schedules" title="Schedules">
           {schedules.state === "listed" ? (
             <>
@@ -550,6 +589,8 @@ export const Overview = observer(({ installation, now, ways }: OverviewProps) =>
                         <th scope="col">Schedule</th>
                         <th scope="col">Validation</th>
                         <th scope="col">Paused</th>
+                        <th scope="col">Next run</th>
+                        <th scope="col">Adherence</th>
                         <th scope="col">Newest completed backup</th>
                       </tr>
                     </thead>
@@ -567,6 +608,10 @@ export const Overview = observer(({ installation, now, ways }: OverviewProps) =>
                             <ValidationMark state={line.view.state} />
                           </td>
                           <td className={styles.short}>{pausedText(line.view.paused)}</td>
+                          {/* The next run and the adherence as the row of the schedule in the list says them, with
+                              their tips: nothing while the backups of the installation were never answered. */}
+                          <td>{line.signal ? <NextRunText next={line.signal.next} /> : null}</td>
+                          <td>{line.signal ? <AdherenceCell signal={line.signal} /> : null}</td>
                           <td>
                             <Completed found={line.newestCompleted} />
                           </td>

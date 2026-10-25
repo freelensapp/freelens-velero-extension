@@ -477,6 +477,65 @@ describe("ADH-03: the zone a schedule is read in, in its signal", () => {
     ]);
   });
 
+  it("gives the words of the derived offset apart from what else is said beside the state, and none without one", () => {
+    const daily = schedule("daily", { phase: "Enabled", lastBackup: "2026-10-12T03:00:00Z" });
+    const before = submitted("daily", Date.parse("2026-10-12T03:00:00Z"), 60);
+    const derived = [
+      SIGNAL_WORDS.derived("UTC+02:00", own.metadata.name, SIGNAL_WORDS.thisSchedule, moment),
+      SIGNAL_WORDS.changed(
+        "UTC+01:00",
+        before.metadata.name,
+        SIGNAL_WORDS.otherSchedule("daily"),
+        "2026-10-12 04:00:00 UTC+01:00",
+      ),
+    ];
+    // The backups are of a read five minutes old, which the last one did not renew: what holds the submissions is
+    // said of that read, beside the offset, and is not a word of the offset.
+    const stale: AdherenceReads = {
+      schedules: succeeded([daily, nightly], now),
+      backups: failed(succeeded([before, own], now - 5 * MINUTE), "failed"),
+    };
+    const late = scheduleSignal(nightly, adherenceContext(stale, now, keepOffset(undefined, stale)));
+
+    expect(late).toMatchObject({ state: "overdue", derived });
+    expect(late.notes).toEqual([...derived, SIGNAL_WORDS.backupsStale("5m", SIGNAL_WORDS.since.failed)]);
+    // A paused schedule whose zone is derived is said with them as well, with the schedule they came from.
+    const paused = schedule(
+      "paused",
+      { phase: "Enabled", lastBackup: "2026-10-13T03:00:41Z" },
+      { schedule: "0 3 * * *", paused: true },
+    );
+    const held = scheduleSignal(paused, contextOf([nightly, paused], [own]));
+    const other = [SIGNAL_WORDS.derived("UTC+02:00", own.metadata.name, SIGNAL_WORDS.otherSchedule("nightly"), moment)];
+
+    expect(held).toMatchObject({ state: "paused", derived: other });
+    expect(held.notes).toEqual(other);
+    // None for a zone the expression names, an interval, a zone that is not known, and a schedule at every look,
+    // whose run no offset counts.
+    const look = schedule("look", { phase: "Enabled", lastBackup: "2026-10-14T11:59:00Z" }, { schedule: "0 0 30 2 *" });
+    const every = schedule(
+      "every",
+      { phase: "Enabled", lastBackup: "2026-10-14T10:00:00Z" },
+      { schedule: "@every 6h" },
+    );
+    const named = schedule(
+      "named",
+      { phase: "Enabled", lastBackup: "2026-10-14T03:00:00Z" },
+      { schedule: "TZ=UTC 0 3 * * *" },
+    );
+    const derivedContext = contextOf([nightly, look, every, named], [own]);
+
+    expect(scheduleSignal(look, derivedContext).state).toBe("at-every-look");
+    for (const signal of [
+      scheduleSignal(look, derivedContext),
+      scheduleSignal(every, derivedContext),
+      scheduleSignal(named, derivedContext),
+      scheduleSignal(nightly, contextOf([nightly], [])),
+    ]) {
+      expect([signal.state, "derived" in signal]).toEqual([signal.state, false]);
+    }
+  });
+
   it("computes an interval with no zone, and five fields with no zone only from a derived offset", () => {
     const every = schedule(
       "every",

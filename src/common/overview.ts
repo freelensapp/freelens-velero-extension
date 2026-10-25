@@ -15,6 +15,7 @@ import { hasItems, isStale } from "./read-state";
 import { locationWarning } from "./references";
 import { restoreView } from "./restore-view";
 import { backupsOf } from "./schedule-history";
+import { SIGNAL_WORDS, scheduleSignal } from "./schedule-signal";
 import { NOTES, scheduleView } from "./schedule-view";
 import { WINDOW_LENGTH } from "./window";
 
@@ -25,6 +26,7 @@ import type { StorageLocationView } from "./location-view";
 import type { OperationTime } from "./operation-time";
 import type { FamilyRead, ReadStatus } from "./read-state";
 import type { RestoreView } from "./restore-view";
+import type { AdherenceContext, NotKnownReason, ScheduleSignal } from "./schedule-signal";
 import type { ScheduleView } from "./schedule-view";
 import type {
   BackupResource,
@@ -37,8 +39,10 @@ import type { ViewKind, ViewTarget } from "./views";
 import type { Window } from "./window";
 
 // What the Overview says of an installation, from the five lists that were read of it and from nothing
-// else. It gives no value for the installation as a whole: what needs attention is a list of items, each
-// of one rule and of the objects the rule read, beside what was read and what was not.
+// else but, for the adherence of its schedules, what the views share of it for a read and a tick of their
+// clock (SPEC-0013), which is made of the same reads. It gives no value for the installation as a whole:
+// what needs attention is a list of items, each of one rule and of the objects the rule read, beside what
+// was read and what was not.
 
 export interface OverviewReads {
   backups: FamilyRead<BackupResource>;
@@ -306,7 +310,7 @@ export function recent(reads: OverviewReads, now: number, window: Window): Recen
 
 // What needs attention. Each item is of one rule, names its object and its reason, and leads to the object,
 // or to the list of its kind when it is of no single object.
-export const RULES = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10"] as const;
+export const RULES = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11"] as const;
 export type Rule = (typeof RULES)[number];
 export type Group = "in-flight" | "storage" | "schedules" | "ended";
 
@@ -345,11 +349,23 @@ export interface Unchecked {
   missing: string;
 }
 
+// How many of the schedules that were read have an adherence that is not known for one reason (REQ-171 of
+// SPEC-0013): such a schedule is never an item, and is counted instead, so that what is not known is never read
+// as what needs nothing.
+export interface NotKnownCount {
+  reason: NotKnownReason;
+  count: number;
+}
+
 export interface Attention {
   items: AttentionItem[];
   unchecked: Unchecked[];
   // The families the rules looked at whose objects are of an earlier read: the last one did not succeed.
   earlier: Family[];
+  // The schedules whose adherence is not known, by reason, in the order the signal names the reasons: there when
+  // the adherence was computed, which is with what the views share of it and of schedules that were read. When
+  // they were not, their line of what was not checked says so.
+  notKnown?: NotKnownCount[];
 }
 
 const MISSING: Partial<Record<Family, string>> = {
@@ -361,6 +377,11 @@ const MISSING: Partial<Record<Family, string>> = {
   storageLocations:
     "The availability of the storage locations, their last validation, the default and the locations the schedules name were not checked",
 };
+
+// While the backups were never answered the adherence of the schedules is not computed either, and the line of the
+// backups says so of the schedules that were read, so that the summary never stands for it.
+export const BACKUPS_AND_ADHERENCE_MISSING =
+  "Whether a backup in flight carries a failure, whether one ended with a failure, how the newest backup of each schedule ended and the adherence of the schedules were not checked";
 
 function failing(view: BackupView | RestoreView): boolean {
   return view.evidence.signal === "failure";
@@ -459,7 +480,55 @@ function storageItems(reads: OverviewReads, now: number): AttentionItem[] {
   return items;
 }
 
-function scheduleItems(reads: OverviewReads, now: number): AttentionItem[] {
+// The signal of each schedule that was read, computed with what the views share of the adherence of the
+// installation for a read and a tick of their clock; none without it, which is while the backups of the
+// installation were never answered, as the views say nothing of the adherence then.
+function signalsOf(
+  reads: OverviewReads,
+  adherence: AdherenceContext | undefined,
+): Map<ScheduleResource, ScheduleSignal> | undefined {
+  if (adherence === undefined || !hasItems(reads.schedules)) return undefined;
+  return new Map(reads.schedules.items.map((schedule) => [schedule, scheduleSignal(schedule, adherence)]));
+}
+
+// Rule A11 (REQ-171 of SPEC-0013): a schedule that is overdue, or held beyond the grace, with its zone
+// established, or that Velero submits at every look, since its expression has no instant. The signal gives none
+// of these states to a schedule that is paused, refused, not read or of a phase this version does not know, and
+// no late state to one whose zone is not established: what is not known is counted, and is never an item.
+function adherenceItem(
+  schedule: ScheduleResource,
+  signal: ScheduleSignal,
+  of: Pick<AttentionItem, "group" | "kind" | "name" | "title">,
+  stale: boolean,
+): AttentionItem | undefined {
+  if (!signal.late && signal.state !== "at-every-look") return undefined;
+  const hold = signal.hold;
+  // The time the reason refers to: the expected run, or the last submission of a schedule at every look, which
+  // has no expected run; none when it has submitted nothing. The items of the group keep their order from the
+  // newest: of two that are overdue, the one that is so by less comes first.
+  const time = signal.state === "at-every-look" ? timestamp(schedule.status?.lastBackup) : signal.expected?.at;
+
+  return {
+    ...of,
+    rule: "A11",
+    // The sentence of the state, the words of the derived offset it was computed with, and that whether a backup
+    // holds the submissions is not known when the backups were not read: the state keeps its value beside it.
+    reason: [
+      signal.words,
+      ...(signal.derived ?? []),
+      ...(hold?.state === "not-known" ? [SIGNAL_WORDS.holdNotKnown(hold.reason)] : []),
+    ].join(" "),
+    ...(time === undefined ? {} : { time }),
+    ...(hold?.state === "held" ? { related: { kind: "backup" as const, name: hold.backup } } : {}),
+    stale,
+  };
+}
+
+function scheduleItems(
+  reads: OverviewReads,
+  now: number,
+  signals: Map<ScheduleResource, ScheduleSignal> | undefined,
+): AttentionItem[] {
   const read = reads.schedules;
 
   if (!hasItems(read)) return [];
@@ -531,8 +600,26 @@ function scheduleItems(reads: OverviewReads, now: number): AttentionItem[] {
         }
       }
     }
+    const signal = signals?.get(schedule);
+    // What holds the submissions is read in the backups: an item that names one is of their read as well.
+    const late = signal && adherenceItem(schedule, signal, of, stale || (backups && reads.backups.status !== "ready"));
+
+    if (late) items.push(late);
   }
   return items;
+}
+
+// The schedules whose adherence is not known, counted by reason, in the order the signal names the reasons. A
+// schedule at every look is an item and is not counted; a paused one is neither.
+function notKnownOf(signals: Map<ScheduleResource, ScheduleSignal>): NotKnownCount[] {
+  const counts = new Map<NotKnownReason, number>();
+
+  for (const signal of signals.values()) {
+    if (signal.state === "not-known" && signal.reason) counts.set(signal.reason, (counts.get(signal.reason) ?? 0) + 1);
+  }
+  return (Object.keys(SIGNAL_WORDS.reasons) as NotKnownReason[])
+    .filter((reason) => counts.has(reason))
+    .map((reason) => ({ reason, count: counts.get(reason) ?? 0 }));
 }
 
 function operationItems(reads: OverviewReads, now: number, window: Window): AttentionItem[] {
@@ -590,36 +677,74 @@ function inOrder(one: AttentionItem, other: AttentionItem): number {
   return byName(one.title, other.title) || RULES.indexOf(one.rule) - RULES.indexOf(other.rule);
 }
 
-export function attention(reads: OverviewReads, now: number, window: Window): Attention {
+// What needs attention by the rules. The adherence of the schedules, rule A11 and the count of what is not known
+// of it, is computed with what the views share of it for a read and a tick of their clock, when it is given.
+export function attention(reads: OverviewReads, now: number, window: Window, adherence?: AdherenceContext): Attention {
   const unchecked = (Object.keys(MISSING) as Family[])
     .filter((family) => !hasItems(reads[family]))
-    .map((family) => ({
-      family,
-      kind: KINDS[family],
-      reason: unread(PLURALS[family], reads[family]).reason,
-      missing: MISSING[family] ?? "",
-    }));
+    .map((family) => {
+      const { state, reason } = unread(PLURALS[family], reads[family]);
+      const adherenceToo = family === "backups" && state === "not-read" && hasItems(reads.schedules);
+
+      return {
+        family,
+        kind: KINDS[family],
+        reason,
+        missing: adherenceToo ? BACKUPS_AND_ADHERENCE_MISSING : (MISSING[family] ?? ""),
+      };
+    });
+  const signals = signalsOf(reads, adherence);
 
   return {
-    items: [...operationItems(reads, now, window), ...storageItems(reads, now), ...scheduleItems(reads, now)].sort(
-      inOrder,
-    ),
+    items: [
+      ...operationItems(reads, now, window),
+      ...storageItems(reads, now),
+      ...scheduleItems(reads, now, signals),
+    ].sort(inOrder),
     unchecked,
     earlier: (Object.keys(MISSING) as Family[]).filter((family) => isStale(reads[family])),
+    ...(signals ? { notKnown: notKnownOf(signals) } : {}),
   };
 }
 
 export const NOTHING_READ = "Nothing was read of what the rules look at: what needs attention is not known.";
 
+function capital(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function adherenceNotKnown(count: number): string {
+  return `The adherence of ${count} schedule${count === 1 ? "" : "s"} is not known`;
+}
+
+// What is said of the schedules whose adherence is not known: in the summary, and on the line before the items,
+// which leads to the list of the schedules, with how many there are for each reason in the short words of the
+// reasons of the signal.
+export const NOT_KNOWN_WORDS = {
+  summary: (count: number) => `${adherenceNotKnown(count)}.`,
+  line: (count: number) =>
+    `${adherenceNotKnown(count)}, which is not that ${count === 1 ? "it needs" : "they need"} nothing.`,
+  reason: (reason: NotKnownReason, count: number) => `${capital(SIGNAL_WORDS.reasons[reason])}: ${count}.`,
+};
+
+// How many schedules have an adherence that is not known, whatever the reason.
+export function notKnownCount(found: Attention): number {
+  return (found.notKnown ?? []).reduce((all, { count }) => all + count, 0);
+}
+
 // What is said of what the rules found: how many items, or that nothing in what was read needs attention,
-// which is never that all is well; then what the rules did not look at, and what they looked at as it was
-// before the last read.
+// which is never that all is well; then of how many schedules the adherence is not known, which is never
+// counted as needing nothing; then what the rules did not look at, and what they looked at as it was before
+// the last read.
 export function attentionSummary(found: Attention): string {
   if (found.unchecked.length === Object.keys(MISSING).length) return NOTHING_READ;
+  const unknown = notKnownCount(found);
+
   return [
     found.items.length
       ? `${found.items.length} item${found.items.length === 1 ? "" : "s"} in what was read.`
       : "Nothing in what was read needs attention.",
+    unknown ? NOT_KNOWN_WORDS.summary(unknown) : "",
     found.unchecked.length ? "Not everything was read." : "",
     found.earlier.length ? "Part of it was read before the last read, which did not succeed." : "",
   ]
@@ -644,6 +769,9 @@ export interface ScheduleLine {
   // The rules that name the schedule.
   rules: Rule[];
   newestCompleted: NewestCompleted;
+  // Its next run and its adherence, as its row of the list says them (REQ-171 of SPEC-0013): there when the
+  // adherence was computed, and absent while the backups of the installation were never answered.
+  signal?: ScheduleSignal;
 }
 
 export interface LocationLine {
@@ -671,7 +799,14 @@ function rulesOf(found: Attention, kind: ViewKind): (name: string) => Rule[] {
   return (name) => [...(rules.get(name) ?? [])];
 }
 
-export function scheduleLines(reads: OverviewReads, now: number, found: Attention): LinesPart<ScheduleLine> {
+// The lines of the schedules, the ones a rule names first, A11 among the rules. Each says its next run and its
+// adherence when the adherence is given, which is what the views share of it for a read and a tick of their clock.
+export function scheduleLines(
+  reads: OverviewReads,
+  now: number,
+  found: Attention,
+  adherence?: AdherenceContext,
+): LinesPart<ScheduleLine> {
   if (!hasItems(reads.schedules)) return unread(PLURALS.schedules, reads.schedules);
   const rules = rulesOf(found, "schedule");
   const shown = lines(
@@ -685,7 +820,7 @@ export function scheduleLines(reads: OverviewReads, now: number, found: Attentio
   return {
     state: "listed",
     stale: reads.schedules.status !== "ready",
-    // The newest completed backup is looked for of the schedules that have a line, and of no other.
+    // The newest completed backup, and the adherence, are of the schedules that have a line, and of no other.
     items: shown.items.map(({ schedule, view, rules: named }) => ({
       view,
       rules: named,
@@ -693,6 +828,7 @@ export function scheduleLines(reads: OverviewReads, now: number, found: Attentio
         name: schedule.metadata.name,
         namespace: schedule.metadata.namespace ?? "",
       }),
+      ...(adherence ? { signal: scheduleSignal(schedule, adherence) } : {}),
     })),
     others: shown.others,
   };

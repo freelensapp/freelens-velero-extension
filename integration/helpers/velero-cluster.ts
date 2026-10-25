@@ -207,6 +207,50 @@ export const SNAPSHOT_LOCATIONS: ListOf = {
 };
 
 /**
+ * A table of lines of a page that is not a list of the host, as the lines of
+ * the schedules and of the storage locations of the Overview: its rows name
+ * their object in `data-line`, and its columns are named by their heads.
+ */
+export interface LinesOf {
+  /** How the table is found. */
+  table: string;
+}
+
+export const SCHEDULE_LINES: LinesOf = { table: "[data-testid=velero-overview-schedules-list]" };
+export const STORAGE_LINES: LinesOf = { table: "[data-testid=velero-overview-storage-list]" };
+
+/**
+ * What the band of a table of lines shows of it: the width of the part that
+ * scrolls it sideways and of the table it holds, and the columns, by their
+ * heads, whose right edge is past the edge of that part when it is not
+ * scrolled, which are reached only by scrolling the band. A cell of such a
+ * table is never clipped: the table is as wide as its words, and the band
+ * scrolls instead.
+ */
+export async function bandOf(of: LinesOf, frame: Frame): Promise<{ room: number; width: number; behind: string[] }> {
+  return frame.evaluate((selector) => {
+    const table = document.querySelector<HTMLElement>(selector);
+
+    if (!table) return { room: 0, width: 0, behind: ["no table"] };
+    let holder: HTMLElement | null = table.parentElement;
+
+    while (holder && !["auto", "scroll"].includes(getComputedStyle(holder).overflowX)) {
+      holder = holder.parentElement;
+    }
+    const scroller = holder ?? table;
+    const edge = scroller.getBoundingClientRect().left + scroller.clientWidth - scroller.scrollLeft;
+
+    return {
+      room: scroller.clientWidth,
+      width: scroller.scrollWidth,
+      behind: [...table.querySelectorAll<HTMLElement>("thead th")]
+        .filter((head) => head.getBoundingClientRect().right > edge + 1)
+        .map((head) => (head.textContent ?? "").trim()),
+    };
+  }, of.table);
+}
+
+/**
  * Runs the pinned `kubectl` of the test environment against the test cluster,
  * reading only, and returns its exit status and output. The kubeconfig is the
  * one of the environment, never the one of the developer.
@@ -933,6 +977,67 @@ export async function rowAdherence(frame: Frame, name: string): Promise<RowAdher
   });
 }
 
+/** The wall clock of Europe/Rome at an instant, by the Intl of the machine of the suite. */
+export function inRome(instant: number): { date: string; minute: string; second: string } {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/Rome",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(instant)
+      .map((part) => [part.type, part.value]),
+  );
+
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    minute: `${parts.hour}:${parts.minute}`,
+    second: parts.second,
+  };
+}
+
+/**
+ * The first run of `CRON_TZ=Europe/Rome 30 2 * * *`, the expression of the
+ * schedule `views-zoned` of the fixtures, after an instant, as the controller
+ * counts it: the first 02:30 of the wall clock of Europe/Rome after it, the
+ * first of the two on the day the hour repeats. The suites compute it so, from
+ * the creation the cluster holds and the clock, and never with the code of the
+ * extension.
+ */
+export function halfPastTwoInRome(after: number): number {
+  const hour = 60 * 60 * 1000;
+
+  for (let day = after - 12 * hour; day < after + 72 * hour; day += 12 * hour) {
+    const { date } = inRome(day);
+    const [year, month, dayOfMonth] = date.split("-").map(Number);
+    const runs = [2, 1]
+      .map((offset) => Date.UTC(year, month - 1, dayOfMonth, 2 - offset, 30))
+      .filter((run) => run > after && inRome(run).date === date && inRome(run).minute === "02:30");
+
+    if (runs.length) return Math.min(...runs);
+  }
+  throw new Error(`No 02:30 of Europe/Rome in the three days after ${new Date(after).toISOString()}`);
+}
+
+// What a schedule is said to be by its run: due for five minutes after it, overdue after that.
+const GRACE_OF_A_RUN = 5 * 60 * 1000;
+
+/**
+ * The states a schedule whose run is at `run` may be said in by a page read
+ * between two clocks: the clock of the page is a tick of up to five seconds
+ * before the read, and the read may be fifteen seconds old.
+ */
+export function statesAround(run: number, before: number, after: number): string[] {
+  const at = (clock: number) => (clock <= run ? "awaited" : clock - run > GRACE_OF_A_RUN ? "overdue" : "due");
+
+  return [...new Set([at(before - 20_000), at(after)])];
+}
+
 /**
  * The room of a list, which the rules of the stylesheet give its columns by:
  * the width of the inside of the part they measure, in pixels of the page.
@@ -955,61 +1060,83 @@ export async function listRoom(frame: Frame, of: ListOf): Promise<number> {
     });
 }
 
+// Where the rows and the cells of a list of cells are. A cell of a list of the
+// host is named by its class and its row by the cell of the name; a cell of a
+// table of lines by the head of its column and its row by its line.
+function partsOf(of: ListOf | LinesOf): { rows: string; cells: string; heads: string; lines: boolean } {
+  return "table" in of
+    ? { rows: `${of.table} tbody tr`, cells: "td", heads: `${of.table} thead th`, lines: true }
+    : {
+        rows: `${list(of)} .TableRow:not(.TableHead)`,
+        cells: ".TableCell",
+        heads: `${list(of)} .TableHead .TableCell`,
+        lines: false,
+      };
+}
+
 /**
  * The columns the list shows, by their names, the ones whose words do not fit
  * their cell in a row that is mounted, and the ones whose words go past the end
  * of their cell: a value that is cut is read in the tip of its cell, and not at
  * a glance; a value that is clipped is cut where the room of the cell ends, with
  * no ellipsis and no tip, since a cell of the host clips what is wider than it.
+ * A table of lines of a page is read the same way, by the heads of its columns.
  */
 export async function columnsOf(
-  of: ListOf,
+  of: ListOf | LinesOf,
   frame: Frame,
 ): Promise<{ shown: string[]; cut: string[]; clipped: string[] }> {
-  return frame.evaluate((selector) => {
-    const column = (cell: Element) =>
-      String(cell.className)
-        .replace(/TableCell|sorting|nowrap/g, "")
-        .trim();
+  return frame.evaluate(({ rows, cells, heads, lines }) => {
+    const titles = [...document.querySelectorAll(heads)].map((head) => (head.textContent ?? "").trim());
+    const column = (cell: Element, index: number) =>
+      lines
+        ? (titles[index] ?? String(index))
+        : String(cell.className)
+            .replace(/TableCell|sorting|nowrap/g, "")
+            .trim();
     const visible = (cell: Element) => getComputedStyle(cell).display !== "none";
     const cut = new Set<string>();
     const clipped = new Set<string>();
 
-    for (const cell of document.querySelectorAll<HTMLElement>(`${selector} .TableRow:not(.TableHead) .TableCell`)) {
-      if (!visible(cell)) continue;
-      const words = [cell, ...cell.querySelectorAll<HTMLElement>("*")].filter(
-        (element) => getComputedStyle(element).textOverflow === "ellipsis",
-      );
+    for (const row of document.querySelectorAll<HTMLElement>(rows)) {
+      [...row.querySelectorAll<HTMLElement>(cells)].forEach((cell, index) => {
+        if (!visible(cell)) return;
+        const words = [cell, ...cell.querySelectorAll<HTMLElement>("*")].filter(
+          (element) => getComputedStyle(element).textOverflow === "ellipsis",
+        );
 
-      if (words.some((element) => element.scrollWidth > element.clientWidth + 1)) cut.add(column(cell));
-      if (cell.scrollWidth > cell.clientWidth + 1) clipped.add(column(cell));
+        if (words.some((element) => element.scrollWidth > element.clientWidth + 1)) cut.add(column(cell, index));
+        if (cell.scrollWidth > cell.clientWidth + 1) clipped.add(column(cell, index));
+      });
     }
 
     return {
-      // The last cell of the head is of the host: what chooses the columns that are shown.
-      shown: [...document.querySelectorAll(`${selector} .TableHead .TableCell`)]
+      // The last cell of the head of a list is of the host: what chooses the columns that are shown.
+      shown: [...document.querySelectorAll(heads)]
         .filter(visible)
         .map(column)
         .filter((name) => name !== "menu"),
       cut: [...cut].sort(),
       clipped: [...clipped].sort(),
     };
-  }, list(of));
+  }, partsOf(of));
 }
 
 /**
  * The cells of the mounted rows whose words do not sit on the line of the words
  * of their row: the middle of the first line of words of a cell, its marks left
- * out, more than a pixel away from the median of the middles of the row.
+ * out, more than a pixel away from the median of the middles of the row. A table
+ * of lines of a page is read the same way, each line by the object it names.
  */
-export async function misalignedWords(of: ListOf, frame: Frame): Promise<string[]> {
-  return frame.evaluate((selector) => {
+export async function misalignedWords(of: ListOf | LinesOf, frame: Frame): Promise<string[]> {
+  return frame.evaluate(({ rows, cells, heads, lines }) => {
     const found: string[] = [];
+    const titles = [...document.querySelectorAll(heads)].map((head) => (head.textContent ?? "").trim());
 
-    for (const row of document.querySelectorAll<HTMLElement>(`${selector} .TableRow:not(.TableHead)`)) {
+    for (const row of document.querySelectorAll<HTMLElement>(rows)) {
       const middles: [string, number][] = [];
 
-      for (const cell of row.querySelectorAll<HTMLElement>(".TableCell")) {
+      for (const [index, cell] of [...row.querySelectorAll<HTMLElement>(cells)].entries()) {
         if (getComputedStyle(cell).display === "none") continue;
         const words = document
           .createTreeWalker(cell, NodeFilter.SHOW_TEXT, {
@@ -1025,15 +1152,19 @@ export async function misalignedWords(of: ListOf, frame: Frame): Promise<string[
 
         range.selectNodeContents(words);
         const box = range.getClientRects()[0];
-        const name = String(cell.className)
-          .replace(/TableCell|sorting|nowrap/g, "")
-          .trim();
+        const name = lines
+          ? (titles[index] ?? String(index))
+          : String(cell.className)
+              .replace(/TableCell|sorting|nowrap/g, "")
+              .trim();
 
         if (box) middles.push([name, box.top + box.height / 2]);
       }
       const sorted = middles.map(([, middle]) => middle).sort((one, other) => one - other);
       const shared = sorted[Math.floor(sorted.length / 2)];
-      const rowName = row.querySelector(".TableCell.name")?.textContent?.trim() ?? "";
+      const rowName = lines
+        ? (row.getAttribute("data-line") ?? "")
+        : (row.querySelector(".TableCell.name")?.textContent?.trim() ?? "");
 
       for (const [name, middle] of middles) {
         if (Math.abs(middle - shared) > 1) found.push(`${rowName} ${name}: ${(middle - shared).toFixed(1)}`);
@@ -1041,7 +1172,7 @@ export async function misalignedWords(of: ListOf, frame: Frame): Promise<string[
     }
 
     return found;
-  }, list(of));
+  }, partsOf(of));
 }
 
 /**
@@ -2279,6 +2410,14 @@ export interface OverviewShown {
   schedules: string[];
   storage: string[];
   completed: string;
+  /**
+   * The line before the items of the schedules whose adherence is not known:
+   * how many, and how many for each reason the signal names; nothing when no
+   * schedule is counted.
+   */
+  notKnown?: { count: number; reasons: Record<string, number> };
+  /** What the line of each schedule says of its adherence, by the attributes of its two cells. */
+  adherence: Record<string, RowAdherence>;
 }
 
 /**
@@ -2316,6 +2455,7 @@ export async function overview(frame: Frame): Promise<OverviewShown> {
     const all = (selector: string) => [...document.querySelectorAll(selector)];
     const names = (selector: string, attribute: string) =>
       all(selector).map((element) => element.getAttribute(attribute) ?? "");
+    const unknown = document.querySelector("[data-testid=velero-overview-attention] [data-adherence-unknown]");
 
     return {
       read: Object.fromEntries(
@@ -2349,6 +2489,32 @@ export async function overview(frame: Frame): Promise<OverviewShown> {
       schedules: names("[data-testid=velero-overview-schedules-list] [data-line]", "data-line"),
       storage: names("[data-testid=velero-overview-storage-list] [data-line]", "data-line"),
       completed: words(document.querySelector("[data-testid=velero-overview-completed] [data-completed]")),
+      notKnown: unknown
+        ? {
+            count: Number(unknown.getAttribute("data-adherence-unknown")),
+            reasons: Object.fromEntries(
+              [...unknown.querySelectorAll("[data-reason]")].map((reason) => [
+                reason.getAttribute("data-reason") ?? "",
+                Number(reason.getAttribute("data-count")),
+              ]),
+            ),
+          }
+        : undefined,
+      adherence: Object.fromEntries(
+        all("[data-testid=velero-overview-schedules-list] [data-line]").map((line) => {
+          const mark = line.querySelector("[data-adherence]");
+
+          return [
+            line.getAttribute("data-line") ?? "",
+            {
+              next: line.querySelector("[data-next]")?.getAttribute("data-next") ?? "",
+              state: mark?.getAttribute("data-adherence") ?? "",
+              mark: mark?.getAttribute("data-mark") ?? "",
+              reason: mark?.getAttribute("data-reason") ?? "",
+            },
+          ];
+        }),
+      ),
     };
   });
 }

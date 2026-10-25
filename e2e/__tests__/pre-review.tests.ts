@@ -1315,11 +1315,12 @@ describe("pre-review of the views", () => {
         },
         OVERVIEW,
       );
-      // At 1440 the bands that share a row are beside each other; at 900, and at twice the zoom, one
-      // is under the other.
+      // At 1440 the bands that share a row are beside each other, but the schedules, whose lines and the ones of
+      // the storage have not the room of their columns side by side there: they are alone on their row, with the
+      // storage under them. At 900, and at twice the zoom, one is under the other.
       expect(sides).toEqual({
         "1440 attention": true,
-        "1440 schedules": true,
+        "1440 schedules": false,
         "900 attention": false,
         "900 schedules": false,
         "720 attention": false,

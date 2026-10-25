@@ -489,15 +489,22 @@ newest backup that completed, the operations of the window, a line for each
 schedule and for each storage location. What was read of a family is what every
 view reads of it, with what the cluster says that it serves.
 
-What needs attention is the items of ten rules, each a function of what was
-read. An item is of one rule and of one object, or of the list of a kind when it
-is of no single object, with its reason in words and the time the reason refers
-to. A rule gives items from the families that were read and from no other: a
-family that was not read gives one line, which says what the rules did not look
-at. The order is fixed: what is in flight, the storage, the schedules, what
-ended; each group from the newest, and by name where there is no time. No
-function computes a value for the installation as a whole, and the page has
-none.
+What needs attention is the items of eleven rules, each a function of what was
+read. Rule A11, the adherence of a schedule, reads the
+[signal of a schedule](../../src/common/schedule-signal.ts) computed with what the
+views share of the adherence of the installation for a read and a tick of their
+clock, which is made of the same reads, and gives no item while the backups of the
+installation were never answered. An item is of one rule and of one object, or of
+the list of a kind when it is of no single object, with its reason in words and
+the time the reason refers to. A rule gives items from the families that were read
+and from no other: a family that was not read gives one line, which says what the
+rules did not look at. After those lines one says of how many schedules the
+adherence is not known, by reason, and leads to their list: such a schedule is
+never an item of A11, and the summary says the count as well, so that a page with
+no item does not read as one where every schedule is on time. The order is fixed:
+what is in flight, the storage, the schedules, what ended; each group from the
+newest, and by name where there is no time. No function computes a value for the
+installation as a whole, and the page has none.
 
 The [window](../../src/common/window.ts) of the recent operations is a
 preference of the extension, kept in the store beside the two maps of the
@@ -511,7 +518,9 @@ The views of the operations are built once for a read and a clock, and the
 backups of a schedule are found in an index made once for a read: what needs
 attention, what is in flight and the recent operations are made from the same
 ones, and the newest completed backup is looked for of the ten schedules that
-have a line.
+have a line. The signal of every schedule is computed once for a drawing, for rule
+A11 and the count of what is not known, and again for the ten that have a line,
+which show their next run and their adherence as the list does.
 
 A band shows ten items, and the ones after them when they are asked for: an
 installation of a thousand operations is not drawn whole to say what is first.

@@ -36,9 +36,6 @@ const DIALOG = '[data-testid="confirmation-dialog"], .Dialog, .ConfirmDialog';
 // No view of a schedule says when it should have run but where its adherence is said: the cells of the next run
 // and of the adherence in the list, the band of its view, and two items of the details of the host.
 const EXPECTATION = /next run|overdue|missed|expected run|is late|should have/i;
-const HOUR = 60 * 60 * 1000;
-// What a schedule is said to be by its run: due for five minutes after it, overdue after that.
-const GRACE = 5 * 60 * 1000;
 // The order by adherence, from what needs a hand first.
 const WEIGHTS: Record<string, number> = {
   overdue: 0,
@@ -62,53 +59,6 @@ const NOT_KNOWN = [
   "views-to-removed",
 ];
 const PAUSED = ["schedule-skipping", "schedule-unread-paused"];
-
-// The wall clock of Europe/Rome at an instant, by the Intl of the machine of the suite.
-function inRome(instant: number): { date: string; minute: string; second: string } {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Europe/Rome",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hourCycle: "h23",
-    })
-      .formatToParts(instant)
-      .map((part) => [part.type, part.value]),
-  );
-
-  return {
-    date: `${parts.year}-${parts.month}-${parts.day}`,
-    minute: `${parts.hour}:${parts.minute}`,
-    second: parts.second,
-  };
-}
-
-// The first run of `CRON_TZ=Europe/Rome 30 2 * * *` after an instant, as the controller counts it: the first 02:30
-// of the wall clock of Europe/Rome after it, the first of the two on the day the hour repeats.
-function halfPastTwoInRome(after: number): number {
-  for (let day = after - 12 * HOUR; day < after + 72 * HOUR; day += 12 * HOUR) {
-    const { date } = inRome(day);
-    const [year, month, dayOfMonth] = date.split("-").map(Number);
-    const runs = [2, 1]
-      .map((offset) => Date.UTC(year, month - 1, dayOfMonth, 2 - offset, 30))
-      .filter((run) => run > after && inRome(run).date === date && inRome(run).minute === "02:30");
-
-    if (runs.length) return Math.min(...runs);
-  }
-  throw new Error(`No 02:30 of Europe/Rome in the three days after ${new Date(after).toISOString()}`);
-}
-
-// The states a schedule whose run is at `run` may be said in by a page read between two clocks: the clock of the
-// page is a tick of up to five seconds before the read, and the read may be fifteen seconds old.
-function statesAround(run: number, before: number, after: number): string[] {
-  const at = (clock: number) => (clock <= run ? "awaited" : clock - run > GRACE ? "overdue" : "due");
-
-  return [...new Set([at(before - 20_000), at(after)])];
-}
 
 // A time as the band writes it in UTC: to the second, with the name of the zone.
 function inUtc(time: string): string {
@@ -670,26 +620,26 @@ describe("views of the schedules", () => {
 
       expect(created.status).toBe(0);
       const creation = Date.parse(created.stdout.trim());
-      const run = halfPastTwoInRome(creation);
-      const ran = inRome(run);
+      const run = cluster.halfPastTwoInRome(creation);
+      const ran = cluster.inRome(run);
       const before = Date.now();
       const row = await cluster.rowAdherence(frame, "views-zoned");
       const cells = await cluster.cellsOf(SCHEDULES, frame, "views-zoned");
 
       expect(row.next).toBe("at");
-      expect(statesAround(run, before, Date.now())).toContain(row.state);
+      expect(cluster.statesAround(run, before, Date.now())).toContain(row.state);
       expect(cells.adherence).toBe(LABELS[row.state]);
       expect(cells.next).toMatch(row.state === "awaited" ? /^in \d/ : / ago$/);
 
       await cluster.openWorkspace(frame, "views-zoned", SCHEDULES);
       const shown = Date.now();
       const band = await cluster.adherenceBand(frame);
-      const begun = inRome(creation);
+      const begun = cluster.inRome(creation);
 
-      expect(statesAround(run, shown, Date.now())).toContain(band.state);
+      expect(cluster.statesAround(run, shown, Date.now())).toContain(band.state);
       expect(band.order).toEqual(["next", "zone", "anchor", "observed", "passed", "clocks"]);
       // The run in the zone of the expression, with its date when it is not the day of the clock there.
-      const forms = [...new Set([shown - 20_000, Date.now()].map((clock) => inRome(clock).date))].map((day) =>
+      const forms = [...new Set([shown - 20_000, Date.now()].map((clock) => cluster.inRome(clock).date))].map((day) =>
         day === ran.date ? "02:30 Europe/Rome" : `02:30 Europe/Rome on ${ran.date}`,
       );
 
@@ -1021,7 +971,7 @@ describe("views of the schedules", () => {
       );
 
       expect(created.status).toBe(0);
-      const run = halfPastTwoInRome(Date.parse(created.stdout.trim()));
+      const run = cluster.halfPastTwoInRome(Date.parse(created.stdout.trim()));
       const listedAt = Date.now();
       const listed = await cluster.rowAdherence(frame, "views-zoned");
 
@@ -1042,14 +992,16 @@ describe("views of the schedules", () => {
         next: element.querySelector("[data-next]")?.getAttribute("data-next") ?? "",
         state: element.querySelector("[data-adherence]")?.getAttribute("data-adherence") ?? "",
       }));
-      const ran = inRome(run);
-      const forms = [...new Set([listedAt - 20_000, Date.now()].map((clock) => inRome(clock).date))].map((day) =>
-        day === ran.date ? "02:30 Europe/Rome" : `02:30 Europe/Rome on ${ran.date}`,
+      const ran = cluster.inRome(run);
+      const forms = [...new Set([listedAt - 20_000, Date.now()].map((clock) => cluster.inRome(clock).date))].map(
+        (day) => (day === ran.date ? "02:30 Europe/Rome" : `02:30 Europe/Rome on ${ran.date}`),
       );
 
       // The details say what the row says, with the clock of their own: the same run, in a state of the span.
       expect(said.next).toBe(listed.next);
-      expect(statesAround(run, listedAt, Date.now())).toEqual(expect.arrayContaining([listed.state, said.state]));
+      expect(cluster.statesAround(run, listedAt, Date.now())).toEqual(
+        expect.arrayContaining([listed.state, said.state]),
+      );
       expect([details, forms.some((form) => new RegExp(`${form}[.,]`).test(details))]).toEqual([details, true]);
       // Outside the two items nothing says when the schedule should have run, and the first is named Next run.
       expect(
