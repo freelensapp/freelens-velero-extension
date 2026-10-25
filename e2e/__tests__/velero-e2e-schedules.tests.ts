@@ -706,8 +706,12 @@ describe("views of the schedules", () => {
       expect(band.lines.passed).toMatch(
         band.state === "awaited" ? /^None yet: the expected run is ahead$/ : /^\d+ expected runs? passed/,
       );
-      // ADHERENCE-PR1-PENDING: the words of the clocks as the answer of the header Date makes them.
-      expect(band.lines.clocks).not.toBe("");
+      // The header Date of the API server reaches the frame through the proxies of the host (AGENTS.md), so the
+      // times are compared by the clock of the cluster; how far it is from the one of this machine is the clock
+      // of Docker's machine, which can drift by a second or more after a sleep: the form is asserted, not the gap.
+      expect(band.lines.clocks).toMatch(
+        /^Times are compared by the clock of the cluster, which the time its API server writes in its answers gives: it is (within a second of the clock of this machine|(ahead of|behind) the clock of this machine by \d+[dhms]( \d+[dhms])?)\.$/,
+      );
       expect(band.ways).toEqual([]);
       expect(await cluster.layoutProblems(frame, SCHEDULES)).toEqual([]);
       await cluster.captureScreenshot(frame, "dark-schedule-adherence");
@@ -844,8 +848,12 @@ describe("views of the schedules", () => {
         "age",
       ];
       const without = (...gone: string[]) => all.filter((column) => !gone.includes(column));
+      // The columns that hold their words whole in a list of 1,000 pixels or more, the age where it is shown.
+      const whole = ["paused", "next", "adherence", "age"];
       let width = 1440;
       let zoom = 1;
+      // The width of the window and the zoom each room was reached at, in the report of the case.
+      const reached: Record<number, { width: number; zoom: number }> = {};
       // The window is set so that the room of the list is the one asked, by the difference measured; with the
       // window zoomed out when it cannot be made wide enough for it within the screen, and zoomed in when it cannot
       // be made narrow enough.
@@ -858,7 +866,10 @@ describe("views of the schedules", () => {
           for (let tries = 0; tries < 4; tries += 1) {
             const now = await cluster.listRoom(frame, SCHEDULES);
 
-            if (Math.round(now) === room) return;
+            if (Math.round(now) === room) {
+              reached[room] = { width, zoom };
+              return;
+            }
             width += Math.round((room - now) * zoom);
             const inner = await frame.evaluate(() => window.innerWidth);
 
@@ -871,16 +882,31 @@ describe("views of the schedules", () => {
         throw new Error(`The room of the list of the schedules could not be made ${room} pixels`);
       };
       const shown: Record<number, string[]> = {};
+      // At each room: what is cut of the columns that hold their words whole there, what is clipped with no
+      // ellipsis and no tip, and the words that leave the line of their row.
+      const read: Record<number, { cut: string[]; clipped: string[]; misaligned: string[] }> = {};
 
       // The window and the zoom are given back whatever happens: every later case reads the window of 1440 by 900.
       try {
         for (const edge of [1200, 1000, 760, 640]) {
           for (const room of [edge + 1, edge]) {
             await roomOf(room);
-            shown[room] = (await cluster.columnsOf(SCHEDULES, frame)).shown;
+            const columns = await cluster.columnsOf(SCHEDULES, frame);
+
+            shown[room] = columns.shown;
+            read[room] = {
+              cut: room >= 1000 ? columns.cut.filter((column) => whole.includes(column)) : [],
+              clipped: columns.clipped,
+              misaligned: await cluster.misalignedWords(SCHEDULES, frame),
+            };
           }
         }
-        // ADHERENCE-PR1-PENDING: the widths of the window and the zoom each room was reached at.
+        const screen = await started.app.evaluate(({ screen }) => screen.getPrimaryDisplay().workAreaSize);
+
+        await cluster.writeReport("schedules-rooms", { screen, reached, shown, read });
+        // On a Mac every room was reached at the zoom of 1, with a window 323 pixels wider than the room: from 963
+        // pixels for 640 to 1,524 for 1,201. The report keeps the widths, the zoom and the screen of each run.
+        expect(Object.values(read)).toEqual(Object.values(read).map(() => ({ cut: [], clipped: [], misaligned: [] })));
         expect(shown).toEqual({
           1201: without(),
           1200: without("installation"),
@@ -897,10 +923,13 @@ describe("views of the schedules", () => {
         await velero.setWindowSize(started.app, 1440, 900);
         await frame.waitForFunction(() => window.innerWidth > 1000, undefined, { timeout: 60_000 });
       }
-      // In a window of 1440 the next run, the adherence and the last submission are read whole, in any language.
-      expect(
-        (await cluster.columnsOf(SCHEDULES, frame)).cut.filter((column) => ["next", "adherence"].includes(column)),
-      ).toEqual([]);
+      // In a window of 1440 paused, the next run, the adherence, the last submission and the age are read whole, in
+      // any language, nothing is clipped and every word is on the line of its row.
+      const wide = await cluster.columnsOf(SCHEDULES, frame);
+
+      expect(wide.cut.filter((column) => whole.includes(column))).toEqual([]);
+      expect(wide.clipped).toEqual([]);
+      expect(await cluster.misalignedWords(SCHEDULES, frame)).toEqual([]);
       expect(await cluster.tooWide(SCHEDULES, frame, cluster.WORDS_OF_A_SCHEDULE)).toEqual([]);
     },
     TIMEOUT,

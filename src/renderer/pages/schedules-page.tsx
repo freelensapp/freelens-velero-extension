@@ -121,8 +121,9 @@ export const SCHEDULES: ListDefinition<ScheduleRow> = {
   cells: (row, item) => [
     <WithTooltip key="namespace">{row.namespace}</WithTooltip>,
     <WithTooltip key="schedule">{row.expression.written ?? "Not reported"}</WithTooltip>,
-    <span key="paused" data-paused={row.paused}>
-      {pausedText(row.paused)}
+    // A plain span in a cell of the host is clipped where its room ends, with no ellipsis and no tip.
+    <span key="paused" className={styles.cellWords} data-paused={row.paused}>
+      <WithTooltip>{pausedText(row.paused)}</WithTooltip>
     </span>,
     // Nothing is said of the adherence before the backups were answered once: the cells are there, and empty,
     // so that every other cell stays under its column.

@@ -956,11 +956,16 @@ export async function listRoom(frame: Frame, of: ListOf): Promise<number> {
 }
 
 /**
- * The columns the list shows, by their names, and the ones whose words do not
- * fit their cell in a row that is mounted: a value that is cut is read in the
- * tip of its cell, and not at a glance.
+ * The columns the list shows, by their names, the ones whose words do not fit
+ * their cell in a row that is mounted, and the ones whose words go past the end
+ * of their cell: a value that is cut is read in the tip of its cell, and not at
+ * a glance; a value that is clipped is cut where the room of the cell ends, with
+ * no ellipsis and no tip, since a cell of the host clips what is wider than it.
  */
-export async function columnsOf(of: ListOf, frame: Frame): Promise<{ shown: string[]; cut: string[] }> {
+export async function columnsOf(
+  of: ListOf,
+  frame: Frame,
+): Promise<{ shown: string[]; cut: string[]; clipped: string[] }> {
   return frame.evaluate((selector) => {
     const column = (cell: Element) =>
       String(cell.className)
@@ -968,6 +973,7 @@ export async function columnsOf(of: ListOf, frame: Frame): Promise<{ shown: stri
         .trim();
     const visible = (cell: Element) => getComputedStyle(cell).display !== "none";
     const cut = new Set<string>();
+    const clipped = new Set<string>();
 
     for (const cell of document.querySelectorAll<HTMLElement>(`${selector} .TableRow:not(.TableHead) .TableCell`)) {
       if (!visible(cell)) continue;
@@ -976,6 +982,7 @@ export async function columnsOf(of: ListOf, frame: Frame): Promise<{ shown: stri
       );
 
       if (words.some((element) => element.scrollWidth > element.clientWidth + 1)) cut.add(column(cell));
+      if (cell.scrollWidth > cell.clientWidth + 1) clipped.add(column(cell));
     }
 
     return {
@@ -985,7 +992,55 @@ export async function columnsOf(of: ListOf, frame: Frame): Promise<{ shown: stri
         .map(column)
         .filter((name) => name !== "menu"),
       cut: [...cut].sort(),
+      clipped: [...clipped].sort(),
     };
+  }, list(of));
+}
+
+/**
+ * The cells of the mounted rows whose words do not sit on the line of the words
+ * of their row: the middle of the first line of words of a cell, its marks left
+ * out, more than a pixel away from the middle the cells of the row share most.
+ */
+export async function misalignedWords(of: ListOf, frame: Frame): Promise<string[]> {
+  return frame.evaluate((selector) => {
+    const found: string[] = [];
+
+    for (const row of document.querySelectorAll<HTMLElement>(`${selector} .TableRow:not(.TableHead)`)) {
+      const middles: [string, number][] = [];
+
+      for (const cell of row.querySelectorAll<HTMLElement>(".TableCell")) {
+        if (getComputedStyle(cell).display === "none") continue;
+        const words = document
+          .createTreeWalker(cell, NodeFilter.SHOW_TEXT, {
+            acceptNode: (node) =>
+              node.textContent?.trim() && !node.parentElement?.closest(".Icon")
+                ? NodeFilter.FILTER_ACCEPT
+                : NodeFilter.FILTER_REJECT,
+          })
+          .nextNode();
+
+        if (!words) continue;
+        const range = document.createRange();
+
+        range.selectNodeContents(words);
+        const box = range.getClientRects()[0];
+        const name = String(cell.className)
+          .replace(/TableCell|sorting|nowrap/g, "")
+          .trim();
+
+        if (box) middles.push([name, box.top + box.height / 2]);
+      }
+      const sorted = middles.map(([, middle]) => middle).sort((one, other) => one - other);
+      const shared = sorted[Math.floor(sorted.length / 2)];
+      const rowName = row.querySelector(".TableCell.name")?.textContent?.trim() ?? "";
+
+      for (const [name, middle] of middles) {
+        if (Math.abs(middle - shared) > 1) found.push(`${rowName} ${name}: ${(middle - shared).toFixed(1)}`);
+      }
+    }
+
+    return found;
   }, list(of));
 }
 
@@ -1046,9 +1101,11 @@ export const WORDS_OF_AN_OPERATION = {
  * adherence beside its mark, and the last submission, a date.
  */
 export const WORDS_OF_A_SCHEDULE = {
+  paused: ["Not paused", "Paused"],
   next: ["in 364d 23h", "29d 23h ago", "Not known"],
   adherence: ["At every look", "Not known", "Overdue"],
   submitted: WORDS_OF_AN_OPERATION.started,
+  age: ["364d", "59m"],
 };
 
 /** The names of the objects a list has mounted, in the order it shows them. */

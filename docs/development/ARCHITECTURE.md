@@ -235,8 +235,9 @@ the first pull request of T3.3 an answer carries the time the header says it was
 written at, half a second after the second the header names, beside the clock of
 this machine in the middle of the request, or neither when the header is missing or
 is not a date written as HTTP writes one. The answer is of the origin of the frame,
-so the header can be read; whether the one of the API server reaches the frame
-through the proxies of the host is ADHERENCE-PR1-PENDING.
+so the header can be read, and it is the one of the API server: the proxies of the
+host keep the header of the answer they pass on, as AGENTS.md says with the lines of
+their source.
 
 | Read | When | Path |
 | --- | --- | --- |

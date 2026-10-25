@@ -492,7 +492,16 @@
     min-width: calc(12ch + 40px);
   }
 
-  /* When a schedule runs next, and the word of its adherence with its mark. */
+  /* Whether a schedule is paused, when it runs next, and the word of its adherence with its mark. */
+  .list :global(.TableCell.paused) {
+    min-width: calc(10ch + 16px);
+  }
+
+  /* The age is shown where the room is of 1,000 pixels or more: there it holds an age of days whole. */
+  .list :global(.TableCell.age) {
+    min-width: calc(4.5ch + 16px);
+  }
+
   .list :global(.TableCell.next) {
     min-width: calc(13ch + 16px);
   }
@@ -616,9 +625,10 @@
   flex-grow: 1.5;
 }
 
-/* The newest backup of a schedule is a name and how it ended: the column has the room of two. */
+/* The newest backup of a schedule is a name and how it ended: the column has the room of more than one, and
+   the name is cut first, read whole in its tip. */
 .list :global(.TableCell.newest) {
-  flex-grow: 3;
+  flex-grow: 2.5;
 }
 
 .list :global(.TableCell.paused) {
@@ -653,14 +663,15 @@
   }
 }
 
-/* The words of a cell of the adherence of a schedule, cut at the end of its room: the whole is in the tip. */
+/* The words of a cell that says what a schedule does, in the tip of the host: its badge cuts them at the end
+   of the room with its own ellipsis, and the whole is in the tip. A flex box and not a block, so that no line
+   of text is drawn around the badge: its words sit on the line of the words of the other cells of the row. */
 .cellWords {
-  display: block;
+  display: flex;
+  align-items: center;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* The band of the adherence of a schedule: a line for each fact, its name and its sentences, which wrap. */
@@ -686,7 +697,9 @@
   white-space: nowrap;
 }
 
-/* How the backup ended is read whole: it is the name that is cut when the room is not enough. */
+/* How the backup ended is read whole: it is the name that is cut when the room is not enough, down to 3em.
+   In a room narrower than that and the whole of how it ended, its words are cut with their tip rather than
+   clipped at the end of the cell. */
 .newest > :first-child {
   flex: 0 1 auto;
   min-width: 3em;
@@ -694,6 +707,7 @@
 
 .newest > :last-child:not(:first-child) {
   flex: 0 0 auto;
+  max-width: calc(100% - 3em - 8px);
 }
 
 .warning {
