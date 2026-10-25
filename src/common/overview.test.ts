@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { submissionOf } from "../../test/adherence-builders";
+import { formatDuration } from "./duration";
+import { unread } from "./location-users";
 import { operationLine } from "./operation-line";
 import {
   attention,
@@ -11,7 +14,9 @@ import {
   inFlight,
   LINES,
   locationLines,
+  NOT_KNOWN_WORDS,
   newestCompleted,
+  notKnownCount,
   RULES,
   readWindow,
   recent,
@@ -22,6 +27,7 @@ import {
 } from "./overview";
 import { BACKUP_PHASES, RESTORE_PHASES } from "./phases";
 import { emptyRead, failed, succeeded } from "./read-state";
+import { adherenceContext, keepOffset, SIGNAL_WORDS, scheduleSignal } from "./schedule-signal";
 
 import type { AttentionItem, OverviewReads, Rule } from "./overview";
 import type {
@@ -31,6 +37,10 @@ import type {
   ScheduleResource,
   VolumeSnapshotLocationResource,
 } from "./types";
+
+// The zone of the machine the tests run on is one no case below is computed or written in, fourteen hours east
+// of UTC, as in the tests of the signal: a word of the adherence written in it would fail.
+process.env.TZ = "Pacific/Kiritimati";
 
 const now = Date.parse("2026-09-10T12:00:00Z");
 const MINUTE = 60_000;
@@ -645,7 +655,8 @@ describe("what needs attention", () => {
   });
 
   it("has every rule of the table, and no other", () => {
-    expect(RULES).toEqual(["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10"]);
+    // A11 is the adherence of a schedule (SPEC-0013), whose cases are under the rules of the table.
+    expect(RULES).toEqual(["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11"]);
     expect(GROUP_TITLES).toEqual({
       "in-flight": "In flight",
       storage: "Storage",
@@ -910,6 +921,366 @@ describe("what needs attention", () => {
     expect(found.items.length).toBeGreaterThan(5);
     expect(words).not.toMatch(/healthy|protected|\bsafe\b|all is well|\bscore\b|%/i);
     expect(Object.keys(found)).toEqual(["items", "unchecked", "earlier"]);
+  });
+});
+
+describe("the adherence of the schedules: rule A11 and what is not known (SPEC-0013)", () => {
+  // What the views share of the adherence of the installation for its reads and a tick of their clock, the offset
+  // of the zone of the server kept from the reads, as the state of the installation keeps it.
+  const adherenceOf = (all: OverviewReads, at = now) => {
+    const read = { schedules: all.schedules, backups: all.backups };
+
+    return adherenceContext(read, at, keepOffset(undefined, read));
+  };
+  const enabled = (name: string, expression: string, lastBackup?: string, more: object = {}) =>
+    schedule(name, { schedule: expression, ...more }, { phase: "Enabled", ...(lastBackup ? { lastBackup } : {}) });
+  // A schedule of each state, the day the run of eleven in UTC was not submitted.
+  const states = [
+    // Overdue by an hour, and the same while a backup of it in progress holds the submissions: held beyond the grace.
+    enabled("late", "TZ=UTC 0 11 * * *", "2026-09-09T11:00:00Z"),
+    enabled("holding", "TZ=UTC 0 11 * * *", "2026-09-09T11:00:00Z"),
+    // Held for three minutes, within the grace; due for two minutes; awaited until one in the afternoon.
+    enabled("within", "TZ=UTC 57 11 * * *", "2026-09-09T11:57:00Z"),
+    enabled("tick", "TZ=UTC 58 11 * * *", "2026-09-09T11:58:00Z"),
+    enabled("soon", "TZ=UTC 0 13 * * *", "2026-09-09T13:00:00Z"),
+    // No instant within five years, and a descriptor with none: Velero submits them at every look, the first with a
+    // submission a minute ago, the second with none yet.
+    enabled("look", "0 0 30 2 *", "2026-09-10T11:59:00Z"),
+    enabled("none-look", "@none"),
+    // Paused while it is late, refused, not read and New: no run is computed for any of them.
+    enabled("weekly", "TZ=UTC 0 11 * * *", "2026-09-09T11:00:00Z", { paused: true }),
+    schedule("broken", { schedule: "every night" }, { phase: "FailedValidation", validationErrors: ["expected 5"] }),
+    schedule("unread", {}, null),
+    schedule("fresh", {}, { phase: "New" }),
+    // Not known: no zone named and none of the server derived, a zone this machine does not know, an expression
+    // this version cannot read, a phase it does not know, and no time to count from.
+    enabled("zoneless", "0 3 * * *", "2026-09-09T03:00:00Z"),
+    enabled("mars", "TZ=Mars/Olympus 0 3 * * *", "2026-09-09T03:00:00Z"),
+    enabled("unreadable", "0 3 * * FRI#L", "2026-09-09T03:00:00Z"),
+    schedule("weird", {}, { phase: "Weird" }),
+    object<ScheduleResource>(
+      "nameless",
+      { schedule: "TZ=UTC 0 3 * * *", template: {} },
+      { phase: "Enabled" },
+      { creationTimestamp: undefined },
+    ),
+  ];
+  const holds = [
+    backup("holding-1", "InProgress", 30 * MINUTE, { schedule: "holding" }),
+    backup("within-1", "InProgress", 2 * MINUTE, { schedule: "within" }),
+  ];
+  const all = reads({ schedules: succeeded(states, now), backups: succeeded(holds, now) });
+  const overdue = (by: number, run: string, from: string) =>
+    SIGNAL_WORDS.overdue(
+      formatDuration(by),
+      run,
+      SIGNAL_WORDS.from("last-submission", from),
+      SIGNAL_WORDS.passed(1, false),
+    );
+  const of = { group: "schedules", kind: "schedule", rule: "A11", stale: false } as const;
+
+  it("A11: lists a schedule overdue, held beyond the grace or submitted at every look, and none in another state", () => {
+    const found = attention(all, now, "7d", adherenceOf(all));
+
+    // Of the schedules from the newest, by the time of each item, and by name where there is no time.
+    expect(rules(found)).toEqual([
+      ["A11", "look"],
+      ["A11", "holding"],
+      ["A11", "late"],
+      ["A5", "broken"],
+      ["A11", "none-look"],
+      ["A6", "unread"],
+    ]);
+    // The sentence of the state is its reason, and its time is the expected run, with the backup that holds the
+    // submissions as the object the item leads to beside the schedule.
+    expect(item(found, "A11", "late")).toEqual({
+      ...of,
+      name: "late",
+      title: "late",
+      reason: overdue(HOUR, "11:00 UTC", "2026-09-09 11:00:00 UTC"),
+      time: now - HOUR,
+    });
+    expect(item(found, "A11", "holding")).toEqual({
+      ...of,
+      name: "holding",
+      title: "holding",
+      reason: `${SIGNAL_WORDS.held("holding-1", "InProgress")} ${SIGNAL_WORDS.heldExpected("11:00 UTC", formatDuration(HOUR))}`,
+      time: now - HOUR,
+      related: { kind: "backup", name: "holding-1" },
+    });
+    // A schedule at every look has no expected run: its time is its last submission, and none when it has none.
+    expect(item(found, "A11", "look")).toEqual({
+      ...of,
+      name: "look",
+      title: "look",
+      reason: SIGNAL_WORDS.atEveryLook(
+        SIGNAL_WORDS.beyondFiveYears,
+        SIGNAL_WORDS.lastSubmission("2026-09-10 11:59:00 UTC"),
+      ),
+      time: now - MINUTE,
+    });
+    expect(item(found, "A11", "none-look")).toEqual({
+      ...of,
+      name: "none-look",
+      title: "none-look",
+      reason: SIGNAL_WORDS.atEveryLook(SIGNAL_WORDS.noInstant("@none"), SIGNAL_WORDS.noSubmissionYet),
+    });
+    // Each of the others is in a state the signal says, and none is an item of the rule.
+    const context = adherenceOf(all);
+    const stateOf = (name: string) =>
+      scheduleSignal(states.find((schedule) => schedule.metadata.name === name) as ScheduleResource, context).state;
+
+    expect(
+      ["within", "tick", "soon", "weekly", "broken", "unread", "fresh", "zoneless", "mars", "unreadable", "weird"].map(
+        (name) => [name, stateOf(name)],
+      ),
+    ).toEqual([
+      ["within", "held"],
+      ["tick", "due"],
+      ["soon", "awaited"],
+      ["weekly", "paused"],
+      ["broken", "refused"],
+      ["unread", "not-known"],
+      ["fresh", "not-known"],
+      ["zoneless", "not-known"],
+      ["mars", "not-known"],
+      ["unreadable", "not-known"],
+      ["weird", "not-known"],
+    ]);
+    expect(stateOf("nameless")).toBe("not-known");
+  });
+
+  it("A11: says the words of the offset of the server it computed with, of the schedule itself or of another", () => {
+    const submission = Date.parse("2026-09-09T09:00:00Z");
+    const own = frozen(submissionOf("derived", A, submission, 120));
+    const schedules = succeeded(
+      [enabled("derived", "0 11 * * *", "2026-09-09T09:00:00Z"), enabled("borrowed", "0 3 * * *")],
+      now,
+    );
+    const derived = reads({ schedules, backups: succeeded([own], now) });
+    const found = attention(derived, now, "7d", adherenceOf(derived));
+    const moment = "2026-09-09 11:00:00 UTC+02:00";
+
+    // Two hours east of UTC: the run of eleven was at nine in UTC, three hours ago.
+    expect(item(found, "A11", "derived")).toEqual({
+      ...of,
+      name: "derived",
+      title: "derived",
+      reason: `${overdue(3 * HOUR, "11:00 UTC+02:00", moment)} ${SIGNAL_WORDS.derived("UTC+02:00", own.metadata.name, SIGNAL_WORDS.thisSchedule, moment)}`,
+      time: now - 3 * HOUR,
+    });
+    // The one with no submission takes the offset of the installation, said with the schedule it came from, and is
+    // overdue since its first run after its creation.
+    expect(item(found, "A11", "borrowed")).toMatchObject({
+      reason: expect.stringContaining(
+        SIGNAL_WORDS.derived("UTC+02:00", own.metadata.name, SIGNAL_WORDS.otherSchedule("derived"), moment),
+      ),
+      time: Date.parse("2026-08-02T01:00:00Z"),
+    });
+    expect(rules(found)).toEqual([
+      ["A11", "derived"],
+      ["A11", "borrowed"],
+    ]);
+    expect(found.notKnown).toEqual([]);
+  });
+
+  it("A11: lists an interval overdue when the backups are denied, saying that what holds it is not known", () => {
+    const denied = failed(emptyRead<BackupResource>(), "forbidden");
+    const blind = reads({
+      schedules: succeeded(
+        [enabled("every", "@every 6h", "2026-09-10T05:00:00Z"), enabled("zoneless", "0 3 * * *")],
+        now,
+      ),
+      backups: denied,
+    });
+    const found = attention(blind, now, "7d", adherenceOf(blind));
+    const why = unread("backups", denied).reason;
+
+    // An interval needs no zone, and keeps its state: whether a backup holds it is not known, which is said.
+    expect(found.items).toEqual([
+      {
+        ...of,
+        name: "every",
+        title: "every",
+        reason: `${overdue(HOUR, "11:00 UTC", "2026-09-10 05:00:00 UTC")} ${SIGNAL_WORDS.holdNotKnown(`${why.charAt(0).toLowerCase()}${why.slice(1)}`)}`,
+        time: now - HOUR,
+      },
+    ]);
+    // Five fields with no zone named need the backups for the zone of the server: not known, and counted.
+    expect(found.notKnown).toEqual([{ reason: "no-offset", count: 1 }]);
+    expect(found.unchecked.map((line) => line.family)).toEqual(["backups"]);
+  });
+
+  it("counts by reason the schedules that were read whose adherence is not known, and none of the others", () => {
+    const found = attention(all, now, "7d", adherenceOf(all));
+
+    // In the order the signal names the reasons: at every look, paused and refused are not counted.
+    expect(found.notKnown).toEqual([
+      { reason: "not-read", count: 2 },
+      { reason: "unknown-phase", count: 1 },
+      { reason: "not-readable", count: 1 },
+      { reason: "no-anchor", count: 1 },
+      { reason: "no-offset", count: 1 },
+      { reason: "unknown-zone", count: 1 },
+    ]);
+    expect(notKnownCount(found)).toBe(7);
+    // None is an item of the rule: what is not known is never said to need attention, nor to need nothing.
+    const counted = ["unread", "fresh", "weird", "unreadable", "nameless", "zoneless", "mars"];
+
+    expect(found.items.filter((entry) => entry.rule === "A11" && counted.includes(entry.name ?? ""))).toEqual([]);
+    // The schedules that were not read are counted by no one: their line of what was not checked says so.
+    const denied = reads({ schedules: failed(emptyRead<ScheduleResource>(), "forbidden"), backups: all.backups });
+    const blind = attention(denied, now, "7d", adherenceOf(denied));
+
+    expect("notKnown" in blind).toBe(false);
+    expect(blind.unchecked.map((line) => line.family)).toEqual(["schedules"]);
+    // The ones of an earlier read were read: they are counted, and so are their items.
+    const before = reads({ schedules: stale(states), backups: all.backups });
+
+    expect(notKnownCount(attention(before, now, "7d", adherenceOf(before)))).toBe(7);
+    // An installation with no schedule has none to count.
+    const none = reads();
+
+    expect(attention(none, now, "7d", adherenceOf(none)).notKnown).toEqual([]);
+  });
+
+  it("says in the summary of how many schedules the adherence is not known, beside the items and beside none", () => {
+    const found = attention(all, now, "7d", adherenceOf(all));
+
+    expect(attentionSummary(found)).toBe(`6 items in what was read. ${NOT_KNOWN_WORDS.summary(7)}`);
+    // Nothing needs attention in what was read, and what is not known is not counted as what needs nothing.
+    const one = reads({ schedules: succeeded([enabled("zoneless", "0 3 * * *")], now) });
+
+    expect(attentionSummary(attention(one, now, "7d", adherenceOf(one)))).toBe(
+      `Nothing in what was read needs attention. ${NOT_KNOWN_WORDS.summary(1)}`,
+    );
+    expect(NOT_KNOWN_WORDS.summary(1)).toBe("The adherence of 1 schedule is not known.");
+    expect(NOT_KNOWN_WORDS.summary(7)).toBe("The adherence of 7 schedules is not known.");
+    // Beside what was not read, and what was read before.
+    const partly = reads({
+      schedules: stale([enabled("zoneless", "0 3 * * *")]),
+      restores: failed(emptyRead(), "forbidden"),
+    });
+
+    expect(attentionSummary(attention(partly, now, "7d", adherenceOf(partly)))).toBe(
+      `Nothing in what was read needs attention. ${NOT_KNOWN_WORDS.summary(1)} Not everything was read. Part of it was read before the last read, which did not succeed.`,
+    );
+    // Every schedule known and on time: the summary is what it was.
+    const known = reads({ schedules: succeeded([enabled("soon", "TZ=UTC 0 13 * * *", "2026-09-09T13:00:00Z")], now) });
+
+    expect(attentionSummary(attention(known, now, "7d", adherenceOf(known)))).toBe(
+      "Nothing in what was read needs attention.",
+    );
+    // The words of the line before the items, and of each reason, in the short words of the signal.
+    expect(NOT_KNOWN_WORDS.line(7)).toBe(
+      "The adherence of 7 schedules is not known, which is not that they need nothing.",
+    );
+    expect(NOT_KNOWN_WORDS.line(1)).toBe(
+      "The adherence of 1 schedule is not known, which is not that it needs nothing.",
+    );
+    expect(NOT_KNOWN_WORDS.reason("no-offset", 9)).toBe(
+      `${SIGNAL_WORDS.reasons["no-offset"].charAt(0).toUpperCase()}${SIGNAL_WORDS.reasons["no-offset"].slice(1)}: 9.`,
+    );
+  });
+
+  it("makes an item of a schedule that passes the grace at a tick of the clock, with no read", () => {
+    const due = reads({ schedules: succeeded([enabled("tick", "TZ=UTC 58 11 * * *", "2026-09-09T11:58:00Z")], now) });
+    const later = now + 4 * MINUTE;
+
+    // Due by two minutes, within the grace: no item. Four minutes later, with the same reads, it is overdue.
+    expect(attention(due, now, "7d", adherenceOf(due)).items).toEqual([]);
+    expect(rules(attention(due, later, "7d", adherenceOf(due, later)))).toEqual([["A11", "tick"]]);
+    expect(item(attention(due, later, "7d", adherenceOf(due, later)), "A11", "tick").time).toBe(now - 2 * MINUTE);
+  });
+
+  it("says of an item of the rule that it was read before when the schedules or the backups it is of were", () => {
+    const staleness = (more: Partial<OverviewReads>) => {
+      const read = reads(more);
+
+      return attention(read, now, "7d", adherenceOf(read))
+        .items.filter((entry) => entry.rule === "A11")
+        .map((entry) => [entry.name, entry.stale]);
+    };
+    const late = enabled("late", "TZ=UTC 0 11 * * *", "2026-09-09T11:00:00Z");
+    const holding = enabled("holding", "TZ=UTC 0 11 * * *", "2026-09-09T11:00:00Z");
+
+    expect(staleness({ schedules: stale([late]) })).toEqual([["late", true]]);
+    // What holds the submissions is read in the backups: an earlier read of them is of every item of the rule.
+    expect(staleness({ schedules: succeeded([holding, late], now), backups: stale([holds[0]]) })).toEqual([
+      ["holding", true],
+      ["late", true],
+    ]);
+    // The backups denied: what holds them is not known, which the reason says, and is of no earlier read.
+    expect(staleness({ schedules: succeeded([late], now), backups: failed(emptyRead(), "forbidden") })).toEqual([
+      ["late", false],
+    ]);
+  });
+
+  it("puts first the lines the rules name, A11 among them, each with its next run and its adherence", () => {
+    const names = Array.from({ length: 12 }, (_, index) => `schedule-${String(index + 1).padStart(2, "0")}`);
+    const schedules = names.map((name) =>
+      name === "schedule-07"
+        ? schedule(name, {}, { phase: "FailedValidation", validationErrors: ["x"] })
+        : name === "schedule-11"
+          ? schedule(name, {}, null)
+          : name === "schedule-12"
+            ? enabled(name, "TZ=UTC 0 11 * * *", "2026-09-09T11:00:00Z")
+            : schedule(name),
+    );
+    const many = reads({ schedules: succeeded(schedules, now) });
+    const context = adherenceOf(many);
+    const found = scheduleLines(many, now, attention(many, now, "7d", context), context);
+
+    if (found.state !== "listed") throw new Error("The schedules were read");
+    expect(found.items.map((line) => [line.view.name, line.rules])).toEqual([
+      ["schedule-07", ["A5"]],
+      ["schedule-11", ["A6"]],
+      ["schedule-12", ["A11"]],
+      ...names.slice(0, 6).map((name) => [name, []]),
+      ["schedule-08", []],
+    ]);
+    expect(found.others).toBe(2);
+    // Each line says what the row of the schedule says in the list: the signal of the same schedule and context.
+    for (const line of found.items) {
+      const signal = scheduleSignal(
+        schedules.find((one) => one.metadata.name === line.view.name) as ScheduleResource,
+        context,
+      );
+
+      expect([line.view.name, line.signal?.state, line.signal?.next]).toEqual([
+        line.view.name,
+        signal.state,
+        signal.next,
+      ]);
+    }
+    expect(found.items[2].signal).toMatchObject({ state: "overdue", next: { kind: "at", at: now - HOUR } });
+    // Without what the views share of the adherence, a line says nothing of it, and no rule names the late one.
+    const without = scheduleLines(many, now, attention(many, now, "7d"));
+
+    expect(without.state === "listed" && without.items.map((line) => "signal" in line)).toEqual(
+      Array.from({ length: 10 }, () => false),
+    );
+  });
+
+  it("computes nothing of the adherence without what the views share of it", () => {
+    const found = attention(all, now, "7d");
+
+    expect(found.items.filter((entry) => entry.rule === "A11")).toEqual([]);
+    expect(Object.keys(found)).toEqual(["items", "unchecked", "earlier"]);
+    expect(attentionSummary(found)).toBe("2 items in what was read.");
+  });
+
+  it("gives no value of the whole with the adherence either, and never the words of a verdict", () => {
+    const found = attention(all, now, "7d", adherenceOf(all));
+    const words = JSON.stringify([
+      found,
+      attentionSummary(found),
+      NOT_KNOWN_WORDS.line(notKnownCount(found)),
+      ...(found.notKnown ?? []).map(({ reason, count }) => NOT_KNOWN_WORDS.reason(reason, count)),
+    ]);
+
+    expect(words).not.toMatch(/healthy|protected|\bsafe\b|all is well|\bscore\b|%/i);
+    expect(Object.keys(found)).toEqual(["items", "unchecked", "earlier", "notKnown"]);
   });
 });
 
