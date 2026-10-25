@@ -5,8 +5,8 @@
 //
 // Before every request the entry of the cluster is read in the catalog of the host: an entry that is not
 // there, that is not connected, or whose kubeconfig or context changed since writes were turned on, is
-// refused as a target that changed, before anything is sent. The proxy of the host does not look at the
-// state of a cluster, and a request to one that is not connected would connect it.
+// refused as a target that changed, before anything is sent. The proxy of the host answers a request to a
+// cluster that is not connected 503, and an upgrade to one, as the port-forward of the tunnel, starts its proxy.
 //
 // Every answer is read by its status, which `getResponse` gives whatever it is, and what a call rejects with
 // is read by its shape: the client of the host rejects with things that are not an `Error`. It has no

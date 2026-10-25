@@ -1,6 +1,6 @@
 # Architecture
 
-Date: 2026-10-19
+Date: 2026-10-25
 
 Status: the foundation is complete and the first views are in place: the discovery of
 the installation, the Backups, the Restores, the Schedules and the storage and
@@ -17,7 +17,7 @@ their specs start from.
 Authority: [directives](../../AGENTS.md), [roadmap](ROADMAP.md), and
 [versioned evidence](RECON-T0.1.md). The evidence report pins Velero v1.18.4 and the
 AWS plugin v1.14.4; the Freelens validation target is the one of SPEC-0015, the
-nightly v2.0.0-0-nightly-2026-10-19, built from freelensapp/freelens `2578fac5`. A
+nightly v2.0.0-0-nightly-2026-10-25, built from freelensapp/freelens `7801fb10`. A
 reviewed version is not a compatibility claim for untested releases. Product
 behavior below requires spec approval.
 
@@ -235,9 +235,13 @@ the first pull request of T3.3 an answer carries the time the header says it was
 written at, half a second after the second the header names, beside the clock of
 this machine in the middle of the request, or neither when the header is missing or
 is not a date written as HTTP writes one. The answer is of the origin of the frame,
-so the header can be read, and it is the one of the API server: the proxies of the
-host keep the header of the answer they pass on, as AGENTS.md says with the lines of
-their source.
+so the header can be read, and it is the one of the API server: the proxy of the main
+process of the host takes the read to the freelens-k8s-proxy of the cluster on the
+fetch path of http-proxy-3, over HTTP/2
+([the route](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/main/freelens-proxy/freelens-proxy.ts#L463-L522),
+[the target](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/main/cluster/freelens-k8s-proxy-target.ts#L154-L168)),
+and each of the two proxies keeps the header of the answer it passes on, as AGENTS.md
+says with the lines of their source.
 
 | Read | When | Path |
 | --- | --- | --- |
@@ -251,7 +255,7 @@ host at the validation target:
 
 - An object of the API has no `selfLink` any more, and the host asks for one to
   build an object of a list
-  ([the check](https://github.com/freelensapp/freelens/blob/2578fac5e9f6d2893129b6ba0d59b379fdf9d305/packages/kube-object/src/kube-object.ts#L115-L120)).
+  ([the check](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/kube-object/src/kube-object.ts#L115-L120)).
   The [store of the list](../../src/renderer/state/list-store.ts) adds it to the copy
   it gives to the host, and the lists of the suites mount their rows with it.
 - The host writes the store of an extension from its main process, and passes the
@@ -261,11 +265,11 @@ host at the validation target:
   it, and the host saves the file once for one change.
 - The host writes the file of a store key by key, from what the store gives it, and
   removes no key: one the store stops giving keeps in the file what it held
-  ([the save](https://github.com/freelensapp/freelens/blob/2578fac5e9f6d2893129b6ba0d59b379fdf9d305/packages/core/src/features/persistent-storage/main/persist-state-to-config.injectable.ts#L16-L22)).
+  ([the save](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/features/persistent-storage/main/persist-state-to-config.injectable.ts#L16-L22)).
   A key that may become empty is always given, empty.
 - The search of the lists of the host waits 250 ms after the last key before it
   gives the list what was typed
-  ([the wait](https://github.com/freelensapp/freelens/blob/2578fac5e9f6d2893129b6ba0d59b379fdf9d305/packages/core/src/renderer/components/input/search-input-url.tsx#L41)).
+  ([the wait](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/renderer/components/input/search-input-url.tsx#L41)).
 
 The reader builds no `KubeApi` of its own: one that an extension creates registers
 itself with the host, and on v2 the reader has the client of the host instead.
@@ -632,9 +636,10 @@ cluster of the request, and nothing else. The extension reads no kubeconfig, run
 no credential plugin, refuses no kind of authentication of its own, and keeps no
 client and no connection of its own to an API server. Resolve the cluster from the
 catalog of the host in main, by the identifier of the frame, and fail closed when
-its entry is not there or is not connected: the proxy does not look at the state
-of a cluster, and a request to one that is not connected would connect it, with an
-authentication the operator did not ask for. Never take a default kubeconfig, an
+its entry is not there or is not connected: since freelensapp/freelens `cd07118f`
+the proxy of the host answers a request to a cluster that is not connected 503, but an
+upgrade, as the port-forward of the tunnel, still starts the proxy of that cluster,
+with an authentication the operator did not ask for. Never take a default kubeconfig, an
 active or first cluster, or a path from the renderer.
 
 - Create uses a namespaced POST, never apply or PUT. Build allowlisted object types
@@ -943,7 +948,13 @@ main process with the kubectl `Main.Shell.getKubectlPath` gives for the cluster,
 environment `Main.Shell.getEnvironment` gives for it as its whole environment, and
 the folder of the extension as its working directory (D2 of SPEC-0015). That
 environment reaches the cluster through the proxy of Freelens, with the identity of
-the connection of the host and the proxy setting of the cluster. kubectl chooses
+the connection of the host and the proxy setting of the cluster. It carries as well
+the token the proxy of Freelens asks of every request, which the credential of its
+kubeconfig, the subcommand `credential` of freelens-k8s-proxy, reads there
+([the kubeconfig](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/main/kubeconfig-manager/kubeconfig-manager.ts#L177-L191),
+[the token](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/main/kube-tools/kube-tools.ts#L119-L122),
+[the check](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/main/freelens-proxy/freelens-proxy.ts#L447-L461)): a
+kubectl given less than that environment is refused by the proxy. kubectl chooses
 the local port, and the tunnel is ready when kubectl writes `Forwarding from
 127.0.0.1:<port>`, within fifteen seconds counted once kubectl is prepared; the
 preparation, which may download the kubectl of the version of the cluster, counts

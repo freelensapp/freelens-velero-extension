@@ -63,9 +63,9 @@ reviewed. Scope and progress toward v1.0.0 are in `docs/development/ROADMAP.md`.
   must not delay a ready release or justify omitted requirements.
 - The validation target is the one of
   [SPEC-0015](docs/specs/SPEC-0015-freelens-v2-host.md): Freelens v2 at
-  freelensapp/freelens `2578fac5e9f6d2893129b6ba0d59b379fdf9d305`, the base of the
-  nightly v2.0.0-0-nightly-2026-10-19, with the SDK `@freelensapp/extensions`
-  2.0.0-0-nightly-2026-10-19 pinned exactly, the version the tests build against.
+  freelensapp/freelens `7801fb10a5f20af308093b39e5f79cd6e8c3461d`, the base of the
+  nightly v2.0.0-0-nightly-2026-10-25, with the SDK `@freelensapp/extensions`
+  2.0.0-0-nightly-2026-10-25 pinned exactly, the version the tests build against.
   `engines.freelens` is `^2.0.0`. Until Freelens 2.0.0 is released the target moves
   with the [host drift watch](docs/development/PROCESS.md#host-drift-watch), read
   before every slice and before every merge; then the pin of the SDK becomes a
@@ -360,6 +360,17 @@ test environment and of the process of this repository.
   its first need, 1.34.12 for the cluster at 1.34.11 of the test environment, where
   the nightly bundles 1.37.1: the first load through the tunnel in a new profile
   waits for it.
+- The kubeconfig in the environment `Main.Shell.getEnvironment` gives for a cluster
+  names the proxy of the host, and as its user the subcommand `credential` of
+  freelens-k8s-proxy, which gives the token of that proxy from `FREELENS_PROXY_TOKEN`
+  of the same environment; the proxy refuses with 403 a request that carries no
+  token, as read in the source at the target
+  (`packages/core/src/main/kubeconfig-manager/kubeconfig-manager.ts`, lines 177 to
+  191; `packages/core/src/main/kube-tools/kube-tools.ts`, lines 119 to 122;
+  `packages/core/src/main/freelens-proxy/freelens-proxy.ts`, lines 447 to 461). The
+  tunnel gives kubectl that environment whole: the plugin of the kubeconfig of a
+  cluster runs in freelens-k8s-proxy alone, as the suite of the tabs proves with the
+  identity of an `exec` plugin.
 - A list of the host hidden with `display: none` reads a scroll of 0 while it is
   hidden, and is back at its scroll when it is shown again. The list behind a
   workspace is hidden with `visibility`, which the scale suite proves keeps the
@@ -524,24 +535,34 @@ test environment and of the process of this repository.
   (`packages/core/src/renderer/fetch/browser-fetch.injectable.ts`): an answer is of
   the same origin, and the reader reads its header Date. The header the frame reads
   is the one of the API server, as read in the source at the target and in what it
-  bundles. The proxy of the host passes the answer on with http-proxy-3 2.0.1, which
-  copies every header of it but the hop-by-hop `transfer-encoding`, and `connection`
-  and `keep-alive` on HTTP/2 (`dist/lib/http-proxy/passes/web-outgoing.js`, lines 56
-  to 61 and 139 to 149), and Node, 24.22.0 in the Electron 43.8.0 of the target, as
+  bundles. The proxy of the main process takes a read of the frame on `/api-kube` to
+  the freelens-k8s-proxy of the cluster (`packages/core/src/main/freelens-proxy/freelens-proxy.ts`,
+  lines 463 to 522), on the fetch path of http-proxy-3 2.0.2, the version its
+  lockfile resolves, with the `fetch` of undici 8.12.3 and its pool of HTTP/2 to that
+  proxy (`packages/core/src/main/cluster/freelens-k8s-proxy-target.ts`, lines 112 to
+  124 and 154 to 168). http-proxy-3 passes on every header of the answer of `fetch`
+  (`dist/lib/http-proxy/passes/web-incoming.js`, lines 350 to 356 and 369 to 374)
+  but the hop-by-hop `transfer-encoding`, and `connection` and `keep-alive` on
+  HTTP/2 (`web-outgoing.js`, lines 56 to 61 and 139 to 149), and the host changes no
+  header of an answer but the `location` of a redirect (`freelens-proxy.ts`, lines
+  359 to 373 and 420 to 434). Node, 24.22.0 in the Electron 43.8.3 of the target, as
   the packaged application reports it, writes a Date only for an answer that has
   none (`lib/internal/http2/core.js`, lines 2690 to 2701, and
   `lib/_http_outgoing.js`, lines 503 and 504, for HTTP/1.1). freelens-k8s-proxy
-  v1.9.1 passes it on with the proxy handler of kubectl (`main.go`, line 80;
-  `k8s.io/kubectl` v0.37.1, `pkg/proxy/proxy_server.go`, line 214), which for a
-  request that is not an upgrade is the reverse proxy of Go (`k8s.io/apimachinery`
-  v0.37.1, `pkg/util/proxy/upgradeaware.go`, line 258): it copies every header but
-  the hop-by-hop ones (`net/http/httputil/reverseproxy.go` of Go 1.27.2, lines 364
-  to 374 and 584 to 590), and the server of Go writes a Date only when its handler
-  set none (`net/http/server.go`, line 1503). On the test environment the header
-  arrives with the headers only the API server writes beside it, `audit-id` and
-  `x-kubernetes-pf-flowschema-uid`; its value alone cannot say who wrote it there,
-  since the clock of the node of kind is 31 to 34 milliseconds from the one of the
-  machine.
+  2.0.0 passes the answer of the API server on with the proxy handler of kubectl
+  (`main.go`, lines 157 and 175; `k8s.io/kubectl` v0.37.1, `pkg/proxy/proxy_server.go`,
+  line 214), which for a request that is not an upgrade is the reverse proxy of Go
+  (`k8s.io/apimachinery` v0.37.1, `pkg/util/proxy/upgradeaware.go`, line 258): it
+  copies every header but the hop-by-hop ones (`net/http/httputil/reverseproxy.go`
+  of Go 1.27.3, the Go of its `go.mod`, lines 364 to 374 and 584 to 590), and the
+  server of Go writes a Date only when its handler set none, on HTTP/2
+  (`net/http/internal/http2/server.go`, lines 2595 to 2599) as on HTTP/1.1
+  (`net/http/server.go`, line 1503). On the test environment the header arrives,
+  through the client of the host as through a `fetch` of the frame, with the headers
+  only the API server writes beside it, `audit-id`, `x-kubernetes-pf-flowschema-uid`
+  and `x-kubernetes-pf-prioritylevel-uid`; its value alone cannot say who wrote it
+  there, since the clock of the node of kind is 30 to 34 milliseconds from the one
+  of the machine.
 - The `Icon` of the host holds the name of its icon as its text, which a font
   draws as the icon. Beside the words of a command it is given `aria-hidden`, or
   the name of the command carries the name of the icon.
@@ -601,7 +622,9 @@ test environment and of the process of this repository.
   the frame or of the request, through the proxy of Freelens. The extension reads
   no kubeconfig, runs no credential plugin and keeps no client and no connection
   of its own to an API server. Ask nothing of a cluster whose entry in the catalog
-  is not connected: the proxy would connect it.
+  is not connected: since freelensapp/freelens `cd07118f` the proxy of the host
+  answers a request to it 503, but an upgrade, as the port-forward of the tunnel,
+  still starts the proxy of that cluster, and with it its authentication.
 - A direct tunnel is the kubectl the host gives for the explicitly selected
   cluster, `Main.Shell.getKubectlPath`, run by the main process with
   `Main.Shell.getEnvironment` as its whole environment and the folder of the
@@ -785,7 +808,7 @@ must not be mapped.
 
 The libraries of the host are devDependencies at the versions of the catalog of
 the host, React and its DOM 19.3.1, MobX 7.0.6, the bindings 10.0.2, with their
-types, and `electron` 43.8.0 for its types alone; `@freelensapp/extensions` is
+types, and `electron` 43.8.3 for its types alone; `@freelensapp/extensions` is
 pinned exactly to the nightly of the validation target. pnpm runs with
 `strictPeerDependencies`: a library shared with the host outside the peer range of
 the SDK fails the install.

@@ -16,7 +16,7 @@ env:
   # The commit of Freelens the integration tests run on: the validation
   # target of SPEC-0015. It moves only with that target, and this line is the
   # one that names it here.
-  freelens_ref: 2578fac5e9f6d2893129b6ba0d59b379fdf9d305
+  freelens_ref: 7801fb10a5f20af308093b39e5f79cd6e8c3461d
 
 jobs:
   test-integration:

@@ -1,6 +1,6 @@
 # Dependencies
 
-Updated: 2026-10-17
+Updated: 2026-10-25
 
 What the extension ships, what it only builds with, and how both are kept
 current, on Freelens v2 since T0.7
@@ -45,10 +45,10 @@ The packed build is about 0.5 MB.
 ## Development Graph
 
 - The host SDK, `@freelensapp/extensions`, is pinned exactly to the nightly of the
-  validation target, 2.0.0-0-nightly-2026-10-19, until Freelens 2.0.0 is released,
+  validation target, 2.0.0-0-nightly-2026-10-25, until Freelens 2.0.0 is released,
   then to a range of versions. Its declarations are in the package itself.
 - `react`, `react-dom` 19.3.1, `mobx` 7.0.6, `mobx-react` 10.0.2, their
-  declarations and `electron` 43.8.0, for its types, are devDependencies at the
+  declarations and `electron` 43.8.3, for its types, are devDependencies at the
   versions of the catalog of the host: the build reads the names they export and
   the tests of the views run against them. pnpm 12 runs with
   `strictPeerDependencies`, so a library shared with the host outside the peer
