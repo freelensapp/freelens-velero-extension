@@ -5,7 +5,7 @@
 - **Milestone / tasks:** M4 / T5.1, T5.2
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`
 - **Reviewed main:** `c111008912919e6a1a4127b2a0b8a641ee2dad80`
-- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `2578fac5e9f6d2893129b6ba0d59b379fdf9d305`, the base of the nightly v2.0.0-0-nightly-2026-10-19, which moves with the host drift watch until Freelens 2.0.0 is released; this spec was drafted against v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, where the facts of the host below were read, and they are read again at the target before T5.1
+- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `7801fb10a5f20af308093b39e5f79cd6e8c3461d`, the base of the nightly v2.0.0-0-nightly-2026-10-25, which moves with the host drift watch until Freelens 2.0.0 is released; this spec was drafted against v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, where the facts of the host below were read, and they are read again at the target before T5.1
 - **Dependencies:** [target discovery](SPEC-0002-installation-discovery.md), [states and Backups](SPEC-0003-backup-read-only.md), [Restores](SPEC-0005-restore-read-only.md), [locations](SPEC-0007-locations-read-only.md), [the volume information of an operation](SPEC-0011-artifact-viewers.md)
 - **Approval:** Approved by the lead maintainer on 2026-10-14, as drafted
 

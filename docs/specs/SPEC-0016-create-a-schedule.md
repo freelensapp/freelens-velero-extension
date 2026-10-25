@@ -5,7 +5,7 @@
 - **Milestone / tasks:** M5 / T4.7
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`
 - **Reviewed main:** not relevant: the creation rests on the reviewed release alone, and behavior present only on the main branch of Velero is design guidance, never a baseline capability ([upstream drift watch](../development/PROCESS.md#upstream-drift-watch))
-- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `2578fac5e9f6d2893129b6ba0d59b379fdf9d305`, the base of the nightly v2.0.0-0-nightly-2026-10-19, which moves with the host drift watch until Freelens 2.0.0 is released
+- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `7801fb10a5f20af308093b39e5f79cd6e8c3461d`, the base of the nightly v2.0.0-0-nightly-2026-10-25, which moves with the host drift watch until Freelens 2.0.0 is released
 - **Dependencies:** [the write gate](SPEC-0009-write-gate.md), [the diagnostic request](SPEC-0010-diagnostic-request-and-transport.md), whose creation through the adapter is the pattern of this one, [Schedules](SPEC-0006-schedule-read-only.md), [locations](SPEC-0007-locations-read-only.md), [the adherence of a schedule](SPEC-0013-schedule-adherence.md), [the Freelens v2 host](SPEC-0015-freelens-v2-host.md); the spec of T4.3, not drafted yet, which owns the form of the template of a backup
 - **Approval:** Approved by the lead maintainer on 2026-10-25, as drafted, with D11 decided as the draft proposed: the form refuses an expression the parser refuses; D3 to D8 confirmed, and the amendments of D12 approved with this spec
 

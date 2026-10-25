@@ -19,7 +19,7 @@ the views, and nothing else.
   the private state of the environment.
 - Freelens v2 at the validation target of
   [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md): the nightly
-  v2.0.0-0-nightly-2026-10-19, built from freelensapp/freelens `2578fac5`, its
+  v2.0.0-0-nightly-2026-10-25, built from freelensapp/freelens `7801fb10`, its
   download checked against the checksum the release publishes beside it.
   Freelens 1 lists the extension as Incompatible.
 

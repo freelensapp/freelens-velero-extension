@@ -1,6 +1,6 @@
 // The address of the frame as the host keeps it, which its navigation, the parameters of a page and its links
 // change, written from the source of the host at the validation target (freelensapp/freelens at
-// 2578fac5e9f6d2893129b6ba0d59b379fdf9d305). The host keeps a browser history (packages/routing/src/
+// 7801fb10a5f20af308093b39e5f79cd6e8c3461d). The host keeps a browser history (packages/routing/src/
 // history.injectable.ts lines 15 to 19) behind an observable one (observable-history.ts lines 60 to 231): every
 // push is one change of the address, and the parameters of its search are kept without the ones that have no
 // value (observable-search-params.ts lines 37 to 115, with search-params.ts lines 9 to 13): an address pushed

@@ -1,6 +1,6 @@
 // A stand-in of the client of the host for the API server of a cluster, `Main.K8sApi.KubeJsonApi.forCluster`,
 // written from the source of the host at the validation target,
-// packages/utility-features/json-api/src/json-api.ts at 2578fac5e9f6d2893129b6ba0d59b379fdf9d305:
+// packages/utility-features/json-api/src/json-api.ts at 7801fb10a5f20af308093b39e5f79cd6e8c3461d:
 // - `getResponse` (lines 154-171) gives the answer whatever its status: a structural answer with its status
 //   and its body, which arrives as a stream and stops when the signal of the request is aborted;
 // - `get` and `post` (lines 173-187, 213-268) read the body whole and reject when the status is not 2xx: a
