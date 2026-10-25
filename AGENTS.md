@@ -525,9 +525,10 @@ test environment and of the process of this repository.
   the same origin, and the reader reads its header Date. The header the frame reads
   is the one of the API server, as read in the source at the target and in what it
   bundles. The proxy of the host passes the answer on with http-proxy-3 2.0.1, which
-  copies every header of it but `connection` and `keep-alive` on HTTP/2
-  (`dist/lib/http-proxy/passes/web-outgoing.js`, lines 139 to 149), and Node,
-  24.22.0 in the Electron of the target, writes a Date only for an answer that has
+  copies every header of it but the hop-by-hop `transfer-encoding`, and `connection`
+  and `keep-alive` on HTTP/2 (`dist/lib/http-proxy/passes/web-outgoing.js`, lines 56
+  to 61 and 139 to 149), and Node, 24.22.0 in the Electron 43.8.0 of the target, as
+  the packaged application reports it, writes a Date only for an answer that has
   none (`lib/internal/http2/core.js`, lines 2690 to 2701, and
   `lib/_http_outgoing.js`, lines 503 and 504, for HTTP/1.1). freelens-k8s-proxy
   v1.9.1 passes it on with the proxy handler of kubectl (`main.go`, line 80;
@@ -539,7 +540,7 @@ test environment and of the process of this repository.
   set none (`net/http/server.go`, line 1503). On the test environment the header
   arrives with the headers only the API server writes beside it, `audit-id` and
   `x-kubernetes-pf-flowschema-uid`; its value alone cannot say who wrote it there,
-  since the clock of the node of kind is within a few milliseconds of the one of the
+  since the clock of the node of kind is 31 to 34 milliseconds from the one of the
   machine.
 - The `Icon` of the host holds the name of its icon as its text, which a font
   draws as the icon. Beside the words of a command it is given `aria-hidden`, or

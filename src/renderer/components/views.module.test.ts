@@ -72,10 +72,9 @@ describe("room of the list of the schedules", () => {
     }
   });
 
-  it("gives paused, the next run, the adherence, the last submission and the age the room of their words from 1,000", () => {
+  it("gives paused, the next run, the adherence, the last submission and the age a width of their own from 1,000", () => {
     const whole = wholeFrom();
 
-    expect([...whole.keys()]).toContain(1000);
     expect(classes.filter((name) => whole.get(1000)?.has(name))).toEqual([
       "paused",
       "next",

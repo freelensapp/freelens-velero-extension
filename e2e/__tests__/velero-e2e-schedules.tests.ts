@@ -791,47 +791,8 @@ describe("views of the schedules", () => {
     TIMEOUT,
   );
 
-  it(
-    "keeps the search, the order and the width of a column when a schedule is opened and closed",
-    async () => {
-      expect([...(await cluster.search(frame, "views-to", SCHEDULES))].sort()).toEqual([
-        "views-to-archive",
-        "views-to-default",
-        "views-to-removed",
-      ]);
-      await frame.click("[data-testid=velero-schedules] .TableHead .TableCell.schedule");
-      const resized = await cluster.resizeColumn(frame, "name", 90, SCHEDULES);
-
-      // The edge was dragged to the right: the column is wider. The columns that hold their words whole
-      // do not give all the room that was asked of them.
-      expect(resized.after - resized.before).toBeGreaterThan(30);
-      const state = await cluster.listState(frame, SCHEDULES);
-
-      expect(state.search).toBe("views-to");
-      expect(state.sorted).toMatch(/^schedule /);
-      // The order is the one of the expression, as the rows show it.
-      const expressions = await Promise.all(
-        (await cluster.mounted(frame, SCHEDULES)).map(
-          async (name) => (await cluster.cellsOf(SCHEDULES, frame, name)).schedule,
-        ),
-      );
-
-      expect(expressions).toHaveLength(3);
-      expect([[...expressions].sort(), [...expressions].sort().reverse()]).toContainEqual(expressions);
-      await cluster.openWorkspace(frame, "views-to-archive", SCHEDULES);
-      await cluster.closeWorkspace(frame);
-      const back = await cluster.listStateLike(frame, state, SCHEDULES);
-
-      expect(back.search).toBe(state.search);
-      expect(back.sorted).toBe(state.sorted);
-      expect(back.items).toBe(state.items);
-      expect(back.first).toBe(state.first);
-      expect(Math.abs(back.columns.name - state.columns.name)).toBeLessThanOrEqual(1);
-      await cluster.search(frame, "", SCHEDULES);
-    },
-    TIMEOUT,
-  );
-
+  // Before the case that resizes a column: the host keeps the width a resize gives every column of the list, and
+  // this case measures the list as the stylesheet draws it.
   it(
     "gives its room to the columns that say what a schedule does, at each width where a column gives its own",
     async () => {
@@ -849,7 +810,7 @@ describe("views of the schedules", () => {
       ];
       const without = (...gone: string[]) => all.filter((column) => !gone.includes(column));
       // The columns that hold their words whole in a list of 1,000 pixels or more, the age where it is shown.
-      const whole = ["paused", "next", "adherence", "age"];
+      const whole = ["paused", "next", "adherence", "submitted", "age"];
       let width = 1440;
       let zoom = 1;
       // The width of the window and the zoom each room was reached at, in the report of the case.
@@ -901,12 +862,12 @@ describe("views of the schedules", () => {
             };
           }
         }
-        const screen = await started.app.evaluate(({ screen }) => screen.getPrimaryDisplay().workAreaSize);
-
-        await cluster.writeReport("schedules-rooms", { screen, reached, shown, read });
-        // On a Mac every room was reached at the zoom of 1, with a window 323 pixels wider than the room: from 963
-        // pixels for 640 to 1,524 for 1,201. The report keeps the widths, the zoom and the screen of each run.
-        expect(Object.values(read)).toEqual(Object.values(read).map(() => ({ cut: [], clipped: [], misaligned: [] })));
+        // On a Mac with a work area of 1,792 by 1,003 pixels and on the hosted runner, 1,920 by 1,200, every room was
+        // reached at the zoom of 1, with a window 323 pixels wider than the room: from 963 pixels for 640 to 1,524 for
+        // 1,201. The report keeps the widths, the zoom and the work area of each run.
+        expect(read).toEqual(
+          Object.fromEntries(Object.keys(read).map((room) => [room, { cut: [], clipped: [], misaligned: [] }])),
+        );
         expect(shown).toEqual({
           1201: without(),
           1200: without("installation"),
@@ -919,18 +880,63 @@ describe("views of the schedules", () => {
         });
         expect(await cluster.layoutProblems(frame, SCHEDULES)).toEqual([]);
       } finally {
+        // The report is written whatever happens: it says how far the rooms were reached when one was not.
+        const screen = await started.app.evaluate(({ screen }) => screen.getPrimaryDisplay().workAreaSize);
+
+        await cluster.writeReport("schedules-rooms", { screen, reached, shown, read });
         await velero.setZoom(started.app, 1);
         await velero.setWindowSize(started.app, 1440, 900);
         await frame.waitForFunction(() => window.innerWidth > 1000, undefined, { timeout: 60_000 });
       }
       // In a window of 1440 paused, the next run, the adherence, the last submission and the age are read whole, in
-      // any language, nothing is clipped and every word is on the line of its row.
+      // any language and at any age the host writes, nothing is clipped and every word is on the line of its row.
       const wide = await cluster.columnsOf(SCHEDULES, frame);
 
       expect(wide.cut.filter((column) => whole.includes(column))).toEqual([]);
       expect(wide.clipped).toEqual([]);
       expect(await cluster.misalignedWords(SCHEDULES, frame)).toEqual([]);
       expect(await cluster.tooWide(SCHEDULES, frame, cluster.WORDS_OF_A_SCHEDULE)).toEqual([]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "keeps the search, the order and the width of a column when a schedule is opened and closed",
+    async () => {
+      expect([...(await cluster.search(frame, "views-to", SCHEDULES))].sort()).toEqual([
+        "views-to-archive",
+        "views-to-default",
+        "views-to-removed",
+      ]);
+      await frame.click("[data-testid=velero-schedules] .TableHead .TableCell.schedule");
+      const resized = await cluster.resizeColumn(frame, "name", 90, SCHEDULES);
+
+      // The edge was dragged to the right: the column is wider. The columns that hold their words whole
+      // do not give all the room that was asked of them.
+      expect(resized.after - resized.before).toBeGreaterThan(30);
+      const state = await cluster.listState(frame, SCHEDULES);
+
+      expect(state.search).toBe("views-to");
+      expect(state.sorted).toMatch(/^schedule /);
+      // The order is the one of the expression, as the rows show it.
+      const expressions = await Promise.all(
+        (await cluster.mounted(frame, SCHEDULES)).map(
+          async (name) => (await cluster.cellsOf(SCHEDULES, frame, name)).schedule,
+        ),
+      );
+
+      expect(expressions).toHaveLength(3);
+      expect([[...expressions].sort(), [...expressions].sort().reverse()]).toContainEqual(expressions);
+      await cluster.openWorkspace(frame, "views-to-archive", SCHEDULES);
+      await cluster.closeWorkspace(frame);
+      const back = await cluster.listStateLike(frame, state, SCHEDULES);
+
+      expect(back.search).toBe(state.search);
+      expect(back.sorted).toBe(state.sorted);
+      expect(back.items).toBe(state.items);
+      expect(back.first).toBe(state.first);
+      expect(Math.abs(back.columns.name - state.columns.name)).toBeLessThanOrEqual(1);
+      await cluster.search(frame, "", SCHEDULES);
     },
     TIMEOUT,
   );

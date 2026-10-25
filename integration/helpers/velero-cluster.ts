@@ -1000,7 +1000,7 @@ export async function columnsOf(
 /**
  * The cells of the mounted rows whose words do not sit on the line of the words
  * of their row: the middle of the first line of words of a cell, its marks left
- * out, more than a pixel away from the middle the cells of the row share most.
+ * out, more than a pixel away from the median of the middles of the row.
  */
 export async function misalignedWords(of: ListOf, frame: Frame): Promise<string[]> {
   return frame.evaluate((selector) => {
@@ -1096,16 +1096,17 @@ export const WORDS_OF_AN_OPERATION = {
 };
 
 /**
- * What the columns of a schedule that say when it runs hold whole in a list
- * with the room for them, in any language: the next run, the word of its
- * adherence beside its mark, and the last submission, a date.
+ * What the columns of a schedule that say what it does and when hold whole in a
+ * list with the room for them, in any language: paused, the next run as far as
+ * five years either way, the word of its adherence beside its mark, the last
+ * submission, a date, and the longest age of each form the host writes.
  */
 export const WORDS_OF_A_SCHEDULE = {
   paused: ["Not paused", "Paused"],
-  next: ["in 364d 23h", "29d 23h ago", "Not known"],
+  next: ["in 364d 23h", "29d 23h ago", "Not known", "in 1825d 23h", "1825d 23h ago"],
   adherence: ["At every look", "Not known", "Overdue"],
   submitted: WORDS_OF_AN_OPERATION.started,
-  age: ["364d", "59m"],
+  age: ["9m59s", "179m", "7h59m", "47h", "7d23h", "729d", "2y364d"],
 };
 
 /** The names of the objects a list has mounted, in the order it shows them. */

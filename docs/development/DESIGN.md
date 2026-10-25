@@ -124,14 +124,16 @@ stay. Of the schedules, the last submission and the newest backup go under 760 a
 the expression under 640, since the view of a schedule has all three, the band of
 its status the expression and the last submission, its history the newest backup:
 the name, paused, the next run, the adherence and the validation stay. Paused, the
-next run, the word of the adherence with its mark and the age have the room of their
-words in a list of 1,000 pixels or more, as measured in the packaged application at
-each edge and in a window of 1440 by 900; in a narrower one they are cut at the end
-of their room, and read whole in their tip. The name, the expression, the newest
-backup and the validation share what is left: of the newest backup the name is cut
-first, and then how it ended, with its tip. The installation is the first to go
-because it is the same in
-every row and the target bar says it. In a list of 1,000 pixels or more what an
+next run, the word of the adherence with its mark and the last submission have the
+room of their words in a list of 1,000 pixels or more, as measured in the packaged
+application at each edge and in a window of 1440 by 900; in a narrower one they are
+cut at the end of their room, and read whole in their tip. The name, the expression,
+the newest backup and the validation share what is left: of the newest backup the
+name is cut first, and then how it ended, with its tip. In every list the age, shown
+from 1,000 pixels, holds there whole every age the host writes, up to 2y364d; its
+tip is the time of the creation. The installation is the first to go because it is
+the same in every row and the target bar says it.
+In a list of 1,000 pixels or more what an
 operation says of a failure, its progress, its start and its duration have the
 room of their words, in whatever way the language of the operator writes a date:
 a window of 1440 by 900 shows them whole, and the name, the source, the phase and

@@ -497,17 +497,18 @@
     min-width: calc(10ch + 16px);
   }
 
-  /* The age is shown where the room is of 1,000 pixels or more: there it holds an age of days whole. */
+  /* The age is shown where the room is of 1,000 pixels or more, in every list: there it holds whole every age the
+     host writes, two units at most, the longest 2y364d. */
   .list :global(.TableCell.age) {
-    min-width: calc(4.5ch + 16px);
+    min-width: calc(6ch + 16px);
   }
 
   .list :global(.TableCell.next) {
-    min-width: calc(13ch + 16px);
+    min-width: calc(12ch + 16px);
   }
 
   .list :global(.TableCell.adherence) {
-    min-width: calc(13ch + 40px);
+    min-width: calc(12ch + 40px);
   }
 }
 
@@ -671,7 +672,6 @@
   align-items: center;
   min-width: 0;
   max-width: 100%;
-  overflow: hidden;
 }
 
 /* The band of the adherence of a schedule: a line for each fact, its name and its sentences, which wrap. */
