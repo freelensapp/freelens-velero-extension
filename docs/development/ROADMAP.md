@@ -191,9 +191,23 @@ the accuracy of the adherence signal, including its uncertainty states.
 | Ground rules of the write actions | | | Planned |
 | Backup now from a schedule | T4.2 | | Planned |
 | Create backup form, followed by a review of the exact request | T4.3 | | Planned |
+| Create schedule form, followed by a review of the exact request | T4.7 | [SPEC-0016](../specs/SPEC-0016-create-a-schedule.md) | Approved |
 | Restore from backup or schedule, with namespace mappings and existing-resource policy | T4.4 | | Planned |
 | Pause and resume of a schedule, with explicit `skipImmediately` behavior | T4.5 | | Planned |
 | Delete one backup through `DeleteBackupRequest`, with double confirmation | T4.6 | | Planned |
+
+Creating a Schedule is in v1.0.0, decided by the lead maintainer on 2026-10-23:
+T4.7, whose spec is [SPEC-0016](../specs/SPEC-0016-create-a-schedule.md), approved
+by the lead maintainer on 2026-10-25. The order of the slices of the milestone is
+T4.2, T4.3, T4.7, T4.4, T4.5, T4.6. T4.7 comes right after T4.3 because the template
+of a Schedule is the spec of a Backup: the form of the template is shared, with two
+wrappers, one for a Backup and one for a Schedule.
+
+Editing a Schedule stays out of v1.0.0, decided by the lead maintainer on
+2026-10-23, and is deferred to the next minor: the adapter is create-only
+([ARCHITECTURE.md](ARCHITECTURE.md#create-only-adapter-decision)), and a patch of
+the spec needs the review of a diff, which is a different review model from the one
+of a creation. Pause and resume, T4.5, are the only patches of v1.0.0.
 
 Exit of M5: each action tested separately on the disposable kind cluster, with
 the resulting objects and state checked. No write on a real cluster, no bulk
@@ -209,3 +223,14 @@ deletion of backups, no way around the confirmation.
 | Tarball, checksums and software bill of materials from the release workflow | T6.4 | | Planned |
 | With Freelens 2.0.0: the pin of the SDK a range of versions, the integration at the tag v2.0.0, the host drift watch ended | | [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#d10-the-version-and-the-release) | Planned |
 | Release through the organization's flow, on the lead maintainer's go | T6.5 | | Planned |
+
+## Deferred after v1.0.0
+
+Work that is decided out of v1.0.0, each item with its decision:
+
+- **Editing a Schedule**, to the next minor: the adapter is create-only, and a
+  patch of the spec needs the review of a diff, a different review model from the
+  one of a creation. Decided by the lead maintainer on 2026-10-23.
+- **Backup coverage panels**, which would show which namespaces and volumes the
+  schedules and the backups of an installation cover. Deferred by the same
+  decision.
