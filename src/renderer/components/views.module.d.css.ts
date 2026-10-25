@@ -75,6 +75,7 @@ declare const classNames: {
   readonly overviewCount: "overviewCount";
   readonly overviewRow: "overviewRow";
   readonly overviewBand: "overviewBand";
+  readonly overviewLines: "overviewLines";
   readonly short: "short";
   readonly flights: "flights";
   readonly flight: "flight";

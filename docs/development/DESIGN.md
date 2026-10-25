@@ -175,8 +175,11 @@ commands open the explicit Velero operation, not an unrestricted YAML editor.
   grace in words, with the marks of the states each beside its word.
 - The Overview is bands without frames, in the order an operator would look: what
   was read, what needs attention beside the newest completed backup and what is in
-  flight, the recent operations, the schedules beside the storage. At 1,000 pixels
-  or more the bands of a row are side by side, under that one is under the other.
+  flight, the recent operations, the schedules and the storage. At 1,000 pixels
+  or more the bands of a row are side by side, under that one is under the other;
+  the schedules and the storage are side by side only where the lines of both have
+  the room of their columns, and in a window of 1440 by 900 the storage is under
+  the schedules, so that each table of lines shows all its columns.
   After what was read is the band of the server, which reads nothing when the
   page opens: the version of the server and its plugins are asked of the server
   through a request, which is a write, by a command of the band, through the gate

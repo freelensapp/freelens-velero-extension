@@ -378,6 +378,11 @@ const MISSING: Partial<Record<Family, string>> = {
     "The availability of the storage locations, their last validation, the default and the locations the schedules name were not checked",
 };
 
+// While the backups were never answered the adherence of the schedules is not computed either, and the line of the
+// backups says so of the schedules that were read, so that the summary never stands for it.
+export const BACKUPS_AND_ADHERENCE_MISSING =
+  "Whether a backup in flight carries a failure, whether one ended with a failure, how the newest backup of each schedule ended and the adherence of the schedules were not checked";
+
 function failing(view: BackupView | RestoreView): boolean {
   return view.evidence.signal === "failure";
 }
@@ -677,12 +682,17 @@ function inOrder(one: AttentionItem, other: AttentionItem): number {
 export function attention(reads: OverviewReads, now: number, window: Window, adherence?: AdherenceContext): Attention {
   const unchecked = (Object.keys(MISSING) as Family[])
     .filter((family) => !hasItems(reads[family]))
-    .map((family) => ({
-      family,
-      kind: KINDS[family],
-      reason: unread(PLURALS[family], reads[family]).reason,
-      missing: MISSING[family] ?? "",
-    }));
+    .map((family) => {
+      const { state, reason } = unread(PLURALS[family], reads[family]);
+      const adherenceToo = family === "backups" && state === "not-read" && hasItems(reads.schedules);
+
+      return {
+        family,
+        kind: KINDS[family],
+        reason,
+        missing: adherenceToo ? BACKUPS_AND_ADHERENCE_MISSING : (MISSING[family] ?? ""),
+      };
+    });
   const signals = signalsOf(reads, adherence);
 
   return {

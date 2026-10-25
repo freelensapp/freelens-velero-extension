@@ -1050,6 +1050,28 @@ describe("the adherence of the schedules: rule A11 and what is not known (SPEC-0
     expect(stateOf("nameless")).toBe("not-known");
   });
 
+  it("A11: leads a schedule at every look to its backup in progress, and says when a second backup holds", () => {
+    const schedules = [
+      enabled("look", "0 0 30 2 *", "2026-09-10T11:59:00Z"),
+      enabled("holding", "TZ=UTC 0 11 * * *", "2026-09-09T11:00:00Z"),
+    ];
+    const backups = [
+      backup("look-1", "InProgress", 2 * MINUTE, { schedule: "look" }),
+      backup("holding-1", "InProgress", 30 * MINUTE, { schedule: "holding" }),
+      backup("holding-2", "InProgress", 20 * MINUTE, { schedule: "holding" }),
+    ];
+    const both = reads({ schedules: succeeded(schedules, now), backups: succeeded(backups, now) });
+    const found = attention(both, now, "7d", adherenceOf(both));
+
+    // At every look, with a backup of it in progress: the item leads to that backup, and its reason says it.
+    expect(item(found, "A11", "look")?.related).toEqual({ kind: "backup", name: "look-1" });
+    expect(item(found, "A11", "look")?.reason).toContain(SIGNAL_WORDS.heldNow("look-1", "InProgress"));
+    // Held by two backups: the item leads to the newest of them, the one the signal names, and says that one more
+    // holds as well.
+    expect(item(found, "A11", "holding")?.related).toEqual({ kind: "backup", name: "holding-2" });
+    expect(item(found, "A11", "holding")?.reason).toContain(SIGNAL_WORDS.heldMore(1));
+  });
+
   it("A11: says the words of the offset of the server it computed with, of the schedule itself or of another", () => {
     const submission = Date.parse("2026-09-09T09:00:00Z");
     const own = frozen(submissionOf("derived", A, submission, 120));

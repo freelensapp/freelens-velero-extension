@@ -287,7 +287,7 @@ describe("views with restricted access", () => {
       // The rules looked at what was read, and say what they did not look at: the restores. No rule is
       // of the snapshot locations, and nothing is said of them among what needs attention. The backups are
       // read, and none of them gives the zone of the server: the adherence of the five schedules of five fields
-      // that name no zone is not known, and so is the one of the two Velero has not read, which is said.
+      // that name no zone is not known, and so is the adherence of the two Velero has not read, which is said.
       expect(shown.unchecked).toEqual(["restores"]);
       expect(shown.summary).toMatch(
         /^\d+ items in what was read\. The adherence of 7 schedules is not known\. Not everything was read\.$/,

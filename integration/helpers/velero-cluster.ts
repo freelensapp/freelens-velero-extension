@@ -220,6 +220,37 @@ export const SCHEDULE_LINES: LinesOf = { table: "[data-testid=velero-overview-sc
 export const STORAGE_LINES: LinesOf = { table: "[data-testid=velero-overview-storage-list]" };
 
 /**
+ * What the band of a table of lines shows of it: the width of the part that
+ * scrolls it sideways and of the table it holds, and the columns, by their
+ * heads, whose right edge is past the edge of that part when it is not
+ * scrolled, which are reached only by scrolling the band. A cell of such a
+ * table is never clipped: the table is as wide as its words, and the band
+ * scrolls instead.
+ */
+export async function bandOf(of: LinesOf, frame: Frame): Promise<{ room: number; width: number; behind: string[] }> {
+  return frame.evaluate((selector) => {
+    const table = document.querySelector<HTMLElement>(selector);
+
+    if (!table) return { room: 0, width: 0, behind: ["no table"] };
+    let holder: HTMLElement | null = table.parentElement;
+
+    while (holder && !["auto", "scroll"].includes(getComputedStyle(holder).overflowX)) {
+      holder = holder.parentElement;
+    }
+    const scroller = holder ?? table;
+    const edge = scroller.getBoundingClientRect().left + scroller.clientWidth - scroller.scrollLeft;
+
+    return {
+      room: scroller.clientWidth,
+      width: scroller.scrollWidth,
+      behind: [...table.querySelectorAll<HTMLElement>("thead th")]
+        .filter((head) => head.getBoundingClientRect().right > edge + 1)
+        .map((head) => (head.textContent ?? "").trim()),
+    };
+  }, of.table);
+}
+
+/**
  * Runs the pinned `kubectl` of the test environment against the test cluster,
  * reading only, and returns its exit status and output. The kubeconfig is the
  * one of the environment, never the one of the developer.

@@ -577,7 +577,7 @@ export const Overview = observer(({ installation, now, ways }: OverviewProps) =>
         />
       </Band>
 
-      <div className={styles.overviewRow}>
+      <div className={styles.overviewLines}>
         <Band id="schedules" title="Schedules">
           {schedules.state === "listed" ? (
             <>

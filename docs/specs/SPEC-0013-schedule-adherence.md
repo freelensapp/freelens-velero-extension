@@ -853,44 +853,56 @@ as the band does.
 T3.3, the second of its four pull requests: the adherence in the Overview, on Freelens v2 at the validation target, on
 2026-10-25, on the machine of the runs (macOS, Node 24.21.0, pnpm 12.14.0, TypeScript 7.0.2, Vitest 5.0.5, Biome 2.5.15,
 Trunk launcher 1.3.4). `pnpm type:check`, exit 0; `pnpm lint:check`, exit 0; `pnpm test:unit`, exit 0, 85 files and
-2,653 tests, then the two measures, the one of ADH-16 as before, the thousand signals in 43.1 ms at the 95th percentile
+2,654 tests, then the two measures, the one of ADH-16 as before, the thousand signals in 44.3 ms at the 95th percentile
 of 250; the same with `VITE_PRESERVE_MODULES=false`, 44.5 ms; `pnpm knip:check`, exit 0; Trunk on the files the pull
-request changes, exit 0. The pull request adds 20 tests to the 85 files and 2,633 tests of main, with the zone of the
-machine fourteen hours east of UTC in the tests of the Overview as in the ones of the signal, and every word they assert
-read from the words of the modules: 1 of the signal, the words of the derived offset as a field of plain data apart from
-the other notes, of a schedule that is not paused and of a paused one, and none without a derived offset; 10 of the rules
-of the Overview, rule A11 with a case that gives an item and one that gives none for overdue, held within the grace and
-beyond it, at every look with a last submission and with none, due, awaited, paused, refused, not read, New, the zone not
-known, a zone this machine does not know, an expression this version cannot read, a phase it does not know and no time
-to count from, the reason, the time and the backup of each item, the words of the derived offset of the schedule itself
-and of another, an interval overdue when the backups are denied, said with the hold not known, an item at a tick of the
-clock with no read, an item of an earlier read, the count by reason of the schedules that were read and of no other, the
-summary, the lines with their signal, nothing without what the views share of the adherence, and no value of the whole
-(ADH-12); 9 of the page, the items of A11 in the order of the page beside A5 to A8, the line of the count before them with
-its way to the list of the schedules, the summary of a page with nothing to report and a count, the two cells of each
-line with their tips, nothing of the adherence until the backups were answered once, an item at a tick of the clock with
-no read and no timer left, nothing of the installation selected before, its offset and its late answer included, the
-items of an earlier read of the backups and of the schedules, and the backups denied (ADH-12, and ADH-14 for the
-Overview). Seven tests of the page are restated with the summary, the cells of the lines and the line of the count, and
-the rules A1 to A10 keep their cases. Twenty-three changes were made on purpose to the code, on a copy of the tree, and
-each made a test fail: A11 for a paused schedule whose run is due, and for one held within the grace; a schedule at every
-look counted among what is not known; the summary silent on what is not known; the line before the items without the
-words that this is not that they need nothing; the reasons in the order of their names; a count, empty, when the
-schedules were not read; nothing counted of a read of the schedules that is not the last one; the words of the derived
-offset, that what holds the submissions is not known, and the backup that holds them, each left out of an item; the time
-of a schedule at every look taken from an expected run it has not; an item of A11 not said of an earlier read of the
-backups; A11 left out of the rules that put a line first; the lines given no signal, and a line without its two cells;
-the line of the count after the items, and given the attribute of what was not looked at; the adherence said while the
-backups were never answered, and computed by the time of the read and not by the clock of the views; the offset of the
-installation selected before kept for the next one; and the words of the derived offset given every note of the signal,
-and left out of a paused schedule. The suites of the Overview and of the first reader are restated on the fixtures that
-exist, and run in the packaged application with the second phase of the pull request: ADHERENCE-PR2-PENDING. Decided
-while implementing, on 2026-10-25, none a change of what a requirement asks: the Overview says nothing of the adherence
-while the backups of the installation were never answered, no item of A11, no count and the two cells of a line empty,
-as the list says nothing of it then; the reason of an item says, when the backups were not read, that whether a backup
-holds the submissions is not known, from the hold of the signal, since REQ-165 asks it of a state that keeps its value;
-an item of A11 is of the read of the backups as well, and says that it was read before when that read is; a schedule
-Velero has not read is an item of A6, as SPEC-0008 has it, and its adherence is counted as not known, which is two
-facts; the line of the count says how many schedules there are for each reason, in the order the signal names the
-reasons, that this is not that they need nothing, and leads to the list of the schedules, where the tip of each says
-why.
+request changes, exit 0. The pull request adds 21 tests to the 85 files and 2,633 tests of main, the last after the
+independent review, with the zone of the machine fourteen hours east of UTC in the tests of the Overview as in the ones
+of the signal, and every word they assert read from the words of the modules: 1 of the signal, the words of the derived
+offset as a field of plain data apart from the other notes, of a schedule that is not paused and of a paused one, and
+none without a derived offset; 11 of the rules of the Overview, rule A11 with a case that gives an item and one that
+gives none for overdue, held within the grace and beyond it, at every look with a last submission and with none, due,
+awaited, paused, refused, not read, New, the zone not known, a zone this machine does not know, an expression this
+version cannot read, a phase it does not know and no time to count from, the reason, the time and the backup of each
+item, a schedule at every look led to its backup in progress and one held by two backups, the words of the derived
+offset of the schedule itself and of another, an interval overdue when the backups are denied, said with the hold not
+known, an item at a tick of the clock with no read, an item of an earlier read, the count by reason of the schedules
+that were read and of no other, the summary, the lines with their signal, nothing without what the views share of the
+adherence, and no value of the whole (ADH-12); 9 of the page, the items of A11 in the order of the page beside A5 to A8,
+the line of the count before them with its way to the list of the schedules, the summary of a page with nothing to
+report and a count, the two cells of each line with their tips, nothing of the adherence until the backups were answered
+once, an item at a tick of the clock with no read and no timer left, nothing of the installation selected before, its
+offset and its late answer included, the items of an earlier read of the backups and of the schedules, and the backups
+denied (ADH-12, and ADH-14 for the Overview). Seven tests of the page are restated with the summary, the cells of the
+lines and the line of the count, and the rules A1 to A10 keep their cases. Twenty-three changes were made on purpose to
+the code, on a copy of the tree, and each made a test fail: A11 for a paused schedule whose run is due, and for one held
+within the grace; a schedule at every look counted among what is not known; the summary silent on what is not known; the
+line before the items without the words that this is not that they need nothing; the reasons in the order of their
+names; a count, empty, when the schedules were not read; nothing counted of a read of the schedules that is not the last
+one; the words of the derived offset, that what holds the submissions is not known, and the backup that holds them, each
+left out of an item; the time of a schedule at every look taken from an expected run it has not; an item of A11 not said
+of an earlier read of the backups; A11 left out of the rules that put a line first; the lines given no signal, and a
+line without its two cells; the line of the count after the items, and given the attribute of what was not looked at;
+the adherence said while the backups were never answered, and computed by the time of the read and not by the clock of
+the views; the offset of the installation selected before kept for the next one; and the words of the derived offset
+given every note of the signal, and left out of a paused schedule. The suites of the Overview and of the first reader
+are restated on the fixtures that exist, and run in the packaged application with the second phase of the pull request:
+on 2026-10-25, on the nightly of the validation target, the suites of the Overview, 15 cases, of the first reader, 15 in
+its two files, and of the schedules, 17, every suite of the views, 174 cases in 12 files, and the pre-review, 33 cases,
+green; `views-zoned`, placed that evening, was awaited, so that the case of A11 on the cluster took its branch with no
+item. The independent review of the first phase found the adherence past the edge of the band of the lines in the window
+of 1440 by 900, which the cells of a table of lines could not show to the checks of the lists of the host: the lead
+maintainer decided that the band of the schedules is alone on its row there, with the storage under it, and the suite
+measures what each band shows, each 1,053 pixels wide with all the columns of its table, and fails with the two bands on
+one row; the suite of the Overview and the pre-review ran green again after the corrections. Decided while implementing,
+on 2026-10-25, none a change of what a requirement asks: the Overview says nothing of the adherence while the backups of
+the installation were never answered, no item of A11, no count and the two cells of a line empty, as the list says
+nothing of it then, and the line of the backups says that the adherence was not checked; the reason of an item says,
+when the backups were not read, that whether a backup holds the submissions is not known, from the hold of the signal,
+since REQ-165 asks it of a state that keeps its value; an item of A11 is of the read of the backups as well, and says
+that it was read before when that read is; a schedule Velero has not read is an item of A6, as SPEC-0008 has it, and its
+adherence is counted as not known, which is two facts; the line of the count says how many schedules there are for each
+reason, in the order the signal names the reasons, that this is not that they need nothing, and leads to the list of the
+schedules, where the tip of each says why. A precision of REQ-171, made in this pull request, to be confirmed at the
+review of the fourth milestone: "never an item" is read as never an item of rule A11, so that a schedule Velero has not
+read stays an item of A6, as SPEC-0008 has it, while its adherence is counted as not known, since ADH-12 keeps the rules
+A1 to A10 as they are and the Failure criteria name an item of rule A11 for a schedule whose adherence is not known.

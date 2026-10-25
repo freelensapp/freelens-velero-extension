@@ -912,6 +912,19 @@
   border-top: 1px solid var(--borderFaintColor);
 }
 
+/* The schedules and the storage, each a table of lines: side by side only where the lines of both have the room
+   of their columns, and otherwise the storage under the schedules, so that each table shows all its columns. A band
+   starts from the width of what it holds, and wraps to its own row when the two do not fit in one. */
+.overviewLines {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 32px;
+}
+
+.overviewLines > .overviewBand {
+  flex: 1 1 max-content;
+}
+
 /* The line over a band is the one of the band: its title has none of its own. */
 .overviewBand .sectionTitle {
   margin: 0;

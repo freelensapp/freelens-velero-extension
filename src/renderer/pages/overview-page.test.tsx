@@ -6,7 +6,7 @@ import { submissionOf } from "../../../test/adherence-builders";
 import { emptyPreferences, heldPreferences, RESOURCES, TITLES } from "../../common/discovery";
 import { formatDuration } from "../../common/duration";
 import { unread } from "../../common/location-users";
-import { COMPLETED_NOTE, GROUP_TITLES, NOT_KNOWN_WORDS } from "../../common/overview";
+import { BACKUPS_AND_ADHERENCE_MISSING, COMPLETED_NOTE, GROUP_TITLES, NOT_KNOWN_WORDS } from "../../common/overview";
 import { emptyRead, failed } from "../../common/read-state";
 import { SIGNAL_WORDS, scheduleSignal } from "../../common/schedule-signal";
 import { adherenceTip } from "../components/adherence";
@@ -1440,7 +1440,7 @@ describe("the adherence of the schedules: rule A11 and what is not known (SPEC-0
     );
   });
 
-  it("says nothing of the adherence until the backups of the installation were answered once", async () => {
+  it("says nothing of the adherence until the backups of the installation were answered once, but that it was not checked", async () => {
     mount(adherence({ [path("backups", A)]: () => new Promise<Answer>(() => undefined) }));
     await screen.findByTestId("velero-overview");
     await waitFor(() => expect(cell("schedules").getAttribute("data-read")).toBe("read"));
@@ -1448,6 +1448,10 @@ describe("the adherence of the schedules: rule A11 and what is not known (SPEC-0
     expect(items().filter(([rule]) => rule === "A11")).toEqual([]);
     expect(counted()).toBeNull();
     expect(summary()).not.toContain(NOT_KNOWN_WORDS.summary(2));
+    // The line of the backups says that the adherence of the schedules was not checked either.
+    expect(band("attention").querySelector('[data-unchecked="backups"]')?.textContent).toContain(
+      BACKUPS_AND_ADHERENCE_MISSING,
+    );
     // The lines are there with their two cells, empty, so that every other cell stays under its column.
     for (const name of lines("velero-overview-schedules-list")) {
       const cells = line(name ?? "").querySelectorAll("td");

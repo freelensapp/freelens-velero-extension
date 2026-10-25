@@ -636,8 +636,9 @@ describe("overview of an installation", () => {
         "overview-schedule-11": { next: "not-known", state: "not-known", mark: "not-known", reason: "not-read" },
       });
       // The cells of the lines, in the window of 1440 by 900: what each table shows, what it cuts with an ellipsis
-      // and a tip, written before anything is asserted; then that no words are clipped with no ellipsis and no tip,
-      // and that every word sits on the line of its row.
+      // and a tip, and what its band leaves behind its scroll, written before anything is asserted; then that each
+      // band shows all the columns of its table, the schedules alone on their row and the storage under them, that
+      // no words are clipped with no ellipsis and no tip, and that every word sits on the line of its row.
       const lines = [
         ["schedules", cluster.SCHEDULE_LINES],
         ["storage", cluster.STORAGE_LINES],
@@ -647,6 +648,7 @@ describe("overview of an installation", () => {
       for (const [id, table] of lines) {
         report[id] = {
           ...(await cluster.columnsOf(table, frame)),
+          band: await cluster.bandOf(table, frame),
           misaligned: await cluster.misalignedWords(table, frame),
         };
       }
@@ -659,7 +661,19 @@ describe("overview of an installation", () => {
         "Adherence",
         "Newest completed backup",
       ]);
+      // The band of the storage is under the one of the schedules, which is alone on its row.
+      expect(
+        await frame.evaluate(() => {
+          const box = (id: string) =>
+            document.querySelector(`[data-testid=velero-overview-${id}]`)?.getBoundingClientRect();
+          const schedules = box("schedules");
+          const storage = box("storage");
+
+          return Boolean(schedules && storage && storage.top >= schedules.bottom - 1);
+        }),
+      ).toBe(true);
       for (const [id, table] of lines) {
+        expect([id, (await cluster.bandOf(table, frame)).behind]).toEqual([id, []]);
         expect([id, (await cluster.columnsOf(table, frame)).clipped]).toEqual([id, []]);
         expect([id, await cluster.misalignedWords(table, frame)]).toEqual([id, []]);
       }
