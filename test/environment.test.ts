@@ -2992,20 +2992,38 @@ describe("foundation fixture boundaries", () => {
       "split-newer": 120,
       "split-older": 0,
     });
-    // At the edge of the check of the placement, a backup created thirty seconds after the clock of its name, what
-    // the name of the older leaves is fifty seconds, under the minute of the rule: with the fifty seconds of the
-    // draft it would be eighty, and the older would give no offset.
-    const edge = adherenceSplitFixtures(
-      "synthetic-owner",
-      run,
-      placed,
-      submissions(Date.parse("2026-10-26T09:00:34Z")),
-    );
+    // At the edge of the check of the placement, the two backups created in one List thirty seconds after the clock
+    // of their names, what the name of the older leaves is fifty seconds, under the minute of the rule: with the
+    // fifty seconds the table had before LM5 it would be eighty, and the older would give no offset.
+    const edge = {
+      named: { "split-newer": placed, "split-older": placed },
+      created: { "split-newer": Date.parse("2026-10-26T09:00:34Z"), "split-older": Date.parse("2026-10-26T09:00:34Z") },
+    };
 
-    expect(offsetsOf(createdAt(edge, submissions(Date.parse("2026-10-26T09:00:34Z")).created))).toEqual({
+    expect(offsetsOf(createdAt(adherenceSplitFixtures("synthetic-owner", run, placed, edge), edge.created))).toEqual({
       "split-newer": 120,
       "split-older": 0,
     });
+    // The older submission is before the newer one while the backup of the older was created less than twenty
+    // seconds after the one of the newer; at twenty it would be the newest, and the views would take its offset.
+    expect(
+      statusOf(
+        adherenceSplitFixtures(
+          "synthetic-owner",
+          run,
+          placed,
+          submissions(Date.parse("2026-10-26T09:00:27.999Z")),
+        ).find((resource) => resource.kind === "Schedule" && resource.metadata.name === "split-older"),
+      )?.lastBackup,
+    ).toBe("2026-10-26T09:00:07Z");
+    expect(() =>
+      adherenceSplitFixtures("synthetic-owner", run, placed, submissions(Date.parse("2026-10-26T09:00:28Z"))),
+    ).toThrow(
+      `The backup split-older of ${names.adherenceSplit} was created 20 seconds after the one of split-newer, twenty ` +
+        "or more: its submission, twenty seconds before its creation, would not be before the one of split-newer, and " +
+        "the views would take the offset of the older one. The cluster took that long to create the two; run the " +
+        "command again: it places the namespace again.",
+    );
   });
 
   it("gives the budget of the adherence three hundred schedules of the expressions of the measure, each with the backup of its submission named two hours east of UTC", () => {
@@ -3202,6 +3220,16 @@ describe("foundation fixture boundaries", () => {
     expect(shaped.again).toEqual([names.adherenceScale]);
     expect(inside(names.adherenceScale, shaped.removed)).toBe(true);
     expect(shaped.removed).toHaveLength(600);
+    // A removal that takes longer than the thirty seconds of the check, the cluster listing what it removed for ten
+    // reads more: the clock of the placement is read once nothing of the run is left, and the backups are named by
+    // it, created within the check.
+    target.runtime.pause(PLACED_FOR + 1000);
+    target.linger(10);
+    const asked = target.runtime.now();
+    const lingering = again();
+
+    expect(lingering.again).toEqual(all);
+    expect(Date.parse(placement(names.adherence) ?? "") - asked).toBeGreaterThan(SUBMISSION_DRIFT);
     // And nothing else of the cluster: what is left of other namespaces is what was there.
     expect(again()).toEqual({ again: [], removed: [] });
   });
@@ -3210,11 +3238,11 @@ describe("foundation fixture boundaries", () => {
     const names = fixtureNames(run);
     const words = (seconds: number, way: string, name: string, namespace: string, created: string, read: string) =>
       `The backup ${name} of ${namespace} was created at ${created}, ${seconds} seconds ${way} the clock of this ` +
-      `machine its name was read from, ${read}: the clock of the Docker machine of the cluster is that far from ` +
-      "the one of this machine, which a sleep of the machine can leave, or the cluster took that long to create " +
-      "it, and its name would give the views no offset of the server. Set the clock of the Docker machine again " +
-      "when it is the cause, which a restart of Docker does, and run the command again: it places the namespace " +
-      "again.";
+      `machine its name was read from, ${read}: the clock of the Docker machine of the cluster is that far ` +
+      `${way === "after" ? "ahead of" : "behind"} the one of this machine, which a sleep of the machine can leave` +
+      `${way === "after" ? ", or the cluster took that long to create it" : ""}, and its name would give the views ` +
+      "no offset of the server. Set the clock of the Docker machine again when it is the cause, which a restart of " +
+      "Docker does, and run the command again: it places the namespace again.";
 
     expect(SUBMISSION_DRIFT).toBe(30_000);
     // The clock of the cluster thirty seconds ahead, with the four seconds of the command: thirty-one.
@@ -3246,6 +3274,20 @@ describe("foundation fixture boundaries", () => {
         names.adherence,
         "2026-10-26T08:59:33.000Z",
         "2026-10-26T09:00:04.000Z",
+      ),
+    );
+    // Thirty seconds and a part is refused, and says thirty-one: the seconds are rounded up.
+    const fraction = cluster("synthetic-owner", Date.parse("2026-10-26T09:00:00.600Z"));
+
+    fraction.told.stamp = (at) => at + 27_000;
+    expect(stopped(() => placeAdherenceFixtures(fraction.runtime as never, run))).toBe(
+      words(
+        31,
+        "after",
+        "adherence-held-20261026090004",
+        names.adherence,
+        "2026-10-26T09:00:35.000Z",
+        "2026-10-26T09:00:04.600Z",
       ),
     );
     // Thirty seconds is within the check.
@@ -3315,6 +3357,51 @@ describe("foundation fixture boundaries", () => {
         true,
       ),
     ).toThrow(`Refusing to place in ${names.adherence} what is made for another namespace`);
+    // The installations of the adherence are placed in two phases, and nothing else is.
+    expect(() =>
+      placeByTheClock(target.runtime as never, run, names.adherence, Date.parse("2026-10-27T09:00:00Z"), (placed) =>
+        adherenceFixtures("synthetic-owner", run, placed),
+      ),
+    ).toThrow(
+      `Refusing to place ${names.adherence} in one phase: the installations of the adherence are placed in two ` +
+        "phases, and no other namespace is",
+    );
+    expect(() =>
+      placeByTheClock(
+        target.runtime as never,
+        run,
+        names.overview,
+        Date.parse("2026-10-27T09:00:00Z"),
+        (placed) => overviewFixtures("synthetic-owner", run, placed),
+        true,
+      ),
+    ).toThrow(
+      `Refusing to place ${names.overview} in two phases: the installations of the adherence are placed in two ` +
+        "phases, and no other namespace is",
+    );
+    // In two phases each backup is of one schedule, which names it in its label, and no two of the same.
+    const relabelled = (label: (backup: KubeResource) => Record<string, string>) =>
+      placeByTheClock(
+        target.runtime as never,
+        run,
+        names.adherence,
+        Date.parse("2026-10-27T09:00:00Z"),
+        (placed, submissions) =>
+          adherenceFixtures("synthetic-owner", run, placed, submissions).map((resource) =>
+            resource.kind === "Backup"
+              ? { ...resource, metadata: { ...resource.metadata, labels: label(resource) } }
+              : resource,
+          ),
+        true,
+      );
+    const without = ({ metadata }: KubeResource) =>
+      Object.fromEntries(Object.entries(metadata.labels ?? {}).filter(([name]) => name !== "velero.io/schedule-name"));
+    const twice = `Refusing to place in ${names.adherence} in two phases a backup of no schedule, or two backups of one`;
+
+    expect(stopped(() => relabelled((backup) => without(backup)))).toBe(twice);
+    expect(stopped(() => relabelled((backup) => ({ ...without(backup), "velero.io/schedule-name": "same" })))).toBe(
+      twice,
+    );
     expect(target.asked).toHaveLength(asked);
     expect([...target.objects.entries()]).toEqual(objects);
     // What is there of another run is not removed: nothing is, and the placement stops.
@@ -3345,6 +3432,113 @@ describe("foundation fixture boundaries", () => {
       ),
     ).toThrow("A placement in two phases needs the clock of this machine");
     expect([clockless.asked, clockless.applied]).toEqual([[], []]);
+  });
+
+  it("stops a placement in two phases on a cluster that does not keep a schedule as it was created, that created the older submission of the split twenty seconds after the newer, or that does not read back a backup it created", () => {
+    const names = fixtureNames(run);
+    const kept =
+      "the views of the adherence read its phase and its last submission, which the definitions of the cluster keep " +
+      "as they are written. Create the environment again with `pnpm demo:down` and `pnpm demo:up`.";
+    // A cluster whose client is told to change what it is asked to create, or what it answers.
+    const told = (
+      target: ReturnType<typeof adherenceCluster>,
+      created: (items: { kind: string; metadata: { name: string }; status?: Record<string, unknown> }[]) => void,
+      answered: (args: string[], answer: string) => string = (_args, answer) => answer,
+    ) => ({
+      ...target.runtime,
+      kubectl(args: string[], input?: string) {
+        if (args[0] === "create" && input) {
+          const list = JSON.parse(input) as { items: Parameters<typeof created>[0] };
+
+          created(list.items);
+          return target.runtime.kubectl(args, JSON.stringify(list));
+        }
+        return answered(args, target.runtime.kubectl(args, input));
+      },
+    });
+
+    // The status of a schedule is not kept: the placement says what it created and what the cluster holds, and a
+    // later call that finds the namespace good says what the cluster holds.
+    const pruned = adherenceCluster();
+    const pruning = told(pruned, (items) => {
+      for (const item of items) if (item.kind === "Schedule") delete item.status;
+    });
+
+    expect(stopped(() => placeAdherenceFixtures(pruning as never, run))).toBe(
+      `The schedule adherence-awaited of ${names.adherence} was created Enabled, submitted at 2026-10-26T09:00:04Z, ` +
+        `and the cluster holds it of no phase, with no submission: ${kept}`,
+    );
+    expect(heldIn(pruned, names.adherence)).toHaveLength(10);
+    expect(stopped(() => placeAdherenceFixtures(pruning as never, run))).toBe(
+      `The schedule adherence-awaited of ${names.adherence} is held of no phase, with no submission: ${kept}`,
+    );
+    // A last submission that is not the one it was created with.
+    const moved = adherenceCluster();
+    const moving = told(moved, (items) => {
+      for (const item of items) {
+        if (item.kind === "Schedule" && item.metadata.name === "split-older") {
+          item.status = { ...item.status, lastBackup: "2026-10-26T09:00:28Z" };
+        }
+      }
+    });
+
+    expect(stopped(() => placeAdherenceFixtures(moving as never, run))).toBe(
+      `The schedule split-older of ${names.adherenceSplit} was created Enabled, submitted at 2026-10-26T09:00:08Z, ` +
+        `and the cluster holds it Enabled, submitted at 2026-10-26T09:00:28Z: ${kept}`,
+    );
+    // The backup of the older submission of the split created twenty seconds after the one of the newer, within
+    // the thirty seconds of the clock of their names: no schedule is created over them, and the next call places
+    // the namespace again.
+    const late = adherenceCluster();
+    let lateBy = 20_000;
+    const later = {
+      ...late.runtime,
+      kubectl(args: string[], input?: string) {
+        const answer = late.runtime.kubectl(args, input);
+
+        if (args[0] === "create" && input?.includes('"split-older"')) {
+          for (const object of late.objects.values()) {
+            if (String(object.metadata.name).startsWith("split-older-")) {
+              object.metadata.creationTimestamp = new Date(
+                Date.parse(String(object.metadata.creationTimestamp)) + lateBy,
+              )
+                .toISOString()
+                .replace(".000Z", "Z");
+            }
+          }
+        }
+        return answer;
+      },
+    };
+
+    expect(stopped(() => placeAdherenceFixtures(later as never, run))).toBe(
+      `The backup split-older of ${names.adherenceSplit} was created 20 seconds after the one of split-newer, ` +
+        "twenty or more: its submission, twenty seconds before its creation, would not be before the one of " +
+        "split-newer, and the views would take the offset of the older one. The cluster took that long to create " +
+        "the two; run the command again: it places the namespace again.",
+    );
+    expect(heldIn(late, names.adherenceSplit).map((object) => object.kind)).toEqual(["Backup", "Backup"]);
+    lateBy = 19_000;
+    expect(placeAdherenceFixtures(later as never, run)).toMatchObject({ split: 4, again: [names.adherenceSplit] });
+    // A backup it created and does not answer when it is read back.
+    const lost = adherenceCluster();
+    const losing = told(
+      lost,
+      () => {},
+      (args, answer) => {
+        if (args[0] !== "get" || args[1] !== "backups.velero.io") return answer;
+        const read = JSON.parse(answer) as { items: { metadata: { name: string } }[] };
+
+        return JSON.stringify({
+          items: read.items.filter((item) => !item.metadata.name.startsWith("adherence-held-")),
+        });
+      },
+    );
+
+    expect(stopped(() => placeAdherenceFixtures(losing as never, run))).toBe(
+      `The backup adherence-held-20261026090004 that was created in ${names.adherence} is not there`,
+    );
+    expect(heldIn(lost, names.adherence).map((object) => object.kind)).toEqual(["Backup", "Backup"]);
   });
 
   // The log the server wrote for the real backup of the run, which begins as the log of every backup of the
@@ -5098,6 +5292,18 @@ describe("foundation fixture boundaries", () => {
       `The schedule ${names.realSchedule} of velero-demo submits its next backup at 2026-10-05T22:05:00.000Z, less ` +
         `than a day from now: the environment is about a year old. ${down}`,
     );
+    // Created a year less half a day before now and skipped since: its next run is counted from the last skip, a
+    // year after it.
+    expect(
+      placed((target) => {
+        validates(target, 0, { skip: true });
+        target.at(0, () => {
+          const found = yearly(target);
+
+          if (found) found.metadata.creationTimestamp = "2025-10-05T22:05:00Z";
+        });
+      }),
+    ).toBe("");
     // Reporting no creation, which no API server leaves out, it is not taken for one far from its run.
     expect(
       placed((target) => {
@@ -5116,6 +5322,56 @@ describe("foundation fixture boundaries", () => {
     expect(placed((target) => target.objects.delete(`schedule/velero-demo/${names.realSchedule}`))).toBe(
       `The schedule ${names.realSchedule} is not in velero-demo, where it was applied. ${down}`,
     );
+    // Of another run once it was applied.
+    expect(
+      placed((target) => {
+        validates(target, 0);
+        target.at(0, () => {
+          const found = yearly(target);
+
+          if (found) (found.metadata.labels as Record<string, string>)[FIXTURE_LABEL] = "0f0f0f0f";
+        });
+      }),
+    ).toBe("Fixture ownership changed");
+    // Of this run, with another expression, a pause or another template, as other scripts may have left it on an
+    // environment kept for days; a pause of false is no pause.
+    const respecified = (change: (spec: Record<string, unknown>) => void) =>
+      placed((target) => {
+        validates(target, 0);
+        target.at(0, () => {
+          const found = yearly(target);
+
+          if (found) change(found.spec as Record<string, unknown>);
+        });
+      });
+    const other = `The schedule ${names.realSchedule} of velero-demo is of this run and not the one the scripts make:`;
+
+    expect(
+      respecified((spec) => {
+        spec.schedule = "@every 24h";
+      }),
+    ).toBe(`${other} its expression is "@every 24h". ${down}`);
+    expect(
+      respecified((spec) => {
+        spec.paused = true;
+      }),
+    ).toBe(`${other} it is paused. ${down}`);
+    expect(
+      respecified((spec) => {
+        spec.template = { ...(spec.template as object), ttl: "1h0m0s" };
+      }),
+    ).toBe(`${other} its template is not the spec of the real backup. ${down}`);
+    expect(
+      respecified((spec) => {
+        delete spec.schedule;
+        spec.paused = true;
+      }),
+    ).toBe(`${other} it names no expression, it is paused. ${down}`);
+    expect(
+      respecified((spec) => {
+        spec.paused = false;
+      }),
+    ).toBe("");
     // One of another run is not taken for the one of this run: nothing is applied over it.
     const foreign = installation();
 
@@ -5271,7 +5527,8 @@ describe("foundation fixture boundaries", () => {
       "controllers.";
     const created =
       `the server created ${names.syncedBackup} and ${names.syncedBackupWithoutLog} from them as they were ` +
-      "stored: once the fixtures of the views and the refused operations were placed, the wait for the two took";
+      "stored: once the fixtures of the views and of the adherence, the refused operations and the schedule its " +
+      "controller validates were placed, the wait for the two took";
     const refused = `PASS: the server refused ${three.join(", ").replace(/, (?=[^,]*$)/, " and ")} for the reasons they are made for`;
     const adherence =
       `PASS: 10 objects of the adherence in ${names.adherence}, 4 in ${names.adherenceSplit} and 600 in ` +
@@ -5369,9 +5626,9 @@ describe("foundation fixture boundaries", () => {
         `${names.overview}, ${names.adherenceSplit} and ${names.adherenceScale}.`,
       "PASS: the store holds the files of the tabs (1 file written by this run, sent as data, which the store " +
         `took after upload: answered 403), and the server created ${names.syncedBackup} and ` +
-        `${names.syncedBackupWithoutLog} from them as they were stored: once the fixtures of the views and the ` +
-        "refused operations were placed, the wait for the two took 1 second, in which 1 pass of its sync ended " +
-        "without both.",
+        `${names.syncedBackupWithoutLog} from them as they were stored: once the fixtures of the views and of the ` +
+        "adherence, the refused operations and the schedule its controller validates were placed, the wait for " +
+        "the two took 1 second, in which 1 pass of its sync ended without both.",
       `NOTE: the server created ${names.syncedBackup} again since the journal was written: the journal has the ` +
         "new identity.",
       `PASS: the server refused ${names.invalidBackup}, ${names.invalidRestore} and ${names.orphanRestore} for ` +
@@ -8872,7 +9129,13 @@ describe("foundation fixture boundaries", () => {
         return of.runtime;
       }),
     ).toEqual({ words: refusal, removed: [] });
-    expect(changed((scene) => runner(scene).runtime)).toEqual({ words: refusal, removed: [] });
+    expect(changed((scene) => runner(scene).runtime)).toEqual({
+      words:
+        `The schedule ${names.realSchedule} of velero-demo is of this run and not in the journal of its objects, ` +
+        "which every object the run applies is entered in before it is applied, and it is not removed: " +
+        `${DOWN}.`,
+      removed: [],
+    });
     // A schedule the cluster does not let go of is waited for two minutes, by the time that went by.
     const lasting = applied();
     const holding = {

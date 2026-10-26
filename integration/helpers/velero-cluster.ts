@@ -14,6 +14,7 @@ import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { captureWindowScreenshot, EXTENSION_NAME } from "./velero-extension";
+import { realScheduleSubmission, writesOf } from "./velero-guard";
 
 import type { Frame, Locator, Page, Request } from "playwright";
 
@@ -310,7 +311,9 @@ export function fixturesMissing(): string {
 /**
  * True when the cluster is up and the fixtures are on it. A cluster without
  * them is reported as not ready instead of failing later as a page full of
- * missing rows.
+ * missing rows. When they are there and the schedule the controller validated
+ * submitted a backup since its placement, it throws with words that say so:
+ * the suite would take that backup into its first snapshot.
  */
 export function fixturesReady(): boolean {
   const probes: [namespace: string, resource: string, name: string][] = [
@@ -350,13 +353,31 @@ export function fixturesReady(): boolean {
   ];
 
   // A run is eight hexadecimal characters: without one, no name of the run is probed.
-  return (
+  const found =
     /^[a-f0-9]{8}$/.test(E2E_FIXTURE_RUN) &&
     probes.every(
       ([namespace, resource, name]) =>
         namespace !== "" && kubectlE2E("get", resource, name, "--namespace", namespace, "-o", "name").status === 0,
-    )
+    );
+
+  if (!found) return false;
+  const installed = kubectlE2E(
+    "get",
+    "schedules.velero.io,backups.velero.io",
+    "--namespace",
+    E2E_NAMESPACE,
+    "-o",
+    "json",
   );
+
+  if (installed.status !== 0) return false;
+  const submitted = realScheduleSubmission(
+    `fixture-yearly-${E2E_FIXTURE_RUN}`,
+    (JSON.parse(installed.stdout) as { items: Parameters<typeof realScheduleSubmission>[1] }).items,
+  );
+
+  if (submitted) throw new Error(submitted);
+  return true;
 }
 
 const KINDS = ["backups", "restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"];
@@ -524,32 +545,19 @@ export function familyReads(counts: Record<string, number>): Record<string, numb
  * `writes` leaves out the PATCH of the schedules, and what proves that nothing
  * was written to the schedule is its version and its status, which the snapshot
  * of every suite holds, and the identities of the objects of the installation,
- * to which a submission would add a backup. ADHERENCE-PR3-PENDING
+ * to which a submission would add a backup. The measure also says the scope and
+ * the number in a minute of that PATCH, which bound what is left out when this
+ * is true. ADHERENCE-PR3-PENDING
  */
 export const SCHEDULE_PATCHED_AT_EVERY_LOOK: boolean = false;
 
 /**
  * The requests that change something, or ask Velero for something, among the
- * ones counted: every request of every kind of `velero.io` that is not a read.
- * One is left out, which the installation under test makes by itself: its
- * controller writes into the status of its storage location every time it
- * validates it. So is the PATCH of a schedule, when its controller sends one at
- * every look (`SCHEDULE_PATCHED_AT_EVERY_LOOK`): the counters carry no
- * namespace, and a PATCH of a synthetic schedule is left out with it, which the
- * version of that schedule in the snapshot still catches.
+ * ones counted (`writesOf`), the PATCH of a schedule among them unless its
+ * controller sends one at every look (`SCHEDULE_PATCHED_AT_EVERY_LOOK`).
  */
 export function writes(counts: Record<string, number>): Record<string, number> {
-  return Object.fromEntries(
-    Object.entries(counts).filter(([key]) => {
-      const [verb, kind] = key.split(" ");
-
-      return (
-        !["GET", "LIST", "WATCH"].includes(verb) &&
-        !(verb === "PATCH" && kind === "backupstoragelocations") &&
-        !(verb === "PATCH" && kind === "schedules" && SCHEDULE_PATCHED_AT_EVERY_LOOK)
-      );
-    }),
-  );
+  return writesOf(counts, SCHEDULE_PATCHED_AT_EVERY_LOOK);
 }
 
 /** What was counted between two readings of the counters: the requests that are more, with how many more. */
