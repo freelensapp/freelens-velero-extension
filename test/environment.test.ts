@@ -2422,6 +2422,14 @@ describe("foundation fixture boundaries", () => {
       phase: "FailedValidation",
       validationErrors: ["Synthetic validation error; no operation was executed"],
     });
+    // The two schedules that submitted two days back are placed with the others, once.
+    for (const name of ["views-submitted", "views-interval"]) {
+      expect(target.applied.filter((key) => key === `schedule/${names.views}/${name}`)).toHaveLength(1);
+      expect(target.find("Schedule", names.views, name)?.status).toEqual({
+        phase: "Enabled",
+        lastBackup: "2026-09-26T07:00:00Z",
+      });
+    }
     // A second call, later, finds every object and changes none.
     const objects = structuredClone([...target.objects.entries()]);
     const changes = target.changes();
@@ -8262,6 +8270,48 @@ describe("foundation fixture boundaries", () => {
     ).toEqual(["views-available"]);
   });
 
+  it("gives the views two schedules that submitted two days before the start and have no backup, of five fields and an interval", () => {
+    const started = Date.parse("2026-09-28T07:31:17.123Z");
+    const resources = viewFixtures("synthetic-owner", run, started, Date.parse("2026-09-28T07:43:09Z"));
+    const named = (name: string) => resources.find((resource) => resource.metadata.name === name);
+    const template = (name: string) =>
+      (named(name)?.spec as { template?: Record<string, unknown> } | undefined)?.template;
+
+    // Read by Velero, which wrote their phase and whether a run that is due is skipped, and each with its last
+    // submission two days before the hour the fixtures were started in, as the history of the views counts its
+    // days.
+    expect(named("views-submitted")).toMatchObject({
+      kind: "Schedule",
+      metadata: { namespace: fixtureNames(run).views },
+      spec: { schedule: "0 4 * * *", paused: false, skipImmediately: false },
+      status: { phase: "Enabled", lastBackup: "2026-09-26T07:00:00Z" },
+    });
+    expect(named("views-interval")).toMatchObject({
+      kind: "Schedule",
+      metadata: { namespace: fixtureNames(run).views },
+      spec: { schedule: "@every 6h", paused: false, skipImmediately: false },
+      status: { phase: "Enabled", lastBackup: "2026-09-26T07:00:00Z" },
+    });
+    // No backup of the installation is of either: the backup of each submission is not among the ones that
+    // exist, and the first has no backup to give the zone of the server.
+    expect(
+      resources.filter((resource) =>
+        ["views-submitted", "views-interval"].includes(resource.metadata.labels?.["velero.io/schedule-name"] ?? ""),
+      ),
+    ).toEqual([]);
+    // They carry the template of the views, which names the location that is available.
+    expect(template("views-submitted")).toEqual(template("views-history"));
+    expect(template("views-interval")).toEqual(template("views-history"));
+    expect(template("views-interval")).toMatchObject({ storageLocation: "views-available" });
+    // Twelve schedules in the installation of the views; the same times give the same two.
+    expect(resources.filter((resource) => resource.kind === "Schedule")).toHaveLength(12);
+    expect(named("views-interval")).toEqual(
+      viewFixtures("synthetic-owner", run, started + 60_000).find(
+        (resource) => resource.metadata.name === "views-interval",
+      ),
+    );
+  });
+
   it("gives the views the locations of every state, none of them validated by a controller", () => {
     const names = fixtureNames(run);
     const started = Date.parse("2026-09-28T07:31:17.123Z");
@@ -8375,6 +8425,8 @@ describe("foundation fixture boundaries", () => {
       "views-to-removed",
       "views-to-archive",
       "views-to-default",
+      "views-submitted",
+      "views-interval",
     ]);
     // The release writes whether the run that is due is skipped into every schedule it reads, which are the
     // ones it gave a phase to: Enabled or FailedValidation. The phase New is of the API, and is not written
@@ -8390,6 +8442,8 @@ describe("foundation fixture boundaries", () => {
       "views-to-removed": false,
       "views-to-archive": false,
       "views-to-default": false,
+      "views-submitted": false,
+      "views-interval": false,
     });
     expect(
       skips(

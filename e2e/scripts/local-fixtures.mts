@@ -769,6 +769,25 @@ export function viewFixtures(
       },
       status: { phase: "Enabled" },
     },
+    // Two schedules that submitted two days before the start, and whose backups are not among the ones that
+    // exist. The first has five fields and names no zone: its zone is not known for want of a submission with
+    // its backup in the installation, where `views-daily` has no submission at all. The second is an interval,
+    // which names no zone and is counted from its last submission: overdue at every age of the environment,
+    // with its state for the reader that reads no backup as well.
+    {
+      apiVersion: "velero.io/v1",
+      kind: "Schedule",
+      metadata: metadata("views-submitted"),
+      spec: { schedule: "0 4 * * *", paused: false, skipImmediately: false, template: spec },
+      status: { phase: "Enabled", lastBackup: at(day(2)) },
+    },
+    {
+      apiVersion: "velero.io/v1",
+      kind: "Schedule",
+      metadata: metadata("views-interval"),
+      spec: { schedule: "@every 6h", paused: false, skipImmediately: false, template: spec },
+      status: { phase: "Enabled", lastBackup: at(day(2)) },
+    },
     backup("backup-missing-schedule", "Completed", { labels: { "velero.io/schedule-name": "views-removed" } }),
     backup("backup-missing-location", "FailedValidation", {
       spec: { storageLocation: "views-removed", volumeSnapshotLocations: ["views-removed"] },
