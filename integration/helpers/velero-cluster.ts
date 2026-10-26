@@ -1508,10 +1508,15 @@ export interface Measure {
 }
 
 // The time of an interaction is taken inside the page: the time the driver of the test takes to reach the
-// page is not of the list.
+// page is not of the list. An order is a click on the head of a column, which the list answers with no wait of
+// the host: its response is its total.
 async function measure(
   frame: Frame,
-  interaction: { kind: "search"; text: string } | { kind: "open"; name: string } | { kind: "close" },
+  interaction:
+    | { kind: "search"; text: string }
+    | { kind: "open"; name: string }
+    | { kind: "close" }
+    | { kind: "order"; column: string },
   of: ListOf,
 ): Promise<Measure> {
   return frame.evaluate(
@@ -1580,6 +1585,14 @@ async function measure(
           }
           set.call(input, action.text);
           input.dispatchEvent(new Event("input", { bubbles: true }));
+        } else if (action.kind === "order") {
+          const head = root?.querySelector<HTMLElement>(`.TableHead .TableCell.${action.column}`);
+
+          if (!head) {
+            refuse(`The list has no head of the column ${action.column} to order by`);
+            return;
+          }
+          head.click();
         } else if (action.kind === "open") {
           const row = [...(root?.querySelectorAll<HTMLElement>(`[data-${kind}-row]`) ?? [])].find(
             (element) => element.getAttribute(`data-${kind}-row`) === action.name,
@@ -1615,6 +1628,11 @@ export async function measureOpen(frame: Frame, name: string, of: ListOf = BACKU
 
 export async function measureClose(frame: Frame, of: ListOf = BACKUPS): Promise<Measure> {
   return measure(frame, { kind: "close" }, of);
+}
+
+/** Orders the list by a column, the way a click on its head gives, which is the other way at a second click. */
+export async function measureOrder(frame: Frame, column: string, of: ListOf = BACKUPS): Promise<Measure> {
+  return measure(frame, { kind: "order", column }, of);
 }
 
 /** The objects whose rows are all inside what the list shows: a click on one does not scroll the list. */
