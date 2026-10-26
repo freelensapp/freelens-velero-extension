@@ -627,7 +627,11 @@ carries its label, which would be a submission nothing here removes; and the sto
 holds none of the twenty keys the client may ask of the run, nine of the fourteen
 the server wrote for the real backup and the real restore and the eleven of the
 tabs. A cleanup stopped at
-any point is taken up by the next from what that one finds. Nothing in the scripts
+any point is taken up by the next from what that one finds. A run placed with the
+fixtures of the adherence is cleaned by scripts that know them: scripts older than
+them know neither the three namespaces of the adherence nor the schedule the
+controller validated, would call the run cleaned with that schedule left in
+`velero-demo`, and the verification would then refuse the installation. Nothing in the scripts
 removes a key of the store: when files of the tabs are in the store and no backup
 comes of them, or a key is left, the cleanup stops and names them, and the way out
 is `pnpm demo:down`. The hosted job of the views places the fixtures of the tabs
@@ -646,8 +650,8 @@ seconds.
 
 The runner says of a placement what it did, a line each: the files of the tabs
 written by this run, with the way they were sent, or none; the time the wait for
-the two backups took once the fixtures of the views and the refused operations
-were placed, which is none when a pass of the sync came meanwhile, with the passes
+the two backups took once the fixtures of the views and of the adherence, the
+refused operations and the schedule its controller validates were placed, which is none when a pass of the sync came meanwhile, with the passes
 that ended without both; the refused operations placed by this run, or each found
 refused; the objects of the adherence in its three installations; the schedule the
 controller validated, applied by this run or found validated; and, only when the
@@ -743,7 +747,16 @@ Docker does, and to run the command again, which places the namespace again. The
 the schedules, each with the creation of its backup as its last submission, or
 twenty seconds before that creation for the older of the two offsets, and the other
 times counted from the clock of the placement, which every object says in its
-annotation.
+annotation. The backup of the older of the two offsets created twenty seconds or
+more after the one of the newer stops the placement, since its submission would
+then be the newest and the views would take its offset; the next run places the
+namespace again. The phase and the last submission of each schedule are read back
+with the rest, and a schedule the cluster holds with another, or with no phase at
+a later run, stops the placement: the definitions of the cluster keep the status a
+client writes with the object, which the views read. The installations of the
+adherence are placed in two phases and no other namespace is, each backup of them
+of one schedule, and the clock that names the first group is read once the objects
+of the run are removed, however long that took.
 
 One schedule is real: `fixture-yearly-<run>`, in `velero-demo`, `@every 8760h`, with
 the spec of the real backup as its template, so that its next run is a year after
@@ -753,11 +766,15 @@ validates it, which says that the controller read it. It is applied through the
 journal after the operations the server refuses, and the controller validates it
 while the server syncs the backups of the tabs; its wait comes after the one of the
 sync, two minutes at most, and ends once it is Enabled with `skipImmediately`
-written. The placement stops by name on a schedule of another run, on one the
-controller refused, on one that carries a last submission or whose label a backup
+written. The placement stops by name on a schedule of another run, on one of this run
+whose expression, pause or template are not the ones the scripts make, as other
+scripts may leave on an environment kept for days, on one the controller refused, on one that carries a last submission or whose label a backup
 carries, and on one whose next run is less than a day away, which says to create
 the environment again. The cleanup of the fixtures removes it by its identity, and
-its end check names it when it is left.
+its end check names it when it is left. Before a suite takes its first snapshot,
+the helpers stop it when the schedule submitted since its placement, by its last
+submission or a backup that carries its label: the suite would take that backup
+into what it compares with.
 
 The controller looks at the schedule once a minute. Whether it sends a PATCH of it
 at each look with nothing changed, which every suite would count as a write, is
@@ -768,11 +785,13 @@ counts leave out the PATCH of the schedules, as they leave out the one the
 controller of the storage locations writes at each validation, and the version and
 the status of the schedule in the snapshot of every suite prove that nothing
 changed it; a submission would add a backup to the identities of the installation,
-and a POST of a backup to what the suite counts.
+and, in the suites that count the writes, a POST of a backup to what they count.
 
-A first placement of the three installations of the adherence, about six hundred
-and twenty objects, took ADHERENCE-PR3-PENDING; a placement after it, which finds
-them good, ADHERENCE-PR3-PENDING; and the cleanup after the suites, with the three
+A first placement of the three installations of the adherence, 614 objects, took
+ADHERENCE-PR3-PENDING; a placement after it, which finds them good,
+ADHERENCE-PR3-PENDING; a placement that places the installation of the budget
+again, its six hundred objects removed and created, after one of its schedules was
+removed, ADHERENCE-PR3-PENDING; and the cleanup after the suites, with the three
 namespaces of the adherence and the schedule, ADHERENCE-PR3-PENDING.
 
 ## Critical Journeys
@@ -948,7 +967,9 @@ ADH-03; the backup of the last submission, of ADH-08. The measure of the adheren
 [`schedule-adherence.measure.ts`](../../test/schedule-adherence.measure.ts), times
 the signals of 1,000 schedules of 898 expressions, every so many minutes or hours,
 five fields with and without a zone name, the calendar descriptors and ten with no
-instant, twenty calls after five, within 250 milliseconds at the 95th percentile,
+instant, which a module of the scripts of the environment,
+`e2e/scripts/local-expressions.mts`, writes once for the measure and for the
+fixtures of the budget of the adherence, twenty calls after five, within 250 milliseconds at the 95th percentile,
 and the signal of one schedule within 2, with the parse kept for the text of the
 expression and the count bounded at one hundred asserted beside the times; it prints
 its numbers as one line, `ADH-16 unit`, before anything is asserted, and it imports

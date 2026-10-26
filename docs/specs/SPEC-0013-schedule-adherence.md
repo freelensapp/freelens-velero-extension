@@ -511,7 +511,7 @@ The fixture families the environment needs, beside the ones that exist:
 | Adherence, placed by the clock | `velero-adherence-<run>`, which no controller reads, good for twelve hours as the Overview's, named by the operator (LM3) | An awaited schedule, `@every 24h` with its last submission at the placement; an overdue one, `@every 1h` with its last submission 25 hours before and no backup, so that the backup of the last submission is not among the ones that exist; a held one, `@every 1h` with its last submission 3 hours before and a backup InProgress newer than it, which is as well a backup that is not a submission; one at every look, `0 0 30 2 *`, Enabled, with its last submission a minute before the placement and no backup; one whose zone is derived from its own submission, `0 3 * * *` with its last submission at the placement and the backup of it named with the wall clock of a server two hours east of UTC, created at the placement; one created with no submission, `0 3 * * *`, which takes the offset of the installation from that backup; one whose last submission is a day after the placement, for the clock of the cluster ahead (LM5); and one with a name of 63 characters and `CRON_TZ=America/Argentina/Buenos_Aires 0 0 1 1 *`, for the pre-review | A client writes the status of a Schedule with the object, since the kind has no status subresource; the creation of a Backup is the placement, which is why the backup of a submission can be matched only for a submission at the placement, and why the overdue case has no backup; a backup of a submission is created first, named by the clock of this machine read just before, and its schedule after it, with the creation read back as its last submission, which is refused more than thirty seconds from that clock; the times are counted back from the placement, which the objects say in an annotation, as the fixtures of the Overview do. A schedule at every look is never placed where a controller reads: it would create a backup a minute |
 | Two offsets, placed by the clock | `velero-adherence-split-<run>`, named by the operator as the long lists are (LM3) | Two schedules `0 3 * * *`, one with its last submission at the placement and the backup of it named two hours east of UTC, the other with its last submission twenty seconds before (LM5) and the backup of it named at UTC, both created at the placement: the offset of the newest is taken, and the words say that the offset changed between the two submissions | The same |
 | Budget of the adherence, placed by the clock | `velero-adherence-scale-<run>`, a namespace of its own, named by the operator as the long lists are (LM2) | The 300 schedules of the budget, of the mixed expressions of the measure of the unit run, `@every`, five fields, with and without a zone name, the calendar descriptors, each with its last submission at the placement and the backup of it named two hours east of UTC, so that the installation has one offset | The same, the backups created fifty at a time, each group named by the clock read just before it |
-| Not known for want of an offset | `velero-views-<run>`, among the fixtures of the views, where no backup gives an offset | A schedule `0 3 * * *` with no submission, and one with a submission two days old and no backup: not known, each with its reason | Placed with the fixtures of the views, whose backups carry no name of fourteen digits within a minute of a submission |
+| Not known for want of an offset | `velero-views-<run>`, among the fixtures of the views, where no backup gives an offset | A schedule `0 3 * * *` with no submission, and one with a submission two days old and no backup: not known, each with its reason; beside them an interval, `@every 6h`, with a submission two days old and no backup: overdue at every age, an item of A11 in the Overview of the views at every hour, its state kept for the second reader, which reads no backup | Placed with the fixtures of the views, whose backups carry no name of fourteen digits within a minute of a submission; an interval names no zone, and its next run is counted from its last submission |
 | The schedules that exist | `velero-views-<run>`, `velero-static-<run>` | Paused, invalid, no phase, New, paused with a skip, the one that names `Europe/Rome`, the one with a history | Already placed; the suite computes what it expects of the zoned one from its creation and the clock, at every age of the environment |
 | The real schedule | `velero-demo`, the installation the controllers read | `@every 8760h`, naming no `skipImmediately` (LM4), its template the spec of the real backup, placed with the fixtures of the tabs and removed by their cleanup | The controller validates it within a minute and writes Enabled and `skipImmediately`, which the placement waits for; its next run is a year after its creation, so that it submits nothing while the suites run, which the guard counts: no Backup created (LM1) |
 | The readers | `velero-views-<run>` | The reader of three kinds, which reads the backups, and the second reader, which does not | Already placed |
@@ -667,7 +667,6 @@ and verdict.
   nothing from the expression; this one does, under REQ-160 to REQ-162, and the
   words that the view does not read the zone of the server stay true: it derives or
   asks. The check SCHED-03 is restated with the pull request, as the design says.
-
 - **The fixtures of the adherence, decided for the third pull request of T3.3.**
   Five decisions on the test environment and on what the guard of the suites
   counts, approved by the lead maintainer on 2026-10-16, as recommended:
@@ -970,7 +969,7 @@ clock of the start of the runner; the three hundred backups of the budget in one
 with each group; the installation of the budget left out of the namespaces placed by the clock, and every namespace of
 the run placed by the clock; objects of another run removed; fixtures older than twelve hours, placed after now, of
 another shape or with one missing kept; the backup of the derived schedule named at UTC; the clock of the cluster ahead
-by an hour and the older submission of the split fifty seconds before, as the draft had them; the older submission of
+by an hour and the older submission of the split fifty seconds before, as the table had them before LM5; the older submission of
 the split at the creation of its backup; the backup that holds completed; the real schedule naming `skipImmediately`;
 its wait ended on the phase alone; a backup with its label, a last submission and a refusal of it not seen; no bound to
 its wait; a real schedule near its run not seen; the real schedule applied again when it is there, applied before the
@@ -978,7 +977,20 @@ operations the server refuses, and waited for before the sync; its removal witho
 journal, of another run, of another identity than the journal's, and with no wait until it is gone; the end check
 without the real schedule and without the backups it submitted; the words of a placement silent on the installations of
 the adherence placed again; the interval of the views of five fields; and the schedule of five fields of the views with
-no submission. The expressions of the measure of the unit run are written once, in a module of the scripts of the
+no submission. After an independent review of the first phase, the pull request adds one test of the environment and a
+file of two tests of the guard of the suites, 86 files and 2,671 tests in all, and extends eight: the placement stops on
+the backup of the older submission of the split created twenty seconds or more after the one of the newer, which would
+make it the newest; reads back the phase and the last submission of each schedule it places in two phases, and stops on
+a schedule found with no phase; places in two phases the installations of the adherence and no other namespace, each
+backup of one schedule; reads the clock that names the first group once a removal of more than thirty seconds ended;
+and says the seconds of a creation far from that clock rounded up, a slow cluster named only for a creation after it.
+The wait for the real schedule stops on one whose labels change, and on one of the run whose expression, pause or
+template are not the ones the scripts make, and counts its next run from its last skip when that is later; the cleanup
+says when the schedule is of the run and not in its journal; a suite stops before its first snapshot when the real
+schedule submitted since its placement; and the writes a suite counts are proven under both answers of LM1, in a module
+of the helpers that reads nothing. Fifteen changes more were made on purpose, and each made one of these tests fail.
+Decided while implementing, on 2026-10-26: the table of the fixtures names, beside the schedule not known for want of
+an offset, the interval of the views, overdue at every age, which rule A11 and the second reader rest on (L514). The expressions of the measure of the unit run are written once, in a module of the scripts of the
 environment that the measure imports, and the measure computes the same signals of the same 898 expressions. The suites
 the new objects move are restated, written and not run: the schedules of the views are twelve, the interval overdue and
 first in both orders and the schedule of five fields not known; the Overview of the installation of the demo has one

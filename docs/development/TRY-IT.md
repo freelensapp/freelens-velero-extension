@@ -59,7 +59,7 @@ wrote. Take the environment down first, with `pnpm demo:down`.
 | `velero-defaults-<run>` | Two storage locations marked default, and nothing else |
 | `velero-overview-<run>` | An installation for the Overview: operations of the last hours and of the last weeks, some in flight, twelve schedules, three storage locations |
 | `velero-scale-<run>` | A thousand backups, a thousand restores and no storage location |
-| `velero-adherence-<run>` | Eight schedules, one in each state of the adherence an environment can hold for twelve hours, placed by the clock, a backup in progress and the backup of a submission, and no storage location |
+| `velero-adherence-<run>` | Eight schedules in the states of the adherence an environment can hold for twelve hours, awaited, overdue, held and at every look among them, placed by the clock, a backup in progress and the backup of a submission, and no storage location |
 | `velero-adherence-split-<run>` | Two schedules whose submissions say two offsets of the server, and no storage location |
 | `velero-adherence-scale-<run>` | Three hundred schedules of mixed expressions with the backups of their submissions, and no storage location |
 
@@ -211,7 +211,7 @@ Then the Schedules:
 | The template | What every backup is asked, as the schedule carries it, and where it goes |
 | Open `views-to-archive` and `views-to-removed` | The backups go to a location that is read-only, and to one that is not there: the view says that the release refuses them |
 | Open `views-to-default` | The template names no location: the view says which one is marked default |
-| Open `views-zoned` | The time zone the expression names, and the band of its adherence: its run is the first at 02:30 in Rome after its creation, awaited until then and overdue some minutes after, with the grace in words. The others are read in the time zone of the server, which no backup of the installation gives: their next run is not known, and the views say why. Open the details of the host of `views-zoned` from Custom Resources: Next run and Adherence say what its row says. The Overview of `velero-views-<run>` says before the items that the adherence of eight of its schedules is not known, lists `views-interval` among what needs attention at every hour and, once `views-zoned` is overdue, lists it as well, each with the run it was expected at as its time |
+| Open `views-zoned` | The time zone the expression names, and the band of its adherence: its run is the first at 02:30 in Rome after its creation, awaited until then and overdue some minutes after, with the grace in words. The others of five fields are read in the time zone of the server, which no backup of the installation gives: their next run is not known, and the views say why; `views-interval` names no zone, and its next run is known. Open the details of the host of `views-zoned` from Custom Resources: Next run and Adherence say what its row says. The Overview of `velero-views-<run>` says before the items that the adherence of eight of its schedules is not known, lists `views-interval` among what needs attention at every hour and, once `views-zoned` is overdue, lists it as well, each with the run it was expected at as its time |
 | Open `schedule-unread`, `schedule-unread-paused`, `schedule-skipping` | What Velero has not read, and what it will do when it reads it. A schedule Velero read says whether the run that is due is skipped, which Velero wrote into it |
 
 Then the locations, from Backup Storage Locations in the sidebar:
