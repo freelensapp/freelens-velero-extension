@@ -992,7 +992,7 @@ of the helpers that reads nothing. Fifteen changes more were made on purpose, an
 Decided while implementing, on 2026-10-26: the table of the fixtures names, beside the schedule not known for want of
 an offset, the interval of the views, overdue at every age, which rule A11 and the second reader rest on (L514). The expressions of the measure of the unit run are written once, in a module of the scripts of the
 environment that the measure imports, and the measure computes the same signals of the same 898 expressions. The suites
-the new objects move are restated, written and not run: the schedules of the views are twelve, the interval overdue and
+the new objects move are restated, and run on 2026-10-26: the schedules of the views are twelve, the interval overdue and
 first in both orders and the schedule of five fields not known; the Overview of the installation of the demo has one
 schedule, with its line, awaited, and no item; the Overview of the views counts six schedules not known for want of the
 zone, lists the interval under rule A11 at every hour, and gives the schedule that names its zone a line only when a
@@ -1016,9 +1016,14 @@ schedules of the budget in a namespace of their own (LM2, L513); the installatio
 as the others (LM3, L511 and L512); the real schedule naming no `skipImmediately` (LM4, L516); the clock of the cluster
 ahead by a day and the second submission of the split twenty seconds before the first (LM5, L511 and L512). Decided
 while implementing, on 2026-10-26: the installation of the states gains a schedule with a name of 63 characters and an
-expression that names its zone, which the pre-review of ADH-15 asks for (L511). What the local integration establishes
-on Docker is left to the second phase of the pull request: the measure of LM1, made on 2026-10-26: the controller sends a
-PATCH of the schedule by name at every look, once a minute over three minutes, with its version and its status unchanged
-and no backup created, so the constant of the helpers says yes; the fixtures placed on the test environment and read back, the real
-schedule validated, every suite, the cleanup and the verification after them, and the times of a placement and of the
-cleanup, ADHERENCE-PR3-PENDING.
+expression that names its zone, which the pre-review of ADH-15 asks for (L511). The local integration on Docker, on
+2026-10-26, at the validation target: the measure of LM1, the controller sends a PATCH of the schedule by name at every
+look, once a minute over three minutes, with its version and its status unchanged and no backup created, so the
+constant of the helpers says yes; the fixtures placed on the test environment and read back, every backup of a
+submission created within a second of the clock its name was read from, less its offset, each last submission its
+creation, twenty seconds before it for the older of the split, and the installation of the budget placed again after
+one of its schedules was removed; the real schedule validated, `skipImmediately` and the phase written by the server in
+the second of its creation, and no submission and no backup of it two hours later; the suites of the schedules, 17
+cases, of the Overview, 15, and of the two readers, 8 and 7, then every suite, 174 cases in 12 files, and the
+pre-review, 33 cases, all green; the cleanup of the fixtures, which removed the schedule by its identity and the ten
+namespaces of the run, and the verification after it. The times of the placements and of the cleanup are in TESTING.

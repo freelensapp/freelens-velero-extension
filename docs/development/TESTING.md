@@ -789,12 +789,18 @@ the status of the schedule in the snapshot of every suite prove that nothing
 changed it; a submission would add a backup to the identities of the installation,
 and, in the suites that count the writes, a POST of a backup to what they count.
 
-A first placement of the three installations of the adherence, 614 objects, took
-ADHERENCE-PR3-PENDING; a placement after it, which finds them good,
-ADHERENCE-PR3-PENDING; a placement that places the installation of the budget
-again, its six hundred objects removed and created, after one of its schedules was
-removed, ADHERENCE-PR3-PENDING; and the cleanup after the suites, with the three
-namespaces of the adherence and the schedule, ADHERENCE-PR3-PENDING.
+On 2026-10-26, on the machine of the runs, a first placement of the three
+installations of the adherence, 614 objects, took 4 minutes 58 seconds as the
+whole of a first `pnpm demo:views` on an environment just up, with the views, the
+long lists, the files of the tabs and the real schedule; a placement after it,
+which finds them good, 1 minute 32 seconds; a placement that places the
+installation of the budget again, its six hundred objects removed and created,
+after one of its schedules was removed, 1 minute 47 seconds, every backup created
+within a second of the clock its name was read from; and the cleanup after the
+suites, with the three namespaces of the adherence and the schedule, 3 minutes 0
+seconds for `fixtures-cleanup`, 73 of them the wait for a pass of the sync, the
+namespace of six hundred objects gone within the 90 seconds of its wait, then 29
+seconds for `verify`.
 
 ## Critical Journeys
 
