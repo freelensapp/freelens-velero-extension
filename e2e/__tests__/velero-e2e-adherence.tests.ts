@@ -3,22 +3,369 @@
  * Licensed under MIT License. See LICENSE in root directory for more information.
  */
 
-// The adherence of the schedules on its fixtures, in a packaged Freelens. What each fixture is to show is computed by
-// the suite from the objects as the cluster holds them and from the clock, by the rules of the controller
-// (`integration/helpers/velero-adherence.ts`), whose own cases come first and start no application.
+// The adherence of the schedules on its fixtures, in a packaged Freelens: the installation of its states, the one of
+// two offsets and the one of three hundred schedules, all placed by the clock and named by the operator, and the
+// schedule the controller of the installation of the demo validated. What each fixture is to show is computed by the
+// suite from the objects as the cluster holds them and from the clock, by the rules of the controller
+// (`integration/helpers/velero-adherence.ts`), whose own cases come first and start no application. The suite reads
+// the application and the cluster, and writes to neither.
 
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as adherence from "../../integration/helpers/velero-adherence";
+import * as cluster from "../../integration/helpers/velero-cluster";
+import * as velero from "../../integration/helpers/velero-extension";
 
-import type { Expected, HeldObject, Part } from "../../integration/helpers/velero-adherence";
+import type { Frame } from "playwright";
 
+import type {
+  Clocks,
+  Expected,
+  HeldObject,
+  Installation,
+  Part,
+  Zone,
+} from "../../integration/helpers/velero-adherence";
+
+const TIMEOUT = 10 * 60 * 1000;
+const SCHEDULES = cluster.SCHEDULES;
+const OVERVIEW = cluster.OVERVIEW;
 const SECOND = 1000;
 const MINUTE = 60_000;
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
+const BUDGET = 250;
+const MOUNTED = 100;
+const DISCOVERY = "LIST backupstoragelocations cluster";
+const PLACED = "freelensapp.io/velero-fixture-placed";
+const RUN = cluster.E2E_FIXTURE_RUN;
+const REAL = `fixture-yearly-${RUN}`;
+// The schedule with a name as long as the value of a label may be, written here as the fixtures name it.
+const LONG = "schedule-with-a-name-as-long-as-the-value-of-a-label-is-allowed";
+// The eight schedules of the installation of the states.
+const STATES = [
+  "adherence-awaited",
+  "adherence-overdue",
+  "adherence-held",
+  "adherence-every-look",
+  "adherence-derived",
+  "adherence-borrowed",
+  "adherence-ahead",
+  LONG,
+];
+
+// The forms of the words of the views, written as they are; the values in them are computed by the suite.
+const WORDS = {
+  label: {
+    awaited: "Awaited",
+    due: "Due",
+    overdue: "Overdue",
+    held: "Held",
+    "at-every-look": "At every look",
+    "not-known": "Not known",
+  },
+  from: {
+    "last-submission": "the last submission",
+    creation: "the creation of the schedule",
+    "last-skipped": "the last skip",
+  },
+  awaited: (inTime: Part, run: string, from: string): Part[] => [
+    "Next run in ",
+    inTime,
+    `, at ${run}. Counted from ${from}.`,
+  ],
+  due: (run: string, ago: Part): Part[] => [
+    `Due: expected at ${run}, `,
+    ago,
+    " ago. Velero looks at a schedule once a minute.",
+  ],
+  overdue: (by: Part, run: string, from: string, passed: string): Part[] => [
+    "Overdue by ",
+    by,
+    `: expected at ${run}. Counted from ${from}, with no submission since; ${passed}. Velero may not be at work, or may not be able to list the backups.`,
+  ],
+  passed: (count: number, beyond: boolean) =>
+    beyond ? "more than 100 expected runs passed" : `${count} expected run${count === 1 ? "" : "s"} passed`,
+  held: (backup: string) => `Held: Velero submits nothing while the backup ${backup} is InProgress.`,
+  heldExpected: (run: string, ago: Part): Part[] => [`A run was expected at ${run}, `, ago, " ago."],
+  heldNext: (run: string, inTime: Part): Part[] => [`The next run is at ${run}, in `, inTime, "."],
+  atEveryLook: (last: string) =>
+    `At every look: the expression has no instant within five years, and Velero submits a backup at each of its looks, once a minute, while no backup of the schedule is New, InProgress or without a phase. Last submission ${last}.`,
+  unknownZone: (name: string) =>
+    `Not known: the expression names the time zone ${name}, which this machine does not know, and the run cannot be computed here. Velero took the expression: its server knows the zone.`,
+  noOffset:
+    "Not known: the expression names no time zone, and the one of the Velero server is not read. It is derived from the backup of a last submission, of this schedule or of another of the installation, and ",
+  grace:
+    "A schedule is due for 5m after its expected run, and overdue after that: Velero looks at a schedule once a minute and submits at its first look after the run.",
+  hostTime: "In the time zone of the preferences:",
+  thisSchedule: "this schedule",
+  otherSchedule: (name: string) => `the schedule ${name}`,
+  derived: (offset: string, backup: string, of: string, moment: string) =>
+    `Computed with ${offset}, the offset of the clock of the Velero server when it submitted the backup ${backup} of ${of}, at ${moment}: across a change of daylight saving time the run may be an hour off.`,
+  changed: (offset: string, backup: string, of: string, moment: string) =>
+    `The offset was ${offset} when the server submitted the backup ${backup} of ${of}, at ${moment}: it changed between the two submissions, and the newest stands.`,
+  holdNotKnown: "Whether a backup of the schedule holds the submissions is not known, since ",
+  zone: {
+    named: (name: string) => `${name}, named by the expression`,
+    namedNotKnown: (name: string) => `${name}, named by the expression, which this machine does not know`,
+    interval: "None: an interval is counted without a time zone, and its times are written in UTC",
+    derived: (offset: string, backup: string, of: string, moment: string) =>
+      `${offset}, the offset of the clock of the Velero server when it submitted the backup ${backup} of ${of}, at ${moment}`,
+  },
+  passedNone: "None yet: the expected run is ahead",
+  passedOne: (run: string) => `1 expected run passed, at ${run}`,
+  passedMany: (count: number, first: string, last: string) =>
+    `${count} expected runs passed, the first at ${first} and the last at ${last}`,
+  passedBeyond: (first: string) => `More than 100 expected runs passed, the first at ${first}`,
+  observed: {
+    found: (moment: string, backup: string) => `Last submission ${moment}: its backup is ${backup}.`,
+    notFound: (moment: string) =>
+      `Last submission ${moment}: its backup is not among the backups that exist; it expired, was deleted or cannot be read. The submission stands, since the schedule carries it.`,
+    readBefore: (moment: string, ago: Part): Part[] => [
+      `Last submission ${moment}: whether its backup exists is not known, since the backups were last read `,
+      ago,
+      " ago, before it.",
+    ],
+    none: "No submission is written in the schedule.",
+    newer: (backup: string, moment: string) =>
+      `The backup ${backup}, created ${moment}, is not a submission of the schedule: it was asked by hand or synced from the store, and it moves nothing in the schedule.`,
+  },
+  heldNow: (backup: string) => `The backup ${backup} is InProgress now.`,
+  // The clocks with the time of the API server, which reaches the frame: the difference is said, and a time an
+  // object reports after the clock of this machine.
+  server:
+    /^Times are compared by the clock of the cluster, which the time its API server writes in its answers gives: it is (within a second of the clock of this machine|(ahead of|behind) the clock of this machine by \d+[dhms]( \d+[dhms])?)\./,
+  object: (name: string, after: Part): Part[] => [
+    `The schedule ${name} reports its last submission `,
+    after,
+    " after the clock of this machine, later than the clock of the API server: by the clock that wrote it a run may be later still.",
+  ],
+};
+
+const text = (value: string) => value.replace(/\s+/g, " ").trim();
+const capital = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
+const unique = <Item>(items: Item[]) => [...new Map(items.map((item) => [JSON.stringify(item), item])).values()];
+
+function percentile(values: number[], fraction: number): number {
+  const sorted = [...values].sort((one, other) => one - other);
+
+  return sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * fraction) - 1)];
+}
+
+// The schedules and the backups of an installation, as the cluster holds them.
+function installationOf(namespace: string): Installation {
+  const read = cluster.kubectlE2E(
+    "get",
+    "schedules.velero.io,backups.velero.io",
+    "--namespace",
+    namespace,
+    "-o",
+    "json",
+  );
+
+  if (read.status !== 0) throw new Error(`The schedules and the backups of ${namespace} could not be read`);
+  const items = (JSON.parse(read.stdout) as { items: (HeldObject & { kind: string })[] }).items;
+
+  return {
+    schedules: items.filter((item) => item.kind === "Schedule"),
+    backups: items.filter((item) => item.kind === "Backup"),
+  };
+}
+
+function scheduleOf(installation: Installation, name: string): HeldObject {
+  const found = installation.schedules.find((schedule) => schedule.metadata.name === name);
+
+  if (!found) throw new Error(`The schedule ${name} is not in the installation`);
+  return found;
+}
 
 // The attributes a row, a line and the details say the adherence of a schedule by.
 const attributes = (one: Expected) => ({ next: one.next, state: one.state, mark: one.mark, reason: one.reason });
+
+// The word of the next run: how far the expected run is from the clock, at the two clocks of the read.
+function nextWords(expected: Expected[]): Part[][] {
+  const [first] = expected;
+
+  if (first.next === "none") return [["None"]];
+  if (first.next === "not-known") return [["Not known"]];
+  const ago = expected.filter((one) => (one.lateness ?? 0) > 0).map((one) => one.lateness ?? 0);
+  const ahead = expected.filter((one) => (one.lateness ?? 0) <= 0).map((one) => -(one.lateness ?? 0));
+
+  return [
+    ...(ago.length ? [[adherence.between(...ago), " ago"]] : []),
+    ...(ahead.length ? [["in ", adherence.between(...ahead)]] : []),
+  ];
+}
+
+// The offset of the server in words, and whose submission it was read in.
+const offsetWords = (minutes: number) => adherence.zoneName({ of: "fixed", minutes });
+const whose = (of: string, name: string) => (of === name ? WORDS.thisSchedule : WORDS.otherSchedule(of));
+
+// The words of the band of a schedule, at each of the two clocks: the sentence of its state, the notes beside it,
+// and each line. What the page shows is one of them.
+interface BandForm {
+  state: string;
+  order: string[];
+  // The word of the state beside its mark, and the sentence of the state.
+  label: string;
+  next: Part[];
+  notes: string[];
+  grace: boolean;
+  host: boolean;
+  zone: string;
+  anchor: string;
+  observed: Part[];
+  held?: string;
+  passed?: string;
+}
+
+function bandForms(name: string, installation: Installation, clocks: Clocks): BandForm[] {
+  const schedule = scheduleOf(installation, name);
+
+  return unique(
+    ([clocks.from, clocks.to] as const).map((clock) => {
+      const one = adherence.expectedOf(schedule, installation, clock);
+      // A duration of this clock, widened to the other one: the page read it at a clock between the two.
+      const span = (value: number) =>
+        adherence.between(value - (clocks.to - clocks.from), value + (clocks.to - clocks.from));
+      const zone: Zone = one.zone;
+      const at = one.at ?? 0;
+      const run = adherence.runText(zone, at, clock);
+      const from = `${WORDS.from[one.anchor.of]}, ${adherence.moment(zone, one.anchor.at)}`;
+      const offset = one.offset;
+      const derived = offset
+        ? [
+            WORDS.derived(
+              offsetWords(offset.minutes),
+              offset.backup,
+              whose(offset.schedule, name),
+              adherence.moment(zone, offset.submission),
+            ),
+            ...(offset.changed
+              ? [
+                  WORDS.changed(
+                    offsetWords(offset.changed.minutes),
+                    offset.changed.backup,
+                    whose(offset.changed.schedule, name),
+                    adherence.moment({ of: "fixed", minutes: offset.changed.minutes }, offset.changed.submission),
+                  ),
+                ]
+              : []),
+          ]
+        : [];
+      const lateness = one.lateness ?? 0;
+      const next: Part[] =
+        one.state === "awaited"
+          ? WORDS.awaited(span(-lateness), run, from)
+          : one.state === "due"
+            ? WORDS.due(run, span(lateness))
+            : one.state === "overdue"
+              ? WORDS.overdue(span(lateness), run, from, WORDS.passed(one.passed ?? 0, one.beyond ?? false))
+              : one.state === "held"
+                ? [
+                    `${WORDS.held(one.held ?? "")} `,
+                    ...(lateness > 0 ? WORDS.heldExpected(run, span(lateness)) : WORDS.heldNext(run, span(-lateness))),
+                  ]
+                : one.state === "at-every-look"
+                  ? [WORDS.atEveryLook(adherence.moment(zone, one.anchor.at))]
+                  : one.reason === "unknown-zone"
+                    ? [WORDS.unknownZone(adherence.BUENOS_AIRES)]
+                    : [WORDS.noOffset];
+      const counted = ["awaited", "due", "overdue", "held"].includes(one.state);
+      const submitted = schedule.status?.lastBackup ? Date.parse(schedule.status.lastBackup) : undefined;
+      const own = adherence.submissionBackup(schedule, installation.backups);
+      const newer = installation.backups
+        .filter(
+          (backup) =>
+            backup.metadata.labels?.["velero.io/schedule-name"] === name &&
+            backup !== own &&
+            (submitted === undefined || Date.parse(backup.metadata.creationTimestamp ?? "") > submitted),
+        )
+        .sort(
+          (one, other) =>
+            Date.parse(other.metadata.creationTimestamp ?? "") - Date.parse(one.metadata.creationTimestamp ?? ""),
+        );
+      const observed: Part[] = [
+        ...(submitted === undefined
+          ? [WORDS.observed.none]
+          : own
+            ? [WORDS.observed.found(adherence.moment(zone, submitted), own.metadata.name)]
+            : submitted > clocks.to
+              ? WORDS.observed.readBefore(
+                  adherence.moment(zone, submitted),
+                  adherence.between(0, clocks.to - clocks.from),
+                )
+              : [WORDS.observed.notFound(adherence.moment(zone, submitted))]),
+        ...(newer[0]
+          ? [
+              ` ${WORDS.observed.newer(
+                newer[0].metadata.name,
+                adherence.moment(zone, Date.parse(newer[0].metadata.creationTimestamp ?? "")),
+              )}`,
+            ]
+          : []),
+      ];
+      const zoneLine =
+        one.zone.of === "named"
+          ? WORDS.zone.named(one.zone.name)
+          : one.reason === "unknown-zone"
+            ? WORDS.zone.namedNotKnown(adherence.BUENOS_AIRES)
+            : schedule.spec?.schedule?.startsWith("@every")
+              ? WORDS.zone.interval
+              : offset
+                ? WORDS.zone.derived(
+                    offsetWords(offset.minutes),
+                    offset.backup,
+                    whose(offset.schedule, name),
+                    adherence.moment(zone, offset.submission),
+                  )
+                : "";
+      const passed = !counted
+        ? undefined
+        : one.passed === 0
+          ? WORDS.passedNone
+          : one.beyond
+            ? WORDS.passedBeyond(run)
+            : one.passed === 1
+              ? WORDS.passedOne(run)
+              : WORDS.passedMany(one.passed ?? 0, run, adherence.runText(zone, one.last ?? at, clock));
+
+      return {
+        state: one.state,
+        order: [
+          "next",
+          "zone",
+          "anchor",
+          "observed",
+          ...(one.held ? ["held"] : []),
+          ...(counted ? ["passed"] : []),
+          "clocks",
+        ],
+        label: WORDS.label[one.state],
+        next,
+        // A schedule at every look is said with no word of the offset.
+        notes: one.state === "at-every-look" ? [] : derived,
+        grace: counted,
+        host: one.next === "at",
+        zone: zoneLine,
+        anchor: capital(from),
+        observed,
+        ...(one.held ? { held: WORDS.heldNow(one.held) } : {}),
+        ...(passed ? { passed } : {}),
+      };
+    }),
+  );
+}
+
+// The words of the clocks of an installation where a schedule reports its last submission after the clock of this
+// machine: the form the time of the API server gives, then the object, by as much as it reports ahead of the read.
+function clocksHold(said: string, name: string, installation: Installation, clocks: Clocks): boolean {
+  const reported = Date.parse(scheduleOf(installation, name).status?.lastBackup ?? "");
+
+  return (
+    WORDS.server.test(said) &&
+    adherence.holdsForm(said, WORDS.object(name, adherence.between(reported - clocks.to, reported - clocks.from)))
+  );
+}
 
 describe("what the suite of the adherence expects, computed by the rules of the controller", () => {
   const P = Date.parse("2026-10-26T13:20:07Z");
@@ -265,4 +612,793 @@ describe("what the suite of the adherence expects, computed by the rules of the 
     ]);
     expect(() => one(schedule("other", "*/5 * * * *", P), P)).toThrow(/is not one of them: it is not a parser/);
   });
+});
+
+describe("adherence of the schedules on its fixtures", () => {
+  let started: velero.StartedApplication;
+  let frame: Frame;
+  const errors = velero.createErrorCollector();
+  let before: cluster.ClusterSnapshot;
+  let counted: Record<string, number>;
+  // How many times the suite asked the views to read again: each one looks for the installations.
+  const asked = 0;
+  // The installation of the states as the cluster held it when the suite began, and when it was placed.
+  let states: Installation;
+  let placed = 0;
+  const row = (name: string) =>
+    frame.locator("[data-testid=velero-schedules] .TableRow", {
+      has: frame.locator(`[data-schedule-row="${name}"]`),
+    });
+  // Whether the tip of a cell shows when the cell is pointed at: its words are the host's, and are not read.
+  const tipShown = async (name: string, column: "next" | "adherence") => {
+    await row(name)
+      .locator(`.TableCell.${column} ${column === "next" ? "[data-next]" : "[data-adherence]"}`)
+      .hover();
+    const shown = await frame
+      .locator("[role=tooltip]")
+      .first()
+      .waitFor({ state: "visible", timeout: 10_000 })
+      .then(() => true)
+      .catch(() => false);
+
+    await started.window.mouse.move(1, 1);
+    return shown;
+  };
+  // The rows of the list, in their order once the head of a column is clicked.
+  const ordered = async (column: string, expected: string[][]) => {
+    const deadline = Date.now() + 10_000;
+    let names: string[] = [];
+
+    await frame.click(`[data-testid=velero-schedules] .TableHead .TableCell.${column}`);
+    do {
+      names = await cluster.mounted(frame, SCHEDULES);
+      if (expected.some((order) => order.join() === names.join())) break;
+      await frame.waitForTimeout(250);
+    } while (Date.now() < deadline);
+    return names;
+  };
+  // The expectations of every schedule of the installation of the states at the two clocks of a read.
+  const expectations = (clocks: Clocks) =>
+    [clocks.from, clocks.to].map((clock) =>
+      Object.fromEntries(
+        STATES.map((name) => [name, adherence.expectedOf(scheduleOf(states, name), states, clock)] as const),
+      ),
+    );
+  // What the API server counted of the kinds of Velero, but its reads, while a view stayed open for a period of the
+  // reads of the views.
+  const countedWhileOpen = async (view: string): Promise<[string, string[]]> => {
+    const opened = cluster.apiRequests();
+
+    await cluster.afterRead(frame);
+    await frame.waitForTimeout(16 * SECOND);
+    const more = cluster.counted(opened, cluster.apiRequests());
+
+    return [view, Object.keys(more).filter((key) => !["GET", "LIST", "WATCH"].includes(key.split(" ")[0]))];
+  };
+  // What the controllers of the installation of the demo write by themselves while nothing is asked of them: the
+  // status of their storage location at each validation, and the schedule they validated at each look.
+  const byTheControllers = ["PATCH backupstoragelocations namespace", "PATCH schedules namespace"];
+
+  beforeAll(async () => {
+    if (!cluster.fixturesReady()) {
+      throw new Error(cluster.fixturesMissing());
+    }
+    if (
+      !cluster.E2E_ADHERENCE_NAMESPACE ||
+      !cluster.E2E_ADHERENCE_SPLIT_NAMESPACE ||
+      !cluster.E2E_ADHERENCE_SCALE_NAMESPACE
+    ) {
+      throw new Error(
+        "E2E_ADHERENCE_NAMESPACE, E2E_ADHERENCE_SPLIT_NAMESPACE and E2E_ADHERENCE_SCALE_NAMESPACE name the installations of the adherence: `pnpm e2e:views` gives them",
+      );
+    }
+    before = cluster.clusterSnapshot();
+    states = installationOf(cluster.E2E_ADHERENCE_NAMESPACE);
+    placed = Date.parse(
+      (states.schedules[0] as HeldObject & { metadata: { annotations?: Record<string, string> } }).metadata
+        .annotations?.[PLACED] ?? "",
+    );
+    errors.start();
+    let kubeconfig = "";
+
+    // The kubeconfig is in the profile before the install is asked, for each start of the application.
+    started = await velero.startWithExtension(async () => {
+      kubeconfig = await cluster.publishKubeconfig();
+    });
+    errors.watch(started.window);
+    await velero.dismissNotifications(started.window);
+    await velero.navigateToCatalog(started.app);
+    expect(await velero.catalogClusterCount(started.window)).toBe(1);
+    // What the API server counted before the frame of the cluster, and the extension in it, is there.
+    counted = cluster.apiRequests();
+    frame = await cluster.openClusterFromCatalog(started.window, kubeconfig);
+    await velero.setWindowSize(started.app, 1440, 900);
+  }, TIMEOUT);
+
+  afterAll(async () => {
+    if (started) errors.stop(started.window);
+    await started?.cleanup();
+  }, TIMEOUT);
+
+  it(
+    "lists the eight schedules of the installation of the states, each with its next run and its adherence as the rules give them",
+    async () => {
+      // The fixtures are as they were placed, counted from the clock of the placement.
+      const submitted = (name: string) => Date.parse(scheduleOf(states, name).status?.lastBackup ?? "");
+
+      expect(Number.isFinite(placed)).toBe(true);
+      expect(Date.now() - placed).toBeLessThan(12 * HOUR);
+      expect(
+        [
+          "adherence-awaited",
+          "adherence-overdue",
+          "adherence-held",
+          "adherence-every-look",
+          "adherence-ahead",
+          LONG,
+        ].map((name) => (submitted(name) - Math.floor(placed / SECOND) * SECOND) / MINUTE),
+      ).toEqual([0, -25 * 60, -3 * 60, -1, 24 * 60, 0]);
+      await cluster.openPage(frame, SCHEDULES);
+      await frame.waitForSelector("[data-testid=velero-state-choose], [data-testid=velero-schedules]", {
+        timeout: 60_000,
+      });
+      // The installations of the adherence hold no storage location: the operator names them.
+      await cluster.configureInstallation(frame, cluster.E2E_ADHERENCE_NAMESPACE);
+      await cluster.waitForList(frame, SCHEDULES);
+      expect((await cluster.target(frame)).namespace).toBe(`${cluster.E2E_ADHERENCE_NAMESPACE} (configured)`);
+      expect((await cluster.mounted(frame, SCHEDULES)).sort()).toEqual([...STATES].sort());
+      for (const name of STATES) {
+        const read = Date.now();
+        const shown = await cluster.rowAdherence(frame, name);
+        const cells = await cluster.cellsOf(SCHEDULES, frame, name);
+        const clocks = adherence.clocksAround(read, Date.now());
+        const expected = adherence.expectedAround(scheduleOf(states, name), states, clocks);
+
+        // ADHERENCE-PR4-PENDING: whether the Intl of the application knows America/Argentina/Buenos_Aires is
+        // settled by the first packaged run; when it does not, the long name is not known with `unknown-zone`.
+        expect([name, expected.map(attributes)]).toEqual([name, expect.arrayContaining([shown])]);
+        expect([name, cells.adherence]).toEqual([name, WORDS.label[shown.state as Expected["state"]]]);
+        expect([name, cells.next, adherence.isForm(cells.next, ...nextWords(expected))]).toEqual([
+          name,
+          cells.next,
+          true,
+        ]);
+        expect([name, await tipShown(name, "next"), await tipShown(name, "adherence")]).toEqual([name, true, true]);
+      }
+      // The clock of the cluster is ahead of this machine by what the schedule ahead reports: said over the list.
+      const clocks = adherence.clocksAround(Date.now(), Date.now());
+      const note = text(await frame.locator("[data-testid=velero-schedules-note]").innerText());
+
+      expect([note, clocksHold(note, "adherence-ahead", states, clocks)]).toEqual([note, true]);
+      expect(await cluster.layoutProblems(frame, SCHEDULES)).toEqual([]);
+      await cluster.captureScreenshot(frame, "dark-adherence-schedules");
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "orders the schedules by the next run and by adherence, both ways, and finds the schedules of a state by its word",
+    async () => {
+      // Read before the click and after the rows settled: an order computed at either clock is accepted.
+      for (const column of ["next", "adherence"]) {
+        const clocks = adherence.clocksAround(Date.now(), Date.now() + 10_000);
+        const orders = expectations(clocks).map((expected) =>
+          column === "next" ? adherence.byNextRun(expected) : adherence.byAdherence(expected),
+        );
+
+        expect([column, orders]).toEqual([column, expect.arrayContaining([await ordered(column, orders)])]);
+        const reversed = orders.map((order) => [...order].reverse());
+
+        expect([column, reversed]).toEqual([column, expect.arrayContaining([await ordered(column, reversed)])]);
+      }
+      // The word of a state finds the schedules in it, and its name when the name holds the word.
+      const clocks = adherence.clocksAround(Date.now(), Date.now() + 10_000);
+      const inState = (word: string) =>
+        expectations(clocks).map((expected) =>
+          STATES.filter(
+            (name) =>
+              WORDS.label[expected[name].state].toLowerCase() === word.toLowerCase() ||
+              name.includes(word.toLowerCase().replace(/ /g, "-")),
+          ).sort(),
+        );
+
+      for (const word of ["Overdue", "At every look"]) {
+        expect([word, inState(word)]).toEqual([
+          word,
+          expect.arrayContaining([[...(await cluster.search(frame, word, SCHEDULES))].sort()]),
+        ]);
+      }
+      // A sentence of a state is not searched.
+      expect(await cluster.search(frame, "Velero may not be at work", SCHEDULES)).toEqual([]);
+      await cluster.search(frame, "", SCHEDULES);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "says in the band of each schedule its state, its zone, its anchor, its last observed run, what holds it, the runs that passed and the clocks",
+    async () => {
+      for (const name of STATES) {
+        await cluster.openWorkspace(frame, name, SCHEDULES);
+        const read = Date.now();
+        const band = await cluster.adherenceBand(frame);
+        const clocks = adherence.clocksAround(read, Date.now());
+        const forms = bandForms(name, states, clocks);
+        const holding = (form: BandForm) =>
+          form.state === band.state &&
+          form.order.join() === band.order.join() &&
+          band.lines.next.startsWith(form.label) &&
+          adherence.holdsForm(band.lines.next, form.next) &&
+          form.notes.every((note) => band.lines.next.includes(note)) &&
+          band.lines.next.includes(WORDS.grace) === form.grace &&
+          band.lines.next.includes(WORDS.hostTime) === form.host &&
+          band.lines.zone === form.zone &&
+          band.lines.anchor === form.anchor &&
+          adherence.isForm(band.lines.observed, form.observed) &&
+          band.lines.held === form.held &&
+          band.lines.passed === form.passed;
+
+        expect([name, band, forms.some(holding)]).toEqual([name, band, true]);
+        // Every band of the installation names the schedule whose last submission is ahead of this machine.
+        expect([name, clocksHold(band.lines.clocks, "adherence-ahead", states, clocks)]).toEqual([name, true]);
+        expect([name, await cluster.layoutProblems(frame, SCHEDULES)]).toEqual([name, []]);
+        if (name === LONG) {
+          // The name of 63 characters wraps in the sentence that holds it, with nothing over anything else.
+          expect(LONG).toHaveLength(63);
+          await cluster.captureScreenshot(frame, "dark-adherence-band-long-name");
+        }
+        if (name === "adherence-held") {
+          const held = scheduleOf(states, name);
+          const backup = adherence.holdingBackup(held, states.backups) ?? "";
+
+          // The backup that holds is not a submission, in UTC, as the command line names one asked by hand; its
+          // ways are on the line of the last observed run and on the line of what holds.
+          expect(backup).toMatch(/^adherence-held-\d{14}$/);
+          expect(band.ways).toEqual([`velero-open-backup-${backup}`, `velero-open-backup-${backup}`]);
+          await cluster.captureScreenshot(frame, "dark-adherence-band-held");
+        } else {
+          expect([name, band.ways]).toEqual([
+            name,
+            name === "adherence-derived"
+              ? [
+                  `velero-open-backup-${adherence.submissionBackup(scheduleOf(states, name), states.backups)?.metadata.name}`,
+                ]
+              : [],
+          ]);
+        }
+        await cluster.closeWorkspace(frame);
+      }
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "leads from the band of the held schedule to the backup that holds it and back, over the list, which is where it was",
+    async () => {
+      const held = adherence.holdingBackup(scheduleOf(states, "adherence-held"), states.backups) ?? "";
+
+      await cluster.search(frame, "adherence", SCHEDULES);
+      await frame.click("[data-testid=velero-schedules] .TableHead .TableCell.name");
+      const list = await cluster.listState(frame, SCHEDULES);
+
+      expect(list.search).toBe("adherence");
+      await cluster.openWorkspace(frame, "adherence-held", SCHEDULES);
+      await frame.click(
+        `[data-testid=velero-schedule-adherence] [data-line=held] [data-testid="velero-open-backup-${held}"]`,
+      );
+      await frame.waitForSelector(`[data-testid=velero-backup-name] >> text="${held}"`, { timeout: 60_000 });
+      expect(await cluster.shownView(frame)).toEqual({
+        kind: "backup",
+        name: held,
+        back: "arrow_back Schedules / adherence-held",
+      });
+      expect(await frame.locator("[data-testid=velero-schedules-page]").count()).toBe(1);
+      expect(await cluster.addressViews(frame)).toEqual(["schedule/adherence-held", `backup/${held}`]);
+      await cluster.closeWorkspace(frame);
+      expect((await cluster.shownView(frame))?.name).toBe("adherence-held");
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      await cluster.closeWorkspace(frame);
+      expect(await cluster.focusOn(frame, "adherence-held")).toBe("adherence-held");
+      expect(await cluster.listStateLike(frame, list, SCHEDULES)).toEqual(list);
+      await cluster.search(frame, "", SCHEDULES);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "says of the installation of two offsets that the newest stands, and that it was UTC at the submission before it",
+    async () => {
+      const split = installationOf(cluster.E2E_ADHERENCE_SPLIT_NAMESPACE);
+      const submitted = (name: string) => Date.parse(scheduleOf(split, name).status?.lastBackup ?? "");
+
+      // The older submission is before the newer one, or the offset of the older would be the newest.
+      expect([
+        "split-older before split-newer",
+        submitted("split-older") < submitted("split-newer"),
+        scheduleOf(split, "split-older").status?.lastBackup,
+        scheduleOf(split, "split-newer").status?.lastBackup,
+      ]).toEqual([
+        "split-older before split-newer",
+        true,
+        scheduleOf(split, "split-older").status?.lastBackup,
+        scheduleOf(split, "split-newer").status?.lastBackup,
+      ]);
+      const offset = adherence.serverOffset(split.schedules, split.backups);
+
+      expect([offset?.minutes, offset?.schedule, offset?.changed?.minutes, offset?.changed?.schedule]).toEqual([
+        120,
+        "split-newer",
+        0,
+        "split-older",
+      ]);
+      await cluster.configureInstallation(frame, cluster.E2E_ADHERENCE_SPLIT_NAMESPACE);
+      await frame.waitForSelector('[data-testid=velero-schedules] [data-schedule-row="split-older"]', {
+        timeout: 60_000,
+      });
+      for (const name of ["split-newer", "split-older"]) {
+        const read = Date.now();
+        const shown = await cluster.rowAdherence(frame, name);
+        const clocks = adherence.clocksAround(read, Date.now());
+
+        expect([name, adherence.expectedAround(scheduleOf(split, name), split, clocks).map(attributes)]).toEqual([
+          name,
+          expect.arrayContaining([shown]),
+        ]);
+        await cluster.openWorkspace(frame, name, SCHEDULES);
+        const opened = Date.now();
+        const band = await cluster.adherenceBand(frame);
+        const forms = bandForms(name, split, adherence.clocksAround(opened, Date.now()));
+
+        // The zone of the newest submission, and the words that it changed, with the backup of the older one.
+        expect([name, band.lines.zone]).toEqual([name, forms[0].zone]);
+        expect([name, forms[0].notes.every((note) => band.lines.next.includes(note)), forms[0].notes.length]).toEqual([
+          name,
+          true,
+          2,
+        ]);
+        expect(band.lines.next).toContain("The offset was UTC when the server submitted the backup split-older-");
+        expect(await cluster.layoutProblems(frame, SCHEDULES)).toEqual([]);
+        await cluster.captureScreenshot(frame, `dark-adherence-band-${name}`);
+        await cluster.closeWorkspace(frame);
+      }
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "gives the details of the host of a schedule of each state what its row and its band say",
+    async () => {
+      const named = [
+        "adherence-awaited",
+        "adherence-overdue",
+        "adherence-held",
+        "adherence-every-look",
+        "adherence-derived",
+      ];
+
+      // The details compute with the reads of the views of the installation that is selected.
+      await cluster.selectInstallation(frame, cluster.E2E_ADHERENCE_NAMESPACE);
+      await cluster.waitForList(frame, SCHEDULES);
+      const listedAt = Date.now();
+      const rows: Record<string, cluster.RowAdherence> = {};
+
+      for (const name of named) rows[name] = await cluster.rowAdherence(frame, name);
+
+      await cluster.navigate(frame, "/crd/velero.io/schedules");
+      await cluster.selectHostNamespace(frame, cluster.E2E_ADHERENCE_NAMESPACE);
+      for (const name of named) {
+        await cluster.hostDetails(frame, name, "Next run", "Adherence");
+        const drawer = "[data-testid=velero-schedule-details]";
+        const said = await frame.locator(drawer).evaluate((element) => ({
+          next: element.querySelector("[data-next]")?.getAttribute("data-next") ?? "",
+          state: element.querySelector("[data-adherence]")?.getAttribute("data-adherence") ?? "",
+          host: element.querySelector("[data-host-time]") !== null,
+          words: (element.querySelector("[data-adherence-words]")?.textContent ?? "").replace(/\s+/g, " ").trim(),
+        }));
+        const clocks = adherence.clocksAround(listedAt, Date.now());
+        const expected = adherence.expectedAround(scheduleOf(states, name), states, clocks);
+        // The words of the details are the sentence of the state and its notes; the age of the read of the views,
+        // which closed, is said after them, and is not read here.
+        const words = said.words.replace(/ ?Computed with the backups of the installation as they were read .*$/, "");
+
+        // The same kind of next run as the row, and a state the row or the rules give at the clocks of the two reads.
+        expect([name, said.next]).toEqual([name, rows[name].next]);
+        expect([name, [rows[name].state, ...expected.map((one) => one.state)]]).toEqual([
+          name,
+          expect.arrayContaining([said.state]),
+        ]);
+        // The date of the host is beside an instant, and only beside one.
+        expect([name, said.host]).toEqual([name, rows[name].next === "at"]);
+        expect([
+          name,
+          words,
+          bandForms(name, states, clocks).some((form) => adherence.holdsForm(words, form.next)),
+        ]).toEqual([name, words, true]);
+        await cluster.closeDetails(frame);
+      }
+      await cluster.captureScreenshot(frame, "dark-adherence-host-details");
+      await cluster.openPage(frame, SCHEDULES);
+      await cluster.waitForList(frame, SCHEDULES);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "lists in the Overview the schedules that are late or submitted at every look, in the order of the page, and counts what is not known in the views",
+    async () => {
+      // Of the other rules, A4 alone gives an item in this installation: it holds no storage location (A1 to A3 none,
+      // A4 the default one), every schedule is Enabled and read (no A5, no A6), the one backup that ended completed
+      // (no A7), no template names a location (no A8), the backup in progress reports no failure (no A9), and no
+      // operation ended with a failure (no A10).
+      await cluster.openPage(frame, OVERVIEW);
+      const read = Date.now();
+      const shown = await cluster.overview(frame);
+      const clocks = adherence.clocksAround(read, Date.now());
+      const all = expectations(clocks);
+      // The items of A11: overdue or held beyond the grace at the time of their expected run, at every look at the
+      // time of the last submission, from the newest, then by name.
+      const items = all.map((expected) =>
+        STATES.filter((name) => expected[name].mark === "late" || expected[name].state === "at-every-look")
+          .map((name) => ({
+            name,
+            time:
+              expected[name].state === "at-every-look"
+                ? Date.parse(scheduleOf(states, name).status?.lastBackup ?? "")
+                : (expected[name].at ?? 0),
+          }))
+          .sort((one, other) => other.time - one.time || (one.name < other.name ? -1 : 1))
+          .map(({ name }) => ["A11", name]),
+      );
+
+      expect(items).toEqual(expect.arrayContaining([shown.items.slice(1)]));
+      expect(shown.items[0]).toEqual(["A4", "Default storage location"]);
+      expect(shown.items.slice(1).map(([, name]) => name)).toEqual(
+        expect.arrayContaining(["adherence-overdue", "adherence-held", "adherence-every-look"]),
+      );
+      // The item of the held schedule leads to the backup that holds it as well; the one at every look is timed by
+      // its last submission.
+      const held = adherence.holdingBackup(scheduleOf(states, "adherence-held"), states.backups) ?? "";
+
+      expect(
+        await frame
+          .locator(
+            '[data-testid=velero-overview-attention] [data-rule="A11"]:has([data-testid="velero-open-schedule-adherence-held"])',
+          )
+          .locator(`[data-testid="velero-open-backup-${held}"]`)
+          .count(),
+      ).toBe(1);
+      // ADHERENCE-PR4-PENDING: nothing is not known, unless the Intl of the application does not know the zone of
+      // the long name, which the first packaged run settles.
+      expect(shown.notKnown).toBeUndefined();
+      expect(shown.summary).toBe(`${shown.items.length} items in what was read.`);
+      // A line for each of the eight, the ones a rule names first, each with the adherence of its row.
+      expect([...shown.schedules].sort()).toEqual([...STATES].sort());
+      const lines = all.map((expected) => Object.fromEntries(STATES.map((name) => [name, attributes(expected[name])])));
+
+      expect(lines).toEqual(expect.arrayContaining([shown.adherence]));
+      expect(await cluster.valuesOfTheWhole(frame)).toEqual([]);
+      expect(await cluster.layoutProblems(frame, OVERVIEW)).toEqual([]);
+      await cluster.captureScreenshot(frame, "dark-adherence-overview");
+      // In the installation of the views, the count of the schedules whose adherence is not known, by reason.
+      await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+      await frame.waitForSelector("[data-testid=velero-overview-read-schedules][data-read=read]", { timeout: 60_000 });
+      expect((await cluster.overview(frame)).notKnown).toEqual({
+        count: 8,
+        reasons: { "not-read": 2, "no-offset": 6 },
+      });
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "says of the schedule the controller validated that it runs a year after its creation, in its row, its band and its line",
+    async () => {
+      const read = cluster.kubectlE2E(
+        "get",
+        "schedules.velero.io",
+        REAL,
+        "--namespace",
+        cluster.E2E_NAMESPACE,
+        "-o",
+        "json",
+      );
+
+      expect(read.status).toBe(0);
+      const real = JSON.parse(read.stdout) as HeldObject & { spec: { skipImmediately?: unknown } };
+      const submissions = cluster.kubectlE2E(
+        "get",
+        "backups.velero.io",
+        "--namespace",
+        cluster.E2E_NAMESPACE,
+        "--selector",
+        `velero.io/schedule-name=${REAL}`,
+        "-o",
+        "name",
+      );
+
+      // Enabled, with whether a run that is due is skipped written by the controller, and nothing submitted.
+      expect([real.status?.phase, real.spec.skipImmediately, real.status?.lastBackup]).toEqual([
+        "Enabled",
+        false,
+        undefined,
+      ]);
+      expect([submissions.status, submissions.stdout]).toEqual([0, ""]);
+      const demo: Installation = { schedules: [real], backups: [] };
+      const runs = (clocks: Clocks) => adherence.expectedAround(real, demo, clocks);
+
+      await cluster.selectInstallation(frame, cluster.E2E_NAMESPACE);
+      await cluster.openPage(frame, SCHEDULES);
+      await cluster.waitForList(frame, SCHEDULES);
+      const listed = Date.now();
+      const shown = await cluster.rowAdherence(frame, REAL);
+      const cells = await cluster.cellsOf(SCHEDULES, frame, REAL);
+      const clocks = adherence.clocksAround(listed, Date.now());
+
+      // A year after its creation, or its last skip when that is later.
+      expect(runs(clocks)[0].at).toBe(adherence.anchorOf(real).at + 8760 * HOUR);
+      expect(runs(clocks).map(attributes)).toEqual(expect.arrayContaining([shown]));
+      expect([cells.next, adherence.isForm(cells.next, ...nextWords(runs(clocks)))]).toEqual([cells.next, true]);
+      await cluster.openWorkspace(frame, REAL, SCHEDULES);
+      const opened = Date.now();
+      const band = await cluster.adherenceBand(frame);
+      const forms = bandForms(REAL, demo, adherence.clocksAround(opened, Date.now()));
+
+      expect([band.lines.next, forms.some((form) => adherence.holdsForm(band.lines.next, form.next))]).toEqual([
+        band.lines.next,
+        true,
+      ]);
+      expect(band.lines.anchor).toBe(forms[0].anchor);
+      await cluster.closeWorkspace(frame);
+      await cluster.openPage(frame, OVERVIEW);
+      const lined = Date.now();
+      const line = (await cluster.overview(frame)).adherence[REAL];
+      const said = text(
+        await frame
+          .locator(`[data-testid=velero-overview-schedules-list] [data-line="${REAL}"] [data-next]`)
+          .innerText(),
+      );
+      const around = runs(adherence.clocksAround(lined, Date.now()));
+
+      expect(around.map(attributes)).toEqual(expect.arrayContaining([line]));
+      expect([said, adherence.isForm(said, ...nextWords(around))]).toEqual([said, true]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "answers a search and an order of a list of three hundred schedules, and a change of the window of their Overview, within the budget",
+    async () => {
+      // Each search is of a text the list is not searched by and changes its rows: names, words of a state and parts
+      // of the expressions.
+      const searches = [
+        "schedule-29",
+        "Overdue",
+        "@every",
+        "Awaited",
+        "CRON_TZ=America/New_York",
+        "At every look",
+        "@monthly",
+        "schedule-1",
+        "Europe/Rome",
+        "Asia/Tokyo",
+      ];
+      // Each order is a column and a direction not asked before, the first click on a head asc and the second desc.
+      const orders = [
+        "next",
+        "next",
+        "adherence",
+        "adherence",
+        "schedule",
+        "schedule",
+        "submitted",
+        "submitted",
+        "name",
+        "name",
+      ];
+      const first = async () => (await cluster.mounted(frame, SCHEDULES)).slice(0, 40).join();
+      const settled = async () => {
+        let rows = await first();
+
+        for (let tries = 0; tries < 40; tries += 1) {
+          await frame.waitForTimeout(150);
+          const again = await first();
+
+          if (again === rows) return rows;
+          rows = again;
+        }
+        return rows;
+      };
+      // Two clicks on another head, then two on the name: the list is by name, the other way.
+      const byNameDesc = async () => {
+        for (const column of ["next", "name", "name"]) {
+          await frame.click(`[data-testid=velero-schedules] .TableHead .TableCell.${column}`);
+        }
+        return settled();
+      };
+
+      await cluster.openPage(frame, SCHEDULES);
+      await cluster.configureInstallation(frame, cluster.E2E_ADHERENCE_SCALE_NAMESPACE);
+      await frame.waitForSelector('[data-testid=velero-schedules] >> text="300 items"', { timeout: 60_000 });
+      // Warm: the first interactions load what the ones after find loaded.
+      for (const search of ["@hourly", "schedule-2", ""]) await cluster.measureSearch(frame, search, SCHEDULES);
+      expect(searches.every((search, index) => search !== "" && search !== searches[index - 1])).toBe(true);
+      // Every order changes the first forty rows from the one before: asked once untimed, from the same start.
+      const changed: string[] = [];
+      let previous = await byNameDesc();
+
+      for (const [index, column] of orders.entries()) {
+        await frame.click(`[data-testid=velero-schedules] .TableHead .TableCell.${column}`);
+        const rows = await settled();
+
+        if (rows === previous) changed.push(`${index + 1}: ${column}`);
+        previous = rows;
+      }
+      expect(changed).toEqual([]);
+      const times: ({ interaction: string } & cluster.Measure)[] = [];
+      let mounted = 0;
+
+      for (const search of searches) {
+        times.push({ interaction: `search ${search}`, ...(await cluster.measureSearch(frame, search, SCHEDULES)) });
+        mounted = Math.max(mounted, (await cluster.mounted(frame, SCHEDULES)).length);
+      }
+      await cluster.measureSearch(frame, "", SCHEDULES);
+      await byNameDesc();
+      for (const [index, column] of orders.entries()) {
+        const direction = index % 2 === 0 ? "asc" : "desc";
+
+        times.push({
+          interaction: `order ${column} ${direction}`,
+          ...(await cluster.measureOrder(frame, column, SCHEDULES)),
+        });
+        mounted = Math.max(mounted, (await cluster.mounted(frame, SCHEDULES)).length);
+      }
+      const rounded = (values: number[]) => ({
+        p95: Math.round(percentile(values, 0.95)),
+        median: Math.round(percentile(values, 0.5)),
+        slowest: Math.round(Math.max(...values)),
+      });
+      const list = {
+        measure: "list",
+        schedules: Number(/^(\d+) items$/.exec((await cluster.listState(frame, SCHEDULES)).items)?.[1] ?? Number.NaN),
+        mounted,
+        interactions: times.length,
+        budget: BUDGET,
+        // What the list takes to show what it is given, the measure the budget is for, and the same from the key.
+        response: rounded(times.map((time) => time.response)),
+        total: rounded(times.map((time) => time.total)),
+        times: times.map((time) => ({
+          interaction: time.interaction,
+          response: Math.round(time.response),
+          total: Math.round(time.total),
+        })),
+      };
+
+      console.log(`ADH-16 ${JSON.stringify(list)}`);
+      await cluster.writeReport("adh-16-list-performance", list);
+      // The Overview of the same installation, twenty changes of the window after three that warm it.
+      await cluster.openPage(frame, OVERVIEW);
+      await frame.waitForSelector("[data-testid=velero-overview-read-backups][data-read=read] >> text=300", {
+        timeout: 60_000,
+      });
+      const windows = ["24h", "30d", "7d"];
+      const changes: ({ interaction: string } & cluster.Measure)[] = [];
+      const holds: Record<string, { marks: number; listed: number }> = {};
+
+      expect((await cluster.overview(frame)).window).toBe("7d");
+      for (const window of windows) await cluster.measureWindow(frame, window);
+      for (let index = 0; index < 20; index += 1) {
+        const window = windows[index % windows.length];
+
+        changes.push({ interaction: `${index + 1}: ${window}`, ...(await cluster.measureWindow(frame, window)) });
+        const shown = await cluster.overview(frame);
+
+        holds[window] = {
+          marks: shown.marks.backups.length + shown.marks.restores.length,
+          listed: shown.recent.length,
+        };
+      }
+      const overview = {
+        measure: "overview",
+        schedules: 300,
+        backups: 300,
+        interactions: changes.length,
+        budget: BUDGET,
+        response: rounded(changes.map((change) => change.response)),
+        holds,
+        times: changes.map((change) => ({ interaction: change.interaction, response: Math.round(change.response) })),
+      };
+
+      console.log(`ADH-16 ${JSON.stringify(overview)}`);
+      await cluster.writeReport("adh-16-overview-performance", overview);
+      // What was measured: twenty different interactions of the list of three hundred, which took a time, with at
+      // most a hundred rows mounted; and twenty changes of the window, each holding operations.
+      expect(list.schedules).toBe(300);
+      expect(list.interactions).toBe(20);
+      expect(new Set(list.times.map((time) => time.interaction)).size).toBe(20);
+      expect(list.times.filter((time) => !(time.total > 0) || time.response > time.total)).toEqual([]);
+      expect(list.mounted).toBeGreaterThan(0);
+      expect(list.mounted).toBeLessThanOrEqual(MOUNTED);
+      expect(overview.interactions).toBe(20);
+      for (const window of windows) {
+        expect([window, holds[window].marks > 0, holds[window].listed]).toEqual([window, true, 10]);
+      }
+      expect(list.response.p95).toBeLessThan(BUDGET);
+      expect(overview.response.p95).toBeLessThan(BUDGET);
+      expect(await cluster.layoutProblems(frame, OVERVIEW)).toEqual([]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "leaves the objects of Velero as they were, asks Velero for nothing, and reads only with the Schedules and the Overview open",
+    async () => {
+      // The evidence of DISC-07 with the Schedules and then the Overview of the installation of the states open for a
+      // period of the reads each: the API server counted only reads of the kinds of Velero, whoever asked them, but
+      // what the controllers of the installation of the demo write by themselves.
+      await cluster.selectInstallation(frame, cluster.E2E_ADHERENCE_NAMESPACE);
+      await cluster.openPage(frame, SCHEDULES);
+      await cluster.waitForList(frame, SCHEDULES);
+      const schedules = await countedWhileOpen("Schedules");
+
+      await cluster.openPage(frame, OVERVIEW);
+      await cluster.overview(frame);
+      const overview = await countedWhileOpen("Overview");
+
+      // The controller of the installation patches the schedule it validated at each of its looks with nothing
+      // changed, and its storage location at each validation: the guard leaves both out, and proves the schedule
+      // unchanged by its version and its status, and the installation by the identities of its objects.
+      expect(cluster.SCHEDULE_PATCHED_AT_EVERY_LOOK).toBe(true);
+      for (const [view, written] of [schedules, overview]) {
+        expect([view, written.filter((key) => !byTheControllers.includes(key))]).toEqual([view, []]);
+      }
+      const after = cluster.clusterSnapshot();
+      const requests = cluster.apiRequests();
+      const all = cluster.counted(counted, requests);
+      const real = Object.keys(before.versions).filter((key) =>
+        key.startsWith(`${cluster.E2E_NAMESPACE}/schedules/${REAL}/`),
+      );
+
+      expect(real).toHaveLength(1);
+      expect(after.versions[real[0]]).toBe(before.versions[real[0]]);
+      expect(after.versions).toEqual(before.versions);
+      expect(after.installed).toEqual(before.installed);
+      expect(before.requests).toBe(0);
+      expect(after.requests).toBe(0);
+      expect(after.named).toEqual(before.named);
+      // The writes of the whole suite by the rule of the guard: no request that is not a read but the PATCH of the
+      // storage locations and, of a schedule by its name, no more than the whole minutes between the two readings of
+      // the counters and two, the ones the controller sends at each of its looks; a PATCH of a schedule of any other
+      // scope is a write.
+      expect(cluster.writes(counted, requests)).toEqual({});
+      // No submission: a backup the real schedule submitted would be a POST of a backup, and would carry its label.
+      expect(all["POST backups namespace"]).toBeUndefined();
+      expect(
+        cluster.kubectlE2E(
+          "get",
+          "backups.velero.io",
+          "--namespace",
+          cluster.E2E_NAMESPACE,
+          "--selector",
+          `velero.io/schedule-name=${REAL}`,
+          "-o",
+          "name",
+        ).stdout,
+      ).toBe("");
+      // Of the whole cluster the storage locations were listed, to find the installations: when the views were
+      // opened, and each time they were asked to read again.
+      expect(cluster.counted(cluster.clusterReads(counted), cluster.clusterReads(requests))).toEqual({
+        [DISCOVERY]: 1 + asked,
+      });
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "leaves no error in the application",
+    async () => {
+      expect(errors.errors()).toEqual([]);
+      expect(Object.values(await velero.hostLogErrors(started.app)).flat()).toEqual([]);
+    },
+    TIMEOUT,
+  );
 });
