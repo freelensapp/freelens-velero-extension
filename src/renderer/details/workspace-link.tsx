@@ -23,17 +23,17 @@ export interface WorkspaceLinkProps {
 export const WorkspaceLink = observer(({ extension, installation, target, namespace }: WorkspaceLinkProps) => {
   const selected = installation.selection;
   const there = (selected.state === "selected" || selected.state === "stale") && selected.namespace === namespace;
-  const { noun } = VIEWS[target.kind];
+  const { plural } = VIEWS[target.kind];
 
   return (
     <DrawerItem name="Workspace">
       {there ? (
         <MaybeLink to={viewUrl(extension.name, target)} data-testid={`velero-${target.kind}-details-link`}>
-          Open among the {noun}s of Velero
+          Open among the {plural} of Velero
         </MaybeLink>
       ) : (
         <span data-testid={`velero-${target.kind}-details-elsewhere`}>
-          Select {namespace} among the {noun}s of Velero to open it there
+          Select {namespace} among the {plural} of Velero to open it there
         </span>
       )}
     </DrawerItem>

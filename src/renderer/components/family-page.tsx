@@ -3,6 +3,7 @@ import { observer } from "mobx-react";
 import React from "react";
 import { hasItems } from "../../common/read-state";
 import { VIEWS } from "../../common/views";
+import { LIST_WORDS } from "../../common/volume-words";
 import { openView } from "../navigation";
 import { FamilyListStore } from "../state/list-store";
 import styles from "./views.module.css";
@@ -65,7 +66,7 @@ interface ListProps<View extends { name: string }> {
 
 function FamilyListView<View extends { name: string }>({ definition, installation, now }: ListProps<View>) {
   const { kind, id, object, tableId, columns } = definition;
-  const { family, title, noun } = VIEWS[kind];
+  const { family, title, noun, plural } = VIEWS[kind];
   const store = React.useMemo(() => new FamilyListStore(installation, family, object), [installation, family, object]);
   const view = (item: HostObject): View => definition.view(item as unknown as Resource, now, installation);
   const sortingCallbacks = Object.fromEntries(
@@ -83,15 +84,13 @@ function FamilyListView<View extends { name: string }>({ definition, installatio
   ) {
     return (
       <div className={styles.state} data-testid={`velero-${id}-unavailable`}>
-        <div className={styles.stateTitle}>
-          The {noun}s of {installation.namespace} are not shown
-        </div>
+        <div className={styles.stateTitle}>{LIST_WORDS.notShown(plural, installation.namespace ?? "")}</div>
         <p className={styles.stateText}>
           {read.status === "forbidden"
-            ? `Access to the ${noun}s of this namespace is denied. How many there are is not known.`
+            ? LIST_WORDS.denied(plural)
             : read.status === "not-served"
-              ? `This cluster does not serve the ${noun}s of Velero.`
-              : `The ${noun}s of this namespace could not be read. How many there are is not known.`}
+              ? LIST_WORDS["not-served"](plural)
+              : LIST_WORDS.failed(plural)}
         </p>
       </div>
     );
@@ -103,9 +102,7 @@ function FamilyListView<View extends { name: string }>({ definition, installatio
       {read.status === "ready" && read.items.length === 0 ? (
         <div role="status" className={`${styles.notice} ${styles.noticeInfo}`} data-testid={`velero-${id}-empty`}>
           <Icon material="info_outline" small />
-          <span>
-            No {noun} is in the namespace {installation.namespace} of {installation.cluster.name}.
-          </span>
+          <span>{LIST_WORDS.empty(noun, installation.namespace ?? "", installation.cluster.name)}</span>
         </div>
       ) : null}
       {notes.map((note) => (
@@ -132,7 +129,7 @@ function FamilyListView<View extends { name: string }>({ definition, installatio
         customizeHeader={({ filters: _hostNamespaces, info, ...placeholders }) => ({
           ...placeholders,
           // The host counts what the list holds: a list that was not read holds nothing, which is not none.
-          info: hasItems(read) ? info : <span data-testid={`velero-${id}-not-counted`}>Not read yet</span>,
+          info: hasItems(read) ? info : <span data-testid={`velero-${id}-not-counted`}>{LIST_WORDS.notCounted}</span>,
           filters: <></>,
         })}
         onDetails={(item: HostObject) => openView({ kind, name: item.getName() })}

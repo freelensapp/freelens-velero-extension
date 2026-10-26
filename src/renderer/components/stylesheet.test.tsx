@@ -67,6 +67,24 @@ const OBJECTS: Record<Family, ReturnType<typeof object>> = {
     { phase: "Available" },
   ),
   snapshotLocations: object("VolumeSnapshotLocation", "snapshots", { provider: "aws" }, {}),
+  backupRepositories: object(
+    "BackupRepository",
+    "shop-default-kopia",
+    { volumeNamespace: "shop", backupStorageLocation: "default", repositoryType: "kopia" },
+    { phase: "Ready", lastMaintenanceTime: "2026-10-05T09:00:00Z" },
+  ),
+  podVolumeBackups: object(
+    "PodVolumeBackup",
+    "nightly-x7k2p",
+    { node: "worker", pod: { namespace: "shop", name: "cart-0" }, volume: "data", uploaderType: "kopia" },
+    { phase: "Completed", progress: { bytesDone: 1024, totalBytes: 1024 } },
+  ),
+  podVolumeRestores: object(
+    "PodVolumeRestore",
+    "monday-q9w3e",
+    { pod: { namespace: "shop", name: "cart-0" }, volume: "data", uploaderType: "kopia" },
+    { phase: "Completed", node: "worker" },
+  ),
 };
 
 function installation(): Installation {

@@ -1,12 +1,14 @@
 import { action, computed, makeObservable, observable, observableRef, runInAction } from "mobx";
 import { withAllowance, withoutAllowance } from "../../common/allowances";
 import {
+  ALWAYS,
   apiAvailability,
   choices,
   current,
   entry,
   FAMILIES,
   familyStatus,
+  ON_DEMAND,
   selection,
   suggestions,
   validNamespace,
@@ -35,8 +37,11 @@ import type { GateState } from "../../common/ipc";
 import type { FamilyRead } from "../../common/read-state";
 import type { ApiServerTime, ServerOffset } from "../../common/schedule-signal";
 import type {
+  BackupRepositoryResource,
   BackupResource,
   BackupStorageLocationResource,
+  PodVolumeBackupResource,
+  PodVolumeRestoreResource,
   RestoreResource,
   ScheduleResource,
   VeleroResource,
@@ -58,6 +63,9 @@ export interface FamilyItems {
   schedules: ScheduleResource;
   storageLocations: BackupStorageLocationResource;
   snapshotLocations: VolumeSnapshotLocationResource;
+  backupRepositories: BackupRepositoryResource;
+  podVolumeBackups: PodVolumeBackupResource;
+  podVolumeRestores: PodVolumeRestoreResource;
 }
 
 export interface ClusterIdentity {
@@ -91,6 +99,10 @@ function emptyReads(): Reads {
 
 // How often the views ask the families of the installation again, while one of them is open.
 export const READ_EVERY = 15_000;
+
+function onDemand(family: Family): boolean {
+  return (ON_DEMAND as readonly Family[]).includes(family);
+}
 
 // What the views of one cluster know of Velero: what the API serves, where the installations may be, which
 // one was chosen and what was read of it. Nothing is asked before a view is opened.
@@ -131,6 +143,9 @@ export class Installation {
   private readonly dependencies: InstallationDependencies;
   private watchers = 0;
   private timer?: ReturnType<typeof setInterval>;
+  // What each holder needs of the families read on demand, with the call that recorded it: a release lets go of
+  // what its own call recorded, and of nothing a later call of the same holder recorded.
+  private readonly holders = new Map<object, { families: Family[]; call: symbol }>();
 
   constructor(dependencies: InstallationDependencies) {
     this.dependencies = dependencies;
@@ -460,6 +475,29 @@ export class Installation {
     this.keep((kept) => ({ ...kept, window }));
   }
 
+  // A holder says which of the families read on demand it needs, in one call that replaces what it needed before:
+  // a holder that changes from one view to another never lets go of a family both need. A family needed and
+  // never read is asked at once, alone, in the generation; then at every read while it is held. The answer lets
+  // the holder go: what no holder needs any more is not asked at the next read, and what was read of it goes then.
+  need(holder: object, families: Family[]): () => void {
+    const call = Symbol("need");
+
+    this.holders.set(holder, { families: families.filter(onDemand), call });
+    const first = this.held().filter((family) => this.reads[family].status === "idle");
+
+    if (first.length) void this.during(() => this.readFamiliesOf(this.generation, first, false));
+    return () => {
+      if (this.holders.get(holder)?.call === call) this.holders.delete(holder);
+    };
+  }
+
+  // The families read on demand that a holder needs now.
+  private held(): Family[] {
+    const needed = new Set([...this.holders.values()].flatMap((holder) => holder.families));
+
+    return ON_DEMAND.filter((family) => needed.has(family));
+  }
+
   // A view that is open asks again every so often, for as long as it is: the last one that closes stops it.
   watch(interval = READ_EVERY): () => void {
     this.watchers += 1;
@@ -527,17 +565,31 @@ export class Installation {
     this.dropWrites(left);
   }
 
+  // A read of the installation: the families read at every read, and the ones a holder needs. What was read of a
+  // family no holder needs any more goes, and it is not asked.
   private async readFamilies(): Promise<void> {
+    const held = this.held();
+
     runInAction(() => {
       this.kept();
       this.target();
+      const released = ON_DEMAND.filter((family) => !held.includes(family) && this.reads[family].status !== "idle");
+
+      if (released.length) {
+        this.reads = {
+          ...this.reads,
+          ...Object.fromEntries(released.map((family) => [family, emptyRead<Resource>()])),
+        };
+      }
     });
-    return this.during(() => this.readFamiliesOf(this.generation));
+    return this.during(() => this.readFamiliesOf(this.generation, [...ALWAYS, ...held], true));
   }
 
-  private async readFamiliesOf(asked: Generation): Promise<void> {
+  // The families asked are read in the generation they were asked in. `cycle` is a read of the installation, after
+  // which what was read of it as a whole is taken; a family asked alone, when a view first needs it, is not one.
+  private async readFamiliesOf(asked: Generation, among: Family[], cycle: boolean): Promise<void> {
     if (!asked.namespace) return;
-    const families = FAMILIES.filter((family) => familyStatus(this.api, family, "idle") !== "not-served");
+    const families = among.filter((family) => familyStatus(this.api, family, "idle") !== "not-served");
     // The newest time of the API server among the answers of this read that listed what was asked. An answer
     // that refused or failed may have been written by what stands between the views and the API server.
     let newest: ApiServerTime | undefined;
@@ -554,8 +606,9 @@ export class Installation {
 
         runInAction(() => {
           // An answer for a target that is not the one any more: a late one, or of a request that was
-          // cancelled and answered all the same.
+          // cancelled and answered all the same. An answer of a family no holder needs any more is not taken.
           if (!current(this.generation, asked)) return;
+          if (onDemand(family) && !this.held().includes(family)) return;
           const items = (answer.body as { items?: unknown } | undefined)?.items;
           const listed =
             typeof answer.status === "number" && answer.status >= 200 && answer.status < 300 && Array.isArray(items);
@@ -575,7 +628,7 @@ export class Installation {
       }),
     );
     runInAction(() => {
-      if (!current(this.generation, asked)) return;
+      if (!cycle || !current(this.generation, asked)) return;
       this.asked = this.dependencies.now();
       // What the read of the families of this installation gives of the zone of its server and of the time of
       // its API server. The offset is the object that was kept when nothing changed: who holds it is told of a

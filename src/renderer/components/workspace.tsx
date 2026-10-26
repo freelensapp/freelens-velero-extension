@@ -2,6 +2,7 @@ import { Renderer } from "@freelensapp/extensions";
 import React from "react";
 import { operationState } from "../../common/phases";
 import { VIEWS } from "../../common/views";
+import { WORKSPACE_WORDS } from "../../common/volume-words";
 import { openView } from "../navigation";
 import styles from "./views.module.css";
 
@@ -182,24 +183,24 @@ export function Workspace({ kind, name, uid, deleting, back, onBack, children }:
 // What a view shows of an object that is not among the ones that were read: that it is not there, or that
 // it is not known. A list that was not read says nothing of what is in it.
 export function NotShown({ kind, namespace, read }: { kind: ViewKind; namespace: string; read: FamilyRead<unknown> }) {
-  const { noun } = VIEWS[kind];
+  const { noun, plural } = VIEWS[kind];
 
   if (read.status === "idle" || read.status === "loading") return <Spinner />;
   if (read.status === "ready") {
     return (
       <p className={styles.stateText} data-testid={`velero-${kind}-missing`}>
-        No {noun} of this name is in {namespace}. It may have been deleted, or it is of another installation.
+        {WORKSPACE_WORDS.missing(noun, namespace)}
       </p>
     );
   }
   return (
     <p className={styles.stateText} data-testid={`velero-${kind}-unknown`}>
       {read.status === "forbidden"
-        ? `Access to the ${noun}s of ${namespace} is denied`
+        ? WORKSPACE_WORDS.denied(plural, namespace)
         : read.status === "not-served"
-          ? `This cluster does not serve the ${noun}s of Velero`
-          : `The ${noun}s of ${namespace} could not be read`}
-      , so this one cannot be shown. It is not known to be absent.
+          ? WORKSPACE_WORDS["not-served"](plural)
+          : WORKSPACE_WORDS.failed(plural, namespace)}
+      {WORKSPACE_WORDS.unknownAfter}
     </p>
   );
 }
@@ -208,8 +209,7 @@ export function NotShown({ kind, namespace, read }: { kind: ViewKind; namespace:
 export function Stale({ kind, read }: { kind: ViewKind; read: FamilyRead<unknown> }) {
   return (
     <p className={styles.factNote} data-testid={`velero-${kind}-stale`}>
-      The {VIEWS[kind].noun}s could not be read again: this is what was read at{" "}
-      {new Date(read.lastSuccess ?? 0).toLocaleTimeString()}.
+      {WORKSPACE_WORDS.stale(VIEWS[kind].plural)} {new Date(read.lastSuccess ?? 0).toLocaleTimeString()}.
     </p>
   );
 }

@@ -9,8 +9,34 @@ import { readWindow, WINDOWS } from "./window";
 import type { ReadStatus } from "./read-state";
 import type { Window } from "./window";
 
-export const FAMILIES = ["backups", "restores", "schedules", "storageLocations", "snapshotLocations"] as const;
+// The families of an installation, one union: the five of the first milestones, the backup repositories, and the
+// families of the operations of the volumes.
+export const FAMILIES = [
+  "backups",
+  "restores",
+  "schedules",
+  "storageLocations",
+  "snapshotLocations",
+  "backupRepositories",
+  "podVolumeBackups",
+  "podVolumeRestores",
+] as const;
 export type Family = (typeof FAMILIES)[number];
+
+// The families read at every read of an installation, whatever view is open: the repositories are few, and the
+// Overview carries their rules.
+export const ALWAYS = [
+  "backups",
+  "restores",
+  "schedules",
+  "storageLocations",
+  "snapshotLocations",
+  "backupRepositories",
+] as const satisfies readonly Family[];
+
+// The families read only while a view that shows them is open: an installation may hold thousands of their
+// objects, and a view that does not show them does not pay for them.
+export const ON_DEMAND = ["podVolumeBackups", "podVolumeRestores"] as const satisfies readonly Family[];
 
 // The plural of each family in the API, which is how the discovery of the API names it.
 export const RESOURCES: Record<Family, string> = {
@@ -19,6 +45,9 @@ export const RESOURCES: Record<Family, string> = {
   schedules: "schedules",
   storageLocations: "backupstoragelocations",
   snapshotLocations: "volumesnapshotlocations",
+  backupRepositories: "backuprepositories",
+  podVolumeBackups: "podvolumebackups",
+  podVolumeRestores: "podvolumerestores",
 };
 
 export const TITLES: Record<Family, string> = {
@@ -27,6 +56,9 @@ export const TITLES: Record<Family, string> = {
   schedules: "Schedules",
   storageLocations: "Backup Storage Locations",
   snapshotLocations: "Volume Snapshot Locations",
+  backupRepositories: "Backup Repositories",
+  podVolumeBackups: "Pod Volume Backups",
+  podVolumeRestores: "Pod Volume Restores",
 };
 
 // An answer of the API: its status and, when it has one, its body. `status` is absent when there was none.

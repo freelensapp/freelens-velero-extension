@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ALWAYS,
   apiAvailability,
   choices,
   current,
@@ -7,10 +8,12 @@ import {
   entry,
   FAMILIES,
   familyStatus,
+  ON_DEMAND,
   RESOURCES,
   readPreferences,
   selection,
   suggestions,
+  TITLES,
   validNamespace,
 } from "./discovery";
 
@@ -35,6 +38,34 @@ function locations(...namespaces: string[]) {
   };
 }
 
+describe("the families of an installation", () => {
+  it("are one union of eight: six read at every read, and the two of the pod volume operations on demand", () => {
+    expect(FAMILIES).toEqual([
+      "backups",
+      "restores",
+      "schedules",
+      "storageLocations",
+      "snapshotLocations",
+      "backupRepositories",
+      "podVolumeBackups",
+      "podVolumeRestores",
+    ]);
+    expect([...ALWAYS, ...ON_DEMAND].sort()).toEqual([...FAMILIES].sort());
+    expect(ALWAYS.filter((family) => (ON_DEMAND as readonly string[]).includes(family))).toEqual([]);
+    expect(ON_DEMAND).toEqual(["podVolumeBackups", "podVolumeRestores"]);
+    expect([RESOURCES.backupRepositories, RESOURCES.podVolumeBackups, RESOURCES.podVolumeRestores]).toEqual([
+      "backuprepositories",
+      "podvolumebackups",
+      "podvolumerestores",
+    ]);
+    expect([TITLES.backupRepositories, TITLES.podVolumeBackups, TITLES.podVolumeRestores]).toEqual([
+      "Backup Repositories",
+      "Pod Volume Backups",
+      "Pod Volume Restores",
+    ]);
+  });
+});
+
 describe("availability of the API", () => {
   it("names the kinds the API serves, and the families that are not among them", () => {
     expect(apiAvailability(served)).toEqual({
@@ -46,7 +77,14 @@ describe("availability of the API", () => {
       {
         state: "served",
         resources: ["backups", "schedules"],
-        missing: ["restores", "storageLocations", "snapshotLocations"],
+        missing: [
+          "restores",
+          "storageLocations",
+          "snapshotLocations",
+          "backupRepositories",
+          "podVolumeBackups",
+          "podVolumeRestores",
+        ],
       },
     );
     expect(apiAvailability({ status: 200, body: { resources: [] } })).toEqual({
@@ -262,9 +300,18 @@ describe("what a view shows before any data", () => {
       state: "ready",
       namespace: "velero-a",
       stale: false,
-      missing: ["restores", "schedules", "storageLocations", "snapshotLocations"],
+      missing: [
+        "restores",
+        "schedules",
+        "storageLocations",
+        "snapshotLocations",
+        "backupRepositories",
+        "podVolumeBackups",
+        "podVolumeRestores",
+      ],
     });
     expect(familyStatus(partial, "restores", "idle")).toBe("not-served");
+    expect(familyStatus(partial, "podVolumeBackups", "idle")).toBe("not-served");
     expect(familyStatus(partial, "backups", "ready")).toBe("ready");
     expect(familyStatus({ state: "failed" }, "restores", "forbidden")).toBe("forbidden");
   });

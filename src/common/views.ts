@@ -2,7 +2,7 @@
 // open. The address holds them in the order they were opened: the last one is shown, and the way back leads
 // to the one before it, or to the list when there is none.
 
-import { FAMILIES } from "./discovery";
+import { ALWAYS } from "./discovery";
 
 import type { Family } from "./discovery";
 
@@ -15,23 +15,29 @@ export interface ViewTarget {
 }
 
 // What is read of the installation to show a view of each kind, and how the kind is called. A view shows
-// something of the families it reads: what is missing of the others is not said over it.
-export const VIEWS: Record<ViewKind, { family: Family; reads: readonly Family[]; title: string; noun: string }> = {
-  backup: { family: "backups", reads: FAMILIES, title: "Backups", noun: "backup" },
-  restore: { family: "restores", reads: FAMILIES, title: "Restores", noun: "restore" },
-  schedule: { family: "schedules", reads: FAMILIES, title: "Schedules", noun: "schedule" },
+// something of the families it reads: what is missing of the others is not said over it. A family of the
+// operations of the volumes is read while a view that reads it is open, and only then.
+export const VIEWS: Record<
+  ViewKind,
+  { family: Family; reads: readonly Family[]; title: string; noun: string; plural: string }
+> = {
+  backup: { family: "backups", reads: ALWAYS, title: "Backups", noun: "backup", plural: "backups" },
+  restore: { family: "restores", reads: ALWAYS, title: "Restores", noun: "restore", plural: "restores" },
+  schedule: { family: "schedules", reads: ALWAYS, title: "Schedules", noun: "schedule", plural: "schedules" },
   // A location is shown with what uses it, which is the backups and the schedules that name it.
   "storage-location": {
     family: "storageLocations",
     reads: ["backups", "schedules", "storageLocations"],
     title: "Backup Storage Locations",
     noun: "backup storage location",
+    plural: "backup storage locations",
   },
   "snapshot-location": {
     family: "snapshotLocations",
     reads: ["backups", "schedules", "snapshotLocations"],
     title: "Volume Snapshot Locations",
     noun: "volume snapshot location",
+    plural: "volume snapshot locations",
   },
 };
 
