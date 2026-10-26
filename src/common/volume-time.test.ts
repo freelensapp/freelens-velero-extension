@@ -145,6 +145,15 @@ describe("the times of an operation, by the clock of the caller", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("say of a phase the release does not write what is missing of its two ends, and a start when it has one", () => {
+    expect(times("PodVolumeBackup", "Odd", { startTimestamp: before(MINUTE) }).text).toBe("Completion not reported");
+    expect(
+      times("PodVolumeBackup", "Odd", { startTimestamp: before(MINUTE), completionTimestamp: before(2 * MINUTE) }).text,
+    ).toBe("Completion before start");
+    expect(times("PodVolumeBackup", "Odd", { completionTimestamp: before(MINUTE) }).text).toBe("Start not reported");
+    expect(times("PodVolumeBackup", "Odd", {}).text).toBe("Start not reported");
+  });
+
   it("never give a value that is not a number to order by", () => {
     for (const phase of [
       undefined,

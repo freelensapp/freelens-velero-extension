@@ -63,11 +63,12 @@ function span(state: VolumeOperationState, status: TimedStatus | null | undefine
       : { state: "duration", milliseconds: completed - started };
   }
   if (state.lifecycle === "unknown") {
-    // A phase the release does not write says nothing of the times: a duration is given only when both ends are.
-    if (started !== undefined && completed !== undefined && completed >= started) {
-      return { state: "duration", milliseconds: completed - started };
-    }
-    return { state: "unavailable", reason: "no-start" };
+    // A phase the release does not write says nothing of the times: a duration is given only when both ends are,
+    // and what is missing of them is said as it is, a start with no completion not being a start not reported.
+    if (started === undefined) return { state: "unavailable", reason: "no-start" };
+    if (completed === undefined) return { state: "unavailable", reason: "no-end" };
+    if (completed < started) return { state: "unavailable", reason: "reversed" };
+    return { state: "duration", milliseconds: completed - started };
   }
   if (state.execution === "running") {
     if (started === undefined) return { state: "unavailable", reason: "no-start" };
