@@ -833,12 +833,13 @@ of their own, first in the file and starting no application, which run alone wit
 The suite reads the cluster only with `kubectl get` in a namespace and the
 counters of the API server, never inside a measure, and runs in the run of the
 pattern `velero-e2e`, as the hosted job runs it (LM6 of SPEC-0013). It took
-ADHERENCE-PR4-PENDING alone on the machine of the runs and ADHERENCE-PR4-PENDING on
-the hosted runner; the run of the pattern `velero-e2e pre-review extensions` took
-ADHERENCE-PR4-PENDING on the machine of the runs and ADHERENCE-PR4-PENDING on the
-hosted runner, against the two hours the runner of the suites gives them in one
-start, the two hours the kubeconfigs of the readers last, and the 150 minutes of
-the job.
+137.97 and 132.81 seconds alone on the machine of the runs on 2026-10-26, 4
+minutes 11 seconds and 4 minutes 1 second with the build, the pack and the start
+of its runner, and ADHERENCE-PR4-PENDING on the hosted runner; the run of the
+pattern `velero-e2e pre-review extensions` took ADHERENCE-PR4-PENDING on the
+machine of the runs and ADHERENCE-PR4-PENDING on the hosted runner, against the
+two hours the runner of the suites gives them in one start, the two hours the
+kubeconfigs of the readers last, and the 150 minutes of the job.
 
 ## Critical Journeys
 
@@ -1046,8 +1047,14 @@ for each, the schedules and the backups the page read, and no value of the whole
 An order is timed by `measureOrder`, a click on the head of a column that ends when
 the first forty rows change, with no wait of the host. Each report is written
 before anything of the measure is asserted, and printed as one line, `ADH-16` with
-the measure it is of. On the machine of the runs, ADHERENCE-PR4-PENDING; on the
-hosted runner, ADHERENCE-PR4-PENDING.
+the measure it is of. On the machine of the runs, an Intel Core i7-9750H of
+twelve threads and 16 GB with macOS and kind in Docker Desktop, in the nightly
+v2.0.0-0-nightly-2026-10-25, on 2026-10-26 in two runs of the suite alone on the
+same placement: the list answered in 176 and 156 ms at the 95th percentile, 104
+and 106 at the median, the slowest 309 and 173, and 414 and 393 from the key,
+with 27 rows mounted; each order in 100 to 113 ms; the Overview in 33 and 62 ms
+at the 95th percentile, each window holding operations and ten of them listed.
+On the hosted runner, ADHERENCE-PR4-PENDING.
 
 The second slice of the adherence (SPEC-0013, T3.2) is the module
 [`schedule-signal.ts`](../../src/common/schedule-signal.ts) and its

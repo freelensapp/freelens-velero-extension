@@ -1076,52 +1076,76 @@ observed run read before its submission, a newer backup that is not a submission
 at every look; and the counters of the API server read by verb, kind and scope, a PATCH and a POST of one object with
 the scope `resource`. Each was seen to fail with the change it proves taken back, on a copy of the tree.
 
-The packaged evidence of each check, by the case of `velero-e2e-adherence` that gives it, ADHERENCE-PR4-PENDING: the
-list of the installation of the states, its eight schedules with the kind of their next run, their state, their mark and
-their reason and the words of the two cells, a tip on each, and the note over the list that the clock of the cluster is
-ahead (ADH-04, ADH-06, ADH-07, ADH-09); the orders by the next run and by adherence both ways and a search by the word
-of a state (ADH-09); the band of each schedule line by line, awaited, overdue with its count and the backup of its
-submission not among the ones that exist, held beyond the grace by a backup in progress that is not a submission, at
-every look, the zone derived of the schedule itself and of another, the zone the long expression names and the clocks of
-every band naming the schedule ahead (ADH-03, ADH-04, ADH-07, ADH-08, ADH-10); the way to the held backup and back, over
-the list, which is where it was (ADH-10); the installation of two offsets, the older submission before the newer read
-with `kubectl` and the words that the offset changed (ADH-03); the details of the host of a schedule of each of five
-states, awaited, overdue, held, at every look and derived, and of the schedule of five fields of the installation of two
-offsets while another installation is selected, not known for want of an offset (ADH-11, and the details of another
-namespace computed with nothing read); the Overview of the installation of the states, its items of A11 in the order of
-the page, the one at every look among them, its lines, and the count by reason in the installation of the views
-(ADH-12); the real schedule, Enabled with `skipImmediately` written by the controller, no submission and no backup of
-it, its next run a year after its creation in its row, its band and its line of the Overview (ADH-17); nothing written,
-the guard of LM1 and the evidence of DISC-07 with the Schedules and the Overview open on the adherence fixtures (ADH-13,
-ADH-17). The restricted suites: with the reader of three kinds the interval of the views overdue and the schedule of
-five fields not known for want of an offset; with the second reader the interval overdue with the words that whether a
-backup holds the submissions is not known, in its row and in its band, and the schedule of five fields not known since
-the backups are denied, and the count by reason of what is not known on its Overview (ADH-03, ADH-06, scenario 6). The
-list of the schedules denied rests on SPEC-0006 and on the component layer: neither reader is denied the schedules.
-ADH-05 in the packaged application rests on the suite of the schedules, with the paused, refused and not read schedules
-of the installations of the views and of the static fixtures, and on the count of the two schedules Velero has not read
-in the Overview of case 7; ADH-14 is of the component layer alone. The pre-review, ADH-15: four views more, 39 in all,
-the list of the installation of the states, the band of the held schedule, the band of the schedule with a name of 63
-characters and the Overview of that installation, each in both themes at 1440 by 900, 900 by 650 and twice the zoom,
-every mark of the adherence hidden from who does not see it with its word beside it, every cell of the list and of the
-lines of the Overview whole, or cut with an ellipsis and a tip, or wrapped, on the line of its row, and the band read
-with the keyboard alone, from the list to the schedule, to the backup that holds it, and back on the way back and on the
-row, ADHERENCE-PR4-PENDING. The placement the runs read, and which of the cases that depend on the hour it exercised,
-01:00 UTC inside its twelve hours or not, ADHERENCE-PR4-PENDING. Whether the `Intl` of the Electron of the nightly knows
-`America/Argentina/Buenos_Aires`, ADHERENCE-PR4-PENDING.
+The packaged evidence of each check, by the case of `velero-e2e-adherence` that gives it, from two runs of the suite
+alone on 2026-10-26, 30 cases of 30 passed in each: the list of the installation of the states, its eight schedules with
+the kind of their next run, their state, their mark and their reason and the words of the two cells, a tip on each, and
+the note over the list that the clock of the cluster is ahead (ADH-04, ADH-06, ADH-07, ADH-09); the orders by the next
+run and by adherence both ways and a search by the word of a state (ADH-09); the band of each schedule line by line,
+awaited, overdue with its count and the backup of its submission not among the ones that exist, held beyond the grace by
+a backup in progress that is not a submission, at every look, the zone derived of the schedule itself and of another,
+the zone the long expression names and the clocks of every band naming the schedule ahead (ADH-03, ADH-04, ADH-07,
+ADH-08, ADH-10); the way to the held backup and back, over the list, which is where it was (ADH-10); the installation of
+two offsets, the older submission before the newer read with `kubectl` and the words that the offset changed (ADH-03);
+the details of the host of a schedule of each of five states, awaited, overdue, held, at every look and derived, and of
+the schedule of five fields of the installation of two offsets while another installation is selected, not known for
+want of an offset (ADH-11, and the details of another namespace computed with nothing read); the Overview of the
+installation of the states, its items of A11 in the order of the page, the one at every look among them, its lines, and
+the count by reason in the installation of the views (ADH-12); the real schedule, Enabled with `skipImmediately` written
+by the controller, no submission and no backup of it, its next run a year after its creation in its row, its band and
+its line of the Overview (ADH-17); nothing written, the guard of LM1 and the evidence of DISC-07 with the Schedules and
+the Overview open on the adherence fixtures (ADH-13, ADH-17). The restricted suites: with the reader of three kinds the
+interval of the views overdue and the schedule of five fields not known for want of an offset; with the second reader
+the interval overdue with the words that whether a backup holds the submissions is not known, in its row and in its
+band, and the schedule of five fields not known since the backups are denied, and the count by reason of what is not
+known on its Overview (ADH-03, ADH-06, scenario 6). The list of the schedules denied rests on SPEC-0006 and on the
+component layer: neither reader is denied the schedules. ADH-05 in the packaged application rests on the suite of the
+schedules, with the paused, refused and not read schedules of the installations of the views and of the static fixtures,
+and on the count of the two schedules Velero has not read in the Overview of case 7; ADH-14 is of the component layer
+alone. The pre-review, ADH-15: four views more, 39 in all, the list of the installation of the states, the band of the
+held schedule, the band of the schedule with a name of 63 characters and the Overview of that installation, each in both
+themes at 1440 by 900, 900 by 650 and twice the zoom, every mark of the adherence hidden from who does not see it with
+its word beside it, every cell of the list and of the lines of the Overview whole, or cut with an ellipsis and a tip, or
+wrapped, on the line of its row, and the band read with the keyboard alone, from the list to the schedule, to the backup
+that holds it, and back on the way back and on the row, ADHERENCE-PR4-PENDING. The placement the runs read was made at
+20:31:02 UTC on 2026-10-26: 01:00 UTC was inside its twelve hours and after the last of the runs, so the four schedules
+of five fields at UTC+02:00 were read awaited, their run at 01:00 UTC ahead, and no run saw them turn due and then
+overdue; the count of the hourly interval was twenty-five in every run, which all ended before the hour of its
+twenty-sixth; the clock ahead was 23h 56m and 23h 52m in the two runs; the next run of the real schedule a year after
+its creation, less the age. The `Intl` of the Electron of the nightly knows `America/Argentina/Buenos_Aires`: the
+schedule of 63 characters was awaited, its next run at 00:00 of 2027-01-01 in that zone, in its row, its band and its
+line, and no schedule of the installation of the states was not known.
 
-ADH-16 in the packaged application, on the installation of the three hundred schedules, ADHERENCE-PR4-PENDING: ten
-searches and ten orders of the list, each a column and a direction asked once untimed from the same start to prove that
-it changes the first forty rows, after three interactions that warm it, the 95th percentile of what the list takes to
-answer of 250 ms with the time from the key beside it and the most rows mounted of 100; and twenty changes of the window
-of its Overview after three, of 250 ms, as OVER-12, with the window after each change and the schedules and the backups
-the page read; each report written before anything of the measure is asserted, as `adh-16-list-performance` and
-`adh-16-overview-performance`, with the machine and the run. The measure of `measure()` gains an order among its
-interactions, a click on the head of a column, which ends when the first forty rows change and has no wait of the host.
-The answer of the header of ADH-07, which the first pull request found reaching the frame on the machine of the runs and
-on the hosted runner: whether it reaches it in these runs, and what the note over the list and the line of the clocks
-say, which the suite prints as `ADH-07` lines before it asserts them, ADHERENCE-PR4-PENDING. The local and hosted times
-of the suite and of the run of the pattern, read before anything else is decided under LM6, ADHERENCE-PR4-PENDING.
+ADH-16 in the packaged application, on the installation of the three hundred schedules, in two runs of the suite alone
+on 2026-10-26 on the machine of the runs, an Intel Core i7-9750H of twelve threads and 16 GB with macOS and kind in
+Docker Desktop, in the nightly v2.0.0-0-nightly-2026-10-25: the list answered in 176 and 156 ms at the 95th percentile,
+414 and 393 from the key, each order in 100 to 113 ms, with 27 rows mounted, and the Overview in 33 and 62 ms, each of
+250 ms; on the hosted runner, ADHERENCE-PR4-PENDING. Its measures are ten searches and ten orders of the list, each a
+column and a direction asked once untimed from the same start to prove that it changes the first forty rows, after three
+interactions that warm it, the 95th percentile of what the list takes to answer of 250 ms with the time from the key
+beside it and the most rows mounted of 100; and twenty changes of the window of its Overview after three, of 250 ms, as
+OVER-12, with the window after each change and the schedules and the backups the page read; each report written before
+anything of the measure is asserted, as `adh-16-list-performance` and `adh-16-overview-performance`, with the machine
+and the run. The measure of `measure()` gains an order among its interactions, a click on the head of a column, which
+ends when the first forty rows change and has no wait of the host. The answer of the header of ADH-07, which the first
+pull request found reaching the frame on the machine of the runs and on the hosted runner: it reached it in the runs of
+2026-10-26 on the machine of the runs, where the note over the list and the line of the clocks of each band, which the
+suite prints as `ADH-07` lines before it asserts them, said: "Times are compared by the clock of the cluster, which the
+time its API server writes in its answers gives: it is within a second of the clock of this machine. The schedule
+adherence-ahead reports its last submission 23h 56m after the clock of this machine, later than the clock of the API
+server: by the clock that wrote it a run may be later still." On the hosted runner, ADHERENCE-PR4-PENDING. The suite
+took 137.97 and 132.81 seconds alone on the machine of the runs, 4 minutes 11 seconds and 4 minutes 1 second with the
+build, the pack and the start of its runner; the run of the pattern on that machine and the times of the hosted runner,
+read before anything else is decided under LM6, ADHERENCE-PR4-PENDING.
+
+Changes made on purpose to what only the packaged application shows, on 2026-10-26, each on a copy of the tree with the
+suite of the adherence run once alone from it: the reader leaving out the header Date made case 1 fail on the note over
+the list, which then compared the times by the clock of this machine, and case 3 on the line of the clocks; the details
+of a schedule of another installation computed with the reads of the installation selected made case 6 fail on the
+details of `split-newer`, awaited where not known for want of the offset of its own server is expected; the way of the
+band to the held backup leading nowhere made case 4 fail, waiting for the view of that backup; and the order of the
+measure ending at the first frame after its click, whether or not the rows changed, made no case fail: the ten orders
+were timed as without it, since the host sorts and draws the list inside the click, so what proves that each order
+changes the first forty rows is their run untimed before the timed ones, not the measure.
 
 Decided while implementing, on 2026-10-26, none a change of what a requirement asks: the helper of the suites holds the
 computation of what each fixture is to show, and the reader of the band, which the first pull request gave the helpers,
@@ -1131,12 +1155,12 @@ suite of the Overview asserts since the third pull request; the case of the guar
 and of each window of DISC-07 by the one rule of the guard of the suites, which the third pull request bounded (the
 PATCH of a schedule by its name, which the API server counts with the scope of one object, `resource`, left out no more
 than the whole minutes between the two readings and two, and one of any other scope a write), and asserts by name that
-no POST of a backup was counted, of any scope; the suite expects the clock of the cluster within a second of the one of this machine,
-as the time of its API server gives it on kind, and fails on the note over the list when it is further off; the
-expectations take whether the application knows the zone of the long name as one constant of the suite, which the first
-packaged run settles; and the 02:30 of Rome on the day the hour is skipped is computed at the first instant after the
-change, as REQ-160 states, by the helper the suites of the views share. The three items that wait for the confirmation
-of the lead maintainer at the review of the fourth milestone are recorded above and hold as they are: the amendment of
-REQ-166 (L776-L780), and the precisions of REQ-170 (L883-L889) and of REQ-171 (L943-L946). The manual review of the
-Success Criteria (L567-L575) waits for the lead maintainer, with its steps in [TRY-IT.md](../development/TRY-IT.md);
-Verified waits for it and for those three items.
+no POST of a backup was counted, of any scope; the suite expects the clock of the cluster within a second of the one of
+this machine, as the time of its API server gives it on kind, and fails on the note over the list when it is further
+off; the expectations take whether the application knows the zone of the long name as one constant of the suite, which
+the packaged runs of 2026-10-26 settled: the nightly knows it; and the 02:30 of Rome on the day the hour is skipped is
+computed at the first instant after the change, as REQ-160 states, by the helper the suites of the views share. The
+three items that wait for the confirmation of the lead maintainer at the review of the fourth milestone are recorded
+above and hold as they are: the amendment of REQ-166 (L776-L780), and the precisions of REQ-170 (L883-L889) and of
+REQ-171 (L943-L946). The manual review of the Success Criteria (L567-L575) waits for the lead maintainer, with its steps
+in [TRY-IT.md](../development/TRY-IT.md); Verified waits for it and for those three items.
