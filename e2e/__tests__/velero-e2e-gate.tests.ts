@@ -319,7 +319,7 @@ describe("the gate of the writes", () => {
     async () => {
       const after = cluster.apiRequests();
 
-      expect(cluster.writes(cluster.counted(counted, after))).toEqual({});
+      expect(cluster.writes(counted, after)).toEqual({});
       expect(cluster.clusterSnapshot()).toEqual(before);
     },
     TIMEOUT,

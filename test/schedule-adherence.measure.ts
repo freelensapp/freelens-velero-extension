@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { mixedExpression } from "../e2e/scripts/local-expressions.mts";
 import { succeeded } from "../src/common/read-state";
 import { COUNT_BOUND, parseExpression } from "../src/common/schedule-adherence";
 import { adherenceContext, keepOffset, scheduleSignal } from "../src/common/schedule-signal";
@@ -28,43 +29,11 @@ const NAMESPACE = "velero-adherence";
 const NOW = Date.parse("2026-10-14T14:00:00.250Z");
 // The zone of the server the backups of the submissions are named in: two hours east of UTC.
 const SERVER_MINUTES = 120;
-const DESCRIPTORS = ["@hourly", "@daily", "@weekly", "@monthly", "@yearly", "@midnight", "@annually"];
-
-// The expressions, each of its own text but for the descriptors, so that the parses are measured on the
-// first call: the minute and the hour of a five-field expression are the ones of the schedule, and so is
-// the interval of an @every one. A tenth of them name a zone east of UTC, a tenth a zone west of it, a tenth
-// is a zone east of UTC again, a tenth a calendar descriptor, and one in a hundred has no instant, which the
-// controller submits at every look.
-function expression(index: number): string {
-  const minute = index % 60;
-  const hour = Math.floor(index / 60) % 24;
-
-  switch (index % 10) {
-    case 0:
-      return `@every ${(index % 9) + 1}m${index % 59}s`;
-    case 1:
-      return `@every ${index + 1}h`;
-    case 2:
-      return `${minute} ${hour} * * *`;
-    case 3:
-      return `TZ=Europe/Rome ${minute} ${hour} * * *`;
-    case 4:
-      return `CRON_TZ=America/New_York ${minute} ${hour} * * 1-5`;
-    case 5:
-      return `${minute % 30}/30 ${hour} * * ${index % 7}`;
-    case 6:
-      return `${minute} ${hour} 1,15 * *`;
-    case 7:
-      return DESCRIPTORS[index % DESCRIPTORS.length];
-    case 8:
-      return `TZ=Asia/Tokyo ${minute} ${hour} * * *`;
-    default:
-      return index % 100 === 99 ? "0 0 30 2 *" : `${minute} ${hour} * * 0`;
-  }
-}
 
 // The schedules: each with its last submission between the placement and 35 hours before it, so that a
-// few expected runs passed for most of them and more than the bound for the ones every few minutes.
+// few expected runs passed for most of them and more than the bound for the ones every few minutes. Their
+// expressions are the ones the fixtures of the budget of the adherence place, each of its own text but for
+// the descriptors, so that the parses are measured on the first call.
 function schedules(): ScheduleResource[] {
   return Array.from({ length: SCHEDULES }, (_, index) => ({
     metadata: {
@@ -72,7 +41,7 @@ function schedules(): ScheduleResource[] {
       namespace: NAMESPACE,
       creationTimestamp: "2026-09-01T00:00:00Z",
     },
-    spec: { schedule: expression(index) },
+    spec: { schedule: mixedExpression(index) },
     status: { phase: "Enabled", lastBackup: new Date(NOW - (index % 36) * 3_600_000 - 250).toISOString() },
   }));
 }

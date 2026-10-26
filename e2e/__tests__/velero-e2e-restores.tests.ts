@@ -787,7 +787,7 @@ describe("views of the restores", () => {
       expect(after.requests).toBe(0);
       // No request of any kind of Velero that is not a read, by whoever: the suite writes nothing, and the
       // installation under test has nothing to do.
-      expect(cluster.counted(cluster.writes(counted), cluster.writes(requests))).toEqual({});
+      expect(cluster.writes(counted, requests)).toEqual({});
       // Of the whole cluster only the storage locations were listed, which is how the installations are
       // found: once when the views were opened, and once for each read that was asked.
       const whole = cluster.counted(cluster.clusterReads(counted), cluster.clusterReads(requests));

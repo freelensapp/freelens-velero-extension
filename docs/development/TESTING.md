@@ -229,12 +229,12 @@ commit. On a Linux without a display the runner starts them under `xvfb-run`.
 | Suite | What it proves |
 | --- | --- |
 | `velero-e2e-journey` | Nothing is asked before a view opens; the choice among the installations; the list of every phase; the workspace, which opens at its summary, the first of five tabs, with the ways of the summary and no field; the references that lead somewhere and the ones that do not; equal names in two installations; no way to select, edit or delete; the section in the details of the host, whose link leads to the view with the drawer gone and no error in the files of the log. On v2 as well: the identifier of the cluster the same in the address of its frame and in the catalogs of both processes, and the reads of the views leaving from the frame, the same ones the API server counts; every page with the tabs of the group, and the five kinds out of the Custom Resources tree of the host until the extension is disabled; the search of the host with the focus when a list opens, and given it back at Ctrl or Cmd with F; a view opened from a row under the details of the host, which stay over it and over what its ways open until they are closed, since the click of a way draws its target again before it reaches the window, where the suite reads it; no action of the extension that opens the details of the host; and a section of the details that throws, kept in its place with the error page of the extension, the rest of the drawer and of the cluster view left, and the error in the log of the frame with the name of the extension. 19 cases |
-| `velero-e2e-overview` | The Overview as the first entry under Velero, with what the API server counted when it opens; what was read of the five families; what needs attention by its rules, in its order, with the reason of each; what is in flight; the newest completed backup; the three windows, on the line of time and in the list; ten lines of twelve schedules; every way of the page followed, and the way back; the installation of the demo as the fixtures of the tabs leave it, with what ended with a failure inside the window computed from the times the cluster holds, the backups synced from the store at their start, the count of the items and the newest completed backup by the time each completed; no value of the whole in any installation; two thousand operations within the budget, and the scroll after a read; since the second pull request of T3.3 the adherence of the schedules: the summary and the line before the items of the schedules whose adherence is not known, by reason, with its way to their list, in each installation, the count computed from the fixtures; rule A11 in the installation of the views exactly when its schedule that names its zone is overdue, computed by the suite from its creation and the clock through Intl; the next run and the adherence on the lines of the schedules, and, in a window of 1440 by 900, the band of the schedules alone on its row and the storage under it, each table of lines with all its columns in the room of its band and none reached by scrolling it, no words of the lines clipped with no ellipsis and no tip and none off the line of their row, what each table shows, cuts and leaves behind the scroll of its band written in the report `overview-lines.json` |
+| `velero-e2e-overview` | The Overview as the first entry under Velero, with what the API server counted when it opens; what was read of the five families; what needs attention by its rules, in its order, with the reason of each; what is in flight; the newest completed backup; the three windows, on the line of time and in the list; ten lines of twelve schedules; every way of the page followed, and the way back; the installation of the demo as the fixtures of the tabs leave it, with what ended with a failure inside the window computed from the times the cluster holds, the backups synced from the store at their start, the count of the items and the newest completed backup by the time each completed; no value of the whole in any installation; two thousand operations within the budget, and the scroll after a read; since the second pull request of T3.3 the adherence of the schedules: the summary and the line before the items of the schedules whose adherence is not known, by reason, with its way to their list, in each installation, the count computed from the fixtures; rule A11 in the installation of the views exactly when its schedule that names its zone is overdue, computed by the suite from its creation and the clock through Intl; the next run and the adherence on the lines of the schedules, and, in a window of 1440 by 900, the band of the schedules alone on its row and the storage under it, each table of lines with all its columns in the room of its band and none reached by scrolling it, no words of the lines clipped with no ellipsis and no tip and none off the line of their row, what each table shows, cuts and leaves behind the scroll of its band written in the report `overview-lines.json`; since the third pull request, the schedule the controller validated in the installation of the demo, with its line, awaited, and no item; the interval of the views overdue, an item of rule A11 at every hour, so that every rule gives an item; and the schedule that names its zone with a line among the ten when a rule names it |
 | `velero-e2e-preferences` | What is kept between two starts of the application, which is the two maps of the namespaces, the window of the recent operations and what the operator allowed the downloads to do, and nothing else; a namespace that is not there any more stays selected; what the file says was allowed is shown in the target bar, one is taken back through the main process, the one that is left is found at the next start, and once the last is taken back nothing is allowed at the start after it |
 | `velero-e2e-restores` | The list of every phase of a restore; a restore as Velero keeps it, with where it restores into and the scope it carries, which opens at its summary under the five tabs, with the ways of the summary and no field; one that failed its validation, with no time and no backup made up; a source that is not there; the way between a restore and its backup in both directions, over the list the first view was opened from; no way to select, edit or delete; the section in the details of the host, whose link leads to the view with the drawer gone and no error in the files of the log |
 | `velero-e2e-restricted` | The views for an identity that reads three kinds of one namespace: what is denied is said, and is neither absent nor empty; a location shown with the Secrets it names, to an identity the API server refuses the Secrets to; the Overview, which says what the rules did not look at and, since the second pull request of T3.3, of how many schedules the adherence is not known |
 | `velero-e2e-restricted-restores` | The views for an identity that reads the restores and the schedules and not the backups: the source of a restore, the history of a schedule, the backups that name a location and the newest completed backup of the Overview are said denied or not known, and are neither absent nor empty |
-| `velero-e2e-schedules` | The schedules Velero took, refused and has not read, with paused and validation as two facts; the last submission beside the newest backup; the history of a schedule, from the newest, on its line of time and in its list, with the backup that never started at the time it was created; the template and where its backups go; the way between a schedule and its backups in both directions; no way to edit, pause or run; the section in the details of the host, whose link leads to the view with the drawer gone and no error in the files of the log; since the first pull request of T3.3 the next run and the adherence of each schedule: a run said of the schedule that names its zone, computed by the suite from its creation and the clock through Intl, never by the code of the extension, and none of the paused, refused and not read ones, the ones of five fields not known for want of the zone of the server; the band of a schedule line by line; the items of the details agreeing with the row; the order by the next run and by adherence both ways, a search by the word of a state; and the columns at each edge of the room of the list and in a window of 1440 by 900, before the case that resizes a column, with no words clipped with no ellipsis and no tip and none off the line of their row, the width of the window and the zoom of each room written in the report `schedules-rooms.json`; SCHED-03 restated outside the cells, the band and the items |
+| `velero-e2e-schedules` | The schedules Velero took, refused and has not read, with paused and validation as two facts; the last submission beside the newest backup; the history of a schedule, from the newest, on its line of time and in its list, with the backup that never started at the time it was created; the template and where its backups go; the way between a schedule and its backups in both directions; no way to edit, pause or run; the section in the details of the host, whose link leads to the view with the drawer gone and no error in the files of the log; since the first pull request of T3.3 the next run and the adherence of each schedule: a run said of the schedule that names its zone, computed by the suite from its creation and the clock through Intl, never by the code of the extension, and none of the paused, refused and not read ones, the ones of five fields not known for want of the zone of the server; the band of a schedule line by line; the items of the details agreeing with the row; the order by the next run and by adherence both ways, a search by the word of a state; and the columns at each edge of the room of the list and in a window of 1440 by 900, before the case that resizes a column, with no words clipped with no ellipsis and no tip and none off the line of their row, the width of the window and the zoom of each room written in the report `schedules-rooms.json`; SCHED-03 restated outside the cells, the band and the items; since the third pull request, twelve schedules in the installation of the views, the interval that submitted two days back overdue and first in both orders, and the one of five fields that submitted not known for want of the zone of the server |
 | `velero-e2e-locations` | The storage locations with availability, access mode and default as three facts; the location the controller validates, which is not late, and the backups that name it, by how each ended; the synthetic ones, which are late; none and two marked default; a message of many lines; where a location points and the Secrets it names, by their names; what uses a location, and the way to it and back; the way from a backup, a restore and a schedule to their locations; the snapshot locations, with a phase that has the mark of what is not known, and one a synced backup names that the installation does not have, said absent by the list and by the workspace of the backup; no way to select, edit, delete or set as default; the sections in the details of the host, the link of each of the two kinds leading to its view with the drawer gone and no error in the files of the log |
 | `velero-e2e-scale` | A thousand backups and a thousand restores: the rows that are mounted, the time of the interactions, the state of each list when an object is opened and closed |
 | `velero-e2e-gate` | The gate of the writes: off when the session starts, on every page of the group; on through the dialog of the host, which names the cluster, its context and the namespace, and not before the dialog is answered; off when another installation is selected, when the dialog is left, and when the application is started again; each frame of a cluster with a gate of its own; on v2, every request bound to the frame it comes from by the address of the frame that a handler of the main process reads, a request of the second frame for the first cluster refused; nothing of it in the store, and nothing written to the cluster |
@@ -310,10 +310,11 @@ the host, which it replaces in the main process of the application with one that
 answers what the case asks. The helper that runs
 `kubectl` for the suites refuses every verb but `get`. Each suite compares what
 the API server holds of Velero before and after: the version of every synthetic
-object, the identity of the objects of the real installation, and the absence of
-any request to Velero. A request is listed by its namespace, its kind and its
-name, and never read whole: the status of a DownloadRequest the server processed
-carries the URL it signed.
+object, the identity of the objects of the real installation, the version and the
+status of the schedule its controller validated, and the absence of any request to
+Velero. A request is listed by its namespace, its kind and its name, and never
+read whole: the status of a DownloadRequest the server processed carries the URL it
+signed.
 
 What is asked of the cluster is counted by the API server, not by the driver of
 the test: on v2 the reads of a frame of a cluster, the host's and the views' alike,
@@ -394,31 +395,37 @@ up, and the suite passes on its second start. The file goes when it is read.
 | References | `velero-views-<run>` | A backup with a schedule, a storage location, a snapshot location and its restores; backups that name a schedule and a location that are not there; a name of 63 characters; a backup that reports nothing; a name that the namespace of the phases has too |
 | Restores | `velero-views-<run>` | A restore as Velero keeps one it took: into two namespaces, in flight with a failure, with the schedule of its backup written beside the backup, the resources Velero excludes and the timeout it fills; one asked from a schedule that has no backup, which failed its validation; one of a backup that is not there any more |
 | Reader | `velero-views-<run>` | A service account that reads backups, schedules and storage locations of its namespace. Its token lasts two hours and its kubeconfig is in the private state for as long as the suites run |
-| Schedules | `velero-views-<run>` | One with a history: a backup a day for six days, two of them an hour from each other, and the newest that failed its validation and never started; one that names its time zone; three whose backups go to a location that is not there, to one that is read-only, and to the one marked default; two that Velero has not read, one of them created paused; one in the phase New, which the API has and the release does not write; one that was read, then paused and asked to skip. The ones Velero read carry `skipImmediately`, which it writes into every schedule it reads, and the last submission of the one with a history is the time its newest backup was created |
+| Schedules | `velero-views-<run>` | One with a history: a backup a day for six days, two of them an hour from each other, and the newest that failed its validation and never started; one that names its time zone; three whose backups go to a location that is not there, to one that is read-only, and to the one marked default; two that Velero has not read, one of them created paused; one in the phase New, which the API has and the release does not write; one that was read, then paused and asked to skip; and, since the third pull request of T3.3 of SPEC-0013, two that submitted two days before the fixtures were started and have no backup, one of five fields, whose zone is not known for want of a submission with its backup in the installation, and an interval of six hours, overdue at every age of the environment. The ones Velero read carry `skipImmediately`, which it writes into every schedule it reads, and the last submission of the one with a history is the time its newest backup was created |
 | Second reader | `velero-views-<run>` | A service account that reads restores, schedules, storage locations and snapshot locations of its namespace, and not the backups |
 | Locations | `velero-views-<run>` | Storage locations: one that names its frequency and one that names none, each with a validation that is days old; one whose name and bucket have 63 characters and whose prefix has many parts; one without a status; one unavailable, with a message of three lines; one that names the Secret of its credential and the one of its certificate, with the validation and the sync turned off and an address that carries a query. A snapshot location with a phase, and one without a status that names the Secret of its credential. No Secret is among the fixtures |
 | Defaults | `velero-defaults-<run>` | Two storage locations marked default, the one that is read-only created first. The one the release would keep is the one created last; of two created in the same second it is not settled which. The suite reads when each was created, and expects what the view says of that |
 | Overview | `velero-overview-<run>` | An installation no controller reads, placed by the clock: a default storage location validated two days before, one that is unavailable, one that reports nothing; twelve schedules, of which one was refused, one was not read and names the location that is unavailable, one is paused, and two carry the time of the last backup the release asked for them; backups and restores that ended one hour to forty days before, some with a failure; operations in flight, at work, waiting with its place in the queue, and with a failure; a backup a client asked from the schedule that was refused, and a restore, which failed their validation and never started |
 | Long lists | `velero-scale-<run>` | A thousand backups and a thousand restores in every phase, spread over the thirty days before they were placed, each restore of one of the backups, and no storage location: nothing suggests the namespace, the operator names it |
 | Tabs | `velero-demo` | Two backups the server syncs from files the store is given: one that failed in part, with the four artifacts made for the tabs, and one that completed with no log. A backup and a restore the server refuses for naming both kinds of selector, and a restore asked from a schedule that has no backup. See [the fixtures of the tabs](#the-fixtures-of-the-tabs) |
+| Adherence | `velero-adherence-<run>` | An installation no controller reads and nothing suggests, placed by the clock in two phases: eight schedules, awaited, overdue by a day and more with no backup of its submission, held beyond the grace by a backup in progress asked by hand, submitted at every look, its zone derived from the backup of its own submission, with no submission and the offset of that one, with its last submission a day after the placement, and one with a name of 63 characters and an expression that names its zone. See [the fixtures of the adherence](#the-fixtures-of-the-adherence) |
+| Two offsets | `velero-adherence-split-<run>` | Two schedules of five fields whose submissions were named two hours east of UTC and at UTC, the older twenty seconds before the newer, placed by the clock in two phases |
+| Budget of the adherence | `velero-adherence-scale-<run>` | Three hundred schedules of the expressions of the measure of the unit run, each with the backup of its submission named two hours east of UTC, placed by the clock in two phases, and no storage location |
+| Real schedule | `velero-demo` | One schedule the controller of the installation validates, `@every 8760h`, whose next run is a year after its creation, with the spec of the real backup as its template and no `skipImmediately`, which the controller writes. See [the fixtures of the adherence](#the-fixtures-of-the-adherence) |
 
 They are put in place by `pnpm e2e:views`, once: a second run finds them. The
 times of the history of a schedule are counted back from when the fixtures were
 started, which the environment keeps: a second run asks for the same objects. No
 controller of Velero watches these namespaces, but `velero-demo`, where the
-fixtures of the tabs are. They go with `pnpm e2e:cluster:down`, or with the
-cleanup of the fixtures.
+fixtures of the tabs are, and the schedule its controller validates. They go with
+`pnpm e2e:cluster:down`, or with the cleanup of the fixtures.
 
-The fixtures of the Overview and of the long lists are placed by the clock: their
-times are counted back from the moment they are put in place, which each object
-says in an annotation, so that a window of the last day holds some of them. They
-are good for twelve hours. Each says as well what it was made as, which is a
-digest of the fixtures of its namespace. A run that finds them older, finds them
-placed at a time that is after its own, finds that one is missing, or finds that
-they are not made as it would make them, removes the objects of its own run from
-their two namespaces and creates the ones of now; it removes nothing when it
-finds there what is not of its run, and places nothing by the clock in another
-namespace, the others of the run among them.
+The fixtures of the Overview, of the long lists and of the adherence are placed
+by the clock: their times are counted back from the moment they are put in place,
+which each object says in an annotation, so that a window of the last day holds
+some of them. They are good for twelve hours. Each says as well what it was made
+as, which is a digest of the fixtures of its namespace. A run that finds them
+older, finds them placed at a time that is after its own, finds that one is
+missing, or finds that they are not made as it would make them, removes the
+objects of its own run from that namespace and creates the ones of now; it removes
+nothing when it finds there what is not of its run, and places nothing by the
+clock in another namespace, the others of the run among them. The ones of the
+adherence are placed in two phases, by the clock of this machine read when their
+placement starts, as [their section](#the-fixtures-of-the-adherence) says.
 What the suites expect of them holds for the twelve hours: an operation of three
 hours before is of the last day until the fixtures are placed again. The
 operations that never started are at the time they were created, which is the
@@ -611,12 +618,20 @@ storing, a folder a stopped placement left without its metadata is given its
 contents, when the store does not hold them whole, and its metadata, before
 anything is asked to be deleted, so that the server makes the backup it deletes
 the folder with. The real backup and the refused one are deleted by the same
-rules, the restore without a backup by its identity. Before the namespaces of the
-run are removed, one check: none of the eleven operations of the run is in the
-installation, each looked for by its name, and the store holds none of the twenty
-keys the client may ask of the run, nine of the fourteen the server wrote for the
-real backup and the real restore and the eleven of the tabs. A cleanup stopped at
-any point is taken up by the next from what that one finds. Nothing in the scripts
+rules, the restore without a backup by its identity, and so is the schedule the
+controller validated, which the journal then forgets: the verification of the
+installation refuses one that holds a schedule. Before the namespaces of the run
+are removed, one check: none of the eleven operations of the run is in the
+installation, each looked for by its name, nor the schedule, nor a backup that
+carries its label, which would be a submission nothing here removes; and the store
+holds none of the twenty keys the client may ask of the run, nine of the fourteen
+the server wrote for the real backup and the real restore and the eleven of the
+tabs. A cleanup stopped at
+any point is taken up by the next from what that one finds. A run placed with the
+fixtures of the adherence is cleaned by scripts that know them: scripts older than
+them know neither the three namespaces of the adherence nor the schedule the
+controller validated, would call the run cleaned with that schedule left in
+`velero-demo`, and the verification would then refuse the installation. Nothing in the scripts
 removes a key of the store: when files of the tabs are in the store and no backup
 comes of them, or a key is left, the cleanup stops and names them, and the way out
 is `pnpm demo:down`. The hosted job of the views places the fixtures of the tabs
@@ -635,12 +650,14 @@ seconds.
 
 The runner says of a placement what it did, a line each: the files of the tabs
 written by this run, with the way they were sent, or none; the time the wait for
-the two backups took once the fixtures of the views and the refused operations
-were placed, which is none when a pass of the sync came meanwhile, with the passes
+the two backups took once the fixtures of the views and of the adherence, the
+refused operations and the schedule its controller validates were placed, which is none when a pass of the sync came meanwhile, with the passes
 that ended without both; the refused operations placed by this run, or each found
-refused; and, only when the fixtures placed by the clock were there before, that
-they were put in place again. A second placement says that none was written and
-that each was found refused. Of a removal of the tabs it says the backups the
+refused; the objects of the adherence in its three installations; the schedule the
+controller validated, applied by this run or found validated; and, only when the
+fixtures placed by the clock were there before, that they were put in place again,
+each namespace named. A second placement says that none was written and that each
+was found refused or validated. Of a removal of the tabs it says the backups the
 server deleted, the deletions it waited for, the files it gave the store first, or
 none, and the time it took.
 
@@ -675,9 +692,11 @@ minute, made beside the suites to watch them, failed the guard of the suite of t
 schedules.
 
 Every suite starts only when the cluster holds the fixtures it needs, each probed
-by its name, the five of the tabs among them by the names of the run, which
-`pnpm e2e:views` gives the suites. A suite that does not find them stops before it
-starts the application, and says where each part of the fixtures comes from.
+by its name, the five of the tabs and the schedule the controller validated among
+them by the names of the run, which `pnpm e2e:views` gives the suites, and a
+schedule of each installation of the adherence, which is created after the backups
+of its submissions. A suite that does not find them stops before it starts the
+application, and says where each part of the fixtures comes from.
 
 `fixtures-artifacts`, a command of the runner for the fixtures of the foundation,
 moves a run out of the phase the placement of the views asks for, which then
@@ -698,6 +717,94 @@ and the placement taking about two minutes and a half before the first suite; th
 cleanup after the twelve suites and the pre-review took 118 seconds, 42 of them
 the two deletions the server carried out, with the seven namespaces of the run
 removed, and the verification after it 22 seconds.
+
+### The Fixtures Of The Adherence
+
+The adherence of a schedule (SPEC-0013) is proven on fixtures placed by the clock,
+in three installations that no controller reads and nothing suggests: they hold no
+storage location, and the operator names them, as the long lists. Their schedules
+ask for backups that name no location. The installation of the states holds eight
+schedules whose times are counted from the placement and two backups; the one of
+two offsets two schedules of five fields whose submissions were named two hours
+east of UTC and at UTC; the one of the budget three hundred schedules of the
+expressions the measure of the unit run computes as well, each with the backup of
+its submission named two hours east of UTC. Due is not placed: it lasts five
+minutes after an instant a placement cannot choose.
+
+A backup of a submission is named as the controller names one, by the name of its
+schedule and the wall clock of the server at the submission, and the views take
+the offset of the server from the digits of the name less the creation of the
+backup, within a minute. The creation is the cluster's, so these installations are
+placed in two phases, after the files of the tabs and the fixtures of the views, by
+the clock of this machine read when their placement starts, not by the clock of
+the start of the runner, which is minutes older. First the backups, fifty at a
+time, each group named by the clock read just before it is created, and each
+creation read back: one that is more than thirty seconds from the clock of its name
+stops the placement with words that name the clock of the Docker machine, which a
+sleep of the machine can leave behind or ahead, and a slow cluster; the way on is to
+set the clock of the Docker machine again when it is the cause, which a restart of
+Docker does, and to run the command again, which places the namespace again. Then
+the schedules, each with the creation of its backup as its last submission, or
+twenty seconds before that creation for the older of the two offsets, and the other
+times counted from the clock of the placement, which every object says in its
+annotation. The backup of the older of the two offsets created twenty seconds or
+more after the one of the newer stops the placement, since its submission would
+then be the newest and the views would take its offset; the next run places the
+namespace again. The phase and the last submission of each schedule are read back
+with the rest, and a schedule the cluster holds with another, or with no phase at
+a later run, stops the placement: the definitions of the cluster keep the status a
+client writes with the object, which the views read. The installations of the
+adherence are placed in two phases and no other namespace is, each backup of them
+of one schedule, and the clock that names the first group is read once the objects
+of the run are removed, however long that took.
+
+One schedule is real: `fixture-yearly-<run>`, in `velero-demo`, `@every 8760h`, with
+the spec of the real backup as its template, so that its next run is a year after
+its creation and it submits nothing for the life of an environment. It names no
+`skipImmediately`: the controller writes the setting of its server into it when it
+validates it, which says that the controller read it. It is applied through the
+journal after the operations the server refuses, and the controller validates it
+while the server syncs the backups of the tabs; its wait comes after the one of the
+sync, two minutes at most, and ends once it is Enabled with `skipImmediately`
+written. The placement stops by name on a schedule of another run, on one of this run
+whose expression, pause or template are not the ones the scripts make, as other
+scripts may leave on an environment kept for days, on one the controller refused, on one that carries a last submission or whose label a backup
+carries, and on one whose next run is less than a day away, which says to create
+the environment again. The cleanup of the fixtures removes it by its identity, and
+its end check names it when it is left. Before a suite takes its first snapshot,
+the helpers stop it when the schedule submitted since its placement, by its last
+submission or a backup that carries its label: the suite would take that backup
+into what it compares with.
+
+The controller looks at the schedule once a minute. Whether it sends a PATCH of
+it at each look with nothing changed, which every suite would count as a write,
+is measured on the test environment from the counters of the API server, over
+three minutes: on 2026-10-26 it did, a PATCH of the schedule by name once a
+minute, 19 to 22 in three minutes, with its version and its status unchanged and
+no POST of a backup. The helpers of the suites say the answer in a constant,
+`SCHEDULE_PATCHED_AT_EVERY_LOOK`: when it is true, the writes a suite counts
+between two readings of the counters leave out the PATCH of a schedule by name,
+as they leave out the one the controller of the storage locations writes at each
+validation, but no more of them than the whole minutes between the two readings
+and two; the ones above that bound, and a PATCH of a schedule of another scope,
+are writes. Within the bound, the version and the status of the schedule in the
+snapshot of every suite prove that nothing changed it, and a PATCH that changes
+nothing, or that the server refuses, is not seen; a submission would add a
+backup to the identities of the installation, and, in the suites that count the
+writes, a POST of a backup to what they count.
+
+On 2026-10-26, on the machine of the runs, a first placement of the three
+installations of the adherence, 614 objects, took 4 minutes 58 seconds as the
+whole of a first `pnpm demo:views` on an environment just up, with the views, the
+long lists, the files of the tabs and the real schedule; a placement after it,
+which finds them good, 1 minute 32 seconds; a placement that places the
+installation of the budget again, its six hundred objects removed and created,
+after one of its schedules was removed, 1 minute 47 seconds, every backup created
+within a second of the clock its name was read from; and the cleanup after the
+suites, with the three namespaces of the adherence and the schedule, 3 minutes 0
+seconds for `fixtures-cleanup`, 73 of them the wait for a pass of the sync, the
+namespace of six hundred objects gone within the 90 seconds of its wait, then 29
+seconds for `verify`.
 
 ## Critical Journeys
 
@@ -872,7 +979,9 @@ ADH-03; the backup of the last submission, of ADH-08. The measure of the adheren
 [`schedule-adherence.measure.ts`](../../test/schedule-adherence.measure.ts), times
 the signals of 1,000 schedules of 898 expressions, every so many minutes or hours,
 five fields with and without a zone name, the calendar descriptors and ten with no
-instant, twenty calls after five, within 250 milliseconds at the 95th percentile,
+instant, which a module of the scripts of the environment,
+`e2e/scripts/local-expressions.mts`, writes once for the measure and for the
+fixtures of the budget of the adherence, twenty calls after five, within 250 milliseconds at the 95th percentile,
 and the signal of one schedule within 2, with the parse kept for the text of the
 expression and the count bounded at one hundred asserted beside the times; it prints
 its numbers as one line, `ADH-16 unit`, before anything is asserted, and it imports

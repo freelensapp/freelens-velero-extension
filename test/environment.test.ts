@@ -31,11 +31,18 @@ import {
   type tabArtifacts,
   tabExpectations,
 } from "../e2e/scripts/local-artifacts.mts";
+import { mixedExpression } from "../e2e/scripts/local-expressions.mts";
 import {
+  ADHERENCE_SCHEDULES,
+  AHEAD_BY,
+  adherenceFixtures,
+  adherenceScaleFixtures,
+  adherenceSplitFixtures,
   allowsFixtureArtifact,
   assertFixtureNamespaceContents,
   assertFixtureOperationsRemoved,
   assertStoreRequest,
+  awaitRealSchedule,
   awaitRequestsBeforeCleanup,
   awaitRequestsRemoved,
   awaitTabFixtures,
@@ -59,8 +66,10 @@ import {
   LONG_LOCATION_NAME,
   LONG_PREFIX,
   LONG_RESTORE_NAME,
+  LONG_SCHEDULE_NAME,
   liveBackup,
   liveRestore,
+  liveSchedule,
   NEWEST_OF_THE_HISTORY,
   NOT_COUNTED,
   NOT_STARTED,
@@ -68,11 +77,14 @@ import {
   overviewFixtures,
   PLACED_ANNOTATION,
   PLACED_FOR,
+  placeAdherenceFixtures,
   placeByTheClock,
   placementWords,
+  placeRealSchedule,
   placeRefusedFixtures,
   placeViewAndTabFixtures,
   proofIdentities,
+  REAL_SCHEDULE_EXPRESSION,
   REFUSALS,
   RESTORE_PHASES,
   type Recorded,
@@ -81,12 +93,17 @@ import {
   recordSyncedBackups,
   refusedFixtures,
   removeFixtureBackup,
+  removeRealSchedule,
   restoreSpec,
   restrictedFixtures,
   runArtifactPaths,
   SCALE_BACKUPS,
   SCALE_RESTORES,
+  SERVER_EAST,
   SHAPE_ANNOTATION,
+  SPLIT_BEFORE,
+  SUBMISSION_DRIFT,
+  SUBMISSIONS_AT_ONCE,
   SYNCED_RETENTION,
   SYNCED_SELECTOR,
   SYNCED_SNAPSHOT_LOCATION,
@@ -449,6 +466,9 @@ describe("foundation fixture boundaries", () => {
       names.defaults,
       names.overview,
       names.scale,
+      names.adherence,
+      names.adherenceSplit,
+      names.adherenceScale,
     ]);
   });
 
@@ -1745,7 +1765,8 @@ describe("foundation fixture boundaries", () => {
 
   // What the fixtures are put into: the objects by their kind, their namespace and their name, as an API
   // server keeps them. It refuses an object of a namespace that is not there, gives each object it creates
-  // the time of its clock, and counts what changed an object.
+  // the time of its clock, and counts what changed an object. The clock of this machine its runtime reads is
+  // `from` and the time of the runtime.
   function cluster(owner: string, from: number) {
     const objects = new Map<string, Record<string, unknown> & { metadata: Record<string, unknown> }>();
     const order: string[] = [];
@@ -1782,8 +1803,13 @@ describe("foundation fixture boundaries", () => {
           ...structuredClone(resource.metadata),
           uid: `uid-${created}`,
           resourceVersion: "1",
-          // Each object at its own second, as the ones of a run are.
-          creationTimestamp: new Date(from + created * 1000).toISOString().replace(".000Z", "Z"),
+          // Each object at its own second, as the ones of a run are; or by the clock of the cluster when it is
+          // told what that clock reads at a time of the runtime, to the second, as an API server writes it.
+          creationTimestamp: new Date(
+            told.stamp ? Math.floor(told.stamp(from + clock) / 1000) * 1000 : from + created * 1000,
+          )
+            .toISOString()
+            .replace(".000Z", "Z"),
         },
       });
       // The server acts on a request to delete a backup that is made in its namespace, a moment later.
@@ -1815,6 +1841,8 @@ describe("foundation fixture boundaries", () => {
       deletes?: number;
       between?: () => void;
       leaves?: ("begun" | "deleting" | "removed")[];
+      // The clock of the cluster when the clock of this machine reads `at`, which it gives an object it creates.
+      stamp?: (at: number) => number;
     } = {};
     // The placement of the tabs each time it was recorded, with the bodies the store had been sent by then.
     const recorded: (TabPlacement & { sent: number })[] = [];
@@ -2226,6 +2254,7 @@ describe("foundation fixture boundaries", () => {
           clock += milliseconds;
         },
         elapsed: () => clock,
+        now: () => from + clock,
         // The store answers what the runner would let it be asked, and nothing else.
         store(method: "GET" | "HEAD" | "PUT", path: string, body?: StoreBody) {
           assertStoreRequest({ method, path, run, body, placement: placement?.state, repaired: placement?.repaired });
@@ -2422,6 +2451,14 @@ describe("foundation fixture boundaries", () => {
       phase: "FailedValidation",
       validationErrors: ["Synthetic validation error; no operation was executed"],
     });
+    // The two schedules that submitted two days back are placed with the others, once.
+    for (const name of ["views-submitted", "views-interval"]) {
+      expect(target.applied.filter((key) => key === `schedule/${names.views}/${name}`)).toHaveLength(1);
+      expect(target.find("Schedule", names.views, name)?.status).toEqual({
+        phase: "Enabled",
+        lastBackup: "2026-09-26T07:00:00Z",
+      });
+    }
     // A second call, later, finds every object and changes none.
     const objects = structuredClone([...target.objects.entries()]);
     const changes = target.changes();
@@ -2749,6 +2786,759 @@ describe("foundation fixture boundaries", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  // What the views take of the backups of the submissions of an installation, by the rule of SPEC-0013 (REQ-162): a
+  // backup of a schedule by its label, named by the schedule and fourteen digits, created within a minute of the
+  // last submission of the schedule; and the offset it gives, the digits read as UTC less its creation, to a quarter
+  // of an hour, in minutes, when what is left is under a minute. Each schedule that gives one, by its name.
+  const offsetsOf = (resources: KubeResource[]) => {
+    const MINUTE = 60_000;
+    const QUARTER = 15 * MINUTE;
+    const found: Record<string, number> = {};
+    const time = (value: unknown) => Date.parse(String(value));
+
+    for (const schedule of resources.filter((resource) => resource.kind === "Schedule")) {
+      const { name } = schedule.metadata;
+      const submission = time((schedule.status as { lastBackup?: string }).lastBackup);
+
+      for (const backup of resources.filter(
+        (resource) => resource.kind === "Backup" && resource.metadata.labels?.["velero.io/schedule-name"] === name,
+      )) {
+        const digits = /^(.+)-(\d{14})$/.exec(backup.metadata.name);
+        const created = time((backup.metadata as { creationTimestamp?: string }).creationTimestamp);
+
+        if (!digits || digits[1] !== name || !(Math.abs(created - submission) <= MINUTE)) continue;
+        const [year, month, day, hour, minute, second] = [0, 4, 6, 8, 10, 12].map((at, index) =>
+          Number(digits[2].slice(at, index ? at + 2 : 4)),
+        );
+        const difference = Date.UTC(year, month - 1, day, hour, minute, second) - created;
+        const rounded = Math.round(difference / QUARTER) * QUARTER;
+
+        if (Math.abs(difference - rounded) < MINUTE) found[name] = rounded / MINUTE + 0;
+      }
+    }
+    return found;
+  };
+  // The fixtures as the cluster would hold them, each backup with the creation it was given, by its schedule.
+  const createdAt = (resources: KubeResource[], created: Record<string, number>) =>
+    resources.map((resource) => {
+      const of = resource.metadata.labels?.["velero.io/schedule-name"];
+
+      return resource.kind === "Backup" && of !== undefined && created[of] !== undefined
+        ? {
+            ...resource,
+            metadata: {
+              ...resource.metadata,
+              creationTimestamp: new Date(created[of]).toISOString().replace(".000Z", "Z"),
+            },
+          }
+        : resource;
+    });
+  const statusOf = (resource: KubeResource | undefined) => resource?.status as Record<string, unknown> | undefined;
+
+  it("names the installations of the adherence, three namespaces of the run, and a schedule with a name as long as a label", () => {
+    const names = fixtureNames(run);
+
+    expect([names.adherence, names.adherenceSplit, names.adherenceScale]).toEqual([
+      `velero-adherence-${run}`,
+      `velero-adherence-split-${run}`,
+      `velero-adherence-scale-${run}`,
+    ]);
+    // Each is a namespace of the run, which the cleanup removes by its identity, with a name a namespace can have.
+    for (const namespace of [names.adherence, names.adherenceSplit, names.adherenceScale]) {
+      expect(fixtureNamespaces(run)).toContain(namespace);
+      expect(namespace.length).toBeLessThanOrEqual(63);
+      expect(namespace).toMatch(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/);
+    }
+    expect(LONG_SCHEDULE_NAME).toHaveLength(63);
+    expect(LONG_SCHEDULE_NAME).toMatch(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/);
+  });
+
+  it("gives the installation of the states eight schedules counted back from the clock of their placement, and the two backups that are of them", () => {
+    const names = fixtureNames(run);
+    const placed = Date.parse("2026-10-26T09:00:04.250Z");
+    const created = Date.parse("2026-10-26T09:00:08Z");
+    const submissions = {
+      named: { "adherence-held": placed, "adherence-derived": placed },
+      created: { "adherence-held": created, "adherence-derived": created },
+    };
+    const resources = adherenceFixtures("synthetic-owner", run, placed, submissions);
+    const named = (name: string) => resources.find((resource) => resource.metadata.name === name);
+    const template = { includedNamespaces: [names.source], includeClusterResources: false, ttl: "720h0m0s" };
+
+    // The backups first, named by the clock of the placement to the second: the one that holds as a backup asked
+    // by hand is named in UTC, and the one of the submission of its schedule two hours east of UTC.
+    expect(resources.map((resource) => `${resource.kind} ${resource.metadata.name}`)).toEqual([
+      "Backup adherence-held-20261026090004",
+      "Backup adherence-derived-20261026110004",
+      "Schedule adherence-awaited",
+      "Schedule adherence-overdue",
+      "Schedule adherence-held",
+      "Schedule adherence-every-look",
+      "Schedule adherence-derived",
+      "Schedule adherence-borrowed",
+      "Schedule adherence-ahead",
+      `Schedule ${LONG_SCHEDULE_NAME}`,
+    ]);
+    // Every object is of the run, in its namespace, and says when it was placed.
+    for (const resource of resources) {
+      expect([resource.metadata.name, resource.metadata]).toMatchObject([
+        resource.metadata.name,
+        {
+          namespace: names.adherence,
+          labels: { [OWNER_LABEL]: "synthetic-owner", [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" },
+          annotations: { [PLACED_ANNOTATION]: "2026-10-26T09:00:04.250Z" },
+        },
+      ]);
+    }
+    expect(named("adherence-held-20261026090004")).toMatchObject({
+      metadata: { labels: { "velero.io/schedule-name": "adherence-held" } },
+      spec: template,
+      status: { phase: "InProgress", startTimestamp: "2026-10-26T09:00:04Z" },
+    });
+    expect(statusOf(named("adherence-held-20261026090004"))).not.toHaveProperty("completionTimestamp");
+    expect(named("adherence-derived-20261026110004")).toMatchObject({
+      metadata: { labels: { "velero.io/schedule-name": "adherence-derived" } },
+      spec: template,
+      status: { phase: "Completed", startTimestamp: "2026-10-26T09:00:04Z" },
+    });
+    // Each schedule with its expression and its last submission, counted from the clock of the placement, but the
+    // derived one, whose last submission is the creation of its backup, and the one that has none.
+    const schedules = resources.filter((resource) => resource.kind === "Schedule");
+
+    expect(
+      Object.fromEntries(
+        schedules.map((schedule) => [
+          schedule.metadata.name,
+          [(schedule.spec as { schedule: string }).schedule, statusOf(schedule)?.lastBackup],
+        ]),
+      ),
+    ).toEqual({
+      "adherence-awaited": ["@every 24h", "2026-10-26T09:00:04Z"],
+      "adherence-overdue": ["@every 1h", "2026-10-25T08:00:04Z"],
+      "adherence-held": ["@every 1h", "2026-10-26T06:00:04Z"],
+      "adherence-every-look": ["0 0 30 2 *", "2026-10-26T08:59:04Z"],
+      "adherence-derived": ["0 3 * * *", "2026-10-26T09:00:08Z"],
+      "adherence-borrowed": ["0 3 * * *", undefined],
+      "adherence-ahead": ["@every 24h", "2026-10-27T09:00:04Z"],
+      [LONG_SCHEDULE_NAME]: ["CRON_TZ=America/Argentina/Buenos_Aires 0 0 1 1 *", "2026-10-26T09:00:04Z"],
+    });
+    expect(AHEAD_BY).toBe(24 * HOUR);
+    // Read by Velero: Enabled, not paused, with whether a run that is due is skipped written; and their backups
+    // name no location, which the installation does not have.
+    for (const schedule of schedules) {
+      expect([schedule.metadata.name, schedule.spec, statusOf(schedule)?.phase]).toEqual([
+        schedule.metadata.name,
+        { schedule: (schedule.spec as { schedule: string }).schedule, paused: false, skipImmediately: false, template },
+        "Enabled",
+      ]);
+    }
+    // One backup gives an offset, the one of the submission of its own schedule: the backup that holds was created
+    // three hours after the last submission of its schedule, and is not a submission.
+    expect(offsetsOf(createdAt(resources, submissions.created))).toEqual({ "adherence-derived": 120 });
+    // Before the first phase the names are of the clock of the placement, and so is each creation; the same
+    // moment makes the same objects, which is what the digest of their shape is of.
+    expect(adherenceFixtures("synthetic-owner", run, placed)).toEqual(
+      adherenceFixtures("synthetic-owner", run, placed, {
+        named: { "adherence-held": placed, "adherence-derived": placed },
+        created: { "adherence-derived": placed },
+      }),
+    );
+    expect(adherenceFixtures("synthetic-owner", run, 0)).toEqual(adherenceFixtures("synthetic-owner", run, 0));
+    expect(() => adherenceFixtures("", run, placed)).toThrow("Fixture ownership is required");
+    expect(() => adherenceFixtures("synthetic-owner", run, Number.NaN)).toThrow(
+      "The time the fixtures are placed at is required",
+    );
+  });
+
+  it("gives the installation of two offsets two schedules whose backups were named two hours east of UTC and at UTC, the second submission twenty seconds before the first", () => {
+    const names = fixtureNames(run);
+    const placed = Date.parse("2026-10-26T09:00:04.250Z");
+    const submissions = (older: number) => ({
+      named: { "split-newer": placed, "split-older": placed },
+      created: { "split-newer": Date.parse("2026-10-26T09:00:08Z"), "split-older": older },
+    });
+    const resources = adherenceSplitFixtures(
+      "synthetic-owner",
+      run,
+      placed,
+      submissions(Date.parse("2026-10-26T09:00:09Z")),
+    );
+    const named = (name: string) => resources.find((resource) => resource.metadata.name === name);
+
+    expect(SPLIT_BEFORE).toBe(20_000);
+    expect(resources.map((resource) => `${resource.kind} ${resource.metadata.name}`)).toEqual([
+      "Backup split-newer-20261026110004",
+      "Backup split-older-20261026085944",
+      "Schedule split-newer",
+      "Schedule split-older",
+    ]);
+    expect(resources.every((resource) => resource.metadata.namespace === names.adherenceSplit)).toBe(true);
+    // The older submission is twenty seconds before the creation of its backup, as its name is twenty seconds
+    // before the clock of the placement: one reading of the clock of the server names a backup and writes its
+    // submission.
+    expect(statusOf(named("split-newer"))).toEqual({ phase: "Enabled", lastBackup: "2026-10-26T09:00:08Z" });
+    expect(statusOf(named("split-older"))).toEqual({ phase: "Enabled", lastBackup: "2026-10-26T08:59:49Z" });
+    expect(statusOf(named("split-older-20261026085944"))).toMatchObject({
+      phase: "Completed",
+      startTimestamp: "2026-10-26T08:59:44Z",
+    });
+    for (const name of ["split-newer", "split-older"]) {
+      expect(named(name)?.spec).toMatchObject({ schedule: "0 3 * * *", paused: false, skipImmediately: false });
+    }
+    // Two offsets, the newest submission's two hours east of UTC: the views take it and say the other.
+    expect(offsetsOf(createdAt(resources, submissions(Date.parse("2026-10-26T09:00:09Z")).created))).toEqual({
+      "split-newer": 120,
+      "split-older": 0,
+    });
+    // At the edge of the check of the placement, the two backups created in one List thirty seconds after the clock
+    // of their names, what the name of the older leaves is fifty seconds, under the minute of the rule: with the
+    // fifty seconds the table had before LM5 it would be eighty, and the older would give no offset.
+    const edge = {
+      named: { "split-newer": placed, "split-older": placed },
+      created: { "split-newer": Date.parse("2026-10-26T09:00:34Z"), "split-older": Date.parse("2026-10-26T09:00:34Z") },
+    };
+
+    expect(offsetsOf(createdAt(adherenceSplitFixtures("synthetic-owner", run, placed, edge), edge.created))).toEqual({
+      "split-newer": 120,
+      "split-older": 0,
+    });
+    // The older submission is before the newer one while the backup of the older was created less than twenty
+    // seconds after the one of the newer; at twenty it would be the newest, and the views would take its offset.
+    expect(
+      statusOf(
+        adherenceSplitFixtures(
+          "synthetic-owner",
+          run,
+          placed,
+          submissions(Date.parse("2026-10-26T09:00:27.999Z")),
+        ).find((resource) => resource.kind === "Schedule" && resource.metadata.name === "split-older"),
+      )?.lastBackup,
+    ).toBe("2026-10-26T09:00:07Z");
+    expect(() =>
+      adherenceSplitFixtures("synthetic-owner", run, placed, submissions(Date.parse("2026-10-26T09:00:28Z"))),
+    ).toThrow(
+      `The backup split-older of ${names.adherenceSplit} was created 20 seconds after the one of split-newer, twenty ` +
+        "or more: its submission, twenty seconds before its creation, would not be before the one of split-newer, and " +
+        "the views would take the offset of the older one. The cluster took that long to create the two; run the " +
+        "command again: it places the namespace again.",
+    );
+  });
+
+  it("gives the budget of the adherence three hundred schedules of the expressions of the measure, each with the backup of its submission named two hours east of UTC", () => {
+    const names = fixtureNames(run);
+    const placed = Date.parse("2026-10-26T09:00:44Z");
+    const schedules = Array.from(
+      { length: ADHERENCE_SCHEDULES },
+      (_, index) => `schedule-${String(index + 1).padStart(3, "0")}`,
+    );
+    const created = Object.fromEntries(schedules.map((name) => [name, placed + 4000]));
+    const resources = adherenceScaleFixtures("synthetic-owner", run, placed, { created });
+    const backups = resources.filter((resource) => resource.kind === "Backup");
+    const listed = resources.filter((resource) => resource.kind === "Schedule");
+
+    expect(ADHERENCE_SCHEDULES).toBe(300);
+    // Six hundred objects: the backups first, in the order of their schedules, then the schedules.
+    expect(resources).toHaveLength(600);
+    expect(resources.slice(0, 300).every((resource) => resource.kind === "Backup")).toBe(true);
+    expect(listed.map((schedule) => schedule.metadata.name)).toEqual(schedules);
+    expect(backups.map((backup) => backup.metadata.labels?.["velero.io/schedule-name"])).toEqual(schedules);
+    expect(backups.map((backup) => backup.metadata.name)).toEqual(schedules.map((name) => `${name}-20261026110044`));
+    expect(resources.every((resource) => resource.metadata.namespace === names.adherenceScale)).toBe(true);
+    expect(backups.every((backup) => (backup.status as { phase: string }).phase === "Completed")).toBe(true);
+    // The expressions of the measure of the unit run, by the index of each schedule: intervals, five fields with
+    // and without a zone, the calendar descriptors, and three with no instant.
+    expect(listed.map((schedule) => (schedule.spec as { schedule: string }).schedule)).toEqual(
+      schedules.map((_, index) => mixedExpression(index)),
+    );
+    expect(listed.filter((schedule) => (schedule.spec as { schedule: string }).schedule === "0 0 30 2 *").length).toBe(
+      3,
+    );
+    expect(
+      listed.every(
+        (schedule) =>
+          statusOf(schedule)?.lastBackup === "2026-10-26T09:00:48Z" && statusOf(schedule)?.phase === "Enabled",
+      ),
+    ).toBe(true);
+    // One offset for the installation, the same in every submission.
+    const offsets = offsetsOf(createdAt(resources, created));
+
+    expect(Object.keys(offsets)).toEqual(schedules);
+    expect(new Set(Object.values(offsets))).toEqual(new Set([SERVER_EAST / 60_000]));
+  });
+
+  // The cluster of the placements of the adherence, whose clock is the one of this machine when it is told nothing
+  // else, and the objects it holds in a namespace.
+  const adherenceCluster = (stamp: (at: number) => number = (at) => at) => {
+    const target = cluster("synthetic-owner", Date.parse("2026-10-26T09:00:00Z"));
+
+    target.told.stamp = stamp;
+    return target;
+  };
+  const heldIn = (target: ReturnType<typeof cluster>, namespace: string) =>
+    [...target.objects.values()].filter(
+      (object) => object.metadata.namespace === namespace,
+    ) as unknown as KubeResource[];
+  const annotation = (resource: KubeResource | undefined, name: string) => resource?.metadata.annotations?.[name];
+
+  it("places the installations of the adherence in two phases: the backups named by the clock read just before each group is created, then the schedules with the creations read back", () => {
+    const names = fixtureNames(run);
+    const target = adherenceCluster();
+    const placed = placeAdherenceFixtures(target.runtime as never, run);
+    const find = (namespace: string, kind: string, name: string) =>
+      target.find(kind, namespace, name) as unknown as KubeResource | undefined;
+
+    expect(placed).toEqual({ states: 10, split: 4, budget: 600, again: [] });
+    expect(SUBMISSIONS_AT_ONCE).toBe(50);
+    // Each namespace through the runtime, which enters it in the journal, before what is placed in it; and for each
+    // a read of what it holds, then for each group of backups a create and the read back, then the create of the
+    // rest, and the read of what it holds. Nothing is removed.
+    expect(target.applied).toEqual(
+      [names.adherence, names.adherenceSplit, names.adherenceScale].map((name) => `namespace//${name}`),
+    );
+    expect(target.asked).toEqual([
+      ...["get", "create", "get", "create", "get"],
+      ...["get", "create", "get", "create", "get"],
+      "get",
+      ...Array.from({ length: 6 }, () => ["create", "get"]).flat(),
+      "create",
+      "get",
+    ]);
+    expect(target.removed).toEqual([]);
+    // Each command takes four seconds: the first group of the states is named by the clock read after the read of
+    // the namespace, 09:00:04, created at 09:00:08 and its schedules at 09:00:16; the split at 09:00:24 and 09:00:28.
+    expect(find(names.adherence, "Backup", "adherence-derived-20261026110004")?.metadata).toMatchObject({
+      creationTimestamp: "2026-10-26T09:00:08Z",
+      annotations: { [PLACED_ANNOTATION]: "2026-10-26T09:00:04.000Z" },
+    });
+    expect(find(names.adherence, "Backup", "adherence-held-20261026090004")).toBeDefined();
+    expect(statusOf(find(names.adherence, "Schedule", "adherence-derived"))?.lastBackup).toBe("2026-10-26T09:00:08Z");
+    expect(statusOf(find(names.adherence, "Schedule", "adherence-awaited"))?.lastBackup).toBe("2026-10-26T09:00:04Z");
+    expect(find(names.adherence, "Schedule", "adherence-borrowed")?.metadata).toMatchObject({
+      creationTimestamp: "2026-10-26T09:00:16Z",
+    });
+    expect(find(names.adherenceSplit, "Backup", "split-older-20261026090004")?.metadata).toMatchObject({
+      creationTimestamp: "2026-10-26T09:00:28Z",
+    });
+    expect(statusOf(find(names.adherenceSplit, "Schedule", "split-older"))?.lastBackup).toBe("2026-10-26T09:00:08Z");
+    expect(statusOf(find(names.adherenceSplit, "Schedule", "split-newer"))?.lastBackup).toBe("2026-10-26T09:00:28Z");
+    // The budget in six groups of fifty, each named by the clock read just before it, eight seconds after the one
+    // before, and each backup created four seconds after its name.
+    const budget = heldIn(target, names.adherenceScale);
+    const backups = budget.filter((resource) => resource.kind === "Backup");
+
+    expect(backups).toHaveLength(300);
+    for (const [index, backup] of backups.entries()) {
+      const read = Date.parse("2026-10-26T09:00:44Z") + Math.floor(index / 50) * 8000;
+      const of = backup.metadata.labels?.["velero.io/schedule-name"] ?? "";
+
+      expect([backup.metadata.name, (backup.metadata as { creationTimestamp?: string }).creationTimestamp]).toEqual([
+        `${of}-${new Date(read + SERVER_EAST).toISOString().replace(/[-:T]/g, "").slice(0, 14)}`,
+        new Date(read + 4000).toISOString().replace(".000Z", "Z"),
+      ]);
+      expect(statusOf(find(names.adherenceScale, "Schedule", of))?.lastBackup).toBe(
+        new Date(read + 4000).toISOString().replace(".000Z", "Z"),
+      );
+    }
+    // Every object of a namespace says when it was placed, the clock its first group was named by, and what it is
+    // made as, a digest of the shape of the namespace.
+    for (const namespace of [names.adherence, names.adherenceSplit, names.adherenceScale]) {
+      const objects = heldIn(target, namespace);
+      const placements = new Set(objects.map((object) => annotation(object, PLACED_ANNOTATION)));
+      const shapes = new Set(objects.map((object) => annotation(object, SHAPE_ANNOTATION)));
+
+      expect([namespace, placements.size, shapes.size]).toEqual([namespace, 1, 1]);
+      expect([...shapes][0]).toMatch(/^[0-9a-f]{16}$/);
+    }
+    // What the views take of them: the offset of the derived schedule alone; the two offsets of the split; one offset
+    // in all three hundred.
+    expect(offsetsOf(heldIn(target, names.adherence))).toEqual({ "adherence-derived": 120 });
+    expect(offsetsOf(heldIn(target, names.adherenceSplit))).toEqual({ "split-newer": 120, "split-older": 0 });
+    expect(new Set(Object.values(offsetsOf(budget)))).toEqual(new Set([120]));
+    expect(Object.keys(offsetsOf(budget))).toHaveLength(300);
+    // A second call an hour later finds them good: it reads each namespace once, creates nothing, removes nothing.
+    const objects = structuredClone([...target.objects.entries()]);
+    const asked = target.asked.length;
+
+    target.runtime.pause(HOUR);
+    expect(placeAdherenceFixtures(target.runtime as never, run)).toEqual(placed);
+    expect(target.asked.slice(asked)).toEqual(["get", "get", "get", "get", "get", "get"]);
+    expect(target.changes()).toBe(0);
+    expect([...target.objects.entries()]).toEqual(objects);
+  });
+
+  it("puts an installation of the adherence in place again when it is older than it is good for, placed after now, missing an object or of another shape, and nothing else", () => {
+    const names = fixtureNames(run);
+    const target = adherenceCluster();
+    const all = [names.adherence, names.adherenceSplit, names.adherenceScale];
+    const placement = (namespace: string) => annotation(heldIn(target, namespace)[0], PLACED_ANNOTATION);
+    const again = () => {
+      const removed = target.removed.length;
+      const answered = placeAdherenceFixtures(target.runtime as never, run);
+
+      return { again: answered.again, removed: target.removed.slice(removed) };
+    };
+    const inside = (namespace: string, removed: string[]) =>
+      removed.length > 0 && removed.every((name) => name.includes(`/${namespace}/`));
+
+    placeAdherenceFixtures(target.runtime as never, run);
+    const first = all.map(placement);
+
+    // Twelve hours after, and a second: every one, each by the clock its own placement starts at.
+    target.runtime.pause(PLACED_FOR + 1000);
+    const late = again();
+
+    expect(late.again).toEqual(all);
+    expect(late.removed).toHaveLength(614);
+    expect(late.removed.every((name) => all.some((namespace) => name.includes(`/${namespace}/`)))).toBe(true);
+    expect(all.map(placement).every((placed, index) => Date.parse(placed ?? "") > Date.parse(first[index] ?? ""))).toBe(
+      true,
+    );
+    // An object that says it was placed after now: its namespace alone.
+    const ahead = heldIn(target, names.adherenceSplit)[0];
+
+    (ahead.metadata.annotations as Record<string, string>)[PLACED_ANNOTATION] = "2026-10-28T09:00:00.000Z";
+    const future = again();
+
+    expect(future.again).toEqual([names.adherenceSplit]);
+    expect(inside(names.adherenceSplit, future.removed)).toBe(true);
+    // An object that is missing.
+    target.objects.delete(`schedule/${names.adherence}/adherence-ahead`);
+    const missing = again();
+
+    expect(missing.again).toEqual([names.adherence]);
+    expect(inside(names.adherence, missing.removed)).toBe(true);
+    expect(target.find("Schedule", names.adherence, "adherence-ahead")).toBeDefined();
+    // An object that is not made as it would be made now.
+    const old = target.find("Schedule", names.adherenceScale, "schedule-150");
+
+    if (!old) throw new Error("The schedule is there");
+    (old.metadata.annotations as Record<string, string>)[SHAPE_ANNOTATION] = "0000000000000000";
+    const shaped = again();
+
+    expect(shaped.again).toEqual([names.adherenceScale]);
+    expect(inside(names.adherenceScale, shaped.removed)).toBe(true);
+    expect(shaped.removed).toHaveLength(600);
+    // A removal that takes longer than the thirty seconds of the check, the cluster listing what it removed for ten
+    // reads more: the clock of the placement is read once nothing of the run is left, and the backups are named by
+    // it, created within the check.
+    target.runtime.pause(PLACED_FOR + 1000);
+    target.linger(10);
+    const asked = target.runtime.now();
+    const lingering = again();
+
+    expect(lingering.again).toEqual(all);
+    expect(Date.parse(placement(names.adherence) ?? "") - asked).toBeGreaterThan(SUBMISSION_DRIFT);
+    // And nothing else of the cluster: what is left of other namespaces is what was there.
+    expect(again()).toEqual({ again: [], removed: [] });
+  });
+
+  it("stops when a backup of a submission is created more than thirty seconds from the clock its name was read from, with what the cause may be and the way on", () => {
+    const names = fixtureNames(run);
+    const words = (seconds: number, way: string, name: string, namespace: string, created: string, read: string) =>
+      `The backup ${name} of ${namespace} was created at ${created}, ${seconds} seconds ${way} the clock of this ` +
+      `machine its name was read from, ${read}: the clock of the Docker machine of the cluster is that far ` +
+      `${way === "after" ? "ahead of" : "behind"} the one of this machine, which a sleep of the machine can leave` +
+      `${way === "after" ? ", or the cluster took that long to create it" : ""}, and its name would give the views ` +
+      "no offset of the server. Set the clock of the Docker machine again when it is the cause, which a restart of " +
+      "Docker does, and run the command again: it places the namespace again.";
+
+    expect(SUBMISSION_DRIFT).toBe(30_000);
+    // The clock of the cluster thirty seconds ahead, with the four seconds of the command: thirty-one.
+    const ahead = adherenceCluster((at) => at + 27_000);
+
+    expect(stopped(() => placeAdherenceFixtures(ahead.runtime as never, run))).toBe(
+      words(
+        31,
+        "after",
+        "adherence-held-20261026090004",
+        names.adherence,
+        "2026-10-26T09:00:35.000Z",
+        "2026-10-26T09:00:04.000Z",
+      ),
+    );
+    // What was created stays, of this run, and no schedule was created over it.
+    expect(heldIn(ahead, names.adherence).map((object) => object.kind)).toEqual(["Backup", "Backup"]);
+    // Once the clocks agree the command places the namespace again, and goes on.
+    ahead.told.stamp = (at) => at;
+    expect(placeAdherenceFixtures(ahead.runtime as never, run)).toMatchObject({ states: 10, again: [names.adherence] });
+    // Behind by thirty-five seconds, less the four of the command.
+    const behind = adherenceCluster((at) => at - 35_000);
+
+    expect(stopped(() => placeAdherenceFixtures(behind.runtime as never, run))).toBe(
+      words(
+        31,
+        "before",
+        "adherence-held-20261026090004",
+        names.adherence,
+        "2026-10-26T08:59:33.000Z",
+        "2026-10-26T09:00:04.000Z",
+      ),
+    );
+    // Thirty seconds and a part is refused, and says thirty-one: the seconds are rounded up.
+    const fraction = cluster("synthetic-owner", Date.parse("2026-10-26T09:00:00.600Z"));
+
+    fraction.told.stamp = (at) => at + 27_000;
+    expect(stopped(() => placeAdherenceFixtures(fraction.runtime as never, run))).toBe(
+      words(
+        31,
+        "after",
+        "adherence-held-20261026090004",
+        names.adherence,
+        "2026-10-26T09:00:35.000Z",
+        "2026-10-26T09:00:04.600Z",
+      ),
+    );
+    // Thirty seconds is within the check.
+    expect(placeAdherenceFixtures(adherenceCluster((at) => at + 26_000).runtime as never, run)).toMatchObject({
+      states: 10,
+      split: 4,
+      budget: 600,
+    });
+    // A cluster that took that long for the third group of the budget: the two before it are there, and its first
+    // backup is named.
+    const slow = adherenceCluster();
+    let creates = 0;
+    const runtime = {
+      ...slow.runtime,
+      kubectl(args: string[], input?: string) {
+        if (args[0] === "create" && input?.includes(names.adherenceScale)) creates += 1;
+        return slow.runtime.kubectl(args, input);
+      },
+    };
+
+    slow.told.stamp = (at) => at + (creates === 3 ? 27_000 : 0);
+    expect(stopped(() => placeAdherenceFixtures(runtime as never, run))).toMatch(
+      new RegExp(
+        `^The backup schedule-101-20261026110100 of ${names.adherenceScale} was created at .+, 31 seconds after `,
+      ),
+    );
+    expect(heldIn(slow, names.adherenceScale)).toHaveLength(150);
+  });
+
+  it("places in two phases nothing outside the installations of the adherence, removes nothing of another run, and needs the clock of this machine", () => {
+    const names = fixtureNames(run);
+    const target = adherenceCluster();
+
+    placeAdherenceFixtures(target.runtime as never, run);
+    const objects = structuredClone([...target.objects.entries()]);
+    const asked = target.asked.length;
+
+    for (const namespace of [
+      "velero",
+      "default",
+      fixtureNames("b1b2b3b4").adherence,
+      `${names.adherence}-more`,
+      names.views,
+    ]) {
+      expect(() =>
+        placeByTheClock(
+          target.runtime as never,
+          run,
+          namespace,
+          Date.parse("2026-10-27T09:00:00Z"),
+          (placed, submissions) =>
+            adherenceFixtures("synthetic-owner", run, placed, submissions).map((resource) => ({
+              ...resource,
+              metadata: { ...resource.metadata, namespace },
+            })),
+          true,
+        ),
+      ).toThrow("Refusing to place fixtures outside the namespaces that are placed by the clock");
+    }
+    expect(() =>
+      placeByTheClock(
+        target.runtime as never,
+        run,
+        names.adherence,
+        Date.parse("2026-10-27T09:00:00Z"),
+        (placed, submissions) => adherenceSplitFixtures("synthetic-owner", run, placed, submissions),
+        true,
+      ),
+    ).toThrow(`Refusing to place in ${names.adherence} what is made for another namespace`);
+    // The installations of the adherence are placed in two phases, and nothing else is.
+    expect(() =>
+      placeByTheClock(target.runtime as never, run, names.adherence, Date.parse("2026-10-27T09:00:00Z"), (placed) =>
+        adherenceFixtures("synthetic-owner", run, placed),
+      ),
+    ).toThrow(
+      `Refusing to place ${names.adherence} in one phase: the installations of the adherence are placed in two ` +
+        "phases, and no other namespace is",
+    );
+    expect(() =>
+      placeByTheClock(
+        target.runtime as never,
+        run,
+        names.overview,
+        Date.parse("2026-10-27T09:00:00Z"),
+        (placed) => overviewFixtures("synthetic-owner", run, placed),
+        true,
+      ),
+    ).toThrow(
+      `Refusing to place ${names.overview} in two phases: the installations of the adherence are placed in two ` +
+        "phases, and no other namespace is",
+    );
+    // In two phases each backup is of one schedule, which names it in its label, and no two of the same.
+    const relabelled = (label: (backup: KubeResource) => Record<string, string>) =>
+      placeByTheClock(
+        target.runtime as never,
+        run,
+        names.adherence,
+        Date.parse("2026-10-27T09:00:00Z"),
+        (placed, submissions) =>
+          adherenceFixtures("synthetic-owner", run, placed, submissions).map((resource) =>
+            resource.kind === "Backup"
+              ? { ...resource, metadata: { ...resource.metadata, labels: label(resource) } }
+              : resource,
+          ),
+        true,
+      );
+    const without = ({ metadata }: KubeResource) =>
+      Object.fromEntries(Object.entries(metadata.labels ?? {}).filter(([name]) => name !== "velero.io/schedule-name"));
+    const twice = `Refusing to place in ${names.adherence} in two phases a backup of no schedule, or two backups of one`;
+
+    expect(stopped(() => relabelled((backup) => without(backup)))).toBe(twice);
+    expect(stopped(() => relabelled((backup) => ({ ...without(backup), "velero.io/schedule-name": "same" })))).toBe(
+      twice,
+    );
+    expect(target.asked).toHaveLength(asked);
+    expect([...target.objects.entries()]).toEqual(objects);
+    // What is there of another run is not removed: nothing is, and the placement stops.
+    const foreign = target.find("Schedule", names.adherenceSplit, "split-newer");
+
+    if (!foreign) throw new Error("The schedule is there");
+    (foreign.metadata.labels as Record<string, string>)[FIXTURE_LABEL] = "b1b2b3b4";
+    target.runtime.pause(PLACED_FOR + 1000);
+    expect(() => placeAdherenceFixtures(target.runtime as never, run)).toThrow(
+      "The namespace holds what is not of this run; nothing is removed",
+    );
+    expect(heldIn(target, names.adherenceSplit)).toHaveLength(4);
+    expect(target.removed.every((name) => name.includes(`/${names.adherence}/`))).toBe(true);
+    // Without the clock of this machine nothing is read and nothing is applied.
+    const clockless = adherenceCluster();
+
+    expect(() => placeAdherenceFixtures({ ...clockless.runtime, now: undefined } as never, run)).toThrow(
+      "The placement of the fixtures of the adherence needs the clock of this machine",
+    );
+    expect(() =>
+      placeByTheClock(
+        { ...clockless.runtime, now: undefined } as never,
+        run,
+        names.adherence,
+        Date.parse("2026-10-26T09:00:00Z"),
+        (placed, submissions) => adherenceFixtures("synthetic-owner", run, placed, submissions),
+        true,
+      ),
+    ).toThrow("A placement in two phases needs the clock of this machine");
+    expect([clockless.asked, clockless.applied]).toEqual([[], []]);
+  });
+
+  it("stops a placement in two phases on a cluster that does not keep a schedule as it was created, that created the older submission of the split twenty seconds after the newer, or that does not read back a backup it created", () => {
+    const names = fixtureNames(run);
+    const kept =
+      "the views of the adherence read its phase and its last submission, which the definitions of the cluster keep " +
+      "as they are written. Create the environment again with `pnpm demo:down` and `pnpm demo:up`.";
+    // A cluster whose client is told to change what it is asked to create, or what it answers.
+    const told = (
+      target: ReturnType<typeof adherenceCluster>,
+      created: (items: { kind: string; metadata: { name: string }; status?: Record<string, unknown> }[]) => void,
+      answered: (args: string[], answer: string) => string = (_args, answer) => answer,
+    ) => ({
+      ...target.runtime,
+      kubectl(args: string[], input?: string) {
+        if (args[0] === "create" && input) {
+          const list = JSON.parse(input) as { items: Parameters<typeof created>[0] };
+
+          created(list.items);
+          return target.runtime.kubectl(args, JSON.stringify(list));
+        }
+        return answered(args, target.runtime.kubectl(args, input));
+      },
+    });
+
+    // The status of a schedule is not kept: the placement says what it created and what the cluster holds, and a
+    // later call that finds the namespace good says what the cluster holds.
+    const pruned = adherenceCluster();
+    const pruning = told(pruned, (items) => {
+      for (const item of items) if (item.kind === "Schedule") delete item.status;
+    });
+
+    expect(stopped(() => placeAdherenceFixtures(pruning as never, run))).toBe(
+      `The schedule adherence-awaited of ${names.adherence} was created Enabled, submitted at 2026-10-26T09:00:04Z, ` +
+        `and the cluster holds it of no phase, with no submission: ${kept}`,
+    );
+    expect(heldIn(pruned, names.adherence)).toHaveLength(10);
+    expect(stopped(() => placeAdherenceFixtures(pruning as never, run))).toBe(
+      `The schedule adherence-awaited of ${names.adherence} is held of no phase, with no submission: ${kept}`,
+    );
+    // A last submission that is not the one it was created with.
+    const moved = adherenceCluster();
+    const moving = told(moved, (items) => {
+      for (const item of items) {
+        if (item.kind === "Schedule" && item.metadata.name === "split-older") {
+          item.status = { ...item.status, lastBackup: "2026-10-26T09:00:28Z" };
+        }
+      }
+    });
+
+    expect(stopped(() => placeAdherenceFixtures(moving as never, run))).toBe(
+      `The schedule split-older of ${names.adherenceSplit} was created Enabled, submitted at 2026-10-26T09:00:08Z, ` +
+        `and the cluster holds it Enabled, submitted at 2026-10-26T09:00:28Z: ${kept}`,
+    );
+    // The backup of the older submission of the split created twenty seconds after the one of the newer, within
+    // the thirty seconds of the clock of their names: no schedule is created over them, and the next call places
+    // the namespace again.
+    const late = adherenceCluster();
+    let lateBy = 20_000;
+    const later = {
+      ...late.runtime,
+      kubectl(args: string[], input?: string) {
+        const answer = late.runtime.kubectl(args, input);
+
+        if (args[0] === "create" && input?.includes('"split-older"')) {
+          for (const object of late.objects.values()) {
+            if (String(object.metadata.name).startsWith("split-older-")) {
+              object.metadata.creationTimestamp = new Date(
+                Date.parse(String(object.metadata.creationTimestamp)) + lateBy,
+              )
+                .toISOString()
+                .replace(".000Z", "Z");
+            }
+          }
+        }
+        return answer;
+      },
+    };
+
+    expect(stopped(() => placeAdherenceFixtures(later as never, run))).toBe(
+      `The backup split-older of ${names.adherenceSplit} was created 20 seconds after the one of split-newer, ` +
+        "twenty or more: its submission, twenty seconds before its creation, would not be before the one of " +
+        "split-newer, and the views would take the offset of the older one. The cluster took that long to create " +
+        "the two; run the command again: it places the namespace again.",
+    );
+    expect(heldIn(late, names.adherenceSplit).map((object) => object.kind)).toEqual(["Backup", "Backup"]);
+    lateBy = 19_000;
+    expect(placeAdherenceFixtures(later as never, run)).toMatchObject({ split: 4, again: [names.adherenceSplit] });
+    // A backup it created and does not answer when it is read back.
+    const lost = adherenceCluster();
+    const losing = told(
+      lost,
+      () => {},
+      (args, answer) => {
+        if (args[0] !== "get" || args[1] !== "backups.velero.io") return answer;
+        const read = JSON.parse(answer) as { items: { metadata: { name: string } }[] };
+
+        return JSON.stringify({
+          items: read.items.filter((item) => !item.metadata.name.startsWith("adherence-held-")),
+        });
+      },
+    );
+
+    expect(stopped(() => placeAdherenceFixtures(losing as never, run))).toBe(
+      `The backup adherence-held-20261026090004 that was created in ${names.adherence} is not there`,
+    );
+    expect(heldIn(lost, names.adherence).map((object) => object.kind)).toEqual(["Backup", "Backup"]);
   });
 
   // The log the server wrote for the real backup of the run, which begins as the log of every backup of the
@@ -4151,6 +4941,21 @@ describe("foundation fixture boundaries", () => {
     });
   const refused = (target: Installation, runtime: object = target.runtime) =>
     placeRefusedFixtures(runtime as never, run);
+  // The controller of the schedules validates the schedule of the run when the time of the runtime reaches a
+  // moment, if it is there by then: it writes the setting of its server into `skipImmediately`, false unless it is
+  // told otherwise, and the phase; with the setting true it sets it back to false at once and writes the time of
+  // that reading as the last skip. `status` is what it writes in the place of that, when a test asks.
+  const validates = (target: Installation, at: number, how: { skip?: boolean; status?: object } = {}) =>
+    target.at(at, () => {
+      const found = target.find("Schedule", "velero-demo", fixtureNames(run).realSchedule);
+
+      if (!found) return;
+      found.spec = { ...(found.spec as object), skipImmediately: false };
+      found.status = how.status ?? {
+        phase: "Enabled",
+        ...(how.skip ? { lastSkipped: new Date(Date.parse("2026-10-05T10:05:00Z") + at).toISOString() } : {}),
+      };
+    });
 
   it("places the operations the server refuses once, and waits until each is refused for its reason, a backup through its queue", () => {
     const names = fixtureNames(run);
@@ -4357,10 +5162,277 @@ describe("foundation fixture boundaries", () => {
     );
   });
 
-  it("stores the files of the tabs first, places the fixtures of the views and the operations the server refuses meanwhile, and waits for the server last", () => {
+  it("makes the schedule the controller validates: a year between its runs, the template of the real backup, no skipImmediately, of the run", () => {
+    const names = fixtureNames(run);
+    const schedule = liveSchedule("synthetic-owner", run);
+
+    expect(names.realSchedule).toBe(`fixture-yearly-${run}`);
+    expect(names.realSchedule).toMatch(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/);
+    expect(schedule).toEqual({
+      apiVersion: "velero.io/v1",
+      kind: "Schedule",
+      metadata: {
+        name: names.realSchedule,
+        namespace: "velero-demo",
+        labels: { [OWNER_LABEL]: "synthetic-owner", [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" },
+      },
+      spec: { schedule: REAL_SCHEDULE_EXPRESSION, template: liveBackup("synthetic-owner", run).spec },
+    });
+    // A year between its runs, counted from its creation: it submits nothing for the life of an environment. It
+    // names no skipImmediately and no pause, and has no status: the controller writes them.
+    expect(REAL_SCHEDULE_EXPRESSION).toBe("@every 8760h");
+    expect(schedule.spec).not.toHaveProperty("skipImmediately");
+    expect(schedule.spec).not.toHaveProperty("paused");
+    expect(schedule).not.toHaveProperty("status");
+    expect(() => liveSchedule("", run)).toThrow("Fixture ownership is required");
+  });
+
+  // The schedule as the cluster holds it, and the reads of its wait.
+  const yearly = (target: Installation) => target.find("Schedule", "velero-demo", fixtureNames(run).realSchedule);
+  const awaitedSchedule = (target: Installation, runtime: object = target.runtime) =>
+    awaitRealSchedule(runtime as never, run);
+
+  it("places the schedule the controller validates once, and waits until the controller wrote its phase and skipImmediately", () => {
+    const names = fixtureNames(run);
+    const target = installation();
+
+    expect(placeRealSchedule(target.runtime as never, run)).toEqual({ applied: true });
+    // It read the installation once, and applied the schedule.
+    expect(target.asked).toEqual(["get"]);
+    expect(target.applied.slice(-1)).toEqual([`schedule/velero-demo/${names.realSchedule}`]);
+    expect(yearly(target)).toMatchObject(liveSchedule("synthetic-owner", run));
+    // The controller validates it ten seconds after: the wait reads every second until it finds the phase and the
+    // setting written, by the time of the runtime, three reads of four seconds with a second between them.
+    validates(target, target.runtime.elapsed() + 10_000);
+    const before = target.asked.length;
+    const waited = awaitedSchedule(target);
+
+    expect(waited).toEqual({ schedule: yearly(target), waited: 14_000 });
+    expect(waited.schedule).toMatchObject({ spec: { skipImmediately: false }, status: { phase: "Enabled" } });
+    expect(target.asked.slice(before)).toEqual(["get", "get", "get"]);
+    expect(target.paused).toEqual([1000, 1000]);
+    // A second call finds it, applies nothing, and its wait finds it validated at its one read.
+    const objects = structuredClone([...target.objects.entries()]);
+
+    expect(placeRealSchedule(target.runtime as never, run)).toEqual({ applied: false });
+    expect(awaitedSchedule(target)).toEqual({ schedule: yearly(target), waited: 4000 });
+    expect(target.applied.filter((key) => key.startsWith("schedule/"))).toHaveLength(1);
+    expect([...target.objects.entries()]).toEqual(objects);
+    // A server told to skip what is due at once writes the setting true, sets it back to false at its reading, and
+    // writes the time of it as the last skip: the schedule is validated all the same.
+    const skipping = installation();
+
+    placeRealSchedule(skipping.runtime as never, run);
+    validates(skipping, skipping.runtime.elapsed() + 3000, { skip: true });
+    expect(awaitedSchedule(skipping).schedule).toMatchObject({
+      spec: { skipImmediately: false },
+      status: { phase: "Enabled", lastSkipped: expect.any(String) },
+    });
+  });
+
+  it("stops on the schedule the controller validates when it is not of the run, refused, submitted, of a backup that carries its label, or near its run", () => {
+    const names = fixtureNames(run);
+    const down = "Create the environment again with `pnpm demo:down` and `pnpm demo:up`.";
+    const placed = (change: (target: Installation) => void) => {
+      const target = installation();
+
+      placeRealSchedule(target.runtime as never, run);
+      change(target);
+      return stopped(() => awaitedSchedule(target));
+    };
+
+    // Refused, with the words the controller wrote.
+    expect(
+      placed((target) =>
+        validates(target, 0, {
+          status: { phase: "FailedValidation", validationErrors: ["invalid schedule: synthetic"] },
+        }),
+      ),
+    ).toBe(
+      `The controller refused the schedule ${names.realSchedule} of velero-demo: invalid schedule: synthetic. It is ` +
+        "left where it is, of this run, and the cleanup of the fixtures removes it.",
+    );
+    // A last submission, and a backup that carries the label of the schedule: a submission no suite expects.
+    expect(
+      placed((target) => validates(target, 0, { status: { phase: "Enabled", lastBackup: "2026-10-05T10:06:00Z" } })),
+    ).toBe(
+      `The controller submitted a backup of the schedule ${names.realSchedule} of velero-demo, whose next run is a ` +
+        `year after its creation: its last submission is 2026-10-05T10:06:00Z. No suite expects one. ${down}`,
+    );
+    const submitted = `${names.realSchedule}-20261005100600`;
+
+    expect(
+      placed((target) => {
+        validates(target, 0);
+        held(target, {
+          apiVersion: "velero.io/v1",
+          kind: "Backup",
+          metadata: {
+            name: submitted,
+            namespace: "velero-demo",
+            labels: { "velero.io/schedule-name": names.realSchedule },
+          },
+        });
+      }),
+    ).toBe(
+      `The controller submitted a backup of the schedule ${names.realSchedule} of velero-demo, whose next run is a ` +
+        `year after its creation: the backup ${submitted} carries its label. No suite expects one. ${down}`,
+    );
+    // Created a year less half a day before now: its next run is in less than a day.
+    expect(
+      placed((target) => {
+        validates(target, 0);
+        target.at(0, () => {
+          const found = yearly(target);
+
+          if (found) found.metadata.creationTimestamp = "2025-10-05T22:05:00Z";
+        });
+      }),
+    ).toBe(
+      `The schedule ${names.realSchedule} of velero-demo submits its next backup at 2026-10-05T22:05:00.000Z, less ` +
+        `than a day from now: the environment is about a year old. ${down}`,
+    );
+    // Created a year less half a day before now and skipped since: its next run is counted from the last skip, a
+    // year after it.
+    expect(
+      placed((target) => {
+        validates(target, 0, { skip: true });
+        target.at(0, () => {
+          const found = yearly(target);
+
+          if (found) found.metadata.creationTimestamp = "2025-10-05T22:05:00Z";
+        });
+      }),
+    ).toBe("");
+    // Reporting no creation, which no API server leaves out, it is not taken for one far from its run.
+    expect(
+      placed((target) => {
+        validates(target, 0);
+        target.at(0, () => {
+          const found = yearly(target);
+
+          if (found) delete found.metadata.creationTimestamp;
+        });
+      }),
+    ).toBe(
+      `The schedule ${names.realSchedule} of velero-demo submits its next backup at a time not known, less than a ` +
+        `day from now: the environment is about a year old. ${down}`,
+    );
+    // Gone from the installation once it was applied.
+    expect(placed((target) => target.objects.delete(`schedule/velero-demo/${names.realSchedule}`))).toBe(
+      `The schedule ${names.realSchedule} is not in velero-demo, where it was applied. ${down}`,
+    );
+    // Of another run once it was applied.
+    expect(
+      placed((target) => {
+        validates(target, 0);
+        target.at(0, () => {
+          const found = yearly(target);
+
+          if (found) (found.metadata.labels as Record<string, string>)[FIXTURE_LABEL] = "0f0f0f0f";
+        });
+      }),
+    ).toBe("Fixture ownership changed");
+    // Of this run, with another expression, a pause or another template, as other scripts may have left it on an
+    // environment kept for days; a pause of false is no pause.
+    const respecified = (change: (spec: Record<string, unknown>) => void) =>
+      placed((target) => {
+        validates(target, 0);
+        target.at(0, () => {
+          const found = yearly(target);
+
+          if (found) change(found.spec as Record<string, unknown>);
+        });
+      });
+    const other = `The schedule ${names.realSchedule} of velero-demo is of this run and not the one the scripts make:`;
+
+    expect(
+      respecified((spec) => {
+        spec.schedule = "@every 24h";
+      }),
+    ).toBe(`${other} its expression is "@every 24h". ${down}`);
+    expect(
+      respecified((spec) => {
+        spec.paused = true;
+      }),
+    ).toBe(`${other} it is paused. ${down}`);
+    expect(
+      respecified((spec) => {
+        spec.template = { ...(spec.template as object), ttl: "1h0m0s" };
+      }),
+    ).toBe(`${other} its template is not the spec of the real backup. ${down}`);
+    expect(
+      respecified((spec) => {
+        delete spec.schedule;
+        spec.paused = true;
+      }),
+    ).toBe(`${other} it names no expression, it is paused. ${down}`);
+    expect(
+      respecified((spec) => {
+        spec.paused = false;
+      }),
+    ).toBe("");
+    // One of another run is not taken for the one of this run: nothing is applied over it.
+    const foreign = installation();
+
+    held(foreign, {
+      ...liveSchedule("synthetic-owner", "0f0f0f0f"),
+      metadata: { ...liveSchedule("synthetic-owner", "0f0f0f0f").metadata, name: names.realSchedule },
+    });
+    const applied = foreign.applied.length;
+
+    expect(stopped(() => placeRealSchedule(foreign.runtime as never, run))).toBe(
+      `The schedule ${names.realSchedule} of velero-demo is not the one this run made, and nothing is applied over ` +
+        "it: the way out is to take the environment down, with `pnpm demo:down`.",
+    );
+    expect(foreign.applied).toHaveLength(applied);
+  });
+
+  it("stops when the controller does not validate the schedule in two minutes, by the time that went by, and says where it is", () => {
+    const names = fixtureNames(run);
+    const target = installation();
+
+    placeRealSchedule(target.runtime as never, run);
+    expect(stopped(() => awaitedSchedule(target))).toBe(
+      `The controller did not validate the schedule ${names.realSchedule} in 2 minutes: it has no phase and names ` +
+        "no skipImmediately. It is left in velero-demo, of this run: run the command again once the controller " +
+        "validates it.",
+    );
+    // Reads of four seconds and a second between them: two minutes and the read that found it still unread.
+    expect(new Set(target.paused)).toEqual(new Set([1000]));
+    expect(target.runtime.elapsed()).toBeGreaterThanOrEqual(124_000);
+    // Of a phase the controller wrote and a setting it did not.
+    const half = installation();
+
+    placeRealSchedule(half.runtime as never, run);
+    half.at(0, () => {
+      const found = yearly(half);
+
+      if (found) found.status = { phase: "Enabled" };
+    });
+    expect(stopped(() => awaitedSchedule(half))).toMatch(/: it is Enabled and names no skipImmediately\. /);
+    // Without the clock of the runtime and the one of this machine nothing is read.
+    for (const lacking of ["elapsed", "now"]) {
+      const clockless = installation();
+
+      expect([
+        lacking,
+        stopped(() => awaitedSchedule(clockless, { ...clockless.runtime, [lacking]: undefined })),
+      ]).toEqual([
+        lacking,
+        "The wait for the schedule the controller validates needs the clock of the runtime and the clock of this machine",
+      ]);
+      expect(clockless.asked).toEqual([]);
+    }
+  });
+
+  it("stores the files of the tabs first, places the fixtures of the views and of the adherence, the operations the server refuses and the schedule its controller validates meanwhile, and waits for the server last", () => {
     const names = fixtureNames(run);
     const target = installation();
     const now = Date.parse("2026-10-05T10:06:00Z");
+    // The clock of the cluster is the one of this machine: the backups of the submissions of the adherence are
+    // created by it, within the seconds a command takes of the clock their names were read from.
+    target.told.stamp = (at) => at;
     const three = [names.invalidBackup, names.invalidRestore, names.orphanRestore];
     // Every file the store is sent, every object the cluster is asked to hold and every read of the wait
     // for the sync, in their order.
@@ -4385,6 +5457,8 @@ describe("foundation fixture boundaries", () => {
 
         events.push(`apply ${resource.kind} ${resource.metadata.name}`);
         target.runtime.apply(resource);
+        // The controller validates the schedule three seconds after it is applied, as it does a new one.
+        if (resource.kind === "Schedule") validates(target, moment + 3000);
         if (which < 0) return;
         writes(target, moment + 3000, resource.kind, three[which], Object.values(REFUSED)[which]);
         if (which === 2) pass();
@@ -4394,6 +5468,7 @@ describe("foundation fixture boundaries", () => {
           events.push("wait");
           pass();
         }
+        if (args[1] === "schedules.velero.io,backups.velero.io") events.push("validated");
         return target.runtime.kubectl(args, input);
       },
     };
@@ -4410,25 +5485,39 @@ describe("foundation fixture boundaries", () => {
         artifacts.log.text,
     ).toBe(true);
     expect(events[11]).toMatch(/^apply Namespace /);
-    // The objects of the views, then the three operations, and only then the reads of the wait.
-    expect(applies.length).toBeGreaterThan(3);
-    expect(applies.slice(-3)).toEqual([
+    // The objects of the views, the namespaces of the adherence, the three operations, the schedule, and only then
+    // the reads of the wait, and at last the one read that finds the schedule validated.
+    expect(applies.length).toBeGreaterThan(7);
+    expect(applies.slice(-7)).toEqual([
+      `apply Namespace ${names.adherence}`,
+      `apply Namespace ${names.adherenceSplit}`,
+      `apply Namespace ${names.adherenceScale}`,
       `apply Backup ${names.invalidBackup}`,
       `apply Restore ${names.invalidRestore}`,
       `apply Restore ${names.orphanRestore}`,
+      `apply Schedule ${names.realSchedule}`,
     ]);
     expect(events.indexOf("wait")).toBe(events.lastIndexOf(applies[applies.length - 1]) + 1);
-    expect(new Set(events.slice(events.indexOf("wait")))).toEqual(new Set(["wait"]));
+    expect(events.indexOf("validated")).toBe(events.length - 1);
+    expect(new Set(events.slice(events.indexOf("wait"), -1))).toEqual(new Set(["wait"]));
     // What each part answers: the files written, the fixtures of the views, the three refused within the
     // read after the server looked at them, and the two backups found once the sync passed.
     expect(placed.stored).toEqual({ state: "stored", written: tabKeys(), way: "upload", met: [] });
     expect(placed.views).toMatchObject({ scale: SCALE_BACKUPS, restores: SCALE_RESTORES, again: [] });
+    expect(placed.adherence).toEqual({ states: 10, split: 4, budget: 600, again: [] });
     expect(placed.refused).toMatchObject({ applied: three, waited: 4000 });
     expect([placed.refused.backup.status, placed.refused.restore.status, placed.refused.orphan.status]).toEqual(
       Object.values(REFUSED),
     );
-    expect(placed.synced).toMatchObject({ passes: 0, waited: 88_000 });
+    expect(placed.synced).toMatchObject({ passes: 0, waited: 82_000 });
     expect(placed.synced.synced).toEqual(target.find("Backup", "velero-demo", names.syncedBackup));
+    // Validated while the server synced: the one read of its wait finds it so.
+    expect(placed.real).toEqual({
+      applied: true,
+      schedule: target.find("Schedule", "velero-demo", names.realSchedule),
+      waited: 4000,
+    });
+    expect(placed.real.schedule).toMatchObject({ spec: { skipImmediately: false }, status: { phase: "Enabled" } });
     // What the runner says of it is what it did: the files it wrote, the way it sent them, the time the wait
     // for the backups took once the other fixtures were placed, and the operations it placed.
     const views = (placement: typeof placed) =>
@@ -4438,13 +5527,23 @@ describe("foundation fixture boundaries", () => {
       "controllers.";
     const created =
       `the server created ${names.syncedBackup} and ${names.syncedBackupWithoutLog} from them as they were ` +
-      "stored: once the fixtures of the views and the refused operations were placed, the wait for the two took";
+      "stored: once the fixtures of the views and of the adherence, the refused operations and the schedule its " +
+      "controller validates were placed, the wait for the two took";
     const refused = `PASS: the server refused ${three.join(", ").replace(/, (?=[^,]*$)/, " and ")} for the reasons they are made for`;
+    const adherence =
+      `PASS: 10 objects of the adherence in ${names.adherence}, 4 in ${names.adherenceSplit} and 600 in ` +
+      `${names.adherenceScale}, the backups of their submissions named by the clock of their placement, are in ` +
+      "place, outside the reach of the controllers.";
+    const validated =
+      `PASS: the controller validated ${names.realSchedule} in velero-demo, @every 8760h: Enabled, with whether a ` +
+      "run that is due is skipped written by it, and no submission and no backup of it";
 
     expect(placementWords(names, placed, [])).toEqual([
       views(placed),
-      `PASS: the store holds the files of the tabs (11 files written by this run, each sent as upload), and ${created} 88 seconds.`,
+      adherence,
+      `PASS: the store holds the files of the tabs (11 files written by this run, each sent as upload), and ${created} 82 seconds.`,
       `${refused} (3 placed by this run, refused after 4 seconds).`,
+      `${validated} (applied by this run).`,
     ]);
     expect(placed.synced.withoutLog).toEqual(target.find("Backup", "velero-demo", names.syncedBackupWithoutLog));
     expect(target.placement()?.state).toBe("synced");
@@ -4463,17 +5562,24 @@ describe("foundation fixture boundaries", () => {
 
     expect(again.stored).toEqual({ state: "synced", written: [], way: "upload", met: [] });
     expect(again.views).toEqual({ ...placed.views, again: [] });
+    expect(again.adherence).toEqual(placed.adherence);
     expect(again.refused).toEqual({ ...placed.refused, applied: [], waited: 0 });
     expect(again.synced).toEqual({ ...placed.synced, passes: 0, waited: 4000 });
+    expect(again.real).toEqual({ ...placed.real, applied: false });
     // It says that it wrote nothing, with no way, and that it placed none of the operations, which it found
     // refused.
     expect(placementWords(names, again, [])).toEqual([
       views(again),
+      adherence,
       `PASS: the store holds the files of the tabs (none written by this run), and ${created} 4 seconds.`,
       `${refused} (none placed by this run, each found refused).`,
+      `${validated} (found validated).`,
     ]);
     expect(
-      since.filter((event) => event.startsWith("store ") || three.some((name) => event.endsWith(` ${name}`))),
+      since.filter(
+        (event) =>
+          event.startsWith("store ") || [...three, names.realSchedule].some((name) => event.endsWith(` ${name}`)),
+      ),
     ).toEqual([]);
     expect(since.filter((event) => event === "wait")).toHaveLength(1);
     expect({
@@ -4484,10 +5590,12 @@ describe("foundation fixture boundaries", () => {
     }).toEqual(before);
     expect([...target.objects.entries()]).toEqual(objects);
     // The fixtures that are placed by the clock are placed by the moment of the placement: half a day
-    // later they are put in place again, and nothing of the tabs is.
+    // later they are put in place again, and nothing of the tabs is. The ones of the adherence are placed by
+    // the clock of this machine, which did not move half a day: they are left as they are.
     const later = place(now + PLACED_FOR + HOUR);
 
     expect(later.views.again).toEqual([names.overview, names.scale]);
+    expect(later.adherence).toEqual(placed.adherence);
     expect(placementWords(names, later, [])).toContain(
       `NOTE: the fixtures that are placed by the clock were put in place again in ${names.overview} and ${names.scale}.`,
     );
@@ -4502,22 +5610,31 @@ describe("foundation fixture boundaries", () => {
     const placed = {
       stored: { state: "stored", written: [paths.synced.archive], way: "data", met: ["upload: answered 403"] },
       views: { views: 60, overview: 31, scale: SCALE_BACKUPS, restores: SCALE_RESTORES, again: [names.overview] },
+      adherence: { states: 10, split: 4, budget: 600, again: [names.adherenceSplit, names.adherenceScale] },
       refused: { applied: [names.orphanRestore], waited: 1400 },
       synced: { passes: 1, waited: 1400 },
+      real: { applied: false, waited: 0 },
     } as unknown as Parameters<typeof placementWords>[1];
     const words = placementWords(names, placed, [names.syncedBackup]);
 
     expect(words.slice(1)).toEqual([
-      `NOTE: the fixtures that are placed by the clock were put in place again in ${names.overview}.`,
+      `PASS: 10 objects of the adherence in ${names.adherence}, 4 in ${names.adherenceSplit} and 600 in ` +
+        `${names.adherenceScale}, the backups of their submissions named by the clock of their placement, are in ` +
+        "place, outside the reach of the controllers.",
+      // The namespaces placed by the clock again, each once, in one sentence.
+      "NOTE: the fixtures that are placed by the clock were put in place again in " +
+        `${names.overview}, ${names.adherenceSplit} and ${names.adherenceScale}.`,
       "PASS: the store holds the files of the tabs (1 file written by this run, sent as data, which the store " +
         `took after upload: answered 403), and the server created ${names.syncedBackup} and ` +
-        `${names.syncedBackupWithoutLog} from them as they were stored: once the fixtures of the views and the ` +
-        "refused operations were placed, the wait for the two took 1 second, in which 1 pass of its sync ended " +
-        "without both.",
+        `${names.syncedBackupWithoutLog} from them as they were stored: once the fixtures of the views and of the ` +
+        "adherence, the refused operations and the schedule its controller validates were placed, the wait for " +
+        "the two took 1 second, in which 1 pass of its sync ended without both.",
       `NOTE: the server created ${names.syncedBackup} again since the journal was written: the journal has the ` +
         "new identity.",
       `PASS: the server refused ${names.invalidBackup}, ${names.invalidRestore} and ${names.orphanRestore} for ` +
         "the reasons they are made for (1 placed by this run, refused after 1 second).",
+      `PASS: the controller validated ${names.realSchedule} in velero-demo, @every 8760h: Enabled, with whether a ` +
+        "run that is due is skipped written by it, and no submission and no backup of it (found validated).",
     ]);
     expect(
       placementWords(names, { ...placed, synced: { ...placed.synced, passes: 2, waited: 125_400 } }, []).find((line) =>
@@ -5605,6 +6722,7 @@ describe("foundation fixture boundaries", () => {
         owner: runtime.owner,
         pause: runtime.pause,
         elapsed: runtime.elapsed,
+        now: runtime.now,
         kubectl: read,
         store: effect("store", runtime.store),
         tabs: { read: runtime.tabs.read, keep: effect("keep", runtime.tabs.keep) },
@@ -7950,13 +9068,109 @@ describe("foundation fixture boundaries", () => {
     }
   });
 
-  it("calls the operations of a run removed once the installation holds none of them, by their names, and the store none of the keys of the run", () => {
+  it("removes for the cleanup the schedule the controller validated by its identity, waits until it is gone, and forgets it in the journal", () => {
+    const names = fixtureNames(run);
+    const path = `/apis/velero.io/v1/namespaces/velero-demo/schedules/${names.realSchedule}`;
+    // The installation with the schedule the runner applied, which its journal knows with its identity.
+    const applied = () => {
+      const target = installation();
+      const from = runner(target);
+
+      from.runtime.apply(liveSchedule("synthetic-owner", run));
+      return { target, from };
+    };
+    const removal = (runtime: object) => removeRealSchedule(runtime as never, run);
+    const { target, from } = applied();
+    const uid = String(target.find("Schedule", "velero-demo", names.realSchedule)?.metadata.uid);
+    const events: string[] = [];
+    const traces = runner(target, from.entries, traced(events));
+
+    expect(from.left().map((entry) => `${entry.kind}/${entry.name}/${entry.uid}`)).toEqual([
+      `Schedule/${names.realSchedule}/${uid}`,
+    ]);
+    // One read; the delete by its path, with the identity it was read with; a read that finds it gone; and the
+    // journal saved without it.
+    expect(removal(traces.runtime)).toEqual({ removed: true, waited: 8000 });
+    expect(events).toEqual(["get", `delete ${path}`, "get", "save"]);
+    expect(target.removed).toEqual([`schedule/velero-demo/${names.realSchedule}`]);
+    expect(traces.left()).toEqual([]);
+    // Again: nothing is there, nothing is removed, and the journal has nothing to forget.
+    expect(removal(traces.runtime)).toEqual({ removed: false, waited: 0 });
+    // A removal that was stopped once the schedule was gone left its entry: it is forgotten.
+    const stoppedAfter = installation();
+    const kept = runner(stoppedAfter, [
+      { apiVersion: "velero.io/v1", kind: "Schedule", name: names.realSchedule, namespace: "velero-demo", uid },
+    ]);
+
+    expect(removal(kept.runtime)).toEqual({ removed: false, waited: 0 });
+    expect(kept.left()).toEqual([]);
+    // Of another run, of another identity than the journal's, or not known to the journal: nothing is removed.
+    const refusal =
+      `The schedule ${names.realSchedule} of velero-demo is not the one this run created, and it is not removed: ` +
+      `${DOWN}.`;
+    const changed = (change: (target: Installation, from: ReturnType<typeof runner>) => object) => {
+      const scene = applied();
+      const runtime = change(scene.target, scene.from);
+
+      return { words: stopped(() => removal(runtime)), removed: scene.target.removed };
+    };
+
+    expect(
+      changed((scene, of) => {
+        const found = scene.find("Schedule", "velero-demo", names.realSchedule);
+
+        (found?.metadata.labels as Record<string, string>)[FIXTURE_LABEL] = "0f0f0f0f";
+        return of.runtime;
+      }),
+    ).toEqual({ words: refusal, removed: [] });
+    expect(
+      changed((_scene, of) => {
+        of.entries[0].uid = "uid-of-before";
+        return of.runtime;
+      }),
+    ).toEqual({ words: refusal, removed: [] });
+    expect(changed((scene) => runner(scene).runtime)).toEqual({
+      words:
+        `The schedule ${names.realSchedule} of velero-demo is of this run and not in the journal of its objects, ` +
+        "which every object the run applies is entered in before it is applied, and it is not removed: " +
+        `${DOWN}.`,
+      removed: [],
+    });
+    // A schedule the cluster does not let go of is waited for two minutes, by the time that went by.
+    const lasting = applied();
+    const holding = {
+      ...lasting.from.runtime,
+      kubectl: (args: string[], input?: string) =>
+        args[0] === "delete" ? "" : lasting.from.runtime.kubectl(args, input),
+    };
+
+    expect(stopped(() => removal(holding))).toBe(
+      `The schedule ${names.realSchedule} of velero-demo is still there 2 minutes after it was removed: run the ` +
+        "command again.",
+    );
+    expect(lasting.from.left()).toHaveLength(1);
+    // It needs the clock of the runtime and the journal.
+    for (const lacking of ["elapsed", "journal"]) {
+      const scene = applied();
+      const asked = scene.target.asked.length;
+
+      expect([lacking, stopped(() => removal({ ...scene.from.runtime, [lacking]: undefined }))]).toEqual([
+        lacking,
+        "The removal of the schedule the controller validates needs the clock of the runtime, and the journal of " +
+          "the objects of the run",
+      ]);
+      expect(scene.target.asked).toHaveLength(asked);
+    }
+  });
+
+  it("calls the operations of a run removed once the installation holds none of them, nor the schedule the controller validated, by their names, and the store none of the keys of the run", () => {
     const names = fixtureNames(run);
     const deletions = [names.backup, names.invalidBackup, names.syncedBackup, names.syncedBackupWithoutLog];
     const named: [kind: string, name: string][] = [
       ...deletions.map((name): [string, string] => ["Backup", name]),
       ...[names.restore, names.invalidRestore, names.orphanRestore].map((name): [string, string] => ["Restore", name]),
       ...deletions.map((name): [string, string] => ["DeleteBackupRequest", `${name}-delete`]),
+      ["Schedule", names.realSchedule],
     ];
     const entry = (kind: string, name: string, namespace = "velero-demo"): Recorded => ({
       apiVersion: "velero.io/v1",
@@ -7986,7 +9200,7 @@ describe("foundation fixture boundaries", () => {
     const traces = runner(clean.target, clean.from.entries, traced(events));
 
     // One read of the installation, which is in the log of the operations; the journal forgets the eleven
-    // operations and keeps the rest; and each of the twenty keys of the run is asked for.
+    // operations and the schedule, and keeps the rest; and each of the twenty keys of the run is asked for.
     expect(ended(traces)).toEqual({ keys: 20 });
     expect(runArtifactPaths(run)).toHaveLength(20);
     expect(events).toEqual(["get", "save", ...runArtifactPaths(run).map((path) => `HEAD ${path}`)]);
@@ -8021,6 +9235,26 @@ describe("foundation fixture boundaries", () => {
         `Restore ${names.invalidRestore}, the DeleteBackupRequest ${names.syncedBackupWithoutLog}-delete are ` +
         `there. Run the command again; for what is still there after it, ${DOWN}.`,
     );
+    // A backup the schedule submitted carries its label, and is told by its name: nothing here removes it, and
+    // the journal forgets nothing.
+    const submission = emptied();
+    const submitted = `${names.realSchedule}-20261005100600`;
+
+    held(submission.target, {
+      apiVersion: "velero.io/v1",
+      kind: "Backup",
+      metadata: {
+        name: submitted,
+        namespace: "velero-demo",
+        labels: { "velero.io/schedule-name": names.realSchedule },
+      },
+    });
+    expect(stopped(() => ended(submission.from))).toBe(
+      "The server has not removed every operation of the run from velero-demo: the Backup " +
+        `${submitted} that ${names.realSchedule} submitted is there. Run the command again; for what is still ` +
+        `there after it, ${DOWN}.`,
+    );
+    expect(submission.from.left()).toEqual(submission.from.entries);
     // An object of one of those names and of another kind, or in another namespace, is not an operation of
     // the run.
     const namesakes = emptied();
@@ -8262,6 +9496,48 @@ describe("foundation fixture boundaries", () => {
     ).toEqual(["views-available"]);
   });
 
+  it("gives the views two schedules that submitted two days before the start and have no backup, of five fields and an interval", () => {
+    const started = Date.parse("2026-09-28T07:31:17.123Z");
+    const resources = viewFixtures("synthetic-owner", run, started, Date.parse("2026-09-28T07:43:09Z"));
+    const named = (name: string) => resources.find((resource) => resource.metadata.name === name);
+    const template = (name: string) =>
+      (named(name)?.spec as { template?: Record<string, unknown> } | undefined)?.template;
+
+    // Read by Velero, which wrote their phase and whether a run that is due is skipped, and each with its last
+    // submission two days before the hour the fixtures were started in, as the history of the views counts its
+    // days.
+    expect(named("views-submitted")).toMatchObject({
+      kind: "Schedule",
+      metadata: { namespace: fixtureNames(run).views },
+      spec: { schedule: "0 4 * * *", paused: false, skipImmediately: false },
+      status: { phase: "Enabled", lastBackup: "2026-09-26T07:00:00Z" },
+    });
+    expect(named("views-interval")).toMatchObject({
+      kind: "Schedule",
+      metadata: { namespace: fixtureNames(run).views },
+      spec: { schedule: "@every 6h", paused: false, skipImmediately: false },
+      status: { phase: "Enabled", lastBackup: "2026-09-26T07:00:00Z" },
+    });
+    // No backup of the installation is of either: the backup of each submission is not among the ones that
+    // exist, and the first has no backup to give the zone of the server.
+    expect(
+      resources.filter((resource) =>
+        ["views-submitted", "views-interval"].includes(resource.metadata.labels?.["velero.io/schedule-name"] ?? ""),
+      ),
+    ).toEqual([]);
+    // They carry the template of the views, which names the location that is available.
+    expect(template("views-submitted")).toEqual(template("views-history"));
+    expect(template("views-interval")).toEqual(template("views-history"));
+    expect(template("views-interval")).toMatchObject({ storageLocation: "views-available" });
+    // Twelve schedules in the installation of the views; the same times give the same two.
+    expect(resources.filter((resource) => resource.kind === "Schedule")).toHaveLength(12);
+    expect(named("views-interval")).toEqual(
+      viewFixtures("synthetic-owner", run, started + 60_000).find(
+        (resource) => resource.metadata.name === "views-interval",
+      ),
+    );
+  });
+
   it("gives the views the locations of every state, none of them validated by a controller", () => {
     const names = fixtureNames(run);
     const started = Date.parse("2026-09-28T07:31:17.123Z");
@@ -8375,6 +9651,8 @@ describe("foundation fixture boundaries", () => {
       "views-to-removed",
       "views-to-archive",
       "views-to-default",
+      "views-submitted",
+      "views-interval",
     ]);
     // The release writes whether the run that is due is skipped into every schedule it reads, which are the
     // ones it gave a phase to: Enabled or FailedValidation. The phase New is of the API, and is not written
@@ -8390,6 +9668,8 @@ describe("foundation fixture boundaries", () => {
       "views-to-removed": false,
       "views-to-archive": false,
       "views-to-default": false,
+      "views-submitted": false,
+      "views-interval": false,
     });
     expect(
       skips(
@@ -8478,6 +9758,9 @@ describe("foundation fixture boundaries", () => {
       names.defaults,
       names.overview,
       names.scale,
+      names.adherence,
+      names.adherenceSplit,
+      names.adherenceScale,
     ]);
   });
 

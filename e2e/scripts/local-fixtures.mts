@@ -13,6 +13,7 @@ import {
   tabArtifacts,
   tabExpectations,
 } from "./local-artifacts.mts";
+import { mixedExpression } from "./local-expressions.mts";
 import { DEMO_CONTEXT, DEMO_NAMESPACE, type KindConfig, OWNER_LABEL, requireCondition } from "./local-kind.mts";
 import { BUCKET, type KubeResource, STORAGE_ENDPOINT } from "./local-manifests.mts";
 import { STORE_WAYS, type StoreAnswer, type StoreBody, type StoreWay } from "./local-store.mts";
@@ -68,6 +69,11 @@ export function fixtureNames(run: string) {
     defaults: `velero-defaults-${run}`,
     overview: `velero-overview-${run}`,
     scale: `velero-scale-${run}`,
+    // The installations of the adherence of the schedules, which no controller reads and the operator names: the
+    // states of a schedule, two offsets of the server, and the three hundred schedules of the budget.
+    adherence: `velero-adherence-${run}`,
+    adherenceSplit: `velero-adherence-split-${run}`,
+    adherenceScale: `velero-adherence-scale-${run}`,
     backup: `fixture-backup-${run}`,
     restore: `fixture-restore-${run}`,
     // The operations the server refuses, which the transport proof asks the artifacts of: a backup and a
@@ -76,6 +82,8 @@ export function fixtureNames(run: string) {
     invalidRestore: `fixture-invalid-restore-${run}`,
     orphanRestore: `fixture-orphan-restore-${run}`,
     emptySchedule: `fixture-empty-schedule-${run}`,
+    // The schedule the controller of the installation validates, whose next run is a year after its creation.
+    realSchedule: `fixture-yearly-${run}`,
     // The backups the sync of the release creates from what the store is given, for the tabs of a backup:
     // one with its four artifacts, and one whose log is not there. Each has a folder of its own in the
     // store, and no backup of a run has a name another one begins with.
@@ -87,7 +95,18 @@ export function fixtureNames(run: string) {
 export function fixtureNamespaces(run: string): string[] {
   const names = fixtureNames(run);
 
-  return [names.source, names.restored, names.static, names.views, names.defaults, names.overview, names.scale];
+  return [
+    names.source,
+    names.restored,
+    names.static,
+    names.views,
+    names.defaults,
+    names.overview,
+    names.scale,
+    names.adherence,
+    names.adherenceSplit,
+    names.adherenceScale,
+  ];
 }
 
 // The path of the log or of the results of a backup or of a restore in the bucket of the environment, as
@@ -769,6 +788,25 @@ export function viewFixtures(
       },
       status: { phase: "Enabled" },
     },
+    // Two schedules that submitted two days before the start, and whose backups are not among the ones that
+    // exist. The first has five fields and names no zone: its zone is not known for want of a submission with
+    // its backup in the installation, where `views-daily` has no submission at all. The second is an interval,
+    // which names no zone and is counted from its last submission: overdue at every age of the environment,
+    // with its state for the reader that reads no backup as well.
+    {
+      apiVersion: "velero.io/v1",
+      kind: "Schedule",
+      metadata: metadata("views-submitted"),
+      spec: { schedule: "0 4 * * *", paused: false, skipImmediately: false, template: spec },
+      status: { phase: "Enabled", lastBackup: at(day(2)) },
+    },
+    {
+      apiVersion: "velero.io/v1",
+      kind: "Schedule",
+      metadata: metadata("views-interval"),
+      spec: { schedule: "@every 6h", paused: false, skipImmediately: false, template: spec },
+      status: { phase: "Enabled", lastBackup: at(day(2)) },
+    },
     backup("backup-missing-schedule", "Completed", { labels: { "velero.io/schedule-name": "views-removed" } }),
     backup("backup-missing-location", "FailedValidation", {
       spec: { storageLocation: "views-removed", volumeSnapshotLocations: ["views-removed"] },
@@ -1111,6 +1149,175 @@ export function overviewFixtures(owner: string, run: string, placed: number): Ku
   ];
 }
 
+// The fixtures of the adherence of the schedules (REQ-176 of SPEC-0013) are in installations no controller reads and
+// no discovery finds: no storage location is in them, and the operator names them, as the long lists, as SPEC-0013
+// decides. Their schedules ask for backups that name no location, so that no rule of the Overview names one of theirs.
+//
+// A backup of a submission is named as the controller names one, by the name of its schedule and the wall clock of
+// the server at the submission, and the schedule carries that instant as its last submission: the views derive the
+// offset of the server from the digits of the name less the creation of the backup, within a minute (REQ-162). The
+// creation is the cluster's, so they are placed in two phases: the backups first, each named by the clock of this
+// machine read just before it is created, and then the schedules, each with the creation of its backup read back, as
+// the controller writes the instant of a submission and names its backup with one reading of its clock. `named` is
+// the clock each backup was named by, and `created` the creation the cluster gave it, both by the name of its
+// schedule: a name not read yet is of the clock of the placement, and a creation not given is the clock of its name.
+export interface Submissions {
+  named?: Record<string, number>;
+  created?: Record<string, number>;
+}
+
+// The zone of the server whose wall clock names the backups of the submissions that give an offset: two hours east
+// of UTC.
+export const SERVER_EAST = 2 * 3_600_000;
+// The clock of the cluster said ahead of this machine by a day: a last submission a day after the placement is still
+// after the clock for the twelve hours the fixtures are good for, where one an hour after it would not be.
+export const AHEAD_BY = 24 * 3_600_000;
+// The second submission of the installation of two offsets, before the first: the remainder of the name of its
+// backup is these seconds and the time its creation took, which the check of the placement keeps within thirty, and
+// the views take an offset only from a remainder under a minute.
+export const SPLIT_BEFORE = 20_000;
+// The schedules of the budget of the adherence (REQ-175).
+export const ADHERENCE_SCHEDULES = 300;
+// A schedule with a name as long as Velero accepts one, which is the value of the label of its backups.
+export const LONG_SCHEDULE_NAME = "schedule-with-a-name-as-long-as-the-value-of-a-label-is-allowed";
+
+// The wall clock of an instant to the second, as fourteen digits, `yyyymmddhhmmss`: the end of the name of a backup
+// of a submission.
+function wallDigits(instant: number): string {
+  return new Date(Math.floor(instant / 1000) * 1000).toISOString().replace(/[-:T]/g, "").slice(0, 14);
+}
+
+// What is common to the fixtures of the adherence: the labels of the run, the moment of the placement, what their
+// schedules ask of a backup, and how a schedule, a backup and a time are written.
+function adherenceParts(owner: string, run: string, namespace: string, placed: number, submissions: Submissions) {
+  requireCondition(owner, "Fixture ownership is required");
+  requireCondition(Number.isFinite(placed), "The time the fixtures are placed at is required");
+  const names = fixtureNames(run);
+  const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
+  const at = placedAt(placed);
+  const second = (instant: number) => Math.floor(instant / 1000) * 1000;
+  const time = (instant: number) => new Date(second(instant)).toISOString().replace(".000Z", "Z");
+  const named = (schedule: string) => submissions.named?.[schedule] ?? placed;
+  const created = (schedule: string) => submissions.created?.[schedule] ?? named(schedule);
+  const metadata = (name: string, more: Record<string, string> = {}) => ({
+    name,
+    namespace,
+    labels: { ...labels, ...more },
+    ...at,
+  });
+  const template = { includedNamespaces: [names.source], includeClusterResources: false, ttl: "720h0m0s" };
+  // A schedule Velero read: Enabled, with whether a run that is due is skipped written, and with its last
+  // submission when it has one.
+  const schedule = (name: string, expression: string, submitted?: number): KubeResource => ({
+    apiVersion: "velero.io/v1",
+    kind: "Schedule",
+    metadata: metadata(name),
+    spec: { schedule: expression, paused: false, skipImmediately: false, template },
+    status: { phase: "Enabled", ...(submitted === undefined ? {} : { lastBackup: time(submitted) }) },
+  });
+  // A backup of a schedule, named by the schedule and the wall clock `wall` gives, in a phase, and started at
+  // `started`: the template of the schedule is its spec, and the name of the schedule is in its label. A backup of a
+  // submission starts at the clock of its name, which may be up to thirty seconds before the creation the cluster
+  // gives it, and twenty more for the older of the split: the views compare its start with no creation.
+  const backup = (of: string, wall: number, phase: string, started: number): KubeResource => ({
+    apiVersion: "velero.io/v1",
+    kind: "Backup",
+    metadata: metadata(`${of}-${wallDigits(wall)}`, { "velero.io/schedule-name": of }),
+    spec: template,
+    status: syntheticStatus(phase, "itemsBackedUp", second(started)),
+  });
+
+  return { names, named, created, schedule, backup };
+}
+
+// The installation of the states of the adherence: eight schedules whose last submissions are counted from the clock
+// of the placement, and two backups. Awaited for the twelve hours the fixtures are good for, counted from the last
+// submission; overdue by a day and more, with its count, and the backup of its submission not among the ones that
+// exist; held beyond the grace by a backup in progress that is not a submission, named as the command line names a
+// backup asked by hand, in UTC; submitted at every look, for an expression with no instant; its zone derived from the
+// backup of its own submission, named two hours east of UTC and the one backup of a submission of the installation;
+// with no submission, taking that offset from it; the clock of the cluster ahead by a day; and a long name with a long
+// expression that names its zone. Due lasts five minutes after an instant a placement cannot choose, and is not
+// placed.
+export function adherenceFixtures(
+  owner: string,
+  run: string,
+  placed: number,
+  submissions: Submissions = {},
+): KubeResource[] {
+  const HOUR = 3_600_000;
+  const parts = adherenceParts(owner, run, fixtureNames(run).adherence, placed, submissions);
+  const { named, created, schedule, backup } = parts;
+
+  return [
+    backup("adherence-held", named("adherence-held"), "InProgress", named("adherence-held")),
+    backup("adherence-derived", named("adherence-derived") + SERVER_EAST, "Completed", named("adherence-derived")),
+    schedule("adherence-awaited", "@every 24h", placed),
+    schedule("adherence-overdue", "@every 1h", placed - 25 * HOUR),
+    schedule("adherence-held", "@every 1h", placed - 3 * HOUR),
+    schedule("adherence-every-look", "0 0 30 2 *", placed - 60_000),
+    schedule("adherence-derived", "0 3 * * *", created("adherence-derived")),
+    schedule("adherence-borrowed", "0 3 * * *"),
+    schedule("adherence-ahead", "@every 24h", placed + AHEAD_BY),
+    schedule(LONG_SCHEDULE_NAME, "CRON_TZ=America/Argentina/Buenos_Aires 0 0 1 1 *", placed),
+  ];
+}
+
+// The installation of two offsets: two schedules of five fields that name no zone, each with the backup of its
+// submission. The newer was named two hours east of UTC; the older at UTC, its submission twenty seconds before the
+// creation of its backup and its name twenty seconds before the clock of the placement, as one reading of the clock
+// of the server names a backup and writes its submission. The offset of the newest stands, and the views say that it
+// was UTC at the other submission. The older submission must be before the newer one, which the creations of the two
+// backups decide: one created twenty seconds or more after the other is refused, and the namespace is placed again
+// at the next call.
+export function adherenceSplitFixtures(
+  owner: string,
+  run: string,
+  placed: number,
+  submissions: Submissions = {},
+): KubeResource[] {
+  const namespace = fixtureNames(run).adherenceSplit;
+  const parts = adherenceParts(owner, run, namespace, placed, submissions);
+  const { named, created, schedule, backup } = parts;
+  const apart = created("split-older") - created("split-newer");
+
+  requireCondition(
+    apart < SPLIT_BEFORE,
+    `The backup split-older of ${namespace} was created ${Math.ceil(apart / 1000)} seconds after the one of ` +
+      "split-newer, twenty or more: its submission, twenty seconds before its creation, would not be before the one " +
+      "of split-newer, and the views would take the offset of the older one. The cluster took that long to create " +
+      "the two; run the command again: it places the namespace again.",
+  );
+  return [
+    backup("split-newer", named("split-newer") + SERVER_EAST, "Completed", named("split-newer")),
+    backup("split-older", named("split-older") - SPLIT_BEFORE, "Completed", named("split-older") - SPLIT_BEFORE),
+    schedule("split-newer", "0 3 * * *", created("split-newer")),
+    schedule("split-older", "0 3 * * *", created("split-older") - SPLIT_BEFORE),
+  ];
+}
+
+// The installation of the budget: three hundred schedules of the mixed expressions the measure of the unit run
+// computes, each with the backup of its submission named two hours east of UTC, so that the installation has one
+// offset. Their backups are listed first, in the order of their schedules.
+export function adherenceScaleFixtures(
+  owner: string,
+  run: string,
+  placed: number,
+  submissions: Submissions = {},
+): KubeResource[] {
+  const parts = adherenceParts(owner, run, fixtureNames(run).adherenceScale, placed, submissions);
+  const { named, created, schedule, backup } = parts;
+  const schedules = Array.from({ length: ADHERENCE_SCHEDULES }, (_, index) => ({
+    name: `schedule-${String(index + 1).padStart(3, "0")}`,
+    expression: mixedExpression(index),
+  }));
+
+  return [
+    ...schedules.map(({ name }) => backup(name, named(name) + SERVER_EAST, "Completed", named(name))),
+    ...schedules.map(({ name, expression }) => schedule(name, expression, created(name))),
+  ];
+}
+
 export function staticFixtures(owner: string, run: string): KubeResource[] {
   requireCondition(owner, "Fixture ownership is required");
   const names = fixtureNames(run);
@@ -1235,6 +1442,9 @@ export interface FixtureRuntime {
   store?(method: "GET" | "HEAD" | "PUT", path: string, body?: StoreBody): StoreAnswer;
   // The time since the runtime was made, in milliseconds: what a wait for the server is bounded by.
   elapsed?(): number;
+  // The clock of this machine, in milliseconds since the epoch, read when it is asked: what the fixtures placed in
+  // two phases are placed by, and name the backups of their submissions by.
+  now?(): number;
   // Where the placement of the tabs is recorded: in private, and before anything of it is written.
   tabs?: { read(): TabPlacement | undefined; keep(placement: TabPlacement): void };
   // The objects the journal of the runner records, by which `apply` knows what it may write over, and what
@@ -1409,42 +1619,80 @@ export function execPluginKubeconfig(config: KindConfig, plugin: ExecPluginFiles
   return kubeconfig;
 }
 
+// How far the creation of a backup of a submission may be from the clock of this machine its name was read from,
+// and how many of them are created at once: a group is created within that time of the clock read just before it.
+export const SUBMISSION_DRIFT = 30_000;
+export const SUBMISSIONS_AT_ONCE = 50;
+
 // What is placed by the clock is found by what it says of when it was placed. It is left as it is while it
 // is good, and put in place again when it is not: the objects of the namespace that are of this run are
 // removed, and the ones of now are created. Nothing else of the cluster is touched. What is answered says
 // whether it was put in place again, over what was there, and not when nothing was.
+//
+// What holds backups of submissions is created in two phases, the installations of the adherence and nothing else,
+// by the clock of this machine the runtime reads (see `Submissions`): the backups first, in groups, each group named
+// by the clock read just before it is created and each creation read back, which is refused when it is more than
+// thirty seconds from that clock; then the rest, with the creations as the cluster gave them. The clock of the
+// placement is read once nothing of the run is left in the namespace, just before the first group, and names it.
+// The phase and the last submission of each schedule created then are read back with the rest: the views read
+// them, and a cluster that did not keep them as they were written is refused, as is a schedule found with no phase
+// at a later call.
 export function placeByTheClock(
   runtime: FixtureRuntime,
   run: string,
   namespace: string,
   now: number,
-  make: (placed: number) => KubeResource[],
+  make: (placed: number, submissions?: Submissions) => KubeResource[],
+  twoPhases = false,
 ): { placed: number; count: number; again: boolean } {
   const names = fixtureNames(run);
 
   // The other namespaces of the run hold fixtures whose times are fixed, with the labels of the run: they
   // would be removed with what is placed by the clock.
   requireCondition(
-    [names.overview, names.scale].includes(namespace),
+    [names.overview, names.scale, names.adherence, names.adherenceSplit, names.adherenceScale].includes(namespace),
     "Refusing to place fixtures outside the namespaces that are placed by the clock",
   );
   requireCondition(
     make(now).every((resource) => resource.metadata.namespace === namespace),
     `Refusing to place in ${namespace} what is made for another namespace`,
   );
+  requireCondition(
+    twoPhases === [names.adherence, names.adherenceSplit, names.adherenceScale].includes(namespace),
+    `Refusing to place ${namespace} in ${twoPhases ? "two phases" : "one phase"}: the installations of the ` +
+      "adherence are placed in two phases, and no other namespace is",
+  );
+  const submitted = make(now)
+    .filter((resource) => resource.kind === "Backup")
+    .map((backup) => backup.metadata.labels?.["velero.io/schedule-name"] ?? "");
+
+  requireCondition(
+    !twoPhases || (submitted.every(Boolean) && new Set(submitted).size === submitted.length),
+    `Refusing to place in ${namespace} in two phases a backup of no schedule, or two backups of one`,
+  );
+  requireCondition(!twoPhases || runtime.now, "A placement in two phases needs the clock of this machine");
   // The digest is of the fixtures made for one moment, which is the same at every call.
   const shape = createHash("sha256")
     .update(JSON.stringify(make(0)))
     .digest("hex")
     .slice(0, 16);
-  const made = () =>
-    make(now).map((resource) => ({
-      ...resource,
-      metadata: {
-        ...resource.metadata,
-        annotations: { ...resource.metadata.annotations, [SHAPE_ANNOTATION]: shape },
-      },
-    }));
+  const create = (items: KubeResource[]) =>
+    runtime.kubectl(
+      ["create", "-f", "-", "-o", "name"],
+      JSON.stringify({
+        apiVersion: "v1",
+        kind: "List",
+        items: items.map((resource) => ({
+          ...resource,
+          metadata: {
+            ...resource.metadata,
+            annotations: { ...resource.metadata.annotations, [SHAPE_ANNOTATION]: shape },
+          },
+        })),
+      }),
+      600_000,
+      false,
+    );
   const kinds = [...new Set(make(now).map((resource) => `${resource.kind}.velero.io`.toLowerCase()))].sort();
   const listed = () =>
     (
@@ -1455,6 +1703,7 @@ export function placeByTheClock(
   const times = (items: KubeResource[]) =>
     items.map((item) => Date.parse(item.metadata.annotations?.[PLACED_ANNOTATION] ?? ""));
   const before = listed();
+  let made: KubeResource[] = [];
   const good =
     before.length === make(now).length &&
     before.every((item) => item.metadata.annotations?.[SHAPE_ANNOTATION] === shape) &&
@@ -1497,12 +1746,8 @@ export function placeByTheClock(
         pause(runtime, REMOVAL_POLL);
       }
     }
-    runtime.kubectl(
-      ["create", "-f", "-", "-o", "name"],
-      JSON.stringify({ apiVersion: "v1", kind: "List", items: made() }),
-      600_000,
-      false,
-    );
+    if (twoPhases) made = createInTwoPhases(runtime, namespace, make, create);
+    else create(make(now));
   }
   const found = listed();
   const placed = Math.min(...times(found));
@@ -1519,7 +1764,137 @@ export function placeByTheClock(
       now - placed <= PLACED_FOR,
     `The fixtures of ${namespace} are not the ones of this run`,
   );
+  // Each schedule placed in two phases has its phase, and the one it was created with when this call created it,
+  // with its last submission.
+  for (const schedule of twoPhases ? found.filter((item) => item.kind === "Schedule") : []) {
+    type Written = { phase?: string; lastBackup?: string } | undefined;
+    const said = (status: Written) =>
+      `${status?.phase ?? "of no phase"}, ${status?.lastBackup ? `submitted at ${status.lastBackup}` : "with no submission"}`;
+    const asked = made.find(
+      (resource) => resource.kind === "Schedule" && resource.metadata.name === schedule.metadata.name,
+    )?.status as Written;
+    const held = schedule.status as Written;
+
+    requireCondition(
+      held?.phase && (!asked || (held.phase === asked.phase && held.lastBackup === asked.lastBackup)),
+      `The schedule ${schedule.metadata.name} of ${namespace} ${asked ? `was created ${said(asked)}, and the cluster holds it` : "is held"} ` +
+        `${said(held)}: the views of the adherence read its phase and its last submission, which the definitions ` +
+        "of the cluster keep as they are written. Create the environment again with `pnpm demo:down` and " +
+        "`pnpm demo:up`.",
+    );
+  }
   return { placed, count: found.length, again: !good && before.length > 0 };
+}
+
+// The two phases of a placement of backups of submissions, in a namespace that holds nothing of the run. Each backup
+// is of one schedule, which names it in its label, and no two are of the same, which the placement checks before it
+// reads anything: the clock of a name and the creation are kept by the name of the schedule. What is answered is
+// what was created in the second phase.
+function createInTwoPhases(
+  runtime: FixtureRuntime,
+  namespace: string,
+  make: (placed: number, submissions?: Submissions) => KubeResource[],
+  create: (items: KubeResource[]) => void,
+): KubeResource[] {
+  requireCondition(runtime.now, "A placement in two phases needs the clock of this machine");
+  const clock = runtime.now.bind(runtime);
+  const placed = clock();
+  const named: Record<string, number> = {};
+  const created: Record<string, number> = {};
+  const isBackup = (resource: KubeResource) => resource.kind === "Backup";
+  const scheduleOf = (backup: KubeResource) => backup.metadata.labels?.["velero.io/schedule-name"] ?? "";
+  const schedules = make(placed).filter(isBackup).map(scheduleOf);
+  const iso = (instant: number) => new Date(instant).toISOString();
+
+  for (let first = 0; first < schedules.length; first += SUBMISSIONS_AT_ONCE) {
+    const group = schedules.slice(first, first + SUBMISSIONS_AT_ONCE);
+    const read = first === 0 ? placed : clock();
+
+    for (const schedule of group) named[schedule] = read;
+    const backups = make(placed, { named, created }).filter(
+      (resource) => isBackup(resource) && group.includes(scheduleOf(resource)),
+    );
+
+    create(backups);
+    const listed = (
+      JSON.parse(
+        runtime.kubectl(
+          ["get", "backups.velero.io", "--namespace", namespace, "-o", "json"],
+          undefined,
+          undefined,
+          false,
+        ),
+      ) as { items: (KubeResource & { metadata: { creationTimestamp?: string } })[] }
+    ).items;
+
+    for (const backup of backups) {
+      const { name } = backup.metadata;
+      const at = Date.parse(listed.find((item) => item.metadata.name === name)?.metadata.creationTimestamp ?? "");
+      const apart = Math.abs(at - read);
+
+      requireCondition(Number.isFinite(at), `The backup ${name} that was created in ${namespace} is not there`);
+      // A creation before the clock is of a clock of the cluster behind, and one after it of a clock ahead or of a
+      // cluster that took that long. The seconds are rounded up: thirty and a part is refused, and says thirty-one.
+      requireCondition(
+        apart <= SUBMISSION_DRIFT,
+        `The backup ${name} of ${namespace} was created at ${iso(at)}, ${Math.ceil(apart / 1000)} seconds ` +
+          `${at > read ? "after" : "before"} the clock of this machine its name was read from, ${iso(read)}: the ` +
+          `clock of the Docker machine of the cluster is that far ${at > read ? "ahead of" : "behind"} the one of ` +
+          `this machine, which a sleep of the machine can leave${at > read ? ", or the cluster took that long to create it" : ""}, ` +
+          "and its name would give the views no offset of the server. Set the clock of the Docker machine again " +
+          "when it is the cause, which a restart of Docker does, and run the command again: it places the " +
+          "namespace again.",
+      );
+      created[scheduleOf(backup)] = at;
+    }
+  }
+  const rest = make(placed, { named, created }).filter((resource) => !isBackup(resource));
+
+  create(rest);
+  return rest;
+}
+
+// The fixtures of the adherence, in their three installations: no controller reads them and no discovery finds
+// them, and the operator names them. Each namespace is applied through the journal, and placed by the clock in
+// two phases with the clock of this machine read when its own placement starts, not the one of the start of the
+// runner: a backup named by that one would be created minutes after the digits of its name, after the fixtures
+// of the tabs and of the views, and would give the views no offset.
+export function placeAdherenceFixtures(
+  runtime: FixtureRuntime,
+  run: string,
+): { states: number; split: number; budget: number; again: string[] } {
+  const names = fixtureNames(run);
+
+  requireCondition(runtime.now, "The placement of the fixtures of the adherence needs the clock of this machine");
+  const clock = runtime.now.bind(runtime);
+  const labels = { [OWNER_LABEL]: runtime.owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
+  const placed = (
+    [
+      [names.adherence, adherenceFixtures],
+      [names.adherenceSplit, adherenceSplitFixtures],
+      [names.adherenceScale, adherenceScaleFixtures],
+    ] as const
+  ).map(([namespace, fixtures]) => {
+    runtime.apply({ apiVersion: "v1", kind: "Namespace", metadata: { name: namespace, labels } });
+    return {
+      namespace,
+      ...placeByTheClock(
+        runtime,
+        run,
+        namespace,
+        clock(),
+        (at, submissions) => fixtures(runtime.owner, run, at, submissions),
+        true,
+      ),
+    };
+  });
+
+  return {
+    states: placed[0].count,
+    split: placed[1].count,
+    budget: placed[2].count,
+    again: placed.filter((one) => one.again).map((one) => one.namespace),
+  };
 }
 
 // The fixtures of the views. The ones whose times are fixed are put in place once: a second call finds
@@ -1605,6 +1980,28 @@ export function liveBackup(owner: string, run: string): KubeResource {
       // looked at with lasts as long as the environment is kept, which is days.
       ttl: LIVE_RETENTION,
     },
+  };
+}
+
+// The schedule the controller of the installation validates (REQ-176 of SPEC-0013): its next run is a year after its
+// creation, so that it submits nothing for the life of an environment, and its template is the spec of the real
+// backup. It names no `skipImmediately`: the controller writes the setting of its server into it when it validates
+// it, which says that the controller read it, as SPEC-0013 decides.
+export const REAL_SCHEDULE_EXPRESSION = "@every 8760h";
+
+export function liveSchedule(owner: string, run: string): KubeResource {
+  const names = fixtureNames(run);
+
+  requireCondition(owner, "Fixture ownership is required");
+  return {
+    apiVersion: "velero.io/v1",
+    kind: "Schedule",
+    metadata: {
+      name: names.realSchedule,
+      namespace: DEMO_NAMESPACE,
+      labels: { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" },
+    },
+    spec: { schedule: REAL_SCHEDULE_EXPRESSION, template: liveBackup(owner, run).spec },
   };
 }
 
@@ -2710,11 +3107,213 @@ export function placeRefusedFixtures(
   return { backup, restore, orphan, applied, waited: elapsed() - began };
 }
 
+// How long the controller is given to validate the schedule of the installation, and how often the cluster is read
+// meanwhile, which are also how long the cluster is given to let it go once the cleanup removed it, and how often it
+// is read then; and how near its next run a placement may find it, which is a year after its creation.
+const VALIDATION_TIMEOUT = 120_000;
+const VALIDATION_POLL = 1000;
+const NEXT_RUN_MARGIN = DAY;
+const YEAR_OF_HOURS = 8760 * 3_600_000;
+
+// Places the schedule the controller validates in the namespace of the installation. It reads the schedule first,
+// and applies it only when it is not there: a second call finds it and changes nothing. One that is there is of this
+// run, or nothing is applied. It is applied after the operations the server refuses, and waited for after the sync of
+// the backups of the tabs: the controller validates it meanwhile.
+export function placeRealSchedule(runtime: FixtureRuntime, run: string): { applied: boolean } {
+  const name = fixtureNames(run).realSchedule;
+  const found = runtime
+    .kubectl(["get", "schedules.velero.io", name, "--namespace", DEMO_NAMESPACE, "--ignore-not-found", "-o", "json"])
+    .trim();
+
+  if (found) {
+    const schedule = JSON.parse(found) as KubeResource;
+
+    requireCondition(
+      schedule.metadata.labels?.[OWNER_LABEL] === runtime.owner && schedule.metadata.labels?.[FIXTURE_LABEL] === run,
+      `The schedule ${name} of ${DEMO_NAMESPACE} is not the one this run made, and nothing is applied over it: ` +
+        "the way out is to take the environment down, with `pnpm demo:down`.",
+    );
+    return { applied: false };
+  }
+  runtime.apply(liveSchedule(runtime.owner, run));
+  return { applied: true };
+}
+
+// Waits until the controller validated the schedule of the installation: Enabled, with `skipImmediately` written,
+// which the schedule did not name. It stops by name on a schedule that is not there or not of this run, on one whose
+// expression, pause or template are not the ones the scripts make, as one left by other scripts on an environment
+// kept for days, on one the controller refused, on one that carries a last submission or whose label a backup
+// carries, which would be a backup the suites do not expect, and on one whose next run is less than a day away. The wait is bounded by the
+// time the runtime counts, two minutes, not by the number of its reads. What is answered is the schedule as the
+// cluster holds it, and how long the wait took.
+export function awaitRealSchedule(runtime: FixtureRuntime, run: string): { schedule: KubeResource; waited: number } {
+  const name = fixtureNames(run).realSchedule;
+
+  requireCondition(
+    runtime.elapsed && runtime.now,
+    "The wait for the schedule the controller validates needs the clock of the runtime and the clock of this machine",
+  );
+  const elapsed = runtime.elapsed.bind(runtime);
+  const clock = runtime.now.bind(runtime);
+  const began = elapsed();
+  const down = "Create the environment again with `pnpm demo:down` and `pnpm demo:up`.";
+  const iso = (instant: number) => (Number.isFinite(instant) ? new Date(instant).toISOString() : "a time not known");
+
+  for (;;) {
+    const items = (
+      JSON.parse(
+        runtime.kubectl(["get", "schedules.velero.io,backups.velero.io", "--namespace", DEMO_NAMESPACE, "-o", "json"]),
+      ) as { items: (KubeResource & { metadata: { creationTimestamp?: string } })[] }
+    ).items;
+    const schedule = items.find((item) => item.kind === "Schedule" && item.metadata.name === name);
+    const backups = items
+      .filter((item) => item.kind === "Backup" && item.metadata.labels?.["velero.io/schedule-name"] === name)
+      .map((item) => item.metadata.name);
+
+    requireCondition(schedule, `The schedule ${name} is not in ${DEMO_NAMESPACE}, where it was applied. ${down}`);
+    const status = schedule.status as
+      | { phase?: string; validationErrors?: string[]; lastBackup?: string; lastSkipped?: string }
+      | undefined;
+    const skip = (schedule.spec as { skipImmediately?: unknown } | undefined)?.skipImmediately;
+
+    requireCondition(
+      schedule.metadata.labels?.[OWNER_LABEL] === runtime.owner && schedule.metadata.labels?.[FIXTURE_LABEL] === run,
+      "Fixture ownership changed",
+    );
+    const spec = (schedule.spec ?? {}) as { schedule?: unknown; paused?: unknown; template?: unknown };
+    const differences = [
+      ...(spec.schedule === REAL_SCHEDULE_EXPRESSION
+        ? []
+        : [
+            spec.schedule === undefined
+              ? "it names no expression"
+              : `its expression is ${JSON.stringify(spec.schedule)}`,
+          ]),
+      ...(spec.paused ? ["it is paused"] : []),
+      ...(isDeepStrictEqual(spec.template, liveBackup(runtime.owner, run).spec)
+        ? []
+        : ["its template is not the spec of the real backup"]),
+    ];
+
+    requireCondition(
+      differences.length === 0,
+      `The schedule ${name} of ${DEMO_NAMESPACE} is of this run and not the one the scripts make: ` +
+        `${differences.join(", ")}. ${down}`,
+    );
+    requireCondition(
+      status?.phase !== "FailedValidation",
+      `The controller refused the schedule ${name} of ${DEMO_NAMESPACE}: ${(status?.validationErrors ?? []).join("; ")}. ` +
+        "It is left where it is, of this run, and the cleanup of the fixtures removes it.",
+    );
+    requireCondition(
+      !status?.lastBackup && backups.length === 0,
+      `The controller submitted a backup of the schedule ${name} of ${DEMO_NAMESPACE}, whose next run is a year ` +
+        `after its creation: ${[
+          ...(status?.lastBackup ? [`its last submission is ${status.lastBackup}`] : []),
+          ...backups.map((backup) => `the backup ${backup} carries its label`),
+        ].join(", ")}. No suite expects one. ${down}`,
+    );
+    if (status?.phase === "Enabled" && typeof skip === "boolean") {
+      // The controller counts the next run from the creation, or from the last skip when it is later.
+      const anchor = Math.max(
+        Date.parse(schedule.metadata.creationTimestamp ?? ""),
+        Date.parse(status.lastSkipped ?? "") || 0,
+      );
+      const next = anchor + YEAR_OF_HOURS;
+
+      requireCondition(
+        Number.isFinite(next) && next - clock() >= NEXT_RUN_MARGIN,
+        `The schedule ${name} of ${DEMO_NAMESPACE} submits its next backup at ${iso(next)}, less than a day from ` +
+          `now: the environment is about a year old. ${down}`,
+      );
+      return { schedule, waited: elapsed() - began };
+    }
+    requireCondition(
+      elapsed() - began < VALIDATION_TIMEOUT,
+      `The controller did not validate the schedule ${name} in ${VALIDATION_TIMEOUT / 60_000} minutes: it ` +
+        `${status?.phase ? `is ${status.phase}` : "has no phase"}${typeof skip === "boolean" ? "" : " and names no skipImmediately"}. ` +
+        `It is left in ${DEMO_NAMESPACE}, of this run: run the command again once the controller validates it.`,
+    );
+    pause(runtime, VALIDATION_POLL);
+  }
+}
+
+// Removes the schedule the controller validated, for the cleanup of the fixtures, by the identity it was read with,
+// and waits until it is gone, two minutes at most, by the time the runtime counts; the journal forgets it then. One
+// that is not of this run, or not the one the journal knows, is not removed. When it is not there the journal
+// forgets it all the same: what was interrupted after its removal is ended.
+export function removeRealSchedule(runtime: FixtureRuntime, run: string): { removed: boolean; waited: number } {
+  const name = fixtureNames(run).realSchedule;
+  const { journal } = runtime;
+
+  requireCondition(
+    runtime.elapsed && journal,
+    "The removal of the schedule the controller validates needs the clock of the runtime, and the journal of the " +
+      "objects of the run",
+  );
+  const elapsed = runtime.elapsed.bind(runtime);
+  const read = () => {
+    const raw = runtime
+      .kubectl(["get", "schedules.velero.io", name, "--namespace", DEMO_NAMESPACE, "--ignore-not-found", "-o", "json"])
+      .trim();
+
+    return raw ? (JSON.parse(raw) as KubeResource) : undefined;
+  };
+  const entry = () =>
+    journal.entries.findIndex(
+      (item) => item.kind === "Schedule" && item.name === name && item.namespace === DEMO_NAMESPACE,
+    );
+  const forget = () => {
+    const index = entry();
+
+    if (index < 0) return;
+    journal.entries.splice(index, 1);
+    journal.save();
+  };
+  const found = read();
+  const began = elapsed();
+
+  if (!found) {
+    forget();
+    return { removed: false, waited: 0 };
+  }
+  const known = journal.entries[entry()];
+  const out = "the way out is to take the environment down, with `pnpm demo:down`.";
+
+  requireCondition(
+    found.metadata.labels?.[OWNER_LABEL] === runtime.owner &&
+      found.metadata.labels?.[FIXTURE_LABEL] === run &&
+      found.metadata.uid &&
+      (!known?.uid || known.uid === found.metadata.uid),
+    `The schedule ${name} of ${DEMO_NAMESPACE} is not the one this run created, and it is not removed: ${out}`,
+  );
+  requireCondition(
+    known,
+    `The schedule ${name} of ${DEMO_NAMESPACE} is of this run and not in the journal of its objects, which every ` +
+      `object the run applies is entered in before it is applied, and it is not removed: ${out}`,
+  );
+  runtime.kubectl(
+    ["delete", "--raw", `/apis/velero.io/v1/namespaces/${DEMO_NAMESPACE}/schedules/${name}`, "-f", "-"],
+    JSON.stringify({ apiVersion: "v1", kind: "DeleteOptions", preconditions: { uid: found.metadata.uid } }),
+  );
+  while (read()) {
+    requireCondition(
+      elapsed() - began < VALIDATION_TIMEOUT,
+      `The schedule ${name} of ${DEMO_NAMESPACE} is still there ${VALIDATION_TIMEOUT / 60_000} minutes after it ` +
+        "was removed: run the command again.",
+    );
+    pause(runtime, VALIDATION_POLL);
+  }
+  forget();
+  return { removed: true, waited: elapsed() - began };
+}
+
 // The fixtures of the views and of the tabs, in the order that costs a run the least. The files of the tabs
 // go to the store first: the server takes a minute or two to create its backups of them, and the other
-// fixtures are placed meanwhile, the objects of the views and then the operations the server refuses, which
-// it validates in seconds. The wait for the backups of the store comes last. A second call finds everything:
-// it asks the store nothing, applies nothing, and has nothing to wait for.
+// fixtures are placed meanwhile, the objects of the views, the installations of the adherence, the operations
+// the server refuses, which it validates in seconds, and the schedule its controller validates, as fast. The wait
+// for the backups of the store comes next, and the one for the schedule last, which then finds it validated. A
+// second call finds everything: it asks the store nothing, applies nothing, and has nothing to wait for.
 export function placeViewAndTabFixtures(
   runtime: FixtureRuntime,
   run: string,
@@ -2724,15 +3323,20 @@ export function placeViewAndTabFixtures(
 ): {
   stored: ReturnType<typeof storeTabFixtures>;
   views: ReturnType<typeof createViewFixtures>;
+  adherence: ReturnType<typeof placeAdherenceFixtures>;
   refused: ReturnType<typeof placeRefusedFixtures>;
   synced: ReturnType<typeof awaitTabFixtures>;
+  real: ReturnType<typeof placeRealSchedule> & ReturnType<typeof awaitRealSchedule>;
 } {
   const stored = storeTabFixtures(runtime, run, started, artifacts);
   const views = createViewFixtures(runtime, run, started, now);
+  const adherence = placeAdherenceFixtures(runtime, run);
   const refused = placeRefusedFixtures(runtime, run);
+  const applied = placeRealSchedule(runtime, run);
   const synced = awaitTabFixtures(runtime, run);
+  const real = { ...applied, ...awaitRealSchedule(runtime, run) };
 
-  return { stored, views, refused, synced };
+  return { stored, views, adherence, refused, synced, real };
 }
 
 // What the journal of the runner keeps of an object: what it is, and the identity the cluster gave it.
@@ -2781,38 +3385,46 @@ export function recordSyncedBackups(
 }
 
 // What the runner says of a placement of the fixtures of the views and of the tabs, a line each: the objects of
-// the views and the ones placed by the clock, the files of the tabs and the backups the server created of
-// them, the ones it created again since the journal was written, and the operations it refused.
+// the views and the ones placed by the clock, the objects of the adherence, the namespaces placed by the clock
+// again, the files of the tabs and the backups the server created of them, the ones it created again since the
+// journal was written, the operations it refused, and the schedule its controller validated.
 //
 // Each says what this call did, and nothing it did not. The files are told as written when this call wrote
 // them, with the way they were sent, and as none when it wrote none. The time of the wait for the two backups
-// is the one of the wait itself, which begins once the fixtures of the views and the refused operations were
-// placed: the server may have created the backups meanwhile, and the wait then takes no time. The refused
-// operations are told as placed when this call applied them, and as found refused when it applied none.
+// is the one of the wait itself, which begins once the fixtures of the views and of the adherence, the refused
+// operations and the schedule its controller validates were placed: the server may have created the backups
+// meanwhile, and the wait then takes no time. The refused
+// operations are told as placed when this call applied them, and as found refused when it applied none; the
+// schedule as applied by this call and validated, or as found validated.
 export function placementWords(
   names: ReturnType<typeof fixtureNames>,
   placed: ReturnType<typeof placeViewAndTabFixtures>,
   recreated: string[],
 ): string[] {
-  const { views, stored, synced, refused } = placed;
+  const { views, adherence, stored, synced, refused, real } = placed;
   const counted = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
   const seconds = (milliseconds: number) => counted(Math.round(milliseconds / 1000), "second");
+  const listed = (items: string[]) =>
+    items.length > 1 ? `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}` : items.join("");
   const written = stored.written.length
     ? `${counted(stored.written.length, "file")} written by this run, ${stored.written.length === 1 ? "sent" : "each sent"} as ${stored.way}${stored.met.length ? `, which the store took after ${stored.met.join("; ")}` : ""}`
     : "none written by this run";
+  const again = [...views.again, ...adherence.again];
 
   return [
     `PASS: ${views.views} objects of the views in ${names.views} and ${names.defaults}, ${views.overview} of the Overview in ${names.overview}, and ${views.scale} backups and ${views.restores} restores of the long lists in ${names.scale}, are in place, outside the reach of the controllers.`,
-    ...(views.again.length
-      ? [`NOTE: the fixtures that are placed by the clock were put in place again in ${views.again.join(" and ")}.`]
+    `PASS: ${adherence.states} objects of the adherence in ${names.adherence}, ${adherence.split} in ${names.adherenceSplit} and ${adherence.budget} in ${names.adherenceScale}, the backups of their submissions named by the clock of their placement, are in place, outside the reach of the controllers.`,
+    ...(again.length
+      ? [`NOTE: the fixtures that are placed by the clock were put in place again in ${listed(again)}.`]
       : []),
-    `PASS: the store holds the files of the tabs (${written}), and the server created ${names.syncedBackup} and ${names.syncedBackupWithoutLog} from them as they were stored: once the fixtures of the views and the refused operations were placed, the wait for the two took ${seconds(synced.waited)}${synced.passes ? `, in which ${counted(synced.passes, "pass", "passes")} of its sync ended without both` : ""}.`,
+    `PASS: the store holds the files of the tabs (${written}), and the server created ${names.syncedBackup} and ${names.syncedBackupWithoutLog} from them as they were stored: once the fixtures of the views and of the adherence, the refused operations and the schedule its controller validates were placed, the wait for the two took ${seconds(synced.waited)}${synced.passes ? `, in which ${counted(synced.passes, "pass", "passes")} of its sync ended without both` : ""}.`,
     ...(recreated.length
       ? [
           `NOTE: the server created ${recreated.join(" and ")} again since the journal was written: the journal has the new identity.`,
         ]
       : []),
     `PASS: the server refused ${names.invalidBackup}, ${names.invalidRestore} and ${names.orphanRestore} for the reasons they are made for (${refused.applied.length ? `${refused.applied.length} placed by this run, refused after ${seconds(refused.waited)}` : "none placed by this run, each found refused"}).`,
+    `PASS: the controller validated ${names.realSchedule} in ${DEMO_NAMESPACE}, ${REAL_SCHEDULE_EXPRESSION}: Enabled, with whether a run that is due is skipped written by it, and no submission and no backup of it (${real.applied ? "applied by this run" : "found validated"}).`,
   ];
 }
 
@@ -3817,12 +4429,13 @@ export function removeFixtureBackup(
 
 // Once the operations of a run were removed, and before the run is called cleaned: the installation holds
 // none of them, each looked for by its name whatever identity the cluster gave it, since the server may have
-// created a backup again; and the store holds none of the keys of the run, the ones the server wrote for the
-// real operations and the ones the store was given for the tabs. The journal forgets the operations as soon
-// as the installation is read to hold none of them, before the store is asked: what it names is what the
-// cluster holds, whatever the store answers, and a key that is left stops the run with no entry of an object
-// that is gone. A store that does not say whether it holds a key says nothing: the run is not called cleaned
-// on it, and the next cleanup asks it again.
+// created a backup again, nor the schedule the controller validated, nor a backup that schedule submitted, which
+// carries its label and which nothing here removes; and the store holds none of the keys of the run, the ones
+// the server wrote for the real operations and the ones the store was given for the tabs. The journal forgets
+// the operations and the schedule as soon as the installation is read to hold none of them, before the store is
+// asked: what it names is what the cluster holds, whatever the store answers, and a key that is left stops the
+// run with no entry of an object that is gone. A store that does not say whether it holds a key says nothing:
+// the run is not called cleaned on it, and the next cleanup asks it again.
 export function assertFixtureOperationsRemoved(runtime: FixtureRuntime, run: string): { keys: number } {
   const names = fixtureNames(run);
   const { journal } = runtime;
@@ -3838,12 +4451,13 @@ export function assertFixtureOperationsRemoved(runtime: FixtureRuntime, run: str
     ...deletions.map((name) => ["Backup", name] as const),
     ...[names.restore, names.invalidRestore, names.orphanRestore].map((name) => ["Restore", name] as const),
     ...deletions.map((name) => ["DeleteBackupRequest", `${name}-delete`] as const),
+    ["Schedule", names.realSchedule] as const,
   ];
   const items = (
     JSON.parse(
       runtime.kubectl([
         "get",
-        "backups.velero.io,restores.velero.io,deletebackuprequests.velero.io",
+        "backups.velero.io,restores.velero.io,deletebackuprequests.velero.io,schedules.velero.io",
         "--namespace",
         DEMO_NAMESPACE,
         "-o",
@@ -3851,9 +4465,16 @@ export function assertFixtureOperationsRemoved(runtime: FixtureRuntime, run: str
       ]),
     ) as { items: KubeResource[] }
   ).items;
-  const there = operations
-    .filter(([kind, name]) => items.some((item) => item.kind === kind && item.metadata.name === name))
-    .map(([kind, name]) => `the ${kind} ${name}`);
+  const there = [
+    ...operations
+      .filter(([kind, name]) => items.some((item) => item.kind === kind && item.metadata.name === name))
+      .map(([kind, name]) => `the ${kind} ${name}`),
+    ...items
+      .filter(
+        (item) => item.kind === "Backup" && item.metadata.labels?.["velero.io/schedule-name"] === names.realSchedule,
+      )
+      .map((item) => `the Backup ${item.metadata.name} that ${names.realSchedule} submitted`),
+  ];
 
   requireCondition(
     there.length === 0,

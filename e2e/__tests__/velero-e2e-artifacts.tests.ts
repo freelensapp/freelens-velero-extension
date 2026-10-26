@@ -255,9 +255,7 @@ describe("the log, the results, the resources and the volumes of an operation", 
     await frame.waitForTimeout(NOTHING);
     expect(askedSince(earlier)).toEqual({});
     expect(
-      Object.keys(cluster.counted(writesBefore, cluster.writes(cluster.apiRequests()))).filter(
-        (key) => key.split(" ")[1] !== RESOURCE,
-      ),
+      Object.keys(cluster.writes(writesBefore, cluster.apiRequests())).filter((key) => key.split(" ")[1] !== RESOURCE),
     ).toEqual([]);
   };
   // Where the suite has a log saved: under the profile of the run, which goes with it.
@@ -1316,7 +1314,7 @@ describe("the log, the results, the resources and the volumes of an operation", 
       await toTheSave();
       const asked = (await velero.saveDialogCalls(running.app)).length;
       const earlier = cluster.requestCodes(RESOURCE);
-      const writesBefore = cluster.writes(cluster.apiRequests());
+      const writesBefore = cluster.apiRequests();
 
       await artifacts.clickOn(frame, id("save"));
       await artifacts.attributeLike(frame, id("saving"), "data-saving", "left");
@@ -1344,7 +1342,7 @@ describe("the log, the results, the resources and the volumes of an operation", 
       const loaded = await toTheSave();
       const asked = (await velero.saveDialogCalls(running.app)).length;
       const earlier = cluster.requestCodes(RESOURCE);
-      const writesBefore = cluster.writes(cluster.apiRequests());
+      const writesBefore = cluster.apiRequests();
 
       await artifacts.clickOn(frame, id("save"));
       await artifacts.attributeLike(frame, id("saving"), "data-saving", "saved");
@@ -2844,7 +2842,7 @@ describe("the log, the results, the resources and the volumes of an operation", 
       const loaded = await toTheSave(SYNCED);
       const asked = (await velero.saveDialogCalls(running.app)).length;
       const earlier = cluster.requestCodes(RESOURCE);
-      const writesBefore = cluster.writes(cluster.apiRequests());
+      const writesBefore = cluster.apiRequests();
 
       await artifacts.clickOn(frame, id("save"));
       await artifacts.attributeLike(frame, id("saving"), "data-saving", "saved");
@@ -3403,7 +3401,7 @@ describe("the log, the results, the resources and the volumes of an operation", 
       await stay("backup", "log", SYNCED);
       expect((await artifacts.panelState(frame, "backup", "log")).shown).toBe(held.request);
       const earlier = cluster.requestCodes(RESOURCE);
-      const writesBefore = cluster.writes(cluster.apiRequests());
+      const writesBefore = cluster.apiRequests();
 
       // Another installation: writes are off there, as a change of installation turns them off.
       await cluster.selectInstallation(frame, VIEWS);
@@ -3462,7 +3460,7 @@ describe("the log, the results, the resources and the volumes of an operation", 
       await frame.waitForSelector("[data-testid=velero-writes-on]", { timeout: 60_000 });
       await cluster.turnWritesOn(frame);
       const earlier = cluster.requestCodes(RESOURCE);
-      const writesBefore = cluster.writes(cluster.apiRequests());
+      const writesBefore = cluster.apiRequests();
       const restore = read("restore", ORPHAN);
 
       // The restore was refused without a backup name: it names none, and Velero signs no URL for it.
@@ -3998,9 +3996,9 @@ describe("the log, the results, the resources and the volumes of an operation", 
         "PATCH 200": patched = 0,
         ...rest
       } = cluster.counted(counted, cluster.requestCodes(RESOURCE));
-      const others = Object.keys(
-        cluster.counted(cluster.writes(written), cluster.writes(cluster.apiRequests())),
-      ).filter((key) => key.split(" ")[1] !== RESOURCE);
+      const others = Object.keys(cluster.writes(written, cluster.apiRequests())).filter(
+        (key) => key.split(" ")[1] !== RESOURCE,
+      );
 
       await report("artifact-requests-of-the-suite", {
         gestures,

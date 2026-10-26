@@ -14,6 +14,7 @@ import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { captureWindowScreenshot, EXTENSION_NAME } from "./velero-extension";
+import { realScheduleSubmission, writesOf } from "./velero-guard";
 
 import type { Frame, Locator, Page, Request } from "playwright";
 
@@ -32,16 +33,37 @@ export const E2E_DEFAULTS_NAMESPACE = process.env.E2E_DEFAULTS_NAMESPACE || "";
 export const E2E_OVERVIEW_NAMESPACE = process.env.E2E_OVERVIEW_NAMESPACE || "";
 /** Where the long list is: a thousand backups and no storage location. */
 export const E2E_SCALE_NAMESPACE = process.env.E2E_SCALE_NAMESPACE || "";
+/** Where the states of the adherence of a schedule are, placed by the clock, with no storage location. */
+export const E2E_ADHERENCE_NAMESPACE = process.env.E2E_ADHERENCE_NAMESPACE || "";
+/** Where the two schedules are whose submissions give two offsets of the server, with no storage location. */
+export const E2E_ADHERENCE_SPLIT_NAMESPACE = process.env.E2E_ADHERENCE_SPLIT_NAMESPACE || "";
+/** Where the three hundred schedules of the budget of the adherence are, with no storage location. */
+export const E2E_ADHERENCE_SCALE_NAMESPACE = process.env.E2E_ADHERENCE_SCALE_NAMESPACE || "";
 /** The run of the fixtures, from the record of the environment: the names of its operations end with it. */
 export const E2E_FIXTURE_RUN = process.env.E2E_FIXTURE_RUN || "";
 
-/** The namespaces a discovery finds: the ones that hold a backup storage location. */
+/**
+ * The namespaces a discovery finds: the ones that hold a backup storage location. The long lists and the
+ * installations of the adherence hold none, and the operator names them.
+ */
 export const SUGGESTED_NAMESPACES = [
   E2E_NAMESPACE,
   E2E_STATIC_NAMESPACE,
   E2E_VIEWS_NAMESPACE,
   E2E_DEFAULTS_NAMESPACE,
   E2E_OVERVIEW_NAMESPACE,
+];
+
+/** The namespaces of the fixtures that no controller reads: nothing but what is under test could write there. */
+const SYNTHETIC_NAMESPACES = [
+  E2E_STATIC_NAMESPACE,
+  E2E_VIEWS_NAMESPACE,
+  E2E_DEFAULTS_NAMESPACE,
+  E2E_OVERVIEW_NAMESPACE,
+  E2E_SCALE_NAMESPACE,
+  E2E_ADHERENCE_NAMESPACE,
+  E2E_ADHERENCE_SPLIT_NAMESPACE,
+  E2E_ADHERENCE_SCALE_NAMESPACE,
 ];
 
 /** Connecting a cluster involves starting a proxy, so it is not quick. */
@@ -289,7 +311,9 @@ export function fixturesMissing(): string {
 /**
  * True when the cluster is up and the fixtures are on it. A cluster without
  * them is reported as not ready instead of failing later as a page full of
- * missing rows.
+ * missing rows. When they are there and the schedule the controller validated
+ * submitted a backup since its placement, it throws with words that say so:
+ * the suite would take that backup into its first snapshot.
  */
 export function fixturesReady(): boolean {
   const probes: [namespace: string, resource: string, name: string][] = [
@@ -317,16 +341,43 @@ export function fixturesReady(): boolean {
     [E2E_OVERVIEW_NAMESPACE, "schedules.velero.io", "overview-schedule-12"],
     [E2E_SCALE_NAMESPACE, "backups.velero.io", "backup-1000"],
     [E2E_SCALE_NAMESPACE, "restores.velero.io", "restore-1000"],
+    // The schedule the controller of the installation validated, by the name of the run; the two schedules of the
+    // views that submitted and have no backup; and a schedule of each installation of the adherence, which are
+    // created after the backups of their submissions.
+    [E2E_NAMESPACE, "schedules.velero.io", `fixture-yearly-${E2E_FIXTURE_RUN}`],
+    [E2E_VIEWS_NAMESPACE, "schedules.velero.io", "views-submitted"],
+    [E2E_VIEWS_NAMESPACE, "schedules.velero.io", "views-interval"],
+    [E2E_ADHERENCE_NAMESPACE, "schedules.velero.io", "adherence-held"],
+    [E2E_ADHERENCE_SPLIT_NAMESPACE, "schedules.velero.io", "split-older"],
+    [E2E_ADHERENCE_SCALE_NAMESPACE, "schedules.velero.io", "schedule-300"],
   ];
 
   // A run is eight hexadecimal characters: without one, no name of the run is probed.
-  return (
+  const found =
     /^[a-f0-9]{8}$/.test(E2E_FIXTURE_RUN) &&
     probes.every(
       ([namespace, resource, name]) =>
         namespace !== "" && kubectlE2E("get", resource, name, "--namespace", namespace, "-o", "name").status === 0,
-    )
+    );
+
+  if (!found) return false;
+  const installed = kubectlE2E(
+    "get",
+    "schedules.velero.io,backups.velero.io",
+    "--namespace",
+    E2E_NAMESPACE,
+    "-o",
+    "json",
   );
+
+  if (installed.status !== 0) return false;
+  const submitted = realScheduleSubmission(
+    `fixture-yearly-${E2E_FIXTURE_RUN}`,
+    (JSON.parse(installed.stdout) as { items: Parameters<typeof realScheduleSubmission>[1] }).items,
+  );
+
+  if (submitted) throw new Error(submitted);
+  return true;
 }
 
 const KINDS = ["backups", "restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"];
@@ -334,7 +385,11 @@ const KINDS = ["backups", "restores", "schedules", "backupstoragelocations", "vo
 const REQUESTS = ["downloadrequests", "serverstatusrequests", "deletebackuprequests"];
 
 export interface ClusterSnapshot {
-  /** Every synthetic object with its version, which changes with every write. */
+  /**
+   * Every synthetic object with its version, which changes with every write; and each schedule of the namespace
+   * of the installation, which is the one its controller validated, with its version and its status: a
+   * submission writes its last submission into it, and a patch that changes it changes its version.
+   */
   versions: Record<string, string>;
   /** The objects of the namespace of the installation, which its controllers may change. */
   installed: string[];
@@ -364,16 +419,13 @@ export function clusterSnapshot(): ClusterSnapshot {
     );
 
     if (status !== 0) throw new Error(`kubectl get ${resource} failed: ${stderr}`);
-    return (JSON.parse(stdout) as { items: { metadata: { name: string; uid: string; resourceVersion: string } }[] })
-      .items;
+    return (
+      JSON.parse(stdout) as {
+        items: { metadata: { name: string; uid: string; resourceVersion: string }; status?: unknown }[];
+      }
+    ).items;
   };
-  const synthetic = [
-    E2E_STATIC_NAMESPACE,
-    E2E_VIEWS_NAMESPACE,
-    E2E_DEFAULTS_NAMESPACE,
-    E2E_OVERVIEW_NAMESPACE,
-    E2E_SCALE_NAMESPACE,
-  ];
+  const synthetic = SYNTHETIC_NAMESPACES;
   const names = (resource: string, namespace: string) => {
     const { status, stdout, stderr } = kubectlE2E(
       "get",
@@ -397,7 +449,13 @@ export function clusterSnapshot(): ClusterSnapshot {
         versions[`${namespace}/${kind}/${item.metadata.name}/${item.metadata.uid}`] = item.metadata.resourceVersion;
       }
     }
-    for (const item of list(kind, E2E_NAMESPACE)) installed.push(`${kind}/${item.metadata.name}/${item.metadata.uid}`);
+    for (const item of list(kind, E2E_NAMESPACE)) {
+      installed.push(`${kind}/${item.metadata.name}/${item.metadata.uid}`);
+      if (kind === "schedules") {
+        versions[`${E2E_NAMESPACE}/${kind}/${item.metadata.name}/${item.metadata.uid}`] =
+          `${item.metadata.resourceVersion} ${JSON.stringify(item.status ?? {})}`;
+      }
+    }
   }
   for (const kind of REQUESTS) {
     for (const namespace of [E2E_NAMESPACE, ...synthetic]) {
@@ -422,14 +480,19 @@ export function veleroObject<Read>(resource: string, name: string, namespace = E
   return status === 0 && stdout ? (JSON.parse(stdout) as Read) : undefined;
 }
 
+/** When each reading of the counters was asked, which `writes` takes the length of its window from. */
+const READ_AT = new WeakMap<Record<string, number>, number>();
+
 /**
  * How many requests the API server counted for the kinds of Velero, by verb,
  * kind and scope: `LIST backupstoragelocations cluster`. The server counts
  * what reaches it, whoever asks: a list of a kind in the whole cluster is
  * asked by the discovery of the extension and by nothing else of this
- * environment, whose controllers ask for their own namespace.
+ * environment, whose controllers ask for their own namespace. The reading
+ * keeps the moment it was asked.
  */
 export function apiRequests(): Record<string, number> {
+  const asked = Date.now();
   const { status, stdout, stderr } = kubectlE2E("get", "--raw", "/metrics");
 
   if (status !== 0) throw new Error(`The counters of the API server could not be read: ${stderr}`);
@@ -442,6 +505,7 @@ export function apiRequests(): Record<string, number> {
 
     counts[key] = (counts[key] ?? 0) + Number(line.slice(line.lastIndexOf(" ") + 1));
   }
+  READ_AT.set(counts, asked);
 
   return counts;
 }
@@ -480,20 +544,42 @@ export function familyReads(counts: Record<string, number>): Record<string, numb
 }
 
 /**
- * The requests that change something, or ask Velero for something, among the
- * ones counted: every request of every kind of `velero.io` that is not a read.
- * One is left out, which the installation under test makes by itself: its
- * controller writes into the status of its storage location every time it
- * validates it.
+ * Whether the controller of the installation sends a PATCH of the schedule it
+ * validated at each of its looks, once a minute, with nothing of the schedule
+ * changed: the measure of the local integration of the fixtures of the
+ * adherence says which, as SPEC-0013 records, and sets this. When it does,
+ * `writes` leaves out the PATCH of the schedules, and what proves that nothing
+ * was written to the schedule is its version and its status, which the snapshot
+ * of every suite holds, and the identities of the objects of the installation,
+ * to which a submission would add a backup. Measured on 2026-10-26, over three
+ * minutes of an environment that nothing else read or wrote: a PATCH of the
+ * scope `resource`, the schedule by name, once a minute (19 to 22), with the
+ * version and the status of the real schedule unchanged and no POST of a
+ * backup. What is left out is bounded by that, and `writesOf` enforces it: no
+ * more PATCH of a schedule by name than the whole minutes between the two
+ * readings and two, the rest counted as writes, with every PATCH of a schedule
+ * of another scope. A PATCH within the bound that changes nothing, or that the
+ * server refuses, leaves no trace in the snapshot.
  */
-export function writes(counts: Record<string, number>): Record<string, number> {
-  return Object.fromEntries(
-    Object.entries(counts).filter(([key]) => {
-      const [verb, kind] = key.split(" ");
+export const SCHEDULE_PATCHED_AT_EVERY_LOOK: boolean = true;
 
-      return !["GET", "LIST", "WATCH"].includes(verb) && !(verb === "PATCH" && kind === "backupstoragelocations");
-    }),
-  );
+/**
+ * The requests that change something, or ask Velero for something, among the
+ * ones counted between two readings of `apiRequests` (`writesOf`), the PATCH
+ * of a schedule among them, but the ones its controller sends at every look
+ * within the bound of the minutes between the readings
+ * (`SCHEDULE_PATCHED_AT_EVERY_LOOK`).
+ */
+export function writes(before: Record<string, number>, after: Record<string, number>): Record<string, number> {
+  const from = READ_AT.get(before);
+  const to = READ_AT.get(after);
+
+  if (from === undefined || to === undefined) {
+    throw new Error(
+      "The writes are counted between two readings of apiRequests, which keep the moment they were asked",
+    );
+  }
+  return writesOf(counted(before, after), SCHEDULE_PATCHED_AT_EVERY_LOOK, (to - from) / 60_000);
 }
 
 /** What was counted between two readings of the counters: the requests that are more, with how many more. */
@@ -2947,15 +3033,7 @@ function requestsOfTheExtension(namespace: string, kind: RequestKind): number {
  * of the installation is refused: there the server removes its requests itself.
  */
 export function removeRequestsOfTheExtension(namespace: string, kind: RequestKind = "ServerStatusRequest"): number {
-  const synthetic = [
-    E2E_STATIC_NAMESPACE,
-    E2E_VIEWS_NAMESPACE,
-    E2E_DEFAULTS_NAMESPACE,
-    E2E_OVERVIEW_NAMESPACE,
-    E2E_SCALE_NAMESPACE,
-  ];
-
-  if (namespace === "" || !synthetic.includes(namespace)) {
+  if (namespace === "" || !SYNTHETIC_NAMESPACES.includes(namespace)) {
     throw new Error(`The suites remove the requests of a namespace of the fixtures, and "${namespace}" is not one`);
   }
   const found = requestsOfTheExtension(namespace, kind);

@@ -48,12 +48,14 @@ const WEIGHTS: Record<string, number> = {
   paused: 7,
 };
 const LABELS: Record<string, string> = { awaited: "Awaited", due: "Due", overdue: "Overdue" };
-// The schedules of the installation of the views whose zone no backup gives, and the paused ones.
+// The schedules of the installation of the views whose zone no backup gives, or that Velero has not read, and the
+// paused ones.
 const NOT_KNOWN = [
   "schedule-new",
   "schedule-unread",
   "views-daily",
   "views-history",
+  "views-submitted",
   "views-to-archive",
   "views-to-default",
   "views-to-removed",
@@ -297,7 +299,7 @@ describe("views of the schedules", () => {
       );
       await cluster.expectRowOf(SCHEDULES, frame, "views-daily", "views-daily-20260901030000", "2 warnings");
       await cluster.expectRowOf(SCHEDULES, frame, "views-zoned", "CRON_TZ=Europe/Rome 30 2 * * *", "None that exists");
-      expect(await cluster.mounted(frame, SCHEDULES)).toHaveLength(10);
+      expect(await cluster.mounted(frame, SCHEDULES)).toHaveLength(12);
       expect(await cluster.layoutProblems(frame, SCHEDULES)).toEqual([]);
       await cluster.captureScreenshot(frame, "dark-schedules-with-history");
     },
@@ -715,16 +717,34 @@ describe("views of the schedules", () => {
         } while (Date.now() < deadline);
         return names;
       };
+      // The two schedules that submitted two days before the fixtures were started and have no backup: the
+      // interval is overdue at every age of the environment, and the one of five fields is not known for want of
+      // the zone of the server.
+      expect(await cluster.rowAdherence(frame, "views-interval")).toEqual({
+        next: "at",
+        state: "overdue",
+        mark: "late",
+        reason: "",
+      });
+      expect(await cluster.rowAdherence(frame, "views-submitted")).toEqual({
+        next: "not-known",
+        state: "not-known",
+        mark: "not-known",
+        reason: "no-offset",
+      });
       // By the next run: the instants from the earliest, then what is not known, then what has none, each by name.
-      // The second click reverses all of it.
-      const byNext = ["views-zoned", ...NOT_KNOWN, ...PAUSED];
+      // The run of the interval was expected two days back, before the one of the schedule that names its zone,
+      // which is after its creation. The second click reverses all of it.
+      const byNext = ["views-interval", "views-zoned", ...NOT_KNOWN, ...PAUSED];
 
       expect(await ordered("next", byNext)).toEqual(byNext);
       expect(await ordered("next", [...byNext].reverse())).toEqual([...byNext].reverse());
-      // By adherence: what needs a hand first, what is not known before what is on time, the paused ones last.
+      // By adherence: what needs a hand first, what is not known before what is on time, the paused ones last. Of
+      // what is overdue, the interval was expected first.
       const zoned = await cluster.rowAdherence(frame, "views-zoned");
       const before = WEIGHTS[zoned.state] < WEIGHTS["not-known"];
       const byAdherence = [
+        "views-interval",
         ...(before ? ["views-zoned"] : []),
         ...NOT_KNOWN,
         ...(before ? [] : ["views-zoned"]),
@@ -1057,7 +1077,7 @@ describe("views of the schedules", () => {
       expect(after.requests).toBe(0);
       // No request of any kind of Velero that is not a read, by whoever: the suite writes nothing, and the
       // installation under test has nothing to do.
-      expect(cluster.counted(cluster.writes(counted), cluster.writes(requests))).toEqual({});
+      expect(cluster.writes(counted, requests)).toEqual({});
       // Of the whole cluster only the storage locations were listed, once, which is how the installations
       // are found.
       expect(cluster.counted(cluster.clusterReads(counted), cluster.clusterReads(requests))).toEqual({

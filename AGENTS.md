@@ -422,6 +422,27 @@ test environment and of the process of this repository.
   it is good for. What a suite expects of it holds for as long as it is good.
   Objects that are created together may have the same creation time or not:
   expect no order among the ones that are placed by their creation alone.
+- A backup of a submission is named by the wall clock of the server, and the views
+  take the offset of the server from its digits less its creation, within a
+  minute; the creation is the cluster's. A fixture that holds one is placed in two
+  phases: the backup first, named by the clock of this machine read just before it
+  is created, and its creation read back, which stops the placement when it is
+  more than thirty seconds from that clock; then its schedule, with that creation
+  as its last submission. A name read from a clock minutes older, as the one of the
+  start of the runner, or a Docker machine whose clock drifted that far from the one
+  of this machine, would give the views no offset, and they would say "not known"
+  with nothing to tell why.
+- The verification of the test environment refuses an installation that holds a
+  schedule, and the hosted job runs it after the cleanup of the fixtures: the
+  schedule the controller of the installation validates, a fixture of the
+  adherence, goes with that cleanup, by its identity, before it. That controller
+  sends a PATCH of the schedule at each of its looks with nothing changed, once a
+  minute (measured on 2026-10-26), which every suite would count as a write: the
+  helpers leave out of the writes the PATCH of a schedule by name, no more of them
+  than the whole minutes between the two readings of the counters and two
+  (`SCHEDULE_PATCHED_AT_EVERY_LOOK`, `writesOf`), so `writes` takes two readings
+  of `apiRequests`, which keep the moment they were asked; the version and the
+  status of the schedule in the snapshot prove that nothing changed it.
 - `kubectl delete` waits for each object it removed, one at a time: two thousand
   take minutes. Remove with `--wait=false`, then read the namespace until
   nothing is left.
