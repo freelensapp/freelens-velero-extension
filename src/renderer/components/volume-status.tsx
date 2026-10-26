@@ -4,6 +4,7 @@ import {
   bytesTip,
   NOT_REPORTED,
   POD_NOT_NAMED,
+  phaseSentence,
   REPOSITORY_WORDS,
   volumePhaseText,
 } from "../../common/volume-words";
@@ -64,11 +65,13 @@ export function VolumePhase({ state, message }: { state: VolumeOperationState; m
 }
 
 // The cell of the phase in a list: the words can be cut, so they are in the badge of the host, with the message
-// in its tip.
+// in its tip. An operation with no phase or New, which carries no message, says in its tip what it waits for.
 export function VolumePhaseCell({ state, message }: { state: VolumeOperationState; message?: string }) {
+  const waiting = state.recognized && (state.reported === undefined || state.reported === "New");
+
   return (
     <span className={styles.cellWords}>
-      <WithTooltip tooltip={message ?? volumePhaseText(state)}>
+      <WithTooltip tooltip={message ?? (waiting ? phaseSentence(state) : volumePhaseText(state))}>
         <VolumePhase state={state} message={message} />
       </WithTooltip>
     </span>

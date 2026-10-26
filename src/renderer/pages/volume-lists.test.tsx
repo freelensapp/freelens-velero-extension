@@ -348,6 +348,12 @@ describe("the lists of the pod volume operations", () => {
     await waitFor(() => expect(rows("pod-volume-backup")).toHaveLength(pvbs.length));
     const phase = (name: string) => cell("pod-volume-backup", name, "phase");
 
+    // What an operation with no phase or New waits for is in its tip, which no message takes.
+    expect([tip(phase("nightly-none")), tip(phase("nightly-new"))]).toEqual([
+      NODE_AGENT_WORDS.PodVolumeBackup,
+      NODE_AGENT_WORDS.PodVolumeBackup,
+    ]);
+
     expect(
       [
         "nightly-none",
