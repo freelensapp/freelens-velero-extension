@@ -1,5 +1,6 @@
 import { defaults } from "./location-view";
 import { LABELS } from "./types";
+import { REFERENCE_WORDS } from "./volume-words";
 
 import type { FamilyRead } from "./read-state";
 import type {
@@ -11,7 +12,15 @@ import type {
   VolumeSnapshotLocationResource,
 } from "./types";
 
-export type ReferenceKind = "Schedule" | "BackupStorageLocation" | "VolumeSnapshotLocation" | "Restore" | "Backup";
+export type ReferenceKind =
+  | "Schedule"
+  | "BackupStorageLocation"
+  | "VolumeSnapshotLocation"
+  | "Restore"
+  | "Backup"
+  | "BackupRepository"
+  | "PodVolumeBackup"
+  | "PodVolumeRestore";
 
 export type ReferenceState =
   // The object is there, in the same installation.
@@ -56,26 +65,34 @@ export interface InstallationReads {
   restores: FamilyRead<RestoreResource>;
 }
 
-const NAMES: Record<ReferenceKind, string> = {
-  Schedule: "schedule",
-  BackupStorageLocation: "backup storage location",
-  VolumeSnapshotLocation: "volume snapshot location",
-  Restore: "restore",
-  Backup: "backup",
+// How each kind is called, one of it and more than one.
+const NAMES: Record<ReferenceKind, { noun: string; plural: string }> = {
+  Schedule: { noun: "schedule", plural: "schedules" },
+  BackupStorageLocation: { noun: "backup storage location", plural: "backup storage locations" },
+  VolumeSnapshotLocation: { noun: "volume snapshot location", plural: "volume snapshot locations" },
+  Restore: { noun: "restore", plural: "restores" },
+  Backup: { noun: "backup", plural: "backups" },
+  BackupRepository: { noun: "backup repository", plural: "backup repositories" },
+  PodVolumeBackup: { noun: "pod volume backup", plural: "pod volume backups" },
+  PodVolumeRestore: { noun: "pod volume restore", plural: "pod volume restores" },
 };
 
-function unavailable(kind: ReferenceKind, read: FamilyRead<unknown>): { state: ReferenceState; reason: string } {
-  const plural = `${NAMES[kind]}s`;
+// What is known of a target whose kind was not read now, and was not read before either.
+export function unavailable(
+  kind: ReferenceKind,
+  read: FamilyRead<unknown>,
+): { state: Exclude<ReferenceState, "resolved" | "absent">; reason: string } {
+  const { plural } = NAMES[kind];
 
   switch (read.status) {
     case "forbidden":
-      return { state: "inaccessible", reason: `The ${plural} of this installation cannot be read: access is denied` };
+      return { state: "inaccessible", reason: REFERENCE_WORDS.denied(plural) };
     case "not-served":
-      return { state: "unknown", reason: `The cluster does not serve the ${plural}` };
+      return { state: "unknown", reason: REFERENCE_WORDS["not-served"](plural) };
     case "failed":
-      return { state: "unknown", reason: `The ${plural} of this installation could not be read` };
+      return { state: "unknown", reason: REFERENCE_WORDS.failed(plural) };
     default:
-      return { state: "not-read", reason: `The ${plural} of this installation were not read yet` };
+      return { state: "not-read", reason: REFERENCE_WORDS["not-read"](plural) };
   }
 }
 
@@ -97,7 +114,7 @@ export function resolveReference<Item extends { metadata: ObjectMetadata }>(
       state: "resolved",
       uid: found.metadata.uid,
       stale,
-      reason: stale ? `Read before the ${NAMES[kind]}s stopped answering` : "",
+      reason: stale ? REFERENCE_WORDS.stale(NAMES[kind].plural) : "",
     };
   }
   if (read.status === "ready") {
@@ -107,7 +124,7 @@ export function resolveReference<Item extends { metadata: ObjectMetadata }>(
       namespace,
       state: "absent",
       stale: false,
-      reason: `No ${NAMES[kind]} of this name in ${namespace}`,
+      reason: REFERENCE_WORDS.absent(NAMES[kind].noun, namespace),
     };
   }
   // Not found in a list that was not read now: the object may be there.
