@@ -86,6 +86,13 @@ const server = createServer((request, response) => {
     response.end(parts.subarray(8));
     return;
   }
+  // A file whose length is not declared, sent whole in one write with the end of its parts: it has all
+  // arrived before anything reads it.
+  if (request.url?.startsWith("/whole")) {
+    response.writeHead(200, { "Transfer-Encoding": "chunked" });
+    response.end(gzipSync("x".repeat(4096)));
+    return;
+  }
   // The beginning of a file, then the connection closed under it.
   if (request.url?.startsWith("/broken")) {
     response.writeHead(200, { "Content-Length": 4096 });
@@ -1000,6 +1007,31 @@ describe("what a download leaves behind, however it ends", () => {
       expect(observed.written()).not.toContain(SENTINEL);
     },
   );
+
+  // An answer that has arrived whole is one whose socket a runtime may leave to close on its own after its
+  // request is closed: the socket is closed when the download ends all the same. The answer is read
+  // whole when the download ends, or the case is not the one it proves.
+  it("closes the socket of an answer that arrived whole when the bound of the compressed bytes stops reading it", async () => {
+    const observed = observe();
+    const outcome = await downloadArtifact(
+      `${route().origin}/whole${query}`,
+      route("/whole"),
+      new AbortController().signal,
+      bounds({ compressed: 4 }),
+    ).catch((error: unknown) => error);
+    // The answer a request was given, which the request keeps beside it without its type saying so.
+    const [made] = vi
+      .mocked(http.request)
+      .mock.results.map((result) => result.value as http.ClientRequest & { res?: IncomingMessage });
+
+    expect(outcome).toMatchObject({ code: "payload-too-large" });
+    expect({ written: made.writableFinished, complete: made.res?.complete }).toEqual({
+      written: true,
+      complete: true,
+    });
+    expect(observed.closed()).toEqual({ requests: [true], sockets: [true], decoders: [true] });
+    expect(await released()).toBe("closed");
+  });
 
   it("says nothing of the URL when it refuses it before any connection", () => {
     const observed = observe();
