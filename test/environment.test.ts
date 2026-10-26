@@ -42,6 +42,7 @@ import {
   assertFixtureNamespaceContents,
   assertFixtureOperationsRemoved,
   assertStoreRequest,
+  awaitRealSchedule,
   awaitRequestsBeforeCleanup,
   awaitRequestsRemoved,
   awaitTabFixtures,
@@ -68,6 +69,7 @@ import {
   LONG_SCHEDULE_NAME,
   liveBackup,
   liveRestore,
+  liveSchedule,
   NEWEST_OF_THE_HISTORY,
   NOT_COUNTED,
   NOT_STARTED,
@@ -78,9 +80,11 @@ import {
   placeAdherenceFixtures,
   placeByTheClock,
   placementWords,
+  placeRealSchedule,
   placeRefusedFixtures,
   placeViewAndTabFixtures,
   proofIdentities,
+  REAL_SCHEDULE_EXPRESSION,
   REFUSALS,
   RESTORE_PHASES,
   type Recorded,
@@ -89,6 +93,7 @@ import {
   recordSyncedBackups,
   refusedFixtures,
   removeFixtureBackup,
+  removeRealSchedule,
   restoreSpec,
   restrictedFixtures,
   runArtifactPaths,
@@ -4742,6 +4747,21 @@ describe("foundation fixture boundaries", () => {
     });
   const refused = (target: Installation, runtime: object = target.runtime) =>
     placeRefusedFixtures(runtime as never, run);
+  // The controller of the schedules validates the schedule of the run when the time of the runtime reaches a
+  // moment, if it is there by then: it writes the setting of its server into `skipImmediately`, false unless it is
+  // told otherwise, and the phase; with the setting true it sets it back to false at once and writes the time of
+  // that reading as the last skip. `status` is what it writes in the place of that, when a test asks.
+  const validates = (target: Installation, at: number, how: { skip?: boolean; status?: object } = {}) =>
+    target.at(at, () => {
+      const found = target.find("Schedule", "velero-demo", fixtureNames(run).realSchedule);
+
+      if (!found) return;
+      found.spec = { ...(found.spec as object), skipImmediately: false };
+      found.status = how.status ?? {
+        phase: "Enabled",
+        ...(how.skip ? { lastSkipped: new Date(Date.parse("2026-10-05T10:05:00Z") + at).toISOString() } : {}),
+      };
+    });
 
   it("places the operations the server refuses once, and waits until each is refused for its reason, a backup through its queue", () => {
     const names = fixtureNames(run);
@@ -4948,7 +4968,209 @@ describe("foundation fixture boundaries", () => {
     );
   });
 
-  it("stores the files of the tabs first, places the fixtures of the views and of the adherence and the operations the server refuses meanwhile, and waits for the server last", () => {
+  it("makes the schedule the controller validates: a year between its runs, the template of the real backup, no skipImmediately, of the run", () => {
+    const names = fixtureNames(run);
+    const schedule = liveSchedule("synthetic-owner", run);
+
+    expect(names.realSchedule).toBe(`fixture-yearly-${run}`);
+    expect(names.realSchedule).toMatch(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/);
+    expect(schedule).toEqual({
+      apiVersion: "velero.io/v1",
+      kind: "Schedule",
+      metadata: {
+        name: names.realSchedule,
+        namespace: "velero-demo",
+        labels: { [OWNER_LABEL]: "synthetic-owner", [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" },
+      },
+      spec: { schedule: REAL_SCHEDULE_EXPRESSION, template: liveBackup("synthetic-owner", run).spec },
+    });
+    // A year between its runs, counted from its creation: it submits nothing for the life of an environment. It
+    // names no skipImmediately and no pause, and has no status: the controller writes them.
+    expect(REAL_SCHEDULE_EXPRESSION).toBe("@every 8760h");
+    expect(schedule.spec).not.toHaveProperty("skipImmediately");
+    expect(schedule.spec).not.toHaveProperty("paused");
+    expect(schedule).not.toHaveProperty("status");
+    expect(() => liveSchedule("", run)).toThrow("Fixture ownership is required");
+  });
+
+  // The schedule as the cluster holds it, and the reads of its wait.
+  const yearly = (target: Installation) => target.find("Schedule", "velero-demo", fixtureNames(run).realSchedule);
+  const awaitedSchedule = (target: Installation, runtime: object = target.runtime) =>
+    awaitRealSchedule(runtime as never, run);
+
+  it("places the schedule the controller validates once, and waits until the controller wrote its phase and skipImmediately", () => {
+    const names = fixtureNames(run);
+    const target = installation();
+
+    expect(placeRealSchedule(target.runtime as never, run)).toEqual({ applied: true });
+    // It read the installation once, and applied the schedule.
+    expect(target.asked).toEqual(["get"]);
+    expect(target.applied.slice(-1)).toEqual([`schedule/velero-demo/${names.realSchedule}`]);
+    expect(yearly(target)).toMatchObject(liveSchedule("synthetic-owner", run));
+    // The controller validates it ten seconds after: the wait reads every second until it finds the phase and the
+    // setting written, by the time of the runtime, three reads of four seconds with a second between them.
+    validates(target, target.runtime.elapsed() + 10_000);
+    const before = target.asked.length;
+    const waited = awaitedSchedule(target);
+
+    expect(waited).toEqual({ schedule: yearly(target), waited: 14_000 });
+    expect(waited.schedule).toMatchObject({ spec: { skipImmediately: false }, status: { phase: "Enabled" } });
+    expect(target.asked.slice(before)).toEqual(["get", "get", "get"]);
+    expect(target.paused).toEqual([1000, 1000]);
+    // A second call finds it, applies nothing, and its wait finds it validated at its one read.
+    const objects = structuredClone([...target.objects.entries()]);
+
+    expect(placeRealSchedule(target.runtime as never, run)).toEqual({ applied: false });
+    expect(awaitedSchedule(target)).toEqual({ schedule: yearly(target), waited: 4000 });
+    expect(target.applied.filter((key) => key.startsWith("schedule/"))).toHaveLength(1);
+    expect([...target.objects.entries()]).toEqual(objects);
+    // A server told to skip what is due at once writes the setting true, sets it back to false at its reading, and
+    // writes the time of it as the last skip: the schedule is validated all the same.
+    const skipping = installation();
+
+    placeRealSchedule(skipping.runtime as never, run);
+    validates(skipping, skipping.runtime.elapsed() + 3000, { skip: true });
+    expect(awaitedSchedule(skipping).schedule).toMatchObject({
+      spec: { skipImmediately: false },
+      status: { phase: "Enabled", lastSkipped: expect.any(String) },
+    });
+  });
+
+  it("stops on the schedule the controller validates when it is not of the run, refused, submitted, of a backup that carries its label, or near its run", () => {
+    const names = fixtureNames(run);
+    const down = "Create the environment again with `pnpm demo:down` and `pnpm demo:up`.";
+    const placed = (change: (target: Installation) => void) => {
+      const target = installation();
+
+      placeRealSchedule(target.runtime as never, run);
+      change(target);
+      return stopped(() => awaitedSchedule(target));
+    };
+
+    // Refused, with the words the controller wrote.
+    expect(
+      placed((target) =>
+        validates(target, 0, {
+          status: { phase: "FailedValidation", validationErrors: ["invalid schedule: synthetic"] },
+        }),
+      ),
+    ).toBe(
+      `The controller refused the schedule ${names.realSchedule} of velero-demo: invalid schedule: synthetic. It is ` +
+        "left where it is, of this run, and the cleanup of the fixtures removes it.",
+    );
+    // A last submission, and a backup that carries the label of the schedule: a submission no suite expects.
+    expect(
+      placed((target) => validates(target, 0, { status: { phase: "Enabled", lastBackup: "2026-10-05T10:06:00Z" } })),
+    ).toBe(
+      `The controller submitted a backup of the schedule ${names.realSchedule} of velero-demo, whose next run is a ` +
+        `year after its creation: its last submission is 2026-10-05T10:06:00Z. No suite expects one. ${down}`,
+    );
+    const submitted = `${names.realSchedule}-20261005100600`;
+
+    expect(
+      placed((target) => {
+        validates(target, 0);
+        held(target, {
+          apiVersion: "velero.io/v1",
+          kind: "Backup",
+          metadata: {
+            name: submitted,
+            namespace: "velero-demo",
+            labels: { "velero.io/schedule-name": names.realSchedule },
+          },
+        });
+      }),
+    ).toBe(
+      `The controller submitted a backup of the schedule ${names.realSchedule} of velero-demo, whose next run is a ` +
+        `year after its creation: the backup ${submitted} carries its label. No suite expects one. ${down}`,
+    );
+    // Created a year less half a day before now: its next run is in less than a day.
+    expect(
+      placed((target) => {
+        validates(target, 0);
+        target.at(0, () => {
+          const found = yearly(target);
+
+          if (found) found.metadata.creationTimestamp = "2025-10-05T22:05:00Z";
+        });
+      }),
+    ).toBe(
+      `The schedule ${names.realSchedule} of velero-demo submits its next backup at 2026-10-05T22:05:00.000Z, less ` +
+        `than a day from now: the environment is about a year old. ${down}`,
+    );
+    // Reporting no creation, which no API server leaves out, it is not taken for one far from its run.
+    expect(
+      placed((target) => {
+        validates(target, 0);
+        target.at(0, () => {
+          const found = yearly(target);
+
+          if (found) delete found.metadata.creationTimestamp;
+        });
+      }),
+    ).toBe(
+      `The schedule ${names.realSchedule} of velero-demo submits its next backup at a time not known, less than a ` +
+        `day from now: the environment is about a year old. ${down}`,
+    );
+    // Gone from the installation once it was applied.
+    expect(placed((target) => target.objects.delete(`schedule/velero-demo/${names.realSchedule}`))).toBe(
+      `The schedule ${names.realSchedule} is not in velero-demo, where it was applied. ${down}`,
+    );
+    // One of another run is not taken for the one of this run: nothing is applied over it.
+    const foreign = installation();
+
+    held(foreign, {
+      ...liveSchedule("synthetic-owner", "0f0f0f0f"),
+      metadata: { ...liveSchedule("synthetic-owner", "0f0f0f0f").metadata, name: names.realSchedule },
+    });
+    const applied = foreign.applied.length;
+
+    expect(stopped(() => placeRealSchedule(foreign.runtime as never, run))).toBe(
+      `The schedule ${names.realSchedule} of velero-demo is not the one this run made, and nothing is applied over ` +
+        "it: the way out is to take the environment down, with `pnpm demo:down`.",
+    );
+    expect(foreign.applied).toHaveLength(applied);
+  });
+
+  it("stops when the controller does not validate the schedule in two minutes, by the time that went by, and says where it is", () => {
+    const names = fixtureNames(run);
+    const target = installation();
+
+    placeRealSchedule(target.runtime as never, run);
+    expect(stopped(() => awaitedSchedule(target))).toBe(
+      `The controller did not validate the schedule ${names.realSchedule} in 2 minutes: it has no phase and names ` +
+        "no skipImmediately. It is left in velero-demo, of this run: run the command again once the controller " +
+        "validates it.",
+    );
+    // Reads of four seconds and a second between them: two minutes and the read that found it still unread.
+    expect(new Set(target.paused)).toEqual(new Set([1000]));
+    expect(target.runtime.elapsed()).toBeGreaterThanOrEqual(124_000);
+    // Of a phase the controller wrote and a setting it did not.
+    const half = installation();
+
+    placeRealSchedule(half.runtime as never, run);
+    half.at(0, () => {
+      const found = yearly(half);
+
+      if (found) found.status = { phase: "Enabled" };
+    });
+    expect(stopped(() => awaitedSchedule(half))).toMatch(/: it is Enabled and names no skipImmediately\. /);
+    // Without the clock of the runtime and the one of this machine nothing is read.
+    for (const lacking of ["elapsed", "now"]) {
+      const clockless = installation();
+
+      expect([
+        lacking,
+        stopped(() => awaitedSchedule(clockless, { ...clockless.runtime, [lacking]: undefined })),
+      ]).toEqual([
+        lacking,
+        "The wait for the schedule the controller validates needs the clock of the runtime and the clock of this machine",
+      ]);
+      expect(clockless.asked).toEqual([]);
+    }
+  });
+
+  it("stores the files of the tabs first, places the fixtures of the views and of the adherence, the operations the server refuses and the schedule its controller validates meanwhile, and waits for the server last", () => {
     const names = fixtureNames(run);
     const target = installation();
     const now = Date.parse("2026-10-05T10:06:00Z");
@@ -4979,6 +5201,8 @@ describe("foundation fixture boundaries", () => {
 
         events.push(`apply ${resource.kind} ${resource.metadata.name}`);
         target.runtime.apply(resource);
+        // The controller validates the schedule three seconds after it is applied, as it does a new one.
+        if (resource.kind === "Schedule") validates(target, moment + 3000);
         if (which < 0) return;
         writes(target, moment + 3000, resource.kind, three[which], Object.values(REFUSED)[which]);
         if (which === 2) pass();
@@ -4988,6 +5212,7 @@ describe("foundation fixture boundaries", () => {
           events.push("wait");
           pass();
         }
+        if (args[1] === "schedules.velero.io,backups.velero.io") events.push("validated");
         return target.runtime.kubectl(args, input);
       },
     };
@@ -5004,19 +5229,21 @@ describe("foundation fixture boundaries", () => {
         artifacts.log.text,
     ).toBe(true);
     expect(events[11]).toMatch(/^apply Namespace /);
-    // The objects of the views, the namespaces of the adherence, then the three operations, and only then the
-    // reads of the wait.
-    expect(applies.length).toBeGreaterThan(6);
-    expect(applies.slice(-6)).toEqual([
+    // The objects of the views, the namespaces of the adherence, the three operations, the schedule, and only then
+    // the reads of the wait, and at last the one read that finds the schedule validated.
+    expect(applies.length).toBeGreaterThan(7);
+    expect(applies.slice(-7)).toEqual([
       `apply Namespace ${names.adherence}`,
       `apply Namespace ${names.adherenceSplit}`,
       `apply Namespace ${names.adherenceScale}`,
       `apply Backup ${names.invalidBackup}`,
       `apply Restore ${names.invalidRestore}`,
       `apply Restore ${names.orphanRestore}`,
+      `apply Schedule ${names.realSchedule}`,
     ]);
     expect(events.indexOf("wait")).toBe(events.lastIndexOf(applies[applies.length - 1]) + 1);
-    expect(new Set(events.slice(events.indexOf("wait")))).toEqual(new Set(["wait"]));
+    expect(events.indexOf("validated")).toBe(events.length - 1);
+    expect(new Set(events.slice(events.indexOf("wait"), -1))).toEqual(new Set(["wait"]));
     // What each part answers: the files written, the fixtures of the views, the three refused within the
     // read after the server looked at them, and the two backups found once the sync passed.
     expect(placed.stored).toEqual({ state: "stored", written: tabKeys(), way: "upload", met: [] });
@@ -5026,8 +5253,15 @@ describe("foundation fixture boundaries", () => {
     expect([placed.refused.backup.status, placed.refused.restore.status, placed.refused.orphan.status]).toEqual(
       Object.values(REFUSED),
     );
-    expect(placed.synced).toMatchObject({ passes: 0, waited: 88_000 });
+    expect(placed.synced).toMatchObject({ passes: 0, waited: 82_000 });
     expect(placed.synced.synced).toEqual(target.find("Backup", "velero-demo", names.syncedBackup));
+    // Validated while the server synced: the one read of its wait finds it so.
+    expect(placed.real).toEqual({
+      applied: true,
+      schedule: target.find("Schedule", "velero-demo", names.realSchedule),
+      waited: 4000,
+    });
+    expect(placed.real.schedule).toMatchObject({ spec: { skipImmediately: false }, status: { phase: "Enabled" } });
     // What the runner says of it is what it did: the files it wrote, the way it sent them, the time the wait
     // for the backups took once the other fixtures were placed, and the operations it placed.
     const views = (placement: typeof placed) =>
@@ -5043,12 +5277,16 @@ describe("foundation fixture boundaries", () => {
       `PASS: 10 objects of the adherence in ${names.adherence}, 4 in ${names.adherenceSplit} and 600 in ` +
       `${names.adherenceScale}, the backups of their submissions named by the clock of their placement, are in ` +
       "place, outside the reach of the controllers.";
+    const validated =
+      `PASS: the controller validated ${names.realSchedule} in velero-demo, @every 8760h: Enabled, with whether a ` +
+      "run that is due is skipped written by it, and no submission and no backup of it";
 
     expect(placementWords(names, placed, [])).toEqual([
       views(placed),
       adherence,
-      `PASS: the store holds the files of the tabs (11 files written by this run, each sent as upload), and ${created} 88 seconds.`,
+      `PASS: the store holds the files of the tabs (11 files written by this run, each sent as upload), and ${created} 82 seconds.`,
       `${refused} (3 placed by this run, refused after 4 seconds).`,
+      `${validated} (applied by this run).`,
     ]);
     expect(placed.synced.withoutLog).toEqual(target.find("Backup", "velero-demo", names.syncedBackupWithoutLog));
     expect(target.placement()?.state).toBe("synced");
@@ -5070,6 +5308,7 @@ describe("foundation fixture boundaries", () => {
     expect(again.adherence).toEqual(placed.adherence);
     expect(again.refused).toEqual({ ...placed.refused, applied: [], waited: 0 });
     expect(again.synced).toEqual({ ...placed.synced, passes: 0, waited: 4000 });
+    expect(again.real).toEqual({ ...placed.real, applied: false });
     // It says that it wrote nothing, with no way, and that it placed none of the operations, which it found
     // refused.
     expect(placementWords(names, again, [])).toEqual([
@@ -5077,9 +5316,13 @@ describe("foundation fixture boundaries", () => {
       adherence,
       `PASS: the store holds the files of the tabs (none written by this run), and ${created} 4 seconds.`,
       `${refused} (none placed by this run, each found refused).`,
+      `${validated} (found validated).`,
     ]);
     expect(
-      since.filter((event) => event.startsWith("store ") || three.some((name) => event.endsWith(` ${name}`))),
+      since.filter(
+        (event) =>
+          event.startsWith("store ") || [...three, names.realSchedule].some((name) => event.endsWith(` ${name}`)),
+      ),
     ).toEqual([]);
     expect(since.filter((event) => event === "wait")).toHaveLength(1);
     expect({
@@ -5113,6 +5356,7 @@ describe("foundation fixture boundaries", () => {
       adherence: { states: 10, split: 4, budget: 600, again: [names.adherenceSplit, names.adherenceScale] },
       refused: { applied: [names.orphanRestore], waited: 1400 },
       synced: { passes: 1, waited: 1400 },
+      real: { applied: false, waited: 0 },
     } as unknown as Parameters<typeof placementWords>[1];
     const words = placementWords(names, placed, [names.syncedBackup]);
 
@@ -5132,6 +5376,8 @@ describe("foundation fixture boundaries", () => {
         "new identity.",
       `PASS: the server refused ${names.invalidBackup}, ${names.invalidRestore} and ${names.orphanRestore} for ` +
         "the reasons they are made for (1 placed by this run, refused after 1 second).",
+      `PASS: the controller validated ${names.realSchedule} in velero-demo, @every 8760h: Enabled, with whether a ` +
+        "run that is due is skipped written by it, and no submission and no backup of it (found validated).",
     ]);
     expect(
       placementWords(names, { ...placed, synced: { ...placed.synced, passes: 2, waited: 125_400 } }, []).find((line) =>
@@ -8565,13 +8811,103 @@ describe("foundation fixture boundaries", () => {
     }
   });
 
-  it("calls the operations of a run removed once the installation holds none of them, by their names, and the store none of the keys of the run", () => {
+  it("removes for the cleanup the schedule the controller validated by its identity, waits until it is gone, and forgets it in the journal", () => {
+    const names = fixtureNames(run);
+    const path = `/apis/velero.io/v1/namespaces/velero-demo/schedules/${names.realSchedule}`;
+    // The installation with the schedule the runner applied, which its journal knows with its identity.
+    const applied = () => {
+      const target = installation();
+      const from = runner(target);
+
+      from.runtime.apply(liveSchedule("synthetic-owner", run));
+      return { target, from };
+    };
+    const removal = (runtime: object) => removeRealSchedule(runtime as never, run);
+    const { target, from } = applied();
+    const uid = String(target.find("Schedule", "velero-demo", names.realSchedule)?.metadata.uid);
+    const events: string[] = [];
+    const traces = runner(target, from.entries, traced(events));
+
+    expect(from.left().map((entry) => `${entry.kind}/${entry.name}/${entry.uid}`)).toEqual([
+      `Schedule/${names.realSchedule}/${uid}`,
+    ]);
+    // One read; the delete by its path, with the identity it was read with; a read that finds it gone; and the
+    // journal saved without it.
+    expect(removal(traces.runtime)).toEqual({ removed: true, waited: 8000 });
+    expect(events).toEqual(["get", `delete ${path}`, "get", "save"]);
+    expect(target.removed).toEqual([`schedule/velero-demo/${names.realSchedule}`]);
+    expect(traces.left()).toEqual([]);
+    // Again: nothing is there, nothing is removed, and the journal has nothing to forget.
+    expect(removal(traces.runtime)).toEqual({ removed: false, waited: 0 });
+    // A removal that was stopped once the schedule was gone left its entry: it is forgotten.
+    const stoppedAfter = installation();
+    const kept = runner(stoppedAfter, [
+      { apiVersion: "velero.io/v1", kind: "Schedule", name: names.realSchedule, namespace: "velero-demo", uid },
+    ]);
+
+    expect(removal(kept.runtime)).toEqual({ removed: false, waited: 0 });
+    expect(kept.left()).toEqual([]);
+    // Of another run, of another identity than the journal's, or not known to the journal: nothing is removed.
+    const refusal =
+      `The schedule ${names.realSchedule} of velero-demo is not the one this run created, and it is not removed: ` +
+      `${DOWN}.`;
+    const changed = (change: (target: Installation, from: ReturnType<typeof runner>) => object) => {
+      const scene = applied();
+      const runtime = change(scene.target, scene.from);
+
+      return { words: stopped(() => removal(runtime)), removed: scene.target.removed };
+    };
+
+    expect(
+      changed((scene, of) => {
+        const found = scene.find("Schedule", "velero-demo", names.realSchedule);
+
+        (found?.metadata.labels as Record<string, string>)[FIXTURE_LABEL] = "0f0f0f0f";
+        return of.runtime;
+      }),
+    ).toEqual({ words: refusal, removed: [] });
+    expect(
+      changed((_scene, of) => {
+        of.entries[0].uid = "uid-of-before";
+        return of.runtime;
+      }),
+    ).toEqual({ words: refusal, removed: [] });
+    expect(changed((scene) => runner(scene).runtime)).toEqual({ words: refusal, removed: [] });
+    // A schedule the cluster does not let go of is waited for two minutes, by the time that went by.
+    const lasting = applied();
+    const holding = {
+      ...lasting.from.runtime,
+      kubectl: (args: string[], input?: string) =>
+        args[0] === "delete" ? "" : lasting.from.runtime.kubectl(args, input),
+    };
+
+    expect(stopped(() => removal(holding))).toBe(
+      `The schedule ${names.realSchedule} of velero-demo is still there 2 minutes after it was removed: run the ` +
+        "command again.",
+    );
+    expect(lasting.from.left()).toHaveLength(1);
+    // It needs the clock of the runtime and the journal.
+    for (const lacking of ["elapsed", "journal"]) {
+      const scene = applied();
+      const asked = scene.target.asked.length;
+
+      expect([lacking, stopped(() => removal({ ...scene.from.runtime, [lacking]: undefined }))]).toEqual([
+        lacking,
+        "The removal of the schedule the controller validates needs the clock of the runtime, and the journal of " +
+          "the objects of the run",
+      ]);
+      expect(scene.target.asked).toHaveLength(asked);
+    }
+  });
+
+  it("calls the operations of a run removed once the installation holds none of them, nor the schedule the controller validated, by their names, and the store none of the keys of the run", () => {
     const names = fixtureNames(run);
     const deletions = [names.backup, names.invalidBackup, names.syncedBackup, names.syncedBackupWithoutLog];
     const named: [kind: string, name: string][] = [
       ...deletions.map((name): [string, string] => ["Backup", name]),
       ...[names.restore, names.invalidRestore, names.orphanRestore].map((name): [string, string] => ["Restore", name]),
       ...deletions.map((name): [string, string] => ["DeleteBackupRequest", `${name}-delete`]),
+      ["Schedule", names.realSchedule],
     ];
     const entry = (kind: string, name: string, namespace = "velero-demo"): Recorded => ({
       apiVersion: "velero.io/v1",
@@ -8601,7 +8937,7 @@ describe("foundation fixture boundaries", () => {
     const traces = runner(clean.target, clean.from.entries, traced(events));
 
     // One read of the installation, which is in the log of the operations; the journal forgets the eleven
-    // operations and keeps the rest; and each of the twenty keys of the run is asked for.
+    // operations and the schedule, and keeps the rest; and each of the twenty keys of the run is asked for.
     expect(ended(traces)).toEqual({ keys: 20 });
     expect(runArtifactPaths(run)).toHaveLength(20);
     expect(events).toEqual(["get", "save", ...runArtifactPaths(run).map((path) => `HEAD ${path}`)]);
@@ -8636,6 +8972,26 @@ describe("foundation fixture boundaries", () => {
         `Restore ${names.invalidRestore}, the DeleteBackupRequest ${names.syncedBackupWithoutLog}-delete are ` +
         `there. Run the command again; for what is still there after it, ${DOWN}.`,
     );
+    // A backup the schedule submitted carries its label, and is told by its name: nothing here removes it, and
+    // the journal forgets nothing.
+    const submission = emptied();
+    const submitted = `${names.realSchedule}-20261005100600`;
+
+    held(submission.target, {
+      apiVersion: "velero.io/v1",
+      kind: "Backup",
+      metadata: {
+        name: submitted,
+        namespace: "velero-demo",
+        labels: { "velero.io/schedule-name": names.realSchedule },
+      },
+    });
+    expect(stopped(() => ended(submission.from))).toBe(
+      "The server has not removed every operation of the run from velero-demo: the Backup " +
+        `${submitted} that ${names.realSchedule} submitted is there. Run the command again; for what is still ` +
+        `there after it, ${DOWN}.`,
+    );
+    expect(submission.from.left()).toEqual(submission.from.entries);
     // An object of one of those names and of another kind, or in another namespace, is not an operation of
     // the run.
     const namesakes = emptied();

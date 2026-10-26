@@ -51,6 +51,7 @@ import {
   readFixture,
   recordSyncedBackups,
   removeFixtureBackup,
+  removeRealSchedule,
   restrictedFixtures,
   runLiveFixtures,
   tabFixtureFacts,
@@ -1865,6 +1866,9 @@ async function cleanupFixtures(): Promise<void> {
       await delay(1000);
     }
   }
+  // The schedule the controller validated is removed by its identity as well, and the journal forgets it: the
+  // verification of the environment refuses an installation that holds a schedule.
+  const yearly = removeRealSchedule(runtime, run);
   // Nothing of the operations of the run is left: in the installation, each looked for by its name, and in
   // the store, by every key of the run, the ones the server wrote and the ones the store was given.
   const { keys } = assertFixtureOperationsRemoved(runtime, run);
@@ -1908,6 +1912,7 @@ async function cleanupFixtures(): Promise<void> {
     JSON.stringify({
       run,
       controllerDeletion: true,
+      scheduleRemoved: yearly.removed,
       expectedArtifactsAbsent: keys,
       namespacesRemoved: removed,
       unrelatedResourcesPreserved: true,
@@ -1915,7 +1920,7 @@ async function cleanupFixtures(): Promise<void> {
     { mode: 0o600 },
   );
   console.log(
-    `PASS: real backup, associated restore and stored artifacts removed by the controller; ${removed} owned fixture namespaces removed with UID checks. Demo infrastructure retained.`,
+    `PASS: real backup, associated restore and stored artifacts removed by the controller; ${yearly.removed ? `the schedule ${names.realSchedule} the controller validated removed with a UID check; ` : ""}${removed} owned fixture namespaces removed with UID checks. Demo infrastructure retained.`,
   );
 }
 
