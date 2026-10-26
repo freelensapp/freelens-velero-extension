@@ -182,7 +182,14 @@ export function downloadArtifact(
       clearTimeout(connectTimer);
       clearTimeout(totalTimer);
       signal.removeEventListener("abort", abort);
+      // The request, then its socket, which the download closes itself: a runtime closes the socket with
+      // its request only while the request or its answer is unfinished, and leaves the socket of an answer
+      // that arrived whole to close later on its own, even one that nothing read to its end, as an answer
+      // beyond the bound of the compressed bytes. The socket is closed when the download ends, whatever
+      // the runtime does.
+      const socket = request.socket;
       request.destroy();
+      socket?.destroy();
       response?.destroy();
       decoder.destroy();
       chunks.length = 0;
