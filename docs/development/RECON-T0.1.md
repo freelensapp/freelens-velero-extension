@@ -576,6 +576,23 @@ controller writes into a schedule. A name the server does not know is refused by
 server alone, which the extension cannot know of: a name the runtime does not know is
 a zone that is not known, never a refusal of the extension.
 
+### With The Fixtures Of The Adherence, 2026-10-26
+
+The third pull request of T3.3 places a real schedule in the installation of the
+test environment, which its controller validates, `@every 8760h` with no
+`skipImmediately`, and waits for what the controller writes into it before the
+suites run. What the controller writes into a schedule it validates was read in the
+source of the reviewed release, `v1.18.4`, as the
+[facts of the controller](../specs/SPEC-0013-schedule-adherence.md#what-the-controller-does)
+of SPEC-0013 record them; what was seen of it on the server of the test environment
+is in the last column.
+
+| Fact | Source | Seen |
+| --- | --- | --- |
+| The controller looks at a schedule when it is created and once a minute, and writes the setting of its server into a schedule that names no `skipImmediately`, false unless the server is told otherwise | [The period](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/schedule_controller.go#L44), [the default](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/schedule_controller.go#L113-L115) | ADHERENCE-PR3-PENDING |
+| An expression it parses gives the phase Enabled with no validation error; the phase, `skipImmediately` and `lastSkipped` are patched when one of them changed, which the release decides by comparing pointers | [The parse](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/schedule_controller.go#L121-L132), [the patch](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/schedule_controller.go#L134-L154) | Whether a PATCH is sent at every look, with nothing changed, from the counters of the API server over three minutes: ADHERENCE-PR3-PENDING |
+| The next run of `@every 8760h` is counted from the creation of the schedule, which has no last submission: nothing is submitted for a year | [The anchor](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/schedule_controller.go#L275-L289), [due](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/schedule_controller.go#L241-L251) | ADHERENCE-PR3-PENDING |
+
 ## Verification And Remaining Work
 
 Completed checks:
