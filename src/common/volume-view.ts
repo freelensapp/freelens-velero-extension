@@ -2,11 +2,12 @@
 // object and of what it refers to, wherever it is shown, with the clock the views share for a tick.
 
 import { timestamp } from "./duration";
+import { timeText } from "./operation-text";
 import { bytesProgress } from "./progress";
 import { LIFECYCLE_RANK, phaseRank, volumeOperationState } from "./volume-phases";
 import { OWNER_KIND, operationNode, operationOwner, operationPod } from "./volume-references";
 import { spanValue, volumeTimes } from "./volume-time";
-import { POD_NOT_NAMED, uploaderText, volumePhaseText } from "./volume-words";
+import { bytesText, POD_NOT_NAMED, spanText, uploaderText, VOLUME_WORDS, volumePhaseText } from "./volume-words";
 
 import type { ItemProgress } from "./progress";
 import type { FamilyRead } from "./read-state";
@@ -103,6 +104,9 @@ export function volumeSearch(view: VolumeView): string[] {
     view.owner.reference?.name ?? "",
     view.source,
     view.node ?? "",
+    bytesText(view.progress),
+    view.times.started === undefined ? VOLUME_WORDS.notStarted : timeText(view.times.started),
+    spanText(view.times.span),
     view.location ?? "",
     uploaderText(view.uploader),
   ].filter(Boolean);

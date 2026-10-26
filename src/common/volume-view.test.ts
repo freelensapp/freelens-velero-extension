@@ -140,9 +140,25 @@ describe("the view of an operation", () => {
       "nightly",
       "shop/cart-0, data",
       "worker-1",
+      "Not reported",
+      "Not started",
+      "No time written",
       "default",
       "Not set",
     ]);
+    // The progress, the start and the duration the columns show are searched as they show them.
+    const moved = volumeView(
+      "PodVolumeBackup",
+      podVolumeBackup(
+        "nightly-moved",
+        { phase: "InProgress", progress: { bytesDone: 536_870_912, totalBytes: 1_073_741_824 } },
+        ownedBy("Backup", nightly),
+      ),
+      NOW,
+      reads,
+    );
+
+    expect(volumeSearch(moved)).toContain("512.0 MiB of 1.0 GiB (50%)");
   });
 
   it("is ordered by callbacks that answer a number, a text or an array, never undefined or NaN", () => {
