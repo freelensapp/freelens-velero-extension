@@ -827,9 +827,15 @@ describe("views of the schedules", () => {
       // ellipsis and no tip, and the words that leave the line of their row.
       const read: Record<number, { cut: string[]; clipped: string[]; misaligned: string[] }> = {};
 
+      // The work area of the screen, in the report of the case.
+      let screen: unknown;
+
       // The window and the zoom are given back whatever happens: every later case reads the window of 1440 by 900.
+      // The edges are the widths where a column gives its room: the installation, the last submission and the newest
+      // backup at 1,200, decided by the lead maintainer on 2026-10-26 (REQ-168), the age at 1,000 and the expression
+      // at 640. At 760 this list gives nothing, which the test of the stylesheet holds.
       try {
-        for (const edge of [1200, 1000, 760, 640]) {
+        for (const edge of [1200, 1000, 640]) {
           for (const room of [edge + 1, edge]) {
             await roomOf(room);
             const columns = await cluster.columnsOf(SCHEDULES, frame);
@@ -850,29 +856,32 @@ describe("views of the schedules", () => {
         );
         expect(shown).toEqual({
           1201: without(),
-          1200: without("installation"),
-          1001: without("installation"),
-          1000: without("installation", "age"),
-          761: without("installation", "age"),
-          760: without("installation", "submitted", "newest", "age"),
+          1200: without("installation", "submitted", "newest"),
+          1001: without("installation", "submitted", "newest"),
+          1000: without("installation", "submitted", "newest", "age"),
           641: without("installation", "submitted", "newest", "age"),
           640: without("installation", "schedule", "submitted", "newest", "age"),
         });
         expect(await cluster.layoutProblems(frame, SCHEDULES)).toEqual([]);
       } finally {
         // The report is written whatever happens: it says how far the rooms were reached when one was not.
-        const screen = await started.app.evaluate(({ screen }) => screen.getPrimaryDisplay().workAreaSize);
+        screen = await started.app.evaluate(({ screen }) => screen.getPrimaryDisplay().workAreaSize);
 
         await cluster.writeReport("schedules-rooms", { screen, reached, shown, read });
         await velero.setZoom(started.app, 1);
         await velero.setWindowSize(started.app, 1440, 900);
         await frame.waitForFunction(() => window.innerWidth > 1000, undefined, { timeout: 60_000 });
       }
-      // In a window of 1440 paused, the next run, the adherence, the last submission and the age are read whole, in
-      // any language and at any age the host writes, nothing is clipped and every word is on the line of its row.
-      const wide = await cluster.columnsOf(SCHEDULES, frame);
+      // In a window of 1440 the room of the list is under 1,200 pixels: the installation, the last submission and the
+      // newest backup are not shown, and what is shown is read whole, nothing cut, which is why the two times give
+      // their room under 1,200 (REQ-168); paused, the next run, the adherence and the age in any language and at any
+      // age the host writes. Nothing is clipped and every word is on the line of its row. The report keeps the room
+      // and what was measured in it beside the edges.
+      const wide = { room: await cluster.listRoom(frame, SCHEDULES), ...(await cluster.columnsOf(SCHEDULES, frame)) };
 
-      expect(wide.cut.filter((column) => whole.includes(column))).toEqual([]);
+      await cluster.writeReport("schedules-rooms", { screen, reached, shown, read, wide });
+      expect(wide.shown).toEqual(without("installation", "submitted", "newest"));
+      expect(wide.cut).toEqual([]);
       expect(wide.clipped).toEqual([]);
       expect(await cluster.misalignedWords(SCHEDULES, frame)).toEqual([]);
       expect(await cluster.tooWide(SCHEDULES, frame, cluster.WORDS_OF_A_SCHEDULE)).toEqual([]);
