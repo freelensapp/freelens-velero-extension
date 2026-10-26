@@ -5,9 +5,10 @@
 
 // What the suite of the adherence expects of each fixture, computed from the objects as the cluster holds them and
 // from the clock, by the rules of the controller as SPEC-0013 states them (REQ-160 to REQ-163, REQ-167), and never
-// with the code of the extension. It knows the expressions of the fixtures and refuses any other: it is not a second
-// parser. Nothing here reads the cluster or the page: the suite reads them, and its own cases give the objects and
-// the clock.
+// with the code of the extension. It knows the forms of the expressions of the fixtures, an interval of whole hours
+// (`@every Nh`), a daily `M H * * *` at the offset of the server, the 02:30 of Rome, the new year of Buenos Aires and
+// `0 0 30 2 *`, which has no instant, and refuses any other: it is not a second parser. Nothing here reads the
+// cluster or the page: the suite reads them, and its own cases give the objects and the clock.
 
 import { halfPastTwoInRome } from "./velero-cluster";
 
@@ -83,6 +84,8 @@ export function zoneKnown(name: string): boolean {
 
 const two = (value: number) => String(value).padStart(2, "0");
 
+// The forms of a zone, a moment and a run below are the ones the design of SPEC-0013 gives the words of the views,
+// written as the views write them: only the instants and the offsets in them are computed here.
 export function zoneName(zone: Zone): string {
   if (zone.of === "named") return zone.name;
   if (zone.minutes === 0) return "UTC";
@@ -184,6 +187,7 @@ export function anchorOf(schedule: HeldObject): { of: "last-submission" | "creat
 }
 
 const scheduleOf = (backup: HeldObject) => backup.metadata.labels?.["velero.io/schedule-name"];
+const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** The backup of the last submission of a schedule: its label, its name of fourteen digits, within a minute of it. */
 export function submissionBackup(schedule: HeldObject, backups: HeldObject[]): HeldObject | undefined {
@@ -192,7 +196,9 @@ export function submissionBackup(schedule: HeldObject, backups: HeldObject[]): H
 
   if (submitted === undefined) return undefined;
   return backups
-    .filter((backup) => scheduleOf(backup) === name && new RegExp(`^${name}-\\d{14}$`).test(backup.metadata.name))
+    .filter(
+      (backup) => scheduleOf(backup) === name && new RegExp(`^${escaped(name)}-\\d{14}$`).test(backup.metadata.name),
+    )
     .map((backup) => ({ backup, distance: Math.abs((time(backup.metadata.creationTimestamp) ?? 0) - submitted) }))
     .filter(({ distance }) => distance <= MINUTE)
     .sort((one, other) => one.distance - other.distance)[0]?.backup;
@@ -233,6 +239,8 @@ export function serverOffset(schedules: HeldObject[], backups: HeldObject[]): Se
           ]
         : [];
     })
+    // Two submissions of the same instant are in no fixture: the name orders them only so that the offset said does
+    // not depend on the order the cluster lists the schedules in.
     .sort((one, other) => other.submission - one.submission || (one.schedule < other.schedule ? -1 : 1));
   const [newest] = offsets;
   const changed = offsets.find((offset) => offset.minutes !== newest?.minutes);
@@ -278,14 +286,22 @@ export interface Installation {
   backups: HeldObject[];
 }
 
+/** Whether the page knows a named zone: the Intl of the application, which the suite says; Node's by default. */
+export type ZoneKnown = (name: string) => boolean;
+
 /** What a schedule of an installation is to show by the clock of the cluster. */
-export function expectedOf(schedule: HeldObject, installation: Installation, clock: number): Expected {
+export function expectedOf(
+  schedule: HeldObject,
+  installation: Installation,
+  clock: number,
+  knows: ZoneKnown = zoneKnown,
+): Expected {
   const rule = ruleOf(schedule.spec?.schedule);
   const anchor = anchorOf(schedule);
   const offset = serverOffset(installation.schedules, installation.backups);
   const server: Zone | undefined = offset ? { of: "fixed", minutes: offset.minutes } : undefined;
-  const known = rule.kind !== "named" || zoneKnown(rule.zone);
-  // An interval names no zone and is written in UTC; a named zone this machine does not know is written in UTC too.
+  const known = rule.kind !== "named" || knows(rule.zone);
+  // An interval names no zone and is written in UTC; a named zone the page does not know is written in UTC too.
   const zone: Zone =
     rule.kind === "named"
       ? known
@@ -329,8 +345,13 @@ export function expectedOf(schedule: HeldObject, installation: Installation, clo
 }
 
 /** The same at the two clocks of a read: what the page shows is one of them. */
-export function expectedAround(schedule: HeldObject, installation: Installation, clocks: Clocks): Expected[] {
-  return [expectedOf(schedule, installation, clocks.from), expectedOf(schedule, installation, clocks.to)];
+export function expectedAround(
+  schedule: HeldObject,
+  installation: Installation,
+  clocks: Clocks,
+  knows: ZoneKnown = zoneKnown,
+): Expected[] {
+  return [expectedOf(schedule, installation, clocks.from, knows), expectedOf(schedule, installation, clocks.to, knows)];
 }
 
 // --- The orders of the list (REQ-168) ---
@@ -395,8 +416,6 @@ export type Part = string | { between: [number, number] };
 export function between(...values: number[]): Part {
   return { between: [Math.min(...values), Math.max(...values)] };
 }
-
-const escaped = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
  * Whether the words shown hold one of the forms: the texts as they are written, and each duration read back into
