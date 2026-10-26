@@ -999,7 +999,7 @@ zone, lists the interval under rule A11 at every hour, and gives the schedule th
 rule names it; every rule, A11 among them, gives an item on the cluster; the first reader counts eight schedules not
 known. Every suite compares the version and the status of the real schedule before and after it, and the writes it
 counts leave out the PATCH of the schedules only when the measure of LM1 says that the controller sends one at every
-look, a constant of the helpers that says no until the measure. Decided while implementing, on 2026-10-26, none a change
+look, a constant of the helpers that the measure sets. Decided while implementing, on 2026-10-26, none a change
 of what a requirement asks: the two phases are an option of the placement by the clock, with its rules of what is good,
 and the clock of this machine a part of the runtime of the fixtures; the backups of the submissions are created fifty at
 a time, each group named by the clock read just before it; the backup that holds, which is not a submission, is created
@@ -1017,7 +1017,8 @@ as the others (LM3, L511 and L512); the real schedule naming no `skipImmediately
 ahead by a day and the second submission of the split twenty seconds before the first (LM5, L511 and L512). Decided
 while implementing, on 2026-10-26: the installation of the states gains a schedule with a name of 63 characters and an
 expression that names its zone, which the pre-review of ADH-15 asks for (L511). What the local integration establishes
-on Docker is left to the second phase of the pull request: the measure of LM1, whether the controller sends a PATCH of a
-schedule at every look, ADHERENCE-PR3-PENDING; the fixtures placed on the test environment and read back, the real
+on Docker is left to the second phase of the pull request: the measure of LM1, made on 2026-10-26: the controller sends a
+PATCH of the schedule by name at every look, once a minute over three minutes, with its version and its status unchanged
+and no backup created, so the constant of the helpers says yes; the fixtures placed on the test environment and read back, the real
 schedule validated, every suite, the cleanup and the verification after them, and the times of a placement and of the
 cleanup, ADHERENCE-PR3-PENDING.

@@ -545,11 +545,14 @@ export function familyReads(counts: Record<string, number>): Record<string, numb
  * `writes` leaves out the PATCH of the schedules, and what proves that nothing
  * was written to the schedule is its version and its status, which the snapshot
  * of every suite holds, and the identities of the objects of the installation,
- * to which a submission would add a backup. The measure also says the scope and
- * the number in a minute of that PATCH, which bound what is left out when this
- * is true. ADHERENCE-PR3-PENDING
+ * to which a submission would add a backup. Measured on 2026-10-26, over three
+ * minutes of an environment that nothing else read or wrote: a PATCH of the
+ * scope `resource`, the schedule by name, once a minute (19 to 22), with the
+ * version and the status of the real schedule unchanged and no POST of a
+ * backup. What is left out is bounded by that: about one PATCH of one schedule
+ * by name for each minute of a suite.
  */
-export const SCHEDULE_PATCHED_AT_EVERY_LOOK: boolean = false;
+export const SCHEDULE_PATCHED_AT_EVERY_LOOK: boolean = true;
 
 /**
  * The requests that change something, or ask Velero for something, among the

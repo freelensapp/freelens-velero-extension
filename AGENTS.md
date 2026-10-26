@@ -435,9 +435,12 @@ test environment and of the process of this repository.
 - The verification of the test environment refuses an installation that holds a
   schedule, and the hosted job runs it after the cleanup of the fixtures: the
   schedule the controller of the installation validates, a fixture of the
-  adherence, goes with that cleanup, by its identity, before it. Whether that
-  controller sends a PATCH of the schedule at each of its looks with nothing
-  changed, which every suite would count as a write: ADHERENCE-PR3-PENDING.
+  adherence, goes with that cleanup, by its identity, before it. That controller
+  sends a PATCH of the schedule at each of its looks with nothing changed, once a
+  minute (measured on 2026-10-26), which every suite would count as a write: the
+  helpers leave the PATCH of the schedules out of the writes
+  (`SCHEDULE_PATCHED_AT_EVERY_LOOK`), and the version and the status of the
+  schedule in the snapshot prove that nothing changed it.
 - `kubectl delete` waits for each object it removed, one at a time: two thousand
   take minutes. Remove with `--wait=false`, then read the namespace until
   nothing is left.

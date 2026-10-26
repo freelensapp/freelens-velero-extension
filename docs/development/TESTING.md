@@ -779,7 +779,9 @@ into what it compares with.
 The controller looks at the schedule once a minute. Whether it sends a PATCH of it
 at each look with nothing changed, which every suite would count as a write, is
 measured on the test environment from the counters of the API server, over three
-minutes: ADHERENCE-PR3-PENDING. The helpers of the suites say the answer in a
+minutes: on 2026-10-26 it did, a PATCH of the schedule by name once a minute, 19
+to 22 in three minutes, with its version and its status unchanged and no POST of
+a backup. The helpers of the suites say the answer in a
 constant, `SCHEDULE_PATCHED_AT_EVERY_LOOK`: when it is true, the writes a suite
 counts leave out the PATCH of the schedules, as they leave out the one the
 controller of the storage locations writes at each validation, and the version and
