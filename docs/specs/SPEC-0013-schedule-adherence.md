@@ -1,6 +1,6 @@
 # SPEC-0013: The Adherence Of A Schedule
 
-- **Status:** Approved
+- **Status:** Implemented
 - **Date:** 2026-10-13
 - **Milestone / tasks:** M4 / T3.1, T3.2, T3.3
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`
@@ -667,9 +667,11 @@ and verdict.
   nothing from the expression; this one does, under REQ-160 to REQ-162, and the
   words that the view does not read the zone of the server stay true: it derives or
   asks. The check SCHED-03 is restated with the pull request, as the design says.
-- **The fixtures of the adherence, decided for the third pull request of T3.3.**
-  Five decisions on the test environment and on what the guard of the suites
-  counts, approved by the lead maintainer on 2026-10-16, as recommended:
+- **The fixtures of the adherence and the time of their suite, decided for the
+  third and the fourth pull requests of T3.3.** Six decisions on the test
+  environment, on what the guard of the suites counts and on where the suite of
+  the adherence runs, approved by the lead maintainer on 2026-10-16, as
+  recommended:
   - LM1: whether the controller sends a PATCH of a schedule at each of its looks,
     since the reviewed release decides to patch by comparing pointers, is
     measured on the test environment, from the counters of the API server, before
@@ -697,6 +699,11 @@ and verdict.
     the remainder of the name of its backup is those seconds and the time the
     creation took, which the placement keeps within thirty, under the minute of
     the rule of REQ-162.
+  - LM6: the suite of the adherence is `velero-e2e-adherence`, and runs in the run
+    of the pattern `velero-e2e` of the hosted job of the views, which takes it
+    with no change of the workflow; the times of its first hosted run are read and
+    recorded before anything else is decided. A step of its own in the job, with
+    its own bound, is a decision for the lead maintainer after those times.
 
 No NEEDS CLARIFICATION marker: every decision above has a default with its reasons,
 and the ones the lead maintainer may overturn at approval are named as such.
@@ -1033,3 +1040,77 @@ the second of its creation, and no submission and no backup of it two hours late
 cases, of the Overview, 15, and of the two readers, 8 and 7, then every suite, 174 cases in 12 files, and the
 pre-review, 33 cases, all green; the cleanup of the fixtures, which removed the schedule by its identity and the ten
 namespaces of the run, and the verification after it. The times of the placements and of the cleanup are in TESTING.
+
+T3.3, the fourth of its four pull requests: the adherence proven on its fixtures in the packaged application, its
+measures and the pre-review, on Freelens v2 at the validation target, written on 2026-10-26 on the machine of the runs
+(macOS, Node 24.21.0, pnpm 12.14.0, TypeScript 7.0.2, Vitest 5.0.5, Biome 2.5.15, Trunk launcher 1.3.4), in a first
+phase that writes the suite and proves its helper by its own cases with no application, and a second that runs it.
+The pull request adds no test to the unit run: what the suite of the adherence expects of each fixture is computed by
+a helper of the suites, `integration/helpers/velero-adherence.ts`, from the objects as the cluster holds them and from
+the clock, by the rules of the controller as REQ-160 to REQ-163 and REQ-167 state them and never with the code of the
+extension, for the expressions of the fixtures alone, and refusing any other; each expectation is computed at the
+clock before a read of the page less twenty seconds and after it plus one, and a state, a count or a duration is
+expected among the two; the words are matched in their own forms, with every duration read back into its span by its
+two units. The helper is proven by ten cases of its own, first in the suite and starting no application: the interval
+and its anchor, the count of twenty-five runs just after the placement and of thirty-seven twelve hours later, the
+daily expression at UTC+02:00 on each side of 01:00 UTC, the 02:30 of Rome with both runs of the hour it repeated on
+2026-10-25, the new year of Buenos Aires on each side of it, a read across the edge of the grace, the hold, the
+durations, the offset at remainders of fifty, sixty and sixty-one seconds with the newest submission standing, and
+the orders. Eighteen changes were made on purpose to the helper, on a copy of the tree, and each made one of its
+cases fail: the count off by one; the run of a daily expression computed at UTC; the span without its twenty seconds;
+the remainder of the offset allowed to a minute; a duration compared as text; an interval not truncated to the second;
+the oldest submission standing; a backup in progress not holding; the last skip never the anchor; the count past one
+hundred not said to be more; the order by adherence without the expected run, and the order by the next run with None
+before Not known; the new year of Buenos Aires at midnight UTC; late as soon as due; a backup of any distance taken as
+the one of a submission; the clock after the read without its second; a daily expression computed without an offset;
+and an expression the helper does not know taken as an interval.
+
+The packaged evidence of each check, by the case of `velero-e2e-adherence` that gives it, ADHERENCE-PR4-PENDING: the
+list of the installation of the states, its eight schedules with the kind of their next run, their state, their mark
+and their reason and the words of the two cells, a tip on each, and the note over the list that the clock of the
+cluster is ahead (ADH-04, ADH-06, ADH-07, ADH-09); the orders by the next run and by adherence both ways and a search
+by the word of a state (ADH-09); the band of each schedule line by line, awaited, overdue with its count and the
+backup of its submission not among the ones that exist, held beyond the grace by a backup in progress that is not a
+submission, at every look, the zone derived of the schedule itself and of another, the zone the long expression names
+and the clocks of every band naming the schedule ahead (ADH-03, ADH-04, ADH-07, ADH-08, ADH-10); the way to the held
+backup and back, over the list, which is where it was (ADH-10); the installation of two offsets, the older submission
+before the newer read with `kubectl` and the words that the offset changed (ADH-03); the details of the host of a
+schedule of each state (ADH-11); the Overview of the installation of the states, its items of A11 in the order of the
+page, the one at every look among them, its lines, and the count by reason in the installation of the views (ADH-12);
+the real schedule, Enabled with `skipImmediately` written by the controller, no submission and no backup of it, its
+next run a year after its creation in its row, its band and its line of the Overview (ADH-17); nothing written, the
+guard of LM1 and the evidence of DISC-07 with the Schedules and the Overview open on the adherence fixtures (ADH-13,
+ADH-17). The restricted suites: with the reader of three kinds the interval of the views overdue and the schedule of
+five fields not known for want of an offset; with the second reader the interval overdue with the words that whether a
+backup holds the submissions is not known, in its row and in its band, and the schedule of five fields not known since
+the backups are denied (ADH-03, ADH-06, scenario 6). The pre-review, ADH-15: four views more, 39 in all, the list of
+the installation of the states, the band of the held schedule, the band of the schedule with a name of 63 characters
+and the Overview of that installation, each in both themes at 1440 by 900, 900 by 650 and twice the zoom, every mark of
+the adherence hidden from who does not see it with its word beside it, and the band read with the keyboard alone, from
+the list to the schedule, to the backup that holds it, and back on the way back and on the row, ADHERENCE-PR4-PENDING.
+The placement the runs read, and which of the cases that depend on the hour it exercised, 01:00 UTC inside its twelve
+hours or not, ADHERENCE-PR4-PENDING. Whether the `Intl` of the Electron of the nightly knows
+`America/Argentina/Buenos_Aires`, ADHERENCE-PR4-PENDING.
+
+ADH-16 in the packaged application, on the installation of the three hundred schedules, ADHERENCE-PR4-PENDING: ten
+searches and ten orders of the list, each a column and a direction not asked before, after three interactions that
+warm it, the 95th percentile of what the list takes to answer of 250 ms with the time from the key beside it and the
+most rows mounted of 100; and twenty changes of the window of its Overview after three, of 250 ms, each report written
+before anything is asserted, as `adh-16-list-performance` and `adh-16-overview-performance`, with the machine and the
+run. The measure of `measure()` gains an order among its interactions, a click on the head of a column, which ends when
+the first forty rows change and has no wait of the host. The answer of the header of ADH-07: the `Date` header reaches
+the frame on the machine of the runs and on the hosted runner, as the first pull request recorded, and the note over the
+list and the line of the clocks are the words of the clock of the cluster with the schedule ahead,
+ADHERENCE-PR4-PENDING. The local and hosted times of the suite and of the run of the pattern, read before anything else
+is decided under LM6, ADHERENCE-PR4-PENDING.
+
+Decided while implementing, on 2026-10-26, none a change of what a requirement asks: the helper of the suites holds the
+computation of what each fixture is to show, and the reader of the band, which the first pull request gave the helpers,
+is reused; the suite reads the cluster only with `kubectl get` in a namespace, never inside a measure; the Overview case
+asserts the count by reason of the installation of the views as well, which the suite of the Overview asserts since the
+third pull request; the guard of the suite bounds the PATCH of the schedules the writes leave out, none of the whole
+cluster and at most one a minute of the time the suite ran and two more, and asserts by name that no POST of a backup
+was counted. The three items that wait for the confirmation of the lead maintainer at the review of the fourth
+milestone are recorded above and hold as they are: the amendment of REQ-166 (L776-L780), and the precisions of REQ-170
+(L883-L889) and of REQ-171 (L943-L946). The manual review of the Success Criteria (L567-L575) waits for the lead
+maintainer, with its steps in [TRY-IT.md](../development/TRY-IT.md); Verified waits for it and for those three items.
