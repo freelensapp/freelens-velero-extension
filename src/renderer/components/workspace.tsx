@@ -29,7 +29,7 @@ const VIEW_OF: Partial<Record<ReferenceKind, ViewKind>> = {
   PodVolumeRestore: "pod-volume-restore",
 };
 
-export function Fact({ name, note, children }: { name: string; note?: string; children: ReactNode }) {
+export function Fact({ name, note, children }: { name: string; note?: ReactNode; children: ReactNode }) {
   return (
     <div className={styles.fact}>
       <div className={styles.factName}>{name}</div>

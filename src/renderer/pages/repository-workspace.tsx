@@ -50,7 +50,9 @@ function MaintenanceRow({ maintenance }: { maintenance: Maintenance }) {
           ? REPOSITORY_WORDS.noDuration
           : formatDuration(maintenance.milliseconds)}
       </td>
-      <td>{shown(maintenance.message) ?? ""}</td>
+      <td>
+        <span className={styles.messageLines}>{shown(maintenance.message) ?? ""}</span>
+      </td>
     </tr>
   );
 }
@@ -82,7 +84,16 @@ export const RepositoryWorkspace = observer(({ installation, name, now, back, on
   return (
     <Workspace kind="backup-repository" name={view.name} uid={view.uid} back={back} onBack={onBack}>
       <div className={styles.band} data-testid="velero-backup-repository-status">
-        <Fact name="Readiness" note={shown(view.message)}>
+        <Fact
+          name="Readiness"
+          note={
+            view.message ? (
+              <span className={styles.messageLines} data-testid="velero-repository-message">
+                {shown(view.message)}
+              </span>
+            ) : undefined
+          }
+        >
           <RepositoryReadinessMark readiness={view.readiness} message={view.message?.value} />
         </Fact>
         <Fact name="Last maintenance" note={view.newestFailed ? REPOSITORY_WORDS.newestFailedNote : undefined}>

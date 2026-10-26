@@ -21,6 +21,7 @@ import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/disco
 import { LEFT_OUT } from "../../common/location-view";
 import { NODE_AGENT_WORDS, REPOSITORY_WORDS, VOLUME_WORDS, WORKSPACE_WORDS } from "../../common/volume-words";
 import { BackupRepository, PodVolumeBackup, PodVolumeRestore } from "../api/kinds";
+import styles from "../components/views.module.css";
 import { RepositoryDetails } from "../details/repository-details";
 import { VolumeOperationDetails } from "../details/volume-operation-details";
 import { closeViews, openView, openViews } from "../navigation";
@@ -212,6 +213,9 @@ describe("the view of a backup repository", () => {
     expect(note(status, "Readiness")).toBe(
       `error to connect "https://s3.example.test/store"\nconnection refused ${LEFT_OUT}`,
     );
+    // Drawn on its lines, which the text alone does not prove.
+    expect(styles.messageLines).toBeTruthy();
+    expect(within(status).getByTestId("velero-repository-message").className).toBe(styles.messageLines);
     expect(value(status, "Last maintenance")).toBe(
       `${new Date(NOW - 8 * DAY).toLocaleString()} (8d ago)warning_amber, ${REPOSITORY_WORDS.newestFailed}`,
     );

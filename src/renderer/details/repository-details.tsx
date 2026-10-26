@@ -3,6 +3,7 @@ import { observer } from "mobx-react";
 import { repositoryView } from "../../common/repository-view";
 import { agoText, REPOSITORY_WORDS } from "../../common/volume-words";
 import { time } from "../components/status";
+import styles from "../components/views.module.css";
 import { useNow } from "../components/views-frame";
 import { FailedMaintenanceMark, RepositoryReadinessMark } from "../components/volume-status";
 import { currentInstallation } from "../state/context";
@@ -35,7 +36,7 @@ export const RepositoryDetails = observer(({ object, extension, installation }: 
       <DrawerTitle>Velero</DrawerTitle>
       <DrawerItem name="Readiness">
         <RepositoryReadinessMark readiness={view.readiness} message={view.message?.value} />
-        {view.message ? <span> {view.message.value}</span> : null}
+        {view.message ? <span className={styles.messageLines}> {view.message.value}</span> : null}
       </DrawerItem>
       <DrawerItem name="Last maintenance">
         <span data-newest-failed={view.newestFailed}>
