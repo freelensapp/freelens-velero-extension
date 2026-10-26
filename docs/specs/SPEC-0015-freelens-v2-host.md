@@ -7,7 +7,7 @@
 - **Reviewed main:** not relevant: the subject of this spec is the host, and it reads or changes no behavior of Velero
 - **Freelens validation target:** freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0, with `@freelensapp/extensions` 2.0.0; the host drift watch moved it to this release and ended on 2026-11-07: the SDK is taken by the range `^2.0.0` of D10, and the target moves with the releases of Freelens, as PROCESS says
 - **Dependencies:** [local foundation](SPEC-0001-local-foundation.md); [test environment](SPEC-0004-test-environment-every-platform.md); [the write gate](SPEC-0009-write-gate.md); [the diagnostic request and its transport](SPEC-0010-diagnostic-request-and-transport.md); [the viewers](SPEC-0011-artifact-viewers.md); for the re-verification, the specs of M1 to M3, SPEC-0002 to SPEC-0012, and [the adherence of a schedule](SPEC-0013-schedule-adherence.md) for T3.1 and T3.2
-- **Approval:** Approved by the lead maintainer on 2026-10-16, as drafted. The version and release plan, D10, was decided by the lead maintainer the same day
+- **Approval:** Approved by the lead maintainer on 2026-10-16, as drafted. The version and release plan, D10, was decided by the lead maintainer the same day. The words of the reasons of D1 and D2 are amended to the host at the validation target, the decisions unchanged, decided by the lead maintainer on 2026-10-26
 
 Governed by [AGENTS.md](../../AGENTS.md).
 
@@ -223,10 +223,25 @@ around the proxy of Freelens: it ignores the proxy setting of the cluster, runs
 credential plugins a second time and in a second process, and refuses kinds of
 authentication the host takes. The reason the recon gave for it, that `Main.K8s`
 of v1 had no creation, is gone: `KubeJsonApi.forCluster` posts any object, by
-path, in the main process as in the renderer. A request to a cluster that is not
-connected would start its proxy, and with it an authentication the operator did
-not ask for. The client of the host has no deadline of its own, and parses an
-answer whole before it gives it.
+path, in the main process as in the renderer. The proxy of Freelens does not
+refuse everything sent to a cluster that is not connected: since
+freelensapp/freelens#2830 it answers a request to such a cluster 503, with a
+`Status` that says that the cluster is not connected, and starts nothing for it,
+while an upgrade, a port-forward among them, still starts the proxy of that
+cluster whatever its state, and with it an authentication the operator did not
+ask for ([the refusal](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/main/freelens-proxy/freelens-proxy.ts#L472-L484),
+[an upgrade](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/main/freelens-proxy/proxy-functions/kube-api-upgrade-request.injectable.ts#L37)).
+The main process reads the state first, so that the refusal says in the words of
+the extension whether the cluster is not there or not connected before anything leaves,
+and so that no read of the route and no tunnel is begun for it. The client of the
+host has no deadline of its own, and parses an answer whole before it gives it.
+
+**Amended, decided by the lead maintainer on 2026-10-26.** The reason as first
+written, that a request to a cluster that is not connected starts its proxy, was
+true of the host the decision was made on; at the validation target it holds of
+an upgrade alone, as the record of the move of the pin of 2026-10-25 says. The words
+above are the host at `7801fb10`; the decision, REQ-200, REQ-201 and their checks
+are unchanged.
 
 **What goes.** The [identity of a context](https://github.com/freelensapp/freelens-velero-extension/blob/224315ce6f7545c16cf2ba49718e416fa016dcbe/src/main/context-identity.ts):
 the read of the kubeconfig, its digest, the credential plugins and the kinds of
@@ -264,8 +279,16 @@ state of the cluster in the catalog sees it leave the connected state. A refusal
 port-forward.
 
 **Why.** The environment of `Main.Shell` points kubectl at the proxy of Freelens,
-so a credential plugin runs once, in that proxy, and never in the kubectl of the
-extension, and the proxy setting of the cluster applies. kubectl is the one the
+so the credential plugin of the identity runs once, in that proxy, and never in
+the kubectl of the extension, and the proxy setting of the cluster applies. That
+kubectl runs one credential of its own, the one the kubeconfig of the host names
+as its user since freelensapp/freelens#2830: the subcommand `credential` of
+freelens-k8s-proxy, which reads no kubeconfig and makes no request, and prints the
+token the proxy of Freelens asks of every request, from `FREELENS_PROXY_TOKEN` of
+the same environment, which is one more reason the environment is given whole
+([the kubeconfig](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/main/kubeconfig-manager/kubeconfig-manager.ts#L177-L191),
+[the token](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/main/kube-tools/kube-tools.ts#L119-L122),
+[the check](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/main/freelens-proxy/freelens-proxy.ts#L447-L461)). kubectl is the one the
 host runs for the cluster, prepared by the host. The port-forward of
 `@kubernetes/client-node` and `ws` leave the bundle, and with them the last
 client of the extension. kubectl reads the Pod and opens the stream to the API
@@ -273,7 +296,16 @@ server before it writes its line of readiness, which is why the line is the
 signal and why a refusal of the API server ends kubectl before it. The
 preparation may download a kubectl, which is why the wait for readiness starts
 after it. The files of the environment exist only while the cluster is connected,
-which is why the tunnel follows the state of the cluster.
+and the port-forward is an upgrade, which starts the proxy of a cluster whatever its
+state, as D1 says, which is why the tunnel follows the state of the cluster.
+
+**Amended, decided by the lead maintainer on 2026-10-26.** The reason as first
+written, that a credential plugin runs once, in the proxy, and never in the
+kubectl of the extension, holds at the validation target of the plugin of the
+identity, while that kubectl runs the subcommand `credential` of the host for the
+token of its proxy, as the record of the move of the pin of 2026-10-25 says. The
+words above are the host at `7801fb10`; the decision, its requirements and their
+checks are unchanged.
 
 **What the transport sees.** A port-forward carries the bytes of one TCP
 connection and changes none: the host, the server name of TLS, the path and the
@@ -1389,7 +1421,9 @@ Decided while implementing, on 2026-10-25:
   port-forward of the tunnel is; the one of D2, that a credential plugin runs once,
   in the proxy, and never in the kubectl of the extension, holds of the plugin of
   the identity, while that kubectl runs the subcommand `credential` of the host for
-  the token of its proxy. Both decisions stand as they are.
+  the token of its proxy. Both decisions stand as they are. The words of the two
+  reasons were amended to these facts on 2026-10-26, decided by the lead
+  maintainer, in D1 and D2 above.
 
 The evidence of the move, on Node 24.21.0 and pnpm 12.14.0: the install, then the
 install frozen; the type check of the nine programs with no error; lint, 266 files;
