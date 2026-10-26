@@ -84,12 +84,7 @@ export const RepositoryWorkspace = observer(({ installation, name, now, back, on
         <Fact name="Readiness" note={shown(view.message)}>
           <RepositoryReadinessMark readiness={view.readiness} message={view.message?.value} />
         </Fact>
-        <Fact
-          name="Last maintenance"
-          note={
-            view.newestFailed ? `The ${REPOSITORY_WORDS.newestFailed}: ${REPOSITORY_WORDS.lastSucceeded}.` : undefined
-          }
-        >
+        <Fact name="Last maintenance" note={view.newestFailed ? REPOSITORY_WORDS.newestFailedNote : undefined}>
           <span data-testid="velero-backup-repository-maintained" data-newest-failed={view.newestFailed}>
             {view.lastMaintenance === undefined
               ? REPOSITORY_WORDS.neverMaintained

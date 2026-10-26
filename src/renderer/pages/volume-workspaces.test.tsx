@@ -215,9 +215,8 @@ describe("the view of a backup repository", () => {
     expect(value(status, "Last maintenance")).toBe(
       `${new Date(NOW - 8 * DAY).toLocaleString()} (8d ago)warning_amber, ${REPOSITORY_WORDS.newestFailed}`,
     );
-    expect(note(status, "Last maintenance")).toBe(
-      `The ${REPOSITORY_WORDS.newestFailed}: ${REPOSITORY_WORDS.lastSucceeded}.`,
-    );
+    // The note as the operator reads it, once as a literal.
+    expect(note(status, "Last maintenance")).toBe("The newest maintenance failed: this is the last that succeeded.");
     // Not ready: no maintenance runs, and nothing is computed of when it would.
     expect(value(status, "Next maintenance")).toBe(REPOSITORY_WORDS.notReadyNoMaintenance);
     expect(note(status, "Next maintenance")).toBe(`${REPOSITORY_WORDS.pass} ${REPOSITORY_WORDS.job}`);

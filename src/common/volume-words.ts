@@ -259,7 +259,8 @@ export const REPOSITORY_WORDS = {
   noMaintenance: "No maintenance is recorded.",
   noConfig: "The repository carries no configuration.",
   noDuration: "Not known",
-  lastSucceeded: "this is the last that succeeded",
+  // The note of the last maintenance when the newest one failed, whole: it is not composed of other words.
+  newestFailedNote: "The newest maintenance failed: this is the last that succeeded.",
 };
 
 // How long ago a time was, by the clock of this machine.
