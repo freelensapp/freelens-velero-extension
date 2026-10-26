@@ -194,3 +194,14 @@ in the views run. Green on v2: DISC-01 to DISC-10 at the unit and component laye
 DISC-01 to DISC-08, DISC-10 and DISC-11 in the packaged application, DISC-02,
 DISC-03 and DISC-06 with the restricted identity, and DISC-11 in the pre-review.
 No deviation was recorded, and v2 brings none.
+
+**T5.1 of [SPEC-0014](SPEC-0014-repositories-and-data-movement.md), 2026-10-26: DISC-08
+with three more entries.** The sidebar has nine entries under Velero: the Overview,
+then the lists of the backups, the restores, the schedules, the backup storage
+locations, the volume snapshot locations, the backup repositories, the pod volume
+backups and the pod volume restores, each a page that is implemented, before the
+entry of the group. The entry points test and the build test pin the nine pages and
+their entries, and the journey suite reads them in the packaged application:
+T51-PR1-PENDING (the run of the journey suite that saw them). The families the
+discovery says a cluster does not serve are the eight of an installation, the
+three of the volumes among them, with the words of before.

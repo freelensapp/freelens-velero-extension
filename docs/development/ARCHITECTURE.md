@@ -68,9 +68,10 @@ Activation asks nothing of a cluster, in either process. Both open the store of 
 preferences; the main process registers its procedures on an instance of
 `Main.Ipc` made for the activation, and the renderer registers the pages of the
 Overview, of the Backups, of the Restores, of the Schedules, of the Backup Storage
-Locations and of the Volume Snapshot Locations, their entries of the sidebar, the
-sections it adds to the details the host shows of each of the five kinds, made with
-`detailsFor`, and the five kinds as `customResources`, which the Custom Resources
+Locations, of the Volume Snapshot Locations, of the Backup Repositories, of the Pod
+Volume Backups and of the Pod Volume Restores, their entries of the sidebar, the
+sections it adds to the details the host shows of each of the eight kinds, made with
+`detailsFor`, and the eight kinds as `customResources`, which the Custom Resources
 tree of the cluster leaves out while the extension is enabled. Every page and
 section is drawn inside an
 [error boundary](../../src/renderer/components/error-boundary.tsx) of the template,
@@ -247,7 +248,8 @@ says with the lines of their source.
 | --- | --- | --- |
 | What the API serves | A view opens, or the operator reads again | `/apis/velero.io/v1` |
 | Where the installations may be | The same | The backup storage locations of the cluster |
-| The five families of the installation | A namespace is selected, every 15 seconds while a view is open, or the operator reads again | The lists of the selected namespace |
+| The six families read at every read: the five of the first milestones and the backup repositories | A namespace is selected, every 15 seconds while a view is open, or the operator reads again | The lists of the selected namespace |
+| The pod volume backups, the pod volume restores | At once when a view that shows them first needs them, then with every read while one holds them | The lists of the selected namespace |
 
 Facts of the host the design rests on, found by asking the packaged application on
 Freelens 1 and proven again on v2, by the packaged suites or in the source of the
@@ -301,9 +303,30 @@ draws where no view of the extension is, compute with the last read of the views
 and say its age when no view is open or when it is older than that period.
 
 The watch of the host is not used for these views. A list every 15 seconds while a
-view is open costs five requests, shows a failed read as such, with what was read
-before and when, and stops when the last view closes. The watch comes with the
-spec that needs what it gives.
+view is open costs six requests, and one more for each family read on demand that a
+view holds, shows a failed read as such, with what was read before and when, and
+stops when the last view closes. The watch comes with the spec that needs what it
+gives.
+
+The families of an installation are one union of eight
+([the families](../../src/common/discovery.ts)): six read at every read, and the
+pod volume backups and the pod volume restores, read only while a view that shows
+them is open ([SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md),
+REQ-178): an installation may hold thousands of them, and a view that does not show
+them does not pay for them. What a view needs of those is said by a holder, in one
+call that replaces what it needed before, and the call answers the function that
+lets it go. The frame of a page is a holder: it needs what its page and the view
+that is open over it read of the families on demand, since the list stays under the
+view, and calls again when the view changes, so that a view that changes from one
+kind to another never lets go of a family both need. A family needed and never read
+is asked at once, alone, in the generation, through the same guarded read; then at
+every read while it is held. A family no holder needs is not asked at the read after
+it was let go, and what was read of it goes then: a view opened again within a read
+finds it still read, and no timer is added. A new generation keeps the holders and
+empties the reads, and an answer of a family no holder needs any more is not taken.
+The Overview, the lists of the other kinds and the views of a backup, a restore and
+a schedule hold none; the sections of the details of the host hold none and ask
+nothing.
 
 What is [known of a family](../../src/common/read-state.ts) is what the last read
 that ended said of it. A family that is asked again keeps that, and is marked as
@@ -386,7 +409,15 @@ is known of its target. The kinds that have a view are the ones of the
 them needs of the renderer is beside what uses it: its
 [page](../../src/renderer/navigation.ts), its
 [component](../../src/renderer/pages/open-view.tsx) and the
-[references](../../src/renderer/components/workspace.tsx) that lead to it.
+[references](../../src/renderer/components/workspace.tsx) that lead to it. Since
+T5.1 they are eight: the five of the first milestones, `backup-repository`,
+`pod-volume-backup` and `pod-volume-restore`, and a reference to a backup
+repository, a pod volume backup or a pod volume restore that is found leads to its
+view as the others do. The view of a repository reads the two families of the pod
+volume operations, and the view of an operation its own family, as the frame holds
+them; the pod and the node of an operation are the links of the host to their
+details (`LinkToPod`, `LinkToNode`), which read nothing and leave the host to read
+the object when its drawer opens.
 
 ### The Time Of An Operation And The History Of A Schedule
 

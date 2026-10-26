@@ -171,7 +171,7 @@ tests had run green in CI on main with the reviewed release moved to v1.18.4.
 | Expected runs from the cron expression, `status.lastBackup` and the newest matching Backup | T3.1 | [SPEC-0013](../specs/SPEC-0013-schedule-adherence.md) | Done |
 | Grace periods, paused, new and invalid schedules, timezone and daylight saving, skipped runs, clock skew, incomplete history, limited RBAC | T3.2 | [SPEC-0013](../specs/SPEC-0013-schedule-adherence.md) | Done |
 | Next expected run, last observed run and overdue state in list, detail and overview, with the reason | T3.3 | [SPEC-0013](../specs/SPEC-0013-schedule-adherence.md) | Done |
-| BackupRepository, PodVolumeBackup and PodVolumeRestore views | T5.1 | [SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md) | Approved |
+| BackupRepository, PodVolumeBackup and PodVolumeRestore views | T5.1 | [SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md) | In PR |
 | DataUpload and DataDownload views with progress and relationships | T5.2 | [SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md) | Approved |
 
 The two specs of the milestone were approved on 2026-10-14, as drafted. The order
@@ -190,6 +190,22 @@ known; the fixtures of the adherence, placed by the clock, and a schedule the
 controller validates; and the suite of the adherence on those fixtures, with the
 measures and the pre-review, whose evidence makes SPEC-0013 Implemented. The row
 of T3.3 is In PR from the first of them and is Done with the last.
+
+The repositories and the pod volume operations, T5.1, are five pull requests, in
+this order: the backup repositories, the pod volume backups and the pod volume
+restores in their lists, their views and the details of the host, with the two
+families of the operations read only while a view that shows them is open; the
+band of the volume operations in the view of a backup and of a restore, what used
+a repository, and the way from the Volumes tab; the cell of the repositories and
+their two rules in the Overview; a pod volume backed up and restored in the test
+environment, with the repositories and the operations of the views and of the long
+lists placed; and the suites on those fixtures, with the measures and the
+pre-review. The data movement, T5.2, is two more: the data uploads and the data
+downloads, read under the second version of the group, in their lists, their
+views, the details of the host and the bands; and their fixtures with their
+suites, the measures and the pre-review, whose evidence makes SPEC-0014
+Implemented. The row of T5.1 is In PR from the first of its pull requests and is
+Done with the last, and so is the row of T5.2 with its two.
 
 Exit of M4: tests with a controlled clock and packaged UI scenarios establish
 the accuracy of the adherence signal, including its uncertainty states.

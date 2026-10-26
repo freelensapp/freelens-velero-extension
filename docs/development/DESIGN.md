@@ -113,6 +113,8 @@ Proposed primary columns, with responsive hiding only for secondary fields:
 | Schedule | Name, installation namespace, cron, paused, next run, adherence, last submission, latest observed backup, validation state, age |
 | BSL | Name, installation namespace, availability, access mode, default, provider, last validation, last sync |
 | VSL | Name, installation namespace, provider, reported phase or unknown, age |
+| BackupRepository | Name, installation namespace, volume namespace, storage location, type, readiness, last maintenance, maintenance frequency, age |
+| PodVolumeBackup, PodVolumeRestore | Name, installation namespace, phase, backup or restore, source (pod and volume), node, progress in bytes, started, duration, storage location, uploader, age |
 
 Use stable column IDs and native resize/sort behavior. Preserve the full value in
 tooltips/details when truncating. In a narrow room the secondary columns give their
@@ -133,6 +135,15 @@ name is cut first, and then how it ended, with its tip. In every list the age, s
 from 1,000 pixels, holds there whole every age the host writes, up to 2y364d; its
 tip is the time of the creation. The installation is the first to go because it is
 the same in every row and the target bar says it.
+Of the backup repositories, the type and the maintenance frequency go under 760,
+after the installation and the age: the name, the volume namespace, the storage
+location, the readiness and the last maintenance stay, since who reads the list of
+a repository that is not ready asks what it is of. Of the pod volume backups and
+restores, the storage location, the uploader and the duration go under 760 and the
+start and the node under 640: the name, the phase, the backup or the restore, the
+source and the progress stay. The storage location of a repository and the source
+of an operation have classes of their own, `location` and `volume`, which no rule
+of another list hides.
 In a list of 1,000 pixels or more what an
 operation says of a failure, its progress, its start and its duration have the
 room of their words, in whatever way the language of the operator writes a date:
