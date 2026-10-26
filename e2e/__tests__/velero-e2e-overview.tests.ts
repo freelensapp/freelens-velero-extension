@@ -892,14 +892,15 @@ describe("overview of an installation", () => {
       expect(shown.read).toEqual({
         backups: { text: `Backups ${of("backup").length}`, state: "read" },
         restores: { text: `Restores ${of("restore").length}`, state: "read" },
-        schedules: { text: "Schedules 0", state: "read" },
+        schedules: { text: "Schedules 1", state: "read" },
         storageLocations: { text: "Backup Storage Locations 1", state: "read" },
         snapshotLocations: { text: "Volume Snapshot Locations 0", state: "read" },
       });
       // What ended with a failure is an item while its time is inside the window: the creation of what the
       // server refused, which did not start, and the start of the backups synced from the store, four hundred
-      // days back. The installation has no schedule: each one is an item of its own. Within five minutes of
-      // the edge the page and the suite may see it on two sides: what is there is expected neither way.
+      // days back. The one schedule of the installation, the one its controller validated, has no backup: each
+      // one is an item of its own, and the schedule is none, its next run a year after its creation. Within five
+      // minutes of the edge the page and the suite may see it on two sides: what is there is expected neither way.
       const failed = operations.filter((operation) => FAILED.includes(operation.phase));
       const edge = failed.filter((operation) => Math.abs(operation.time - from) <= MARGIN).map(({ name }) => name);
       const inside = failed
@@ -935,9 +936,16 @@ describe("overview of an installation", () => {
           .sort(completedFirst)[0]?.name,
       ).toBe(LIVE);
       expect(shown.completed).toMatch(new RegExp(`^${LIVE} completed \\S`));
-      expect(await words("[data-testid=velero-overview-schedules]")).toBe(
-        "Schedules No schedule is in this installation.",
-      );
+      // The schedule the controller validated has its line, with its next run and its adherence: awaited, its run
+      // an instant a year after its creation. No schedule of the installation is not known.
+      expect(shown.schedules).toEqual([`fixture-yearly-${run}`]);
+      expect(shown.adherence[`fixture-yearly-${run}`]).toEqual({
+        next: "at",
+        state: "awaited",
+        mark: "awaited",
+        reason: "",
+      });
+      expect(shown.notKnown).toBeUndefined();
       // The location the controller of the installation validates every minute is not late.
       expect(shown.storage).toEqual(["default"]);
       expect(await words('[data-testid=velero-overview-storage-list] [data-line="default"]')).toMatch(
@@ -957,11 +965,12 @@ describe("overview of an installation", () => {
       // What the rule of the default names in each installation.
       const defaults: Record<string, string[]> = {};
       // The schedules of each installation whose adherence is not known, by reason, as the fixtures are made: no
-      // backup of them gives the zone of the server, and Velero has read none of the ones of the views that report
-      // no phase or New. The installation of the two defaults has no schedule.
+      // backup of them gives the zone of the server, the one of the views that submitted two days before the
+      // fixtures were started among them, and Velero has read none of the ones of the views that report no phase
+      // or New. The installation of the two defaults has no schedule.
       const unknown: Record<string, Record<string, number>> = {
         [cluster.E2E_STATIC_NAMESPACE]: { "no-offset": 1 },
-        [cluster.E2E_VIEWS_NAMESPACE]: { "not-read": 2, "no-offset": 5 },
+        [cluster.E2E_VIEWS_NAMESPACE]: { "not-read": 2, "no-offset": 6 },
         [cluster.E2E_DEFAULTS_NAMESPACE]: {},
         [cluster.E2E_OVERVIEW_NAMESPACE]: { "not-read": 1, "no-offset": 9 },
       };
@@ -1024,12 +1033,24 @@ describe("overview of an installation", () => {
         if (namespace === cluster.E2E_VIEWS_NAMESPACE) {
           const line = shown.adherence["views-zoned"];
 
-          // Its line is in a state the run and the clock give; it is an item exactly when it is overdue, at the
-          // edge of the grace as well, since its line and its item are of one drawing.
-          expect(cluster.statesAround(run, read, Date.now())).toContain(line?.state);
+          // The interval that submitted two days before the fixtures were started is overdue at every age of the
+          // environment: an item of A11, and its line among the ones a rule names.
+          expect(shown.adherence["views-interval"]).toEqual({ next: "at", state: "overdue", mark: "late", reason: "" });
+          // The schedule that names its zone is in a state its run and the clock give, and an item exactly when it is
+          // overdue. A rule then names it, and its line is among the ten, overdue, since its line and its item are of
+          // one drawing; when none names it the ten are the five a rule names and the five first by name, which
+          // leave it out, awaited or due.
           zoned = shown.items.some(([rule, name]) => rule === "A11" && name === "views-zoned");
-          expect([line?.state, zoned]).toEqual([line?.state, line?.state === "overdue"]);
-          expect(shown.items.filter(([rule, name]) => rule === "A11" && name !== "views-zoned")).toEqual([]);
+          expect(cluster.statesAround(run, read, Date.now()).some((state) => (state === "overdue") === zoned)).toBe(
+            true,
+          );
+          expect([line?.state, zoned]).toEqual([zoned ? "overdue" : undefined, zoned]);
+          expect(
+            shown.items
+              .filter(([rule]) => rule === "A11")
+              .map(([, name]) => name)
+              .sort(),
+          ).toEqual(["views-interval", ...(zoned ? ["views-zoned"] : [])]);
         }
       }
       // The installation of the phases marks no location default: the item is of no single location,
@@ -1038,10 +1059,10 @@ describe("overview of an installation", () => {
       expect(defaults[cluster.E2E_STATIC_NAMESPACE]).toEqual(["Default storage location"]);
       expect(defaults[cluster.E2E_DEFAULTS_NAMESPACE]).toEqual(["defaults-older"]);
       expect(defaults[cluster.E2E_OVERVIEW_NAMESPACE]).toEqual([]);
-      // Every rule gave an item on the cluster, in one installation or in another: A11 when the schedule of the
-      // views that names its zone is overdue, which it is from some minutes after its first run.
+      // Every rule gave an item on the cluster, in one installation or in another: A11 of the interval of the views,
+      // whatever the hour, and of the schedule that names its zone once it is overdue.
       expect([...new Set(Object.values(rules).flat())].sort()).toEqual(
-        ["A1", "A10", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", ...(zoned ? ["A11"] : [])].sort(),
+        ["A1", "A10", "A11", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9"].sort(),
       );
     },
     TIMEOUT,
