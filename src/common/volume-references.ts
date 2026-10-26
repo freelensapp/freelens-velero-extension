@@ -2,6 +2,7 @@
 // storage location, the backup repository it writes into or reads from, and the pod and the node it is of, which
 // are names the extension does not read.
 
+import { labelOf } from "./name-label";
 import { resolveReference, unavailable } from "./references";
 import { LABELS, PVC_NAME_ANNOTATION } from "./types";
 
@@ -27,6 +28,7 @@ function named(value: unknown): string | undefined {
 // The objects of a read by their name, made once for the items of a read: a list of two thousand operations finds
 // the owner of each row in one look, and a new read makes a new array, so a new map.
 const byName = new WeakMap<readonly unknown[], Map<string, { metadata: ObjectMetadata }>>();
+const byLabel = new WeakMap<readonly unknown[], Map<string, { metadata: ObjectMetadata }>>();
 
 function indexed<Item extends { metadata: ObjectMetadata }>(items: readonly Item[]): Map<string, Item> {
   let found = byName.get(items) as Map<string, Item> | undefined;
@@ -34,6 +36,17 @@ function indexed<Item extends { metadata: ObjectMetadata }>(items: readonly Item
   if (!found) {
     found = new Map(items.map((item) => [item.metadata.name, item]));
     byName.set(items, found);
+  }
+  return found;
+}
+
+// The items by the value of a label that names them, which is the name cut as the release cuts a long one.
+function labelled<Item extends { metadata: ObjectMetadata }>(items: readonly Item[]): Map<string, Item> {
+  let found = byLabel.get(items) as Map<string, Item> | undefined;
+
+  if (!found) {
+    found = new Map(items.map((item) => [labelOf(item.metadata.name), item]));
+    byLabel.set(items, found);
   }
   return found;
 }
@@ -77,17 +90,26 @@ export function operationOwner(
   const by = fromLabels.name ? "labels" : fromOwner.name ? "owner-reference" : "none";
   const { name, uid } = by === "labels" ? fromLabels : fromOwner;
   const noun = kind.toLowerCase();
+  // The label of a name over 63 characters is the name cut as the release cuts it: the owner reference names
+  // the same object when its name, cut that way, is the label.
   const disagreement =
     by === "labels" &&
     fromOwner.name !== undefined &&
-    (fromOwner.name !== fromLabels.name || (fromLabels.uid !== undefined && fromOwner.uid !== fromLabels.uid))
+    (labelOf(fromOwner.name) !== fromLabels.name || (fromLabels.uid !== undefined && fromOwner.uid !== fromLabels.uid))
       ? `Its owner reference names the ${noun} ${fromOwner.name}${fromOwner.uid ? ` of UID ${fromOwner.uid}` : ""}, which its labels do not name`
       : undefined;
 
   if (!name) return { by, replaced: false };
   const namespace = operation.metadata.namespace ?? "";
-  const found = indexed<{ metadata: ObjectMetadata }>(read.items).get(name);
+  const found =
+    by === "labels"
+      ? labelled<{ metadata: ObjectMetadata }>(read.items).get(name)
+      : indexed<{ metadata: ObjectMetadata }>(read.items).get(name);
   const there = found && found.metadata.namespace === namespace ? found : undefined;
+  // The whole name: the one of the object found, or the one of the owner reference that the label is the cut of.
+  const whole =
+    there?.metadata.name ??
+    (by === "labels" && fromOwner.name !== undefined && labelOf(fromOwner.name) === name ? fromOwner.name : name);
 
   if (there && uid !== undefined && there.metadata.uid !== uid) {
     return {
@@ -95,7 +117,7 @@ export function operationOwner(
       replaced: true,
       reference: {
         kind,
-        name,
+        name: whole,
         namespace,
         state: "absent",
         stale: false,
@@ -105,7 +127,7 @@ export function operationOwner(
     };
   }
   // The one object of that name, found in the index, is resolved as every reference is.
-  const reference = resolveReference(kind, name, namespace, { ...read, items: there ? [there] : [] });
+  const reference = resolveReference(kind, whole, namespace, { ...read, items: there ? [there] : [] });
 
   return { by, replaced: false, reference, ...(disagreement ? { disagreement } : {}) };
 }
@@ -200,7 +222,9 @@ export function operationRepository(
   if (read.status !== "ready" && read.lastSuccess === undefined) {
     return { ...unavailable("BackupRepository", read), names: [] } as OperationRepository;
   }
-  const found = (byTriple(read.items).get(tripleKey({ volumeNamespace: namespace, location, type })) ?? []).filter(
+  // The labels hold the names cut as the release cuts a long one: the triple is compared cut the same way.
+  const key = tripleKey({ volumeNamespace: labelOf(namespace), location: labelOf(location), type });
+  const found = (byTriple(read.items).get(key) ?? []).filter(
     (repository) => repository.metadata.namespace === operation.metadata.namespace,
   );
 

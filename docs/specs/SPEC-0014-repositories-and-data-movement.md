@@ -578,6 +578,13 @@ Record role, date and verdict.
 - **The repository of an operation is found by the three labels**, as the
   release finds it, and never by the name, which the release says it may change.
   Two repositories of the same labels are said so, as the release refuses them.
+- **A label that carries a name is compared as the release cuts it**: a name
+  longer than 63 characters is cut to its first 57 and six characters of its
+  SHA-256 ([RECON-T0.1](../development/RECON-T0.1.md), the labels), so the owner
+  of an operation and the location of its repository are found by the name cut
+  that way, as decided by the maintainer on 2026-10-26. The extension cuts the
+  labels of the requests it creates with the same function
+  (`src/common/name-label.ts`).
 - **Due is counted by the clock of this machine**, against the last maintenance
   time and the frequency the object names, with the five minutes of the pass of
   the server said beside it. The release gives no field for it. A frequency
@@ -694,7 +701,8 @@ evidence, by check:
 - KIND-10: the owner by its labels and by its owner reference, found, found with
   another UID, absent, denied, not read, failed, and the two disagreeing; the
   location; the repository by its three labels, of kopia, of restic and of an empty
-  uploader, none and two; the pod and the node as names, the node of a pod volume
+  uploader, none and two; the owner and the repository by names of 63, 64 and 78
+  characters, which the release cuts in their labels; the pod and the node as names, the node of a pod volume
   backup from its spec and of a restore from its status
   (`src/common/volume-references.test.ts`).
 - KIND-14: no menu, no selection and no control but ways in the rows and in the

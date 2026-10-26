@@ -146,6 +146,81 @@ describe("the backup or the restore an operation belongs to", () => {
   });
 });
 
+describe("a name the release cuts in a label", () => {
+  // The labels as the release writes them: a name over 63 characters is cut to its first 57 and the first six
+  // hexadecimal characters of its SHA-256, computed outside the extension.
+  it("finds the owner of an operation by a name of 63, 64 and 78 characters, with no disagreement", () => {
+    const cases = [
+      [
+        "daily-backups-of-the-shop-database-and-of-its-uploaded-files-ab",
+        "daily-backups-of-the-shop-database-and-of-its-uploaded-files-ab",
+      ],
+      [
+        "daily-backups-of-the-shop-database-and-of-its-uploaded-files-abc",
+        "daily-backups-of-the-shop-database-and-of-its-uploaded-fi1cdcbe",
+      ],
+      [
+        "the-daily-backups-of-the-shop-database-and-of-its-files-of-2026-20261026120000",
+        "the-daily-backups-of-the-shop-database-and-of-its-files-o80b6c5",
+      ],
+    ] as const;
+
+    expect(cases.map(([name]) => name.length)).toEqual([63, 64, 78]);
+    for (const [name, label] of cases) {
+      const uid = `backup-${name.length}`;
+      const owner = backup(name, "Completed", { uid });
+      const operation = podVolumeBackup("x", undefined, {
+        labels: { "velero.io/backup-name": label, "velero.io/backup-uid": uid },
+        ownerReferences: [{ apiVersion: "velero.io/v1", kind: "Backup", name, uid, controller: true }],
+      });
+      const found = operationOwner(operation, "Backup", read([nightly, owner]));
+
+      expect([name.length, found.by, found.reference?.state, found.reference?.name, found.disagreement]).toEqual([
+        name.length,
+        "labels",
+        "resolved",
+        name,
+        undefined,
+      ]);
+    }
+  });
+
+  it("finds the repository of an operation whose storage location is named with 63 and 64 characters", () => {
+    const cases = [
+      [
+        "the-storage-location-of-the-backups-of-the-shop-in-the-region-a",
+        "the-storage-location-of-the-backups-of-the-shop-in-the-region-a",
+      ],
+      [
+        "the-storage-location-of-the-backups-of-the-shop-in-the-region-ab",
+        "the-storage-location-of-the-backups-of-the-shop-in-the-re2c9aa0",
+      ],
+    ] as const;
+
+    expect(cases.map(([location]) => location.length)).toEqual([63, 64]);
+    for (const [location, label] of cases) {
+      const far = repository(
+        "shop-far-kopia",
+        { phase: "Ready" },
+        {
+          spec: { backupStorageLocation: location },
+          labels: {
+            "velero.io/volume-namespace": "shop",
+            "velero.io/storage-location": label,
+            "velero.io/repository-type": "kopia",
+          },
+        },
+      );
+      const operation = podVolumeBackup("x", undefined, { spec: { backupStorageLocation: location } });
+
+      expect([location.length, operationRepository("PodVolumeBackup", operation, read([far]))]).toEqual([
+        location.length,
+        expect.objectContaining({ state: "found", reference: expect.objectContaining({ name: "shop-far-kopia" }) }),
+      ]);
+    }
+  });
+});
+
 describe("the storage location of an operation", () => {
   it("is the one its spec names, among the ones of its installation", () => {
     const location = { metadata: { name: "default", namespace: "velero", uid: "l" } } as BackupStorageLocationResource;
