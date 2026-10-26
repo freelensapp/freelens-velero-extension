@@ -1168,7 +1168,7 @@ describe("overview of an installation", () => {
       expect(after.installed).toEqual(before.installed);
       expect(before.requests).toBe(0);
       expect(after.requests).toBe(0);
-      expect(cluster.counted(cluster.writes(counted), cluster.writes(requests))).toEqual({});
+      expect(cluster.writes(counted, requests)).toEqual({});
       // Of the whole cluster the storage locations were listed, to find the installations: when the
       // views were opened, and each time they were asked to read again.
       expect(cluster.counted(cluster.clusterReads(counted), cluster.clusterReads(requests))).toEqual({

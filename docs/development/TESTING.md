@@ -776,18 +776,22 @@ the helpers stop it when the schedule submitted since its placement, by its last
 submission or a backup that carries its label: the suite would take that backup
 into what it compares with.
 
-The controller looks at the schedule once a minute. Whether it sends a PATCH of it
-at each look with nothing changed, which every suite would count as a write, is
-measured on the test environment from the counters of the API server, over three
-minutes: on 2026-10-26 it did, a PATCH of the schedule by name once a minute, 19
-to 22 in three minutes, with its version and its status unchanged and no POST of
-a backup. The helpers of the suites say the answer in a
-constant, `SCHEDULE_PATCHED_AT_EVERY_LOOK`: when it is true, the writes a suite
-counts leave out the PATCH of the schedules, as they leave out the one the
-controller of the storage locations writes at each validation, and the version and
-the status of the schedule in the snapshot of every suite prove that nothing
-changed it; a submission would add a backup to the identities of the installation,
-and, in the suites that count the writes, a POST of a backup to what they count.
+The controller looks at the schedule once a minute. Whether it sends a PATCH of
+it at each look with nothing changed, which every suite would count as a write,
+is measured on the test environment from the counters of the API server, over
+three minutes: on 2026-10-26 it did, a PATCH of the schedule by name once a
+minute, 19 to 22 in three minutes, with its version and its status unchanged and
+no POST of a backup. The helpers of the suites say the answer in a constant,
+`SCHEDULE_PATCHED_AT_EVERY_LOOK`: when it is true, the writes a suite counts
+between two readings of the counters leave out the PATCH of a schedule by name,
+as they leave out the one the controller of the storage locations writes at each
+validation, but no more of them than the whole minutes between the two readings
+and two; the ones above that bound, and a PATCH of a schedule of another scope,
+are writes. Within the bound, the version and the status of the schedule in the
+snapshot of every suite prove that nothing changed it, and a PATCH that changes
+nothing, or that the server refuses, is not seen; a submission would add a
+backup to the identities of the installation, and, in the suites that count the
+writes, a POST of a backup to what they count.
 
 On 2026-10-26, on the machine of the runs, a first placement of the three
 installations of the adherence, 614 objects, took 4 minutes 58 seconds as the

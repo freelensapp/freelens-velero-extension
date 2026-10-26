@@ -15,20 +15,35 @@ describe("the guard of the suites", () => {
     "POST downloadrequests namespace": 1,
   };
 
-  it("counts every request that is not a read as a write, but the PATCH of a storage location, and the PATCH of a schedule only while its controller does not send one at every look", () => {
+  it("counts every request that is not a read as a write, but the PATCH of a storage location, and the PATCH of a schedule by name only above the whole minutes of the window and two while its controller sends one at every look", () => {
     const always = {
       "POST backups namespace": 1,
       "DELETE schedules resource": 1,
       "POST downloadrequests namespace": 1,
+      "PATCH schedules namespace": 1,
     };
 
-    expect(writesOf(counts, false)).toEqual({
+    // Its controller sends no PATCH at every look: every PATCH of a schedule is a write, whatever the window.
+    expect(writesOf(counts, false, 0)).toEqual({ ...always, "PATCH schedules resource": 2 });
+    expect(writesOf(counts, false, 90)).toEqual({ ...always, "PATCH schedules resource": 2 });
+    // It does: no more than the whole minutes of the window and two are left out, and only by name.
+    expect(writesOf(counts, true, 0)).toEqual(always);
+    expect(writesOf({ ...counts, "PATCH schedules resource": 3 }, true, 0.99)).toEqual({
       ...always,
-      "PATCH schedules resource": 2,
-      "PATCH schedules namespace": 1,
+      "PATCH schedules resource": 1,
     });
-    expect(writesOf(counts, true)).toEqual(always);
-    expect(writesOf({}, true)).toEqual({});
+    expect(writesOf({ ...counts, "PATCH schedules resource": 5 }, true, 3.9)).toEqual(always);
+    expect(writesOf({ ...counts, "PATCH schedules resource": 9 }, true, 3.9)).toEqual({
+      ...always,
+      "PATCH schedules resource": 4,
+    });
+    expect(writesOf({ "PATCH schedules resource": 37 }, true, 35.6)).toEqual({});
+    expect(writesOf({ "PATCH schedules resource": 38 }, true, 35.6)).toEqual({ "PATCH schedules resource": 1 });
+    expect(writesOf({}, true, 0)).toEqual({});
+    // A window that is not one is refused, not taken as none.
+    for (const minutes of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => writesOf(counts, true, minutes)).toThrow(/window of minutes/);
+    }
   });
 
   it("says that the schedule the controller validated submitted a backup, by its last submission and by each backup that carries its label, and says nothing of one that submitted none", () => {

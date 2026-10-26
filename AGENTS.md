@@ -438,9 +438,11 @@ test environment and of the process of this repository.
   adherence, goes with that cleanup, by its identity, before it. That controller
   sends a PATCH of the schedule at each of its looks with nothing changed, once a
   minute (measured on 2026-10-26), which every suite would count as a write: the
-  helpers leave the PATCH of the schedules out of the writes
-  (`SCHEDULE_PATCHED_AT_EVERY_LOOK`), and the version and the status of the
-  schedule in the snapshot prove that nothing changed it.
+  helpers leave out of the writes the PATCH of a schedule by name, no more of them
+  than the whole minutes between the two readings of the counters and two
+  (`SCHEDULE_PATCHED_AT_EVERY_LOOK`, `writesOf`), so `writes` takes two readings
+  of `apiRequests`, which keep the moment they were asked; the version and the
+  status of the schedule in the snapshot prove that nothing changed it.
 - `kubectl delete` waits for each object it removed, one at a time: two thousand
   take minutes. Remove with `--wait=false`, then read the namespace until
   nothing is left.

@@ -1077,7 +1077,7 @@ describe("views of the schedules", () => {
       expect(after.requests).toBe(0);
       // No request of any kind of Velero that is not a read, by whoever: the suite writes nothing, and the
       // installation under test has nothing to do.
-      expect(cluster.counted(cluster.writes(counted), cluster.writes(requests))).toEqual({});
+      expect(cluster.writes(counted, requests)).toEqual({});
       // Of the whole cluster only the storage locations were listed, once, which is how the installations
       // are found.
       expect(cluster.counted(cluster.clusterReads(counted), cluster.clusterReads(requests))).toEqual({

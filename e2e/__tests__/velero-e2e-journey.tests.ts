@@ -806,7 +806,7 @@ describe("views of the first milestone", () => {
       expect(after.requests).toBe(0);
       // No request of any kind of Velero that is not a read, by whoever: the suite writes nothing, and the
       // installation under test has nothing to do.
-      expect(cluster.counted(cluster.writes(counted), cluster.writes(requests))).toEqual({});
+      expect(cluster.writes(counted, requests)).toEqual({});
     },
     TIMEOUT,
   );

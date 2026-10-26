@@ -480,14 +480,19 @@ export function veleroObject<Read>(resource: string, name: string, namespace = E
   return status === 0 && stdout ? (JSON.parse(stdout) as Read) : undefined;
 }
 
+/** When each reading of the counters was asked, which `writes` takes the length of its window from. */
+const READ_AT = new WeakMap<Record<string, number>, number>();
+
 /**
  * How many requests the API server counted for the kinds of Velero, by verb,
  * kind and scope: `LIST backupstoragelocations cluster`. The server counts
  * what reaches it, whoever asks: a list of a kind in the whole cluster is
  * asked by the discovery of the extension and by nothing else of this
- * environment, whose controllers ask for their own namespace.
+ * environment, whose controllers ask for their own namespace. The reading
+ * keeps the moment it was asked.
  */
 export function apiRequests(): Record<string, number> {
+  const asked = Date.now();
   const { status, stdout, stderr } = kubectlE2E("get", "--raw", "/metrics");
 
   if (status !== 0) throw new Error(`The counters of the API server could not be read: ${stderr}`);
@@ -500,6 +505,7 @@ export function apiRequests(): Record<string, number> {
 
     counts[key] = (counts[key] ?? 0) + Number(line.slice(line.lastIndexOf(" ") + 1));
   }
+  READ_AT.set(counts, asked);
 
   return counts;
 }
@@ -549,18 +555,31 @@ export function familyReads(counts: Record<string, number>): Record<string, numb
  * minutes of an environment that nothing else read or wrote: a PATCH of the
  * scope `resource`, the schedule by name, once a minute (19 to 22), with the
  * version and the status of the real schedule unchanged and no POST of a
- * backup. What is left out is bounded by that: about one PATCH of one schedule
- * by name for each minute of a suite.
+ * backup. What is left out is bounded by that, and `writesOf` enforces it: no
+ * more PATCH of a schedule by name than the whole minutes between the two
+ * readings and two, the rest counted as writes, with every PATCH of a schedule
+ * of another scope. A PATCH within the bound that changes nothing, or that the
+ * server refuses, leaves no trace in the snapshot.
  */
 export const SCHEDULE_PATCHED_AT_EVERY_LOOK: boolean = true;
 
 /**
  * The requests that change something, or ask Velero for something, among the
- * ones counted (`writesOf`), the PATCH of a schedule among them unless its
- * controller sends one at every look (`SCHEDULE_PATCHED_AT_EVERY_LOOK`).
+ * ones counted between two readings of `apiRequests` (`writesOf`), the PATCH
+ * of a schedule among them, but the ones its controller sends at every look
+ * within the bound of the minutes between the readings
+ * (`SCHEDULE_PATCHED_AT_EVERY_LOOK`).
  */
-export function writes(counts: Record<string, number>): Record<string, number> {
-  return writesOf(counts, SCHEDULE_PATCHED_AT_EVERY_LOOK);
+export function writes(before: Record<string, number>, after: Record<string, number>): Record<string, number> {
+  const from = READ_AT.get(before);
+  const to = READ_AT.get(after);
+
+  if (from === undefined || to === undefined) {
+    throw new Error(
+      "The writes are counted between two readings of apiRequests, which keep the moment they were asked",
+    );
+  }
+  return writesOf(counted(before, after), SCHEDULE_PATCHED_AT_EVERY_LOOK, (to - from) / 60_000);
 }
 
 /** What was counted between two readings of the counters: the requests that are more, with how many more. */

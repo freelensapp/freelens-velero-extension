@@ -998,8 +998,14 @@ schedule, with its line, awaited, and no item; the Overview of the views counts 
 zone, lists the interval under rule A11 at every hour, and gives the schedule that names its zone a line only when a
 rule names it; every rule, A11 among them, gives an item on the cluster; the first reader counts eight schedules not
 known. Every suite compares the version and the status of the real schedule before and after it, and the writes it
-counts leave out the PATCH of the schedules only when the measure of LM1 says that the controller sends one at every
-look, a constant of the helpers that the measure sets. Decided while implementing, on 2026-10-26, none a change
+counts leave out the PATCH of a schedule by name only when the measure of LM1 says that the controller sends one at
+every look, a constant of the helpers that the measure sets, and then no more of them than the whole minutes between the
+two readings of the counters and two: the ones above that bound, and a PATCH of a schedule of another scope, are writes,
+and a PATCH within it that changes nothing, or that the server refuses, is not seen. Decided while implementing, on
+2026-10-26: that bound, one PATCH a minute as measured and two more, enforced by the guard of the suites, which takes
+the length of the window from the moments the two readings were asked, and proven by its test, which four changes made
+on purpose to the guard each made fail; the suites ran before it, with every PATCH of a schedule left out. Decided while
+implementing, on 2026-10-26, none a change
 of what a requirement asks: the two phases are an option of the placement by the clock, with its rules of what is good,
 and the clock of this machine a part of the runtime of the fixtures; the backups of the submissions are created fifty at
 a time, each group named by the clock read just before it; the backup that holds, which is not a submission, is created
