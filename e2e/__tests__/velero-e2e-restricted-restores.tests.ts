@@ -222,6 +222,12 @@ describe("restores with restricted access", () => {
       expect(shown.read.backups).toEqual({ text: "Backups Access denied", state: "denied" });
       expect(shown.read.restores).toEqual({ text: "Restores 6", state: "read" });
       expect(shown.unchecked).toEqual(["backups"]);
+      // The backups denied, none gives the zone of the server: the adherence of the six schedules of five fields that
+      // name no zone is not known, and so is the adherence of the two Velero has not read, counted and said.
+      expect(shown.summary).toMatch(
+        /^\d+ items in what was read\. The adherence of 8 schedules is not known\. Not everything was read\.$/,
+      );
+      expect(shown.notKnown).toEqual({ count: 8, reasons: { "not-read": 2, "no-offset": 6 } });
       const attention = (await frame.locator("[data-testid=velero-overview-attention]").innerText()).replace(
         /\s+/g,
         " ",

@@ -109,8 +109,15 @@ describe("pre-review of the views", () => {
   // of the tabs looks at one: the pointer is parked in a corner, since what it rests on is drawn as
   // pointed at and is no state of the tab; a page that is scrolled, as one with a tab is at twice the
   // zoom, is looked at from its top, where its target bar is, by the check of the page, and from its end,
-  // where the view is whole, by the check of the tab, which is where it is left for the picture.
-  const everyLayout = async (view: string, prepare?: () => Promise<void>, of = cluster.BACKUPS, tab?: Tab) => {
+  // where the view is whole, by the check of the tab, which is where it is left for the picture. What `more`
+  // answers at each size is recorded with the problems of the layout.
+  const everyLayout = async (
+    view: string,
+    prepare?: () => Promise<void>,
+    of = cluster.BACKUPS,
+    tab?: Tab,
+    more?: () => Promise<string[]>,
+  ) => {
     for (const theme of THEMES) {
       await velero.setColorTheme(started.app, started.window, theme);
       for (const size of SIZES) {
@@ -138,6 +145,7 @@ describe("pre-review of the views", () => {
         } else {
           problems[name] = await cluster.layoutProblems(frame, of);
         }
+        if (more) problems[name] = [...problems[name], ...(await more())];
         screenshots.push(await cluster.requiredScreenshot(frame, name, size.zoom));
       }
     }
@@ -1432,13 +1440,20 @@ describe("pre-review of the views", () => {
             })
             .map((mark) => mark.getAttribute("data-adherence")),
         );
-      const marked = async (view: string, least: number) => {
+      // The marks are counted in the part the view is: a band over the list counts its own, not the rows behind.
+      const marked = async (view: string, least: number, within = "") => {
         expect([view, await unsaid()]).toEqual([view, []]);
-        expect([view, (await frame.locator("[data-adherence]:not([data-testid])").count()) >= least]).toEqual([
+        expect([
           view,
-          true,
-        ]);
+          (await frame.locator(`${within} [data-adherence]:not([data-testid])`.trim()).count()) >= least,
+        ]).toEqual([view, true]);
       };
+      const WORKSPACE = "[data-testid=velero-schedule-workspace]";
+      // The words of every cell whole, cut with an ellipsis and a tip, or wrapped, and on the line of their row.
+      const fitted = (of: cluster.ListOf | cluster.LinesOf) => async () => [
+        ...(await cluster.columnsOf(of, frame)).clipped.map((column) => `clipped with no ellipsis or tip: ${column}`),
+        ...(await cluster.misalignedWords(of, frame)).map((words) => `off the line of its row: ${words}`),
+      ];
 
       await cluster.showList(frame);
       await cluster.openPage(frame, SCHEDULES);
@@ -1446,14 +1461,20 @@ describe("pre-review of the views", () => {
       await cluster.configureInstallation(frame, cluster.E2E_ADHERENCE_NAMESPACE);
       await frame.waitForSelector(`[data-testid=velero-schedules] [data-schedule-row="${HELD}"]`, { timeout: 60_000 });
       await cluster.rowAdherence(frame, HELD);
-      await everyLayout("adherence-schedules", () => marked("adherence-schedules", 8), SCHEDULES);
+      await everyLayout(
+        "adherence-schedules",
+        () => marked("adherence-schedules", 8),
+        SCHEDULES,
+        undefined,
+        fitted(SCHEDULES),
+      );
       await cluster.openWorkspace(frame, HELD, SCHEDULES);
       await cluster.adherenceBand(frame);
       await everyLayout(
         "adherence-band-held",
         async () => {
           await frame.locator("[data-testid=velero-schedule-adherence]").scrollIntoViewIfNeeded();
-          await marked("adherence-band-held", 1);
+          await marked("adherence-band-held", 1, WORKSPACE);
         },
         SCHEDULES,
       );
@@ -1464,7 +1485,7 @@ describe("pre-review of the views", () => {
         "adherence-band-long-name",
         async () => {
           await frame.locator("[data-testid=velero-schedule-adherence]").scrollIntoViewIfNeeded();
-          await marked("adherence-band-long-name", 1);
+          await marked("adherence-band-long-name", 1, WORKSPACE);
         },
         SCHEDULES,
       );
@@ -1478,6 +1499,8 @@ describe("pre-review of the views", () => {
           await marked("adherence-overview", 8);
         },
         OVERVIEW,
+        undefined,
+        fitted(cluster.SCHEDULE_LINES),
       );
       for (const view of [
         "adherence-schedules",
