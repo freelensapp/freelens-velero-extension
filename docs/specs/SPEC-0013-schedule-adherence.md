@@ -7,7 +7,7 @@
 - **Reviewed main:** `c111008912919e6a1a4127b2a0b8a641ee2dad80`
 - **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0, to which the host drift watch moved it; T3.1 and T3.2 were implemented against v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and the evidence of their checks moved to v2 at T0.8, while T3.3 is implemented on v2
 - **Dependencies:** [Schedules](SPEC-0006-schedule-read-only.md), [states and Backups](SPEC-0003-backup-read-only.md), [the Overview](SPEC-0008-overview.md), [target discovery](SPEC-0002-installation-discovery.md)
-- **Approval:** Approved by the lead maintainer on 2026-10-14, as drafted, with the one disagreement of the independent review decided as the spec says: two offsets of one installation are a change of daylight saving time (REQ-162)
+- **Approval:** Approved by the lead maintainer on 2026-10-14, as drafted, with the one disagreement of the independent review decided as the spec says: two offsets of one installation are a change of daylight saving time (REQ-162). REQ-166 as the pull request of T3.2 amended it, and the precisions of REQ-170 and REQ-171 the first and the second pull requests of T3.3 made, confirmed by the lead maintainer on 2026-10-26
 
 Governed by [AGENTS.md](../../AGENTS.md).
 
@@ -795,8 +795,8 @@ schedule in 0.04 ms of 2; none not known, ten held, ten at every look, 8,775 run
 bound, as for T3.1. The independent review found REQ-166 the wrong way round for a cluster that is ahead, which
 only makes the lateness the controller counts longer; the pull request amends
 REQ-166, scenario 7, REQ-163, the table of the computation, the design of the clocks, ADH-07 and the Success
-Criteria, an amendment of an approved requirement for the lead maintainer to confirm at the review of the
-milestone. Deviations of the slice, to amend in the spec: REQ-165 (L133), the hold not known, a read of before and a
+Criteria, an amendment of an approved requirement, confirmed by the lead maintainer on 2026-10-26. Deviations of the
+slice, to amend in the spec: REQ-165 (L133), the hold not known, a read of before and a
 derived offset are words beside a state that keeps its mark, as REQ-165 says of the backups denied, ADH-06 (L529)
 and the design (L384-L386) have it, and the mark of what is not known is of the states of uncertainty proper;
 REQ-161 and REQ-163 (L129, L131), an expression with no instant is at every look whatever the zone, since it has
@@ -900,7 +900,7 @@ well; the details of a schedule of a namespace that is not the one the installat
 its installation, no backup, no offset and no time of its API server, and never read the cluster; the search holds the
 word of the state, the text of the next run and the notes, and not the sentence; the grace is one sentence under the
 line of the next run, from its constant, said of the states whose run is expected or held. A precision of REQ-170, made
-in this pull request, to be confirmed at the review of the fourth milestone: the host draws its details where no view of
+in this pull request, confirmed by the lead maintainer on 2026-10-26: the host draws its details where no view of
 the extension is, and the views ask the installation again only while one of them is open, so the details compute with
 the last read of the views and, when no view is open or that read of the backups is older than the period of the reads,
 say its age in a sentence of the module, as the stale words do, "Computed with the backups of the installation as they
@@ -959,8 +959,8 @@ since REQ-165 asks it of a state that keeps its value; an item of A11 is of the 
 that it was read before when that read is; a schedule Velero has not read is an item of A6, as SPEC-0008 has it, and its
 adherence is counted as not known, which is two facts; the line of the count says how many schedules there are for each
 reason, in the order the signal names the reasons, that this is not that they need nothing, and leads to the list of the
-schedules, where the tip of each says why. A precision of REQ-171, made in this pull request, to be confirmed at the
-review of the fourth milestone: "never an item" is read as never an item of rule A11, so that a schedule Velero has not
+schedules, where the tip of each says why. A precision of REQ-171, made in this pull request, confirmed by the lead
+maintainer on 2026-10-26: "never an item" is read as never an item of rule A11, so that a schedule Velero has not
 read stays an item of A6, as SPEC-0008 has it, while its adherence is counted as not known, since ADH-12 keeps the rules
 A1 to A10 as they are and the Failure criteria name an item of rule A11 for a schedule whose adherence is not known.
 
