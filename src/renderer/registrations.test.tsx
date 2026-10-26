@@ -49,15 +49,35 @@ vi.mock(import("./pages/snapshot-locations-page"), async (original) => ({
     throw new Error("the page of the snapshot locations");
   },
 }));
+vi.mock(import("./pages/repositories-page"), async (original) => ({
+  ...(await original()),
+  RepositoriesPage: () => {
+    throw new Error("the page of the backup repositories");
+  },
+}));
+vi.mock(import("./pages/pod-volume-backups-page"), async (original) => ({
+  ...(await original()),
+  PodVolumeBackupsPage: () => {
+    throw new Error("the page of the pod volume backups");
+  },
+}));
+vi.mock(import("./pages/pod-volume-restores-page"), async (original) => ({
+  ...(await original()),
+  PodVolumeRestoresPage: () => {
+    throw new Error("the page of the pod volume restores");
+  },
+}));
 
 // A section that cannot read an object named `broken`, and says the name of any other. It is made before the
 // modules are, as the mocks that use it are.
 const { section } = vi.hoisted(() => ({
   section:
-    (of: string) =>
-    ({ object }: { object: { metadata: { name: string } } }) => {
-      if (object.metadata.name === "broken") throw new Error(`the section of ${of}`);
-      return <p>{`the section of ${of} for ${object.metadata.name}`}</p>;
+    (of: string | ((props: { volume?: string }) => string)) =>
+    ({ object, ...props }: { object: { metadata: { name: string } }; volume?: string }) => {
+      const named = typeof of === "string" ? of : of(props);
+
+      if (object.metadata.name === "broken") throw new Error(`the section of ${named}`);
+      return <p>{`the section of ${named} for ${object.metadata.name}`}</p>;
     },
 }));
 
@@ -80,6 +100,17 @@ vi.mock(import("./details/storage-location-details"), async (original) => ({
 vi.mock(import("./details/snapshot-location-details"), async (original) => ({
   ...(await original()),
   SnapshotLocationDetails: section("a snapshot location") as never,
+}));
+vi.mock(import("./details/repository-details"), async (original) => ({
+  ...(await original()),
+  RepositoryDetails: section("a backup repository") as never,
+}));
+// One section for the two kinds of the pod volume operations, told apart by the kind it is given.
+vi.mock(import("./details/volume-operation-details"), async (original) => ({
+  ...(await original()),
+  VolumeOperationDetails: section(({ volume }) =>
+    volume === "PodVolumeBackup" ? "a pod volume backup" : "a pod volume restore",
+  ) as never,
 }));
 
 const NAME = "@freelensapp/velero-extension";
@@ -114,6 +145,9 @@ describe("what the renderer registers, drawn by the host", () => {
       ["schedules", "the page of the schedules"],
       ["storage-locations", "the page of the storage locations"],
       ["snapshot-locations", "the page of the snapshot locations"],
+      ["backup-repositories", "the page of the backup repositories"],
+      ["pod-volume-backups", "the page of the pod volume backups"],
+      ["pod-volume-restores", "the page of the pod volume restores"],
     ];
 
     expect(extension.clusterPages.map((page) => page.id)).toEqual(pages.map(([id]) => id));
@@ -142,7 +176,16 @@ describe("what the renderer registers, drawn by the host", () => {
 
   it("keeps an error of each section of the details in the section, with the rest of the drawer, and draws it again for another object", () => {
     const extension = Reflect.construct(VeleroRenderer, []) as Renderer.LensExtension;
-    const sections = ["a backup", "a restore", "a schedule", "a storage location", "a snapshot location"];
+    const sections = [
+      "a backup",
+      "a restore",
+      "a schedule",
+      "a storage location",
+      "a snapshot location",
+      "a backup repository",
+      "a pod volume backup",
+      "a pod volume restore",
+    ];
 
     expect(extension.kubeObjectDetailItems).toHaveLength(sections.length);
     for (const [index, { components }] of extension.kubeObjectDetailItems.entries()) {

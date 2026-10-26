@@ -25,16 +25,30 @@ import { catalogEntries } from "./main/host";
 import { VeleroIpc } from "./main/ipc";
 import VeleroRenderer from "./renderer";
 import { VeleroIpcRenderer } from "./renderer/api/ipc";
-import { Backup, BackupStorageLocation, Restore, Schedule, VolumeSnapshotLocation } from "./renderer/api/kinds";
+import {
+  Backup,
+  BackupRepository,
+  BackupStorageLocation,
+  PodVolumeBackup,
+  PodVolumeRestore,
+  Restore,
+  Schedule,
+  VolumeSnapshotLocation,
+} from "./renderer/api/kinds";
 import { ErrorBoundary } from "./renderer/components/error-boundary";
 import { BackupDetails } from "./renderer/details/backup-details";
+import { RepositoryDetails } from "./renderer/details/repository-details";
 import { RestoreDetails } from "./renderer/details/restore-details";
 import { ScheduleDetails } from "./renderer/details/schedule-details";
 import { SnapshotLocationDetails } from "./renderer/details/snapshot-location-details";
 import { StorageLocationDetails } from "./renderer/details/storage-location-details";
+import { VolumeOperationDetails } from "./renderer/details/volume-operation-details";
 import { PAGES } from "./renderer/navigation";
 import { BackupsPage } from "./renderer/pages/backups-page";
 import { OverviewPage } from "./renderer/pages/overview-page";
+import { PodVolumeBackupsPage } from "./renderer/pages/pod-volume-backups-page";
+import { PodVolumeRestoresPage } from "./renderer/pages/pod-volume-restores-page";
+import { RepositoriesPage } from "./renderer/pages/repositories-page";
 import { RestoresPage } from "./renderer/pages/restores-page";
 import { SchedulesPage } from "./renderer/pages/schedules-page";
 import { SnapshotLocationsPage } from "./renderer/pages/snapshot-locations-page";
@@ -98,7 +112,17 @@ describe("what the extension registers", () => {
     const pages = (extension.clusterPages as { id: string }[]).map((page) => page.id);
     const menus = extension.clusterPageMenus as { id: string; parentId?: string; target: { pageId: string } }[];
 
-    expect(pages).toEqual(["overview", "backups", "restores", "schedules", "storage-locations", "snapshot-locations"]);
+    expect(pages).toEqual([
+      "overview",
+      "backups",
+      "restores",
+      "schedules",
+      "storage-locations",
+      "snapshot-locations",
+      "backup-repositories",
+      "pod-volume-backups",
+      "pod-volume-restores",
+    ]);
     // The Overview is the first entry under Velero, and the page the entry of Velero names: the host
     // opens a group from its entry, and marks the entry when the page it names is shown.
     expect(menus.map((menu) => [menu.id, menu.parentId, menu.target.pageId])).toEqual([
@@ -108,6 +132,9 @@ describe("what the extension registers", () => {
       ["velero-schedules", "velero", "schedules"],
       ["velero-storage-locations", "velero", "storage-locations"],
       ["velero-snapshot-locations", "velero", "snapshot-locations"],
+      ["velero-backup-repositories", "velero", "backup-repositories"],
+      ["velero-pod-volume-backups", "velero", "pod-volume-backups"],
+      ["velero-pod-volume-restores", "velero", "pod-volume-restores"],
       ["velero", undefined, "overview"],
     ]);
     // The host takes the first entry that leads to a page to know whether the page is of a group, and
@@ -129,6 +156,9 @@ describe("what the extension registers", () => {
       ["Schedule", ["velero.io/v1"]],
       ["BackupStorageLocation", ["velero.io/v1"]],
       ["VolumeSnapshotLocation", ["velero.io/v1"]],
+      ["BackupRepository", ["velero.io/v1"]],
+      ["PodVolumeBackup", ["velero.io/v1"]],
+      ["PodVolumeRestore", ["velero.io/v1"]],
     ]);
   });
 
@@ -159,21 +189,36 @@ describe("what the extension registers", () => {
     expectTypeOf<Schedule["kind"]>().toEqualTypeOf<"Schedule">();
     expectTypeOf<BackupStorageLocation["kind"]>().toEqualTypeOf<"BackupStorageLocation">();
     expectTypeOf<VolumeSnapshotLocation["kind"]>().toEqualTypeOf<"VolumeSnapshotLocation">();
+    expectTypeOf<BackupRepository["kind"]>().toEqualTypeOf<"BackupRepository">();
+    expectTypeOf<PodVolumeBackup["kind"]>().toEqualTypeOf<"PodVolumeBackup">();
+    expectTypeOf<PodVolumeRestore["kind"]>().toEqualTypeOf<"PodVolumeRestore">();
     for (const version of [
       expectTypeOf<Backup["apiVersion"]>(),
       expectTypeOf<Restore["apiVersion"]>(),
       expectTypeOf<Schedule["apiVersion"]>(),
       expectTypeOf<BackupStorageLocation["apiVersion"]>(),
       expectTypeOf<VolumeSnapshotLocation["apiVersion"]>(),
+      expectTypeOf<BackupRepository["apiVersion"]>(),
+      expectTypeOf<PodVolumeBackup["apiVersion"]>(),
+      expectTypeOf<PodVolumeRestore["apiVersion"]>(),
     ])
       version.toEqualTypeOf<"velero.io/v1">();
   });
 
-  it("is no API and no store of its own for a kind: the module of the kinds is the five classes", async () => {
+  it("is no API and no store of its own for a kind: the module of the kinds is the eight classes", async () => {
     const kinds = await import("./renderer/api/kinds");
 
     expect(Object.keys(kinds).sort()).toEqual(
-      ["Backup", "BackupStorageLocation", "Restore", "Schedule", "VolumeSnapshotLocation"].sort(),
+      [
+        "Backup",
+        "BackupStorageLocation",
+        "Restore",
+        "Schedule",
+        "VolumeSnapshotLocation",
+        "BackupRepository",
+        "PodVolumeBackup",
+        "PodVolumeRestore",
+      ].sort(),
     );
     for (const value of Object.values(kinds)) {
       expect(Object.getPrototypeOf(value)).toBe(Renderer.K8sApi.LensExtensionKubeObject);
@@ -182,7 +227,7 @@ describe("what the extension registers", () => {
     }
   });
 
-  it("is the five kinds as the custom resources the Custom Resources tree leaves out, and nothing else", () => {
+  it("is the eight kinds as the custom resources the Custom Resources tree leaves out, and nothing else", () => {
     const extension = Reflect.construct(VeleroRenderer, []) as HostExtensionStub & { customResources: unknown[] };
 
     expect(extension.customResources).toHaveLength(KINDS.length);
@@ -191,7 +236,7 @@ describe("what the extension registers", () => {
     });
   });
 
-  it("is the five sections of the details, each made with detailsFor for its kind, drawn inside a boundary of the extension with the object alone", () => {
+  it("is the eight sections of the details, each made with detailsFor for its kind, drawn inside a boundary of the extension with the object alone", () => {
     const extension = Reflect.construct(VeleroRenderer, []) as HostExtensionStub;
     const items = extension.kubeObjectDetailItems as {
       kind: string;
@@ -225,7 +270,9 @@ describe("what the extension registers", () => {
       const element = (inner.type as (props: object) => Drawn)(inner.props);
 
       // The host gives the object, and the registration gives the extension.
-      expect([item.kind, element.type, element.props]).toEqual([item.kind, SECTIONS[index], { object, extension }]);
+      const [section, props] = SECTIONS[index];
+
+      expect([item.kind, element.type, element.props]).toEqual([item.kind, section, { object, ...props, extension }]);
     });
   });
 
@@ -260,11 +307,14 @@ describe("what the extension registers", () => {
       ["schedules", ErrorBoundary, true, undefined, true, SchedulesPage, {}],
       ["storage-locations", ErrorBoundary, true, undefined, true, StorageLocationsPage, {}],
       ["snapshot-locations", ErrorBoundary, true, undefined, true, SnapshotLocationsPage, {}],
+      ["backup-repositories", ErrorBoundary, true, undefined, true, RepositoriesPage, {}],
+      ["pod-volume-backups", ErrorBoundary, true, undefined, true, PodVolumeBackupsPage, {}],
+      ["pod-volume-restores", ErrorBoundary, true, undefined, true, PodVolumeRestoresPage, {}],
     ]);
   });
 });
 
-// The five kinds of Velero, with their kind, plural, singular, short names and title.
+// The eight kinds of Velero, with their kind, plural, singular, short names and title.
 const KINDS = [
   [Backup, "Backup", "backups", "backup", [], "Backups"],
   [Restore, "Restore", "restores", "restore", [], "Restores"],
@@ -285,10 +335,23 @@ const KINDS = [
     ["vsl"],
     "Volume Snapshot Locations",
   ],
+  [BackupRepository, "BackupRepository", "backuprepositories", "backuprepository", [], "Backup Repositories"],
+  [PodVolumeBackup, "PodVolumeBackup", "podvolumebackups", "podvolumebackup", [], "Pod Volume Backups"],
+  [PodVolumeRestore, "PodVolumeRestore", "podvolumerestores", "podvolumerestore", [], "Pod Volume Restores"],
 ] as const;
 
-// The sections of the details, in the order of the kinds.
-const SECTIONS = [BackupDetails, RestoreDetails, ScheduleDetails, StorageLocationDetails, SnapshotLocationDetails];
+// The sections of the details, in the order of the kinds, with what the registration gives each beside the object
+// and the extension: the one section of the two kinds of the pod volume operations is given its kind.
+const SECTIONS: [unknown, object][] = [
+  [BackupDetails, {}],
+  [RestoreDetails, {}],
+  [ScheduleDetails, {}],
+  [StorageLocationDetails, {}],
+  [SnapshotLocationDetails, {}],
+  [RepositoryDetails, {}],
+  [VolumeOperationDetails, { volume: "PodVolumeBackup" }],
+  [VolumeOperationDetails, { volume: "PodVolumeRestore" }],
+];
 
 // An element a registration draws: a boundary of the extension, what it holds, or a page or a section.
 type Drawn = React.ReactElement<Record<string, unknown> & { children?: unknown; params?: unknown }>;

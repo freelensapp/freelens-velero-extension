@@ -1,0 +1,616 @@
+// @vitest-environment jsdom
+
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { listProps } from "../../../test/host-components";
+import {
+  backup,
+  before,
+  DAY,
+  HOUR,
+  MINUTE,
+  NOW,
+  ownedBy,
+  podVolumeBackup,
+  podVolumeRestore,
+  repository,
+  restore,
+} from "../../../test/volume-builders";
+import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
+import { VIEWS } from "../../common/views";
+import { LIST_NOTES, LIST_WORDS, NODE_AGENT_WORDS, NOT_REPORTED, REPOSITORY_WORDS } from "../../common/volume-words";
+import { closeViews, openView } from "../navigation";
+import { Installation, READ_EVERY } from "../state/installation";
+import { BackupsPage } from "./backups-page";
+import { OverviewPage } from "./overview-page";
+import { PodVolumeBackupsPage } from "./pod-volume-backups-page";
+import { PodVolumeRestoresPage } from "./pod-volume-restores-page";
+import { RepositoriesPage } from "./repositories-page";
+
+import type { Renderer } from "@freelensapp/extensions";
+
+import type { ReactNode } from "react";
+
+import type { Answer, Family, Preferences } from "../../common/discovery";
+
+const DISCOVERY = "/apis/velero.io/v1";
+const LOCATIONS = "/apis/velero.io/v1/backupstoragelocations";
+const A = "velero";
+
+type Answers = Record<string, Answer | (() => Promise<Answer>)>;
+
+function path(family: Family, namespace = A): string {
+  return `/apis/velero.io/v1/namespaces/${namespace}/${RESOURCES[family]}`;
+}
+
+function list(...items: unknown[]): Answer {
+  return { status: 200, body: { items } };
+}
+
+// The installation of the tests: a backup in flight with its pod volume backups in every phase, a restore with its
+// pod volume restores, and the repositories of each state.
+const nightly = backup("nightly", "InProgress", { uid: "backup-nightly-2" });
+const earlier = backup("nightly", "Completed", { uid: "backup-nightly-1" });
+const monday = restore("monday", "InProgress", { uid: "restore-monday-1" });
+const LONG = "repository-with-a-name-as-long-as-the-name-of-an-object-can-be-6";
+const MiB = 1_048_576;
+const of = ownedBy("Backup", nightly);
+const repositories = [
+  repository("shop-default-kopia", {
+    phase: "Ready",
+    lastMaintenanceTime: before(DAY),
+    recentMaintenance: [
+      { result: "Succeeded", startTimestamp: before(DAY + MINUTE), completeTimestamp: before(DAY) },
+      {
+        result: "Failed",
+        startTimestamp: before(HOUR),
+        completeTimestamp: before(HOUR - MINUTE),
+        message: "out of space",
+      },
+    ],
+  }),
+  repository(
+    "shop-default-restic",
+    { phase: "Ready" },
+    { spec: { repositoryType: "restic", resticIdentifier: "s3:https://s3.example.test/store/restic/shop" } },
+  ),
+  repository(
+    "broken-archive-kopia",
+    { phase: "NotReady", message: "error to connect to the repository\nconnection refused" },
+    { spec: { volumeNamespace: "broken", backupStorageLocation: "archive" } },
+  ),
+  repository("fresh-default-kopia", undefined, { spec: { volumeNamespace: "fresh", maintenanceFrequency: "" } }),
+  repository("odd-default-", { phase: "Broken" }, { spec: { volumeNamespace: "odd", repositoryType: "" } }),
+  repository(LONG, { phase: "Ready", lastMaintenanceTime: before(2 * HOUR) }, { spec: { volumeNamespace: "long" } }),
+];
+const pvbs = [
+  podVolumeBackup("nightly-none", undefined, of),
+  podVolumeBackup("nightly-new", { phase: "New" }, of),
+  podVolumeBackup("nightly-accepted", { phase: "Accepted", acceptedTimestamp: before(3 * MINUTE) }, of),
+  podVolumeBackup(
+    "nightly-running",
+    {
+      phase: "InProgress",
+      acceptedTimestamp: before(12 * MINUTE),
+      startTimestamp: before(10 * MINUTE),
+      progress: { bytesDone: 512 * MiB, totalBytes: 1024 * MiB },
+    },
+    { ...of, spec: { node: "worker-2" } },
+  ),
+  podVolumeBackup("nightly-canceling", { phase: "Canceling", startTimestamp: before(5 * MINUTE) }, of),
+  podVolumeBackup(
+    "nightly-completed",
+    {
+      phase: "Completed",
+      startTimestamp: before(20 * MINUTE),
+      completionTimestamp: before(16 * MINUTE),
+      progress: { bytesDone: 2 * MiB, totalBytes: 2 * MiB },
+      incrementalBytes: MiB,
+    },
+    of,
+  ),
+  podVolumeBackup(
+    "nightly-failed",
+    {
+      phase: "Failed",
+      message: "data path failed\nthe disk is full",
+      startTimestamp: before(7 * MINUTE),
+      completionTimestamp: before(7 * MINUTE),
+    },
+    of,
+  ),
+  podVolumeBackup("nightly-timeout", { phase: "Failed", message: "timeout on preparing PVB" }, of),
+  podVolumeBackup("nightly-canceled", { phase: "Canceled", message: "canceled by the backup" }, of),
+  podVolumeBackup("nightly-odd", { phase: "Paused" }, { ...of, spec: { node: "", uploaderType: "" } }),
+  podVolumeBackup("nightly-earlier", { phase: "Completed" }, ownedBy("Backup", earlier)),
+];
+const pvrs = [
+  podVolumeRestore("monday-new", { phase: "New" }, ownedBy("Restore", monday)),
+  podVolumeRestore(
+    "monday-accepted",
+    { phase: "Accepted", node: "worker-3", acceptedTimestamp: before(MINUTE) },
+    ownedBy("Restore", monday),
+  ),
+  podVolumeRestore(
+    "monday-legacy",
+    { phase: "Completed", startTimestamp: before(9 * MINUTE), completionTimestamp: before(8 * MINUTE) },
+    { ...ownedBy("Restore", monday), spec: { uploaderType: "restic" } },
+  ),
+];
+const location = (name: string, accessMode = "ReadWrite") => ({
+  metadata: { name, namespace: A, uid: `location-${name}` },
+  spec: { provider: "aws", accessMode },
+  status: { phase: "Available" },
+});
+
+function answers(more: Answers = {}): Answers {
+  return {
+    [DISCOVERY]: { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } },
+    [LOCATIONS]: list(location("default")),
+    [path("backups")]: list(nightly),
+    [path("restores")]: list(monday),
+    [path("schedules")]: list(),
+    [path("storageLocations")]: list(location("default")),
+    [path("snapshotLocations")]: list(),
+    [path("backupRepositories")]: list(...repositories),
+    [path("podVolumeBackups")]: list(...pvbs),
+    [path("podVolumeRestores")]: list(...pvrs),
+    ...more,
+  };
+}
+
+function mount(table: Answers, page: (installation: Installation) => ReactNode) {
+  const asked: string[] = [];
+  const installation = new Installation({
+    cluster: { id: "cluster-a", name: "local-demo" },
+    read: async (address) => {
+      asked.push(address);
+      const answer = table[address] ?? { status: 404 };
+
+      return typeof answer === "function" ? answer() : answer;
+    },
+    now: () => NOW,
+    storage: heldPreferences({ ...emptyPreferences(), selected: { "cluster-a": A } } satisfies Preferences),
+  });
+
+  render(page(installation));
+  return { installation, asked };
+}
+
+const extension = { name: "@freelensapp/velero-extension" } as unknown as Renderer.LensExtension;
+const rows = (kind: string) =>
+  [...document.querySelectorAll(`[data-${kind}-row]`)].map((row) => row.getAttribute(`data-${kind}-row`));
+const row = (kind: string, name: string) =>
+  screen.getByText(name, { selector: `[data-${kind}-row]` }).closest(".TableRow") as HTMLElement;
+const cell = (kind: string, name: string, column: string) =>
+  row(kind, name).querySelector(`.TableCell.${column}`) as HTMLElement;
+const head = (column: string) => document.querySelector(`.TableHead .TableCell.${column}`) as HTMLElement;
+const tip = (element: Element) => {
+  const pointed = element.querySelector("[id^='tooltip_target_']") as HTMLElement;
+
+  fireEvent.mouseEnter(pointed);
+  const said = screen.getByRole("tooltip").textContent;
+
+  fireEvent.mouseLeave(pointed);
+  return said;
+};
+
+beforeEach(() => {
+  vi.setSystemTime(NOW);
+});
+
+afterEach(() => {
+  act(() => closeViews());
+  cleanup();
+  listProps.clear();
+  vi.useRealTimers();
+});
+
+describe("the list of the backup repositories", () => {
+  it("gives the host a list that only reads, with the columns of the spec in their order", async () => {
+    mount(answers(), (installation) => <RepositoriesPage installation={installation} />);
+    await waitFor(() => expect(rows("backup-repository")).toHaveLength(repositories.length));
+    const props = listProps.get("veleroBackupRepositoriesTable") ?? {};
+    const columns = props.renderTableHeader as { title: string; id: string; sortBy: string; className: string }[];
+
+    expect(props.isSelectable).toBe(false);
+    expect((props.renderItemMenu as () => unknown)()).toBeNull();
+    for (const forbidden of ["onAdd", "addRemoveButtons", "renderFooter", "headerActions"]) {
+      expect(props[forbidden]).toBeUndefined();
+    }
+    expect(columns.map((column) => [column.title, column.id, column.className])).toEqual([
+      ["Name", "name", "name"],
+      ["Installation", "namespace", "installation"],
+      ["Volume namespace", "volume-namespace", "volume-namespace"],
+      ["Storage location", "location", "location"],
+      ["Type", "type", "repository-type"],
+      ["Readiness", "readiness", "readiness"],
+      ["Last maintenance", "maintained", "maintained"],
+      ["Maintenance frequency", "frequency", "frequency"],
+      ["Age", "age", "age"],
+    ]);
+    expect(Object.keys(props.sortingCallbacks as object).sort()).toEqual(columns.map((column) => column.sortBy).sort());
+  });
+
+  it("says the readiness of each with its mark and word, the message in the tip, and its last maintenance", async () => {
+    mount(answers(), (installation) => <RepositoriesPage installation={installation} />);
+    await waitFor(() => expect(rows("backup-repository")).toHaveLength(repositories.length));
+    const readiness = (name: string) => cell("backup-repository", name, "readiness");
+
+    expect(
+      ["shop-default-kopia", "broken-archive-kopia", "fresh-default-kopia", "odd-default-"].map((name) => [
+        readiness(name).querySelector("[data-readiness]")?.getAttribute("data-readiness"),
+        readiness(name).querySelector(".Icon")?.textContent,
+        readiness(name).querySelector("[data-readiness]")?.lastElementChild?.textContent,
+      ]),
+    ).toEqual([
+      ["ready", "check", "Ready"],
+      ["not-ready", "error_outline", "Not ready"],
+      ["not-initialized", "hourglass_empty", "Not initialized yet"],
+      ["unknown", "help_outline", "Unknown: Broken"],
+    ]);
+    expect(tip(readiness("broken-archive-kopia"))).toBe("error to connect to the repository\nconnection refused");
+    const maintained = cell("backup-repository", "shop-default-kopia", "maintained");
+
+    // The time of the last that succeeded, with the mark of the newest that failed beside it, said in words.
+    expect(
+      maintained.getAttribute("data-newest-failed") ?? maintained.firstElementChild?.getAttribute("data-newest-failed"),
+    ).toBe("true");
+    expect(maintained.textContent).toBe(`1d ago${"warning_amber"}, ${REPOSITORY_WORDS.newestFailed}`);
+    expect(cell("backup-repository", "shop-default-restic", "maintained").textContent).toBe(
+      REPOSITORY_WORDS.neverMaintained,
+    );
+    expect(cell("backup-repository", "fresh-default-kopia", "frequency").textContent).toBe("Not set");
+    expect(cell("backup-repository", "shop-default-kopia", "frequency").textContent).toBe("168h0m0s");
+    expect(cell("backup-repository", "odd-default-", "repository-type").textContent).toBe("Not set");
+    expect(cell("backup-repository", "shop-default-restic", "repository-type").textContent).toBe("restic");
+    expect(cell("backup-repository", "shop-default-kopia", "volume-namespace").textContent).toBe("shop");
+  });
+
+  it("makes the storage location a way to its view when it is there, and says why when it is not", async () => {
+    mount(answers(), (installation) => <RepositoriesPage installation={installation} />);
+    await waitFor(() => expect(rows("backup-repository")).toHaveLength(repositories.length));
+    const way = cell("backup-repository", "shop-default-kopia", "location").querySelector("button") as HTMLElement;
+
+    expect(way.textContent).toBe("default");
+    const absent = cell("backup-repository", "broken-archive-kopia", "location");
+
+    expect(absent.querySelector("button")).toBeNull();
+    expect(absent.querySelector("[data-reference]")?.getAttribute("data-reference")).toBe("absent");
+    expect(tip(absent)).toBe("No backup storage location of this name in velero");
+    fireEvent.click(way);
+    await screen.findByTestId("velero-storage-location-workspace");
+  });
+
+  it("orders by readiness and by the last maintenance both ways, none last in the first, and searches the message", async () => {
+    mount(answers(), (installation) => <RepositoriesPage installation={installation} />);
+    await waitFor(() => expect(rows("backup-repository")).toHaveLength(repositories.length));
+    fireEvent.click(head("readiness"));
+    const ready = ["shop-default-kopia", "shop-default-restic", LONG];
+
+    expect(rows("backup-repository").slice(0, 3).sort()).toEqual([...ready].sort());
+    expect(rows("backup-repository").slice(3)).toEqual(["broken-archive-kopia", "fresh-default-kopia", "odd-default-"]);
+    fireEvent.click(head("readiness"));
+    expect(rows("backup-repository").slice(0, 3)).toEqual([
+      "odd-default-",
+      "fresh-default-kopia",
+      "broken-archive-kopia",
+    ]);
+    fireEvent.click(head("maintained"));
+    expect(rows("backup-repository").slice(0, 2)).toEqual(["shop-default-kopia", LONG]);
+    fireEvent.click(head("maintained"));
+    expect(rows("backup-repository").slice(-2)).toEqual([LONG, "shop-default-kopia"]);
+    const props = listProps.get("veleroBackupRepositoriesTable") ?? {};
+    const items = (props.getItems as () => { getName(): string }[])();
+    const searched = (name: string) =>
+      (props.searchFilters as ((item: unknown) => string[])[]).flatMap((filter) =>
+        filter(items.find((item) => item.getName() === name)),
+      );
+
+    expect(searched("broken-archive-kopia")).toContain("error to connect to the repository\nconnection refused");
+    expect(searched("broken-archive-kopia")).toContain("Not ready");
+    expect(searched("shop-default-restic")).toContain(REPOSITORY_WORDS.neverMaintained);
+  });
+});
+
+describe("the lists of the pod volume operations", () => {
+  it("gives the host lists that only read, with the twelve columns of the spec in their order", async () => {
+    mount(answers(), (installation) => <PodVolumeBackupsPage installation={installation} />);
+    await waitFor(() => expect(rows("pod-volume-backup")).toHaveLength(pvbs.length));
+    const props = listProps.get("veleroPodVolumeBackupsTable") ?? {};
+    const columns = props.renderTableHeader as { title: string; id: string; sortBy: string; className: string }[];
+
+    expect(props.isSelectable).toBe(false);
+    expect((props.renderItemMenu as () => unknown)()).toBeNull();
+    expect(columns.map((column) => [column.title, column.id, column.className])).toEqual([
+      ["Name", "name", "name"],
+      ["Installation", "namespace", "installation"],
+      ["Phase", "phase", "phase"],
+      ["Backup", "operation", "operation"],
+      ["Source", "volume", "volume"],
+      ["Node", "node", "node"],
+      ["Progress", "bytes", "progress"],
+      ["Started", "started", "started"],
+      ["Duration", "duration", "duration"],
+      ["Storage location", "storage", "storage"],
+      ["Uploader", "uploader", "uploader"],
+      ["Age", "age", "age"],
+    ]);
+    expect(Object.keys(props.sortingCallbacks as object).sort()).toEqual(columns.map((column) => column.sortBy).sort());
+    // What no row says, over the list.
+    expect(screen.getAllByTestId("velero-pod-volume-backups-note").map((note) => note.textContent)).toEqual([
+      `info_outline${LIST_NOTES.PodVolumeBackup}`,
+    ]);
+  });
+
+  it("says each phase with its mark and its label, the message of Velero in the tip", async () => {
+    mount(answers(), (installation) => <PodVolumeBackupsPage installation={installation} />);
+    await waitFor(() => expect(rows("pod-volume-backup")).toHaveLength(pvbs.length));
+    const phase = (name: string) => cell("pod-volume-backup", name, "phase");
+
+    expect(
+      [
+        "nightly-none",
+        "nightly-new",
+        "nightly-accepted",
+        "nightly-running",
+        "nightly-canceling",
+        "nightly-completed",
+        "nightly-failed",
+        "nightly-canceled",
+        "nightly-odd",
+      ].map((name) => [
+        phase(name).querySelector(".Icon")?.textContent,
+        phase(name).querySelector("[data-phase]")?.lastElementChild?.textContent,
+        phase(name).querySelector("[data-outcome]")?.getAttribute("data-outcome"),
+      ]),
+    ).toEqual([
+      ["hourglass_empty", "No phase yet", "none"],
+      ["hourglass_empty", "New", "none"],
+      ["hourglass_empty", "Accepted", "none"],
+      ["autorenew", "In progress", "none"],
+      ["stop_circle", "Canceling", "none"],
+      ["check_circle_outline", "Completed", "completed"],
+      ["highlight_off", "Failed", "failed"],
+      ["block", "Canceled", "cancelled"],
+      ["help_outline", "Unknown: Paused", "unknown"],
+    ]);
+    expect(tip(phase("nightly-failed"))).toBe("data path failed\nthe disk is full");
+    expect(tip(phase("nightly-timeout"))).toBe("timeout on preparing PVB");
+  });
+
+  it("makes the backup a way when it is the one of that UID, and says another one took the name otherwise", async () => {
+    mount(answers({ [path("backups")]: list(nightly) }), (installation) => (
+      <PodVolumeBackupsPage installation={installation} />
+    ));
+    await waitFor(() => expect(rows("pod-volume-backup")).toHaveLength(pvbs.length));
+    const way = cell("pod-volume-backup", "nightly-completed", "operation").querySelector("button") as HTMLElement;
+    const other = cell("pod-volume-backup", "nightly-earlier", "operation");
+
+    expect(way.textContent).toBe("nightly");
+    expect(other.querySelector("button")).toBeNull();
+    expect(tip(other)).toBe("The backup of this name is another one, created after the one this operation belongs to");
+    fireEvent.click(way);
+    await screen.findByTestId("velero-backup-workspace");
+  });
+
+  it("shows the source, the node as a way of the host, the bytes, the start, the duration, the location and the uploader", async () => {
+    mount(answers(), (installation) => <PodVolumeBackupsPage installation={installation} />);
+    await waitFor(() => expect(rows("pod-volume-backup")).toHaveLength(pvbs.length));
+    const text = (name: string, column: string) => cell("pod-volume-backup", name, column).textContent;
+
+    expect(text("nightly-running", "volume")).toBe("shop/cart-0, data");
+    const node = cell("pod-volume-backup", "nightly-running", "node").querySelector("a") as HTMLAnchorElement;
+
+    expect([node.textContent, new URL(node.href).searchParams.get("kube-details")]).toEqual([
+      "worker-2",
+      "/api/v1/nodes/worker-2",
+    ]);
+    expect(text("nightly-odd", "node")).toBe(NOT_REPORTED);
+    expect(text("nightly-running", "progress")).toBe("512.0 MiB of 1.0 GiB (50%)");
+    expect(text("nightly-new", "progress")).toBe(NOT_REPORTED);
+    expect(text("nightly-new", "started")).toBe("Not started");
+    expect(text("nightly-running", "started")).toBe(new Date(NOW - 10 * MINUTE).toLocaleString());
+    expect(text("nightly-accepted", "duration")).toBe("Waiting 3m");
+    expect(text("nightly-running", "duration")).toBe("10m so far");
+    expect(text("nightly-completed", "duration")).toBe("4m");
+    expect(text("nightly-failed", "duration")).toBe("No duration: the start is the completion");
+    expect(text("nightly-timeout", "duration")).toBe("No time written");
+    expect(text("nightly-completed", "storage")).toBe("default");
+    expect(text("nightly-completed", "uploader")).toBe("kopia");
+    expect(text("nightly-odd", "uploader")).toBe("Built-in");
+  });
+
+  it("orders by the phase and by the node both ways, none last in the first order, and searches the message", async () => {
+    mount(answers(), (installation) => <PodVolumeBackupsPage installation={installation} />);
+    await waitFor(() => expect(rows("pod-volume-backup")).toHaveLength(pvbs.length));
+    fireEvent.click(head("phase"));
+    expect(rows("pod-volume-backup").slice(0, 3)).toEqual(["nightly-none", "nightly-new", "nightly-accepted"]);
+    expect(rows("pod-volume-backup").at(-1)).toBe("nightly-odd");
+    fireEvent.click(head("phase"));
+    expect(rows("pod-volume-backup")[0]).toBe("nightly-odd");
+    fireEvent.click(head("node"));
+    expect(rows("pod-volume-backup").at(-1)).toBe("nightly-odd");
+    fireEvent.click(head("node"));
+    expect(rows("pod-volume-backup")[0]).toBe("nightly-odd");
+    const props = listProps.get("veleroPodVolumeBackupsTable") ?? {};
+    const items = (props.getItems as () => { getName(): string }[])();
+    const searched = (props.searchFilters as ((item: unknown) => string[])[]).flatMap((filter) =>
+      filter(items.find((item) => item.getName() === "nightly-failed")),
+    );
+
+    expect(searched).toEqual(expect.arrayContaining(["data path failed\nthe disk is full", "nightly", "worker-1"]));
+  });
+
+  it("reads the node of a pod volume restore from its status, and says none for one a legacy controller took", async () => {
+    mount(answers(), (installation) => <PodVolumeRestoresPage installation={installation} />);
+    await waitFor(() => expect(rows("pod-volume-restore")).toHaveLength(pvrs.length));
+    const props = listProps.get("veleroPodVolumeRestoresTable") ?? {};
+
+    expect((props.renderTableHeader as { title: string }[])[3].title).toBe("Restore");
+    expect(cell("pod-volume-restore", "monday-accepted", "node").textContent).toBe("worker-3");
+    expect(cell("pod-volume-restore", "monday-legacy", "node").textContent).toBe(NOT_REPORTED);
+    expect(cell("pod-volume-restore", "monday-legacy", "uploader").textContent).toBe("restic");
+    expect(cell("pod-volume-restore", "monday-new", "volume").textContent).toBe("shop-restored/cart-0, data");
+    expect(screen.getByTestId("velero-pod-volume-restores-note").textContent).toBe(
+      `info_outline${LIST_NOTES.PodVolumeRestore}`,
+    );
+    // The words of a pod volume restore that waits are of the node of the restored pod.
+    expect(NODE_AGENT_WORDS.PodVolumeRestore).toContain("restored pod");
+  });
+
+  it("gives no control that writes: no menu, no selection, and nothing in a row but its ways", async () => {
+    mount(answers(), (installation) => <PodVolumeBackupsPage installation={installation} />);
+    await waitFor(() => expect(rows("pod-volume-backup")).toHaveLength(pvbs.length));
+    for (const name of rows("pod-volume-backup")) {
+      const shown = row("pod-volume-backup", name as string);
+      const controls = [
+        ...shown.querySelectorAll("button, a, input, select, textarea, [role='checkbox'], [role='menu']"),
+      ];
+
+      for (const control of controls) {
+        const way =
+          control.hasAttribute("data-pod-volume-backup-row") ||
+          control.getAttribute("data-reference") === "resolved" ||
+          (control.tagName === "A" && (control.getAttribute("href") ?? "").includes("kube-details="));
+
+        expect([name, control.outerHTML.slice(0, 80), way]).toEqual([name, control.outerHTML.slice(0, 80), true]);
+      }
+      expect(shown.querySelector(".TableCell.menu")?.textContent ?? "").toBe("");
+      expect(shown.querySelector(".TableCell.checkbox")).toBeNull();
+    }
+  });
+});
+
+describe("what a list says of its family", () => {
+  it.each([
+    [
+      "pod-volume-backups",
+      "podVolumeBackups",
+      (installation: Installation) => <PodVolumeBackupsPage installation={installation} />,
+    ],
+    [
+      "pod-volume-restores",
+      "podVolumeRestores",
+      (installation: Installation) => <PodVolumeRestoresPage installation={installation} />,
+    ],
+    [
+      "backup-repositories",
+      "backupRepositories",
+      (installation: Installation) => <RepositoriesPage installation={installation} />,
+    ],
+  ] as const)("in each state: %s", async (id, family, page) => {
+    const { plural, noun } =
+      VIEWS[
+        id === "backup-repositories"
+          ? "backup-repository"
+          : id === "pod-volume-backups"
+            ? "pod-volume-backup"
+            : "pod-volume-restore"
+      ];
+
+    for (const [status, words] of [
+      [403, LIST_WORDS.denied(plural)],
+      [404, LIST_WORDS["not-served"](plural)],
+      [500, LIST_WORDS.failed(plural)],
+    ] as const) {
+      mount(answers({ [path(family)]: { status } }), page);
+      const unavailable = await screen.findByTestId(`velero-${id}-unavailable`);
+
+      expect([status, unavailable.textContent]).toEqual([status, `${LIST_WORDS.notShown(plural, A)}${words}`]);
+      cleanup();
+    }
+    mount(answers({ [path(family)]: list() }), page);
+    expect((await screen.findByTestId(`velero-${id}-empty`)).textContent).toBe(
+      `info_outline${LIST_WORDS.empty(noun, A, "local-demo")}`,
+    );
+    cleanup();
+    // Never answered: no rows, no count.
+    mount(answers({ [path(family)]: () => new Promise<Answer>(() => undefined) }), page);
+    expect((await screen.findByTestId(`velero-${id}-not-counted`)).textContent).toBe(LIST_WORDS.notCounted);
+  });
+});
+
+describe("the families of the pod volume operations, read where they are shown", () => {
+  const PVB = path("podVolumeBackups");
+  const PVR = path("podVolumeRestores");
+  const count = (asked: string[], at: string) => asked.filter((one) => one === at).length;
+
+  it("are read while their list is shown, at every read, and not while the Overview or another list is", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const backups = mount(answers(), (installation) => <BackupsPage installation={installation} />);
+
+    await waitFor(() => expect(rows("backup")).toEqual(["nightly"]));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2 * READ_EVERY);
+    });
+    expect([
+      count(backups.asked, PVB),
+      count(backups.asked, PVR),
+      count(backups.asked, path("backupRepositories")),
+    ]).toEqual([0, 0, 3]);
+    cleanup();
+    const overview = mount(answers(), (installation) => (
+      <OverviewPage extension={extension} installation={installation} />
+    ));
+
+    await screen.findByTestId("velero-overview-page");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2 * READ_EVERY);
+    });
+    expect([count(overview.asked, PVB), count(overview.asked, PVR)]).toEqual([0, 0]);
+    cleanup();
+    const shown = mount(answers(), (installation) => <PodVolumeBackupsPage installation={installation} />);
+
+    await waitFor(() => expect(rows("pod-volume-backup")).toHaveLength(pvbs.length));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2 * READ_EVERY);
+    });
+    expect([count(shown.asked, PVB), count(shown.asked, PVR)]).toEqual([3, 0]);
+  });
+
+  it("are read while a repository is open over its list, both, and not at the read after it is closed", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const { asked, installation } = mount(answers(), (installation) => (
+      <RepositoriesPage installation={installation} />
+    ));
+
+    await waitFor(() => expect(rows("backup-repository")).toHaveLength(repositories.length));
+    expect([count(asked, PVB), count(asked, PVR)]).toEqual([0, 0]);
+    act(() => openView({ kind: "backup-repository", name: "shop-default-kopia" }));
+    await screen.findByTestId("velero-backup-repository-workspace");
+    // Asked at once, when the view opens.
+    await waitFor(() => expect([count(asked, PVB), count(asked, PVR)]).toEqual([1, 1]));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(READ_EVERY);
+    });
+    expect([count(asked, PVB), count(asked, PVR)]).toEqual([2, 2]);
+    // From a repository to one of its operations, the family both need is never let go.
+    act(() => openView({ kind: "pod-volume-backup", name: "nightly-completed" }));
+    await screen.findByTestId("velero-pod-volume-backup-workspace");
+    expect(installation.read("podVolumeBackups").status).toBe("ready");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(READ_EVERY);
+    });
+    expect([count(asked, PVB), count(asked, PVR)]).toEqual([3, 2]);
+    expect(installation.read("podVolumeRestores").status).toBe("idle");
+    act(() => closeViews());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2 * READ_EVERY);
+    });
+    expect([count(asked, PVB), count(asked, PVR)]).toEqual([3, 2]);
+    expect(installation.read("podVolumeBackups")).toEqual({ status: "idle", items: [] });
+  });
+
+  it("are not asked by a view of a backup, a restore or a schedule, which read the families of every read", async () => {
+    const { asked } = mount(answers(), (installation) => <BackupsPage installation={installation} />);
+
+    await waitFor(() => expect(rows("backup")).toEqual(["nightly"]));
+    act(() => openView({ kind: "backup", name: "nightly" }));
+    const workspace = await screen.findByTestId("velero-backup-workspace");
+
+    expect(within(workspace).getByTestId("velero-backup-name").textContent).toBe("nightly");
+    expect([count(asked, PVB), count(asked, PVR)]).toEqual([0, 0]);
+    expect(asked).toContain(path("backupRepositories"));
+  });
+});

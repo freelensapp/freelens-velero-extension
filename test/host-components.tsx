@@ -8,7 +8,7 @@
 
 import React from "react";
 import { createPortal } from "react-dom";
-import { addressPath, createPageParam, pushAddress } from "./host-address";
+import { addressPath, addressSearch, createPageParam, pushAddress } from "./host-address";
 
 import type { Renderer } from "@freelensapp/extensions";
 
@@ -957,6 +957,49 @@ const selectedParam = createPageParam({
   },
 });
 
+// `getMaybeDetailsUrl` (packages/core/src/renderer/components/kube-detail-params/get-maybe-details-url.injectable.ts
+// lines 13 to 22) over `getDetailsUrl` (get-details-url.injectable.ts lines 15 to 39): nothing for no path, and
+// otherwise the search the address is at with the path as the object whose details are shown, and the object
+// selected kept when one is.
+function detailsUrl(selfLink: string | undefined): string {
+  if (!selfLink) return "";
+  const params = new URLSearchParams(addressSearch());
+  const selected = selectedParam.get() as string | undefined;
+
+  params.set("kube-details", selfLink);
+  if (selected) params.set("kube-selected", selected);
+  else params.delete("kube-selected");
+  return `?${params}`;
+}
+
+// `LinkToPod` (packages/core/src/renderer/components/kube-object-link/link-to-pod.tsx lines 27 to 44), with the path
+// the API of the pods gives one (packages/utility-features/kube-api/src/kube-api.ts lines 533 to 541): nothing
+// without a name and a namespace; otherwise the link of the host to the details of the pod, whose click goes no
+// further than the link, with the name in a `WithTooltip`. It reads nothing: the drawer reads the pod when it opens.
+function LinkToPod({ name, namespace }: Passed) {
+  if (!name || !namespace) return null;
+  return (
+    <MaybeLink
+      key="link"
+      to={detailsUrl(`/api/v1/namespaces/${namespace as string}/pods/${name as string}`)}
+      onClick={stopPropagation}
+    >
+      <WithTooltip>{name as string}</WithTooltip>
+    </MaybeLink>
+  );
+}
+
+// `LinkToNode` (packages/core/src/renderer/components/kube-object-link/link-to-node.tsx lines 26 to 42), as the link
+// to a pod, for a node, which is of no namespace.
+function LinkToNode({ name }: Passed) {
+  if (!name) return null;
+  return (
+    <MaybeLink key="link" to={detailsUrl(`/api/v1/nodes/${name as string}`)} onClick={stopPropagation}>
+      <WithTooltip>{name as string}</WithTooltip>
+    </MaybeLink>
+  );
+}
+
 // The field of the search of a list (input/search-input-url.tsx lines 32 to 262, with search-input.tsx lines 38
 // to 102): the `Input` of the host, taking the focus when it is mounted, with the words of the search of the
 // address, which it writes there 250 milliseconds after a change, and at once when it is cleared, by Escape or by
@@ -1329,6 +1372,8 @@ export const hostComponents = {
   Input,
   KubeObjectAge,
   KubeObjectListLayout,
+  LinkToNode,
+  LinkToPod,
   LocaleDate,
   MaybeLink,
   Select,

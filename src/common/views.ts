@@ -6,7 +6,16 @@ import { ALWAYS } from "./discovery";
 
 import type { Family } from "./discovery";
 
-export const VIEW_KINDS = ["backup", "restore", "schedule", "storage-location", "snapshot-location"] as const;
+export const VIEW_KINDS = [
+  "backup",
+  "restore",
+  "schedule",
+  "storage-location",
+  "snapshot-location",
+  "backup-repository",
+  "pod-volume-backup",
+  "pod-volume-restore",
+] as const;
 export type ViewKind = (typeof VIEW_KINDS)[number];
 
 export interface ViewTarget {
@@ -38,6 +47,28 @@ export const VIEWS: Record<
     title: "Volume Snapshot Locations",
     noun: "volume snapshot location",
     plural: "volume snapshot locations",
+  },
+  // A repository is shown with the operations of the volumes that write into it or read from it.
+  "backup-repository": {
+    family: "backupRepositories",
+    reads: [...ALWAYS, "podVolumeBackups", "podVolumeRestores"],
+    title: "Backup Repositories",
+    noun: "backup repository",
+    plural: "backup repositories",
+  },
+  "pod-volume-backup": {
+    family: "podVolumeBackups",
+    reads: [...ALWAYS, "podVolumeBackups"],
+    title: "Pod Volume Backups",
+    noun: "pod volume backup",
+    plural: "pod volume backups",
+  },
+  "pod-volume-restore": {
+    family: "podVolumeRestores",
+    reads: [...ALWAYS, "podVolumeRestores"],
+    title: "Pod Volume Restores",
+    noun: "pod volume restore",
+    plural: "pod volume restores",
   },
 };
 

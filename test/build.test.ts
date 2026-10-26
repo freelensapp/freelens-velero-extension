@@ -205,23 +205,29 @@ describe("the bundle of the renderer", () => {
         extension.kubeObjectDetailItems as { kind: string; components: { Details(props: object): Drawn } }[]
       ).map((item) => item.components.Details({ object }));
 
-      expect(pages).toHaveLength(6);
-      expect(sections).toHaveLength(5);
+      expect(pages).toHaveLength(9);
+      expect(sections).toHaveLength(8);
       for (const drawn of [...pages, ...sections]) {
         expect(typeof drawn.type.getDerivedStateFromError).toBe("function");
         expect(drawn.props.extension).toBe(extension);
       }
-      expect(sections.map((drawn) => drawn.props.resetKey)).toEqual(Array(5).fill(object));
+      expect(sections.map((drawn) => drawn.props.resetKey)).toEqual(Array(8).fill(object));
       expect(
         (extension.customResources as { kind: string }[]).map((kind) => [
           kind.kind,
           Object.getPrototypeOf(kind) === Renderer.K8sApi.LensExtensionKubeObject,
         ]),
       ).toEqual(
-        ["Backup", "Restore", "Schedule", "BackupStorageLocation", "VolumeSnapshotLocation"].map((kind) => [
-          kind,
-          true,
-        ]),
+        [
+          "Backup",
+          "Restore",
+          "Schedule",
+          "BackupStorageLocation",
+          "VolumeSnapshotLocation",
+          "BackupRepository",
+          "PodVolumeBackup",
+          "PodVolumeRestore",
+        ].map((kind) => [kind, true]),
       );
     });
   });
