@@ -320,6 +320,23 @@ describe("the repository of an operation", () => {
       state: "found",
       reference: { stale: true },
     });
+    // None found in what was read before is not known, and two found are said read before.
+    expect(operationRepository("PodVolumeBackup", operation, read([restic], "forbidden", 1))).toEqual({
+      state: "inaccessible",
+      names: [],
+      reason: "The backup repositories of this installation cannot be read: access is denied",
+    });
+    expect(operationRepository("PodVolumeBackup", operation, read([restic], "failed", 1))).toMatchObject({
+      state: "unknown",
+    });
+    const twin = repository("shop-default-kopia-2", { phase: "Ready" }, { labels: kopia.metadata.labels });
+
+    expect(operationRepository("PodVolumeBackup", operation, read([twin, kopia], "failed", 1))).toEqual({
+      state: "many",
+      names: ["shop-default-kopia", "shop-default-kopia-2"],
+      reason:
+        "2 repositories name the volumes of shop, the location default and the type kopia: the release refuses more than one. Read before the backup repositories stopped answering",
+    });
   });
 });
 

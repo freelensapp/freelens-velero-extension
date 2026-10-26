@@ -5,6 +5,7 @@
 import { labelOf } from "./name-label";
 import { resolveReference, unavailable } from "./references";
 import { LABELS, PVC_NAME_ANNOTATION } from "./types";
+import { REFERENCE_WORDS } from "./volume-words";
 
 import type { FamilyRead } from "./read-state";
 import type { Reference, ReferenceState } from "./references";
@@ -238,12 +239,15 @@ export function operationRepository(
     };
   }
   const names = found.map((repository) => repository.metadata.name).sort();
+  const stale = read.status !== "ready";
 
+  // None found in a list that was not read now is not known, as for every reference: the repository may be there.
+  if (!found.length && stale) return { ...unavailable("BackupRepository", read), names: [] } as OperationRepository;
   return found.length
     ? {
         state: "many",
         names,
-        reason: `${found.length} repositories name the volumes of ${namespace}, the location ${location} and the type ${type}: the release refuses more than one`,
+        reason: `${found.length} repositories name the volumes of ${namespace}, the location ${location} and the type ${type}: the release refuses more than one${stale ? `. ${REFERENCE_WORDS.stale("backup repositories")}` : ""}`,
       }
     : {
         state: "none",
