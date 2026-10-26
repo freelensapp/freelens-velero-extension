@@ -13,6 +13,7 @@ import {
   tabArtifacts,
   tabExpectations,
 } from "./local-artifacts.mts";
+import { mixedExpression } from "./local-expressions.mts";
 import { DEMO_CONTEXT, DEMO_NAMESPACE, type KindConfig, OWNER_LABEL, requireCondition } from "./local-kind.mts";
 import { BUCKET, type KubeResource, STORAGE_ENDPOINT } from "./local-manifests.mts";
 import { STORE_WAYS, type StoreAnswer, type StoreBody, type StoreWay } from "./local-store.mts";
@@ -68,6 +69,11 @@ export function fixtureNames(run: string) {
     defaults: `velero-defaults-${run}`,
     overview: `velero-overview-${run}`,
     scale: `velero-scale-${run}`,
+    // The installations of the adherence of the schedules, which no controller reads and the operator names: the
+    // states of a schedule, two offsets of the server, and the three hundred schedules of the budget.
+    adherence: `velero-adherence-${run}`,
+    adherenceSplit: `velero-adherence-split-${run}`,
+    adherenceScale: `velero-adherence-scale-${run}`,
     backup: `fixture-backup-${run}`,
     restore: `fixture-restore-${run}`,
     // The operations the server refuses, which the transport proof asks the artifacts of: a backup and a
@@ -87,7 +93,18 @@ export function fixtureNames(run: string) {
 export function fixtureNamespaces(run: string): string[] {
   const names = fixtureNames(run);
 
-  return [names.source, names.restored, names.static, names.views, names.defaults, names.overview, names.scale];
+  return [
+    names.source,
+    names.restored,
+    names.static,
+    names.views,
+    names.defaults,
+    names.overview,
+    names.scale,
+    names.adherence,
+    names.adherenceSplit,
+    names.adherenceScale,
+  ];
 }
 
 // The path of the log or of the results of a backup or of a restore in the bucket of the environment, as
@@ -1130,6 +1147,162 @@ export function overviewFixtures(owner: string, run: string, placed: number): Ku
   ];
 }
 
+// The fixtures of the adherence of the schedules (REQ-176 of SPEC-0013) are in installations no controller reads and
+// no discovery finds: no storage location is in them, and the operator names them, as the long lists, as SPEC-0013
+// decides. Their schedules ask for backups that name no location, so that no rule of the Overview names one of theirs.
+//
+// A backup of a submission is named as the controller names one, by the name of its schedule and the wall clock of
+// the server at the submission, and the schedule carries that instant as its last submission: the views derive the
+// offset of the server from the digits of the name less the creation of the backup, within a minute (REQ-162). The
+// creation is the cluster's, so they are placed in two phases: the backups first, each named by the clock of this
+// machine read just before it is created, and then the schedules, each with the creation of its backup read back, as
+// the controller writes the instant of a submission and names its backup with one reading of its clock. `named` is
+// the clock each backup was named by, and `created` the creation the cluster gave it, both by the name of its
+// schedule: a name not read yet is of the clock of the placement, and a creation not given is the clock of its name.
+export interface Submissions {
+  named?: Record<string, number>;
+  created?: Record<string, number>;
+}
+
+// The zone of the server whose wall clock names the backups of the submissions that give an offset: two hours east
+// of UTC.
+export const SERVER_EAST = 2 * 3_600_000;
+// The clock of the cluster said ahead of this machine by a day: a last submission a day after the placement is still
+// after the clock for the twelve hours the fixtures are good for, where one an hour after it would not be.
+export const AHEAD_BY = 24 * 3_600_000;
+// The second submission of the installation of two offsets, before the first: the remainder of the name of its
+// backup is these seconds and the time its creation took, which the check of the placement keeps within thirty, and
+// the views take an offset only from a remainder under a minute.
+export const SPLIT_BEFORE = 20_000;
+// The schedules of the budget of the adherence (REQ-175).
+export const ADHERENCE_SCHEDULES = 300;
+// A schedule with a name as long as Velero accepts one, which is the value of the label of its backups.
+export const LONG_SCHEDULE_NAME = "schedule-with-a-name-as-long-as-the-value-of-a-label-is-allowed";
+
+// The wall clock of an instant to the second, as fourteen digits, `yyyymmddhhmmss`: the end of the name of a backup
+// of a submission.
+function wallDigits(instant: number): string {
+  return new Date(Math.floor(instant / 1000) * 1000).toISOString().replace(/[-:T]/g, "").slice(0, 14);
+}
+
+// What is common to the fixtures of the adherence: the labels of the run, the moment of the placement, what their
+// schedules ask of a backup, and how a schedule, a backup and a time are written.
+function adherenceParts(owner: string, run: string, namespace: string, placed: number, submissions: Submissions) {
+  requireCondition(owner, "Fixture ownership is required");
+  requireCondition(Number.isFinite(placed), "The time the fixtures are placed at is required");
+  const names = fixtureNames(run);
+  const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
+  const at = placedAt(placed);
+  const second = (instant: number) => Math.floor(instant / 1000) * 1000;
+  const time = (instant: number) => new Date(second(instant)).toISOString().replace(".000Z", "Z");
+  const named = (schedule: string) => submissions.named?.[schedule] ?? placed;
+  const created = (schedule: string) => submissions.created?.[schedule] ?? named(schedule);
+  const metadata = (name: string, more: Record<string, string> = {}) => ({
+    name,
+    namespace,
+    labels: { ...labels, ...more },
+    ...at,
+  });
+  const template = { includedNamespaces: [names.source], includeClusterResources: false, ttl: "720h0m0s" };
+  // A schedule Velero read: Enabled, with whether a run that is due is skipped written, and with its last
+  // submission when it has one.
+  const schedule = (name: string, expression: string, submitted?: number): KubeResource => ({
+    apiVersion: "velero.io/v1",
+    kind: "Schedule",
+    metadata: metadata(name),
+    spec: { schedule: expression, paused: false, skipImmediately: false, template },
+    status: { phase: "Enabled", ...(submitted === undefined ? {} : { lastBackup: time(submitted) }) },
+  });
+  // A backup of a schedule, named by the schedule and the wall clock `wall` gives, in a phase, and started at
+  // `started`: the template of the schedule is its spec, and the name of the schedule is in its label.
+  const backup = (of: string, wall: number, phase: string, started: number): KubeResource => ({
+    apiVersion: "velero.io/v1",
+    kind: "Backup",
+    metadata: metadata(`${of}-${wallDigits(wall)}`, { "velero.io/schedule-name": of }),
+    spec: template,
+    status: syntheticStatus(phase, "itemsBackedUp", second(started)),
+  });
+
+  return { names, named, created, schedule, backup };
+}
+
+// The installation of the states of the adherence: eight schedules whose last submissions are counted from the clock
+// of the placement, and two backups. Awaited for the twelve hours the fixtures are good for, counted from the last
+// submission; overdue by a day and more, with its count, and the backup of its submission not among the ones that
+// exist; held beyond the grace by a backup in progress that is not a submission, named as the command line names a
+// backup asked by hand, in UTC; submitted at every look, for an expression with no instant; its zone derived from the
+// backup of its own submission, named two hours east of UTC and the one backup of a submission of the installation;
+// with no submission, taking that offset from it; the clock of the cluster ahead by a day; and a long name with a long
+// expression that names its zone. Due lasts five minutes after an instant a placement cannot choose, and is not
+// placed.
+export function adherenceFixtures(
+  owner: string,
+  run: string,
+  placed: number,
+  submissions: Submissions = {},
+): KubeResource[] {
+  const HOUR = 3_600_000;
+  const parts = adherenceParts(owner, run, fixtureNames(run).adherence, placed, submissions);
+  const { named, created, schedule, backup } = parts;
+
+  return [
+    backup("adherence-held", named("adherence-held"), "InProgress", named("adherence-held")),
+    backup("adherence-derived", named("adherence-derived") + SERVER_EAST, "Completed", named("adherence-derived")),
+    schedule("adherence-awaited", "@every 24h", placed),
+    schedule("adherence-overdue", "@every 1h", placed - 25 * HOUR),
+    schedule("adherence-held", "@every 1h", placed - 3 * HOUR),
+    schedule("adherence-every-look", "0 0 30 2 *", placed - 60_000),
+    schedule("adherence-derived", "0 3 * * *", created("adherence-derived")),
+    schedule("adherence-borrowed", "0 3 * * *"),
+    schedule("adherence-ahead", "@every 24h", placed + AHEAD_BY),
+    schedule(LONG_SCHEDULE_NAME, "CRON_TZ=America/Argentina/Buenos_Aires 0 0 1 1 *", placed),
+  ];
+}
+
+// The installation of two offsets: two schedules of five fields that name no zone, each with the backup of its
+// submission. The newer was named two hours east of UTC; the older at UTC, its submission twenty seconds before the
+// creation of its backup and its name twenty seconds before the clock of the placement, as one reading of the clock
+// of the server names a backup and writes its submission. The offset of the newest stands, and the views say that it
+// was UTC at the other submission.
+export function adherenceSplitFixtures(
+  owner: string,
+  run: string,
+  placed: number,
+  submissions: Submissions = {},
+): KubeResource[] {
+  const parts = adherenceParts(owner, run, fixtureNames(run).adherenceSplit, placed, submissions);
+  const { named, created, schedule, backup } = parts;
+
+  return [
+    backup("split-newer", named("split-newer") + SERVER_EAST, "Completed", named("split-newer")),
+    backup("split-older", named("split-older") - SPLIT_BEFORE, "Completed", named("split-older") - SPLIT_BEFORE),
+    schedule("split-newer", "0 3 * * *", created("split-newer")),
+    schedule("split-older", "0 3 * * *", created("split-older") - SPLIT_BEFORE),
+  ];
+}
+
+// The installation of the budget: three hundred schedules of the mixed expressions the measure of the unit run
+// computes, each with the backup of its submission named two hours east of UTC, so that the installation has one
+// offset. Their backups are listed first, in the order of their schedules.
+export function adherenceScaleFixtures(
+  owner: string,
+  run: string,
+  placed: number,
+  submissions: Submissions = {},
+): KubeResource[] {
+  const parts = adherenceParts(owner, run, fixtureNames(run).adherenceScale, placed, submissions);
+  const { named, created, schedule, backup } = parts;
+  const schedules = Array.from({ length: ADHERENCE_SCHEDULES }, (_, index) => ({
+    name: `schedule-${String(index + 1).padStart(3, "0")}`,
+    expression: mixedExpression(index),
+  }));
+
+  return [
+    ...schedules.map(({ name }) => backup(name, named(name) + SERVER_EAST, "Completed", named(name))),
+    ...schedules.map(({ name, expression }) => schedule(name, expression, created(name))),
+  ];
+}
+
 export function staticFixtures(owner: string, run: string): KubeResource[] {
   requireCondition(owner, "Fixture ownership is required");
   const names = fixtureNames(run);
@@ -1254,6 +1427,9 @@ export interface FixtureRuntime {
   store?(method: "GET" | "HEAD" | "PUT", path: string, body?: StoreBody): StoreAnswer;
   // The time since the runtime was made, in milliseconds: what a wait for the server is bounded by.
   elapsed?(): number;
+  // The clock of this machine, in milliseconds since the epoch, read when it is asked: what the fixtures placed in
+  // two phases are placed by, and name the backups of their submissions by.
+  now?(): number;
   // Where the placement of the tabs is recorded: in private, and before anything of it is written.
   tabs?: { read(): TabPlacement | undefined; keep(placement: TabPlacement): void };
   // The objects the journal of the runner records, by which `apply` knows what it may write over, and what
@@ -1428,42 +1604,64 @@ export function execPluginKubeconfig(config: KindConfig, plugin: ExecPluginFiles
   return kubeconfig;
 }
 
+// How far the creation of a backup of a submission may be from the clock of this machine its name was read from,
+// and how many of them are created at once: a group is created within that time of the clock read just before it.
+export const SUBMISSION_DRIFT = 30_000;
+export const SUBMISSIONS_AT_ONCE = 50;
+
 // What is placed by the clock is found by what it says of when it was placed. It is left as it is while it
 // is good, and put in place again when it is not: the objects of the namespace that are of this run are
 // removed, and the ones of now are created. Nothing else of the cluster is touched. What is answered says
 // whether it was put in place again, over what was there, and not when nothing was.
+//
+// What holds backups of submissions is created in two phases, when `twoPhases` is asked, by the clock of this
+// machine the runtime reads (see `Submissions`): the backups first, in groups, each group named by the clock read
+// just before it is created and each creation read back, which is refused when it is more than thirty seconds from
+// that clock; then the rest, with the creations as the cluster gave them. The clock of the placement is read once
+// nothing of the run is left in the namespace, just before the first group, and names it.
 export function placeByTheClock(
   runtime: FixtureRuntime,
   run: string,
   namespace: string,
   now: number,
-  make: (placed: number) => KubeResource[],
+  make: (placed: number, submissions?: Submissions) => KubeResource[],
+  twoPhases = false,
 ): { placed: number; count: number; again: boolean } {
   const names = fixtureNames(run);
 
   // The other namespaces of the run hold fixtures whose times are fixed, with the labels of the run: they
   // would be removed with what is placed by the clock.
   requireCondition(
-    [names.overview, names.scale].includes(namespace),
+    [names.overview, names.scale, names.adherence, names.adherenceSplit, names.adherenceScale].includes(namespace),
     "Refusing to place fixtures outside the namespaces that are placed by the clock",
   );
   requireCondition(
     make(now).every((resource) => resource.metadata.namespace === namespace),
     `Refusing to place in ${namespace} what is made for another namespace`,
   );
+  requireCondition(!twoPhases || runtime.now, "A placement in two phases needs the clock of this machine");
   // The digest is of the fixtures made for one moment, which is the same at every call.
   const shape = createHash("sha256")
     .update(JSON.stringify(make(0)))
     .digest("hex")
     .slice(0, 16);
-  const made = () =>
-    make(now).map((resource) => ({
-      ...resource,
-      metadata: {
-        ...resource.metadata,
-        annotations: { ...resource.metadata.annotations, [SHAPE_ANNOTATION]: shape },
-      },
-    }));
+  const create = (items: KubeResource[]) =>
+    runtime.kubectl(
+      ["create", "-f", "-", "-o", "name"],
+      JSON.stringify({
+        apiVersion: "v1",
+        kind: "List",
+        items: items.map((resource) => ({
+          ...resource,
+          metadata: {
+            ...resource.metadata,
+            annotations: { ...resource.metadata.annotations, [SHAPE_ANNOTATION]: shape },
+          },
+        })),
+      }),
+      600_000,
+      false,
+    );
   const kinds = [...new Set(make(now).map((resource) => `${resource.kind}.velero.io`.toLowerCase()))].sort();
   const listed = () =>
     (
@@ -1516,12 +1714,8 @@ export function placeByTheClock(
         pause(runtime, REMOVAL_POLL);
       }
     }
-    runtime.kubectl(
-      ["create", "-f", "-", "-o", "name"],
-      JSON.stringify({ apiVersion: "v1", kind: "List", items: made() }),
-      600_000,
-      false,
-    );
+    if (twoPhases) createInTwoPhases(runtime, namespace, make, create);
+    else create(make(now));
   }
   const found = listed();
   const placed = Math.min(...times(found));
@@ -1539,6 +1733,108 @@ export function placeByTheClock(
     `The fixtures of ${namespace} are not the ones of this run`,
   );
   return { placed, count: found.length, again: !good && before.length > 0 };
+}
+
+// The two phases of a placement of backups of submissions, in a namespace that holds nothing of the run.
+function createInTwoPhases(
+  runtime: FixtureRuntime,
+  namespace: string,
+  make: (placed: number, submissions?: Submissions) => KubeResource[],
+  create: (items: KubeResource[]) => void,
+): void {
+  requireCondition(runtime.now, "A placement in two phases needs the clock of this machine");
+  const clock = runtime.now.bind(runtime);
+  const placed = clock();
+  const named: Record<string, number> = {};
+  const created: Record<string, number> = {};
+  const isBackup = (resource: KubeResource) => resource.kind === "Backup";
+  const scheduleOf = (backup: KubeResource) => backup.metadata.labels?.["velero.io/schedule-name"] ?? "";
+  const schedules = make(placed).filter(isBackup).map(scheduleOf);
+  const iso = (instant: number) => new Date(instant).toISOString();
+
+  for (let first = 0; first < schedules.length; first += SUBMISSIONS_AT_ONCE) {
+    const group = schedules.slice(first, first + SUBMISSIONS_AT_ONCE);
+    const read = first === 0 ? placed : clock();
+
+    for (const schedule of group) named[schedule] = read;
+    const backups = make(placed, { named, created }).filter(
+      (resource) => isBackup(resource) && group.includes(scheduleOf(resource)),
+    );
+
+    create(backups);
+    const listed = (
+      JSON.parse(
+        runtime.kubectl(
+          ["get", "backups.velero.io", "--namespace", namespace, "-o", "json"],
+          undefined,
+          undefined,
+          false,
+        ),
+      ) as { items: (KubeResource & { metadata: { creationTimestamp?: string } })[] }
+    ).items;
+
+    for (const backup of backups) {
+      const { name } = backup.metadata;
+      const at = Date.parse(listed.find((item) => item.metadata.name === name)?.metadata.creationTimestamp ?? "");
+      const apart = Math.abs(at - read);
+
+      requireCondition(Number.isFinite(at), `The backup ${name} that was created in ${namespace} is not there`);
+      requireCondition(
+        apart <= SUBMISSION_DRIFT,
+        `The backup ${name} of ${namespace} was created at ${iso(at)}, ${Math.round(apart / 1000)} seconds ` +
+          `${at > read ? "after" : "before"} the clock of this machine its name was read from, ${iso(read)}: the ` +
+          "clock of the Docker machine of the cluster is that far from the one of this machine, which a sleep of " +
+          "the machine can leave, or the cluster took that long to create it, and its name would give the views no " +
+          "offset of the server. Set the clock of the Docker machine again when it is the cause, which a restart " +
+          "of Docker does, and run the command again: it places the namespace again.",
+      );
+      created[scheduleOf(backup)] = at;
+    }
+  }
+  create(make(placed, { named, created }).filter((resource) => !isBackup(resource)));
+}
+
+// The fixtures of the adherence, in their three installations: no controller reads them and no discovery finds
+// them, and the operator names them. Each namespace is applied through the journal, and placed by the clock in
+// two phases with the clock of this machine read when its own placement starts, not the one of the start of the
+// runner: a backup named by that one would be created minutes after the digits of its name, after the fixtures
+// of the tabs and of the views, and would give the views no offset.
+export function placeAdherenceFixtures(
+  runtime: FixtureRuntime,
+  run: string,
+): { states: number; split: number; budget: number; again: string[] } {
+  const names = fixtureNames(run);
+
+  requireCondition(runtime.now, "The placement of the fixtures of the adherence needs the clock of this machine");
+  const clock = runtime.now.bind(runtime);
+  const labels = { [OWNER_LABEL]: runtime.owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
+  const placed = (
+    [
+      [names.adherence, adherenceFixtures],
+      [names.adherenceSplit, adherenceSplitFixtures],
+      [names.adherenceScale, adherenceScaleFixtures],
+    ] as const
+  ).map(([namespace, fixtures]) => {
+    runtime.apply({ apiVersion: "v1", kind: "Namespace", metadata: { name: namespace, labels } });
+    return {
+      namespace,
+      ...placeByTheClock(
+        runtime,
+        run,
+        namespace,
+        clock(),
+        (at, submissions) => fixtures(runtime.owner, run, at, submissions),
+        true,
+      ),
+    };
+  });
+
+  return {
+    states: placed[0].count,
+    split: placed[1].count,
+    budget: placed[2].count,
+    again: placed.filter((one) => one.again).map((one) => one.namespace),
+  };
 }
 
 // The fixtures of the views. The ones whose times are fixed are put in place once: a second call finds
@@ -2731,9 +3027,9 @@ export function placeRefusedFixtures(
 
 // The fixtures of the views and of the tabs, in the order that costs a run the least. The files of the tabs
 // go to the store first: the server takes a minute or two to create its backups of them, and the other
-// fixtures are placed meanwhile, the objects of the views and then the operations the server refuses, which
-// it validates in seconds. The wait for the backups of the store comes last. A second call finds everything:
-// it asks the store nothing, applies nothing, and has nothing to wait for.
+// fixtures are placed meanwhile, the objects of the views, the installations of the adherence and then the
+// operations the server refuses, which it validates in seconds. The wait for the backups of the store comes
+// last. A second call finds everything: it asks the store nothing, applies nothing, and has nothing to wait for.
 export function placeViewAndTabFixtures(
   runtime: FixtureRuntime,
   run: string,
@@ -2743,15 +3039,17 @@ export function placeViewAndTabFixtures(
 ): {
   stored: ReturnType<typeof storeTabFixtures>;
   views: ReturnType<typeof createViewFixtures>;
+  adherence: ReturnType<typeof placeAdherenceFixtures>;
   refused: ReturnType<typeof placeRefusedFixtures>;
   synced: ReturnType<typeof awaitTabFixtures>;
 } {
   const stored = storeTabFixtures(runtime, run, started, artifacts);
   const views = createViewFixtures(runtime, run, started, now);
+  const adherence = placeAdherenceFixtures(runtime, run);
   const refused = placeRefusedFixtures(runtime, run);
   const synced = awaitTabFixtures(runtime, run);
 
-  return { stored, views, refused, synced };
+  return { stored, views, adherence, refused, synced };
 }
 
 // What the journal of the runner keeps of an object: what it is, and the identity the cluster gave it.
@@ -2800,8 +3098,9 @@ export function recordSyncedBackups(
 }
 
 // What the runner says of a placement of the fixtures of the views and of the tabs, a line each: the objects of
-// the views and the ones placed by the clock, the files of the tabs and the backups the server created of
-// them, the ones it created again since the journal was written, and the operations it refused.
+// the views and the ones placed by the clock, the objects of the adherence, the namespaces placed by the clock
+// again, the files of the tabs and the backups the server created of them, the ones it created again since the
+// journal was written, and the operations it refused.
 //
 // Each says what this call did, and nothing it did not. The files are told as written when this call wrote
 // them, with the way they were sent, and as none when it wrote none. The time of the wait for the two backups
@@ -2813,17 +3112,21 @@ export function placementWords(
   placed: ReturnType<typeof placeViewAndTabFixtures>,
   recreated: string[],
 ): string[] {
-  const { views, stored, synced, refused } = placed;
+  const { views, adherence, stored, synced, refused } = placed;
   const counted = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
   const seconds = (milliseconds: number) => counted(Math.round(milliseconds / 1000), "second");
+  const listed = (items: string[]) =>
+    items.length > 1 ? `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}` : items.join("");
   const written = stored.written.length
     ? `${counted(stored.written.length, "file")} written by this run, ${stored.written.length === 1 ? "sent" : "each sent"} as ${stored.way}${stored.met.length ? `, which the store took after ${stored.met.join("; ")}` : ""}`
     : "none written by this run";
+  const again = [...views.again, ...adherence.again];
 
   return [
     `PASS: ${views.views} objects of the views in ${names.views} and ${names.defaults}, ${views.overview} of the Overview in ${names.overview}, and ${views.scale} backups and ${views.restores} restores of the long lists in ${names.scale}, are in place, outside the reach of the controllers.`,
-    ...(views.again.length
-      ? [`NOTE: the fixtures that are placed by the clock were put in place again in ${views.again.join(" and ")}.`]
+    `PASS: ${adherence.states} objects of the adherence in ${names.adherence}, ${adherence.split} in ${names.adherenceSplit} and ${adherence.budget} in ${names.adherenceScale}, the backups of their submissions named by the clock of their placement, are in place, outside the reach of the controllers.`,
+    ...(again.length
+      ? [`NOTE: the fixtures that are placed by the clock were put in place again in ${listed(again)}.`]
       : []),
     `PASS: the store holds the files of the tabs (${written}), and the server created ${names.syncedBackup} and ${names.syncedBackupWithoutLog} from them as they were stored: once the fixtures of the views and the refused operations were placed, the wait for the two took ${seconds(synced.waited)}${synced.passes ? `, in which ${counted(synced.passes, "pass", "passes")} of its sync ended without both` : ""}.`,
     ...(recreated.length

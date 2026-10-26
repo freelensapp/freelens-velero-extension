@@ -2638,8 +2638,8 @@ function takeDown(): void {
 }
 
 // What the fixtures of the views and of the tabs reach the environment through: the cluster; the store, as
-// the identity that writes to the bucket of the environment alone; the time since it was made; the journal
-// of the objects of the run; and the record of what the store was given for the tabs.
+// the identity that writes to the bucket of the environment alone; the time since it was made; the clock of
+// this machine; the journal of the objects of the run; and the record of what the store was given for the tabs.
 function fixtureRuntime(): FixtureRuntime {
   const made = performance.now();
 
@@ -2653,6 +2653,7 @@ function fixtureRuntime(): FixtureRuntime {
       return storageRequest(method, path, credentials.velero, body);
     },
     elapsed: () => performance.now() - made,
+    now: () => Date.now(),
     // The objects of the run as the journal names them now: what forgets one or learns one changes that
     // list where it is, and saves it.
     journal: {
@@ -2767,7 +2768,7 @@ function prepareDemo(): void {
       `  all the namespaces:     ${CONFIG}`,
       `  the reader of a part:   ${reader} (backups, schedules, storage locations; its credential lasts eight hours)`,
       `  the second reader:      ${second} (restores, schedules, locations and no backup; eight hours)`,
-      `The namespaces of Velero: ${DEMO_NAMESPACE}, ${names.static}, ${names.views}, ${names.defaults}, ${names.overview}; to be named: ${names.scale}.`,
+      `The namespaces of Velero: ${DEMO_NAMESPACE}, ${names.static}, ${names.views}, ${names.defaults}, ${names.overview}; to be named: ${names.scale}, ${names.adherence}, ${names.adherenceSplit}, ${names.adherenceScale}.`,
       `What each artifact of the tabs holds, counted outside the extension: ${TABS.facts}`,
     ].join("\n"),
   );
@@ -2871,6 +2872,9 @@ function runViews(): void {
           E2E_DEFAULTS_NAMESPACE: names.defaults,
           E2E_OVERVIEW_NAMESPACE: names.overview,
           E2E_SCALE_NAMESPACE: names.scale,
+          E2E_ADHERENCE_NAMESPACE: names.adherence,
+          E2E_ADHERENCE_SPLIT_NAMESPACE: names.adherenceSplit,
+          E2E_ADHERENCE_SCALE_NAMESPACE: names.adherenceScale,
           E2E_FIXTURE_RUN: run,
           E2E_ARTIFACTS_DIR: artifacts,
         }),
