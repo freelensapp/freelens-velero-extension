@@ -446,9 +446,9 @@ test environment and of the process of this repository.
 - What the suite of the adherence expects of a fixture is computed by the helper
   of the suites, `integration/helpers/velero-adherence.ts`, from the objects as
   the cluster holds them and from the clock, at the clock before a read of the
-  page less twenty seconds and after it, and never with the code of the
-  extension: the helper runs in Node, and the page in the Electron of the host.
-  Whether that `Intl` knows `America/Argentina/Buenos_Aires`, the zone of the
+  page less twenty seconds and after it plus a second, and never with the code
+  of the extension: the helper runs in Node, and the page in the Electron of the
+  host. Whether that `Intl` knows `America/Argentina/Buenos_Aires`, the zone of the
   schedule with a name of 63 characters: ADHERENCE-PR4-PENDING. The suite took
   ADHERENCE-PR4-PENDING alone on the machine of the runs, and the hosted job
   runs it in the run of the pattern `velero-e2e`. The list of three hundred

@@ -233,9 +233,9 @@ commit. On a Linux without a display the runner starts them under `xvfb-run`.
 | `velero-e2e-preferences` | What is kept between two starts of the application, which is the two maps of the namespaces, the window of the recent operations and what the operator allowed the downloads to do, and nothing else; a namespace that is not there any more stays selected; what the file says was allowed is shown in the target bar, one is taken back through the main process, the one that is left is found at the next start, and once the last is taken back nothing is allowed at the start after it |
 | `velero-e2e-restores` | The list of every phase of a restore; a restore as Velero keeps it, with where it restores into and the scope it carries, which opens at its summary under the five tabs, with the ways of the summary and no field; one that failed its validation, with no time and no backup made up; a source that is not there; the way between a restore and its backup in both directions, over the list the first view was opened from; no way to select, edit or delete; the section in the details of the host, whose link leads to the view with the drawer gone and no error in the files of the log |
 | `velero-e2e-restricted` | The views for an identity that reads three kinds of one namespace: what is denied is said, and is neither absent nor empty; a location shown with the Secrets it names, to an identity the API server refuses the Secrets to; the Overview, which says what the rules did not look at and, since the second pull request of T3.3, of how many schedules the adherence is not known; since the fourth, the interval of the views overdue and the schedule of five fields not known for want of an offset |
-| `velero-e2e-restricted-restores` | The views for an identity that reads the restores and the schedules and not the backups: the source of a restore, the history of a schedule, the backups that name a location and the newest completed backup of the Overview are said denied or not known, and are neither absent nor empty; since the fourth pull request of T3.3, the interval of the views overdue with the words that whether a backup holds the submissions is not known, in its row and in its band, and the schedule of five fields not known since the backups are denied |
+| `velero-e2e-restricted-restores` | The views for an identity that reads the restores and the schedules and not the backups: the source of a restore, the history of a schedule, the backups that name a location and the newest completed backup of the Overview are said denied or not known, and are neither absent nor empty; since the fourth pull request of T3.3, the interval of the views overdue with the words that whether a backup holds the submissions is not known, in its row and in its band, the schedule of five fields not known since the backups are denied, and the count by reason of what is not known on the Overview |
 | `velero-e2e-schedules` | The schedules Velero took, refused and has not read, with paused and validation as two facts; the last submission beside the newest backup; the history of a schedule, from the newest, on its line of time and in its list, with the backup that never started at the time it was created; the template and where its backups go; the way between a schedule and its backups in both directions; no way to edit, pause or run; the section in the details of the host, whose link leads to the view with the drawer gone and no error in the files of the log; since the first pull request of T3.3 the next run and the adherence of each schedule: a run said of the schedule that names its zone, computed by the suite from its creation and the clock through Intl, never by the code of the extension, and none of the paused, refused and not read ones, the ones of five fields not known for want of the zone of the server; the band of a schedule line by line; the items of the details agreeing with the row; the order by the next run and by adherence both ways, a search by the word of a state; and the columns at each edge of the room of the list and in a window of 1440 by 900, before the case that resizes a column, with no words clipped with no ellipsis and no tip and none off the line of their row, the width of the window and the zoom of each room written in the report `schedules-rooms.json`; SCHED-03 restated outside the cells, the band and the items; since the third pull request, twelve schedules in the installation of the views, the interval that submitted two days back overdue and first in both orders, and the one of five fields that submitted not known for want of the zone of the server |
-| `velero-e2e-adherence` | The adherence of the schedules on its fixtures, placed by the clock in the three installations the operator names, and on the schedule the controller of the demo validated, each expectation computed by the helper of the suites, [`velero-adherence.ts`](../../integration/helpers/velero-adherence.ts), from the objects as the cluster holds them and from the clock, by the rules of the controller and never by the code of the extension, at the clock before a read of the page less twenty seconds and after it, with every duration read back into its span: first the ten cases of the helper, which start no application; then the list of the installation of the states, its eight schedules with their next run, their state, their mark and their words, a tip on each cell and the note that the clock of the cluster is ahead; the orders by the next run and by adherence both ways and a search by the word of a state; the band of each schedule line by line; the way to the held backup and back over the list, which is where it was; the installation of two offsets, the older submission before the newer and the change said; the details of the host of a schedule of each state; the Overview with the items of rule A11 in the order of the page and the count by reason of the installation of the views; the real schedule, Enabled, nothing submitted, its next run a year after its creation in its row, its band and its line; ADH-16 in the packaged application, ten searches and ten orders of the list of three hundred schedules and twenty changes of the window of their Overview, in the reports `adh-16-list-performance.json` and `adh-16-overview-performance.json`; and the guard, with the PATCH the controller sends the schedule it validated at each look left out and bounded, no POST of a backup, and only reads with the Schedules and then the Overview open for a period of the reads each. 21 cases |
+| `velero-e2e-adherence` | The adherence of the schedules on its fixtures, placed by the clock in the three installations the operator names, and on the schedule the controller of the demo validated, each expectation computed by the helper of the suites, [`velero-adherence.ts`](../../integration/helpers/velero-adherence.ts), from the objects as the cluster holds them and from the clock, by the rules of the controller and never by the code of the extension, at the clock before a read of the page less twenty seconds and after it plus a second, with every duration read back into its span: first the nineteen cases of the helper, of the words the suite expects and of the counters it reads, which start no application; then the list of the installation of the states, its eight schedules with their next run, their state, their mark and their words, a tip on each cell, shown only when the cell is pointed at, and the note that the clock of the cluster is ahead, within a second of this machine by the time of its API server; the orders by the next run and by adherence both ways and a search by the word of a state; the band of each schedule line by line; the way to the held backup and back over the list, which is where it was; the installation of two offsets, the older submission before the newer and the change said; the details of the host of a schedule of five states, and of a schedule of another installation, not known for want of the offset of its server; the Overview with the items of rule A11 in the order of the page and the count by reason of the installation of the views; the real schedule, Enabled, nothing submitted, its next run a year after its creation in its row, its band and its line; ADH-16 in the packaged application, ten searches and ten orders of the list of three hundred schedules and twenty changes of the window of their Overview, in the reports `adh-16-list-performance.json` and `adh-16-overview-performance.json`; and the guard, with the PATCH the controller sends the schedule it validated at each look, of that schedule by its name, left out and bounded, of no other scope, no POST of a backup, and only reads with the Schedules and then the Overview open for a period of the reads each. 30 cases |
 | `velero-e2e-locations` | The storage locations with availability, access mode and default as three facts; the location the controller validates, which is not late, and the backups that name it, by how each ended; the synthetic ones, which are late; none and two marked default; a message of many lines; where a location points and the Secrets it names, by their names; what uses a location, and the way to it and back; the way from a backup, a restore and a schedule to their locations; the snapshot locations, with a phase that has the mark of what is not known, and one a synced backup names that the installation does not have, said absent by the list and by the workspace of the backup; no way to select, edit, delete or set as default; the sections in the details of the host, the link of each of the two kinds leading to its view with the drawer gone and no error in the files of the log |
 | `velero-e2e-scale` | A thousand backups and a thousand restores: the rows that are mounted, the time of the interactions, the state of each list when an object is opened and closed |
 | `velero-e2e-gate` | The gate of the writes: off when the session starts, on every page of the group; on through the dialog of the host, which names the cluster, its context and the namespace, and not before the dialog is answered; off when another installation is selected, when the dialog is left, and when the application is started again; each frame of a cluster with a gate of its own; on v2, every request bound to the frame it comes from by the address of the frame that a handler of the main process reads, a request of the second frame for the first cluster refused; nothing of it in the store, and nothing written to the cluster |
@@ -812,7 +812,9 @@ fixtures what the helper of the suites,
 [`velero-adherence.ts`](../../integration/helpers/velero-adherence.ts), computes
 from the objects as the cluster holds them and from the clock, by the rules of the
 controller as SPEC-0013 states them, and never with the code of the extension. It
-knows the expressions of the fixtures and refuses any other: it is not a parser.
+knows the forms of the expressions of the fixtures, an interval of whole hours, a
+daily `M H * * *` at the offset of the server, the 02:30 of Rome, the new year of
+Buenos Aires and `0 0 30 2 *`, and refuses any other: it is not a parser.
 The clock of the page is a tick of up to five seconds before a read of it, and the
 read up to fifteen seconds old, so each expectation is computed at the clock
 before the read less twenty seconds and after it plus one second, and a state, a
@@ -824,16 +826,19 @@ overdue five minutes after, inside the twelve hours of a placement made after
 clock ahead shrinks with the age; the next run of the real schedule is a year less
 the age. The forms of the sentences are copied as they are written in the module
 of the signal, and every duration they hold is read back into its span by its two
-units and expected to overlap the one computed. The helper has ten cases of its
-own, first in the file and starting no application, which run alone with
+units and expected to overlap the one computed. The helper, the words the suite
+expects of a band and of a next run, and the counters it reads have nineteen cases
+of their own, first in the file and starting no application, which run alone with
 `pnpm exec vitest run --config vitest.integration.config.ts e2e/__tests__/velero-e2e-adherence.tests.ts -t "what the suite of the adherence expects, computed by the rules of the controller"`.
-The suite reads the cluster only with `kubectl get` in a namespace, never inside a
-measure, and runs in the run of the pattern `velero-e2e`, as the hosted job runs
-it (LM6 of SPEC-0013). It took ADHERENCE-PR4-PENDING alone on the machine of the
-runs and ADHERENCE-PR4-PENDING on the hosted runner; the run of the pattern
-`velero-e2e pre-review extensions` took ADHERENCE-PR4-PENDING on the machine of
-the runs and ADHERENCE-PR4-PENDING on the hosted runner, against the two hours of
-the runner and the 150 minutes of the job.
+The suite reads the cluster only with `kubectl get` in a namespace and the
+counters of the API server, never inside a measure, and runs in the run of the
+pattern `velero-e2e`, as the hosted job runs it (LM6 of SPEC-0013). It took
+ADHERENCE-PR4-PENDING alone on the machine of the runs and ADHERENCE-PR4-PENDING on
+the hosted runner; the run of the pattern `velero-e2e pre-review extensions` took
+ADHERENCE-PR4-PENDING on the machine of the runs and ADHERENCE-PR4-PENDING on the
+hosted runner, against the two hours the runner of the suites gives them in one
+start, the two hours the kubeconfigs of the readers last, and the 150 minutes of
+the job.
 
 ## Critical Journeys
 
@@ -1031,16 +1036,18 @@ In the packaged application ADH-16 is measured by the suite of the adherence, on
 the installation of the three hundred schedules of the same expressions, each with
 the backup of its submission: three interactions that warm the list, then ten
 searches of texts it is not searched by and ten orders, each a column and a
-direction not asked before, which an order asked once before the timed ones proves
-to change the first forty rows; the 95th percentile of what the list takes to
-answer within 250 milliseconds, with the time from the key beside it, and at most
-a hundred rows mounted; then twenty changes of the window of the Overview of the
-same installation after three, within 250 milliseconds, as OVER-12 measures them.
+direction, asked once untimed from the same start as the timed ones, each awaited
+until the first forty rows change, which proves that each changes them; the 95th
+percentile of what the list takes to answer within 250 milliseconds, with the time
+from the key beside it, and at most a hundred rows mounted; then twenty changes of
+the window of the Overview of the same installation after three, within 250
+milliseconds, as OVER-12 measures them, with the window after each change, a time
+for each, the schedules and the backups the page read, and no value of the whole.
 An order is timed by `measureOrder`, a click on the head of a column that ends when
 the first forty rows change, with no wait of the host. Each report is written
-before anything is asserted, and printed as one line, `ADH-16` with the measure it
-is of. On the machine of the runs, ADHERENCE-PR4-PENDING; on the hosted runner,
-ADHERENCE-PR4-PENDING.
+before anything of the measure is asserted, and printed as one line, `ADH-16` with
+the measure it is of. On the machine of the runs, ADHERENCE-PR4-PENDING; on the
+hosted runner, ADHERENCE-PR4-PENDING.
 
 The second slice of the adherence (SPEC-0013, T3.2) is the module
 [`schedule-signal.ts`](../../src/common/schedule-signal.ts) and its
