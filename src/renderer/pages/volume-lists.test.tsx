@@ -257,6 +257,10 @@ describe("the list of the backup repositories", () => {
       maintained.getAttribute("data-newest-failed") ?? maintained.firstElementChild?.getAttribute("data-newest-failed"),
     ).toBe("true");
     expect(maintained.textContent).toBe(`1d ago${"warning_amber"}, ${REPOSITORY_WORDS.newestFailed}`);
+    // The mark says its words to the pointer as well.
+    expect(maintained.querySelector("[data-maintenance=failed]")?.getAttribute("title")).toBe(
+      "the newest maintenance failed",
+    );
     expect(cell("backup-repository", "shop-default-restic", "maintained").textContent).toBe(
       REPOSITORY_WORDS.neverMaintained,
     );

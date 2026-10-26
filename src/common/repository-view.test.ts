@@ -200,6 +200,16 @@ describe("the list of the repositories", () => {
       "168h0m0s",
     ]);
     expect(repositorySearch(views[1])).toContain("Not set");
+    // The mark of a failed newest maintenance is searched by its words.
+    const failing = repositoryView(
+      repository("e-failing", {
+        phase: "Ready",
+        recentMaintenance: [{ result: "Failed", startTimestamp: before(DAY), completeTimestamp: before(DAY) }],
+      }),
+    );
+
+    expect(failing.newestFailed).toBe(true);
+    expect(repositorySearch(failing)).toContain("the newest maintenance failed");
   });
 
   it("is ordered by callbacks that answer a number, a text or an array, never undefined or NaN", () => {

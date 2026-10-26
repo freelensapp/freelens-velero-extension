@@ -111,7 +111,11 @@ export function RepositoryReadinessMark({ readiness, message }: { readiness: Rep
 // to who does not see the mark.
 export function FailedMaintenanceMark() {
   return (
-    <span className={`${styles.status} ${styles.signalWarnings}`} data-maintenance="failed">
+    <span
+      className={`${styles.status} ${styles.signalWarnings}`}
+      data-maintenance="failed"
+      title={REPOSITORY_WORDS.newestFailed}
+    >
       <Icon material="warning_amber" small aria-hidden />
       <span className={styles.spoken}>, {REPOSITORY_WORDS.newestFailed}</span>
     </span>

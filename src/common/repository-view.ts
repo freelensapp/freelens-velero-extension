@@ -174,6 +174,7 @@ export function repositorySearch(view: RepositoryView): string[] {
     view.readiness.label,
     view.message?.value ?? "",
     repositoryFrequencyText(view.frequency),
+    view.newestFailed ? REPOSITORY_WORDS.newestFailed : "",
   ].filter(Boolean);
 }
 
