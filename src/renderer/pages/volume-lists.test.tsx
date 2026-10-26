@@ -418,7 +418,8 @@ describe("the lists of the pod volume operations", () => {
     expect(text("nightly-timeout", "duration")).toBe("No time written");
     expect(text("nightly-completed", "storage")).toBe("default");
     expect(text("nightly-completed", "uploader")).toBe("kopia");
-    expect(text("nightly-odd", "uploader")).toBe("Built-in");
+    // An uploader that is not set is said so: the release reads it as restic, and Built-in is a data mover.
+    expect(text("nightly-odd", "uploader")).toBe("Not set");
   });
 
   it("orders by the phase and by the node both ways, none last in the first order, and searches the message", async () => {

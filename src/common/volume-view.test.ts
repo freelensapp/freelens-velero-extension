@@ -141,7 +141,7 @@ describe("the view of an operation", () => {
       "shop/cart-0, data",
       "worker-1",
       "default",
-      "Built-in",
+      "Not set",
     ]);
   });
 

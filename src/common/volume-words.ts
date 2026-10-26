@@ -226,10 +226,13 @@ export const INCREMENTAL_NOTE =
 
 export const SNAPSHOT_SIZE_NOTE = "The logical size of the snapshot, taken from the pod volume backup it restores.";
 
-// The uploader of a pod volume operation: what it names, and the built-in one when it names none.
+// The uploader of a pod volume operation: what it names, or that it names none, which the release reads as restic.
+// Built-in is the data mover of the data movement, not an uploader.
 export function uploaderText(value: string | undefined): string {
-  return value ?? "Built-in";
+  return value ?? "Not set";
 }
+
+export const UPLOADER_NOT_SET_NOTE = "The release reads an uploader that is not set as restic.";
 
 // What a list of the operations says over itself, which no row says.
 export const LIST_NOTES: Record<VolumeKind, string> = {

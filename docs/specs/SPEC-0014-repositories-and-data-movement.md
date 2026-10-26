@@ -331,7 +331,7 @@ The columns of the four operation kinds:
 | Started | `status.startTimestamp`, in the time of the operator with the one of the host in the tip; not started when there is none | By start, none last |
 | Duration | REQ-185 | By duration |
 | Storage location | `spec.backupStorageLocation` | By name |
-| Uploader | `spec.uploaderType` for the pod volume kinds, `spec.datamover` for the data movement, empty said built-in | By text |
+| Uploader | `spec.uploaderType` for the pod volume kinds, empty said not set, which the release reads as restic; `spec.datamover` for the data movement, empty said built-in | By text |
 | Age | The age the host writes | By creation |
 
 In a narrow room the secondary columns give their room in this order, by the

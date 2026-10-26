@@ -16,6 +16,7 @@ import {
   SNAPSHOT_SIZE_NOTE,
   spanNote,
   spanText,
+  UPLOADER_NOT_SET_NOTE,
   uploaderText,
   VOLUME_WORDS,
 } from "../../common/volume-words";
@@ -196,7 +197,9 @@ export const VolumeOperationWorkspace = observer(
 
         <h3 className={styles.sectionTitle}>Settings</h3>
         <div className={styles.band} data-testid="velero-volume-settings">
-          <Fact name="Uploader">{uploaderText(view.uploader)}</Fact>
+          <Fact name="Uploader" note={view.uploader === undefined ? UPLOADER_NOT_SET_NOTE : undefined}>
+            {uploaderText(view.uploader)}
+          </Fact>
           <Fact name="Uploader settings">
             <Entries entries={mapEntries(operation.spec?.uploaderSettings)} testId="velero-volume-uploader-settings" />
           </Fact>
