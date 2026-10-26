@@ -413,9 +413,13 @@ them needs of the renderer is beside what uses it: its
 T5.1 they are eight: the five of the first milestones, `backup-repository`,
 `pod-volume-backup` and `pod-volume-restore`, and a reference to a backup
 repository, a pod volume backup or a pod volume restore that is found leads to its
-view as the others do. The view of a repository reads the two families of the pod
-volume operations, and the view of an operation its own family, as the frame holds
-them; the pod and the node of an operation are the links of the host to their
+view as the others do. Each view reads the families it shows, and the notices over
+it are of those alone, as decided by the maintainer on 2026-10-26: a backup, a
+restore and a schedule the backups, the restores, the schedules and the two
+locations; a repository the repositories and the storage locations, the operations
+that use it coming with the band that shows them; an operation its own family,
+which the frame holds, the family of its owner, the storage locations and the
+repositories. The pod and the node of an operation are the links of the host to their
 details (`LinkToPod`, `LinkToNode`), which read nothing and leave the host to read
 the object when its drawer opens.
 

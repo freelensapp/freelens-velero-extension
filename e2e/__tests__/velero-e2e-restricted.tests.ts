@@ -84,14 +84,11 @@ describe("views with restricted access", () => {
     "keeps the backup and says which of its references cannot be read",
     async () => {
       await cluster.openWorkspace(frame, SCHEDULED);
-      // The view of a backup reads the families of every read, the backup repositories among them, which this
-      // identity is denied as it is the restores and the snapshot locations.
-      const shown = await cluster.notices(frame, ["restores", "snapshotLocations", "backupRepositories"]);
+      const shown = await cluster.notices(frame, ["restores", "snapshotLocations"]);
 
-      expect(Object.keys(shown).sort()).toEqual(["backupRepositories", "restores", "snapshotLocations"]);
+      expect(Object.keys(shown).sort()).toEqual(["restores", "snapshotLocations"]);
       expect(shown.restores).toContain("access is denied");
       expect(shown.snapshotLocations).toContain("access is denied");
-      expect(shown.backupRepositories).toContain("access is denied");
       expect(await frame.locator("[data-testid=velero-backup-status]").innerText()).toContain("Completed");
       expect((await cluster.reference(frame, "velero-reference-Schedule-views-daily", "resolved")).state).toBe(
         "resolved",

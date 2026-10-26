@@ -23,16 +23,18 @@ export const FAMILIES = [
 ] as const;
 export type Family = (typeof FAMILIES)[number];
 
-// The families read at every read of an installation, whatever view is open: the repositories are few, and the
-// Overview carries their rules.
-export const ALWAYS = [
+// The families a backup, a restore and a schedule are shown with: the three kinds and the two locations they name.
+export const BACKUPS_AND_LOCATIONS = [
   "backups",
   "restores",
   "schedules",
   "storageLocations",
   "snapshotLocations",
-  "backupRepositories",
 ] as const satisfies readonly Family[];
+
+// The families read at every read of an installation, whatever view is open: the repositories are few, and the
+// Overview carries their rules.
+export const ALWAYS = [...BACKUPS_AND_LOCATIONS, "backupRepositories"] as const satisfies readonly Family[];
 
 // The families read only while a view that shows them is open: an installation may hold thousands of their
 // objects, and a view that does not show them does not pay for them.

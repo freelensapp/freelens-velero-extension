@@ -569,7 +569,7 @@ describe("the families of the pod volume operations, read where they are shown",
     expect([count(shown.asked, PVB), count(shown.asked, PVR)]).toEqual([3, 0]);
   });
 
-  it("are read while a repository is open over its list, both, and not at the read after it is closed", async () => {
+  it("are not read while a repository is open over its list, and one is while an operation is opened from it", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     const { asked, installation } = mount(answers(), (installation) => (
       <RepositoriesPage installation={installation} />
@@ -577,32 +577,33 @@ describe("the families of the pod volume operations, read where they are shown",
 
     await waitFor(() => expect(rows("backup-repository")).toHaveLength(repositories.length));
     expect([count(asked, PVB), count(asked, PVR)]).toEqual([0, 0]);
+    // The view of a repository shows nothing of the operations of the volumes until the band that shows them, as
+    // decided by the maintainer on 2026-10-26: it asks for neither family.
     act(() => openView({ kind: "backup-repository", name: "shop-default-kopia" }));
     await screen.findByTestId("velero-backup-repository-workspace");
-    // Asked at once, when the view opens.
-    await waitFor(() => expect([count(asked, PVB), count(asked, PVR)]).toEqual([1, 1]));
     await act(async () => {
       await vi.advanceTimersByTimeAsync(READ_EVERY);
     });
-    expect([count(asked, PVB), count(asked, PVR)]).toEqual([2, 2]);
-    // From a repository to one of its operations, the family both need is never let go.
+    expect([count(asked, PVB), count(asked, PVR)]).toEqual([0, 0]);
+    // An operation opened from it is asked at once, and at each read while its view is open.
     act(() => openView({ kind: "pod-volume-backup", name: "nightly-completed" }));
     await screen.findByTestId("velero-pod-volume-backup-workspace");
-    expect(installation.read("podVolumeBackups").status).toBe("ready");
+    await waitFor(() => expect(installation.read("podVolumeBackups").status).toBe("ready"));
+    expect([count(asked, PVB), count(asked, PVR)]).toEqual([1, 0]);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(READ_EVERY);
     });
-    expect([count(asked, PVB), count(asked, PVR)]).toEqual([3, 2]);
+    expect([count(asked, PVB), count(asked, PVR)]).toEqual([2, 0]);
     expect(installation.read("podVolumeRestores").status).toBe("idle");
     act(() => closeViews());
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2 * READ_EVERY);
     });
-    expect([count(asked, PVB), count(asked, PVR)]).toEqual([3, 2]);
+    expect([count(asked, PVB), count(asked, PVR)]).toEqual([2, 0]);
     expect(installation.read("podVolumeBackups")).toEqual({ status: "idle", items: [] });
   });
 
-  it("are not asked by a view of a backup, a restore or a schedule, which read the families of every read", async () => {
+  it("are not asked by a view of a backup, a restore or a schedule, which read the backups and the locations", async () => {
     const { asked } = mount(answers(), (installation) => <BackupsPage installation={installation} />);
 
     await waitFor(() => expect(rows("backup")).toEqual(["nightly"]));

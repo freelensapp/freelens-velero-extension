@@ -25,9 +25,12 @@ import { RepositoryDetails } from "../details/repository-details";
 import { VolumeOperationDetails } from "../details/volume-operation-details";
 import { closeViews, openView, openViews } from "../navigation";
 import { Installation } from "../state/installation";
+import { BackupsPage } from "./backups-page";
 import { PodVolumeBackupsPage } from "./pod-volume-backups-page";
 import { PodVolumeRestoresPage } from "./pod-volume-restores-page";
 import { RepositoriesPage } from "./repositories-page";
+import { RestoresPage } from "./restores-page";
+import { SchedulesPage } from "./schedules-page";
 
 import type { Renderer } from "@freelensapp/extensions";
 
@@ -548,5 +551,53 @@ describe("the sections of the details of the host", () => {
     expect(drawerValue("Workspace", section)).toBe(
       "Select velero among the pod volume restores of Velero to open it there",
     );
+  });
+});
+
+describe("the notices over a view", () => {
+  // A view says what is missing of the families it shows something of, and of no other.
+  const daily = {
+    metadata: { name: "daily", namespace: A, uid: "schedule-daily" },
+    spec: { schedule: "0 1 * * *", template: {} },
+    status: { phase: "Enabled" },
+  };
+
+  it("say nothing of the denied repositories over a backup, a restore and a schedule, and say it over their list", async () => {
+    const denied = answers({ [path("backupRepositories")]: { status: 403 }, [path("schedules")]: list(daily) });
+
+    for (const [kind, name, page] of [
+      ["backup", "nightly", (made: Installation) => <BackupsPage installation={made} />],
+      ["restore", "monday", (made: Installation) => <RestoresPage installation={made} />],
+      ["schedule", "daily", (made: Installation) => <SchedulesPage installation={made} />],
+    ] as const) {
+      const { installation: made } = mount(denied, page);
+
+      act(() => openView({ kind, name }));
+      await screen.findByTestId(`velero-${kind}-workspace`);
+      await waitFor(() => expect(made.read("backupRepositories").status).toBe("forbidden"));
+      await act(async () => {});
+      expect([kind, screen.queryByTestId("velero-notice-backupRepositories")]).toEqual([kind, null]);
+      act(() => closeViews());
+      cleanup();
+    }
+    mount(denied, (made) => <RepositoriesPage installation={made} />);
+    expect((await screen.findByTestId("velero-notice-backupRepositories")).textContent).toContain("access is denied");
+  });
+
+  it("say nothing of the denied restores over a pod volume backup, and say it over a pod volume restore", async () => {
+    const denied = answers({ [path("restores")]: { status: 403 } });
+    const { installation: made } = mount(denied, (made) => <PodVolumeBackupsPage installation={made} />);
+
+    act(() => openView({ kind: "pod-volume-backup", name: "nightly-failed" }));
+    await screen.findByTestId("velero-pod-volume-backup-workspace");
+    await waitFor(() => expect(made.read("restores").status).toBe("forbidden"));
+    await act(async () => {});
+    expect(screen.queryByTestId("velero-notice-restores")).toBeNull();
+    act(() => closeViews());
+    cleanup();
+    mount(denied, (made) => <PodVolumeRestoresPage installation={made} />);
+    act(() => openView({ kind: "pod-volume-restore", name: restored.metadata.name }));
+    await screen.findByTestId("velero-pod-volume-restore-workspace");
+    expect((await screen.findByTestId("velero-notice-restores")).textContent).toContain("access is denied");
   });
 });

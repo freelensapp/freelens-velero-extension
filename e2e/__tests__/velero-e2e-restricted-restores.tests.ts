@@ -80,10 +80,8 @@ describe("restores with restricted access", () => {
     "keeps the restore and says that its source cannot be read, which is not that it is not there",
     async () => {
       await cluster.openWorkspace(frame, MAPPED, RESTORES);
-      // The view of a restore reads the families of every read: the backups and the backup repositories, which
-      // this identity is denied, are said over it.
       const shown = async () => ({
-        notices: await cluster.notices(frame, ["backups", "backupRepositories"]),
+        notices: await cluster.notices(frame, ["backups"]),
         status: (await frame.locator("[data-testid=velero-restore-status]").innerText()).replace(/\s+/g, " "),
         source: await cluster.reference(frame, `velero-reference-Backup-${SCHEDULED}`, "inaccessible"),
         location: await frame.locator("[data-testid=velero-reference-BackupStorageLocation-none]").innerText(),
@@ -92,9 +90,8 @@ describe("restores with restricted access", () => {
       });
       const first = await shown();
 
-      expect(Object.keys(first.notices)).toEqual(["backups", "backupRepositories"]);
+      expect(Object.keys(first.notices)).toEqual(["backups"]);
       expect(first.notices.backups).toContain("access is denied");
-      expect(first.notices.backupRepositories).toContain("access is denied");
       expect(first.status).toContain("Waiting for plugin operations");
       expect(first.source.state).toBe("inaccessible");
       expect(first.source.text).toContain("access is denied");
@@ -144,10 +141,7 @@ describe("restores with restricted access", () => {
       // No row and no line: nothing is drawn of a history that is not known.
       expect(await cluster.history(frame)).toEqual({ rows: [], marks: [], over: [], width: 0 });
       expect(await frame.locator("[data-testid=velero-history-counts]").count()).toBe(0);
-      const notices = await cluster.notices(frame, ["backups", "backupRepositories"]);
-
-      expect(Object.keys(notices)).toEqual(["backups", "backupRepositories"]);
-      expect(notices.backups).toContain("access is denied");
+      expect((await cluster.notices(frame, ["backups"])).backups).toContain("access is denied");
       // What the schedule is asked, and where its backups go, is read: the locations are not denied.
       expect(
         (await cluster.reference(frame, "velero-reference-BackupStorageLocation-views-available", "resolved")).state,
