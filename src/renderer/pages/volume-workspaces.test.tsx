@@ -291,6 +291,16 @@ describe("the view of a backup repository", () => {
     );
   });
 
+  it("says that when the next maintenance is due is not known while the storage locations are denied", async () => {
+    mount(answers({ [path("storageLocations")]: { status: 403 } }), (made) => <RepositoriesPage installation={made} />);
+    act(() => openView({ kind: "backup-repository", name: "due-default-kopia" }));
+    await screen.findByTestId("velero-backup-repository-workspace");
+    await waitFor(() =>
+      expect(screen.getByTestId("velero-backup-repository-due").getAttribute("data-due")).toBe("access-unknown"),
+    );
+    expect(screen.getByTestId("velero-backup-repository-due").textContent).toBe(REPOSITORY_WORDS.accessUnknown);
+  });
+
   it("says that the next maintenance is due by the clock of this machine, and moves with it", async () => {
     mount(answers(), (made) => <RepositoriesPage installation={made} />);
     act(() => openView({ kind: "backup-repository", name: "due-default-kopia" }));

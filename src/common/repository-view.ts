@@ -114,9 +114,12 @@ export type Due =
   // The server maintains only a repository that is ready.
   | { state: "not-ready" }
   // The server runs no maintenance of a repository of a read-only location.
-  | { state: "read-only" };
+  | { state: "read-only" }
+  // Whether the location is read-only is not known: it is not read, denied, or not there.
+  | { state: "access-unknown" };
 
-export function maintenanceDue(view: RepositoryView, now: number, readOnly: boolean): Due {
+// `readOnly` is undefined when the location of the repository is not known.
+export function maintenanceDue(view: RepositoryView, now: number, readOnly: boolean | undefined): Due {
   const { frequency } = view;
 
   if (!frequency.read) {
@@ -126,6 +129,7 @@ export function maintenanceDue(view: RepositoryView, now: number, readOnly: bool
   }
   if (view.readiness.readiness !== "ready") return { state: "not-ready" };
   if (readOnly) return { state: "read-only" };
+  if (readOnly === undefined) return { state: "access-unknown" };
   if (view.lastMaintenance === undefined) return { state: "due-no-time" };
   const at = view.lastMaintenance + frequency.milliseconds;
 
@@ -146,6 +150,8 @@ export function dueText(due: Due): string {
       return REPOSITORY_WORDS.frequencyUnreadable(due.written);
     case "not-ready":
       return REPOSITORY_WORDS.notReadyNoMaintenance;
+    case "access-unknown":
+      return REPOSITORY_WORDS.accessUnknown;
     default:
       return REPOSITORY_WORDS.readOnly;
   }

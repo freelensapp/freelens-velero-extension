@@ -247,6 +247,8 @@ export const REPOSITORY_WORDS = {
   pass: "The server looks at every repository every five minutes: a maintenance that is due starts at its next look.",
   job: "A maintenance runs as a Job of the installation, which the extension does not read.",
   readOnly: "The storage location is read-only: the server runs no maintenance of a repository of it.",
+  accessUnknown:
+    "Not known: the storage location of the repository is not known, and the server runs no maintenance of a repository of a read-only one.",
   frequencyNotSet:
     "No frequency is set: the server fills it with its own, or with the one of the type, at its next look. Nothing is computed until it does.",
   frequencyUnreadable: (written: string) =>

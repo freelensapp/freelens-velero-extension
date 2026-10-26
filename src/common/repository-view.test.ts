@@ -155,6 +155,16 @@ describe("when the next maintenance is due, by the clock of this machine", () =>
     ).toBe("Not set");
   });
 
+  it("is not known when whether the location is read-only is not known", () => {
+    const old = repositoryView(repository("r", { phase: "Ready", lastMaintenanceTime: before(30 * DAY) } as never));
+
+    expect(maintenanceDue(old, NOW, undefined)).toEqual({ state: "access-unknown" });
+    expect(maintenanceDue(old, NOW, false)).toMatchObject({ state: "due" });
+    expect(dueText({ state: "access-unknown" })).toBe(
+      "Not known: the storage location of the repository is not known, and the server runs no maintenance of a repository of a read-only one.",
+    );
+  });
+
   it("is none for a repository that is not ready, or of a read-only location", () => {
     expect(due({ phase: "NotReady", lastMaintenanceTime: before(30 * DAY) })).toEqual({ state: "not-ready" });
     expect(due({})).toEqual({ state: "not-ready" });

@@ -75,7 +75,8 @@ export const RepositoryWorkspace = observer(({ installation, name, now, back, on
   const location = view.location
     ? (locations.items as BackupStorageLocationResource[]).find((item) => item.metadata.name === view.location)
     : undefined;
-  const readOnly = location?.spec?.accessMode === "ReadOnly";
+  // Not known when the location is not read, is denied or is not there: a read-only one is never maintained.
+  const readOnly = location ? location.spec?.accessMode === "ReadOnly" : undefined;
   const due = maintenanceDue(view, now, readOnly);
 
   return (
