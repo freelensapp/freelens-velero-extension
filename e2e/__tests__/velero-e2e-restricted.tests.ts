@@ -84,11 +84,14 @@ describe("views with restricted access", () => {
     "keeps the backup and says which of its references cannot be read",
     async () => {
       await cluster.openWorkspace(frame, SCHEDULED);
-      const shown = await cluster.notices(frame, ["restores", "snapshotLocations"]);
+      // The view of a backup reads the families of every read, the backup repositories among them, which this
+      // identity is denied as it is the restores and the snapshot locations.
+      const shown = await cluster.notices(frame, ["restores", "snapshotLocations", "backupRepositories"]);
 
-      expect(Object.keys(shown).sort()).toEqual(["restores", "snapshotLocations"]);
+      expect(Object.keys(shown).sort()).toEqual(["backupRepositories", "restores", "snapshotLocations"]);
       expect(shown.restores).toContain("access is denied");
       expect(shown.snapshotLocations).toContain("access is denied");
+      expect(shown.backupRepositories).toContain("access is denied");
       expect(await frame.locator("[data-testid=velero-backup-status]").innerText()).toContain("Completed");
       expect((await cluster.reference(frame, "velero-reference-Schedule-views-daily", "resolved")).state).toBe(
         "resolved",
@@ -262,6 +265,43 @@ describe("views with restricted access", () => {
       expect(await frame.locator("[data-testid=velero-snapshot-locations-unavailable]").innerText()).toContain(
         "Access to the volume snapshot locations of this namespace is denied",
       );
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "says that the backup repositories, the pod volume backups and the pod volume restores are denied, and not that there are none",
+    async () => {
+      // The identity reads the backups, the schedules and the storage locations: each list of the three kinds of
+      // the volumes says that it is denied, with no row and no count, and the notice of its family says the same.
+      for (const [of, family, plural] of [
+        [cluster.REPOSITORIES, "backupRepositories", "backup repositories"],
+        [cluster.POD_VOLUME_BACKUPS, "podVolumeBackups", "pod volume backups"],
+        [cluster.POD_VOLUME_RESTORES, "podVolumeRestores", "pod volume restores"],
+      ] as const) {
+        await cluster.openPage(frame, of);
+        await frame.waitForSelector(`[data-testid=velero-${of.id}-unavailable]`, { timeout: 60_000 });
+        const state = (await frame.locator(`[data-testid=velero-${of.id}-unavailable]`).innerText()).replace(
+          /\s+/g,
+          " ",
+        );
+
+        expect([of.id, state]).toEqual([
+          of.id,
+          `The ${plural} of ${cluster.E2E_VIEWS_NAMESPACE} are not shown Access to the ${plural} of this namespace is denied. How many there are is not known.`,
+        ]);
+        expect([of.id, await frame.locator(`[data-testid=velero-${of.id}]`).count()]).toEqual([of.id, 0]);
+        expect([
+          of.id,
+          /\b\d+ items?\b/.test(await frame.locator(`[data-testid=velero-${of.id}-page]`).innerText()),
+        ]).toEqual([of.id, false]);
+        const notices = await cluster.notices(frame, [family]);
+
+        expect([of.id, Object.keys(notices)]).toEqual([of.id, [family]]);
+        expect([of.id, notices[family]]).toEqual([of.id, expect.stringContaining("access is denied")]);
+        expect([of.id, await cluster.layoutProblems(frame, of)]).toEqual([of.id, []]);
+        await cluster.captureScreenshot(frame, `dark-restricted-${of.id}-denied`);
+      }
     },
     TIMEOUT,
   );

@@ -1407,13 +1407,20 @@ describe("foundation fixture boundaries", () => {
       roleRef: { apiGroup: "rbac.authorization.k8s.io", kind: "Role", name: identity },
       subjects: [{ kind: "ServiceAccount", name: identity, namespace: "velero-demo" }],
     });
-    // What the views read of the installation, the request a download creates and reads, and the route to the
-    // store: the Service, its endpoint slices and its Pod. Neither verb of the port-forward, get nor create, no
-    // Secret, and nothing that deletes or changes.
+    // What the views read of the installation at every read, the backup repositories among it, the request a
+    // download creates and reads, and the route to the store: the Service, its endpoint slices and its Pod.
+    // Neither verb of the port-forward, get nor create, no Secret, and nothing that deletes or changes.
     expect((resources[1] as unknown as { rules: unknown[] }).rules).toEqual([
       {
         apiGroups: ["velero.io"],
-        resources: ["backups", "restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"],
+        resources: [
+          "backups",
+          "restores",
+          "schedules",
+          "backupstoragelocations",
+          "volumesnapshotlocations",
+          "backuprepositories",
+        ],
         verbs: ["get", "list", "watch"],
       },
       { apiGroups: ["velero.io"], resources: ["downloadrequests"], verbs: ["create", "get"] },
@@ -1440,13 +1447,21 @@ describe("foundation fixture boundaries", () => {
       roleRef: { apiGroup: "rbac.authorization.k8s.io", kind: "Role", name: identity },
       subjects: [{ kind: "ServiceAccount", name: identity, namespace: "velero-demo" }],
     });
-    // What the views read of the installation, the two requests the gate lets through, created and read, the
-    // route to the store, and the port-forward with the verb the documentation lists. No Secret, since the
-    // location of the demo refers to none, and nothing that deletes or changes.
+    // What the views read of the installation at every read, the backup repositories among it, the two requests
+    // the gate lets through, created and read, the route to the store, and the port-forward with the verb the
+    // documentation lists. No Secret, since the location of the demo refers to none, and nothing that deletes or
+    // changes.
     expect((resources[1] as unknown as { rules: unknown[] }).rules).toEqual([
       {
         apiGroups: ["velero.io"],
-        resources: ["backups", "restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"],
+        resources: [
+          "backups",
+          "restores",
+          "schedules",
+          "backupstoragelocations",
+          "volumesnapshotlocations",
+          "backuprepositories",
+        ],
         verbs: ["get", "list", "watch"],
       },
       {
