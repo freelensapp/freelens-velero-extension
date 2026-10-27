@@ -1540,6 +1540,12 @@ describe("adherence of the schedules on its fixtures", () => {
         });
         mounted = Math.max(mounted, (await cluster.mounted(frame, SCHEDULES)).length);
       }
+      // An order that changes nothing the measure reads is refused, not timed: with one row left by a search, an
+      // order changes neither the row nor the words of the list.
+      await cluster.measureSearch(frame, "schedule-300", SCHEDULES);
+      expect(await cluster.mounted(frame, SCHEDULES)).toHaveLength(1);
+      await expect(cluster.measureOrder(frame, "name", SCHEDULES, 2_000)).rejects.toThrow(/Nothing changed after/);
+      await cluster.measureSearch(frame, "", SCHEDULES);
       const rounded = (values: number[]) => ({
         p95: Math.round(percentile(values, 0.95)),
         median: Math.round(percentile(values, 0.5)),

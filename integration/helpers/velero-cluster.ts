@@ -1538,9 +1538,11 @@ async function measure(
     | { kind: "close" }
     | { kind: "order"; column: string },
   of: ListOf,
+  // How long a change is waited for before the interaction is refused as one that changed nothing.
+  limit = 10_000,
 ): Promise<Measure> {
   return frame.evaluate(
-    ({ list, kind, action }) =>
+    ({ list, kind, action, limit }) =>
       new Promise<{ total: number; response: number }>((resolve, reject) => {
         const root = document.querySelector(list);
         const shown = () =>
@@ -1564,7 +1566,7 @@ async function measure(
         const deadline = setTimeout(() => {
           over = true;
           reject(new Error(`Nothing changed after ${JSON.stringify(action)}`));
-        }, 10_000);
+        }, limit);
         const wait = () => {
           const now = performance.now();
 
@@ -1634,7 +1636,7 @@ async function measure(
         }
         requestAnimationFrame(wait);
       }),
-    { list: list(of), kind: of.kind, action: interaction },
+    { list: list(of), kind: of.kind, action: interaction, limit },
   );
 }
 
@@ -1651,8 +1653,13 @@ export async function measureClose(frame: Frame, of: ListOf = BACKUPS): Promise<
 }
 
 /** Orders the list by a column, the way a click on its head gives, which is the other way at a second click. */
-export async function measureOrder(frame: Frame, column: string, of: ListOf = BACKUPS): Promise<Measure> {
-  return measure(frame, { kind: "order", column }, of);
+export async function measureOrder(
+  frame: Frame,
+  column: string,
+  of: ListOf = BACKUPS,
+  limit?: number,
+): Promise<Measure> {
+  return measure(frame, { kind: "order", column }, of, limit);
 }
 
 /** The objects whose rows are all inside what the list shows: a click on one does not scroll the list. */
