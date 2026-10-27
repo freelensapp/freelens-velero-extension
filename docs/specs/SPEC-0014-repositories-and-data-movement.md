@@ -656,12 +656,16 @@ an environment at either release serves the objects this spec reads alike.
 
 T5.1, the first of its five pull requests: the backup repositories, the pod volume
 backups and the pod volume restores in their lists, their views and the details of
-the host, with the reads on demand, on 2026-10-26. The gates on the machine of the
-runs: `pnpm type:check`, `pnpm lint:check`, `pnpm test:unit` and its second form
-with `VITE_PRESERVE_MODULES=false`, `pnpm knip:check`, `pnpm trunk:check --all`,
-each commit type-checked alone: T51-PR1-PENDING (the exit codes, the counts of the
-files and of the tests, the versions of the tools). The unit and component
-evidence, by check:
+the host, with the reads on demand, on 2026-10-26 and 2026-10-27. The gates on the
+machine of the runs, on 2026-10-27, on the branch rebased on main at `94891de`, with
+Node 24.21.0, pnpm 12.14.0, TypeScript 7.0.2, Vitest 5.0.5, Biome 2.5.15, Knip
+6.41.0 and the launcher of Trunk 1.3.4: `pnpm type:check`, the nine programs, and
+`pnpm lint:check`, 298 files, each with no error; `pnpm test:unit`, the build, then
+95 files and 2,853 tests, all passed, then the two measures within their budgets,
+and its second form with `VITE_PRESERVE_MODULES=false`, the same; `pnpm knip:check`,
+both passes with no finding; Trunk on the files the branch changes, with no issue;
+and each commit type-checked and linted alone, with no error at any. The unit and
+component evidence, by check:
 
 - KIND-01: the three classes, with their kind, their `declare` literals, the
   version `velero.io/v1`, their plural and no short name; `detailsFor` given the
@@ -763,16 +767,39 @@ evidence, by check:
   request, which draws it.
 
 The packaged cases, on the fixtures that exist, where no object of the three kinds
-is: the journey with nine entries under Velero and the eight kinds out of the
-Custom Resources tree until the extension is disabled (DISC-08, HOST-15); the
-suite `velero-e2e-volumes`, with the three lists empty in the installation of the
-views, the list of the repositories of the demo empty, and the reads of the pod
-volume operations counted on the API server, one list at each read while their
-list is shown and none while the list of the backups or the Overview is (KIND-02);
-the first reader denied the three lists, with their words (KIND-16); the reads
-of every suite that counts them restated with the repositories. T51-PR1-PENDING:
-the runs, their durations and their reports, and the room of the three lists at 900
-by 650 and at each edge of the room.
+is: the journey with nine entries under Velero and the eight kinds out of the Custom
+Resources tree until the extension is disabled (DISC-08, HOST-15); the suite
+`velero-e2e-volumes`, with the three lists empty in the installation of the views,
+the list of the repositories of the demo empty, and the reads of the pod volume
+operations counted on the API server, one list at each read while their list is
+shown and none while the list of the backups or the Overview is (KIND-02); the first
+reader denied the three lists, with their words (KIND-16); the reads of every suite
+that counts them restated with the repositories, and the entries and the tabs of the
+group with the nine pages in the suites of the Overview, of the locations and of the
+schedules. On 2026-10-27, on the nightly v2.0.0-0-nightly-2026-10-25 of the
+validation target, in the disposable environment of the repository, one run at a
+time: the journey alone, 19 cases of 19 in 92 seconds; `velero-e2e-volumes` alone, 4
+of 4 in 312 seconds, with three lists of the pod volume backups over the three reads
+it waited for while their list was shown and three of the pod volume restores while
+theirs was, none of the other family in either window and none of either while the
+list of the backups or the Overview was shown, as its report
+`kind-02-reads-of-the-pod-volume-operations.json` says; and every suite of the
+views, the pre-review and FND-10 as the hosted job runs them, 252 cases of 252 in 16
+files in 55 minutes 18 seconds, the suites 53 minutes 31 seconds, the volumes 312
+seconds of it; a first run of the pattern, on the code before the entries and the
+tabs of those three suites were restated, had failed their first cases, which
+compared them with the six of before, and the cases that start from them, 18 of 252,
+every other file passing. The heads of the three lists, empty, fit their room at
+1440 by 900 and at 900 by 650; their room with rows, at each edge of it and at twice
+the zoom, is measured with their fixtures. A check run once from a copy of the tree,
+on four synthetic pod volume backups placed in the namespace of the views for its
+run and removed after it, measured the cells of the list with rows: at 1440 by 900
+the words of every cell sat on the line of their row and none was clipped, the node
+and the longer words cut with their ellipsis, and with the cell of the node as it
+was before, the link of the host inside a block, the names of the nodes sat 1.7
+pixels above their rows and the column of the node was clipped; at 900 by 650 and at
+twice the zoom the column of the node is not shown. The job of the views on the
+hosted runner, which runs the new suite with the others: T51-PR1-HOSTED.
 
 Two precisions, which the implementation found, approved by the lead maintainer on
 2026-10-26 with the plan of the fourth milestone:
@@ -842,3 +869,8 @@ Decided while implementing, on 2026-10-27:
   repositories mark the columns they take from another family: the owner stays a
   way, with why in its tip, and no mark of its own is drawn in each row of a column
   whose every row is of the same read (the row Stale of What Is Not Known).
+- A link of the host in a cell of a list, the one to the node of an operation, is
+  a flex box inside the flex box of the cell, by one rule of the stylesheet for any
+  link of the host there, so that the badge of its words sits on the line of its
+  row and a long name is cut with its ellipsis; a node that is not reported, and an
+  owner that is not named, are said in a badge of the cell as well.
