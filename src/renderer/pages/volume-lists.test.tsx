@@ -510,15 +510,43 @@ describe("the lists of the pod volume operations", () => {
   it("orders by the phase and by the node both ways, none last in the first order, and searches the message", async () => {
     mount(answers(), (installation) => <PodVolumeBackupsPage installation={installation} />);
     await waitFor(() => expect(rows("pod-volume-backup")).toHaveLength(pvbs.length));
+    // What each row says of the phase and of the node, in the order of the rows.
+    const phases = () =>
+      rows("pod-volume-backup").map(
+        (name) =>
+          cell("pod-volume-backup", name as string, "phase").querySelector("[data-phase]")?.lastElementChild
+            ?.textContent,
+      );
+    const nodes = () =>
+      rows("pod-volume-backup").map((name) => cell("pod-volume-backup", name as string, "node").textContent);
+    const inOrder = [
+      "No phase yet",
+      "New",
+      "Accepted",
+      "In progress",
+      "Canceling",
+      "Completed",
+      "Completed",
+      "Failed",
+      "Failed",
+      "Canceled",
+      "Unknown: Paused",
+    ];
+
     fireEvent.click(head("phase"));
     expect(rows("pod-volume-backup").slice(0, 3)).toEqual(["nightly-none", "nightly-new", "nightly-accepted"]);
     expect(rows("pod-volume-backup").at(-1)).toBe("nightly-odd");
+    // In flight by the order of its phases, then finished, then what is not known.
+    expect(phases()).toEqual(inOrder);
     fireEvent.click(head("phase"));
     expect(rows("pod-volume-backup")[0]).toBe("nightly-odd");
+    expect(phases()).toEqual([...inOrder].reverse());
     fireEvent.click(head("node"));
     expect(rows("pod-volume-backup").at(-1)).toBe("nightly-odd");
+    expect(nodes()).toEqual([...Array(pvbs.length - 2).fill("worker-1"), "worker-2", NOT_REPORTED]);
     fireEvent.click(head("node"));
     expect(rows("pod-volume-backup")[0]).toBe("nightly-odd");
+    expect(nodes()).toEqual([NOT_REPORTED, "worker-2", ...Array(pvbs.length - 2).fill("worker-1")]);
     const props = listProps.get("veleroPodVolumeBackupsTable") ?? {};
     const items = (props.getItems as () => { getName(): string }[])();
     const searched = (props.searchFilters as ((item: unknown) => string[])[]).flatMap((filter) =>
