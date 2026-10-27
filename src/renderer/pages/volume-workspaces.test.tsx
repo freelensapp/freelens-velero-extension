@@ -438,6 +438,8 @@ describe("the view of a pod volume operation", () => {
     const status = within(workspace).getByTestId("velero-pod-volume-backup-status");
 
     expect(value(status, "Phase")).toBe("highlight_offFailed");
+    // In the view, where no badge holds it, the mark gives the message to who points at it.
+    expect(status.querySelector("[data-phase]")?.getAttribute("title")).toBe("data path failed\nthe disk is full");
     expect(note(status, "Phase")).toContain("Finished, ran or not started, as its times say, failed.");
     expect(note(status, "Phase")).toContain("A start equal to the completion is one the failure wrote");
     expect(within(status).getByTestId("velero-volume-message").textContent).toBe("data path failed\nthe disk is full");

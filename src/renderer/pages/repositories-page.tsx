@@ -90,7 +90,7 @@ export const REPOSITORIES: ListDefinition<RepositoryRow> = {
     </span>,
     <span key="readiness" className={styles.cellWords}>
       <WithTooltip tooltip={row.message?.value ?? row.readiness.label}>
-        <RepositoryReadinessMark readiness={row.readiness} message={row.message?.value} />
+        <RepositoryReadinessMark readiness={row.readiness} message={row.message?.value} titled={false} />
       </WithTooltip>
     </span>,
     // How long ago, which is read at a glance, with when it was in the tip, and the mark of a newest maintenance

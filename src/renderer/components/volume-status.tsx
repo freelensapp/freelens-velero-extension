@@ -54,14 +54,23 @@ const PHASE_STYLES: Record<VolumeOperationState["outcome"], string> = {
   unknown: styles.signalUnknown,
 };
 
-// The phase of an operation: its mark and its word, with the message of Velero in the tip when it wrote one.
-export function VolumePhase({ state, message }: { state: VolumeOperationState; message?: string }) {
+// The phase of an operation: its mark and its word, with the message of Velero in the tip when it wrote one. In a
+// cell the tip is the one of the badge that holds it, and the mark has none of its own.
+export function VolumePhase({
+  state,
+  message,
+  titled = true,
+}: {
+  state: VolumeOperationState;
+  message?: string;
+  titled?: boolean;
+}) {
   const text = volumePhaseText(state);
 
   return (
     <span
       className={`${styles.status} ${PHASE_STYLES[state.outcome]}`}
-      title={message ?? state.reported ?? text}
+      title={titled ? (message ?? state.reported ?? text) : undefined}
       data-phase={state.reported ?? "none"}
       data-outcome={state.outcome}
     >
@@ -79,7 +88,7 @@ export function VolumePhaseCell({ state, message }: { state: VolumeOperationStat
   return (
     <span className={styles.cellWords}>
       <WithTooltip tooltip={message ?? (waiting ? phaseSentence(state) : volumePhaseText(state))}>
-        <VolumePhase state={state} message={message} />
+        <VolumePhase state={state} message={message} titled={false} />
       </WithTooltip>
     </span>
   );
@@ -98,14 +107,23 @@ const READINESS_STYLES: Record<Readiness, string> = {
   unknown: styles.signalUnknown,
 };
 
-// Whether Velero can use a repository: a mark and a word, with the message of Velero in the tip.
-export function RepositoryReadinessMark({ readiness, message }: { readiness: RepositoryReadiness; message?: string }) {
+// Whether Velero can use a repository: a mark and a word, with the message of Velero in the tip. In a cell the tip is
+// the one of the badge that holds it, and the mark has none of its own.
+export function RepositoryReadinessMark({
+  readiness,
+  message,
+  titled = true,
+}: {
+  readiness: RepositoryReadiness;
+  message?: string;
+  titled?: boolean;
+}) {
   const text = readiness.readiness === "unknown" ? `${readiness.label}: ${readiness.reported}` : readiness.label;
 
   return (
     <span
       className={`${styles.status} ${READINESS_STYLES[readiness.readiness]}`}
-      title={message ?? readiness.reported ?? text}
+      title={titled ? (message ?? readiness.reported ?? text) : undefined}
       data-readiness={readiness.readiness}
     >
       <Icon material={READINESS_ICONS[readiness.readiness]} small aria-hidden />

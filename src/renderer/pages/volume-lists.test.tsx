@@ -257,6 +257,8 @@ describe("the list of the backup repositories", () => {
       ["unknown", "help_outline", "Unknown: Broken"],
     ]);
     expect(tip(readiness("broken-archive-kopia"))).toBe("error to connect to the repository\nconnection refused");
+    // One tip for a cell: the mark in the badge carries no tip of its own, which would say the message twice.
+    expect(readiness("broken-archive-kopia").querySelector("[title]")).toBeNull();
     const maintained = cell("backup-repository", "shop-default-kopia", "maintained");
 
     // The time of the last that succeeded, with the mark of the newest that failed beside it, said in words.
@@ -413,6 +415,8 @@ describe("the lists of the pod volume operations", () => {
     ]);
     expect(tip(phase("nightly-failed"))).toBe("data path failed\nthe disk is full");
     expect(tip(phase("nightly-timeout"))).toBe("timeout on preparing PVB");
+    // One tip for a cell: the mark in the badge carries no tip of its own, which would say the message twice.
+    expect(phase("nightly-failed").querySelector("[title]")).toBeNull();
     // The release writes a message on a cancellation as well: it is in the tip whatever the phase.
     expect(tip(phase("nightly-canceled"))).toBe("canceled by the backup");
   });
