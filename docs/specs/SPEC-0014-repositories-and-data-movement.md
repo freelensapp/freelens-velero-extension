@@ -772,11 +772,11 @@ is: the journey with nine entries under Velero and the eight kinds out of the Cu
 Resources tree until the extension is disabled (DISC-08, HOST-15); the suite
 `velero-e2e-volumes`, with the three lists empty in the installation of the views,
 the list of the repositories of the demo empty, and the reads of the pod volume
-operations counted on the API server, one list at each read while their list is
-shown and none while the list of the backups or the Overview is (KIND-02); the first
-reader denied the three lists, with their words (KIND-16); the reads of every suite
-that counts them restated with the repositories, and the entries and the tabs of the
-group with the nine pages in the suites of the Overview, of the locations and of the
+operations counted on the API server, one list at each read while their list is shown
+and none while the list of the backups or the Overview is (KIND-02); the first reader
+denied the three lists, with their words (KIND-16); the reads of every suite that
+counts them restated with the repositories, and the entries and the tabs of the group
+with the nine pages in the suites of the Overview, of the locations and of the
 schedules. On 2026-10-27, on the nightly v2.0.0-0-nightly-2026-10-25 of the
 validation target, in the disposable environment of the repository, one run at a
 time: the journey alone, 19 cases of 19 in 92 seconds; `velero-e2e-volumes` alone, 4
@@ -784,31 +784,33 @@ of 4 in 312 seconds, with three lists of the pod volume backups over the three r
 it waited for while their list was shown and three of the pod volume restores while
 theirs was, none of the other family in either window and none of either while the
 list of the backups or the Overview was shown, as its report
-`kind-02-reads-of-the-pod-volume-operations.json` says; and every suite of the
-views, the pre-review and FND-10 as the hosted job runs them, 252 cases of 252 in 16
-files in 55 minutes 18 seconds, the suites 53 minutes 31 seconds, the volumes 312
-seconds of it; a first run of the pattern, on the code before the entries and the
-tabs of those three suites were restated, had failed their first cases, which
-compared them with the six of before, and the cases that start from them, 18 of 252,
-every other file passing. The heads of the three lists, empty, fit their room at
-1440 by 900 and at 900 by 650; their room with rows, at each edge of it and at twice
-the zoom, is measured with their fixtures. What proves the cell of the node today is
-two tests of the repository and one packaged check outside it: the test of the
-stylesheet, which reads the rule of a link of the host in a cell
+`kind-02-reads-of-the-pod-volume-operations.json` says; and every suite of the views,
+the pre-review and FND-10 as the hosted job runs them, 252 cases of 252 in 16 files
+in 55 minutes 18 seconds, the suites 53 minutes 31 seconds, the volumes 312 seconds
+of it; a first run of the pattern, on the code before the entries and the tabs of
+those three suites were restated, had failed their first cases, which compared them
+with the six of before, and the cases that start from them, 18 of 252, every other
+file passing. The heads of the three lists, empty, fit their room at 1440 by 900 and
+at 900 by 650; their room with rows, at each edge of it and at twice the zoom, is
+measured with their fixtures. What proves the cell of the node today is two tests of
+the repository and one packaged check outside it: the test of the stylesheet, which
+reads the rule of a link of the host in a cell
 (`src/renderer/components/views.module.test.ts`), and the test of the cells of the
 list on the double of `LinkToNode` (`test/host-components.tsx`,
-`src/renderer/pages/volume-lists.test.tsx`); and one check of 2026-10-27, run once
-in the packaged application from a temporary suite that is not kept in the
-repository, on four synthetic pod volume backups placed in the namespace of the
-views for its run and removed after it. It measured the cells of the list with
-rows: at 1440 by 900 the words of every cell sat on the line of their row and none
-was clipped, the node and the longer words cut with their ellipsis, and with the
-cell of the node as it was before, the link of the host inside a block, the names
-of the nodes sat 1.7 pixels above their rows and the column of the node was
-clipped; at 900 by 650 and at twice the zoom the column of the node is not shown.
-The packaged proof with rows, kept in a suite, comes with the fixtures of the lists,
-in a later pull request of T5.1. The job of the views on the hosted runner, which
-runs the new suite with the others: T51-PR1-HOSTED.
+`src/renderer/pages/volume-lists.test.tsx`); and one check of 2026-10-27, run once in
+the packaged application from a temporary suite that is not kept in the repository,
+on four synthetic pod volume backups placed in the namespace of the views for its run
+and removed after it. It measured the cells of the list with rows: at 1440 by 900 the
+words of every cell sat on the line of their row and none was clipped, the node and
+the longer words cut with their ellipsis, and with the cell of the node as it was
+before, the link of the host inside a block, the names of the nodes sat 1.7 pixels
+above their rows and the column of the node was clipped; at 900 by 650 and at twice
+the zoom the column of the node is not shown. The packaged proof with rows, kept in a
+suite, comes with the fixtures of the lists, in a later pull request of T5.1. The job
+of the views on the hosted runner, which runs the new suite with the others: in its
+first run, on 2026-10-27, every suite, the pre-review and FND-10 passed, 252 of 252
+in 16 files, the step of the suites in 47 minutes 10 seconds and the job in 52
+minutes 48 seconds of its 150.
 
 Two precisions of the plan of the fourth milestone, approved by the lead maintainer
 on 2026-10-26 with it:
