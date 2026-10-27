@@ -584,7 +584,18 @@ Record role, date and verdict.
   of an operation and the location of its repository are found by the name cut
   that way, as decided while implementing, on 2026-10-26. The extension cuts the
   labels of the requests it creates with the same function
-  (`src/common/name-label.ts`).
+  (`src/common/name-label.ts`). The reviewed release writes these labels through
+  that cut, as read in its source: the name of the backup of a pod volume
+  backup ([labels](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/podvolume/backupper.go#L559-L562)),
+  the name of the restore of a pod volume restore
+  ([labels](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/podvolume/restorer.go#L275-L279)),
+  and the volume namespace, the location and the type of a repository, which it
+  creates and looks up by them
+  ([labels](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/repository/backup_repo_op.go#L44-L50),
+  [looked up](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/repository/backup_repo_op.go#L59),
+  [created](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/repository/backup_repo_op.go#L99)),
+  each through one function
+  ([the cut](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/label/label.go#L37-L51)).
 - **Due is counted by the clock of this machine**, against the last maintenance
   time and the frequency the object names, with the five minutes of the pass of
   the server said beside it. The release gives no field for it. A frequency
