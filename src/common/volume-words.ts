@@ -238,6 +238,9 @@ export const REPOSITORY_WORDS = {
   notSet: "Not set",
   neverMaintained: "Never maintained",
   newestFailed: "the newest maintenance failed",
+  // The tip of the mark of a newest maintenance that failed, which is read alone: a sentence, not the words that
+  // follow the time for who does not see the mark.
+  newestFailedTip: "The newest maintenance failed",
   // A repository is not a verdict on the backups it holds.
   what: "A repository is created by the first backup or restore of a namespace to a storage location, and is shared by the ones after it. Its readiness says whether Velero can use it, and nothing of the backups it holds.",
   pass: "The server looks at every repository every five minutes: a maintenance that is due starts at its next look.",
