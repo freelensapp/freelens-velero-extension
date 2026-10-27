@@ -710,8 +710,9 @@ component evidence, by check:
   `src/renderer/components/views.module.test.ts`).
 - KIND-05: the views of the three kinds, their bands, their ways and back, the
   object created again under the name; the sections of the details, which agree
-  with the rows, lead to the view for the installation selected, say the age of the
-  read they found the owner in, ask nothing and keep no timer once closed
+  with the rows, draw a message on its lines as the views do, lead to the view for
+  the installation selected, say the age of the read they found the owner in, ask
+  nothing and keep no timer once closed
   (`src/renderer/pages/volume-workspaces.test.tsx`). The view of a repository has
   no band of what used it until the second pull request, which shows the
   operations of the volumes in it.

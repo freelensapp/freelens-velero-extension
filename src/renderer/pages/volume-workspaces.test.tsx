@@ -699,7 +699,7 @@ describe("the sections of the details of the host", () => {
     expect(other.querySelector("[data-written=unknown] .Icon")?.textContent).toBe("help_outline");
   });
 
-  it("of an operation say its phase, its progress, its owner as the views last read it, and its node, asking nothing", async () => {
+  it("of an operation say its phase, its message on its lines, its progress, its owner as the views last read it, and its node, asking nothing", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"], now: NOW });
     const { installation: made, asked } = installation(answers());
 
@@ -714,8 +714,15 @@ describe("the sections of the details of the host", () => {
       />,
     );
     const section = screen.getByTestId("velero-pod-volume-backup-details");
+    const message = within(section).getByTestId("velero-pod-volume-backup-details-message");
 
     expect(drawerValue("Phase", section)).toBe("Failed (Finished, ran or not started, as its times say, failed)");
+    // The message is drawn on its lines in the section as in the view.
+    expect([drawerValue("Message", section), message.textContent, message.className]).toEqual([
+      "data path failed\nthe disk is full",
+      "data path failed\nthe disk is full",
+      styles.messageLines,
+    ]);
     expect(drawerValue("Progress", section)).toBe("512.0 MiB of 1.0 GiB (50%)");
     // No view keeps the reads fresh: how old the one the owner was found in is, is said.
     expect(drawerValue("Backup", section)).toBe(

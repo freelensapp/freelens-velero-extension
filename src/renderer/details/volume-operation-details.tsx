@@ -2,6 +2,7 @@ import { Renderer } from "@freelensapp/extensions";
 import { observer } from "mobx-react";
 import { volumeView } from "../../common/volume-view";
 import { agoText, axesText, bytesText, spanText, VOLUME_WORDS, volumePhaseText } from "../../common/volume-words";
+import styles from "../components/views.module.css";
 import { useNow } from "../components/views-frame";
 import { NodeLink } from "../components/volume-status";
 import { currentInstallation } from "../state/context";
@@ -61,7 +62,13 @@ export const VolumeOperationDetails = observer(
         <DrawerItem name="Phase">
           {volumePhaseText(view.state)} ({axesText(view.state)})
         </DrawerItem>
-        {view.message ? <DrawerItem name="Message">{view.message}</DrawerItem> : null}
+        {view.message ? (
+          <DrawerItem name="Message">
+            <span className={styles.messageLines} data-testid={`velero-${kind}-details-message`}>
+              {view.message}
+            </span>
+          </DrawerItem>
+        ) : null}
         <DrawerItem name="Progress">{bytesText(view.progress)}</DrawerItem>
         <DrawerItem name="Duration">{spanText(view.times.span)}</DrawerItem>
         <DrawerItem name={noun}>
