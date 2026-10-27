@@ -3,12 +3,15 @@
  * Licensed under MIT License. See LICENSE in root directory for more information.
  */
 
-// What the sessions of the integration test share: one session for each of the five kinds the extension has
-// a page for, as the integration test of the template has one for each version of its kind. A session puts
-// one object of its kind in a namespace of its own on the cluster of the test environment, and removes the
-// namespace with the object when it ends. The namespace is not the one of a server of Velero, so no
-// controller reads the object: it stays as it was written. The session needs neither the fixtures of the
-// views nor another file having run, and it writes nothing but its namespace and its object.
+// What the sessions of the integration test share: one session for each of the five kinds of the first
+// milestones, Backup, Restore, Schedule, BackupStorageLocation and VolumeSnapshotLocation, as the integration
+// test of the template has one for each version of its kind. The three kinds of the backup repositories and
+// of the pod volume operations have pages of their own and no session yet: the amendment of SPEC-0015 for
+// them says why. A session puts one object of its kind in a namespace of its own on the cluster of the test
+// environment, and removes the namespace with the object when it ends. The namespace is not the one of a
+// server of Velero, so no controller reads the object: it stays as it was written. The session needs neither
+// the fixtures of the views nor another file having run, and it writes nothing but its namespace and its
+// object.
 //
 // Every kubectl names the kubeconfig and the context of the environment: the runner of the integration test,
 // `pnpm e2e:integration`, checks the target of the environment before and after, and gives both.

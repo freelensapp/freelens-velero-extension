@@ -1429,4 +1429,8 @@ their literals, the nine pages and the eight sections made with `detailsFor`, an
 2026-10-27 the journey suite, on the nightly v2.0.0-0-nightly-2026-10-25 of the
 validation target, read the eight kinds out of the Custom Resources tree while the
 extension was enabled and back once it was disabled, and the tabs of the group on each
-of the nine pages, in its 19 cases, all passed.
+of the nine pages, in its 19 cases, all passed. REQ-215 and HOST-20 keep the five
+sessions of the integration test, one for each kind of the first milestones, and ask
+no session of the three kinds of SPEC-0014. Decided while implementing, on
+2026-10-27: the three kinds of SPEC-0014 get their sessions of the integration test
+with their fixtures, in a later pull request of T5.1.

@@ -113,7 +113,9 @@ that:
   line at the level of an error, nor does what either process wrote.
 
 No cluster takes part in FND-10. Beside it, the integration test of the template
-has a session for each of the five kinds, each a file of its own,
+has a session for each of the five kinds of the first milestones (the three of
+SPEC-0014 get theirs with their fixtures, in a later pull request of T5.1, as the
+amendment of 2026-10-27 of SPEC-0015 says), each a file of its own,
 [`backups`](../../integration/__tests__/backups.tests.ts),
 [`restores`](../../integration/__tests__/restores.tests.ts),
 [`schedules`](../../integration/__tests__/schedules.tests.ts),
