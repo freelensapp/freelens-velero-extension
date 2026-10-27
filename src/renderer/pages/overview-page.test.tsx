@@ -3,7 +3,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { submissionOf } from "../../../test/adherence-builders";
-import { emptyPreferences, heldPreferences, RESOURCES, TITLES } from "../../common/discovery";
+import { ALWAYS, emptyPreferences, heldPreferences, ON_DEMAND, RESOURCES, TITLES } from "../../common/discovery";
 import { formatDuration } from "../../common/duration";
 import { unread } from "../../common/location-users";
 import { BACKUPS_AND_ADHERENCE_MISSING, COMPLETED_NOTE, GROUP_TITLES, NOT_KNOWN_WORDS } from "../../common/overview";
@@ -244,10 +244,12 @@ describe("what was read", () => {
       ["Backup Storage Locations3", "read", "/extension/freelensapp--velero-extension/storage-locations"],
       ["Volume Snapshot Locations1", "read", "/extension/freelensapp--velero-extension/snapshot-locations"],
     ]);
-    // The page asks what every other view asks, and nothing of its own.
+    // The page asks what every other view asks at every read, and nothing of its own: none of the families read on
+    // demand, which only a view that shows them holds.
     expect([...new Set(asked)].sort()).toEqual(
-      [DISCOVERY, LOCATIONS, ...Object.keys(RESOURCES).map((family) => path(family as Family, A))].sort(),
+      [DISCOVERY, LOCATIONS, ...ALWAYS.map((family) => path(family, A))].sort(),
     );
+    expect(asked.filter((at) => ON_DEMAND.some((family) => at === path(family, A)))).toEqual([]);
     expect(screen.getByTestId("velero-overview-page")).toBeTruthy();
   });
 

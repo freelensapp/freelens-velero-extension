@@ -13,8 +13,9 @@
 // deadline and no bound on the size of an answer of its own, so the adapter keeps ten seconds for a request,
 // with a signal of its own, and 4 MiB of an answer, counted as the body arrives.
 
-import { createHash, X509Certificate } from "node:crypto";
+import { X509Certificate } from "node:crypto";
 import { type ArtifactTarget, DIAGNOSTIC_REQUEST_LABEL, isArtifactTarget } from "../common/ipc";
+import { labelOf } from "../common/name-label";
 import { type CatalogEntry, refusalOf, sameEntry } from "./catalog";
 import { DiagnosticError } from "./diagnostic-transport";
 
@@ -85,14 +86,6 @@ function name(value: string, maximum = 253): string {
   if (typeof value !== "string" || value.length > maximum || !/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(value))
     throw new DiagnosticError("validation");
   return value;
-}
-
-// The value of a label that carries a name, by the rule of the reviewed release: a name longer than the 63
-// characters a label value may have is cut to its first 57, followed by the first 6 hexadecimal characters
-// of the SHA-256 of the whole name. The release counts bytes, which for a name are its characters.
-function labelOf(value: string): string {
-  if (value.length <= 63) return value;
-  return `${value.slice(0, 57)}${createHash("sha256").update(value).digest("hex").slice(0, 6)}`;
 }
 
 // The query of a request, with only the parameters that have a value. The API server reads a key with no

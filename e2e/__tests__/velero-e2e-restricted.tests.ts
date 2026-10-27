@@ -267,6 +267,43 @@ describe("views with restricted access", () => {
   );
 
   it(
+    "says that the backup repositories, the pod volume backups and the pod volume restores are denied, and not that there are none",
+    async () => {
+      // The identity reads the backups, the schedules and the storage locations: each list of the three kinds of
+      // the volumes says that it is denied, with no row and no count, and the notice of its family says the same.
+      for (const [of, family, plural] of [
+        [cluster.REPOSITORIES, "backupRepositories", "backup repositories"],
+        [cluster.POD_VOLUME_BACKUPS, "podVolumeBackups", "pod volume backups"],
+        [cluster.POD_VOLUME_RESTORES, "podVolumeRestores", "pod volume restores"],
+      ] as const) {
+        await cluster.openPage(frame, of);
+        await frame.waitForSelector(`[data-testid=velero-${of.id}-unavailable]`, { timeout: 60_000 });
+        const state = (await frame.locator(`[data-testid=velero-${of.id}-unavailable]`).innerText()).replace(
+          /\s+/g,
+          " ",
+        );
+
+        expect([of.id, state]).toEqual([
+          of.id,
+          `The ${plural} of ${cluster.E2E_VIEWS_NAMESPACE} are not shown Access to the ${plural} of this namespace is denied. How many there are is not known.`,
+        ]);
+        expect([of.id, await frame.locator(`[data-testid=velero-${of.id}]`).count()]).toEqual([of.id, 0]);
+        expect([
+          of.id,
+          /\b\d+ items?\b/.test(await frame.locator(`[data-testid=velero-${of.id}-page]`).innerText()),
+        ]).toEqual([of.id, false]);
+        const notices = await cluster.notices(frame, [family]);
+
+        expect([of.id, Object.keys(notices)]).toEqual([of.id, [family]]);
+        expect([of.id, notices[family]]).toEqual([of.id, expect.stringContaining("access is denied")]);
+        expect([of.id, await cluster.layoutProblems(frame, of)]).toEqual([of.id, []]);
+        await cluster.captureScreenshot(frame, `dark-restricted-${of.id}-denied`);
+      }
+    },
+    TIMEOUT,
+  );
+
+  it(
     "says on the Overview what is denied, which is not a count of none, and what could not be checked",
     async () => {
       await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);

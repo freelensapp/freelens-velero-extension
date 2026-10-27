@@ -2,10 +2,16 @@ import { Renderer } from "@freelensapp/extensions";
 import { VELERO_API_VERSION } from "../../common/paths";
 
 import type {
+  BackupRepositorySpec,
+  BackupRepositoryStatus,
   BackupSpec,
   BackupStatus,
   BackupStorageLocationSpec,
   BackupStorageLocationStatus,
+  PodVolumeBackupSpec,
+  PodVolumeBackupStatus,
+  PodVolumeRestoreSpec,
+  PodVolumeRestoreStatus,
   RestoreSpec,
   RestoreStatus,
   ScheduleSpec,
@@ -116,5 +122,68 @@ export class VolumeSnapshotLocation extends Renderer.K8sApi.LensExtensionKubeObj
     singular: "volumesnapshotlocation",
     shortNames: ["vsl"],
     title: "Volume Snapshot Locations",
+  };
+}
+
+// The kinds of the volumes: the repositories the file system backup and the data movement write into, and the
+// operations of the file system backup on the data of a volume. The release names none of them with a short name.
+
+export class BackupRepository extends Renderer.K8sApi.LensExtensionKubeObject<
+  Metadata,
+  BackupRepositoryStatus,
+  BackupRepositorySpec
+> {
+  declare kind: "BackupRepository";
+  declare apiVersion: "velero.io/v1";
+
+  static readonly kind = "BackupRepository";
+  static readonly namespaced = true;
+  static readonly apiBase = `/apis/${VELERO_API_VERSION}/backuprepositories`;
+  static readonly crd: VeleroCrd = {
+    apiVersions: [VELERO_API_VERSION],
+    plural: "backuprepositories",
+    singular: "backuprepository",
+    shortNames: [],
+    title: "Backup Repositories",
+  };
+}
+
+export class PodVolumeBackup extends Renderer.K8sApi.LensExtensionKubeObject<
+  Metadata,
+  PodVolumeBackupStatus,
+  PodVolumeBackupSpec
+> {
+  declare kind: "PodVolumeBackup";
+  declare apiVersion: "velero.io/v1";
+
+  static readonly kind = "PodVolumeBackup";
+  static readonly namespaced = true;
+  static readonly apiBase = `/apis/${VELERO_API_VERSION}/podvolumebackups`;
+  static readonly crd: VeleroCrd = {
+    apiVersions: [VELERO_API_VERSION],
+    plural: "podvolumebackups",
+    singular: "podvolumebackup",
+    shortNames: [],
+    title: "Pod Volume Backups",
+  };
+}
+
+export class PodVolumeRestore extends Renderer.K8sApi.LensExtensionKubeObject<
+  Metadata,
+  PodVolumeRestoreStatus,
+  PodVolumeRestoreSpec
+> {
+  declare kind: "PodVolumeRestore";
+  declare apiVersion: "velero.io/v1";
+
+  static readonly kind = "PodVolumeRestore";
+  static readonly namespaced = true;
+  static readonly apiBase = `/apis/${VELERO_API_VERSION}/podvolumerestores`;
+  static readonly crd: VeleroCrd = {
+    apiVersions: [VELERO_API_VERSION],
+    plural: "podvolumerestores",
+    singular: "podvolumerestore",
+    shortNames: [],
+    title: "Pod Volume Restores",
   };
 }

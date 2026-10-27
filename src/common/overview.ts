@@ -61,14 +61,17 @@ function byName(one: string, other: string): number {
   return one < other ? -1 : one > other ? 1 : 0;
 }
 
-const KINDS: Record<Family, ViewKind> = {
+// The families the Overview reads, each with the kind of its list and its name in words.
+type OverviewFamily = keyof OverviewReads;
+
+const KINDS: Record<OverviewFamily, ViewKind> = {
   backups: "backup",
   restores: "restore",
   schedules: "schedule",
   storageLocations: "storage-location",
   snapshotLocations: "snapshot-location",
 };
-const PLURALS: Record<Family, string> = {
+const PLURALS: Record<OverviewFamily, string> = {
   backups: "backups",
   restores: "restores",
   schedules: "schedules",
@@ -94,7 +97,7 @@ const NOT_READ: Record<ReadStatus, "denied" | "not-served" | "failed" | "not-rea
 };
 
 export function coverage(reads: OverviewReads): Coverage[] {
-  return (Object.keys(KINDS) as Family[]).map((family) => {
+  return (Object.keys(KINDS) as OverviewFamily[]).map((family) => {
     const read = reads[family];
     const of = { family, kind: KINDS[family] };
 
@@ -124,7 +127,7 @@ export const STALE_WORDS: Partial<Record<ReadStatus, string>> = {
 export type Part<Item> = { state: "listed"; stale: boolean; at?: number; items: Item[] } | Unread;
 
 function part<Resource, Item>(
-  family: Family,
+  family: OverviewFamily,
   read: FamilyRead<Resource>,
   make: (items: Resource[]) => Item[],
 ): Part<Item> {
@@ -368,7 +371,7 @@ export interface Attention {
   notKnown?: NotKnownCount[];
 }
 
-const MISSING: Partial<Record<Family, string>> = {
+const MISSING: Partial<Record<OverviewFamily, string>> = {
   backups:
     "Whether a backup in flight carries a failure, whether one ended with a failure, and how the newest backup of each schedule ended were not checked",
   restores: "Whether a restore in flight carries a failure, and whether one ended with a failure, were not checked",
@@ -680,7 +683,7 @@ function inOrder(one: AttentionItem, other: AttentionItem): number {
 // What needs attention by the rules. The adherence of the schedules, rule A11 and the count of what is not known
 // of it, is computed with what the views share of it for a read and a tick of their clock, when it is given.
 export function attention(reads: OverviewReads, now: number, window: Window, adherence?: AdherenceContext): Attention {
-  const unchecked = (Object.keys(MISSING) as Family[])
+  const unchecked = (Object.keys(MISSING) as OverviewFamily[])
     .filter((family) => !hasItems(reads[family]))
     .map((family) => {
       const { state, reason } = unread(PLURALS[family], reads[family]);
@@ -702,7 +705,7 @@ export function attention(reads: OverviewReads, now: number, window: Window, adh
       ...scheduleItems(reads, now, signals),
     ].sort(inOrder),
     unchecked,
-    earlier: (Object.keys(MISSING) as Family[]).filter((family) => isStale(reads[family])),
+    earlier: (Object.keys(MISSING) as OverviewFamily[]).filter((family) => isStale(reads[family])),
     ...(signals ? { notKnown: notKnownOf(signals) } : {}),
   };
 }

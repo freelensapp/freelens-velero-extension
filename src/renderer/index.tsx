@@ -1,19 +1,36 @@
 import { Renderer } from "@freelensapp/extensions";
 import { PreferencesStore } from "../common/preferences-store";
 import { VeleroIpcRenderer } from "./api/ipc";
-import { Backup, BackupStorageLocation, Restore, Schedule, VolumeSnapshotLocation } from "./api/kinds";
+import {
+  Backup,
+  BackupRepository,
+  BackupStorageLocation,
+  PodVolumeBackup,
+  PodVolumeRestore,
+  Restore,
+  Schedule,
+  VolumeSnapshotLocation,
+} from "./api/kinds";
 import { withDetailsErrorBoundary, withPageErrorBoundary } from "./components/error-boundary";
 import { VeleroIcon } from "./components/velero-icon";
 import { BackupDetails } from "./details/backup-details";
+import { RepositoryDetails } from "./details/repository-details";
 import { RestoreDetails } from "./details/restore-details";
 import { ScheduleDetails } from "./details/schedule-details";
 import { SnapshotLocationDetails } from "./details/snapshot-location-details";
 import { StorageLocationDetails } from "./details/storage-location-details";
+import { VolumeOperationDetails } from "./details/volume-operation-details";
 import {
   BACKUPS_MENU_ID,
   BACKUPS_PAGE_ID,
   OVERVIEW_MENU_ID,
   OVERVIEW_PAGE_ID,
+  POD_VOLUME_BACKUPS_MENU_ID,
+  POD_VOLUME_BACKUPS_PAGE_ID,
+  POD_VOLUME_RESTORES_MENU_ID,
+  POD_VOLUME_RESTORES_PAGE_ID,
+  REPOSITORIES_MENU_ID,
+  REPOSITORIES_PAGE_ID,
   RESTORES_MENU_ID,
   RESTORES_PAGE_ID,
   ROOT_MENU_ID,
@@ -26,6 +43,9 @@ import {
 } from "./navigation";
 import { BackupsPage } from "./pages/backups-page";
 import { OverviewPage } from "./pages/overview-page";
+import { PodVolumeBackupsPage } from "./pages/pod-volume-backups-page";
+import { PodVolumeRestoresPage } from "./pages/pod-volume-restores-page";
+import { RepositoriesPage } from "./pages/repositories-page";
 import { RestoresPage } from "./pages/restores-page";
 import { SchedulesPage } from "./pages/schedules-page";
 import { SnapshotLocationsPage } from "./pages/snapshot-locations-page";
@@ -44,6 +64,9 @@ export default class VeleroRenderer extends Renderer.LensExtension {
     { id: SCHEDULES_PAGE_ID, components: { Page: () => <SchedulesPage /> } },
     { id: STORAGE_LOCATIONS_PAGE_ID, components: { Page: () => <StorageLocationsPage /> } },
     { id: SNAPSHOT_LOCATIONS_PAGE_ID, components: { Page: () => <SnapshotLocationsPage /> } },
+    { id: REPOSITORIES_PAGE_ID, components: { Page: () => <RepositoriesPage /> } },
+    { id: POD_VOLUME_BACKUPS_PAGE_ID, components: { Page: () => <PodVolumeBackupsPage /> } },
+    { id: POD_VOLUME_RESTORES_PAGE_ID, components: { Page: () => <PodVolumeRestoresPage /> } },
   ].map((registration) => withPageErrorBoundary(this, registration));
 
   // The host gives a page the tabs of its group when the first entry that leads to it is an entry of the
@@ -93,10 +116,31 @@ export default class VeleroRenderer extends Renderer.LensExtension {
       target: { pageId: SNAPSHOT_LOCATIONS_PAGE_ID },
       components: {},
     },
+    {
+      id: REPOSITORIES_MENU_ID,
+      parentId: ROOT_MENU_ID,
+      title: BackupRepository.crd.title,
+      target: { pageId: REPOSITORIES_PAGE_ID },
+      components: {},
+    },
+    {
+      id: POD_VOLUME_BACKUPS_MENU_ID,
+      parentId: ROOT_MENU_ID,
+      title: PodVolumeBackup.crd.title,
+      target: { pageId: POD_VOLUME_BACKUPS_PAGE_ID },
+      components: {},
+    },
+    {
+      id: POD_VOLUME_RESTORES_MENU_ID,
+      parentId: ROOT_MENU_ID,
+      title: PodVolumeRestore.crd.title,
+      target: { pageId: POD_VOLUME_RESTORES_PAGE_ID },
+      components: {},
+    },
     { id: ROOT_MENU_ID, title: "Velero", target: { pageId: OVERVIEW_PAGE_ID }, components: { Icon: VeleroIcon } },
   ];
 
-  // The sections of the details of the five kinds, each tied to its kind by `detailsFor`, which takes the
+  // The sections of the details of the eight kinds, each tied to its kind by `detailsFor`, which takes the
   // kind and the versions from the class and checks the section against it. The host renders a section with
   // the object alone: the extension is given by the registration. The host has no boundary around its drawer
   // of the details: every section is drawn inside one of the extension, which keeps an error in the section
@@ -122,11 +166,32 @@ export default class VeleroRenderer extends Renderer.LensExtension {
       priority: 10,
       Details: (props) => <SnapshotLocationDetails {...props} extension={this} />,
     }),
+    Renderer.K8sApi.detailsFor(BackupRepository, {
+      priority: 10,
+      Details: (props) => <RepositoryDetails {...props} extension={this} />,
+    }),
+    Renderer.K8sApi.detailsFor(PodVolumeBackup, {
+      priority: 10,
+      Details: (props) => <VolumeOperationDetails {...props} volume="PodVolumeBackup" extension={this} />,
+    }),
+    Renderer.K8sApi.detailsFor(PodVolumeRestore, {
+      priority: 10,
+      Details: (props) => <VolumeOperationDetails {...props} volume="PodVolumeRestore" extension={this} />,
+    }),
   ].map((registration) => withDetailsErrorBoundary(this, registration));
 
   // The kinds with pages of their own in the group of Velero: the Custom Resources tree of the cluster leaves
   // them out while the extension is enabled, and lists them again once it is disabled.
-  customResources = [Backup, Restore, Schedule, BackupStorageLocation, VolumeSnapshotLocation];
+  customResources = [
+    Backup,
+    Restore,
+    Schedule,
+    BackupStorageLocation,
+    VolumeSnapshotLocation,
+    BackupRepository,
+    PodVolumeBackup,
+    PodVolumeRestore,
+  ];
 
   // What the activation does is to open the store of the preferences and the way to the main process.
   // Nothing is asked of a cluster, or of the main process, until a view asks. The host runs onDeactivate

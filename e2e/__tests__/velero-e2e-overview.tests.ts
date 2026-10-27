@@ -18,7 +18,12 @@ import type { Frame } from "playwright";
 const TIMEOUT = 10 * 60 * 1000;
 const OVERVIEW = cluster.OVERVIEW;
 const DISCOVERY = "LIST backupstoragelocations cluster";
+// The five families the Overview has a cell for.
 const KINDS = ["backups", "restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"];
+// The six read at every read of an installation, and the two of the pod volume operations, which only a view that
+// shows them reads: the Overview holds neither.
+const READ_ALWAYS = [...KINDS, "backuprepositories"];
+const ON_DEMAND = ["podvolumebackups", "podvolumerestores"];
 const BUDGET = 250;
 // How long what must not happen is waited for.
 const NOTHING = 1500;
@@ -263,6 +268,9 @@ describe("overview of an installation", () => {
         "velero-schedules": "Schedules",
         "velero-storage-locations": "Backup Storage Locations",
         "velero-snapshot-locations": "Volume Snapshot Locations",
+        "velero-backup-repositories": "Backup Repositories",
+        "velero-pod-volume-backups": "Pod Volume Backups",
+        "velero-pod-volume-restores": "Pod Volume Restores",
       });
       expect((await frame.locator(".TabLayout .Tabs .Tab").allInnerTexts()).map(text)).toEqual([
         "Overview",
@@ -271,6 +279,9 @@ describe("overview of an installation", () => {
         "Schedules",
         "Backup Storage Locations",
         "Volume Snapshot Locations",
+        "Backup Repositories",
+        "Pod Volume Backups",
+        "Pod Volume Restores",
       ]);
       expect(text(await frame.locator(".TabLayout .Tabs .Tab.active").innerText())).toBe("Overview");
       expect(await frame.locator(".TabLayout .TabLayout").count()).toBe(0);
@@ -286,17 +297,22 @@ describe("overview of an installation", () => {
         [DISCOVERY]: (counted[DISCOVERY] ?? 0) + 1,
       });
       expect(await cluster.layoutProblems(frame, OVERVIEW)).toEqual([]);
-      // The installation is chosen: its five families are read, in its namespace, and nothing of the
-      // whole cluster is asked again.
+      // The installation is chosen: its six families are read, in its namespace, none of the pod volume operations,
+      // and nothing of the whole cluster is asked again.
       await frame.click(`[data-testid="velero-choice-${cluster.E2E_OVERVIEW_NAMESPACE}"]`);
       await cluster.overview(frame);
       await frame.waitForTimeout(1500);
       const read = cluster.apiRequests();
 
-      for (const kind of KINDS) {
+      for (const kind of READ_ALWAYS) {
         const key = `LIST ${kind} namespace`;
 
         expect([key, (read[key] ?? 0) - (opened[key] ?? 0) >= 1]).toEqual([key, true]);
+      }
+      for (const kind of ON_DEMAND) {
+        const key = `LIST ${kind} namespace`;
+
+        expect([key, (read[key] ?? 0) - (opened[key] ?? 0)]).toEqual([key, 0]);
       }
       expect(cluster.clusterReads(read)).toEqual(cluster.clusterReads(opened));
       expect((await cluster.target(frame)).namespace).toBe(cluster.E2E_OVERVIEW_NAMESPACE);

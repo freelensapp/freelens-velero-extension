@@ -76,7 +76,7 @@ describe("the names the stub gives", () => {
       expect([path, Object.keys(members).filter((name) => !known.includes(name))]).toEqual([path, []]);
     }
     // The ones the extension reads, at least.
-    expect(Object.keys(Renderer.Component).length).toBe(19);
+    expect(Object.keys(Renderer.Component).length).toBe(21);
   });
 
   it("refuse a component the host removed, the virtual list of v1, and record it", () => {

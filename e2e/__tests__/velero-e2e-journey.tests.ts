@@ -25,8 +25,29 @@ const NOTHING = 1500;
 const MENU = ".Menu .MenuItem";
 const DIALOG = '[data-testid="confirmation-dialog"], .Dialog, .ConfirmDialog';
 const STARTED = /\b2026\b/;
-// The five kinds of Velero with pages of their own, as the API names them.
-const FAMILIES = ["backups", "backupstoragelocations", "restores", "schedules", "volumesnapshotlocations"];
+// The eight kinds of Velero with pages of their own, as the API names them: the Custom Resources tree of the host
+// leaves them out while the extension is enabled.
+const PAGED = [
+  "backuprepositories",
+  "backups",
+  "backupstoragelocations",
+  "podvolumebackups",
+  "podvolumerestores",
+  "restores",
+  "schedules",
+  "volumesnapshotlocations",
+];
+// The six read at every read of the installation, whatever view is open.
+const READ_ALWAYS = [
+  "backuprepositories",
+  "backups",
+  "backupstoragelocations",
+  "restores",
+  "schedules",
+  "volumesnapshotlocations",
+];
+// The two read only while a view that shows them is open.
+const ON_DEMAND = ["podvolumebackups", "podvolumerestores"];
 // The words of the error the suite makes the section of the details of a backup throw: the one error the
 // application is to have, which is known by them.
 const MADE = "The suite made the section of the details of a backup throw";
@@ -137,6 +158,9 @@ describe("views of the first milestone", () => {
         "velero-schedules": "Schedules",
         "velero-storage-locations": "Backup Storage Locations",
         "velero-snapshot-locations": "Volume Snapshot Locations",
+        "velero-backup-repositories": "Backup Repositories",
+        "velero-pod-volume-backups": "Pod Volume Backups",
+        "velero-pod-volume-restores": "Pod Volume Restores",
       });
       await frame.waitForSelector("[data-testid=velero-state-choose]", { timeout: 60_000 });
       expect((await cluster.target(frame)).cluster).toBe(cluster.E2E_KUBE_CONTEXT);
@@ -245,11 +269,17 @@ describe("views of the first milestone", () => {
       const later = cluster.apiRequests();
 
       expect(later[DISCOVERY]).toBe(earlier[DISCOVERY] + 1);
-      // The five families of the namespace that is shown were read, which the counters see.
-      for (const kind of ["backups", "restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"]) {
+      // The six families read at every read of the namespace that is shown were read, which the counters see; the
+      // list of the backups shows none of the pod volume operations, which are not asked.
+      for (const kind of READ_ALWAYS) {
         const key = `LIST ${kind} namespace`;
 
         expect([key, (later[key] ?? 0) - (earlier[key] ?? 0) >= 1]).toEqual([key, true]);
+      }
+      for (const kind of ON_DEMAND) {
+        const key = `LIST ${kind} namespace`;
+
+        expect([key, (later[key] ?? 0) - (earlier[key] ?? 0)]).toEqual([key, 0]);
       }
       // Of the whole cluster only the storage locations are listed, which is how the installations are found.
       expect(cluster.clusterReads(later)).toEqual({
@@ -326,7 +356,8 @@ describe("views of the first milestone", () => {
             new URL(request.frame || "about:blank").origin !== origin,
         ),
       ).toEqual([]);
-      for (const kind of FAMILIES) expect([kind, (sent[`LIST ${kind} namespace`] ?? 0) >= 1]).toEqual([kind, true]);
+      for (const kind of READ_ALWAYS) expect([kind, (sent[`LIST ${kind} namespace`] ?? 0) >= 1]).toEqual([kind, true]);
+      for (const kind of ON_DEMAND) expect([kind, sent[`LIST ${kind} namespace`] ?? 0]).toEqual([kind, 0]);
       expect(sent["LIST backupstoragelocations cluster"]).toBeGreaterThanOrEqual(1);
       expect(sent).toEqual(asked);
       await cluster.writeReport("host-12-reads-of-the-frame", {
@@ -529,11 +560,13 @@ describe("views of the first milestone", () => {
   );
 
   it(
-    "opens the details of the host by none of its own actions",
+    "opens the details of the host by none of the actions of its views but the links of the host they hold",
     async () => {
       // The cases before this one took the actions of the views alone: a page of the group, a choice, a read,
       // the views of objects, their ways to one another and back, another installation. None of them named an
-      // object for the details of the host in the address of the frame, which is what opens their drawer.
+      // object for the details of the host in the address of the frame, which is what opens their drawer. The
+      // one way of the views to the details of the host is the link of the host to the pod or the node of an
+      // operation of the volumes, which the views of this suite do not show.
       expect(await cluster.hostDetailsAddresses(frame)).toEqual([]);
       expect(await cluster.hostDetailsShown(frame)).toEqual({ drawer: false, address: false });
     },
@@ -757,7 +790,7 @@ describe("views of the first milestone", () => {
   );
 
   it(
-    "gives every page of the group the tabs of the group, and leaves its five kinds out of the Custom Resources of the host until it is disabled",
+    "gives every page of the group the tabs of the group, and leaves its eight kinds out of the Custom Resources of the host until it is disabled",
     async () => {
       const { velero: _group, ...entries } = await cluster.veleroSidebarEntries(frame);
       const titles = Object.values(entries);
@@ -769,6 +802,9 @@ describe("views of the first milestone", () => {
         cluster.SCHEDULES,
         cluster.STORAGE_LOCATIONS,
         cluster.SNAPSHOT_LOCATIONS,
+        cluster.REPOSITORIES,
+        cluster.POD_VOLUME_BACKUPS,
+        cluster.POD_VOLUME_RESTORES,
       ]) {
         await cluster.openPage(frame, of);
         expect([of.id, await cluster.groupTabs(frame)]).toEqual([of.id, { tabs: titles, active: [entries[of.menu]] }]);
@@ -778,16 +814,16 @@ describe("views of the first milestone", () => {
       // kinds of the group are in it.
       const enabled = await cluster.customResourceKinds(frame);
 
-      expect(enabled.filter((kind) => FAMILIES.includes(kind))).toEqual([]);
+      expect(enabled.filter((kind) => PAGED.includes(kind))).toEqual([]);
       expect(enabled).toContain("downloadrequests");
       await cluster.captureScreenshot(frame, "dark-custom-resources-enabled");
-      // Disabled from the Extensions page, the extension leaves the sidebar, and the tree has the five again.
+      // Disabled from the Extensions page, the extension leaves the sidebar, and the tree has the eight again.
       await velero.disableExtension(started.app, started.window);
       await velero.captureWindowScreenshot(started.window, "dark-extension-disabled");
       await velero.navigateToCatalog(started.app);
       frame = await cluster.openClusterFromCatalog(started.window, kubeconfig);
       await expect.poll(() => cluster.veleroSidebarEntries(frame), { timeout: 60_000 }).toEqual({});
-      expect(await cluster.customResourceKinds(frame)).toEqual([...enabled, ...FAMILIES].sort());
+      expect(await cluster.customResourceKinds(frame)).toEqual([...enabled, ...PAGED].sort());
       await cluster.captureScreenshot(frame, "dark-custom-resources-disabled");
     },
     TIMEOUT,

@@ -226,6 +226,24 @@ describe("reader of the cluster of a frame", () => {
     expect(asked).toEqual([]);
   });
 
+  it("takes the paths of the three kinds of the volumes of velero.io/v1, as it takes the others", async () => {
+    const reader = clusterReader("cluster-a");
+    const paths = [
+      "/apis/velero.io/v1/namespaces/velero-demo/backuprepositories",
+      "/apis/velero.io/v1/namespaces/velero-demo/podvolumebackups",
+      "/apis/velero.io/v1/namespaces/velero-demo/podvolumerestores",
+    ];
+
+    // The paths of their families are the ones the API names them by.
+    expect(
+      (["backupRepositories", "podVolumeBackups", "podVolumeRestores"] as const).map((family) =>
+        PATHS.family(family, "velero-demo"),
+      ),
+    ).toEqual(paths);
+    for (const path of paths) await reader(path);
+    expect(asked.map(({ args }) => args[1])).toEqual(paths);
+  });
+
   it("does not make a path of what is not the name of a namespace", () => {
     for (const name of ["", "Velero", "../velero", "velero/backups", "velero?watch=true"]) {
       expect(() => PATHS.family("backups", name)).toThrow("Not the name of a namespace");

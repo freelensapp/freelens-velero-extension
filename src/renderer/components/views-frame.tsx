@@ -1,5 +1,6 @@
 import { observer } from "mobx-react";
 import React from "react";
+import { ON_DEMAND } from "../../common/discovery";
 import { VIEWS } from "../../common/views";
 import { closeView, closeViews, openViews } from "../navigation";
 import { EntryState } from "./entry-state";
@@ -92,6 +93,20 @@ function ViewsFrameView({ id, title, installation, families, earlier, view, orig
     void installation.open();
     return installation.watch();
   }, [installation]);
+
+  // The frame holds what its page and the view that is open read of the families read on demand: the list stays
+  // under the view, so both are needed while the view is open. A view that changes from one kind to another
+  // replaces what the frame needs in one call, and lets go of nothing both need.
+  const [holder] = React.useState(() => ({}));
+  const release = React.useRef<() => void>(undefined);
+  const held = ON_DEMAND.filter(
+    (family) => families.includes(family) || (open !== undefined && VIEWS[open.kind].reads.includes(family)),
+  ).join(" ");
+
+  React.useEffect(() => {
+    release.current = installation.need(holder, held ? (held.split(" ") as Family[]) : []);
+  }, [installation, holder, held]);
+  React.useEffect(() => () => release.current?.(), [installation]);
 
   // The views that are open are of the installation they were opened in: with another one selected, the
   // way back would name what the other does not have.

@@ -227,6 +227,21 @@ export const SNAPSHOT_LOCATIONS: ListOf = {
   kind: "snapshot-location",
   menu: "velero-snapshot-locations",
 };
+export const REPOSITORIES: ListOf = {
+  id: "backup-repositories",
+  kind: "backup-repository",
+  menu: "velero-backup-repositories",
+};
+export const POD_VOLUME_BACKUPS: ListOf = {
+  id: "pod-volume-backups",
+  kind: "pod-volume-backup",
+  menu: "velero-pod-volume-backups",
+};
+export const POD_VOLUME_RESTORES: ListOf = {
+  id: "pod-volume-restores",
+  kind: "pod-volume-restore",
+  menu: "velero-pod-volume-restores",
+};
 
 /**
  * A table of lines of a page that is not a list of the host, as the lines of
@@ -380,7 +395,10 @@ export function fixturesReady(): boolean {
   return true;
 }
 
-const KINDS = ["backups", "restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"];
+// The kinds whose objects the snapshot of a suite compares before and after it: the ones its fixtures place.
+const SNAPSHOT_KINDS = ["backups", "restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"];
+// The kinds the views read: the families of an installation, which a suite reads and counts the reads of.
+const KINDS = [...SNAPSHOT_KINDS, "backuprepositories", "podvolumebackups", "podvolumerestores"];
 // The kinds a read of Velero is asked through: a request of any of them is a write.
 const REQUESTS = ["downloadrequests", "serverstatusrequests", "deletebackuprequests"];
 
@@ -443,7 +461,7 @@ export function clusterSnapshot(): ClusterSnapshot {
   const installed: string[] = [];
   const named: string[] = [];
 
-  for (const kind of KINDS) {
+  for (const kind of SNAPSHOT_KINDS) {
     for (const namespace of synthetic) {
       for (const item of list(kind, namespace)) {
         versions[`${namespace}/${kind}/${item.metadata.name}/${item.metadata.uid}`] = item.metadata.resourceVersion;
@@ -539,7 +557,7 @@ export function clusterReads(counts: Record<string, number>): Record<string, num
 }
 
 /**
- * The lists and the reads by name of the five families, in a namespace, of one
+ * The lists and the reads by name of the eight families, in a namespace, of one
  * object or of the whole cluster, among the ones counted, and their watches in
  * a namespace or of one object. It is what a view would ask to read again what
  * it shows. The watches of the whole cluster are left out: the control plane

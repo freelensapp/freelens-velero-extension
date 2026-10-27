@@ -76,6 +76,12 @@ const two = {
   [path("storageLocations", "velero-b")]: list(object("default", "velero-b")),
   [path("snapshotLocations", "velero-a")]: list(),
   [path("snapshotLocations", "velero-b")]: list(),
+  [path("backupRepositories", "velero-a")]: list(object("shop-default-kopia", "velero-a")),
+  [path("backupRepositories", "velero-b")]: list(),
+  [path("podVolumeBackups", "velero-a")]: list(object("nightly-1-x7k2p", "velero-a")),
+  [path("podVolumeBackups", "velero-b")]: list(object("nightly-1-q9w3e", "velero-b")),
+  [path("podVolumeRestores", "velero-a")]: list(),
+  [path("podVolumeRestores", "velero-b")]: list(),
 };
 
 describe("discovery", () => {
@@ -109,7 +115,7 @@ describe("discovery", () => {
     expect(state.read("backups")).toEqual({ status: "idle", items: [] });
   });
 
-  it("reads the five families of the namespace that is chosen, and of no other", async () => {
+  it("reads the five families of the namespace that is chosen and its backup repositories, and of no other", async () => {
     const { state, api } = installation(two);
 
     await state.open();
@@ -117,7 +123,7 @@ describe("discovery", () => {
     await vi.waitFor(() => expect(state.read("backups").status).toBe("ready"));
     expect(state.entry).toEqual({ state: "ready", namespace: "velero-a", stale: false, missing: [] });
     expect(api.asked.filter((asked) => asked.includes("/namespaces/")).sort()).toEqual(
-      (["backups", "restores", "schedules", "snapshotLocations", "storageLocations"] as Family[])
+      (["backups", "restores", "schedules", "snapshotLocations", "storageLocations", "backupRepositories"] as Family[])
         .map((family) => path(family, "velero-a"))
         .sort(),
     );
@@ -144,7 +150,7 @@ describe("discovery", () => {
     await vi.waitFor(() => expect(state.asked).toBeDefined());
     for (const asked of api.asked) {
       expect(asked).toMatch(
-        /^\/apis\/velero\.io\/v1(\/backupstoragelocations|\/namespaces\/velero-[abc]\/(backups|restores|schedules|backupstoragelocations|volumesnapshotlocations))?$/,
+        /^\/apis\/velero\.io\/v1(\/backupstoragelocations|\/namespaces\/velero-[abc]\/(backups|restores|schedules|backupstoragelocations|volumesnapshotlocations|backuprepositories))?$/,
       );
     }
     expect(api.asked.some((asked) => /downloadrequests|serverstatusrequests|accessreview/.test(asked))).toBe(false);
@@ -226,7 +232,14 @@ describe("families whose kind is not served", () => {
       state: "ready",
       namespace: "velero-a",
       stale: false,
-      missing: ["restores", "schedules", "snapshotLocations"],
+      missing: [
+        "restores",
+        "schedules",
+        "snapshotLocations",
+        "backupRepositories",
+        "podVolumeBackups",
+        "podVolumeRestores",
+      ],
     });
     expect(state.read("restores").status).toBe("not-served");
     expect(state.read("backups").status).toBe("ready");
@@ -663,16 +676,250 @@ describe("a view that is open", () => {
       const second = state.watch(1000);
 
       await vi.advanceTimersByTimeAsync(1000);
-      expect(api.asked.length).toBe(opened + 5);
+      expect(api.asked.length).toBe(opened + 6);
       first();
       await vi.advanceTimersByTimeAsync(1000);
-      expect(api.asked.length).toBe(opened + 10);
+      expect(api.asked.length).toBe(opened + 12);
       second();
       await vi.advanceTimersByTimeAsync(5000);
-      expect(api.asked.length).toBe(opened + 10);
+      expect(api.asked.length).toBe(opened + 12);
       expect(vi.getTimerCount()).toBe(0);
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("the families read on demand", () => {
+  const PVB = (namespace: string) => path("podVolumeBackups", namespace);
+  const PVR = (namespace: string) => path("podVolumeRestores", namespace);
+  const one = { ...two, [LOCATIONS]: list(object("default", "velero-a")) };
+  const asked = (paths: string[], family: Family, namespace = "velero-a") =>
+    paths.filter((at) => at === path(family, namespace)).length;
+
+  it("are asked by no read while no holder needs them", async () => {
+    vi.useFakeTimers();
+    try {
+      const { state, api } = installation(one);
+
+      await state.open();
+      const stop = state.watch(1000);
+
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(asked(api.asked, "backupRepositories")).toBe(4);
+      expect(asked(api.asked, "podVolumeBackups")).toBe(0);
+      expect(asked(api.asked, "podVolumeRestores")).toBe(0);
+      expect(state.read("podVolumeBackups")).toEqual({ status: "idle", items: [] });
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("asks a family a holder needs at once, alone, in the generation, and at every read while it is held", async () => {
+    vi.useFakeTimers();
+    try {
+      const { state, api, clock } = installation({
+        ...one,
+        // An answer with the time of the API server, which a read of the installation would take.
+        [PVB("velero-a")]: { ...list(object("nightly-1-x7k2p", "velero-a")), date: 9000, at: 8000 },
+      });
+
+      await state.open();
+      const stop = state.watch(1000);
+      const before = api.asked.length;
+      const read = { asked: state.asked, serverTime: state.serverTime };
+
+      clock.now = 1500;
+      const release = state.need({}, ["podVolumeBackups"]);
+
+      // Asked at once, and nothing else with it.
+      expect(api.asked.slice(before)).toEqual([PVB("velero-a")]);
+      expect(state.read("podVolumeBackups").status).toBe("loading");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(state.read("podVolumeBackups")).toMatchObject({ status: "ready", items: [{}] });
+      // A family asked alone is not a read of the installation: the time of the last read, which the suites count
+      // the reads by, and the time of the API server stay the ones of that read.
+      expect({ asked: state.asked, serverTime: state.serverTime }).toEqual(read);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(asked(api.asked, "podVolumeBackups")).toBe(3);
+      expect(asked(api.asked, "podVolumeRestores")).toBe(0);
+      release();
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("is not asked at the read after the last holder lets it go, and what was read of it goes then", async () => {
+    vi.useFakeTimers();
+    try {
+      const { state, api } = installation(one);
+
+      await state.open();
+      const stop = state.watch(1000);
+      const first = state.need({}, ["podVolumeBackups"]);
+      const second = state.need({}, ["podVolumeBackups", "podVolumeRestores"]);
+
+      await vi.advanceTimersByTimeAsync(0);
+      first();
+      await vi.advanceTimersByTimeAsync(1000);
+      // Still held by the second.
+      expect(asked(api.asked, "podVolumeBackups")).toBe(2);
+      second();
+      // Let go: still what was read until the next read, which does not ask it and drops it.
+      expect(state.read("podVolumeBackups").status).toBe("ready");
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(asked(api.asked, "podVolumeBackups")).toBe(2);
+      expect(asked(api.asked, "podVolumeRestores")).toBe(2);
+      expect(state.read("podVolumeBackups")).toEqual({ status: "idle", items: [] });
+      expect(state.read("podVolumeRestores")).toEqual({ status: "idle", items: [] });
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(asked(api.asked, "podVolumeBackups")).toBe(2);
+      stop();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("is found still read by a holder that needs it again within one read, and is not asked at once again", async () => {
+    vi.useFakeTimers();
+    try {
+      const { state, api } = installation(one);
+
+      await state.open();
+      const stop = state.watch(1000);
+      const first = state.need({}, ["podVolumeBackups"]);
+
+      await vi.advanceTimersByTimeAsync(0);
+      first();
+      const again = state.need({}, ["podVolumeBackups"]);
+
+      expect(asked(api.asked, "podVolumeBackups")).toBe(1);
+      expect(state.read("podVolumeBackups").status).toBe("ready");
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(asked(api.asked, "podVolumeBackups")).toBe(2);
+      again();
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("is never let go by a holder that replaces what it needs in one call", async () => {
+    vi.useFakeTimers();
+    try {
+      const { state, api } = installation(one);
+
+      await state.open();
+      const stop = state.watch(1000);
+      const holder = {};
+      const before = state.need(holder, ["podVolumeBackups"]);
+
+      await vi.advanceTimersByTimeAsync(0);
+      const after = state.need(holder, ["podVolumeBackups", "podVolumeRestores"]);
+
+      // The release of the call before is of nothing the holder needs now.
+      before();
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(asked(api.asked, "podVolumeBackups")).toBe(2);
+      expect(asked(api.asked, "podVolumeRestores")).toBe(2);
+      expect(state.read("podVolumeBackups").status).toBe("ready");
+      after();
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(asked(api.asked, "podVolumeBackups")).toBe(2);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the holders across a change of namespace, which drops the reads and reads what is held there", async () => {
+    const { state, api } = installation(two);
+
+    await state.open();
+    state.select("velero-a");
+    await vi.waitFor(() => expect(state.read("backups").status).toBe("ready"));
+    const release = state.need({}, ["podVolumeBackups"]);
+
+    await vi.waitFor(() => expect(state.read("podVolumeBackups").status).toBe("ready"));
+    state.select("velero-b");
+    expect(state.read("podVolumeBackups").items).toEqual([]);
+    await vi.waitFor(() => expect(state.read("podVolumeBackups").status).toBe("ready"));
+    expect(state.read("podVolumeBackups").items.map((item) => item.metadata.name)).toEqual(["nightly-1-q9w3e"]);
+    expect(api.asked).toContain(PVB("velero-b"));
+    expect(api.asked).not.toContain(PVR("velero-b"));
+    release();
+  });
+
+  it("takes no late answer of another namespace, nor one of a family no holder needs any more", async () => {
+    let answer: (value: Answer) => void = () => undefined;
+    const late = () => new Promise<Answer>((resolve) => (answer = resolve));
+    const { state } = installation({ ...two, [PVB("velero-a")]: late });
+
+    await state.open();
+    state.select("velero-a");
+    await vi.waitFor(() => expect(state.read("backups").status).toBe("ready"));
+    const release = state.need({}, ["podVolumeBackups"]);
+
+    state.select("velero-b");
+    await vi.waitFor(() => expect(state.read("podVolumeBackups").status).toBe("ready"));
+    // The late answer is waited for until the read that asked it ended, whatever it did with it.
+    expect(state.reading).toBe(true);
+    answer(list(object("late", "velero-a")));
+    await vi.waitFor(() => expect(state.reading).toBe(false));
+    expect(state.read("podVolumeBackups").items.map((item) => item.metadata.name)).toEqual(["nightly-1-q9w3e"]);
+    release();
+
+    // A family let go while it is asked: its answer is not taken.
+    const again = installation({ ...one, [PVB("velero-a")]: late });
+
+    await again.state.open();
+    const held = again.state.need({}, ["podVolumeBackups"]);
+
+    expect(again.state.reading).toBe(true);
+    held();
+    answer(list(object("late", "velero-a")));
+    await vi.waitFor(() => expect(again.state.reading).toBe(false));
+    expect(again.state.read("podVolumeBackups").items).toEqual([]);
+  });
+
+  it("takes nothing from the other families when it is denied, and is not asked when it is not served", async () => {
+    const denied = installation({ ...one, [PVB("velero-a")]: { status: 403 } });
+
+    await denied.state.open();
+    denied.state.need({}, ["podVolumeBackups"]);
+    await vi.waitFor(() => expect(denied.state.read("podVolumeBackups").status).toBe("forbidden"));
+    expect(denied.state.read("backups").status).toBe("ready");
+    expect(denied.state.read("backupRepositories").status).toBe("ready");
+
+    const served = installation({
+      ...one,
+      [DISCOVERY]: {
+        status: 200,
+        body: {
+          resources: Object.values(RESOURCES)
+            .filter((name) => name !== "podvolumebackups")
+            .map((name) => ({ name })),
+        },
+      },
+    });
+
+    await served.state.open();
+    served.state.need({}, ["podVolumeBackups"]);
+    await Promise.resolve();
+    expect(served.state.read("podVolumeBackups").status).toBe("not-served");
+    expect(served.api.asked).not.toContain(PVB("velero-a"));
+  });
+
+  it("is only a family read on demand: a holder of the others changes nothing", async () => {
+    const { state, api } = installation(one);
+
+    await state.open();
+    const before = api.asked.length;
+
+    state.need({}, ["backups", "schedules"]);
+    expect(api.asked).toHaveLength(before);
   });
 });

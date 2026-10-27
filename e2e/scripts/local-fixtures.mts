@@ -2886,10 +2886,10 @@ export function proofIdentities(
 
 // The identity of the views that may not port-forward, which the runner of the suites makes for as long as
 // they run: an account of the namespace of the installation, of the run, with a role of that namespace. It
-// reads what the views and a download read of the installation, creates and reads a DownloadRequest there,
-// and reads the route to the store, its Service, its endpoint slices and its Pod. It has neither verb of the
-// port-forward, get nor create, and reads no Secret: a load of a log is refused at the port-forward, once its
-// request is in the cluster.
+// reads what the views and a download read of the installation at every read, the backup repositories among
+// it, creates and reads a DownloadRequest there, and reads the route to the store, its Service, its endpoint
+// slices and its Pod. It has neither verb of the port-forward, get nor create, and reads no Secret: a load of a
+// log is refused at the port-forward, once its request is in the cluster.
 export function viewIdentityWithoutPortForward(owner: string, run: string): KubeResource[] {
   requireCondition(owner, "Fixture ownership is required");
   fixtureNames(run);
@@ -2909,7 +2909,14 @@ export function viewIdentityWithoutPortForward(owner: string, run: string): Kube
       rules: [
         {
           apiGroups: ["velero.io"],
-          resources: ["backups", "restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"],
+          resources: [
+            "backups",
+            "restores",
+            "schedules",
+            "backupstoragelocations",
+            "volumesnapshotlocations",
+            "backuprepositories",
+          ],
           verbs: ["get", "list", "watch"],
         },
         { apiGroups: ["velero.io"], resources: ["downloadrequests"], verbs: ["create", "get"] },
@@ -2930,9 +2937,10 @@ export function viewIdentityWithoutPortForward(owner: string, run: string): Kube
 // The identity of the views whose kubeconfig takes its token from an `exec` plugin, which the runner of the
 // suites makes for as long as they run: an account of the namespace of the installation, of the run, with a
 // role of that namespace. It has what the documentation lists for the writes and for a download through the
-// cluster: it reads what the views read of the installation, creates and reads the two requests the gate lets
-// through, reads the Service of the store, its endpoint slices and its Pod, and may create a port-forward. It
-// reads no Secret: the storage location of the demo refers to none for its certificate.
+// cluster: it reads what the views read of the installation at every read, the backup repositories among it,
+// creates and reads the two requests the gate lets through, reads the Service of the store, its endpoint slices
+// and its Pod, and may create a port-forward. It reads no Secret: the storage location of the demo refers to none
+// for its certificate.
 export function viewIdentityOfAnExecPlugin(owner: string, run: string): KubeResource[] {
   requireCondition(owner, "Fixture ownership is required");
   fixtureNames(run);
@@ -2952,7 +2960,14 @@ export function viewIdentityOfAnExecPlugin(owner: string, run: string): KubeReso
       rules: [
         {
           apiGroups: ["velero.io"],
-          resources: ["backups", "restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"],
+          resources: [
+            "backups",
+            "restores",
+            "schedules",
+            "backupstoragelocations",
+            "volumesnapshotlocations",
+            "backuprepositories",
+          ],
           verbs: ["get", "list", "watch"],
         },
         {

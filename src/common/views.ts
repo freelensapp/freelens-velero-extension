@@ -2,11 +2,20 @@
 // open. The address holds them in the order they were opened: the last one is shown, and the way back leads
 // to the one before it, or to the list when there is none.
 
-import { FAMILIES } from "./discovery";
+import { BACKUPS_AND_LOCATIONS } from "./discovery";
 
 import type { Family } from "./discovery";
 
-export const VIEW_KINDS = ["backup", "restore", "schedule", "storage-location", "snapshot-location"] as const;
+export const VIEW_KINDS = [
+  "backup",
+  "restore",
+  "schedule",
+  "storage-location",
+  "snapshot-location",
+  "backup-repository",
+  "pod-volume-backup",
+  "pod-volume-restore",
+] as const;
 export type ViewKind = (typeof VIEW_KINDS)[number];
 
 export interface ViewTarget {
@@ -15,23 +24,61 @@ export interface ViewTarget {
 }
 
 // What is read of the installation to show a view of each kind, and how the kind is called. A view shows
-// something of the families it reads: what is missing of the others is not said over it.
-export const VIEWS: Record<ViewKind, { family: Family; reads: readonly Family[]; title: string; noun: string }> = {
-  backup: { family: "backups", reads: FAMILIES, title: "Backups", noun: "backup" },
-  restore: { family: "restores", reads: FAMILIES, title: "Restores", noun: "restore" },
-  schedule: { family: "schedules", reads: FAMILIES, title: "Schedules", noun: "schedule" },
+// something of the families it reads: what is missing of the others is not said over it. A family of the
+// operations of the volumes is read while a view that reads it is open, and only then. Each view reads the
+// families it shows, and no other: the families read at every read are asked whatever view is open, and a view
+// that reads fewer of them asks no less of the cluster.
+export const VIEWS: Record<
+  ViewKind,
+  { family: Family; reads: readonly Family[]; title: string; noun: string; plural: string }
+> = {
+  backup: { family: "backups", reads: BACKUPS_AND_LOCATIONS, title: "Backups", noun: "backup", plural: "backups" },
+  restore: { family: "restores", reads: BACKUPS_AND_LOCATIONS, title: "Restores", noun: "restore", plural: "restores" },
+  schedule: {
+    family: "schedules",
+    reads: BACKUPS_AND_LOCATIONS,
+    title: "Schedules",
+    noun: "schedule",
+    plural: "schedules",
+  },
   // A location is shown with what uses it, which is the backups and the schedules that name it.
   "storage-location": {
     family: "storageLocations",
     reads: ["backups", "schedules", "storageLocations"],
     title: "Backup Storage Locations",
     noun: "backup storage location",
+    plural: "backup storage locations",
   },
   "snapshot-location": {
     family: "snapshotLocations",
     reads: ["backups", "schedules", "snapshotLocations"],
     title: "Volume Snapshot Locations",
     noun: "volume snapshot location",
+    plural: "volume snapshot locations",
+  },
+  // A repository is shown with the location it is kept in. The operations of the volumes that write into it or
+  // read from it come with the band that shows them.
+  "backup-repository": {
+    family: "backupRepositories",
+    reads: ["backupRepositories", "storageLocations"],
+    title: "Backup Repositories",
+    noun: "backup repository",
+    plural: "backup repositories",
+  },
+  // An operation of the volumes is shown with its owner, the location it goes to and the repository it uses.
+  "pod-volume-backup": {
+    family: "podVolumeBackups",
+    reads: ["podVolumeBackups", "backups", "storageLocations", "backupRepositories"],
+    title: "Pod Volume Backups",
+    noun: "pod volume backup",
+    plural: "pod volume backups",
+  },
+  "pod-volume-restore": {
+    family: "podVolumeRestores",
+    reads: ["podVolumeRestores", "restores", "storageLocations", "backupRepositories"],
+    title: "Pod Volume Restores",
+    noun: "pod volume restore",
+    plural: "pod volume restores",
   },
 };
 

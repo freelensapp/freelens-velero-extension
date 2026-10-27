@@ -40,3 +40,25 @@ export function itemProgress(
   if (total === 0) return { reported, done, total, state: "indeterminate", reason: "no-total" };
   return { reported, done, total, percentage: Math.floor((done / total) * 100), state: "measured" };
 }
+
+// The bytes of the data path of an operation of the volumes, by the rule of the items: the release leaves out each
+// count when it is zero, so in a progress that is there a count that is missing is its zero, and `{}` is a total of
+// none, not a progress of zero bytes. A progress that is not there reports nothing.
+export function bytesProgress(
+  progress: { bytesDone?: unknown; totalBytes?: unknown } | null | undefined,
+): ItemProgress {
+  const reported = { done: progress?.bytesDone, total: progress?.totalBytes };
+  const missing = (value: unknown) => value === undefined || value === null;
+
+  if (progress === undefined || progress === null || typeof progress !== "object") {
+    return { reported, state: "indeterminate", reason: "not-reported" };
+  }
+  const done = missing(reported.done) ? 0 : reported.done;
+  const total = missing(reported.total) ? 0 : reported.total;
+
+  if (!valid(total) || !valid(done)) return { reported, state: "indeterminate", reason: "invalid" };
+  // Bytes done with no total are bytes of an estimate the data path did not give yet, not bytes over a total.
+  if (total === 0) return { reported, done, total, state: "indeterminate", reason: "no-total" };
+  if (done > total) return { reported, done, total, state: "indeterminate", reason: "over-total" };
+  return { reported, done, total, percentage: Math.floor((done / total) * 100), state: "measured" };
+}

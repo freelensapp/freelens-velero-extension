@@ -21,6 +21,12 @@ export const STORAGE_LOCATIONS_PAGE_ID = "storage-locations";
 export const STORAGE_LOCATIONS_MENU_ID = "velero-storage-locations";
 export const SNAPSHOT_LOCATIONS_PAGE_ID = "snapshot-locations";
 export const SNAPSHOT_LOCATIONS_MENU_ID = "velero-snapshot-locations";
+export const REPOSITORIES_PAGE_ID = "backup-repositories";
+export const REPOSITORIES_MENU_ID = "velero-backup-repositories";
+export const POD_VOLUME_BACKUPS_PAGE_ID = "pod-volume-backups";
+export const POD_VOLUME_BACKUPS_MENU_ID = "velero-pod-volume-backups";
+export const POD_VOLUME_RESTORES_PAGE_ID = "pod-volume-restores";
+export const POD_VOLUME_RESTORES_MENU_ID = "velero-pod-volume-restores";
 
 // The page where the list of each kind is, which is where a link from outside the views opens one of it.
 export const PAGES: Record<ViewKind, string> = {
@@ -29,6 +35,9 @@ export const PAGES: Record<ViewKind, string> = {
   schedule: SCHEDULES_PAGE_ID,
   "storage-location": STORAGE_LOCATIONS_PAGE_ID,
   "snapshot-location": SNAPSHOT_LOCATIONS_PAGE_ID,
+  "backup-repository": REPOSITORIES_PAGE_ID,
+  "pod-volume-backup": POD_VOLUME_BACKUPS_PAGE_ID,
+  "pod-volume-restore": POD_VOLUME_RESTORES_PAGE_ID,
 };
 
 // The views that are open travel in the address, by their kind and their name, in the order they were

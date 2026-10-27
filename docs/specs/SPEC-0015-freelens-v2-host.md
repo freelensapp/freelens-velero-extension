@@ -145,7 +145,7 @@ which none is kept; the work of M6 at Freelens 2.0.0, which D10 names.
 | REQ-207 | The views read the cluster through `Renderer.K8sApi.KubeJsonApi.forCluster(<the cluster of the frame>).getResponse`, with `GET` and the paths of the kinds of Velero only, and take the status and the body of the answer, which is not a `Response` of the DOM; the state of a view keeps coming from the status. The reader creates no `KubeApi` and registers nothing with the host. The identifier of the cluster of a frame is the one the host writes in the address of the frame, and the one the catalog of each process gives: the three agree | HOST-12 |
 | REQ-208 | The procedures are a subclass of `Main.Ipc` in the main process and of `Renderer.Ipc` in the renderer, each created in `onActivate` and reset in `onDeactivate`, and the store of the preferences is opened in `onActivate` of each process. A disable and an enable of the extension in one session leave one handler for each channel, one listener of the changes of the gate, one store that saves, and no tunnel, no confirmation and no write of before | HOST-13 |
 | REQ-209 | The main process binds every request to its frame as SPEC-0009 says: the event of a handler is typed as the `IpcMainInvokeEvent` of Electron, so that the compiler checks what is read of it; the cluster of the sender is read from the host of the address of its frame, `<clusterId>.renderer.freelens.app`, by the rule of the host; the identifier a request names must be that cluster and an entry of `Main.Catalog`. A listener of the renderer never reads the event it is given. The contract and its readers of REQ-112 of SPEC-0009 do not change. The architecture states the trust model of v2: the extensions are not isolated from one another, the container of the host is no security boundary, and the renderer has no isolation of its context | HOST-14 |
-| REQ-210 | The registrations are the ones of the template. Each kind is one `LensExtensionKubeObject` with static metadata, `crd.apiVersions` listing every version the cluster serves, `velero.io/v1` for the five, and `declare kind` and `declare apiVersion` as literals; no subclass of `KubeApi` or `KubeObjectStore`, and no instance method. A store of the host is the one the host registers for a served version, read with `getStore()` in the render of an `observer`. The five kinds with pages of their own are `customResources`, so that the Custom Resources tree of the cluster leaves them out while the extension is enabled. The five sections of the details are made with `detailsFor`, and a menu item a later spec adds is made with `menuItemFor`. A page receives only its parameters and takes the extension from its registration. The entries of the sidebar keep their order | HOST-15 |
+| REQ-210 | The registrations are the ones of the template. Each kind is one `LensExtensionKubeObject` with static metadata, `crd.apiVersions` listing every version the cluster serves, `velero.io/v1` for the eight of today, and `declare kind` and `declare apiVersion` as literals; no subclass of `KubeApi` or `KubeObjectStore`, and no instance method. A store of the host is the one the host registers for a served version, read with `getStore()` in the render of an `observer`. The kinds with pages of their own, eight since T5.1 of SPEC-0014, are `customResources`, so that the Custom Resources tree of the cluster leaves them out while the extension is enabled. The sections of the details, one for each of them, are made with `detailsFor`, and a menu item a later spec adds is made with `menuItemFor`. A page receives only its parameters and takes the extension from its registration. The entries of the sidebar keep their order | HOST-15 |
 | REQ-211 | Every page, section of the details and menu item renders inside the error boundaries of the template. An error thrown while one renders stays in its place, with the error page of the extension or nothing for a menu item; the crash page of the host never replaces the cluster view because of the extension, and the log of the host has the error with the name of the extension | HOST-16 |
 | REQ-212 | The extension runs on the React 19 and the MobX 7 of the host, one copy of each. `observableRef` replaces `observable.ref`; a decorated observable field is `@observable accessor`, and no class calls `makeObservable(this)` without its annotations; a class whose instances are serialized keeps plain fields with an annotation map. An `observer` reads its props in its render, and a callback the host calls from its own derivations, `getItems` or `customizeHeader` of the list, carries the values it needs from there. A change of a preference made through MobX reaches the views | HOST-17 |
 | REQ-213 | The lines of a log and the resources viewer are windowed by react-window 2, bundled at the version of the catalog of the host, in place of the virtual list the host no longer offers. What SPEC-0011 says of the lists of lines stays: at most a hundred rows mounted, each line whole with its wrap, the search that brings its match into view, the focus on the first line after a load, and the keyboard. The budgets of REQ-147 of SPEC-0011, measured again in the packaged Freelens v2, are the acceptance | HOST-18 |
@@ -409,15 +409,16 @@ installer installs nothing, either way.
 
 ### D7: The Registrations
 
-**Decision.** Each of the five kinds is one `LensExtensionKubeObject` with
+**Decision.** Each of the kinds, five then and eight since T5.1 of
+[SPEC-0014](SPEC-0014-repositories-and-data-movement.md), is one `LensExtensionKubeObject` with
 `static readonly` metadata, `crd.apiVersions` `["velero.io/v1"]`, and
 `declare kind` and `declare apiVersion` as literals. The unused `KubeApi` and
 `KubeObjectStore` subclasses go. A store of the host is the one it registers for a
 served version, read with `getStore()` inside the render of an `observer`; the
 native lists keep the [store of a list](../../src/renderer/state/list-store.ts) of
 the extension, which the reader fills, and which the structural type of v2 takes
-as it is. `customResources` lists the five kinds. The five sections of the details
-are made with `detailsFor`. Every page is registered as
+as it is. `customResources` lists the kinds, and their sections of the details
+are made with `detailsFor`, one for each. Every page is registered as
 `Page: () => <X extension={this} />` where it needs the extension. Every
 registration goes through the error boundaries of the template. The entries of
 the sidebar keep their order, the group last. MobX keeps its annotation maps, with
@@ -437,7 +438,9 @@ tabs of the group, and the rule of the host has not changed.
 out Backups, Restores, Schedules, Backup Storage Locations and Volume Snapshot
 Locations while the extension is enabled, and lists them again once it is
 disabled. The definitions, the lists of the host and their addresses stay. The
-kinds of T5.1 and T5.2 join `customResources` with their pages.
+kinds of T5.1 and T5.2 join `customResources` with their pages: since the first
+pull request of T5.1 the tree leaves out Backup Repositories, Pod Volume Backups
+and Pod Volume Restores as well.
 
 ### D8: The Virtual List
 
@@ -597,7 +600,7 @@ no fixture holds real data.
 | HOST-12 | Unit/packaged | REQ-207 | The reader on a fake `forCluster`: the paths refused, the status and the body of an answer, nothing created and nothing registered with the host. Packaged: the two readers with the states of SPEC-0002 to SPEC-0008, and the identifier of the frame, of the catalog of the renderer and of the catalog of the main process equal |
 | HOST-13 | Unit/packaged | REQ-208 | Activated, deactivated and activated again: one handler for each channel, the instances reset. Packaged: a disable and an enable from the Extensions page, then a load: one creation counted, one kubectl, one answer, and the file of the store written once for one change |
 | HOST-14 | Unit/packaged | REQ-209 | The rule of the frame on addresses of v2, packaged and in development; an identifier that is not the one of the frame, and one that is not in the catalog, refused. Packaged: GATE-12 on v2, with two frames, and the address of a frame read by a handler of `Main.Ipc`. Review: the trust model in ARCHITECTURE |
-| HOST-15 | Unit/packaged | REQ-210 | The test of the entry points: the five classes and their literals, `customResources`, the sections made with `detailsFor`, the pages taking their parameters alone, the order of the sidebar. Packaged: the Custom Resources tree without the five kinds while enabled and with them after a disable, and the tabs of the group on every page |
+| HOST-15 | Unit/packaged | REQ-210 | The test of the entry points: the classes and their literals, eight since T5.1, `customResources`, the sections made with `detailsFor`, the pages taking their parameters alone, the order of the sidebar. Packaged: the Custom Resources tree without the kinds of the extension while enabled and with them after a disable, and the tabs of the group on every page |
 | HOST-16 | Component/packaged | REQ-211 | A component that throws inside each of the three boundaries, and a cell of the list of the host that throws: the error page in its place, nothing for a menu item, and the log with the name of the extension |
 | HOST-17 | Component/packaged | REQ-212 | An `observer` that follows a change of the store of the preferences; the callbacks of the list reading no props outside the render. Packaged: an allowance taken back in the target bar gone from it at once, and a namespace chosen there followed by every page |
 | HOST-18 | Component/unit measure/packaged | REQ-213 | At most a hundred rows mounted while a log scrolls, a line whole with its wrap, a match brought into view, the focus on the first line; the measure of the unit run on 500,000 lines; packaged: VIEW-10 on the log of 200,000 lines, within its budgets |
@@ -1411,3 +1414,24 @@ process were corrected after the run of the views: the pre-review and the integr
 ran the code of the commits, whose bundles are the ones of the run of the views byte
 for byte but the map of the main process. No `freelens-k8s-proxy`, kubectl or
 Freelens of a run was left after it.
+
+**Amendment of 2026-10-27: the kinds of SPEC-0014** (REQ-210, D7, HOST-15). The
+first pull request of T5.1 of [SPEC-0014](SPEC-0014-repositories-and-data-movement.md)
+registers three kinds more, the backup repositories, the pod volume backups and the
+pod volume restores, each a class of the pattern of D7 with a page of its own and a
+section of the details, and lists the eight in `customResources`. REQ-210, D7 and
+HOST-15 said five: they say the kinds of the extension, eight since that pull request,
+and ask of each what they asked of the five; nothing else of this spec changes.
+Decided while implementing, on 2026-10-27, for the review of the milestone to
+confirm: the three rows are rewritten in place, with this paragraph beside them, as
+the amendment of 2026-10-16 was made. HOST-15 holds on the eight: the test of the
+entry points and the build test pin the eight classes and their literals, the nine
+pages and the eight sections made with `detailsFor`, and on 2026-10-27 the journey
+suite, on the nightly v2.0.0-0-nightly-2026-10-25 of the validation target, read the
+eight kinds out of the Custom Resources tree while the extension was enabled and back
+once it was disabled, and the tabs of the group on each of the nine pages, in its 19
+cases, all passed. REQ-215 and HOST-20 keep the five sessions of the integration
+test, one for each kind of the first milestones, and ask no session of the three kinds
+of SPEC-0014. Decided while implementing, on 2026-10-27, for the review of the
+milestone to confirm: the three kinds of SPEC-0014 get their sessions of the
+integration test with their fixtures, in a later pull request of T5.1.

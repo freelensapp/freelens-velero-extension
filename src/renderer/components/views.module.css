@@ -664,6 +664,58 @@
   }
 }
 
+/* The lists of the backup repositories and of the operations of the volumes. The source of an operation is its
+   pod and its volume, under a class of its own: the source of a restore, its backup, gives its room under 760
+   pixels, and the source of an operation is one of the columns that stay. */
+.list :global(.TableCell.volume) {
+  flex-grow: 1.6;
+}
+
+.list :global(.TableCell.operation),
+.list :global(.TableCell.location),
+.list :global(.TableCell.volume-namespace) {
+  flex-grow: 1.3;
+}
+
+.list :global(.TableCell.readiness),
+.list :global(.TableCell.maintained) {
+  flex-grow: 1.2;
+}
+
+.list :global(.TableCell.node) {
+  flex-grow: 1;
+}
+
+.list :global(.TableCell.uploader),
+.list :global(.TableCell.repository-type),
+.list :global(.TableCell.frequency) {
+  flex-grow: 0.8;
+}
+
+/* In a narrow room the columns that say how an operation or a repository is set up give their room first, with
+   the storage location and the duration of an operation; then the node and the start of an operation. The name,
+   the phase, the backup or the restore, the source and the progress of an operation stay; of a repository the
+   name, the volume namespace, the storage location, the readiness and the last maintenance. */
+@container (max-width: 760px) {
+  .list :global(.TableCell.uploader),
+  .list :global(.TableCell.repository-type),
+  .list :global(.TableCell.frequency) {
+    display: none;
+  }
+}
+
+@container (max-width: 640px) {
+  .list :global(.TableCell.node) {
+    display: none;
+  }
+}
+
+/* A message of Velero of several lines, on its lines, in the view of one object. */
+.messageLines {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* The words of a cell that says what a schedule does, in the tip of the host: its badge cuts them at the end
    of the room with its own ellipsis, and the whole is in the tip. A flex box and not a block, so that no line
    of text is drawn around the badge: its words sit on the line of the words of the other cells of the row. */
@@ -672,6 +724,14 @@
   align-items: center;
   min-width: 0;
   max-width: 100%;
+}
+
+/* A link of the host in a cell, as the one to the node of an operation, holds the badge of its words: a flex box
+   inside the flex box of the cell, so that the badge is a flex item there as well, and no line is drawn around it. */
+.cellWords > a {
+  display: flex;
+  align-items: center;
+  min-width: 0;
 }
 
 /* The band of the adherence of a schedule: a line for each fact, its name and its sentences, which wrap. */

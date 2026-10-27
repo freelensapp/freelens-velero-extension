@@ -5,7 +5,7 @@
 - **Milestone / tasks:** M4 / T5.1, T5.2
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`
 - **Reviewed main:** `c111008912919e6a1a4127b2a0b8a641ee2dad80`
-- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `7801fb10a5f20af308093b39e5f79cd6e8c3461d`, the base of the nightly v2.0.0-0-nightly-2026-10-25, which moves with the host drift watch until Freelens 2.0.0 is released; this spec was drafted against v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, where the facts of the host below were read, and they are read again at the target before T5.1
+- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `7801fb10a5f20af308093b39e5f79cd6e8c3461d`, the base of the nightly v2.0.0-0-nightly-2026-10-25, which moves with the host drift watch until Freelens 2.0.0 is released; this spec was drafted against v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, where the facts of the host below were read, and they were read again at the target with the first pull request of T5.1
 - **Dependencies:** [target discovery](SPEC-0002-installation-discovery.md), [states and Backups](SPEC-0003-backup-read-only.md), [Restores](SPEC-0005-restore-read-only.md), [locations](SPEC-0007-locations-read-only.md), [the volume information of an operation](SPEC-0011-artifact-viewers.md)
 - **Approval:** Approved by the lead maintainer on 2026-10-14, as drafted
 
@@ -55,9 +55,9 @@ in the Design:
   ([upload](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/backup/actions/csi/pvc_action.go#L540-L597),
   [download](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/restore/actions/csi/pvc_action.go#L405-L453)).
 - The test environment installs the server and the node agent, with the volume
-  snapshots off ([the install](../../e2e/scripts/local-demo.mts#L1091-L1093)),
+  snapshots off ([the install](../../e2e/scripts/local-demo.mts#L1092-L1094)),
   and its live backup is of ConfigMaps with `defaultVolumesToFsBackup: false`
-  ([the backup](../../e2e/scripts/local-fixtures.mts#L1557-L1568)): no object of
+  ([the backup](../../e2e/scripts/local-fixtures.mts#L1959-L1984)): no object of
   these five kinds exists in it today.
 
 Included: the five lists, the five workspaces, the five sections in the details
@@ -331,7 +331,7 @@ The columns of the four operation kinds:
 | Started | `status.startTimestamp`, in the time of the operator with the one of the host in the tip; not started when there is none | By start, none last |
 | Duration | REQ-185 | By duration |
 | Storage location | `spec.backupStorageLocation` | By name |
-| Uploader | `spec.uploaderType` for the pod volume kinds, `spec.datamover` for the data movement, empty said built-in | By text |
+| Uploader | `spec.uploaderType` for the pod volume kinds, empty said not set, which the release reads as restic; `spec.datamover` for the data movement, empty said built-in | By text |
 | Age | The age the host writes | By creation |
 
 In a narrow room the secondary columns give their room in this order, by the
@@ -354,7 +354,7 @@ The workspace of an operation, from the top:
 | Status | Phase and its mark, the message, accepted, started, completed, elapsed or duration, bytes done of total with the percentage, incremental bytes, installation and cluster | `status` |
 | Belongs to | The backup or the restore, with its state; the storage location; the repository | The labels, the owner, the spec, the reads of the installation |
 | Volume | The pod and its namespace and UID, the volume, the node, the claim; for a data upload the snapshot, its class, its driver, the storage class, the source claim; for a data download the target claim, the volume when bound, the namespace, the snapshot ID, the source namespace and the data upload | `spec` |
-| Settings | The uploader or the data mover, the uploader settings or the data mover configuration as keys, the repository identifier shown as an address is, the tags, the operation timeout, the node OS, the data mover result as keys, the path | `spec`, `status` |
+| Settings | The uploader or the data mover, the uploader settings or the data mover configuration as keys, the repository identifier shown as an address is, the tags, the operation timeout, the node OS, the data mover result as keys, the path; whether a cancellation was asked, which the views read and never write | `spec`, `status` |
 
 The workspace of a repository:
 
@@ -382,7 +382,7 @@ phases of the backup, as the table above records it.
 | Empty | The list says of what it is the list; the host says that it is empty | The band says that the backup has no volume operation among the ones the installation holds; the repository says that nothing of the installation used it |
 | Restricted | The list is not shown, and says that access is denied and that how many there are is not known | The band says that the kind cannot be read; a reference says denied; the Volumes tab offers no way |
 | Partial | A kind read and another denied: each list and each half of a band on its own | The repository counts the kinds it could read and says which it could not |
-| Stale | The rows of the last read that succeeded, with when; the column of the operation marked when its family is of an earlier read | The band says that its operations were read before, and when |
+| Stale | The rows of the last read that succeeded, with when; the column of the operation marked when its family is of an earlier read, by the notice over the list that names the family and when it was read | The band says that its operations were read before, and when |
 | Unknown | A phase or a value the release does not write, as text with its mark; an operation New without a node agent read | A reference whose family failed is not known, with the reason |
 | Failure | A read that failed keeps the last rows and says so | A failed operation shows its message; a failed maintenance its message |
 | Not served | A kind the version of the API does not serve, said so by the list and by the band, with nothing else affected | The same |
@@ -409,21 +409,34 @@ where the band is.
 ### What The Host Gives
 
 The lists are the list layout of the host, which the extension API exports with
-its details and its drawer
-([components](https://github.com/freelensapp/freelens/blob/3da74415bff57a77c6e08cb5f538191ce87bac17/packages/core/src/extensions/renderer-api/components.ts#L57-L71)),
+its details, its drawer and its links to the details of an object
+([components](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/extensions/renderer-api/components.ts#L59-L73)),
 and which takes the header, the contents, the order and the search of a list,
-and the menu of a row, which the extension gives nothing to
-([the layout](https://github.com/freelensapp/freelens/blob/3da74415bff57a77c6e08cb5f538191ce87bac17/packages/core/src/renderer/components/kube-object-list-layout/kube-object-list-layout.tsx#L165-L192),
-[the menu and the details](https://github.com/freelensapp/freelens/blob/3da74415bff57a77c6e08cb5f538191ce87bac17/packages/core/src/renderer/components/kube-object-list-layout/kube-object-list-layout.tsx#L262-L269)).
+and the menu of a row, which the extension gives nothing to; it takes its items
+from the `items` it is given or from the `contextItems` of the store, and not from
+the `getItems` it is given
+([the items](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/renderer/components/kube-object-list-layout/kube-object-list-layout.tsx#L246),
+[the menu and the details](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/renderer/components/kube-object-list-layout/kube-object-list-layout.tsx#L273-L280)).
 The age is the one the host writes
-([age](https://github.com/freelensapp/freelens/blob/3da74415bff57a77c6e08cb5f538191ce87bac17/packages/core/src/renderer/components/kube-object/age.tsx#L27)).
+([age](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/renderer/components/kube-object/age.tsx#L25)).
 The pages, the entries of the sidebar and the sections in the details are
 registered as the other kinds are
-([registration](https://github.com/freelensapp/freelens/blob/3da74415bff57a77c6e08cb5f538191ce87bac17/packages/core/src/extensions/lens-renderer-extension.ts#L62-L70)).
-The way to the details of a Pod or a Node is the one the host exports for the
-details of an object by its path
-([navigation](https://github.com/freelensapp/freelens/blob/3da74415bff57a77c6e08cb5f538191ce87bac17/packages/core/src/extensions/renderer-api/navigation.ts#L47-L49)):
-the extension gives the path of the kind and the name, and reads nothing.
+([registration](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/extensions/lens-renderer-extension.ts#L59-L85),
+[the sections](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/extensions/renderer-api/kube-object-registrations.ts#L121-L134),
+[the custom resources](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/renderer/components/custom-resource-definitions/custom-resource-registration.ts#L52-L94)).
+The way to the details of a Pod or a Node is the link the host exports for each,
+`LinkToPod` with the name and the namespace and `LinkToNode` with the name: a
+link of the host to the details of the object by its path, which reads nothing
+and draws nothing without a name
+([pod](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/renderer/components/kube-object-link/link-to-pod.tsx#L27-L44),
+[node](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/renderer/components/kube-object-link/link-to-node.tsx#L26-L42),
+[the address of the details](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/renderer/components/kube-detail-params/get-maybe-details-url.injectable.ts#L13-L22));
+the drawer of the details reads the object of its address when it opens
+([the drawer](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/renderer/components/kube-object-details/current-kube-object-in-details.injectable.ts#L29-L44)).
+These facts were read again at the validation target with the first pull request
+of T5.1, where the draft had read them on v1.10.3: the way of the draft, a path
+given to `showDetails`, is replaced by the two links, which the extension API
+exports.
 
 ### What The Main Branch Changes
 
@@ -566,6 +579,24 @@ Record role, date and verdict.
 - **The repository of an operation is found by the three labels**, as the
   release finds it, and never by the name, which the release says it may change.
   Two repositories of the same labels are said so, as the release refuses them.
+- **A label that carries a name is compared as the release cuts it**: a name
+  longer than 63 characters is cut to its first 57 and six characters of its
+  SHA-256 ([RECON-T0.1](../development/RECON-T0.1.md), the labels), so the owner
+  of an operation and the location of its repository are found by the name cut
+  that way, as decided while implementing, on 2026-10-26. The extension cuts the
+  labels of the requests it creates with the same function
+  (`src/common/name-label.ts`). The reviewed release writes these labels through
+  that cut, as read in its source: the name of the backup of a pod volume
+  backup ([labels](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/podvolume/backupper.go#L559-L562)),
+  the name of the restore of a pod volume restore
+  ([labels](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/podvolume/restorer.go#L275-L279)),
+  and the volume namespace, the location and the type of a repository, which it
+  creates and looks up by them
+  ([labels](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/repository/backup_repo_op.go#L44-L50),
+  [looked up](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/repository/backup_repo_op.go#L59),
+  [created](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/repository/backup_repo_op.go#L99)),
+  each through one function
+  ([the cut](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/label/label.go#L37-L51)).
 - **Due is counted by the clock of this machine**, against the last maintenance
   time and the frequency the object names, with the five minutes of the pass of
   the server said beside it. The release gives no field for it. A frequency
@@ -614,7 +645,7 @@ Record role, date and verdict.
 
 ## Evidence And Deviations
 
-No implementation, tests or runtime evidence yet. The upstream drift watch of
+Before T5.1: no implementation, tests or runtime evidence. The upstream drift watch of
 this milestone is in the Design, under what the main branch changes: the five
 schemas differ, and nothing of main is a baseline. The test environment moves
 its pins to v1.18.4, the reviewed release, with a pull request in flight. The
@@ -622,3 +653,242 @@ schemas of the five kinds are the same in v1.18.2 and v1.18.4: of the thirteen
 kinds the Restore alone changed between the two, which the drift watch of the
 milestone records in the [recon](../development/RECON-T0.1.md#upstream-drift-watch);
 an environment at either release serves the objects this spec reads alike.
+
+T5.1, the first of its five pull requests: the backup repositories, the pod volume
+backups and the pod volume restores in their lists, their views and the details of
+the host, with the reads on demand, on 2026-10-26 and 2026-10-27. The gates on the
+machine of the runs, on 2026-10-27, on the branch rebased on main at `94891de`, with
+Node 24.21.0, pnpm 12.14.0, TypeScript 7.0.2, Vitest 5.0.5, Biome 2.5.15, Knip
+6.41.0 and the launcher of Trunk 1.3.4: `pnpm type:check`, the nine programs, and
+`pnpm lint:check`, 298 files, each with no error; `pnpm test:unit`, the build, then
+95 files and 2,853 tests, all passed, then the two measures within their budgets,
+and its second form with `VITE_PRESERVE_MODULES=false`, the same; `pnpm knip:check`,
+both passes with no finding; Trunk on the files the branch changes, with no issue;
+and each commit type-checked and linted alone, with no error at any. The unit and
+component evidence, by check:
+
+- KIND-01: the three classes, with their kind, their `declare` literals, the
+  version `velero.io/v1`, their plural and no short name; `detailsFor` given the
+  kind and the version of each; `customResources` of eight; nine pages and eight
+  sections in the build test (`src/entrypoints.test.ts`, `test/build.test.ts`,
+  `src/renderer/registrations.test.tsx`). The reader takes the plurals of the three
+  kinds under `velero.io/v1` with no change: its expression takes any plural of the
+  group, which its test proves on the three paths, and the second version is of
+  T5.2 (`src/renderer/api/reader.test.ts`).
+- KIND-02 and KIND-15: one union of eight families, the six read at every read
+  (the five of before and the backup repositories) and the two of the pod volume
+  operations read on demand; a holder that says what it needs in one call, the
+  frame of a page among them with the families of its page and of the view that is
+  open; a family needed and never read asked at once, alone, in the generation, and
+  at every read while it is held; one no holder needs not asked at the read after,
+  and dropped to idle then; two holders of one family; a holder that replaces what
+  it needs never letting go of what both need; a change of namespace that keeps the
+  holders and drops the reads; a family denied that takes nothing from the others;
+  a late answer of another generation, or of a family no holder needs any more, not
+  taken; a family asked at once, which is not a read of the installation, leaving the
+  time of the last read and the time of the API server as they were; no timer added
+  (`src/renderer/state/installation.test.ts`,
+  `src/renderer/pages/volume-lists.test.tsx`, `src/renderer/pages/overview-page.test.tsx`).
+  No family of the operations is asked by the view of a backup, of a restore or of
+  a schedule: the test of the reads of the view of a backup
+  (`src/renderer/pages/volume-lists.test.tsx`), and the tests that count what
+  opening a restore and a schedule asks, which fail when either view is given a
+  family of the operations (`src/renderer/pages/restores-page.test.tsx`, "opens
+  from a row and shows a restore that waits with a failure as in flight";
+  `src/renderer/pages/schedules-page.test.tsx`, "shows what Velero says of the
+  schedule, and computes from its expression only its band of the adherence").
+- KIND-03 and KIND-04: the columns of the three lists, their stable identifiers
+  and classes in the order of the Design, each cell in each state, the order of
+  each column through the callbacks of the host both ways with none answering
+  `undefined` or `NaN`, the search, the notes over the lists; the node, and an owner
+  that is not named, in a badge that is a flex item of its cell, the link of the host
+  a flex box there by a rule of the stylesheet; the column of an owner of an earlier
+  read marked by the notice over the list, the owner still a way with why in its tip;
+  the room of each list read from the rules of the stylesheet
+  (`src/renderer/pages/volume-lists.test.tsx`,
+  `src/common/repository-view.test.ts`, `src/common/volume-view.test.ts`,
+  `src/renderer/components/views.module.test.ts`).
+- KIND-05: the views of the three kinds, their bands, their ways and back, the
+  object created again under the name; the sections of the details, which agree
+  with the rows, draw a message on its lines as the views do, lead to the view for
+  the installation selected, say the age of the read they found the owner in, ask
+  nothing and keep no timer once closed
+  (`src/renderer/pages/volume-workspaces.test.tsx`). The view of a repository has
+  no band of what used it until the second pull request, which shows the
+  operations of the volumes in it.
+- KIND-06: the eight phases, none and an unknown one, for each of the two kinds,
+  with their axes, their outcome and their words (`src/common/volume-phases.test.ts`);
+  the message of Velero beside the phase, in the tip of a row and in the view, on a
+  failure, on a cancellation and on a volume that was empty; an uploader, a type of
+  repository and a result of a maintenance the release does not write, kept as their
+  text with the mark of what is not known in the lists, the views and the section of
+  a repository, and no mark on a value it writes or on one that is not set
+  (`src/renderer/pages/volume-lists.test.tsx`,
+  `src/renderer/pages/volume-workspaces.test.tsx`).
+- KIND-07: the fields of a repository; the frequency as a duration and one that
+  cannot be read; due and not due by a controlled clock, Ready with no time,
+  not ready, a read-only location, a frequency not set; three maintenances newest
+  first with their durations whatever their order in the object; the restic
+  identifier shown as an address is; never maintained
+  (`src/common/repository-view.test.ts`).
+- KIND-08: the bytes in flight with their percentage, without a total, `{}` said
+  as no total, over the total, none, not an integer; the incremental size present,
+  absent and nothing of it for a pod volume restore; the snapshot size of a restore;
+  no `NaN` (`src/common/volume-view.test.ts`).
+- KIND-09: the accepted, the started and the completed times in each combination
+  the controllers write, the waiting time, the elapsed time, the duration, a start
+  equal to the completion, a failure without a start, a failure with neither; the
+  order by the time of the operation; no timer (`src/common/volume-time.test.ts`).
+- KIND-10: the owner by its labels and by its owner reference, found, found with
+  another UID, absent, denied, not read, failed, and the two disagreeing, and labels
+  with no UID told replaced by the UID of the owner reference that names their
+  object; the location; the repository by its three labels, of kopia, of restic and
+  of an empty uploader, none and two; the owner by names of 63, 64 and 78
+  characters and the repository by a location of 63 and 64, which the release cuts
+  in their labels, and an owner of 78 characters that is not in the read named
+  whole from its owner reference; the pod and the node as names, the node of a pod
+  volume backup from its spec and of a restore from its status, and the namespace
+  of the pod a fact of the view (`src/common/volume-references.test.ts`,
+  `src/renderer/pages/volume-workspaces.test.tsx`).
+- KIND-14: no menu, no selection and no control but ways in the rows and in the
+  views (`src/renderer/pages/volume-lists.test.tsx`,
+  `src/renderer/pages/volume-workspaces.test.tsx`).
+- KIND-16: the states of a family on the surfaces that show them: each of the
+  three lists denied, not served and failed with nothing read before, empty, never
+  answered, and read once and then failed, with its rows kept and the notice of
+  when they were read; the views of a repository and of a pod volume backup of a
+  name that is not there, denied, created again under its name and of an earlier
+  read, and a pod volume backup opened before its family was first read, which
+  waits for the read and says no absence; a reference not read, loading, denied,
+  not served and failed, each with its words; and the words of an operation that
+  waits for a node agent
+  (`src/renderer/pages/volume-lists.test.tsx`,
+  `src/renderer/pages/volume-workspaces.test.tsx`, `src/common/volume-words.test.ts`).
+  The words of the band of a backup and of a restore are of the second pull
+  request, which draws it.
+
+The packaged cases, on the fixtures that exist, where no object of the three kinds
+is: the journey with nine entries under Velero and the eight kinds out of the Custom
+Resources tree until the extension is disabled (DISC-08, HOST-15); the suite
+`velero-e2e-volumes`, with the three lists empty in the installation of the views,
+the list of the repositories of the demo empty, and the reads of the pod volume
+operations counted on the API server, one list at each read while their list is shown
+and none while the list of the backups or the Overview is (KIND-02); the first reader
+denied the three lists, with their words (KIND-16); the reads of every suite that
+counts them restated with the repositories, and the entries and the tabs of the group
+with the nine pages in the suites of the Overview, of the locations and of the
+schedules. On 2026-10-27, on the nightly v2.0.0-0-nightly-2026-10-25 of the
+validation target, in the disposable environment of the repository, one run at a
+time: the journey alone, 19 cases of 19 in 92 seconds; `velero-e2e-volumes` alone, 4
+of 4 in 312 seconds, with three lists of the pod volume backups over the three reads
+it waited for while their list was shown and three of the pod volume restores while
+theirs was, none of the other family in either window and none of either while the
+list of the backups or the Overview was shown, as its report
+`kind-02-reads-of-the-pod-volume-operations.json` says; and every suite of the views,
+the pre-review and FND-10 as the hosted job runs them, 252 cases of 252 in 16 files
+in 55 minutes 18 seconds, the suites 53 minutes 31 seconds, the volumes 312 seconds
+of it; a first run of the pattern, on the code before the entries and the tabs of
+those three suites were restated, had failed their first cases, which compared them
+with the six of before, and the cases that start from them, 18 of 252, every other
+file passing. The heads of the three lists, empty, fit their room at 1440 by 900 and
+at 900 by 650; their room with rows, at each edge of it and at twice the zoom, is
+measured with their fixtures. What proves the cell of the node today is two tests of
+the repository and one packaged check outside it: the test of the stylesheet, which
+reads the rule of a link of the host in a cell
+(`src/renderer/components/views.module.test.ts`), and the test of the cells of the
+list on the double of `LinkToNode` (`test/host-components.tsx`,
+`src/renderer/pages/volume-lists.test.tsx`); and one check of 2026-10-27, run once in
+the packaged application from a temporary suite that is not kept in the repository,
+on four synthetic pod volume backups placed in the namespace of the views for its run
+and removed after it. It measured the cells of the list with rows: at 1440 by 900 the
+words of every cell sat on the line of their row and none was clipped, the node and
+the longer words cut with their ellipsis, and with the cell of the node as it was
+before, the link of the host inside a block, the names of the nodes sat 1.7 pixels
+above their rows and the column of the node was clipped; at 900 by 650 and at twice
+the zoom the column of the node is not shown. The packaged proof with rows, kept in a
+suite, comes with the fixtures of the lists, in a later pull request of T5.1. The job
+of the views on the hosted runner, which runs the new suite with the others: in its
+first run, on 2026-10-27, every suite, the pre-review and FND-10 passed, 252 of 252
+in 16 files, the step of the suites in 47 minutes 10 seconds and the job in 52
+minutes 48 seconds of its 150.
+
+Two precisions of the plan of the fourth milestone, approved by the lead maintainer
+on 2026-10-26 with it:
+
+- REQ-177 (L120): on Freelens v2 the extension declares the class of each kind, and
+  the host registers the API and the store of a served CRD, as SPEC-0015 records it
+  (REQ-210, D7): the three classes are the pattern of D7, with no API and no store
+  of the extension's own.
+- REQ-179 (L122) gives no order in which the columns of the repositories give their
+  room: the installation under 1,200 pixels, the age under 1,000, the type and the
+  frequency under 760; the name, the volume namespace, the storage location, the
+  readiness and the last maintenance stay, since scenario 3 names the volume
+  namespace and the location in the list. The location has a class of its own,
+  `location`: the class `storage` is hidden under 760 in every list. The source of an
+  operation has the class `volume`, since the class `source` of the restores is
+  hidden under 760 and the source of an operation stays.
+
+Decided while implementing, on 2026-10-26:
+
+- The two identities of the views the runner makes for the suite of the tabs read
+  what the views read of the installation at every read: the backup repositories
+  are added to their rules (`e2e/scripts/local-fixtures.mts`,
+  `viewIdentityWithoutPortForward` and `viewIdentityOfAnExecPlugin`). The two
+  readers of the restricted suites keep their kinds: the first never reads the
+  three, and the second is given them with the fixtures of the fourth pull request.
+- The records of the Overview, its kinds and its plurals, are keyed by the five
+  families it reads, and not by every family: the sixth is the repositories, with
+  the third pull request.
+- The column of the backup or the restore of an operation is titled by the kind
+  it names, Backup or Restore, with the stable identifier `operation`.
+- An operation with no phase is labelled "No phase yet", beside the New of the
+  release, and is read as one New is: waiting, and no failure.
+- A progress with bytes done and no total is said with the bytes and no total,
+  before it is compared with the total: the total of none is the estimate the data
+  path did not give yet.
+- The words of the states of a family for a list, a view and a reference are
+  written once for every kind, in `src/common/volume-words.ts`, which the page of a
+  list, the view of one object and the references of every kind read; the text of
+  each is the one of before.
+- The Settings band of the view of a pod volume backup or restore says whether a
+  cancellation was asked, from `spec.cancel`, which the release reads to stop the
+  data path: Asked or Not asked, with the note that a cancellation is asked by a
+  write, which the views do not make (REQ-190). It is a field of the spec the
+  table of the kinds names, read as the others are, and the views offer no way to
+  write it (`src/renderer/pages/volume-operation-workspace.tsx`).
+
+Decided while implementing, on 2026-10-27, for the review of the milestone to confirm:
+
+- The states of REQ-178 are told by the status of the read of a family and by
+  when it last succeeded, which every surface reads, and are proven on the lists,
+  the views and the references that word them: no function names them apart, since
+  a second name for each state would change nothing that is shown.
+- The mark of an uploader or a type of repository the release does not write is
+  the one of a phase and of a readiness it does not write, before the value as it
+  is written, with its words for who does not see the mark, in the tip of a cell
+  and in the note of a view; a result of a maintenance it does not write keeps the
+  word Unknown before its text, as a phase does. An uploader or a type that is not
+  set is said so, with no mark, and a result that is not reported has none either:
+  neither is a value.
+- Labels of an owner that carry its name and no UID take the UID of the owner
+  reference that names the same object, so that an object created again under the
+  name is told from the owner as the label of the UID tells it; the release writes
+  both labels, and an object without the second is not one it made.
+- The column of the backup or of the restore of an operation is marked, when its
+  family is of an earlier read, by the notice over the list, which names the family
+  and the time of its last read, as the lists of the schedules and of the
+  repositories mark the columns they take from another family: the owner stays a
+  way, with why in its tip, and no mark of its own is drawn in each row of a column
+  whose every row is of the same read (the row Stale of What Is Not Known).
+- A link of the host in a cell of a list, the one to the node of an operation, is
+  a flex box inside the flex box of the cell, by one rule of the stylesheet for any
+  link of the host there, so that the badge of its words sits on the line of its
+  row and a long name is cut with its ellipsis; a node that is not reported, and an
+  owner that is not named, are said in a badge of the cell as well.
+- No packaged suite of the cell of the node is added by the first pull request: the
+  lists of the pod volume operations have no rows in the test environment until
+  their fixtures. The cell is proven by the test of the stylesheet and the test of
+  the cells on the double of `LinkToNode`, and with rows by one packaged check run
+  from a temporary suite that is not kept, whose result the packaged cases record;
+  the packaged proof with rows comes with the fixtures of the lists, in a later pull
+  request of T5.1.

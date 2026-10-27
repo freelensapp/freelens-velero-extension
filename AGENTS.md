@@ -397,6 +397,18 @@ test environment and of the process of this repository.
 - A family that is asked again keeps the status of its last read, with
   `reading` beside it. Do not show a state from `loading` alone: it is the state
   of a family that was never answered.
+- The pod volume backups and the pod volume restores are read only while a view
+  that shows them is open: a holder says what it needs in one call that replaces
+  what it needed before, the frame of a page with what its page and the view that
+  is open read, and lets go when it is gone. A family needed and never read is asked
+  at once, alone, in the generation; one no holder needs is not asked at the read
+  after, and what was read of it goes then. The Overview, the other lists and the
+  sections of the details hold none: a test of what a page asks counts them.
+- The list layout of the host takes its rows from the `items` it is given, or from
+  the `contextItems` of its store, and not from the `getItems` it is given, as read
+  in the source at the target
+  (`kube-object-list-layout/kube-object-list-layout.tsx`, line 246): the store of a
+  list of the extension answers `contextItems` with its items.
 - The host gives a page the tabs of its group, in a layout of its own, when the
   first entry of `clusterPageMenus` that leads to the page has a parent: the
   entries of the lists come before the entry of the group. A page does not render
@@ -412,7 +424,17 @@ test environment and of the process of this repository.
   way back, draw another view or the list in its place before their click reaches
   the window: the drawer stays over what they open, with the address that names
   its object, until it is closed, and the journey suite reads the target of such a
-  click at the window. No action of the extension opens the details of the host.
+  click at the window. The one way of the extension to the details of the host is
+  the link of the host to the pod and to the node of an operation of the volumes,
+  `LinkToPod` and `LinkToNode`, which the extension API exports
+  (`packages/core/src/extensions/renderer-api/components.ts`, line 72): each draws
+  nothing without a name, and a namespace for a pod, and otherwise a `MaybeLink` to
+  the address of the details of the object by its path, whose click goes no further
+  than the link, with the name in a `WithTooltip`; it reads nothing, and the drawer
+  reads the object when it opens, as read in the source at the target
+  (`kube-object-link/link-to-pod.tsx`, lines 27 to 44; `link-to-node.tsx`, lines 26
+  to 42; `kube-object-details/current-kube-object-in-details.injectable.ts`, lines 29
+  to 44). No other action of the extension opens them.
 - A fixture that a view of the milestone needs goes with the fixtures of the views,
   which `pnpm e2e:views` puts in place on an environment that is already up. The
   ones of the phases are put in place once, when the environment is created.
@@ -571,7 +593,20 @@ test environment and of the process of this repository.
   measured in the packaged application. The suite of the schedules checks, in a
   window of 1440 by 900 and at each edge of the room of the list, that no cell is
   clipped and that the words of every cell sit on the line of their row
-  (`columnsOf`, `misalignedWords`).
+  (`columnsOf`, `misalignedWords`). A link of the host in a cell, as `LinkToNode`,
+  holds the badge of its words inside its own element: the link is a flex box
+  inside the flex box of the cell (`.cellWords > a`). What the repository keeps of
+  it is the test of the stylesheet, which reads the rule
+  (`src/renderer/components/views.module.test.ts`), and the test of the cells of
+  the list on the double of `LinkToNode` in `test/host-components.tsx`
+  (`src/renderer/pages/volume-lists.test.tsx`): neither sees a change of the
+  markup of the host, which the double copies. Inside a block the name of a node
+  sat 1.7 pixels above the words of its row, and what was wider than the cell was
+  clipped: measured once, on 2026-10-27, in the packaged application, by a
+  temporary suite on four synthetic pod volume backups that is not kept in the
+  repository, whose result SPEC-0014 records. No suite measures the column of the
+  node yet: the packaged proof with rows comes with the fixtures of the lists of
+  the pod volume operations, in a later pull request of T5.1.
 - The renderer of the host reads the cluster with the `fetch` of Chromium, to the
   origin of the frame, as read in the source at the target
   (`packages/core/src/renderer/fetch/browser-fetch.injectable.ts`): an answer is of
@@ -711,7 +746,7 @@ the same helpers. So:
 
 - **Metadata**: `static readonly` `kind`, `namespaced`, `apiBase` and `crd`, with
   `crd.apiVersions` listing every version the cluster serves, `velero.io/v1` for
-  the five kinds of today.
+  the eight kinds of today.
 - **Instance type**: `declare kind` and `declare apiVersion`, with the kind and the
   version as literals, which tie a section of the details made with `detailsFor`,
   and a menu item made with `menuItemFor`, to its kind. `declare` emits nothing: a
@@ -753,7 +788,7 @@ export class Backup extends Renderer.K8sApi.LensExtensionKubeObject<Metadata, Ba
 `src/renderer/index.tsx` registers the section of the details of each kind with
 `Renderer.K8sApi.detailsFor(<class>, { priority, Details })`, which takes the kind
 and the versions from the class and checks the section against it, and lists the
-five classes in `customResources`: while the extension is enabled the Custom
+eight classes in `customResources`: while the extension is enabled the Custom
 Resources tree of the cluster leaves them out, where they would be listed a second
 time beside the pages of the group of Velero, and lists them again once it is
 disabled. A kind with a page of its own joins `customResources` with its page; a

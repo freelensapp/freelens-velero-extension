@@ -4,15 +4,29 @@ import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { addressSearch, Renderer as Host, hostObject } from "../../../test/freelens-extensions";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
-import { Backup, BackupStorageLocation, Restore, Schedule, VolumeSnapshotLocation } from "../api/kinds";
+import {
+  Backup,
+  BackupRepository,
+  BackupStorageLocation,
+  PodVolumeBackup,
+  PodVolumeRestore,
+  Restore,
+  Schedule,
+  VolumeSnapshotLocation,
+} from "../api/kinds";
 import { BackupDetails } from "../details/backup-details";
+import { RepositoryDetails } from "../details/repository-details";
 import { RestoreDetails } from "../details/restore-details";
 import { ScheduleDetails } from "../details/schedule-details";
 import { SnapshotLocationDetails } from "../details/snapshot-location-details";
 import { StorageLocationDetails } from "../details/storage-location-details";
+import { VolumeOperationDetails } from "../details/volume-operation-details";
 import { closeViews, openView } from "../navigation";
 import { BackupsPage } from "../pages/backups-page";
 import { OverviewPage } from "../pages/overview-page";
+import { PodVolumeBackupsPage } from "../pages/pod-volume-backups-page";
+import { PodVolumeRestoresPage } from "../pages/pod-volume-restores-page";
+import { RepositoriesPage } from "../pages/repositories-page";
 import { RestoresPage } from "../pages/restores-page";
 import { SchedulesPage } from "../pages/schedules-page";
 import { SnapshotLocationsPage } from "../pages/snapshot-locations-page";
@@ -67,6 +81,24 @@ const OBJECTS: Record<Family, ReturnType<typeof object>> = {
     { phase: "Available" },
   ),
   snapshotLocations: object("VolumeSnapshotLocation", "snapshots", { provider: "aws" }, {}),
+  backupRepositories: object(
+    "BackupRepository",
+    "shop-default-kopia",
+    { volumeNamespace: "shop", backupStorageLocation: "default", repositoryType: "kopia" },
+    { phase: "Ready", lastMaintenanceTime: "2026-10-05T09:00:00Z" },
+  ),
+  podVolumeBackups: object(
+    "PodVolumeBackup",
+    "nightly-x7k2p",
+    { node: "worker", pod: { namespace: "shop", name: "cart-0" }, volume: "data", uploaderType: "kopia" },
+    { phase: "Completed", progress: { bytesDone: 1024, totalBytes: 1024 } },
+  ),
+  podVolumeRestores: object(
+    "PodVolumeRestore",
+    "monday-q9w3e",
+    { pod: { namespace: "shop", name: "cart-0" }, volume: "data", uploaderType: "kopia" },
+    { phase: "Completed", node: "worker" },
+  ),
 };
 
 function installation(): Installation {
@@ -120,6 +152,24 @@ describe("the rules of the views", () => {
         "snapshot-location",
         "snapshots",
       ],
+      [
+        "backup-repositories",
+        (installation) => <RepositoriesPage installation={installation} />,
+        "backup-repository",
+        "shop-default-kopia",
+      ],
+      [
+        "pod-volume-backups",
+        (installation) => <PodVolumeBackupsPage installation={installation} />,
+        "pod-volume-backup",
+        "nightly-x7k2p",
+      ],
+      [
+        "pod-volume-restores",
+        (installation) => <PodVolumeRestoresPage installation={installation} />,
+        "pod-volume-restore",
+        "monday-q9w3e",
+      ],
     ];
 
     for (const [id, page, kind, name] of pages) {
@@ -156,6 +206,23 @@ describe("the rules of the views", () => {
         />
         <SnapshotLocationDetails
           object={hostObject(VolumeSnapshotLocation, OBJECTS.snapshotLocations)}
+          extension={extension}
+          installation={shown}
+        />
+        <RepositoryDetails
+          object={hostObject(BackupRepository, OBJECTS.backupRepositories)}
+          extension={extension}
+          installation={shown}
+        />
+        <VolumeOperationDetails
+          volume="PodVolumeBackup"
+          object={hostObject(PodVolumeBackup, OBJECTS.podVolumeBackups)}
+          extension={extension}
+          installation={shown}
+        />
+        <VolumeOperationDetails
+          volume="PodVolumeRestore"
+          object={hostObject(PodVolumeRestore, OBJECTS.podVolumeRestores)}
           extension={extension}
           installation={shown}
         />
