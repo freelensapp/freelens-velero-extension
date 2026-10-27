@@ -185,6 +185,29 @@ describe("a name the release cuts in a label", () => {
     }
   });
 
+  it("names an owner that is not in the read by the whole name of its owner reference, which the label is the cut of", () => {
+    const name = "the-daily-backups-of-the-shop-database-and-of-its-files-of-2026-20261026120000";
+    const label = "the-daily-backups-of-the-shop-database-and-of-its-files-o80b6c5";
+    const labels = { "velero.io/backup-name": label, "velero.io/backup-uid": "backup-78" };
+    const owned = podVolumeBackup("x", undefined, {
+      labels,
+      ownerReferences: [{ apiVersion: "velero.io/v1", kind: "Backup", name, uid: "backup-78", controller: true }],
+    });
+    const found = operationOwner(owned, "Backup", read([nightly]));
+
+    expect([found.by, found.reference?.state, found.reference?.name, found.disagreement]).toEqual([
+      "labels",
+      "absent",
+      name,
+      undefined,
+    ]);
+    expect(found.reference?.reason).toBe(REFERENCE_WORDS.absent("backup", "velero"));
+    // With no owner reference, the label is all that names it.
+    const labelled = operationOwner(podVolumeBackup("y", undefined, { labels }), "Backup", read([nightly]));
+
+    expect([labelled.reference?.state, labelled.reference?.name]).toEqual(["absent", label]);
+  });
+
   it("finds the repository of an operation whose storage location is named with 63 and 64 characters", () => {
     const cases = [
       [

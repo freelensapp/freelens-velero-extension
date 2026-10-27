@@ -727,10 +727,13 @@ evidence, by check:
 - KIND-10: the owner by its labels and by its owner reference, found, found with
   another UID, absent, denied, not read, failed, and the two disagreeing; the
   location; the repository by its three labels, of kopia, of restic and of an empty
-  uploader, none and two; the owner and the repository by names of 63, 64 and 78
-  characters, which the release cuts in their labels; the pod and the node as names, the node of a pod volume
-  backup from its spec and of a restore from its status
-  (`src/common/volume-references.test.ts`).
+  uploader, none and two; the owner by names of 63, 64 and 78 characters and the
+  repository by a location of 63 and 64, which the release cuts in their labels, and
+  an owner of 78 characters that is not in the read named whole from its owner
+  reference; the pod and the node as names, the node of a pod volume backup from
+  its spec and of a restore from its status, and the namespace of the pod a fact of
+  the view (`src/common/volume-references.test.ts`,
+  `src/renderer/pages/volume-workspaces.test.tsx`).
 - KIND-14: no menu, no selection and no control but ways in the rows and in the
   views (`src/renderer/pages/volume-lists.test.tsx`,
   `src/renderer/pages/volume-workspaces.test.tsx`).
