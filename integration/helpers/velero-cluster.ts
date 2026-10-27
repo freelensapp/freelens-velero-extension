@@ -496,16 +496,28 @@ export function apiRequests(): Record<string, number> {
   const { status, stdout, stderr } = kubectlE2E("get", "--raw", "/metrics");
 
   if (status !== 0) throw new Error(`The counters of the API server could not be read: ${stderr}`);
+  const counts = countsOf(stdout);
+
+  READ_AT.set(counts, asked);
+  return counts;
+}
+
+/**
+ * The counters of the kinds of Velero in the metrics of the API server, by
+ * verb, kind and scope. A request on one object by its name, as a PATCH or the
+ * POST that creates it, has the scope `resource`; a list or a watch, the scope
+ * `namespace` or `cluster`.
+ */
+export function countsOf(metrics: string): Record<string, number> {
   const counts: Record<string, number> = {};
 
-  for (const line of stdout.split("\n")) {
+  for (const line of metrics.split("\n")) {
     if (!line.startsWith("apiserver_request_total{") || !line.includes('group="velero.io"')) continue;
     const label = (name: string) => new RegExp(`[{,]${name}="([^"]*)"`).exec(line)?.[1] ?? "";
     const key = `${label("verb")} ${label("resource")} ${label("scope")}`;
 
     counts[key] = (counts[key] ?? 0) + Number(line.slice(line.lastIndexOf(" ") + 1));
   }
-  READ_AT.set(counts, asked);
 
   return counts;
 }
@@ -1091,8 +1103,10 @@ export function inRome(instant: number): { date: string; minute: string; second:
  * The first run of `CRON_TZ=Europe/Rome 30 2 * * *`, the expression of the
  * schedule `views-zoned` of the fixtures, after an instant, as the controller
  * counts it: the first 02:30 of the wall clock of Europe/Rome after it, the
- * first of the two on the day the hour repeats. The suites compute it so, from
- * the creation the cluster holds and the clock, and never with the code of the
+ * first of the two on the day the hour repeats, and on the day the hour is
+ * skipped, which has no 02:30, the first instant after the change, 03:00 of
+ * the summer at 01:00 UTC (REQ-160). The suites compute it so, from the
+ * creation the cluster holds and the clock, and never with the code of the
  * extension.
  */
 export function halfPastTwoInRome(after: number): number {
@@ -1101,9 +1115,15 @@ export function halfPastTwoInRome(after: number): number {
   for (let day = after - 12 * hour; day < after + 72 * hour; day += 12 * hour) {
     const { date } = inRome(day);
     const [year, month, dayOfMonth] = date.split("-").map(Number);
-    const runs = [2, 1]
+    const halves = [2, 1]
       .map((offset) => Date.UTC(year, month - 1, dayOfMonth, 2 - offset, 30))
-      .filter((run) => run > after && inRome(run).date === date && inRome(run).minute === "02:30");
+      .filter((run) => inRome(run).date === date && inRome(run).minute === "02:30");
+    const skipped = Date.UTC(year, month - 1, dayOfMonth, 1, 0);
+    const runs = (
+      halves.length
+        ? halves
+        : [skipped].filter((run) => inRome(run).date === date && inRome(run - 1000).minute === "01:59")
+    ).filter((run) => run > after);
 
     if (runs.length) return Math.min(...runs);
   }
@@ -1508,14 +1528,21 @@ export interface Measure {
 }
 
 // The time of an interaction is taken inside the page: the time the driver of the test takes to reach the
-// page is not of the list.
+// page is not of the list. An order is a click on the head of a column, which the list answers with no wait of
+// the host: its response is its total.
 async function measure(
   frame: Frame,
-  interaction: { kind: "search"; text: string } | { kind: "open"; name: string } | { kind: "close" },
+  interaction:
+    | { kind: "search"; text: string }
+    | { kind: "open"; name: string }
+    | { kind: "close" }
+    | { kind: "order"; column: string },
   of: ListOf,
+  // How long a change is waited for before the interaction is refused as one that changed nothing.
+  limit = 10_000,
 ): Promise<Measure> {
   return frame.evaluate(
-    ({ list, kind, action }) =>
+    ({ list, kind, action, limit }) =>
       new Promise<{ total: number; response: number }>((resolve, reject) => {
         const root = document.querySelector(list);
         const shown = () =>
@@ -1539,7 +1566,7 @@ async function measure(
         const deadline = setTimeout(() => {
           over = true;
           reject(new Error(`Nothing changed after ${JSON.stringify(action)}`));
-        }, 10_000);
+        }, limit);
         const wait = () => {
           const now = performance.now();
 
@@ -1580,6 +1607,14 @@ async function measure(
           }
           set.call(input, action.text);
           input.dispatchEvent(new Event("input", { bubbles: true }));
+        } else if (action.kind === "order") {
+          const head = root?.querySelector<HTMLElement>(`.TableHead .TableCell.${action.column}`);
+
+          if (!head) {
+            refuse(`The list has no head of the column ${action.column} to order by`);
+            return;
+          }
+          head.click();
         } else if (action.kind === "open") {
           const row = [...(root?.querySelectorAll<HTMLElement>(`[data-${kind}-row]`) ?? [])].find(
             (element) => element.getAttribute(`data-${kind}-row`) === action.name,
@@ -1601,7 +1636,7 @@ async function measure(
         }
         requestAnimationFrame(wait);
       }),
-    { list: list(of), kind: of.kind, action: interaction },
+    { list: list(of), kind: of.kind, action: interaction, limit },
   );
 }
 
@@ -1615,6 +1650,16 @@ export async function measureOpen(frame: Frame, name: string, of: ListOf = BACKU
 
 export async function measureClose(frame: Frame, of: ListOf = BACKUPS): Promise<Measure> {
   return measure(frame, { kind: "close" }, of);
+}
+
+/** Orders the list by a column, the way a click on its head gives, which is the other way at a second click. */
+export async function measureOrder(
+  frame: Frame,
+  column: string,
+  of: ListOf = BACKUPS,
+  limit?: number,
+): Promise<Measure> {
+  return measure(frame, { kind: "order", column }, of, limit);
 }
 
 /** The objects whose rows are all inside what the list shows: a click on one does not scroll the list. */
@@ -2807,6 +2852,9 @@ export interface AdherenceBand {
   lines: Record<string, string>;
   // The views its words lead to, by the names of their ways.
   ways: string[];
+  // The parts of the line of the next run: the word beside the mark, the sentence of the state, each note under
+  // it, and whether the grace and the date of the host are said.
+  next: { word: string; words: string; notes: string[]; grace: boolean; host: boolean };
 }
 
 /**
@@ -2841,10 +2889,27 @@ export async function adherenceBand(frame: Frame): Promise<AdherenceBand> {
     icons.forEach((icon, index) => {
       icon.style.display = shown[index];
     });
+    const said = (part: Node | null) => (part?.textContent ?? "").replace(/\s+/g, " ").trim();
+    const next = element.querySelector("tr[data-line=next]");
+    // The word of the mark is what it holds beside its icon, whose text is the name of the icon.
+    const mark = next?.querySelector("[data-adherence]");
+    const word = [...(mark?.childNodes ?? [])]
+      .filter((node) => !(node instanceof Element && node.classList.contains("Icon")))
+      .map(said)
+      .join(" ")
+      .trim();
+
     return {
       state: element.getAttribute("data-adherence") ?? "",
       order: rows.map((row) => row.getAttribute("data-line") ?? ""),
       lines,
+      next: {
+        word,
+        words: said(next?.querySelector("[data-words]") ?? null),
+        notes: [...(next?.querySelectorAll("[data-note]") ?? [])].map(said),
+        grace: next?.querySelector("[data-grace]") != null,
+        host: next?.querySelector("[data-host-time]") != null,
+      },
       ways: [...element.querySelectorAll("[data-testid^=velero-open-]")].map(
         (way) => way.getAttribute("data-testid") ?? "",
       ),

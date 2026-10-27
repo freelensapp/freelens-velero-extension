@@ -214,6 +214,26 @@ Then the Schedules:
 | Open `views-zoned` | The time zone the expression names, and the band of its adherence: its run is the first at 02:30 in Rome after its creation, awaited until then and overdue some minutes after, with the grace in words. The others of five fields are read in the time zone of the server, which no backup of the installation gives: their next run is not known, and the views say why; `views-interval` names no zone, and its next run is known. Open the details of the host of `views-zoned` from Custom Resources: Next run and Adherence say what its row says. The Overview of `velero-views-<run>` says before the items that the adherence of eight of its schedules is not known, lists `views-interval` among what needs attention at every hour and, once `views-zoned` is overdue, lists it as well, each with the run it was expected at as its time |
 | Open `schedule-unread`, `schedule-unread-paused`, `schedule-skipping` | What Velero has not read, and what it will do when it reads it. A schedule Velero read says whether the run that is due is skipped, which Velero wrote into it |
 
+Then the adherence of the schedules, on its fixtures, which `pnpm demo:views`
+places by the clock and which are good for twelve hours. This is the manual review
+of [SPEC-0013](../specs/SPEC-0013-schedule-adherence.md#success-criteria): record
+the role, the date and the verdict.
+
+| Step | What to look at |
+| --- | --- |
+| Schedules, Other namespace in the target bar, `velero-adherence-<run>` | Eight schedules. In one minute, from the list alone: which is overdue and since when, `adherence-overdue`, its Next run a day and more ago and its tip the instant as the preferences of the host write one; which is held and by what, `adherence-held`, by the backup its band names; which is submitted at every look, `adherence-every-look`, with a next run of None. Over the list, a note says that the clock of the cluster is ahead of this machine, by what `adherence-ahead` reports. `adherence-derived` and `adherence-borrowed` run at 03:00 at the offset of the server, which is 01:00 UTC: awaited before, due for five minutes after and overdue then |
+| Open `adherence-held`, then the backup its band names | The band says the backup in progress that holds the submissions, with its way: the backup opens over the list. Its way back leads to the schedule, with the focus on its way back, and the way back of the schedule to the list, with the focus on the row and the list where it was |
+| Open `adherence-derived` and `adherence-borrowed` | The zone of the server, UTC+02:00, derived from the backup of the submission of `adherence-derived`, of this schedule for the first and of the schedule `adherence-derived` for the second, with the words that across a change of daylight saving time the run may be an hour off |
+| Select `velero-views-<run>` | The schedules whose next run is not known, `views-daily` and `views-submitted` among them, and in the tip of each why: no backup of the installation gives the zone of the server. What would make it known is said with it: the zone named in the expression |
+| Other namespace, `velero-adherence-split-<run>` | Two schedules: the offset of the newest submission stands, and the band says that it was UTC at the submission of `split-older` |
+| Preferences of the host, another time zone, then the list of `velero-adherence-<run>` | The tips of the next runs follow the time zone of the preferences, and the instants the band computes do not move: they are written in the zone the expression is read in |
+| The Overview of `velero-adherence-<run>` | The items of what needs attention: the default storage location, which the installation does not hold, then the schedules that are overdue, held beyond the grace or submitted at every look, from the newest; a line for each of the eight, with its next run and its adherence |
+| Schedules, `velero-demo` | `fixture-yearly-<run>`, which the controller of the installation validated: Enabled, nothing submitted, and its next run a year after its creation |
+
+Expected: the three answers are on the list and on the band without opening the
+objects; the way back ends on the row; the tips follow the preference of the host
+and the computed instants do not move.
+
 Then the locations, from Backup Storage Locations in the sidebar:
 
 | Step | What to look at |

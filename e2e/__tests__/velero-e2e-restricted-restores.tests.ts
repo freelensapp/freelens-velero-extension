@@ -222,6 +222,12 @@ describe("restores with restricted access", () => {
       expect(shown.read.backups).toEqual({ text: "Backups Access denied", state: "denied" });
       expect(shown.read.restores).toEqual({ text: "Restores 6", state: "read" });
       expect(shown.unchecked).toEqual(["backups"]);
+      // The backups denied, none gives the zone of the server: the adherence of the six schedules of five fields that
+      // name no zone is not known, and so is the adherence of the two Velero has not read, counted and said.
+      expect(shown.summary).toMatch(
+        /^\d+ items in what was read\. The adherence of 8 schedules is not known\. Not everything was read\.$/,
+      );
+      expect(shown.notKnown).toEqual({ count: 8, reasons: { "not-read": 2, "no-offset": 6 } });
       const attention = (await frame.locator("[data-testid=velero-overview-attention]").innerText()).replace(
         /\s+/g,
         " ",
@@ -254,6 +260,61 @@ describe("restores with restricted access", () => {
       expect(await cluster.valuesOfTheWhole(frame)).toEqual([]);
       expect(await cluster.layoutProblems(frame, cluster.OVERVIEW)).toEqual([]);
       await cluster.captureScreenshot(frame, "dark-restricted-restores-overview");
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "says the adherence of the schedules without the backups: an interval overdue with its hold not known, five fields not known",
+    async () => {
+      // The words that whether a backup holds the submissions is not known, and the words of a zone that is not
+      // known, as the module of the signal writes them; the reason after them is the one the read gives.
+      const holdNotKnown = /^Whether a backup of the schedule holds the submissions is not known, since .+\.$/;
+      const noOffset =
+        "Not known: the expression names no time zone, and the one of the Velero server is not read. It is derived from the backup of a last submission, of this schedule or of another of the installation, and ";
+
+      await cluster.openPage(frame, cluster.SCHEDULES);
+      await cluster.waitForList(frame, cluster.SCHEDULES);
+      // The interval keeps its state, counted from its last submission, with the words of the hold: in its row,
+      // where the search finds it by them, and in its band.
+      expect(await cluster.rowAdherence(frame, "views-interval")).toEqual({
+        next: "at",
+        state: "overdue",
+        mark: "late",
+        reason: "",
+      });
+      expect(
+        await cluster.search(
+          frame,
+          "Whether a backup of the schedule holds the submissions is not known",
+          cluster.SCHEDULES,
+        ),
+      ).toContain("views-interval");
+      await cluster.search(frame, "", cluster.SCHEDULES);
+      await cluster.openWorkspace(frame, "views-interval", cluster.SCHEDULES);
+      const interval = await cluster.adherenceBand(frame);
+
+      expect(interval.state).toBe("overdue");
+      expect(interval.order).toContain("held");
+      expect(interval.lines.held).toMatch(holdNotKnown);
+      expect(interval.lines.held).toContain("access is denied");
+      expect(await cluster.layoutProblems(frame, cluster.SCHEDULES)).toEqual([]);
+      await cluster.captureScreenshot(frame, "dark-restricted-adherence-hold");
+      await cluster.closeWorkspace(frame);
+      // The schedule of five fields is not known: the backups that would give the zone of the server are denied.
+      expect(await cluster.rowAdherence(frame, "views-daily")).toEqual({
+        next: "not-known",
+        state: "not-known",
+        mark: "not-known",
+        reason: "no-offset",
+      });
+      await cluster.openWorkspace(frame, "views-daily", cluster.SCHEDULES);
+      const daily = await cluster.adherenceBand(frame);
+
+      expect(daily.state).toBe("not-known");
+      expect(daily.lines.next).toContain(noOffset);
+      expect(daily.lines.next).toContain("access is denied");
+      await cluster.closeWorkspace(frame);
     },
     TIMEOUT,
   );

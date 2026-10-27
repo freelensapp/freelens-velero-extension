@@ -443,6 +443,27 @@ test environment and of the process of this repository.
   (`SCHEDULE_PATCHED_AT_EVERY_LOOK`, `writesOf`), so `writes` takes two readings
   of `apiRequests`, which keep the moment they were asked; the version and the
   status of the schedule in the snapshot prove that nothing changed it.
+- What the suite of the adherence expects of a fixture is computed by the helper
+  of the suites, `integration/helpers/velero-adherence.ts`, from the objects as
+  the cluster holds them and from the clock, at the clock before a read of the
+  page less twenty seconds and after it plus a second, and never with the code
+  of the extension: the helper runs in Node, and the page in the Electron of the
+  host. That `Intl` knows `America/Argentina/Buenos_Aires`, the zone of the
+  schedule with a name of 63 characters, in the nightly
+  v2.0.0-0-nightly-2026-10-25 (runs of 2026-10-26); an application that did not
+  would show that schedule not known, and the suite says which in one constant.
+  The suite took 133 to 138 seconds alone on the machine of the runs, about four
+  minutes with the build, the pack and the start of its runner, and the hosted
+  job runs it in the run of the pattern `velero-e2e`. The list of three hundred
+  schedules ordered by a column of the host answers in 100 to 113 ms, alike for
+  each column and direction, and a search of it in 62 to 309 ms, about a quarter
+  of a second more from the key, which the host waits before it searches.
+- A mark of the views, `.status`, is an inline box in the middle of its line: in
+  a table cell at the top of a row of plain words its word sits about a pixel
+  under the others, past the pixel the pre-review allows at twice the zoom. The
+  lines of the Overview put it at the top of its cell (`.overviewLines
+  .references .status`); a table of a workspace whose words a check measures at
+  twice the zoom may need the same.
 - `kubectl delete` waits for each object it removed, one at a time: two thousand
   take minutes. Remove with `--wait=false`, then read the namespace until
   nothing is left.

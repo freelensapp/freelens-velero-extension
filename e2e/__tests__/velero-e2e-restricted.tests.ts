@@ -337,6 +337,32 @@ describe("views with restricted access", () => {
   );
 
   it(
+    "says the adherence of the schedules it reads with the backups: an interval overdue, five fields not known for want of an offset",
+    async () => {
+      await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+      await cluster.openPage(frame, cluster.SCHEDULES);
+      await cluster.waitForList(frame, cluster.SCHEDULES);
+      // The interval is counted from its last submission, two days back, whatever the backups say; the schedule of
+      // five fields names no zone, and no backup of the installation gives the one of the server.
+      expect(await cluster.rowAdherence(frame, "views-interval")).toEqual({
+        next: "at",
+        state: "overdue",
+        mark: "late",
+        reason: "",
+      });
+      expect(await cluster.rowAdherence(frame, "views-daily")).toEqual({
+        next: "not-known",
+        state: "not-known",
+        mark: "not-known",
+        reason: "no-offset",
+      });
+      expect(await cluster.layoutProblems(frame, cluster.SCHEDULES)).toEqual([]);
+      await cluster.captureScreenshot(frame, "dark-restricted-adherence");
+    },
+    TIMEOUT,
+  );
+
+  it(
     "leaves the objects of Velero as they were",
     async () => {
       const after = cluster.clusterSnapshot();

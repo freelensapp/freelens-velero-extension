@@ -37,9 +37,9 @@ const OPENED = "backup-finalizingpartiallyfailed";
 const RESTORES = cluster.RESTORES;
 const RESTORED = "restore-mapped";
 const LONG_RESTORE = cluster.LONG_RESTORE_NAME;
-// The views that are checked, each in both themes at every size: eight of the tabs, then the twenty-seven
-// of the pages.
-const VIEWS = 35;
+// The views that are checked, each in both themes at every size: eight of the tabs, then the thirty-one
+// of the pages, four of them of the adherence of the schedules.
+const VIEWS = 39;
 const OVERVIEW = cluster.OVERVIEW;
 const SCHEDULES = cluster.SCHEDULES;
 const SCHEDULED = "views-history";
@@ -59,6 +59,10 @@ const DEMO_RESTORE = `fixture-restore-${cluster.E2E_FIXTURE_RUN}`;
 const REMOVED_WITHIN = 12 * 60 * 1000;
 // The narrowest window the bar of the log is looked at in: the width of the window at twice the zoom.
 const NARROWEST = 720;
+// The schedule of the installation of the states of the adherence that a backup in progress holds, and the one with
+// a name as long as the value of a label may be, as the fixtures name them.
+const HELD = "adherence-held";
+const LONG_SCHEDULE = "schedule-with-a-name-as-long-as-the-value-of-a-label-is-allowed";
 // A tab of the view that is shown: the operation the view is of, and the tab.
 interface Tab {
   kind: artifacts.Operation;
@@ -105,8 +109,15 @@ describe("pre-review of the views", () => {
   // of the tabs looks at one: the pointer is parked in a corner, since what it rests on is drawn as
   // pointed at and is no state of the tab; a page that is scrolled, as one with a tab is at twice the
   // zoom, is looked at from its top, where its target bar is, by the check of the page, and from its end,
-  // where the view is whole, by the check of the tab, which is where it is left for the picture.
-  const everyLayout = async (view: string, prepare?: () => Promise<void>, of = cluster.BACKUPS, tab?: Tab) => {
+  // where the view is whole, by the check of the tab, which is where it is left for the picture. What `more`
+  // answers at each size is recorded with the problems of the layout.
+  const everyLayout = async (
+    view: string,
+    prepare?: () => Promise<void>,
+    of = cluster.BACKUPS,
+    tab?: Tab,
+    more?: () => Promise<string[]>,
+  ) => {
     for (const theme of THEMES) {
       await velero.setColorTheme(started.app, started.window, theme);
       for (const size of SIZES) {
@@ -134,6 +145,7 @@ describe("pre-review of the views", () => {
         } else {
           problems[name] = await cluster.layoutProblems(frame, of);
         }
+        if (more) problems[name] = [...problems[name], ...(await more())];
         screenshots.push(await cluster.requiredScreenshot(frame, name, size.zoom));
       }
     }
@@ -1401,6 +1413,136 @@ describe("pre-review of the views", () => {
       // Who comes back is on the mark the view was opened from.
       expect(await cluster.focusOn(frame, mark)).toBe(mark);
       await cluster.chooseWindow(frame, "7d");
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows the adherence of the schedules in the list, in two bands and in the Overview in both themes, at every size, each mark with its word",
+    async () => {
+      // Every mark of the adherence is hidden from who does not see it, and has its word beside it: answered are
+      // the ones that do not.
+      const unsaid = () =>
+        frame.locator("[data-adherence]:not([data-testid])").evaluateAll((marks) =>
+          marks
+            .filter((mark) => {
+              const icon = mark.querySelector(".Icon");
+              const word = [...mark.childNodes]
+                .filter((node) => node !== icon)
+                .map((node) => node.textContent ?? "")
+                .join("")
+                .trim();
+
+              const hidden =
+                icon?.getAttribute("aria-hidden") === "true" || icon?.querySelector('[aria-hidden="true"]') != null;
+
+              return !hidden || word === "";
+            })
+            .map((mark) => mark.getAttribute("data-adherence")),
+        );
+      // The marks are counted in the part the view is: a band over the list counts its own, not the rows behind.
+      const marked = async (view: string, least: number, within = "") => {
+        expect([view, await unsaid()]).toEqual([view, []]);
+        expect([
+          view,
+          (await frame.locator(`${within} [data-adherence]:not([data-testid])`.trim()).count()) >= least,
+        ]).toEqual([view, true]);
+      };
+      const WORKSPACE = "[data-testid=velero-schedule-workspace]";
+      // The words of every cell whole, cut with an ellipsis and a tip, or wrapped, and on the line of their row.
+      const fitted = (of: cluster.ListOf | cluster.LinesOf) => async () => [
+        ...(await cluster.columnsOf(of, frame)).clipped.map((column) => `clipped with no ellipsis or tip: ${column}`),
+        ...(await cluster.misalignedWords(of, frame)).map((words) => `off the line of its row: ${words}`),
+      ];
+
+      await cluster.showList(frame);
+      await cluster.openPage(frame, SCHEDULES);
+      // The installations of the adherence hold no storage location: the operator names them.
+      await cluster.configureInstallation(frame, cluster.E2E_ADHERENCE_NAMESPACE);
+      await frame.waitForSelector(`[data-testid=velero-schedules] [data-schedule-row="${HELD}"]`, { timeout: 60_000 });
+      await cluster.rowAdherence(frame, HELD);
+      await everyLayout(
+        "adherence-schedules",
+        () => marked("adherence-schedules", 8),
+        SCHEDULES,
+        undefined,
+        fitted(SCHEDULES),
+      );
+      await cluster.openWorkspace(frame, HELD, SCHEDULES);
+      await cluster.adherenceBand(frame);
+      await everyLayout(
+        "adherence-band-held",
+        async () => {
+          await frame.locator("[data-testid=velero-schedule-adherence]").scrollIntoViewIfNeeded();
+          await marked("adherence-band-held", 1, WORKSPACE);
+        },
+        SCHEDULES,
+      );
+      await cluster.closeWorkspace(frame);
+      await cluster.openWorkspace(frame, LONG_SCHEDULE, SCHEDULES);
+      await cluster.adherenceBand(frame);
+      await everyLayout(
+        "adherence-band-long-name",
+        async () => {
+          await frame.locator("[data-testid=velero-schedule-adherence]").scrollIntoViewIfNeeded();
+          await marked("adherence-band-long-name", 1, WORKSPACE);
+        },
+        SCHEDULES,
+      );
+      await cluster.closeWorkspace(frame);
+      await cluster.openPage(frame, OVERVIEW);
+      await cluster.overview(frame);
+      await everyLayout(
+        "adherence-overview",
+        async () => {
+          await cluster.scrollOverview(frame, 0);
+          await marked("adherence-overview", 8);
+        },
+        OVERVIEW,
+        undefined,
+        fitted(cluster.SCHEDULE_LINES),
+      );
+      for (const view of [
+        "adherence-schedules",
+        "adherence-band-held",
+        "adherence-band-long-name",
+        "adherence-overview",
+      ]) {
+        expect([view, found(view)]).toEqual([view, {}]);
+      }
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "reads the band of a schedule with the keyboard alone: from the list to the schedule, to the backup that holds it, and back to its row",
+    async () => {
+      await velero.setColorTheme(started.app, started.window, "Dark");
+      await velero.setWindowSize(started.app, 1440, 900);
+      await velero.setZoom(started.app, 1);
+      await cluster.showList(frame);
+      await cluster.openPage(frame, SCHEDULES);
+      await frame.waitForSelector(`[data-testid=velero-schedules] [data-schedule-row="${HELD}"]`, { timeout: 60_000 });
+      await frame.locator("[data-testid=velero-refresh]").focus();
+      await cluster.tabTo(frame, (focus) => focus === HELD, 80);
+      await started.window.keyboard.press("Enter");
+      await frame.waitForSelector(`[data-testid=velero-schedule-name] >> text="${HELD}"`, { timeout: 60_000 });
+      // The way back first, then the way to the backup that holds the schedule, in its band.
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      await cluster.tabTo(frame, (focus) => focus.startsWith(`velero-open-backup-${HELD}-`), 20);
+      const backup = (await cluster.focused(frame)).replace("velero-open-backup-", "");
+
+      expect(backup).toMatch(new RegExp(`^${HELD}-\\d{14}$`));
+      await started.window.keyboard.press("Enter");
+      await frame.waitForSelector(`[data-testid=velero-backup-name] >> text="${backup}"`, { timeout: 60_000 });
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      expect((await cluster.shownView(frame))?.back).toBe(`arrow_back Schedules / ${HELD}`);
+      await started.window.keyboard.press("Escape");
+      await frame.waitForSelector(`[data-testid=velero-schedule-name] >> text="${HELD}"`, { timeout: 60_000 });
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      await started.window.keyboard.press("Escape");
+      await frame.waitForSelector("[data-testid=velero-schedule-workspace]", { state: "detached", timeout: 60_000 });
+      expect(await cluster.focusOn(frame, HELD)).toBe(HELD);
     },
     TIMEOUT,
   );

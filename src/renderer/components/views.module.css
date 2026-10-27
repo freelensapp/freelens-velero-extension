@@ -941,6 +941,12 @@
   white-space: nowrap;
 }
 
+/* A mark in a line of the schedules or of the storage sits at the top of its cell, where the words of the other cells
+   are: in the middle of the line, half an x over the baseline, its word was drawn a pixel under them. */
+.overviewLines .references .status {
+  vertical-align: top;
+}
+
 /* What is in flight, in half the page: two lines for each operation. */
 .flights {
   margin: 8px 0 0;
