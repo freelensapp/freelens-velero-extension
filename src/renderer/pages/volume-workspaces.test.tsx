@@ -583,6 +583,71 @@ describe("the view of a pod volume operation", () => {
     expect(value(within(workspace).getByTestId("velero-volume-settings"), "Source namespace")).toBe("shop");
   });
 
+  it("says that a pod volume backup of that name is not there, and what is not known of one that cannot be read", async () => {
+    mount(answers(), (made) => <PodVolumeBackupsPage installation={made} />);
+    act(() => openView({ kind: "pod-volume-backup", name: "gone" }));
+    expect((await screen.findByTestId("velero-pod-volume-backup-missing")).textContent).toBe(
+      WORKSPACE_WORDS.missing("pod volume backup", A),
+    );
+    cleanup();
+    mount(answers({ [path("podVolumeBackups")]: { status: 403 } }), (made) => (
+      <PodVolumeBackupsPage installation={made} />
+    ));
+    act(() => openView({ kind: "pod-volume-backup", name: "gone" }));
+    expect((await screen.findByTestId("velero-pod-volume-backup-unknown")).textContent).toBe(
+      `${WORKSPACE_WORDS.denied("pod volume backups", A)}${WORKSPACE_WORDS.unknownAfter}`,
+    );
+    expect(screen.queryByTestId("velero-pod-volume-backup-missing")).toBeNull();
+  });
+
+  it("waits for the first read of its family when it is opened from a view that did not read it, and says no absence", async () => {
+    mount(answers({ [path("podVolumeBackups")]: () => new Promise<Answer>(() => undefined) }), (made) => (
+      <RepositoriesPage installation={made} />
+    ));
+    act(() => openView({ kind: "backup-repository", name: "shop-default-kopia" }));
+    await screen.findByTestId("velero-backup-repository-workspace");
+    act(() => openView({ kind: "pod-volume-backup", name: "nightly-failed" }));
+    const workspace = await screen.findByTestId("velero-pod-volume-backup-workspace");
+
+    expect(workspace.querySelector(".Spinner")).not.toBeNull();
+    expect(screen.queryByTestId("velero-pod-volume-backup-missing")).toBeNull();
+    expect(screen.queryByTestId("velero-pod-volume-backup-unknown")).toBeNull();
+  });
+
+  it("tells a pod volume backup created again under the name from the one that was open, and says what was read before", async () => {
+    let table = answers();
+    const made = new Installation({
+      cluster: { id: "cluster-a", name: "local-demo" },
+      read: async (address) => {
+        const answer = table[address] ?? { status: 404 };
+
+        return typeof answer === "function" ? answer() : answer;
+      },
+      now: () => NOW,
+      storage: heldPreferences({ ...emptyPreferences(), selected: { "cluster-a": A } }),
+    });
+
+    render(<PodVolumeBackupsPage installation={made} />);
+    act(() => openView({ kind: "pod-volume-backup", name: "nightly-failed" }));
+    await screen.findByTestId("velero-pod-volume-backup-workspace");
+    await waitFor(() => expect(screen.getByTestId("velero-pod-volume-backup-name").textContent).toBe("nightly-failed"));
+    expect(screen.queryByTestId("velero-pod-volume-backup-replaced")).toBeNull();
+    table = answers({
+      [path("podVolumeBackups")]: list({ ...failed, metadata: { ...failed.metadata, uid: "again" } }),
+    });
+    await act(async () => {
+      await made.refresh();
+    });
+    expect(await screen.findByTestId("velero-pod-volume-backup-replaced")).toBeTruthy();
+    table = answers({ [path("podVolumeBackups")]: { status: 500 } });
+    await act(async () => {
+      await made.refresh();
+    });
+    expect(screen.getByTestId("velero-pod-volume-backup-stale").textContent).toContain(
+      WORKSPACE_WORDS.stale("pod volume backups"),
+    );
+  });
+
   it("gives no control that writes: every button is a way, every link one of the host to its details", async () => {
     mount(answers(), (made) => <PodVolumeBackupsPage installation={made} />);
     act(() => openView({ kind: "pod-volume-backup", name: "nightly-failed" }));

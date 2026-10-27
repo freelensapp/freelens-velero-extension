@@ -726,10 +726,12 @@ evidence, by check:
 - KIND-16: the states of a family on the surfaces that show them: each of the
   three lists denied, not served and failed with nothing read before, empty, never
   answered, and read once and then failed, with its rows kept and the notice of
-  when they were read; the view of a repository of a name that is not there,
-  denied, created again under its name and of an earlier read; a reference not
-  read, loading, denied, not served and failed, each with its words; and the words
-  of an operation that waits for a node agent
+  when they were read; the views of a repository and of a pod volume backup of a
+  name that is not there, denied, created again under its name and of an earlier
+  read, and a pod volume backup opened before its family was first read, which
+  waits for the read and says no absence; a reference not read, loading, denied,
+  not served and failed, each with its words; and the words of an operation that
+  waits for a node agent
   (`src/renderer/pages/volume-lists.test.tsx`,
   `src/renderer/pages/volume-workspaces.test.tsx`, `src/common/volume-words.test.ts`).
   The words of the band of a backup and of a restore are of the second pull
