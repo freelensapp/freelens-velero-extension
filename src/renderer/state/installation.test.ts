@@ -719,11 +719,18 @@ describe("the families read on demand", () => {
   it("asks a family a holder needs at once, alone, in the generation, and at every read while it is held", async () => {
     vi.useFakeTimers();
     try {
-      const { state, api } = installation(one);
+      const { state, api, clock } = installation({
+        ...one,
+        // An answer with the time of the API server, which a read of the installation would take.
+        [PVB("velero-a")]: { ...list(object("nightly-1-x7k2p", "velero-a")), date: 9000, at: 8000 },
+      });
 
       await state.open();
       const stop = state.watch(1000);
       const before = api.asked.length;
+      const read = { asked: state.asked, serverTime: state.serverTime };
+
+      clock.now = 1500;
       const release = state.need({}, ["podVolumeBackups"]);
 
       // Asked at once, and nothing else with it.
@@ -731,6 +738,9 @@ describe("the families read on demand", () => {
       expect(state.read("podVolumeBackups").status).toBe("loading");
       await vi.advanceTimersByTimeAsync(0);
       expect(state.read("podVolumeBackups")).toMatchObject({ status: "ready", items: [{}] });
+      // A family asked alone is not a read of the installation: the time of the last read, which the suites count
+      // the reads by, and the time of the API server stay the ones of that read.
+      expect({ asked: state.asked, serverTime: state.serverTime }).toEqual(read);
       await vi.advanceTimersByTimeAsync(2000);
       expect(asked(api.asked, "podVolumeBackups")).toBe(3);
       expect(asked(api.asked, "podVolumeRestores")).toBe(0);
