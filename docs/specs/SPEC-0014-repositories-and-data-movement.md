@@ -55,9 +55,9 @@ in the Design:
   ([upload](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/backup/actions/csi/pvc_action.go#L540-L597),
   [download](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/restore/actions/csi/pvc_action.go#L405-L453)).
 - The test environment installs the server and the node agent, with the volume
-  snapshots off ([the install](../../e2e/scripts/local-demo.mts#L1091-L1093)),
+  snapshots off ([the install](../../e2e/scripts/local-demo.mts#L1092-L1094)),
   and its live backup is of ConfigMaps with `defaultVolumesToFsBackup: false`
-  ([the backup](../../e2e/scripts/local-fixtures.mts#L1584-L1609)): no object of
+  ([the backup](../../e2e/scripts/local-fixtures.mts#L1959-L1984)): no object of
   these five kinds exists in it today.
 
 Included: the five lists, the five workspaces, the five sections in the details
