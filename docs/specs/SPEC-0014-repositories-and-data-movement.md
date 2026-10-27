@@ -669,7 +669,8 @@ evidence, by check:
   sections in the build test (`src/entrypoints.test.ts`, `test/build.test.ts`,
   `src/renderer/registrations.test.tsx`). The reader takes the plurals of the three
   kinds under `velero.io/v1` with no change: its expression takes any plural of the
-  group, and the second version is of T5.2.
+  group, which its test proves on the three paths, and the second version is of
+  T5.2 (`src/renderer/api/reader.test.ts`).
 - KIND-02 and KIND-15: one union of eight families, the six read at every read
   (the five of before and the backup repositories) and the two of the pod volume
   operations read on demand; a holder that says what it needs in one call, the
