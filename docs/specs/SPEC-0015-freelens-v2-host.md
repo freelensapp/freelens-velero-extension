@@ -1414,3 +1414,19 @@ process were corrected after the run of the views: the pre-review and the integr
 ran the code of the commits, whose bundles are the ones of the run of the views byte
 for byte but the map of the main process. No `freelens-k8s-proxy`, kubectl or
 Freelens of a run was left after it.
+
+**Amendment of 2026-10-27: the kinds of SPEC-0014** (REQ-210, D7, HOST-15). The
+first pull request of T5.1 of [SPEC-0014](SPEC-0014-repositories-and-data-movement.md)
+registers three kinds more, the backup repositories, the pod volume backups and the
+pod volume restores, each a class of the pattern of D7 with a page of its own and a
+section of the details, and lists the eight in `customResources`. REQ-210, D7 and
+HOST-15 said five: they say the kinds of the extension, eight since that pull request,
+and ask of each what they asked of the five; nothing else of this spec changes.
+Decided while implementing, on 2026-10-27: the three rows are rewritten in place, with
+this paragraph beside them, as the amendment of 2026-10-16 was made. HOST-15 holds on
+the eight: the test of the entry points and the build test pin the eight classes and
+their literals, the nine pages and the eight sections made with `detailsFor`, and on
+2026-10-27 the journey suite, on the nightly v2.0.0-0-nightly-2026-10-25 of the
+validation target, read the eight kinds out of the Custom Resources tree while the
+extension was enabled and back once it was disabled, and the tabs of the group on each
+of the nine pages, in its 19 cases, all passed.
