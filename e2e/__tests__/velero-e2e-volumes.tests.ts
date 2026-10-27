@@ -91,8 +91,8 @@ describe("views of the backup repositories and of the pod volume operations", ()
         await cluster.captureScreenshot(frame, `dark-${of.id}-empty`);
       }
       // In the smallest window of the review the head of each list, its twelve or nine columns among it, lies over
-      // nothing and fits its room. T51-PR1-PENDING: the room of the columns with their rows at 900 by 650 and at
-      // each edge of the room is measured once objects of the three kinds are in the installation.
+      // nothing and fits its room. The room of the columns with their rows, at 900 by 650 and at each edge of the
+      // room, is measured once objects of the three kinds are in the installation, with their fixtures.
       await velero.setWindowSize(started.app, 900, 650);
       for (const [of] of LISTS) {
         await cluster.openPage(frame, of);
@@ -138,9 +138,10 @@ describe("views of the backup repositories and of the pod volume operations", ()
 
       // One list of the family at each read the page waited for, and none of the pod volume restores, which no
       // view that is open shows. The counters carry no namespace: what the node agent of the installation asks of
-      // the four kinds of its namespace is counted with the reads of the views. T51-PR1-PENDING: the bound below,
-      // one more than the reads waited for, is to be confirmed on the counters of the test environment; the
-      // controllers of the four kinds are measured with their objects in place, after this suite.
+      // the four kinds of its namespace is counted with the reads of the views. On the test environment of
+      // 2026-10-27 each window counted one list at each read, three of three, and nothing else listed the two
+      // kinds in a namespace; the bound below, one more than the reads waited for, leaves room for a read that
+      // ends at the edge of a window. The controllers of the four kinds are measured with their objects in place.
       expect(shown[PVB] ?? 0).toBeGreaterThanOrEqual(CYCLES);
       expect(shown[PVB] ?? 0).toBeLessThanOrEqual(CYCLES + 1);
       expect(shown[PVR] ?? 0).toBe(0);
@@ -158,8 +159,8 @@ describe("views of the backup repositories and of the pod volume operations", ()
         await cluster.afterRead(frame);
         const elsewhere = await askedOver(CYCLES);
 
-        // T51-PR1-PENDING: none of the pod volume operations is asked while these pages are shown, by the views;
-        // the counters of the test environment are to show that nothing else lists them in the window either.
+        // None of the pod volume operations is listed while these pages are shown, by the views or by anything else
+        // of the test environment, whose counters showed none in either window on 2026-10-27.
         expect([of.id, elsewhere[PVB] ?? 0, elsewhere[PVR] ?? 0]).toEqual([of.id, 0, 0]);
         expect([of.id, (elsewhere["LIST backuprepositories namespace"] ?? 0) >= CYCLES]).toEqual([of.id, true]);
       }

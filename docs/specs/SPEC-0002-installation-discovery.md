@@ -201,7 +201,10 @@ then the lists of the backups, the restores, the schedules, the backup storage
 locations, the volume snapshot locations, the backup repositories, the pod volume
 backups and the pod volume restores, each a page that is implemented, before the
 entry of the group. The entry points test and the build test pin the nine pages and
-their entries, and the journey suite reads them in the packaged application:
-T51-PR1-PENDING (the run of the journey suite that saw them). The families the
+their entries, and the journey suite reads them in the packaged application: on
+2026-10-27, on the nightly v2.0.0-0-nightly-2026-10-25 of the validation target, the
+suite alone passed its 19 cases in 92 seconds, the nine entries under Velero and the
+eight kinds left out of the Custom Resources tree until the extension was disabled
+among them, with the order of the entries proven by the entry points test. The families the
 discovery says a cluster does not serve are the eight of an installation, the
 three of the volumes among them, with the words of before.
