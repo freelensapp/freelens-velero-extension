@@ -1422,15 +1422,16 @@ pod volume restores, each a class of the pattern of D7 with a page of its own an
 section of the details, and lists the eight in `customResources`. REQ-210, D7 and
 HOST-15 said five: they say the kinds of the extension, eight since that pull request,
 and ask of each what they asked of the five; nothing else of this spec changes.
-Decided while implementing, on 2026-10-27: the three rows are rewritten in place, with
-this paragraph beside them, as the amendment of 2026-10-16 was made. HOST-15 holds on
-the eight: the test of the entry points and the build test pin the eight classes and
-their literals, the nine pages and the eight sections made with `detailsFor`, and on
-2026-10-27 the journey suite, on the nightly v2.0.0-0-nightly-2026-10-25 of the
-validation target, read the eight kinds out of the Custom Resources tree while the
-extension was enabled and back once it was disabled, and the tabs of the group on each
-of the nine pages, in its 19 cases, all passed. REQ-215 and HOST-20 keep the five
-sessions of the integration test, one for each kind of the first milestones, and ask
-no session of the three kinds of SPEC-0014. Decided while implementing, on
-2026-10-27: the three kinds of SPEC-0014 get their sessions of the integration test
-with their fixtures, in a later pull request of T5.1.
+Decided while implementing, on 2026-10-27, for the review of the milestone to
+confirm: the three rows are rewritten in place, with this paragraph beside them, as
+the amendment of 2026-10-16 was made. HOST-15 holds on the eight: the test of the
+entry points and the build test pin the eight classes and their literals, the nine
+pages and the eight sections made with `detailsFor`, and on 2026-10-27 the journey
+suite, on the nightly v2.0.0-0-nightly-2026-10-25 of the validation target, read the
+eight kinds out of the Custom Resources tree while the extension was enabled and back
+once it was disabled, and the tabs of the group on each of the nine pages, in its 19
+cases, all passed. REQ-215 and HOST-20 keep the five sessions of the integration
+test, one for each kind of the first milestones, and ask no session of the three kinds
+of SPEC-0014. Decided while implementing, on 2026-10-27, for the review of the
+milestone to confirm: the three kinds of SPEC-0014 get their sessions of the
+integration test with their fixtures, in a later pull request of T5.1.

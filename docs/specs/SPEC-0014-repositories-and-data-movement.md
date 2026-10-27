@@ -810,8 +810,8 @@ The packaged proof with rows, kept in a suite, comes with the fixtures of the li
 in a later pull request of T5.1. The job of the views on the hosted runner, which
 runs the new suite with the others: T51-PR1-HOSTED.
 
-Two precisions, which the implementation found, approved by the lead maintainer on
-2026-10-26 with the plan of the fourth milestone:
+Two precisions of the plan of the fourth milestone, approved by the lead maintainer
+on 2026-10-26 with it:
 
 - REQ-177 (L120): on Freelens v2 the extension declares the class of each kind, and
   the host registers the API and the store of a served CRD, as SPEC-0015 records it
@@ -855,7 +855,7 @@ Decided while implementing, on 2026-10-26:
   table of the kinds names, read as the others are, and the views offer no way to
   write it (`src/renderer/pages/volume-operation-workspace.tsx`).
 
-Decided while implementing, on 2026-10-27:
+Decided while implementing, on 2026-10-27, for the review of the milestone to confirm:
 
 - The states of REQ-178 are told by the status of the read of a family and by
   when it last succeeded, which every surface reads, and are proven on the lists,
