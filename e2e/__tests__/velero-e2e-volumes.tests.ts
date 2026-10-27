@@ -26,6 +26,8 @@ const PVB = "LIST podvolumebackups namespace";
 const PVR = "LIST podvolumerestores namespace";
 // How many reads of the installation each window of the reads waits for: one every fifteen seconds.
 const CYCLES = 3;
+// The report of the windows of the reads, with what was counted while each page was shown.
+const REPORT = "kind-02-reads-of-the-pod-volume-operations";
 
 describe("views of the backup repositories and of the pod volume operations", () => {
   let started: velero.StartedApplication;
@@ -134,7 +136,13 @@ describe("views of the backup repositories and of the pod volume operations", ()
     async () => {
       await cluster.openPage(frame, cluster.POD_VOLUME_BACKUPS);
       await frame.waitForSelector(`[data-testid=velero-${cluster.POD_VOLUME_BACKUPS.id}-empty]`, { timeout: 60_000 });
+      // The report is written after each window and before what is expected of it, so that a case that fails
+      // leaves the counts that tell why.
+      const report: Record<string, unknown> = { cycles: CYCLES };
       const shown = await askedOver(CYCLES);
+
+      report.podVolumeBackupsShown = shown;
+      await cluster.writeReport(REPORT, report);
 
       // One list of the family at each read the page waited for, and none of the pod volume restores, which no
       // view that is open shows. The counters carry no namespace: what the node agent of the installation asks of
@@ -149,6 +157,8 @@ describe("views of the backup repositories and of the pod volume operations", ()
       await frame.waitForSelector(`[data-testid=velero-${cluster.POD_VOLUME_RESTORES.id}-empty]`, { timeout: 60_000 });
       const restores = await askedOver(CYCLES);
 
+      report.podVolumeRestoresShown = restores;
+      await cluster.writeReport(REPORT, report);
       expect(restores[PVR] ?? 0).toBeGreaterThanOrEqual(CYCLES);
       expect(restores[PVR] ?? 0).toBeLessThanOrEqual(CYCLES + 1);
       // The page of the pod volume backups was left: its family is not asked at the reads after it.
@@ -159,16 +169,13 @@ describe("views of the backup repositories and of the pod volume operations", ()
         await cluster.afterRead(frame);
         const elsewhere = await askedOver(CYCLES);
 
+        report[`${of.id}Shown`] = elsewhere;
+        await cluster.writeReport(REPORT, report);
         // None of the pod volume operations is listed while these pages are shown, by the views or by anything else
         // of the test environment, whose counters showed none in either window on 2026-10-27.
         expect([of.id, elsewhere[PVB] ?? 0, elsewhere[PVR] ?? 0]).toEqual([of.id, 0, 0]);
         expect([of.id, (elsewhere["LIST backuprepositories namespace"] ?? 0) >= CYCLES]).toEqual([of.id, true]);
       }
-      await cluster.writeReport("kind-02-reads-of-the-pod-volume-operations", {
-        cycles: CYCLES,
-        podVolumeBackupsShown: shown,
-        podVolumeRestoresShown: restores,
-      });
     },
     TIMEOUT,
   );
