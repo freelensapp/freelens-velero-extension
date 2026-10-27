@@ -410,7 +410,7 @@ where the band is.
 
 The lists are the list layout of the host, which the extension API exports with
 its details, its drawer and its links to the details of an object
-([components](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/extensions/renderer-api/components.ts#L69-L73)),
+([components](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/extensions/renderer-api/components.ts#L59-L73)),
 and which takes the header, the contents, the order and the search of a list,
 and the menu of a row, which the extension gives nothing to; it takes its items
 from the `items` it is given or from the `contextItems` of the store, and not from
@@ -422,7 +422,7 @@ The age is the one the host writes
 The pages, the entries of the sidebar and the sections in the details are
 registered as the other kinds are
 ([registration](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/extensions/lens-renderer-extension.ts#L59-L85),
-[the sections](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/extensions/renderer-api/kube-object-registrations.ts#L65-L91),
+[the sections](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/extensions/renderer-api/kube-object-registrations.ts#L121-L134),
 [the custom resources](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/renderer/components/custom-resource-definitions/custom-resource-registration.ts#L52-L94)).
 The way to the details of a Pod or a Node is the link the host exports for each,
 `LinkToPod` with the name and the namespace and `LinkToNode` with the name: a
@@ -433,9 +433,10 @@ and draws nothing without a name
 [the address of the details](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/renderer/components/kube-detail-params/get-maybe-details-url.injectable.ts#L13-L22));
 the drawer of the details reads the object of its address when it opens
 ([the drawer](https://github.com/freelensapp/freelens/blob/7801fb10a5f20af308093b39e5f79cd6e8c3461d/packages/core/src/renderer/components/kube-object-details/current-kube-object-in-details.injectable.ts#L29-L44)).
-These facts were read again at the validation target before T5.1, where the
-draft had read them on v1.10.3: the way of the draft, a path given to
-`showDetails`, is replaced by the two links, which the extension API exports.
+These facts were read again at the validation target with the first pull request
+of T5.1, where the draft had read them on v1.10.3: the way of the draft, a path
+given to `showDetails`, is replaced by the two links, which the extension API
+exports.
 
 ### What The Main Branch Changes
 
@@ -700,7 +701,9 @@ evidence, by check:
   object created again under the name; the sections of the details, which agree
   with the rows, lead to the view for the installation selected, say the age of the
   read they found the owner in, ask nothing and keep no timer once closed
-  (`src/renderer/pages/volume-workspaces.test.tsx`).
+  (`src/renderer/pages/volume-workspaces.test.tsx`). The view of a repository has
+  no band of what used it until the second pull request, which shows the
+  operations of the volumes in it.
 - KIND-06: the eight phases, none and an unknown one, for each of the two kinds,
   with their axes, their outcome and their words (`src/common/volume-phases.test.ts`);
   the message of Velero beside the phase, in the tip of a row and in the view, on a
