@@ -595,10 +595,18 @@ test environment and of the process of this repository.
   clipped and that the words of every cell sit on the line of their row
   (`columnsOf`, `misalignedWords`). A link of the host in a cell, as `LinkToNode`,
   holds the badge of its words inside its own element: the link is a flex box
-  inside the flex box of the cell (`.cellWords > a`). Inside a block the name of a
-  node sat 1.7 pixels above the words of its row, and what was wider than the cell
-  was clipped, as measured in the packaged application on rows of pod volume
-  backups.
+  inside the flex box of the cell (`.cellWords > a`). What the repository keeps of
+  it is the test of the stylesheet, which reads the rule
+  (`src/renderer/components/views.module.test.ts`), and the test of the cells of
+  the list on the double of `LinkToNode` in `test/host-components.tsx`
+  (`src/renderer/pages/volume-lists.test.tsx`): neither sees a change of the
+  markup of the host, which the double copies. Inside a block the name of a node
+  sat 1.7 pixels above the words of its row, and what was wider than the cell was
+  clipped: measured once, on 2026-10-27, in the packaged application, by a
+  temporary suite on four synthetic pod volume backups that is not kept in the
+  repository, whose result SPEC-0014 records. No suite measures the column of the
+  node yet: the packaged proof with rows comes with the fixtures of the lists of
+  the pod volume operations, in a later pull request of T5.1.
 - The renderer of the host reads the cluster with the `fetch` of Chromium, to the
   origin of the frame, as read in the source at the target
   (`packages/core/src/renderer/fetch/browser-fetch.injectable.ts`): an answer is of

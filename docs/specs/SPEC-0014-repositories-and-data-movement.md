@@ -792,15 +792,23 @@ tabs of those three suites were restated, had failed their first cases, which
 compared them with the six of before, and the cases that start from them, 18 of 252,
 every other file passing. The heads of the three lists, empty, fit their room at
 1440 by 900 and at 900 by 650; their room with rows, at each edge of it and at twice
-the zoom, is measured with their fixtures. A check run once from a copy of the tree,
-on four synthetic pod volume backups placed in the namespace of the views for its
-run and removed after it, measured the cells of the list with rows: at 1440 by 900
-the words of every cell sat on the line of their row and none was clipped, the node
-and the longer words cut with their ellipsis, and with the cell of the node as it
-was before, the link of the host inside a block, the names of the nodes sat 1.7
-pixels above their rows and the column of the node was clipped; at 900 by 650 and at
-twice the zoom the column of the node is not shown. The job of the views on the
-hosted runner, which runs the new suite with the others: T51-PR1-HOSTED.
+the zoom, is measured with their fixtures. What proves the cell of the node today is
+two tests of the repository and one packaged check outside it: the test of the
+stylesheet, which reads the rule of a link of the host in a cell
+(`src/renderer/components/views.module.test.ts`), and the test of the cells of the
+list on the double of `LinkToNode` (`test/host-components.tsx`,
+`src/renderer/pages/volume-lists.test.tsx`); and one check of 2026-10-27, run once
+in the packaged application from a temporary suite that is not kept in the
+repository, on four synthetic pod volume backups placed in the namespace of the
+views for its run and removed after it. It measured the cells of the list with
+rows: at 1440 by 900 the words of every cell sat on the line of their row and none
+was clipped, the node and the longer words cut with their ellipsis, and with the
+cell of the node as it was before, the link of the host inside a block, the names
+of the nodes sat 1.7 pixels above their rows and the column of the node was
+clipped; at 900 by 650 and at twice the zoom the column of the node is not shown.
+The packaged proof with rows, kept in a suite, comes with the fixtures of the lists,
+in a later pull request of T5.1. The job of the views on the hosted runner, which
+runs the new suite with the others: T51-PR1-HOSTED.
 
 Two precisions, which the implementation found, approved by the lead maintainer on
 2026-10-26 with the plan of the fourth milestone:
@@ -875,3 +883,10 @@ Decided while implementing, on 2026-10-27:
   link of the host there, so that the badge of its words sits on the line of its
   row and a long name is cut with its ellipsis; a node that is not reported, and an
   owner that is not named, are said in a badge of the cell as well.
+- No packaged suite of the cell of the node is added by the first pull request: the
+  lists of the pod volume operations have no rows in the test environment until
+  their fixtures. The cell is proven by the test of the stylesheet and the test of
+  the cells on the double of `LinkToNode`, and with rows by one packaged check run
+  from a temporary suite that is not kept, whose result the packaged cases record;
+  the packaged proof with rows comes with the fixtures of the lists, in a later pull
+  request of T5.1.
