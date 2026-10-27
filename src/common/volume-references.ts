@@ -89,14 +89,18 @@ export function operationOwner(
     references.find((reference) => reference?.kind === kind);
   const fromOwner = { name: named(owned?.name), uid: named(owned?.uid) };
   const by = fromLabels.name ? "labels" : fromOwner.name ? "owner-reference" : "none";
-  const { name, uid } = by === "labels" ? fromLabels : fromOwner;
-  const noun = kind.toLowerCase();
   // The label of a name over 63 characters is the name cut as the release cuts it: the owner reference names
-  // the same object when its name, cut that way, is the label.
+  // the object of the label when its name, cut that way, is the label.
+  const sameName = fromOwner.name !== undefined && labelOf(fromOwner.name) === fromLabels.name;
+  const name = by === "labels" ? fromLabels.name : fromOwner.name;
+  // Labels that carry no UID take the one of the owner reference that names their object, which tells a replaced
+  // one as the label of the UID does.
+  const uid = by === "labels" ? (fromLabels.uid ?? (sameName ? fromOwner.uid : undefined)) : fromOwner.uid;
+  const noun = kind.toLowerCase();
   const disagreement =
     by === "labels" &&
     fromOwner.name !== undefined &&
-    (labelOf(fromOwner.name) !== fromLabels.name || (fromLabels.uid !== undefined && fromOwner.uid !== fromLabels.uid))
+    (!sameName || (fromLabels.uid !== undefined && fromOwner.uid !== fromLabels.uid))
       ? `Its owner reference names the ${noun} ${fromOwner.name}${fromOwner.uid ? ` of UID ${fromOwner.uid}` : ""}, which its labels do not name`
       : undefined;
 
@@ -108,9 +112,7 @@ export function operationOwner(
       : indexed<{ metadata: ObjectMetadata }>(read.items).get(name);
   const there = found && found.metadata.namespace === namespace ? found : undefined;
   // The whole name: the one of the object found, or the one of the owner reference that the label is the cut of.
-  const whole =
-    there?.metadata.name ??
-    (by === "labels" && fromOwner.name !== undefined && labelOf(fromOwner.name) === name ? fromOwner.name : name);
+  const whole = there?.metadata.name ?? (by === "labels" && sameName ? (fromOwner.name ?? name) : name);
 
   if (there && uid !== undefined && there.metadata.uid !== uid) {
     return {

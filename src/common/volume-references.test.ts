@@ -60,6 +60,24 @@ describe("the backup or the restore an operation belongs to", () => {
     expect(owner.reference?.reason).toContain("another one, created after the one this operation belongs to");
   });
 
+  it("is told replaced by the UID of its owner reference when its labels carry no UID and name the same object", () => {
+    const earlier = backup("nightly", "Completed", { uid: "backup-nightly-1" });
+    const { labels, ownerReferences } = ownedBy("Backup", earlier);
+    const named = { labels: { "velero.io/backup-name": labels?.["velero.io/backup-name"] ?? "" }, ownerReferences };
+    const replaced = operationOwner(podVolumeBackup("nightly-x7k2p", undefined, named), "Backup", read([nightly]));
+
+    expect([replaced.by, replaced.replaced, replaced.reference?.state, replaced.disagreement]).toEqual([
+      "labels",
+      true,
+      "absent",
+      undefined,
+    ]);
+    // The same object under the name: the UID of the owner reference is the one of the object, which resolves.
+    const same = operationOwner(podVolumeBackup("nightly-x7k2p", undefined, named), "Backup", read([earlier]));
+
+    expect([same.replaced, same.reference?.state]).toEqual([false, "resolved"]);
+  });
+
   it("is absent, denied, not read or failed as what was read of the backups says", () => {
     const operation = podVolumeBackup("nightly-x7k2p", undefined, ownedBy("Backup", nightly));
     const state = (status: Parameters<typeof read>[1], items = [] as (typeof nightly)[]) =>

@@ -729,14 +729,15 @@ evidence, by check:
   equal to the completion, a failure without a start, a failure with neither; the
   order by the time of the operation; no timer (`src/common/volume-time.test.ts`).
 - KIND-10: the owner by its labels and by its owner reference, found, found with
-  another UID, absent, denied, not read, failed, and the two disagreeing; the
-  location; the repository by its three labels, of kopia, of restic and of an empty
-  uploader, none and two; the owner by names of 63, 64 and 78 characters and the
-  repository by a location of 63 and 64, which the release cuts in their labels, and
-  an owner of 78 characters that is not in the read named whole from its owner
-  reference; the pod and the node as names, the node of a pod volume backup from
-  its spec and of a restore from its status, and the namespace of the pod a fact of
-  the view (`src/common/volume-references.test.ts`,
+  another UID, absent, denied, not read, failed, and the two disagreeing, and labels
+  with no UID told replaced by the UID of the owner reference that names their
+  object; the location; the repository by its three labels, of kopia, of restic and
+  of an empty uploader, none and two; the owner by names of 63, 64 and 78
+  characters and the repository by a location of 63 and 64, which the release cuts
+  in their labels, and an owner of 78 characters that is not in the read named
+  whole from its owner reference; the pod and the node as names, the node of a pod
+  volume backup from its spec and of a restore from its status, and the namespace
+  of the pod a fact of the view (`src/common/volume-references.test.ts`,
   `src/renderer/pages/volume-workspaces.test.tsx`).
 - KIND-14: no menu, no selection and no control but ways in the rows and in the
   views (`src/renderer/pages/volume-lists.test.tsx`,
@@ -818,3 +819,7 @@ Decided while implementing, on 2026-10-27:
   word Unknown before its text, as a phase does. An uploader or a type that is not
   set is said so, with no mark, and a result that is not reported has none either:
   neither is a value.
+- Labels of an owner that carry its name and no UID take the UID of the owner
+  reference that names the same object, so that an object created again under the
+  name is told from the owner as the label of the UID tells it; the release writes
+  both labels, and an object without the second is not one it made.
