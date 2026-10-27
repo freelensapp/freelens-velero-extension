@@ -458,6 +458,12 @@ test environment and of the process of this repository.
   schedules ordered by a column of the host answers in 100 to 113 ms, alike for
   each column and direction, and a search of it in 62 to 309 ms, about a quarter
   of a second more from the key, which the host waits before it searches.
+- A mark of the views, `.status`, is an inline box in the middle of its line: in
+  a table cell at the top of a row of plain words its word sits about a pixel
+  under the others, past the pixel the pre-review allows at twice the zoom. The
+  lines of the Overview put it at the top of its cell (`.overviewLines
+  .references .status`); a table of a workspace whose words a check measures at
+  twice the zoom may need the same.
 - `kubectl delete` waits for each object it removed, one at a time: two thousand
   take minutes. Remove with `--wait=false`, then read the namespace until
   nothing is left.
