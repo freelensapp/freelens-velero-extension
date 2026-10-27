@@ -670,6 +670,14 @@ evidence, by check:
   a late answer of another generation, or of a family no holder needs any more, not
   taken; no timer added (`src/renderer/state/installation.test.ts`,
   `src/renderer/pages/volume-lists.test.tsx`, `src/renderer/pages/overview-page.test.tsx`).
+  No family of the operations is asked by the view of a backup, of a restore or of
+  a schedule: the test of the reads of the view of a backup
+  (`src/renderer/pages/volume-lists.test.tsx`), and the tests that count what
+  opening a restore and a schedule asks, which fail when either view is given a
+  family of the operations (`src/renderer/pages/restores-page.test.tsx`, "opens
+  from a row and shows a restore that waits with a failure as in flight";
+  `src/renderer/pages/schedules-page.test.tsx`, "shows what Velero says of the
+  schedule, and computes from its expression only its band of the adherence").
 - KIND-03 and KIND-04: the columns of the three lists, their stable identifiers
   and classes in the order of the Design, each cell in each state, the order of
   each column through the callbacks of the host both ways with none answering
