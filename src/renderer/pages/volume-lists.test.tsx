@@ -589,7 +589,7 @@ describe("the families of the pod volume operations, read where they are shown",
     await waitFor(() => expect(rows("backup-repository")).toHaveLength(repositories.length));
     expect([count(asked, PVB), count(asked, PVR)]).toEqual([0, 0]);
     // The view of a repository shows nothing of the operations of the volumes until the band that shows them, as
-    // decided by the maintainer on 2026-10-26: it asks for neither family.
+    // decided while implementing, on 2026-10-26: it asks for neither family.
     act(() => openView({ kind: "backup-repository", name: "shop-default-kopia" }));
     await screen.findByTestId("velero-backup-repository-workspace");
     await act(async () => {

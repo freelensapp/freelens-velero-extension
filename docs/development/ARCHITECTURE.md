@@ -414,7 +414,7 @@ T5.1 they are eight: the five of the first milestones, `backup-repository`,
 `pod-volume-backup` and `pod-volume-restore`, and a reference to a backup
 repository, a pod volume backup or a pod volume restore that is found leads to its
 view as the others do. Each view reads the families it shows, and the notices over
-it are of those alone, as decided by the maintainer on 2026-10-26: a backup, a
+it are of those alone, as decided while implementing, on 2026-10-26: a backup, a
 restore and a schedule the backups, the restores, the schedules and the two
 locations; a repository the repositories and the storage locations, the operations
 that use it coming with the band that shows them; an operation its own family,

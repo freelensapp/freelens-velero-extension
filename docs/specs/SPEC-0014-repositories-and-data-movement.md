@@ -582,7 +582,7 @@ Record role, date and verdict.
   longer than 63 characters is cut to its first 57 and six characters of its
   SHA-256 ([RECON-T0.1](../development/RECON-T0.1.md), the labels), so the owner
   of an operation and the location of its repository are found by the name cut
-  that way, as decided by the maintainer on 2026-10-26. The extension cuts the
+  that way, as decided while implementing, on 2026-10-26. The extension cuts the
   labels of the requests it creates with the same function
   (`src/common/name-label.ts`).
 - **Due is counted by the clock of this machine**, against the last maintenance

@@ -26,7 +26,7 @@ export interface ViewTarget {
 // What is read of the installation to show a view of each kind, and how the kind is called. A view shows
 // something of the families it reads: what is missing of the others is not said over it. A family of the
 // operations of the volumes is read while a view that reads it is open, and only then. Each view reads the
-// families it shows, and no other, as decided by the maintainer on 2026-10-26: the families read at every read
+// families it shows, and no other, as decided while implementing, on 2026-10-26: the families read at every read
 // are asked whatever view is open, and a view that reads fewer of them asks no less of the cluster.
 export const VIEWS: Record<
   ViewKind,
