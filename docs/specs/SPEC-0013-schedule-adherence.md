@@ -1121,25 +1121,28 @@ on 2026-10-26 on the machine of the runs, an Intel Core i7-9750H of twelve threa
 Docker Desktop, in the nightly v2.0.0-0-nightly-2026-10-25: the list answered in 176 and 156 ms at the 95th percentile,
 414 and 393 from the key, each order in 100 to 113 ms, with 27 rows mounted, and the Overview in 33 and 62 ms, each of
 250 ms; on 2026-10-27, in the run of the pattern of the hosted job on that machine, the list in 134 ms at the 95th
-percentile, 385 from the key, each order in 98 to 119 ms, and the Overview in 37 ms; on the hosted runner,
-ADHERENCE-PR4-PENDING. Its measures are ten searches and ten orders of the list, each a column and a direction asked
-once untimed from the same start to prove that it changes the first forty rows, after three interactions that warm it,
-the 95th percentile of what the list takes to answer of 250 ms with the time from the key beside it and the most rows
-mounted of 100; and twenty changes of the window of its Overview after three, of 250 ms, as OVER-12, with the window
-after each change and the schedules and the backups the page read; each report written before anything of the measure is
-asserted, as `adh-16-list-performance` and `adh-16-overview-performance`, with the machine and the run. The measure of
-`measure()` gains an order among its interactions, a click on the head of a column, which ends when the first forty rows
-change and has no wait of the host, and how long it waits for a change: ten seconds, and two for the order that case 9
-expects refused. The answer of the header of ADH-07, which the first pull request found reaching the frame on the
-machine of the runs and on the hosted runner: it reached it in the runs of 2026-10-26 on the machine of the runs, where
-the note over the list and the line of the clocks of each band, which the suite prints as `ADH-07` lines before it
-asserts them, said: "Times are compared by the clock of the cluster, which the time its API server writes in its answers
-gives: it is within a second of the clock of this machine. The schedule adherence-ahead reports its last submission 23h
-56m after the clock of this machine, later than the clock of the API server: by the clock that wrote it a run may be
-later still." On the hosted runner, ADHERENCE-PR4-PENDING. The suite took 137.97 and 132.81 seconds alone on the machine
-of the runs, 4 minutes 11 seconds and 4 minutes 1 second with the build, the pack and the start of its runner; the run
-of the pattern on that machine took 51 minutes 21 seconds on 2026-10-27, the suite of the adherence 133.85 seconds in
-it, and the times of the hosted runner, read before anything else is decided under LM6, ADHERENCE-PR4-PENDING.
+percentile, 385 from the key, each order in 98 to 119 ms, and the Overview in 37 ms; on the hosted runner, on
+2026-10-27, the list in 100 ms, 343 from the key, each order in 71 to 82 ms, and the Overview in 27 ms. Its measures are
+ten searches and ten orders of the list, each a column and a direction asked once untimed from the same start to prove
+that it changes the first forty rows, after three interactions that warm it, the 95th percentile of what the list takes
+to answer of 250 ms with the time from the key beside it and the most rows mounted of 100; and twenty changes of the
+window of its Overview after three, of 250 ms, as OVER-12, with the window after each change and the schedules and the
+backups the page read; each report written before anything of the measure is asserted, as `adh-16-list-performance` and
+`adh-16-overview-performance`, with the machine and the run. The measure of `measure()` gains an order among its
+interactions, a click on the head of a column, which ends when the first forty rows change and has no wait of the host,
+and how long it waits for a change: ten seconds, and two for the order that case 9 expects refused. The answer of the
+header of ADH-07, which the first pull request found reaching the frame on the machine of the runs and on the hosted
+runner: it reached it in the runs of 2026-10-26 on the machine of the runs, where the note over the list and the line of
+the clocks of each band, which the suite prints as `ADH-07` lines before it asserts them, said: "Times are compared by
+the clock of the cluster, which the time its API server writes in its answers gives: it is within a second of the clock
+of this machine. The schedule adherence-ahead reports its last submission 23h 56m after the clock of this machine, later
+than the clock of the API server: by the clock that wrote it a run may be later still." On the hosted runner, on
+2026-10-27, the note and the line of the clocks said the same, the last submission 23h 45m ahead: the answer of the
+header reached the frame there too. The suite took 137.97 and 132.81 seconds alone on the machine of the runs, 4 minutes
+11 seconds and 4 minutes 1 second with the build, the pack and the start of its runner; the run of the pattern on that
+machine took 51 minutes 21 seconds on 2026-10-27, the suite of the adherence 133.85 seconds in it, and on the hosted
+runner, read before anything else is decided under LM6, the run of the pattern took 42 minutes 28 seconds on 2026-10-27,
+its suites 41 minutes 16 seconds, in a job of 47 minutes 48 seconds of its 150.
 
 Changes made on purpose to what only the packaged application shows, on 2026-10-26, each on a copy of the tree with the
 suite of the adherence run once alone from it: the reader leaving out the header Date made case 1 fail on the note over

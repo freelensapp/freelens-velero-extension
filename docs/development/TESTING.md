@@ -837,13 +837,15 @@ and the counters of the API server, never inside a measure, and runs in the run
 of the pattern `velero-e2e`, as the hosted job runs it (LM6 of SPEC-0013). It
 took 137.97 and 132.81 seconds alone on the machine of the runs on 2026-10-26, 4
 minutes 11 seconds and 4 minutes 1 second with the build, the pack and the start
-of its runner, 133.85 seconds in the run of the pattern on 2026-10-27, and
-ADHERENCE-PR4-PENDING on the hosted runner; the run of the pattern `velero-e2e
-pre-review extensions` took 51 minutes 21 seconds on the machine of the runs on
-2026-10-27, its suites 49 minutes 29 seconds, and ADHERENCE-PR4-PENDING on the
-hosted runner, against the two hours the runner of the suites gives them in one
-start, the two hours the kubeconfigs of the readers last, and the 150 minutes of
-the job.
+of its runner, 133.85 seconds in the run of the pattern on 2026-10-27, and about
+a minute and three quarters on the hosted runner that day, from the last line of
+the suite before it to its own last line, since the reporter of the job prints
+no time of a file; the run of the pattern `velero-e2e pre-review extensions`
+took 51 minutes 21 seconds on the machine of the runs on 2026-10-27, its suites
+49 minutes 29 seconds, and 42 minutes 28 seconds on the hosted runner that day,
+its suites 41 minutes 16 seconds, in a job of 47 minutes 48 seconds, against the
+two hours the runner of the suites gives them in one start, the two hours the
+kubeconfigs of the readers last, and the 150 minutes of the job.
 
 ## Critical Journeys
 
@@ -1061,8 +1063,9 @@ the Overview in 33 and 62 ms at the 95th percentile, each window holding
 operations and ten of them listed. On 2026-10-27, in the run of the pattern of
 the hosted job on the same machine: 134 ms at the 95th percentile, 110 at the
 median, the slowest 172, and 385 from the key, with 27 rows mounted; each order
-in 98 to 119 ms; the Overview in 37 ms. On the hosted runner,
-ADHERENCE-PR4-PENDING.
+in 98 to 119 ms; the Overview in 37 ms. On the hosted runner, on 2026-10-27: 100
+ms at the 95th percentile, 77 at the median, the slowest 103, and 343 from the
+key, with 27 rows mounted; each order in 71 to 82 ms; the Overview in 27 ms.
 
 The second slice of the adherence (SPEC-0013, T3.2) is the module
 [`schedule-signal.ts`](../../src/common/schedule-signal.ts) and its
