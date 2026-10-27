@@ -677,6 +677,18 @@ describe("overview of an installation", () => {
         expect([id, (await cluster.columnsOf(table, frame)).clipped]).toEqual([id, []]);
         expect([id, await cluster.misalignedWords(table, frame)]).toEqual([id, []]);
       }
+      // At twice the zoom too: a mark in the middle of its line drew its word 1.1 pixels under the words of its row,
+      // past the pixel the check allows.
+      try {
+        await velero.setZoom(started.app, 2);
+        await frame.waitForTimeout(1000);
+        for (const [id, table] of lines) {
+          expect([id, "zoom 200", await cluster.misalignedWords(table, frame)]).toEqual([id, "zoom 200", []]);
+        }
+      } finally {
+        await velero.setZoom(started.app, 1);
+        await frame.waitForTimeout(1000);
+      }
       expect(shown.storage).toEqual(["overview-default", "overview-silent", "overview-unavailable"]);
       expect(await frame.locator("[data-testid=velero-overview-storage-others]").count()).toBe(0);
       expect(await words('[data-testid=velero-overview-storage-list] [data-line="overview-default"]')).toMatch(

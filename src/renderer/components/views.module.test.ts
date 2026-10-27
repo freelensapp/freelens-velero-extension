@@ -84,3 +84,13 @@ describe("room of the list of the schedules", () => {
     ]);
   });
 });
+
+describe("lines of the overview", () => {
+  // A mark is centred on the middle of the line, half an x over the baseline, and its word with it: in a cell at the
+  // top of a row of plain words, that word was drawn a pixel under the others.
+  it("puts the mark of a line at the top of its cell, where the words of the other cells are", () => {
+    const text = readFileSync(join(process.cwd(), "src", "renderer", "components", "views.module.css"), "utf8");
+
+    expect(/\.overviewLines \.references \.status \{([^}]*)\}/.exec(text)?.[1]).toMatch(/vertical-align:\s*top;/);
+  });
+});
