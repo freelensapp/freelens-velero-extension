@@ -2,34 +2,11 @@ import { describe, expect, it } from "vitest";
 import { read } from "../../test/volume-builders";
 import { unavailable } from "./references";
 import { VIEWS } from "./views";
-import { familyState, LIST_WORDS, REFERENCE_WORDS, WORKSPACE_WORDS } from "./volume-words";
+import { LIST_WORDS, REFERENCE_WORDS, WORKSPACE_WORDS } from "./volume-words";
 
 import type { ReadStatus } from "./read-state";
 import type { ReferenceKind } from "./references";
 import type { ViewKind } from "./views";
-
-// The seven states of a family (SPEC-0014, REQ-178), from what was read of it.
-const STATES: [string, ReadStatus, number | undefined, string][] = [
-  ["never asked", "idle", undefined, "never-asked"],
-  ["being read for the first time", "loading", undefined, "loading"],
-  ["read", "ready", 1, "ready"],
-  ["denied", "forbidden", undefined, "denied"],
-  ["not served", "not-served", undefined, "not-served"],
-  ["failed", "failed", undefined, "failed"],
-  ["read before a read that was denied", "forbidden", 1, "stale"],
-  ["read before a read that failed", "failed", 1, "stale"],
-];
-
-describe("the state of a family", () => {
-  it.each(STATES)("is %s", (_, status, lastSuccess, state) => {
-    expect(familyState(read([], status, lastSuccess))).toBe(state);
-  });
-
-  it("asked again keeps the state of its last read", () => {
-    expect(familyState({ status: "ready", items: [], lastSuccess: 1, reading: true })).toBe("ready");
-    expect(familyState({ status: "forbidden", items: [], reading: true })).toBe("denied");
-  });
-});
 
 // The three kinds of this slice, each with the kind it is referred to by.
 const KINDS: [ViewKind, ReferenceKind][] = [

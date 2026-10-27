@@ -16,7 +16,7 @@ import {
   repository,
   restore,
 } from "../../../test/volume-builders";
-import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
+import { emptyPreferences, heldPreferences, RESOURCES, TITLES } from "../../common/discovery";
 import { VIEWS } from "../../common/views";
 import { LIST_NOTES, LIST_WORDS, NODE_AGENT_WORDS, NOT_REPORTED, REPOSITORY_WORDS } from "../../common/volume-words";
 import { closeViews, openView } from "../navigation";
@@ -511,14 +511,14 @@ describe("what a list says of its family", () => {
       (installation: Installation) => <RepositoriesPage installation={installation} />,
     ],
   ] as const)("in each state: %s", async (id, family, page) => {
-    const { plural, noun } =
-      VIEWS[
-        id === "backup-repositories"
-          ? "backup-repository"
-          : id === "pod-volume-backups"
-            ? "pod-volume-backup"
-            : "pod-volume-restore"
-      ];
+    const kind =
+      id === "backup-repositories"
+        ? "backup-repository"
+        : id === "pod-volume-backups"
+          ? "pod-volume-backup"
+          : "pod-volume-restore";
+    const { plural, noun } = VIEWS[kind];
+    const read = { backupRepositories: repositories, podVolumeBackups: pvbs, podVolumeRestores: pvrs }[family];
 
     for (const [status, words] of [
       [403, LIST_WORDS.denied(plural)],
@@ -539,6 +539,21 @@ describe("what a list says of its family", () => {
     // Never answered: no rows, no count.
     mount(answers({ [path(family)]: () => new Promise<Answer>(() => undefined) }), page);
     expect((await screen.findByTestId(`velero-${id}-not-counted`)).textContent).toBe(LIST_WORDS.notCounted);
+    cleanup();
+    // Read, then failed: the rows of the read that succeeded stay, and the list says when they were read.
+    const table = answers();
+    const { installation } = mount(table, page);
+
+    await waitFor(() => expect(rows(kind)).toHaveLength(read.length));
+    table[path(family)] = { status: 500 };
+    await act(async () => {
+      await installation.refresh();
+    });
+    expect(rows(kind)).toHaveLength(read.length);
+    expect(screen.queryByTestId(`velero-${id}-unavailable`)).toBeNull();
+    expect(screen.getByTestId(`velero-notice-${family}`).textContent).toBe(
+      `error_outline${TITLES[family]} could not be read. What is shown was read at ${new Date(NOW).toLocaleTimeString()}.`,
+    );
   });
 });
 

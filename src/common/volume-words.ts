@@ -5,22 +5,8 @@ import { sizeText } from "./artifact-volumes";
 import { formatDuration } from "./duration";
 
 import type { ItemProgress } from "./progress";
-import type { FamilyRead } from "./read-state";
 import type { VolumeKind, VolumeOperationState } from "./volume-phases";
 import type { VolumeSpan } from "./volume-time";
-
-// The seven states of what was read of a family (SPEC-0014, REQ-178): never asked, being read for the first time,
-// read, denied with nothing read before, not served, failed with nothing read before, and read before a read that
-// did not succeed.
-export type FamilyState = "never-asked" | "loading" | "ready" | "denied" | "not-served" | "failed" | "stale";
-
-export function familyState(read: FamilyRead<unknown>): FamilyState {
-  if (read.status === "ready") return "ready";
-  if (read.status === "idle") return "never-asked";
-  if (read.status === "loading") return "loading";
-  if (read.lastSuccess !== undefined) return "stale";
-  return read.status === "forbidden" ? "denied" : read.status;
-}
 
 // What a list says when it has nothing to show: what it holds no count of, and why.
 export const LIST_WORDS = {
