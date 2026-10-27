@@ -116,7 +116,7 @@ Then the Backups, under Velero in the sidebar:
 | Open `views-daily-20260901030000` | Its schedule, its storage location, its snapshot location and its three restores |
 | Open `backup-missing-location` and `backup-missing-schedule` | References to what is not there: a name with its reason, and no link |
 | Other namespace, `velero-scale-<run>` | A namespace nothing suggests, read because it was named. A thousand backups: search, sort, drag the edge of a column, scroll, open one and come back |
-| Custom Resources | While the extension is enabled, the group `velero.io` of the tree lists the kinds of Velero that have no page under Velero, and none of the five that have one |
+| Custom Resources | While the extension is enabled, the group `velero.io` of the tree lists the kinds of Velero that have no page under Velero, and none of the eight that have one |
 | Custom Resources, Definitions, then `Backup` of the group `velero.io` | The page of the host. In the details of a backup the section of Velero reads it as the views do, says that its log, its results, its resources and its volumes are in the workspace and loads none of them, and leads to the workspace when the backup is of the installation selected |
 | Close Freelens and open it again | The namespace that was selected is the one shown |
 
@@ -248,6 +248,16 @@ Then the locations, from Backup Storage Locations in the sidebar:
 | Select `velero-defaults-<run>` | Two locations marked default: the list names both, says which one the release would keep, and picks none |
 | Volume Snapshot Locations, `velero-views-<run>` | The phase as it is written, with the mark of what is not known: the list says that the release neither writes nor checks it |
 | From a backup, a restore or a schedule | The locations they name lead to the view of the location, over the list the first view was opened from |
+
+Then the volumes, from Backup Repositories, Pod Volume Backups and Pod Volume
+Restores, after Volume Snapshot Locations in the sidebar. The environment holds no
+object of the three kinds yet: no backup of the file system ran in it, and their
+fixtures come with a later pull request of T5.1.
+
+| Step | What to look at |
+| --- | --- |
+| Backup Repositories, `velero-demo` | No repository: the list says of what it is the list, and the host that it is empty |
+| Pod Volume Backups and Pod Volume Restores, `velero-views-<run>` | None of either, each list saying of what it is the list, with the note over it that the operations go with their backups or their restores |
 
 With the keyboard alone: Tab reaches the choices, the search and the names of the
 rows, Enter opens, Tab reaches the ways to the other views and the marks of a line
