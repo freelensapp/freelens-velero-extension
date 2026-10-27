@@ -768,7 +768,8 @@ of every suite that counts them restated with the repositories. T51-PR1-PENDING:
 the runs, their durations and their reports, and the room of the three lists at 900
 by 650 and at each edge of the room.
 
-Two precisions, which the implementation found:
+Two precisions, which the implementation found, approved by the lead maintainer on
+2026-10-26 with the plan of the fourth milestone:
 
 - REQ-177 (L120): on Freelens v2 the extension declares the class of each kind, and
   the host registers the API and the store of a served CRD, as SPEC-0015 records it
