@@ -176,6 +176,8 @@ export const VolumeOperationWorkspace = observer(
 
         <h3 className={styles.sectionTitle}>Volume</h3>
         <div className={styles.band} data-testid="velero-volume-of">
+          {/* The namespace of the pod, which for a restore is the one it was restored into, beside the source one. */}
+          <Fact name="Pod namespace">{view.pod.namespace ?? NOT_REPORTED}</Fact>
           <Fact
             name="Pod"
             note={view.pod.uid ? `UID ${view.pod.uid}. ${VOLUME_WORDS.hostResolves}` : VOLUME_WORDS.hostResolves}

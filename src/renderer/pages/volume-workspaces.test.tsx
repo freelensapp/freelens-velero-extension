@@ -407,6 +407,8 @@ describe("the view of a pod volume operation", () => {
     expect(new URL(pod.href).searchParams.get("kube-details")).toBe("/api/v1/namespaces/shop/pods/cart-0");
     expect(new URL(node.href).searchParams.get("kube-details")).toBe("/api/v1/nodes/worker-1");
     expect(note(of, "Pod")).toBe(`UID pod-cart-0. ${VOLUME_WORDS.hostResolves}`);
+    // The namespace of the pod is a fact of its own, and not only a part of the address of the link.
+    expect(value(of, "Pod namespace")).toBe("shop");
     expect([value(of, "Volume"), value(of, "Claim")]).toEqual(["data", "data-cart-0, UID claim-1"]);
     expect(note(of, "Node")).toBe(VOLUME_WORDS.nodeNote.PodVolumeBackup);
     const settings = within(workspace).getByTestId("velero-volume-settings");
@@ -475,6 +477,8 @@ describe("the view of a pod volume operation", () => {
 
     expect(value(of, "Node")).toBe("worker-3");
     expect(note(of, "Node")).toBe(VOLUME_WORDS.nodeNote.PodVolumeRestore);
+    // The restored pod is in the namespace it was restored into, which is not the source one of the settings.
+    expect(value(of, "Pod namespace")).toBe("shop-restored");
     expect(value(within(workspace).getByTestId("velero-volume-belongs"), "Restore")).toBe("monday (In progress)");
     expect(value(within(workspace).getByTestId("velero-volume-settings"), "Source namespace")).toBe("shop");
   });
