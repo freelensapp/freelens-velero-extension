@@ -24,6 +24,7 @@ import {
   NODE_AGENT_WORDS,
   NOT_REPORTED,
   NOT_WRITTEN,
+  REFERENCE_WORDS,
   REPOSITORY_WORDS,
 } from "../../common/volume-words";
 import styles from "../components/views.module.css";
@@ -688,6 +689,43 @@ describe("what a list says of its family", () => {
       `error_outline${TITLES[family]} could not be read. What is shown was read at ${new Date(NOW).toLocaleTimeString()}.`,
     );
   });
+
+  it.each([
+    [
+      "pod-volume-backup",
+      "backups",
+      "nightly-completed",
+      "nightly",
+      (installation: Installation) => <PodVolumeBackupsPage installation={installation} />,
+    ],
+    [
+      "pod-volume-restore",
+      "restores",
+      "monday-new",
+      "monday",
+      (installation: Installation) => <PodVolumeRestoresPage installation={installation} />,
+    ],
+  ] as const)(
+    "marks the column of the %s owner of an earlier read by the notice over the list",
+    async (kind, family, name, owner, page) => {
+      const table = answers();
+      const { installation } = mount(table, page);
+      const way = () => cell(kind, name, "operation").querySelector("button") as HTMLButtonElement;
+
+      await waitFor(() => expect(way()?.textContent).toBe(owner));
+      expect(screen.queryByTestId(`velero-notice-${family}`)).toBeNull();
+      table[path(family)] = { status: 500 };
+      await act(async () => {
+        await installation.refresh();
+      });
+      // The owner stays a way, as it was read, with why in its tip; what marks the column is the notice over the
+      // list, which names the family the column is taken from and when it was read.
+      expect([way().textContent, way().title]).toEqual([owner, REFERENCE_WORDS.stale(family)]);
+      expect(screen.getByTestId(`velero-notice-${family}`).textContent).toBe(
+        `error_outline${TITLES[family]} could not be read. What is shown was read at ${new Date(NOW).toLocaleTimeString()}.`,
+      );
+    },
+  );
 });
 
 describe("the families of the pod volume operations, read where they are shown", () => {
