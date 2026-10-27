@@ -10,6 +10,7 @@ import {
   read,
   restore,
 } from "../../test/volume-builders";
+import { timeText } from "./operation-text";
 import { bytesProgress } from "./progress";
 import { mapEntries, unknownFields, VOLUME_SORTING, volumeSearch, volumeView } from "./volume-view";
 import { bytesText, bytesTip, incrementalText, NOT_REPORTED, POD_NOT_NAMED } from "./volume-words";
@@ -159,6 +160,21 @@ describe("the view of an operation", () => {
     );
 
     expect(volumeSearch(moved)).toContain("512.0 MiB of 1.0 GiB (50%)");
+    // An operation that started and completed: its start in the time of the operator and its duration, as the
+    // cells of the start and of the duration write them.
+    const ended = volumeView(
+      "PodVolumeBackup",
+      podVolumeBackup(
+        "nightly-ended",
+        { phase: "Completed", startTimestamp: before(20 * MINUTE), completionTimestamp: before(16 * MINUTE) },
+        ownedBy("Backup", nightly),
+      ),
+      NOW,
+      reads,
+    );
+
+    expect(volumeSearch(ended)).toEqual(expect.arrayContaining([timeText(NOW - 20 * MINUTE), "4m"]));
+    expect(volumeSearch(ended)).not.toContain("Not started");
   });
 
   it("is ordered by callbacks that answer a number, a text or an array, never undefined or NaN", () => {
