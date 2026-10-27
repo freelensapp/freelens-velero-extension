@@ -18,7 +18,14 @@ import {
 } from "../../../test/volume-builders";
 import { emptyPreferences, heldPreferences, RESOURCES, TITLES } from "../../common/discovery";
 import { VIEWS } from "../../common/views";
-import { LIST_NOTES, LIST_WORDS, NODE_AGENT_WORDS, NOT_REPORTED, REPOSITORY_WORDS } from "../../common/volume-words";
+import {
+  LIST_NOTES,
+  LIST_WORDS,
+  NODE_AGENT_WORDS,
+  NOT_REPORTED,
+  NOT_WRITTEN,
+  REPOSITORY_WORDS,
+} from "../../common/volume-words";
 import { closeViews, openView } from "../navigation";
 import { Installation, READ_EVERY } from "../state/installation";
 import { BackupsPage } from "./backups-page";
@@ -271,6 +278,25 @@ describe("the list of the backup repositories", () => {
     expect(cell("backup-repository", "shop-default-kopia", "volume-namespace").textContent).toBe("shop");
   });
 
+  it("marks a type the release does not write as not known, beside its text, and no type it writes", async () => {
+    const zfs = repository("shop-default-zfs", { phase: "Ready" }, { spec: { repositoryType: "zfs" } });
+
+    mount(answers({ [path("backupRepositories")]: list(...repositories, zfs) }), (installation) => (
+      <RepositoriesPage installation={installation} />
+    ));
+    await waitFor(() => expect(rows("backup-repository")).toHaveLength(repositories.length + 1));
+    const type = (name: string) => cell("backup-repository", name, "repository-type");
+
+    expect(type("shop-default-zfs").querySelector("[data-written=unknown] .Icon")?.textContent).toBe("help_outline");
+    expect(type("shop-default-zfs").textContent).toBe(`help_outlinezfs, ${NOT_WRITTEN.mark}`);
+    expect(tip(type("shop-default-zfs"))).toBe(`zfs: ${NOT_WRITTEN.mark}`);
+    expect(
+      ["shop-default-kopia", "shop-default-restic", "odd-default-"].map(
+        (name) => type(name).querySelector("[data-written]") ?? type(name).textContent,
+      ),
+    ).toEqual(["kopia", "restic", "Not set"]);
+  });
+
   it("makes the storage location a way to its view when it is there, and says why when it is not", async () => {
     mount(answers(), (installation) => <RepositoriesPage installation={installation} />);
     await waitFor(() => expect(rows("backup-repository")).toHaveLength(repositories.length));
@@ -430,6 +456,30 @@ describe("the lists of the pod volume operations", () => {
     expect(text("nightly-completed", "uploader")).toBe("kopia");
     // An uploader that is not set is said so: the release reads it as restic, and Built-in is a data mover.
     expect(text("nightly-odd", "uploader")).toBe("Not set");
+  });
+
+  it("marks an uploader the release does not write as not known, beside its text, and no uploader it writes", async () => {
+    const other = podVolumeBackup(
+      "nightly-other",
+      { phase: "Completed" },
+      { ...of, spec: { uploaderType: "velero-x" } },
+    );
+
+    mount(answers({ [path("podVolumeBackups")]: list(...pvbs, other) }), (installation) => (
+      <PodVolumeBackupsPage installation={installation} />
+    ));
+    await waitFor(() => expect(rows("pod-volume-backup")).toHaveLength(pvbs.length + 1));
+    const uploader = (name: string) => cell("pod-volume-backup", name, "uploader");
+
+    expect(uploader("nightly-other").querySelector("[data-written=unknown] .Icon")?.textContent).toBe("help_outline");
+    expect(uploader("nightly-other").textContent).toBe(`help_outlinevelero-x, ${NOT_WRITTEN.mark}`);
+    expect(tip(uploader("nightly-other"))).toBe(`velero-x: ${NOT_WRITTEN.mark}`);
+    // Kopia, and an uploader that is not set, which the release reads as restic, are no unknown.
+    expect(
+      ["nightly-completed", "nightly-odd"].map(
+        (name) => uploader(name).querySelector("[data-written]") ?? uploader(name).textContent,
+      ),
+    ).toEqual(["kopia", "Not set"]);
   });
 
   it("orders by the phase and by the node both ways, none last in the first order, and searches the message", async () => {

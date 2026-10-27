@@ -165,3 +165,17 @@ export function maintenanceResult(value: unknown): MaintenanceResult {
   if (value === undefined || value === null || value === "") return { result: "unknown", label: "Not reported" };
   return { reported: typeof value === "string" ? value : JSON.stringify(value), result: "unknown", label: "Unknown" };
 }
+
+// The uploaders and the types of repository the reviewed release writes, which its schemas list for both: another is
+// kept as its text, with the mark of what is not known (REQ-182). One that is not set is said so, and is not unknown.
+const WRITTEN_TYPES: readonly string[] = ["kopia", "restic"];
+
+export function writtenType(value: string | undefined): boolean {
+  return value === undefined || value === "" || WRITTEN_TYPES.includes(value);
+}
+
+// A result of a maintenance the reviewed release does not write, which is kept as its text with the mark of what is
+// not known. One that is not reported has no text to keep.
+export function unwrittenResult(result: MaintenanceResult): boolean {
+  return result.result === "unknown" && result.reported !== undefined;
+}

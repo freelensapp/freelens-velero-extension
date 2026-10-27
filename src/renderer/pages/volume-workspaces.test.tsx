@@ -19,7 +19,14 @@ import {
 } from "../../../test/volume-builders";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { LEFT_OUT } from "../../common/location-view";
-import { NODE_AGENT_WORDS, REPOSITORY_WORDS, VOLUME_WORDS, WORKSPACE_WORDS } from "../../common/volume-words";
+import {
+  NODE_AGENT_WORDS,
+  NOT_WRITTEN,
+  REPOSITORY_WORDS,
+  UPLOADER_NOT_SET_NOTE,
+  VOLUME_WORDS,
+  WORKSPACE_WORDS,
+} from "../../common/volume-words";
 import { BackupRepository, PodVolumeBackup, PodVolumeRestore } from "../api/kinds";
 import styles from "../components/views.module.css";
 import { RepositoryDetails } from "../details/repository-details";
@@ -100,6 +107,19 @@ const due = repository(
     spec: { volumeNamespace: "due" },
   },
 );
+// A type of repository and a result of a maintenance the release does not write, which the schemas refuse.
+const zfs = repository(
+  "shop-default-zfs",
+  {
+    phase: "Ready",
+    lastMaintenanceTime: before(DAY),
+    recentMaintenance: [
+      { result: "Succeeded", startTimestamp: before(DAY + MINUTE), completeTimestamp: before(DAY) },
+      { result: "Skipped", startTimestamp: before(HOUR), completeTimestamp: before(HOUR - MINUTE) },
+    ],
+  },
+  { spec: { repositoryType: "zfs" } },
+);
 const failed = podVolumeBackup(
   "nightly-failed",
   {
@@ -121,6 +141,17 @@ const failed = podVolumeBackup(
   },
 );
 const waiting = podVolumeBackup("nightly-waiting", { phase: "New" }, ownedBy("Backup", nightly));
+// An uploader the release does not write, and one that is not set, which the release reads as restic.
+const other = podVolumeBackup(
+  "nightly-other",
+  { phase: "Completed" },
+  { ...ownedBy("Backup", nightly), spec: { uploaderType: "velero-x" } },
+);
+const unset = podVolumeBackup(
+  "nightly-unset",
+  { phase: "Completed" },
+  { ...ownedBy("Backup", nightly), spec: { uploaderType: "" } },
+);
 const disagreeing = podVolumeBackup(
   "nightly-disagreeing",
   { phase: "Completed", incrementalBytes: MiB },
@@ -148,8 +179,8 @@ function answers(more: Answers = {}): Answers {
     [path("schedules")]: list(),
     [path("storageLocations")]: list(location("default"), location("archive", "ReadOnly")),
     [path("snapshotLocations")]: list(),
-    [path("backupRepositories")]: list(kopia, restic, due),
-    [path("podVolumeBackups")]: list(failed, waiting, disagreeing, later),
+    [path("backupRepositories")]: list(kopia, restic, due, zfs),
+    [path("podVolumeBackups")]: list(failed, waiting, disagreeing, later, other, unset),
     [path("podVolumeRestores")]: list(restored),
     ...more,
   };
@@ -240,6 +271,8 @@ describe("the view of a backup repository", () => {
       "kopia",
     ]);
     expect([value(of, "Maintenance frequency"), note(of, "Maintenance frequency")]).toEqual(["168h0m0s", "7d"]);
+    // A type the release writes carries no mark of what is not known, and no note of it.
+    expect([of.querySelector("[data-written]"), note(of, "Type")]).toEqual([null, undefined]);
     expect(
       [...within(workspace).getByTestId("velero-backup-repository-config").querySelectorAll("tr")].map(
         (row) => row.textContent,
@@ -277,6 +310,27 @@ describe("the view of a backup repository", () => {
     expect(openViews()).toEqual([
       { kind: "backup-repository", name: "shop-default-kopia" },
       { kind: "storage-location", name: "default" },
+    ]);
+  });
+
+  it("marks a type and a result of a maintenance the release does not write as not known, beside their text", async () => {
+    mount(answers(), (made) => <RepositoriesPage installation={made} />);
+    act(() => openView({ kind: "backup-repository", name: "shop-default-zfs" }));
+    const workspace = await screen.findByTestId("velero-backup-repository-workspace");
+    const of = within(workspace).getByTestId("velero-backup-repository-of");
+
+    expect(fact(of, "Type").querySelector("[data-written=unknown] .Icon")?.textContent).toBe("help_outline");
+    expect([value(of, "Type"), note(of, "Type")]).toEqual([`help_outlinezfs, ${NOT_WRITTEN.mark}`, NOT_WRITTEN.note]);
+    const results = [
+      ...within(workspace)
+        .getByTestId("velero-backup-repository-maintenances")
+        .querySelectorAll("tbody tr td:first-child"),
+    ];
+
+    // Newest first: the result the release does not write with its mark, and one it writes with none.
+    expect(results.map((cell) => [cell.textContent, cell.querySelector(".Icon")?.textContent ?? null])).toEqual([
+      ["help_outlineUnknown: Skipped", "help_outline"],
+      ["Succeeded", null],
     ]);
   });
 
@@ -428,6 +482,24 @@ describe("the view of a pod volume operation", () => {
     expect(openViews()).toEqual([{ kind: "pod-volume-backup", name: "nightly-failed" }]);
   });
 
+  it("marks an uploader the release does not write as not known, and says that one not set is read as restic", async () => {
+    mount(answers(), (made) => <PodVolumeBackupsPage installation={made} />);
+    act(() => openView({ kind: "pod-volume-backup", name: "nightly-other" }));
+    await screen.findByTestId("velero-pod-volume-backup-workspace");
+    let settings = screen.getByTestId("velero-volume-settings");
+
+    expect(fact(settings, "Uploader").querySelector("[data-written=unknown] .Icon")?.textContent).toBe("help_outline");
+    expect([value(settings, "Uploader"), note(settings, "Uploader")]).toEqual([
+      `help_outlinevelero-x, ${NOT_WRITTEN.mark}`,
+      NOT_WRITTEN.note,
+    ]);
+    act(() => openView({ kind: "pod-volume-backup", name: "nightly-unset" }));
+    await waitFor(() => expect(screen.getByTestId("velero-pod-volume-backup-name").textContent).toBe("nightly-unset"));
+    settings = screen.getByTestId("velero-volume-settings");
+    expect([value(settings, "Uploader"), note(settings, "Uploader")]).toEqual(["Not set", UPLOADER_NOT_SET_NOTE]);
+    expect(fact(settings, "Uploader").querySelector("[data-written]")).toBeNull();
+  });
+
   it("says what an operation that did not start waits for, which is no failure", async () => {
     mount(answers(), (made) => <PodVolumeBackupsPage installation={made} />);
     act(() => openView({ kind: "pod-volume-backup", name: "nightly-waiting" }));
@@ -517,6 +589,13 @@ describe("the sections of the details of the host", () => {
     );
     expect(drawerValue("Workspace", section)).toBe("Open among the backup repositories of Velero");
     expect(asked).toEqual([]);
+    expect(drawerValue("Type", section)).toBe("kopia");
+    cleanup();
+    render(<RepositoryDetails object={hostObject(BackupRepository, zfs)} extension={extension} installation={made} />);
+    const other = screen.getByTestId("velero-backup-repository-details");
+
+    expect(drawerValue("Type", other)).toBe(`help_outlinezfs, ${NOT_WRITTEN.mark}`);
+    expect(other.querySelector("[data-written=unknown] .Icon")?.textContent).toBe("help_outline");
   });
 
   it("of an operation say its phase, its progress, its owner as the views last read it, and its node, asking nothing", async () => {

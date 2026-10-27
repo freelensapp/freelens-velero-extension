@@ -683,7 +683,12 @@ evidence, by check:
   read they found the owner in, ask nothing and keep no timer once closed
   (`src/renderer/pages/volume-workspaces.test.tsx`).
 - KIND-06: the eight phases, none and an unknown one, for each of the two kinds,
-  with their axes, their outcome and their words (`src/common/volume-phases.test.ts`).
+  with their axes, their outcome and their words (`src/common/volume-phases.test.ts`);
+  an uploader, a type of repository and a result of a maintenance the release does
+  not write, kept as their text with the mark of what is not known in the lists, the
+  views and the section of a repository, and no mark on a value it writes or on one
+  that is not set (`src/renderer/pages/volume-lists.test.tsx`,
+  `src/renderer/pages/volume-workspaces.test.tsx`).
 - KIND-07: the fields of a repository; the frequency as a duration and one that
   cannot be read; due and not due by a controlled clock, Ready with no time,
   not ready, a read-only location, a frequency not set; three maintenances newest
@@ -776,3 +781,10 @@ Decided while implementing, on 2026-10-27:
   when it last succeeded, which every surface reads, and are proven on the lists,
   the views and the references that word them: no function names them apart, since
   a second name for each state would change nothing that is shown.
+- The mark of an uploader or a type of repository the release does not write is
+  the one of a phase and of a readiness it does not write, before the value as it
+  is written, with its words for who does not see the mark, in the tip of a cell
+  and in the note of a view; a result of a maintenance it does not write keeps the
+  word Unknown before its text, as a phase does. An uploader or a type that is not
+  set is said so, with no mark, and a result that is not reported has none either:
+  neither is a value.

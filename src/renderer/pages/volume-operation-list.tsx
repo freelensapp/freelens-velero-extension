@@ -1,17 +1,19 @@
 import { Renderer } from "@freelensapp/extensions";
+import { writtenType } from "../../common/volume-phases";
 import { VOLUME_SORTING, volumeSearch, volumeView } from "../../common/volume-view";
 import {
   bytesText,
   bytesTip,
   LIST_NOTES,
   NOT_REPORTED,
+  NOT_WRITTEN,
   spanText,
   uploaderText,
   VOLUME_WORDS,
 } from "../../common/volume-words";
 import { time } from "../components/status";
 import styles from "../components/views.module.css";
-import { CellWay, NodeLink, VolumePhaseCell } from "../components/volume-status";
+import { CellWay, NodeLink, VolumePhaseCell, WrittenValue } from "../components/volume-status";
 
 import type { Renderer as RendererType } from "@freelensapp/extensions";
 
@@ -97,7 +99,11 @@ export function volumeOperationList(
       </span>,
       <WithTooltip key="storage">{row.location ?? NOT_REPORTED}</WithTooltip>,
       <span key="uploader" className={styles.cellWords}>
-        <WithTooltip>{uploaderText(row.uploader)}</WithTooltip>
+        <WithTooltip
+          tooltip={writtenType(row.uploader) ? undefined : `${uploaderText(row.uploader)}: ${NOT_WRITTEN.mark}`}
+        >
+          <WrittenValue text={uploaderText(row.uploader)} known={writtenType(row.uploader)} />
+        </WithTooltip>
       </span>,
       <KubeObjectAge key="age" object={item} />,
     ],

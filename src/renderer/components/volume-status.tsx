@@ -1,8 +1,10 @@
 import { Renderer } from "@freelensapp/extensions";
+import { unwrittenResult } from "../../common/volume-phases";
 import {
   bytesText,
   bytesTip,
   NOT_REPORTED,
+  NOT_WRITTEN,
   POD_NOT_NAMED,
   phaseSentence,
   REPOSITORY_WORDS,
@@ -14,7 +16,12 @@ import styles from "./views.module.css";
 import type { ItemProgress } from "../../common/progress";
 import type { Reference } from "../../common/references";
 import type { ViewKind } from "../../common/views";
-import type { Readiness, RepositoryReadiness, VolumeOperationState } from "../../common/volume-phases";
+import type {
+  MaintenanceResult,
+  Readiness,
+  RepositoryReadiness,
+  VolumeOperationState,
+} from "../../common/volume-phases";
 import type { PodOf } from "../../common/volume-references";
 
 const {
@@ -103,6 +110,37 @@ export function RepositoryReadinessMark({ readiness, message }: { readiness: Rep
     >
       <Icon material={READINESS_ICONS[readiness.readiness]} small aria-hidden />
       <span className={styles.statusText}>{text}</span>
+    </span>
+  );
+}
+
+// A value as it is written. One the reviewed release does not write has the mark of what is not known before it, the
+// shape the phase and the readiness use, with its words for who does not see the mark (REQ-182).
+export function WrittenValue({ text, known }: { text: string; known: boolean }) {
+  if (known) return <>{text}</>;
+  return (
+    <span className={`${styles.status} ${styles.signalUnknown}`} data-written="unknown">
+      <Icon material="help_outline" small aria-hidden />
+      <span className={styles.statusText}>{text}</span>
+      <span className={styles.spoken}>, {NOT_WRITTEN.mark}</span>
+    </span>
+  );
+}
+
+// The result of one maintenance of a repository in its word: a failure in the colour of one, and a result the
+// reviewed release does not write as its text with the mark of what is not known.
+export function MaintenanceResultMark({ result }: { result: MaintenanceResult }) {
+  const unwritten = unwrittenResult(result);
+
+  return (
+    <span
+      className={`${styles.status} ${
+        result.result === "failed" ? styles.signalFailure : unwritten ? styles.signalUnknown : ""
+      }`}
+      data-result={result.reported ?? "none"}
+    >
+      {unwritten ? <Icon material="help_outline" small aria-hidden /> : null}
+      <span className={styles.statusText}>{unwritten ? `${result.label}: ${result.reported}` : result.label}</span>
     </span>
   );
 }

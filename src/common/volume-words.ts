@@ -220,6 +220,13 @@ export function uploaderText(value: string | undefined): string {
 
 export const UPLOADER_NOT_SET_NOTE = "The release reads an uploader that is not set as restic.";
 
+// What the mark of a value the reviewed release does not write says: beside the value as it is written, to who does
+// not see the mark and in the tip of a cell, and in the note of a view.
+export const NOT_WRITTEN = {
+  mark: "a value the reviewed release does not write",
+  note: "The reviewed release does not write this value: it is shown as written, and what it means is not known.",
+};
+
 // What a list of the operations says over itself, which no row says.
 export const LIST_NOTES: Record<VolumeKind, string> = {
   PodVolumeBackup: "These are the pod volume backups the installation holds now: they go with their backups.",

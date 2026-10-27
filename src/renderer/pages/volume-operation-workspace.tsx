@@ -4,6 +4,7 @@ import { LEFT_OUT, shownText } from "../../common/location-view";
 import { operationState } from "../../common/phases";
 import { isStale } from "../../common/read-state";
 import { VIEWS } from "../../common/views";
+import { writtenType } from "../../common/volume-phases";
 import { operationClaim, operationLocation, operationRepository } from "../../common/volume-references";
 import { mapEntries, unknownFields, volumeView } from "../../common/volume-view";
 import {
@@ -12,6 +13,7 @@ import {
   INCREMENTAL_NOTE,
   incrementalText,
   NOT_REPORTED,
+  NOT_WRITTEN,
   phaseSentence,
   SNAPSHOT_SIZE_NOTE,
   spanNote,
@@ -22,7 +24,7 @@ import {
 } from "../../common/volume-words";
 import { time } from "../components/status";
 import styles from "../components/views.module.css";
-import { Bytes, NodeLink, PodLink, VolumePhase } from "../components/volume-status";
+import { Bytes, NodeLink, PodLink, VolumePhase, WrittenValue } from "../components/volume-status";
 import { Fact, NotShown, Stale, Target, Workspace } from "../components/workspace";
 
 import type {
@@ -199,8 +201,17 @@ export const VolumeOperationWorkspace = observer(
 
         <h3 className={styles.sectionTitle}>Settings</h3>
         <div className={styles.band} data-testid="velero-volume-settings">
-          <Fact name="Uploader" note={view.uploader === undefined ? UPLOADER_NOT_SET_NOTE : undefined}>
-            {uploaderText(view.uploader)}
+          <Fact
+            name="Uploader"
+            note={
+              view.uploader === undefined
+                ? UPLOADER_NOT_SET_NOTE
+                : writtenType(view.uploader)
+                  ? undefined
+                  : NOT_WRITTEN.note
+            }
+          >
+            <WrittenValue text={uploaderText(view.uploader)} known={writtenType(view.uploader)} />
           </Fact>
           <Fact name="Uploader settings">
             <Entries entries={mapEntries(operation.spec?.uploaderSettings)} testId="velero-volume-uploader-settings" />

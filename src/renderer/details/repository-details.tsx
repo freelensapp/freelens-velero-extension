@@ -1,11 +1,12 @@
 import { Renderer } from "@freelensapp/extensions";
 import { observer } from "mobx-react";
 import { repositoryView } from "../../common/repository-view";
+import { writtenType } from "../../common/volume-phases";
 import { agoText, REPOSITORY_WORDS } from "../../common/volume-words";
 import { time } from "../components/status";
 import styles from "../components/views.module.css";
 import { useNow } from "../components/views-frame";
-import { FailedMaintenanceMark, RepositoryReadinessMark } from "../components/volume-status";
+import { FailedMaintenanceMark, RepositoryReadinessMark, WrittenValue } from "../components/volume-status";
 import { currentInstallation } from "../state/context";
 import { WorkspaceLink } from "./workspace-link";
 
@@ -48,7 +49,9 @@ export const RepositoryDetails = observer(({ object, extension, installation }: 
       </DrawerItem>
       <DrawerItem name="Volume namespace">{view.volumeNamespace ?? REPOSITORY_WORDS.notSet}</DrawerItem>
       <DrawerItem name="Storage location">{view.location ?? REPOSITORY_WORDS.notSet}</DrawerItem>
-      <DrawerItem name="Type">{view.type ?? REPOSITORY_WORDS.notSet}</DrawerItem>
+      <DrawerItem name="Type">
+        <WrittenValue text={view.type ?? REPOSITORY_WORDS.notSet} known={writtenType(view.type)} />
+      </DrawerItem>
       <DrawerItem name="Installation">{view.namespace}</DrawerItem>
       <WorkspaceLink
         extension={extension}

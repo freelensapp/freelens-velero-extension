@@ -6,11 +6,12 @@ import {
   repositorySearch,
   repositoryView,
 } from "../../common/repository-view";
-import { agoText, REPOSITORY_WORDS } from "../../common/volume-words";
+import { writtenType } from "../../common/volume-phases";
+import { agoText, NOT_WRITTEN, REPOSITORY_WORDS } from "../../common/volume-words";
 import { BackupRepository } from "../api/kinds";
 import { FamilyPage } from "../components/family-page";
 import styles from "../components/views.module.css";
-import { CellWay, FailedMaintenanceMark, RepositoryReadinessMark } from "../components/volume-status";
+import { CellWay, FailedMaintenanceMark, RepositoryReadinessMark, WrittenValue } from "../components/volume-status";
 import { currentInstallation } from "../state/context";
 import { OpenView } from "./open-view";
 
@@ -83,7 +84,9 @@ export const REPOSITORIES: ListDefinition<RepositoryRow> = {
     </span>,
     <CellWay key="location" kind="storage-location" reference={row.storage} />,
     <span key="type" className={styles.cellWords}>
-      <WithTooltip>{row.type ?? REPOSITORY_WORDS.notSet}</WithTooltip>
+      <WithTooltip tooltip={writtenType(row.type) ? undefined : `${row.type}: ${NOT_WRITTEN.mark}`}>
+        <WrittenValue text={row.type ?? REPOSITORY_WORDS.notSet} known={writtenType(row.type)} />
+      </WithTooltip>
     </span>,
     <span key="readiness" className={styles.cellWords}>
       <WithTooltip tooltip={row.message?.value ?? row.readiness.label}>

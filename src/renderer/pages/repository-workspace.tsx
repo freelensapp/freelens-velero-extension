@@ -4,10 +4,16 @@ import { LEFT_OUT } from "../../common/location-view";
 import { isStale } from "../../common/read-state";
 import { resolveReference } from "../../common/references";
 import { dueText, maintenanceDue, repositoryFrequencyText, repositoryView } from "../../common/repository-view";
-import { agoText, REPOSITORY_WORDS } from "../../common/volume-words";
+import { writtenType } from "../../common/volume-phases";
+import { agoText, NOT_WRITTEN, REPOSITORY_WORDS } from "../../common/volume-words";
 import { time } from "../components/status";
 import styles from "../components/views.module.css";
-import { FailedMaintenanceMark, RepositoryReadinessMark } from "../components/volume-status";
+import {
+  FailedMaintenanceMark,
+  MaintenanceResultMark,
+  RepositoryReadinessMark,
+  WrittenValue,
+} from "../components/volume-status";
 import { Fact, NotShown, Stale, Target, Workspace } from "../components/workspace";
 
 import type { Maintenance } from "../../common/repository-view";
@@ -34,14 +40,7 @@ function MaintenanceRow({ maintenance }: { maintenance: Maintenance }) {
   return (
     <tr data-maintenance-result={result.result}>
       <td>
-        <span
-          className={`${styles.status} ${result.result === "failed" ? styles.signalFailure : ""}`}
-          data-result={result.reported ?? "none"}
-        >
-          <span className={styles.statusText}>
-            {result.result === "unknown" && result.reported ? `${result.label}: ${result.reported}` : result.label}
-          </span>
-        </span>
+        <MaintenanceResultMark result={result} />
       </td>
       <td>{time(maintenance.started)}</td>
       <td>{time(maintenance.completed)}</td>
@@ -128,7 +127,9 @@ export const RepositoryWorkspace = observer(({ installation, name, now, back, on
             REPOSITORY_WORDS.notSet
           )}
         </Fact>
-        <Fact name="Type">{view.type ?? REPOSITORY_WORDS.notSet}</Fact>
+        <Fact name="Type" note={writtenType(view.type) ? undefined : NOT_WRITTEN.note}>
+          <WrittenValue text={view.type ?? REPOSITORY_WORDS.notSet} known={writtenType(view.type)} />
+        </Fact>
         {view.resticIdentifier ? (
           <Fact name="Restic identifier" note={view.resticIdentifier.shortened ? LEFT_OUT : undefined}>
             <code data-testid="velero-backup-repository-identifier">{view.resticIdentifier.value}</code>

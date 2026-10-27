@@ -5,8 +5,10 @@ import {
   phaseRank,
   READINESS_RANK,
   repositoryReadiness,
+  unwrittenResult,
   VOLUME_PHASES,
   volumeOperationState,
+  writtenType,
 } from "./volume-phases";
 import { axesText, NODE_AGENT_WORDS, phaseSentence, volumePhaseText } from "./volume-words";
 
@@ -144,5 +146,25 @@ describe("the result of a maintenance", () => {
     expect(maintenanceResult("Failed")).toEqual({ reported: "Failed", result: "failed", label: "Failed" });
     expect(maintenanceResult("Skipped")).toEqual({ reported: "Skipped", result: "unknown", label: "Unknown" });
     expect(maintenanceResult(undefined)).toEqual({ result: "unknown", label: "Not reported" });
+  });
+});
+
+describe("a value the reviewed release does not write", () => {
+  it("is an uploader or a type of repository but kopia and restic, and one that is not set is not one", () => {
+    expect([undefined, "", "kopia", "restic", "velero-x", "zfs", "Kopia"].map(writtenType)).toEqual([
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+    ]);
+  });
+
+  it("is a result of a maintenance with a text but Succeeded and Failed, and one not reported is not one", () => {
+    expect(
+      ["Succeeded", "Failed", "Skipped", undefined].map((value) => unwrittenResult(maintenanceResult(value))),
+    ).toEqual([false, false, true, false]);
   });
 });
