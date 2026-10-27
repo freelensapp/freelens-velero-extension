@@ -316,6 +316,8 @@ describe("the view of a backup repository", () => {
         "",
       ],
     ]);
+    // The message of a maintenance is drawn on its lines, which the text alone does not prove.
+    expect(maintenances[0].querySelectorAll("td")[4].firstElementChild?.className).toBe(styles.messageLines);
     fireEvent.click(within(of).getByTestId("velero-open-storage-location-default"));
     await screen.findByTestId("velero-storage-location-workspace");
     expect(openViews()).toEqual([
@@ -684,6 +686,10 @@ describe("the sections of the details of the host", () => {
     );
     expect(drawerValue("Workspace", section)).toBe("Open among the backup repositories of Velero");
     expect(asked).toEqual([]);
+    // The message is drawn on its lines in the section as in the view.
+    expect(section.getElementsByClassName(styles.messageLines)[0]?.textContent).toBe(
+      ' error to connect "https://s3.example.test/store"\nconnection refused',
+    );
     expect(drawerValue("Type", section)).toBe("kopia");
     cleanup();
     render(<RepositoryDetails object={hostObject(BackupRepository, zfs)} extension={extension} installation={made} />);
