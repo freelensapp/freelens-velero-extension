@@ -13,7 +13,7 @@ import {
 } from "../../common/volume-words";
 import { time } from "../components/status";
 import styles from "../components/views.module.css";
-import { CellWay, NodeLink, VolumePhaseCell, WrittenValue } from "../components/volume-status";
+import { CellWay, NodeCell, VolumePhaseCell, WrittenValue } from "../components/volume-status";
 
 import type { Renderer as RendererType } from "@freelensapp/extensions";
 
@@ -84,9 +84,7 @@ export function volumeOperationList(
       <span key="volume" className={styles.cellWords}>
         <WithTooltip>{row.source}</WithTooltip>
       </span>,
-      <span key="node" className={styles.cellWords}>
-        <NodeLink name={row.node} />
-      </span>,
+      <NodeCell key="node" name={row.node} />,
       <span key="bytes" className={styles.cellWords}>
         <WithTooltip tooltip={bytesTip(row.progress)}>{bytesText(row.progress)}</WithTooltip>
       </span>,

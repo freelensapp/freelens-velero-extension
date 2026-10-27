@@ -222,10 +222,28 @@ export function NodeLink({ name }: { name?: string }) {
   );
 }
 
+// The node of an operation in a cell of a list. The link of the host holds the name in its badge: the link is the
+// flex box inside the flex box of the cell, so that the badge is a flex item, with no line of text drawn around it,
+// and a long name is cut with its ellipsis. A node that is not reported is said in a badge as well.
+export function NodeCell({ name }: { name?: string }) {
+  return (
+    <span className={styles.cellWords} data-node={name || "none"}>
+      {name ? <LinkToNode name={name} /> : <WithTooltip>{NOT_REPORTED}</WithTooltip>}
+    </span>
+  );
+}
+
 // A reference in a cell of a list: a way to the view of its target when the target is there, which opens over the
-// list as the name of a row does; its name otherwise, with why in the tip.
+// list as the name of a row does; its name otherwise, with why in the tip. A reference that names nothing is said in
+// a badge, as the words of every cell that can be cut.
 export function CellWay({ reference, kind }: { reference?: Reference; kind: ViewKind }) {
-  if (!reference) return <span className={styles.muted}>{NOT_REPORTED}</span>;
+  if (!reference) {
+    return (
+      <span className={`${styles.cellWords} ${styles.muted}`} data-reference="none">
+        <WithTooltip>{NOT_REPORTED}</WithTooltip>
+      </span>
+    );
+  }
   if (reference.state !== "resolved") {
     return (
       <span className={styles.cellWords} data-reference={reference.state}>

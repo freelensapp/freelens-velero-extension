@@ -726,6 +726,14 @@
   max-width: 100%;
 }
 
+/* A link of the host in a cell, as the one to the node of an operation, holds the badge of its words: a flex box
+   inside the flex box of the cell, so that the badge is a flex item there as well, and no line is drawn around it. */
+.cellWords > a {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
 /* The band of the adherence of a schedule: a line for each fact, its name and its sentences, which wrap. */
 .adherence th {
   width: 11em;

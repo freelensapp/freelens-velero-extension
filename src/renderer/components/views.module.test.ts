@@ -98,6 +98,17 @@ describe("lines of the overview", () => {
   });
 });
 
+describe("words of a cell", () => {
+  // A badge in a block is drawn on the line of the block, off the line of the words of its row: the link of the host
+  // that holds the badge of the node of an operation is a flex box, inside the flex box of its cell.
+  it("makes a link of the host in a cell a flex box that can be narrower than its words", () => {
+    const text = readFileSync(join(process.cwd(), "src", "renderer", "components", "views.module.css"), "utf8");
+    const rule = /\.cellWords > a \{([^}]*)\}/.exec(text)?.[1] ?? "";
+
+    expect([/display:\s*flex;/.test(rule), /min-width:\s*0;/.test(rule)]).toEqual([true, true]);
+  });
+});
+
 // What a list shows in a room of a width: the classes of its columns no rule hides there.
 function shownIn(classes: string[]) {
   return (width: number) => {

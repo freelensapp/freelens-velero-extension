@@ -26,6 +26,7 @@ import {
   NOT_WRITTEN,
   REPOSITORY_WORDS,
 } from "../../common/volume-words";
+import styles from "../components/views.module.css";
 import { closeViews, openView } from "../navigation";
 import { Installation, READ_EVERY } from "../state/installation";
 import { BackupsPage } from "./backups-page";
@@ -481,6 +482,35 @@ describe("the lists of the pod volume operations", () => {
     expect(text("nightly-completed", "uploader")).toBe("kopia");
     // An uploader that is not set is said so: the release reads it as restic, and Built-in is a data mover.
     expect(text("nightly-odd", "uploader")).toBe("Not set");
+  });
+
+  it("holds the words of the node, and of a backup not named, in a badge that is a flex item of its cell", async () => {
+    const orphan = podVolumeBackup("nightly-orphan", { phase: "Completed" });
+
+    mount(answers({ [path("podVolumeBackups")]: list(...pvbs, orphan) }), (installation) => (
+      <PodVolumeBackupsPage installation={installation} />
+    ));
+    await waitFor(() => expect(rows("pod-volume-backup")).toHaveLength(pvbs.length + 1));
+    // What is between the cell and the badge of its words, each element by its tag and its class.
+    const between = (name: string, column: string) => {
+      const box = cell("pod-volume-backup", name, column).firstElementChild as HTMLElement;
+      const badge = box.querySelector(".badge") as HTMLElement;
+      const parts: string[] = [];
+
+      for (let element = badge.parentElement; element && element !== box; element = element.parentElement) {
+        parts.unshift(element.tagName);
+      }
+      return [box.className, ...parts];
+    };
+
+    // The flex box of the cell holds the link of the host, a flex box itself by the stylesheet, which holds the
+    // badge: no block between them, where a line would be drawn around the badge. A node that is not reported and
+    // a backup that is not named are a badge of the flex box of the cell.
+    expect(between("nightly-running", "node")).toEqual([styles.cellWords, "A"]);
+    expect(between("nightly-odd", "node")).toEqual([styles.cellWords]);
+    expect(between("nightly-orphan", "operation")).toEqual([`${styles.cellWords} ${styles.muted}`]);
+    expect(cell("pod-volume-backup", "nightly-orphan", "operation").textContent).toBe(NOT_REPORTED);
+    expect(cell("pod-volume-backup", "nightly-odd", "node").textContent).toBe(NOT_REPORTED);
   });
 
   it("marks an uploader the release does not write as not known, beside its text, and no uploader it writes", async () => {
