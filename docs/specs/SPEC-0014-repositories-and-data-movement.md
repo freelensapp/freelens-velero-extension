@@ -681,7 +681,9 @@ evidence, by check:
   it needs never letting go of what both need; a change of namespace that keeps the
   holders and drops the reads; a family denied that takes nothing from the others;
   a late answer of another generation, or of a family no holder needs any more, not
-  taken; no timer added (`src/renderer/state/installation.test.ts`,
+  taken; a family asked at once, which is not a read of the installation, leaving the
+  time of the last read and the time of the API server as they were; no timer added
+  (`src/renderer/state/installation.test.ts`,
   `src/renderer/pages/volume-lists.test.tsx`, `src/renderer/pages/overview-page.test.tsx`).
   No family of the operations is asked by the view of a backup, of a restore or of
   a schedule: the test of the reads of the view of a backup
@@ -694,8 +696,12 @@ evidence, by check:
 - KIND-03 and KIND-04: the columns of the three lists, their stable identifiers
   and classes in the order of the Design, each cell in each state, the order of
   each column through the callbacks of the host both ways with none answering
-  `undefined` or `NaN`, the search, the notes over the lists; the room of each list
-  read from the rules of the stylesheet (`src/renderer/pages/volume-lists.test.tsx`,
+  `undefined` or `NaN`, the search, the notes over the lists; the node, and an owner
+  that is not named, in a badge that is a flex item of its cell, the link of the host
+  a flex box there by a rule of the stylesheet; the column of an owner of an earlier
+  read marked by the notice over the list, the owner still a way with why in its tip;
+  the room of each list read from the rules of the stylesheet
+  (`src/renderer/pages/volume-lists.test.tsx`,
   `src/common/repository-view.test.ts`, `src/common/volume-view.test.ts`,
   `src/renderer/components/views.module.test.ts`).
 - KIND-05: the views of the three kinds, their bands, their ways and back, the
