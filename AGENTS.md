@@ -593,7 +593,12 @@ test environment and of the process of this repository.
   measured in the packaged application. The suite of the schedules checks, in a
   window of 1440 by 900 and at each edge of the room of the list, that no cell is
   clipped and that the words of every cell sit on the line of their row
-  (`columnsOf`, `misalignedWords`).
+  (`columnsOf`, `misalignedWords`). A link of the host in a cell, as `LinkToNode`,
+  holds the badge of its words inside its own element: the link is a flex box
+  inside the flex box of the cell (`.cellWords > a`). Inside a block the name of a
+  node sat 1.7 pixels above the words of its row, and what was wider than the cell
+  was clipped, as measured in the packaged application on rows of pod volume
+  backups.
 - The renderer of the host reads the cluster with the `fetch` of Chromium, to the
   origin of the frame, as read in the source at the target
   (`packages/core/src/renderer/fetch/browser-fetch.injectable.ts`): an answer is of
