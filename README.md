@@ -22,8 +22,9 @@ is a from-scratch MIT implementation and it is not a Velero product.
 > place, that is the toolchain, the test environment and the code of the main
 > process that fetches logs and results, and so are the first views: the
 > discovery of the Velero installations of a cluster, the Overview of an
-> installation, the Backups, the Restores, the Schedules and the storage and
-> snapshot locations, read only. The write mode is in place too, off until it is
+> installation, the Backups, the Restores, the Schedules, the storage and
+> snapshot locations, the backup repositories, the pod volume backups and the pod
+> volume restores, read only. The write mode is in place too, off until it is
 > turned on, with its first writes: the version of the server and its plugins, in
 > the Overview, and the log, the results, the resource list and the volume
 > information of a backup and of a restore, each loaded when it is asked for, in

@@ -324,9 +324,9 @@ every read while it is held. A family no holder needs is not asked at the read a
 it was let go, and what was read of it goes then: a view opened again within a read
 finds it still read, and no timer is added. A new generation keeps the holders and
 empties the reads, and an answer of a family no holder needs any more is not taken.
-The Overview, the lists of the other kinds and the views of a backup, a restore and
-a schedule hold none; the sections of the details of the host hold none and ask
-nothing.
+The Overview, the lists of the other kinds and the views of a backup, a restore, a
+schedule and a repository hold none; the sections of the details of the host hold
+none and ask nothing.
 
 What is [known of a family](../../src/common/read-state.ts) is what the last read
 that ended said of it. A family that is asked again keeps that, and is marked as
@@ -517,7 +517,8 @@ restores, and what is denied of them is not said over it.
 ### The Overview
 
 The [Overview](../../src/renderer/pages/overview-page.tsx) asks the cluster
-nothing of its own. It is computed from the five reads of the installation by
+nothing of its own. It is computed from five of the six families read at every
+read of the installation, the backup repositories apart, by
 [pure functions](../../src/common/overview.ts) that are given the reads, the
 clock and the window: what was read, what needs attention, what is in flight, the
 newest backup that completed, the operations of the window, a line for each

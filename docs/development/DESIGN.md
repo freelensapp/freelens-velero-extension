@@ -144,7 +144,7 @@ start and the node under 640: the name, the phase, the backup or the restore, th
 source and the progress stay. The storage location of a repository and the source
 of an operation have classes of their own, `location` and `volume`, which no rule
 of another list hides.
-In a list of 1,000 pixels or more what an
+In a list of the backups or of the restores of 1,000 pixels or more what an
 operation says of a failure, its progress, its start and its duration have the
 room of their words, in whatever way the language of the operator writes a date:
 a window of 1440 by 900 shows them whole, and the name, the source, the phase and

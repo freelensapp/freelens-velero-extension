@@ -32,8 +32,8 @@ export const BACKUPS_AND_LOCATIONS = [
   "snapshotLocations",
 ] as const satisfies readonly Family[];
 
-// The families read at every read of an installation, whatever view is open: the repositories are few, and the
-// Overview carries their rules.
+// The families read at every read of an installation, whatever view is open: the five of the first milestones, and
+// the backup repositories, which are few (SPEC-0014, REQ-178).
 export const ALWAYS = [...BACKUPS_AND_LOCATIONS, "backupRepositories"] as const satisfies readonly Family[];
 
 // The families read only while a view that shows them is open: an installation may hold thousands of their
