@@ -147,6 +147,17 @@ const other = podVolumeBackup(
   { phase: "Completed" },
   { ...ownedBy("Backup", nightly), spec: { uploaderType: "velero-x" } },
 );
+// The release writes a message on a cancellation and on an empty volume, not only on a failure.
+const canceled = podVolumeBackup(
+  "nightly-canceled",
+  { phase: "Canceled", message: "canceled by the backup\nthe backup timed out" },
+  ownedBy("Backup", nightly),
+);
+const empty = podVolumeBackup(
+  "nightly-empty",
+  { phase: "Completed", message: "volume was empty so no snapshot was taken" },
+  ownedBy("Backup", nightly),
+);
 const unset = podVolumeBackup(
   "nightly-unset",
   { phase: "Completed" },
@@ -180,7 +191,7 @@ function answers(more: Answers = {}): Answers {
     [path("storageLocations")]: list(location("default"), location("archive", "ReadOnly")),
     [path("snapshotLocations")]: list(),
     [path("backupRepositories")]: list(kopia, restic, due, zfs),
-    [path("podVolumeBackups")]: list(failed, waiting, disagreeing, later, other, unset),
+    [path("podVolumeBackups")]: list(failed, waiting, disagreeing, later, other, unset, canceled, empty),
     [path("podVolumeRestores")]: list(restored),
     ...more,
   };
@@ -498,6 +509,23 @@ describe("the view of a pod volume operation", () => {
     settings = screen.getByTestId("velero-volume-settings");
     expect([value(settings, "Uploader"), note(settings, "Uploader")]).toEqual(["Not set", UPLOADER_NOT_SET_NOTE]);
     expect(fact(settings, "Uploader").querySelector("[data-written]")).toBeNull();
+  });
+
+  it("shows the message of a cancellation and of an empty volume beside the phase, as of a failure", async () => {
+    mount(answers(), (made) => <PodVolumeBackupsPage installation={made} />);
+    for (const [name, outcome, message] of [
+      ["nightly-canceled", "cancelled", "canceled by the backup\nthe backup timed out"],
+      ["nightly-empty", "completed", "volume was empty so no snapshot was taken"],
+    ] as const) {
+      act(() => openView({ kind: "pod-volume-backup", name }));
+      await waitFor(() => expect(screen.getByTestId("velero-pod-volume-backup-name").textContent).toBe(name));
+      const status = screen.getByTestId("velero-pod-volume-backup-status");
+      const shown = within(status).getByTestId("velero-volume-message");
+
+      expect([name, status.querySelector("[data-outcome]")?.getAttribute("data-outcome")]).toEqual([name, outcome]);
+      expect([name, shown.textContent, shown.className]).toEqual([name, message, styles.messageLines]);
+      expect(value(status, "Message")).toBe(message);
+    }
   });
 
   it("says what an operation that did not start waits for, which is no failure", async () => {

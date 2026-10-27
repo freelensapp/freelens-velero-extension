@@ -684,10 +684,12 @@ evidence, by check:
   (`src/renderer/pages/volume-workspaces.test.tsx`).
 - KIND-06: the eight phases, none and an unknown one, for each of the two kinds,
   with their axes, their outcome and their words (`src/common/volume-phases.test.ts`);
-  an uploader, a type of repository and a result of a maintenance the release does
-  not write, kept as their text with the mark of what is not known in the lists, the
-  views and the section of a repository, and no mark on a value it writes or on one
-  that is not set (`src/renderer/pages/volume-lists.test.tsx`,
+  the message of Velero beside the phase, in the tip of a row and in the view, on a
+  failure, on a cancellation and on a volume that was empty; an uploader, a type of
+  repository and a result of a maintenance the release does not write, kept as their
+  text with the mark of what is not known in the lists, the views and the section of
+  a repository, and no mark on a value it writes or on one that is not set
+  (`src/renderer/pages/volume-lists.test.tsx`,
   `src/renderer/pages/volume-workspaces.test.tsx`).
 - KIND-07: the fields of a repository; the frequency as a duration and one that
   cannot be read; due and not due by a controlled clock, Ready with no time,

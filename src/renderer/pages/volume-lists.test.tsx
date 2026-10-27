@@ -413,6 +413,27 @@ describe("the lists of the pod volume operations", () => {
     ]);
     expect(tip(phase("nightly-failed"))).toBe("data path failed\nthe disk is full");
     expect(tip(phase("nightly-timeout"))).toBe("timeout on preparing PVB");
+    // The release writes a message on a cancellation as well: it is in the tip whatever the phase.
+    expect(tip(phase("nightly-canceled"))).toBe("canceled by the backup");
+  });
+
+  it("says in the tip the message of an operation that completed with one, as the release writes for an empty volume", async () => {
+    const empty = podVolumeBackup(
+      "nightly-empty",
+      { phase: "Completed", message: "volume was empty so no snapshot was taken" },
+      of,
+    );
+
+    mount(answers({ [path("podVolumeBackups")]: list(...pvbs, empty) }), (installation) => (
+      <PodVolumeBackupsPage installation={installation} />
+    ));
+    await waitFor(() => expect(rows("pod-volume-backup")).toHaveLength(pvbs.length + 1));
+    const phase = cell("pod-volume-backup", "nightly-empty", "phase");
+
+    expect(phase.querySelector("[data-outcome]")?.getAttribute("data-outcome")).toBe("completed");
+    expect(tip(phase)).toBe("volume was empty so no snapshot was taken");
+    // A completed operation that carries no message says its phase in the tip.
+    expect(tip(cell("pod-volume-backup", "nightly-completed", "phase"))).toBe("Completed");
   });
 
   it("makes the backup a way when it is the one of that UID, and says another one took the name otherwise", async () => {
