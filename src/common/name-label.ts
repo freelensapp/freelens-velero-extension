@@ -3,10 +3,10 @@
 // of the SHA-256 of the whole name (docs/development/RECON-T0.1.md, the labels). The release counts bytes,
 // which for a name are its characters. The main process writes the labels of the requests it creates with
 // it, and the renderer finds what a label names with it: the digest is computed here, with no module of
-// Node, so that both read the same function. Decided while implementing, on 2026-10-26: the host gives a
-// SHA-256 in `Common.Util.sha256Hex`, but the references that use the cut are pure functions of this
-// folder, which read nothing of the host and are tested without it, and the Web Crypto of both runtimes
-// answers later, which a derivation of a view cannot wait for.
+// Node, so that both read the same function. The host gives a SHA-256 in `Common.Util.sha256Hex`, but the
+// references that use the cut are pure functions of this folder, which read nothing of the host and are
+// tested without it, and the Web Crypto of both runtimes answers later, which a derivation of a view cannot
+// wait for.
 
 const MAXIMUM = 63;
 const KEPT = 57;
