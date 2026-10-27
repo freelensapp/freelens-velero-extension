@@ -354,7 +354,7 @@ The workspace of an operation, from the top:
 | Status | Phase and its mark, the message, accepted, started, completed, elapsed or duration, bytes done of total with the percentage, incremental bytes, installation and cluster | `status` |
 | Belongs to | The backup or the restore, with its state; the storage location; the repository | The labels, the owner, the spec, the reads of the installation |
 | Volume | The pod and its namespace and UID, the volume, the node, the claim; for a data upload the snapshot, its class, its driver, the storage class, the source claim; for a data download the target claim, the volume when bound, the namespace, the snapshot ID, the source namespace and the data upload | `spec` |
-| Settings | The uploader or the data mover, the uploader settings or the data mover configuration as keys, the repository identifier shown as an address is, the tags, the operation timeout, the node OS, the data mover result as keys, the path | `spec`, `status` |
+| Settings | The uploader or the data mover, the uploader settings or the data mover configuration as keys, the repository identifier shown as an address is, the tags, the operation timeout, the node OS, the data mover result as keys, the path; whether a cancellation was asked, which the views read and never write | `spec`, `status` |
 
 The workspace of a repository:
 
@@ -382,7 +382,7 @@ phases of the backup, as the table above records it.
 | Empty | The list says of what it is the list; the host says that it is empty | The band says that the backup has no volume operation among the ones the installation holds; the repository says that nothing of the installation used it |
 | Restricted | The list is not shown, and says that access is denied and that how many there are is not known | The band says that the kind cannot be read; a reference says denied; the Volumes tab offers no way |
 | Partial | A kind read and another denied: each list and each half of a band on its own | The repository counts the kinds it could read and says which it could not |
-| Stale | The rows of the last read that succeeded, with when; the column of the operation marked when its family is of an earlier read | The band says that its operations were read before, and when |
+| Stale | The rows of the last read that succeeded, with when; the column of the operation marked when its family is of an earlier read, by the notice over the list that names the family and when it was read | The band says that its operations were read before, and when |
 | Unknown | A phase or a value the release does not write, as text with its mark; an operation New without a node agent read | A reference whose family failed is not known, with the reason |
 | Failure | A read that failed keeps the last rows and says so | A failed operation shows its message; a failed maintenance its message |
 | Not served | A kind the version of the API does not serve, said so by the list and by the band, with nothing else affected | The same |
@@ -806,6 +806,12 @@ Decided while implementing, on 2026-10-26:
   written once for every kind, in `src/common/volume-words.ts`, which the page of a
   list, the view of one object and the references of every kind read; the text of
   each is the one of before.
+- The Settings band of the view of a pod volume backup or restore says whether a
+  cancellation was asked, from `spec.cancel`, which the release reads to stop the
+  data path: Asked or Not asked, with the note that a cancellation is asked by a
+  write, which the views do not make (REQ-190). It is a field of the spec the
+  table of the kinds names, read as the others are, and the views offer no way to
+  write it (`src/renderer/pages/volume-operation-workspace.tsx`).
 
 Decided while implementing, on 2026-10-27:
 
@@ -824,3 +830,9 @@ Decided while implementing, on 2026-10-27:
   reference that names the same object, so that an object created again under the
   name is told from the owner as the label of the UID tells it; the release writes
   both labels, and an object without the second is not one it made.
+- The column of the backup or of the restore of an operation is marked, when its
+  family is of an earlier read, by the notice over the list, which names the family
+  and the time of its last read, as the lists of the schedules and of the
+  repositories mark the columns they take from another family: the owner stays a
+  way, with why in its tip, and no mark of its own is drawn in each row of a column
+  whose every row is of the same read (the row Stale of What Is Not Known).
