@@ -510,7 +510,8 @@ export const REPOSITORY_RULE_WORDS = {
 };
 
 // Rules A12 and A13 (REQ-189 of SPEC-0014): a repository Velero reports NotReady, and one whose newest maintenance,
-// by its start and whatever the order of the entries in the object, failed. Both are items of the storage.
+// by its start and whatever the order of the entries in the object, and of two with the same start or with none the
+// later in the object, failed. Both are items of the storage.
 function repositoryItems(reads: OverviewReads, now: number): AttentionItem[] {
   const read = reads.backupRepositories;
 

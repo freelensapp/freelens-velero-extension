@@ -1553,11 +1553,11 @@ describe("the backup repositories: rules A12 and A13, and their cell (SPEC-0014)
           ],
         }),
         repo("never", { phase: "Ready", recentMaintenance: [maintained("Failed", 2 * HOUR)] }),
-        // No entry has a start: the first in the object is the newest, as the list reads it, and it has no time.
+        // No entry has a start: the later in the object is the newer, as the release appends them, and it has no time.
         repo("unstarted", {
           phase: "Ready",
           lastMaintenanceTime: ago(2 * DAY),
-          recentMaintenance: [maintained("Failed", undefined, "stopped"), maintained("Succeeded", undefined)],
+          recentMaintenance: [maintained("Succeeded", undefined), maintained("Failed", undefined, "stopped")],
         }),
       ),
       now,

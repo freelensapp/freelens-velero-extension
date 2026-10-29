@@ -1280,6 +1280,17 @@ Decided while implementing, on 2026-10-29:
 - An item of A12 is of an earlier read when the repositories are, or when the
   location it leads to is; an item of A13 when the repositories are. An item of A13
   whose newest entry has no start has no time, and its reason says so.
+- The newest maintenance of a repository, which A13 reads and the view of a
+  repository lists first: by the start, then, of two with the same start or with
+  none, the later in `status.recentMaintenance`, where the first pull request kept
+  the order of the object. Velero v1.18.4 appends each maintenance to the list and
+  keeps the last three (`pkg/controller/backup_repository_controller.go:559-573`),
+  and lists them from the oldest when it gathers them again from the Jobs
+  (`consolidateHistory`, 436-476); every maintenance it writes has a start, the
+  creation of its Job (`pkg/repository/maintenance/maintenance.go:699-708`) or the
+  time of a Job that could not start (`backup_repository_controller.go:515-517`), so
+  the place decides only for an object the release did not write
+  (`src/common/repository-view.ts`).
 - No line of the repositories is in the bands of the schedules and of the storage,
   which REQ-102 of [SPEC-0008](SPEC-0008-overview.md) names alone.
 - The index of the specs names the third pull request in the rows of SPEC-0014 and

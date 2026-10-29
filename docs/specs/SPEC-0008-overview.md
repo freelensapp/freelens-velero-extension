@@ -109,7 +109,8 @@ other: a repository that reports none or New is not initialized yet, and a phase
 the release does not write is not known. Its location is the one its spec names,
 which the item leads to when it is among the locations read in the namespace of
 the repository. A13 reads the newest entry by its start, whatever the order of the
-entries in the object, and its time is that start. Both are items of the storage,
+entries in the object, and of two with the same start or with none the later in the
+object, as Velero appends them; its time is that start. Both are items of the storage,
 by name among the items of the locations, A12 before A13 for one repository.
 
 ## Design

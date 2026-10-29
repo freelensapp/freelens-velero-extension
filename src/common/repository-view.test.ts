@@ -108,6 +108,23 @@ describe("the view of a backup repository", () => {
     ]);
     expect(view.newestFailed).toBe(false);
   });
+
+  it("takes the later in the list as the newer of two with the same start or with none, as the release appends them", () => {
+    const view = repositoryView(
+      repository("r", {
+        phase: "Ready",
+        recentMaintenance: [
+          { result: "Succeeded", message: "first" },
+          { result: "Failed", message: "second" },
+          { result: "Succeeded", startTimestamp: before(HOUR), message: "third" },
+          { result: "Failed", startTimestamp: before(HOUR), message: "fourth" },
+        ],
+      }),
+    );
+
+    expect(view.maintenances.map((one) => one.message?.value)).toEqual(["fourth", "third", "second", "first"]);
+    expect(view.newestFailed).toBe(true);
+  });
 });
 
 describe("when the next maintenance is due, by the clock of this machine", () => {
