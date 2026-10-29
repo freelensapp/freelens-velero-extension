@@ -134,6 +134,9 @@ const served: Answer = { status: 200, body: { resources: Object.values(RESOURCES
 function answers(more: Answers = {}): Answers {
   return {
     [DISCOVERY]: served,
+    // No repository in either installation: what the cases below say of the other families holds with them read.
+    [path("backupRepositories", A)]: list(),
+    [path("backupRepositories", B)]: list(),
     [LOCATIONS]: list({ metadata: { name: "default", namespace: A } }, { metadata: { name: "default", namespace: B } }),
     [path("backups", A)]: list(...backups),
     [path("restores", A)]: list(...restores),
@@ -227,12 +230,15 @@ afterEach(() => {
 });
 
 describe("what was read", () => {
-  it("says of each of the five families how many of its objects were read, and leads to its list", async () => {
+  it("says of each of the six families how many of its objects were read, and leads to its list", async () => {
     const { asked } = mount(answers());
 
     await page();
+    await waitFor(() => expect(cell("backupRepositories").getAttribute("data-read")).toBe("read"));
     expect(
-      (["backups", "restores", "schedules", "storageLocations", "snapshotLocations"] as const).map((family) => [
+      (
+        ["backups", "restores", "schedules", "storageLocations", "snapshotLocations", "backupRepositories"] as const
+      ).map((family) => [
         cell(family).textContent,
         cell(family).getAttribute("data-read"),
         cell(family).getAttribute("href"),
@@ -243,6 +249,7 @@ describe("what was read", () => {
       ["Schedules4", "read", "/extension/freelensapp--velero-extension/schedules"],
       ["Backup Storage Locations3", "read", "/extension/freelensapp--velero-extension/storage-locations"],
       ["Volume Snapshot Locations1", "read", "/extension/freelensapp--velero-extension/snapshot-locations"],
+      ["Backup Repositories0", "read", "/extension/freelensapp--velero-extension/backup-repositories"],
     ]);
     // The page asks what every other view asks at every read, and nothing of its own: none of the families read on
     // demand, which only a view that shows them holds.
@@ -410,14 +417,16 @@ describe("what needs attention", () => {
         [path("restores", A)]: { status: 403 },
         [path("schedules", A)]: { status: 403 },
         [path("storageLocations", A)]: { status: 403 },
+        [path("backupRepositories", A)]: { status: 403 },
       }),
     );
     await page();
+    await waitFor(() => expect(cell("backupRepositories").getAttribute("data-read")).toBe("denied"));
     expect(screen.getByTestId("velero-overview-attention-summary").textContent).toBe(
       "Nothing was read of what the rules look at: what needs attention is not known.",
     );
     expect(items()).toEqual([]);
-    expect([...band("attention").querySelectorAll("[data-unchecked]")]).toHaveLength(4);
+    expect([...band("attention").querySelectorAll("[data-unchecked]")]).toHaveLength(5);
     noValueOfTheWhole();
   });
 

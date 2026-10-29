@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { submissionOf } from "../../test/adherence-builders";
+import { repository } from "../../test/volume-builders";
 import { formatDuration } from "./duration";
 import { unread } from "./location-users";
+import { shownText } from "./location-view";
+import { labelOf } from "./name-label";
 import { operationLine } from "./operation-line";
 import {
   attention,
@@ -17,6 +20,7 @@ import {
   NOT_KNOWN_WORDS,
   newestCompleted,
   notKnownCount,
+  REPOSITORY_RULE_WORDS,
   RULES,
   readWindow,
   recent,
@@ -30,7 +34,11 @@ import { emptyRead, failed, succeeded } from "./read-state";
 import { adherenceContext, keepOffset, SIGNAL_WORDS, scheduleSignal } from "./schedule-signal";
 
 import type { AttentionItem, OverviewReads, Rule } from "./overview";
+import type { FamilyRead } from "./read-state";
 import type {
+  BackupRepositoryResource,
+  BackupRepositorySpec,
+  BackupRepositoryStatus,
   BackupResource,
   BackupStorageLocationResource,
   RestoreResource,
@@ -104,6 +112,16 @@ const location = (name: string, spec: object = {}, status: object | undefined = 
     status ?? { phase: "Available", lastValidationTime: ago(30_000) },
   );
 const fine = location("default", { default: true });
+// A backup repository as the release writes one, in the namespace of the installation: its labels name the volume
+// namespace, the storage location and the type, and its spec names them whole.
+const repo = (name: string, status: BackupRepositoryStatus | undefined, spec: Partial<BackupRepositorySpec> = {}) =>
+  frozen(repository(name, status, { namespace: A, spec }));
+// An entry of the recent maintenances, which the release writes with its start and its completion.
+const maintained = (result: string, started: number | undefined, message?: string) => ({
+  result,
+  ...(started === undefined ? {} : { startTimestamp: ago(started), completeTimestamp: ago(started - MINUTE) }),
+  ...(message === undefined ? {} : { message }),
+});
 
 function reads(more: Partial<OverviewReads> = {}): OverviewReads {
   return {
@@ -112,6 +130,7 @@ function reads(more: Partial<OverviewReads> = {}): OverviewReads {
     schedules: succeeded<ScheduleResource>([], now),
     storageLocations: succeeded<BackupStorageLocationResource>([fine], now),
     snapshotLocations: succeeded<VolumeSnapshotLocationResource>([], now),
+    backupRepositories: succeeded<BackupRepositoryResource>([], now),
     ...more,
   };
 }
@@ -147,6 +166,7 @@ describe("what was read of an installation", () => {
       schedules: stale([schedule("nightly")]),
       storageLocations: failed(emptyRead(), "not-served"),
       snapshotLocations: failed(emptyRead(), "failed"),
+      backupRepositories: succeeded([repo("shop-default-kopia", { phase: "Ready" })], now),
     });
 
     expect(found).toEqual([
@@ -155,6 +175,7 @@ describe("what was read of an installation", () => {
       { family: "schedules", kind: "schedule", state: "stale", count: 1, at: now - MINUTE, status: "failed" },
       { family: "storageLocations", kind: "storage-location", state: "not-served" },
       { family: "snapshotLocations", kind: "snapshot-location", state: "failed" },
+      { family: "backupRepositories", kind: "backup-repository", state: "read", count: 1 },
     ]);
     // A family that holds nothing was read, and holds none: it is a number, which is zero.
     expect(coverage(reads())[0]).toEqual({ family: "backups", kind: "backup", state: "read", count: 0 });
@@ -656,7 +677,8 @@ describe("what needs attention", () => {
 
   it("has every rule of the table, and no other", () => {
     // A11 is the adherence of a schedule (SPEC-0013), whose cases are under the rules of the table.
-    expect(RULES).toEqual(["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11"]);
+    // A12 and A13 are of the backup repositories (SPEC-0014), whose cases are under the rules of SPEC-0013.
+    expect(RULES).toEqual(["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11", "A12", "A13"]);
     expect(GROUP_TITLES).toEqual({
       "in-flight": "In flight",
       storage: "Storage",
@@ -785,16 +807,31 @@ describe("what needs attention", () => {
 
   it("says that nothing was read when no family the rules look at was, and what is of an earlier read", () => {
     const blind = attention(
-      reads({ backups: denied(), restores: denied(), schedules: denied(), storageLocations: emptyRead() }),
+      reads({
+        backups: denied(),
+        restores: denied(),
+        schedules: denied(),
+        storageLocations: emptyRead(),
+        backupRepositories: denied(),
+      }),
       now,
       "7d",
     );
 
     expect(blind.items).toEqual([]);
-    expect(blind.unchecked).toHaveLength(4);
+    expect(blind.unchecked).toHaveLength(5);
     expect(attentionSummary(blind)).toBe(
       "Nothing was read of what the rules look at: what needs attention is not known.",
     );
+    // The backup repositories are among what the rules look at: while they were read, something was.
+    const repositories = attention(
+      reads({ backups: denied(), restores: denied(), schedules: denied(), storageLocations: emptyRead() }),
+      now,
+      "7d",
+    );
+
+    expect(repositories.unchecked).toHaveLength(4);
+    expect(attentionSummary(repositories)).toBe("Nothing in what was read needs attention. Not everything was read.");
     // The storage of an earlier read, with no item: what was looked at is not what is there now.
     const earlier = attention(reads({ storageLocations: stale([fine]) }), now - MINUTE, "7d");
 
@@ -907,6 +944,10 @@ describe("what needs attention", () => {
         ),
         schedules: succeeded([schedule("unread", {}, null), schedule("nightly")], now),
         storageLocations: succeeded([location("a"), object("silent", { provider: "aws" }, undefined)], now),
+        backupRepositories: succeeded(
+          [repo("not-ready", { phase: "NotReady", recentMaintenance: [maintained("Failed", HOUR)] })],
+          now,
+        ),
       }),
       now,
       "30d",
@@ -1303,6 +1344,447 @@ describe("the adherence of the schedules: rule A11 and what is not known (SPEC-0
 
     expect(words).not.toMatch(/healthy|protected|\bsafe\b|all is well|\bscore\b|%/i);
     expect(Object.keys(found)).toEqual(["items", "unchecked", "earlier", "notKnown"]);
+  });
+});
+
+describe("the backup repositories: rules A12 and A13, and their cell (SPEC-0014)", () => {
+  const repositories = (...items: BackupRepositoryResource[]) => reads({ backupRepositories: succeeded(items, now) });
+  const ready = { phase: "Ready", lastMaintenanceTime: ago(DAY) };
+  const shown = (found: { items: AttentionItem[] }) =>
+    found.items.map(({ rule, name, related, stale: before }) => [rule, name, related?.name ?? "", before]);
+
+  it("gives A12 for a repository Velero reports NotReady, and for no other readiness", () => {
+    const found = attention(
+      repositories(
+        repo("ready", ready),
+        repo("not-ready", { phase: "NotReady", message: "error to connect to the storage" }),
+        repo("silent", { phase: "NotReady" }),
+        // Not initialized yet: no phase, an empty one, and New.
+        repo("none", undefined),
+        repo("empty", { phase: "" }),
+        repo("new", { phase: "New" }),
+        // A phase the release does not write is not known, which is not that it is not ready.
+        repo("unknown", { phase: "Initializing" }),
+      ),
+      now,
+      "7d",
+    );
+
+    expect(rules(found)).toEqual([
+      ["A12", "not-ready"],
+      ["A12", "silent"],
+    ]);
+    expect(found.unchecked).toEqual([]);
+  });
+
+  it("says in A12 what Velero says, the volume namespace and the storage location, and a value that is not written", () => {
+    const address = "error to connect to https://user:secret@objects.example:9000/velero?token=abc, giving up.";
+    const found = attention(
+      repositories(
+        repo("not-ready", { phase: "NotReady", message: "error to connect to the storage." }),
+        repo("silent", { phase: "NotReady" }),
+        // A message of nothing but a full stop says nothing.
+        repo("stop", { phase: "NotReady", message: " . " }),
+        repo("unnamed", { phase: "NotReady" }, { volumeNamespace: "", backupStorageLocation: "" }),
+        repo("addressed", { phase: "NotReady", message: address }),
+      ),
+      now,
+      "7d",
+    );
+
+    expect(item(found, "A12", "not-ready")).toStrictEqual({
+      group: "storage",
+      kind: "backup-repository",
+      name: "not-ready",
+      title: "not-ready",
+      rule: "A12",
+      reason:
+        "Velero reports it not ready: error to connect to the storage. Volume namespace: shop. Storage location: default.",
+      related: { kind: "storage-location", name: "default" },
+      stale: false,
+    });
+    expect(item(found, "A12", "silent").reason).toBe(
+      "Velero reports it not ready, and gives no message. Volume namespace: shop. Storage location: default.",
+    );
+    expect(item(found, "A12", "stop").reason).toBe(item(found, "A12", "silent").reason);
+    expect(item(found, "A12", "unnamed")).toStrictEqual({
+      group: "storage",
+      kind: "backup-repository",
+      name: "unnamed",
+      title: "unnamed",
+      rule: "A12",
+      reason:
+        "Velero reports it not ready, and gives no message. Volume namespace: Not set. Storage location: Not set.",
+      stale: false,
+    });
+    // An address in the message is shown as an address is.
+    const words = item(found, "A12", "addressed").reason;
+
+    expect(words).toBe(
+      `${REPOSITORY_RULE_WORDS.notReady(shownText(address).value.replace(/[\s.]+$/, ""))} ${REPOSITORY_RULE_WORDS.of("shop", "default")}`,
+    );
+    expect(words).not.toMatch(/secret|token/);
+  });
+
+  it("leads from A12 to the storage location its spec names in its namespace, and to none it does not find", () => {
+    // A name longer than a label can carry: the labels of the repository carry it cut, and its spec whole.
+    const long = `archive-${"x".repeat(56)}`;
+    const cut = repository("long", { phase: "NotReady" }, { namespace: A, spec: { backupStorageLocation: long } });
+    const labelled = frozen({
+      ...cut,
+      metadata: {
+        ...cut.metadata,
+        labels: { ...cut.metadata.labels, "velero.io/storage-location": labelOf(long) },
+      },
+    }) as BackupRepositoryResource;
+    // The location of that name is of another installation, which marks it default.
+    const elsewhere = frozen({
+      ...location("archive", { default: true }),
+      metadata: { ...location("archive").metadata, namespace: "velero-b" },
+    });
+    const all = [
+      repo("found", { phase: "NotReady" }),
+      repo("gone", { phase: "NotReady" }, { backupStorageLocation: "gone" }),
+      repo("of-another", { phase: "NotReady" }, { backupStorageLocation: "archive" }),
+      labelled,
+    ];
+    const found = attention(
+      reads({
+        storageLocations: succeeded([fine, elsewhere as BackupStorageLocationResource, location(long)], now),
+        backupRepositories: succeeded(all, now),
+      }),
+      now,
+      "7d",
+    );
+
+    expect(long).toHaveLength(64);
+    expect(labelOf(long)).not.toBe(long);
+    expect(shown(found)).toEqual([
+      ["A12", "found", "default", false],
+      ["A12", "gone", "", false],
+      ["A12", "long", long, false],
+      ["A12", "of-another", "", false],
+    ]);
+    // What the item says of a location it does not find is what the spec names.
+    expect(item(found, "A12", "gone").reason).toContain("Storage location: gone.");
+    // The locations not read: the location is not known, and the item leads to the repository alone.
+    const blind = attention(reads({ storageLocations: denied(), backupRepositories: succeeded(all, now) }), now, "7d");
+
+    expect(shown(blind).map(([, name, related]) => [name, related])).toEqual([
+      ["found", ""],
+      ["gone", ""],
+      ["long", ""],
+      ["of-another", ""],
+    ]);
+    expect(blind.unchecked.map((line) => line.family)).toEqual(["storageLocations"]);
+  });
+
+  it("gives A13 when the newest maintenance by its start failed, whatever the order of the entries in the object", () => {
+    const found = attention(
+      repositories(
+        repo("failed", { ...ready, recentMaintenance: [maintained("Succeeded", 3 * DAY), maintained("Failed", DAY)] }),
+        // The newest failed, and is the first in the object.
+        repo("first", {
+          ...ready,
+          recentMaintenance: [
+            maintained("Failed", HOUR),
+            maintained("Succeeded", 3 * DAY),
+            maintained("Succeeded", DAY),
+          ],
+        }),
+        // An older one failed under a newer one that succeeded.
+        repo("recovered", {
+          ...ready,
+          recentMaintenance: [maintained("Failed", 3 * DAY), maintained("Succeeded", DAY)],
+        }),
+        // The first in the object failed, and is not the newest by its start.
+        repo("reordered", {
+          ...ready,
+          recentMaintenance: [
+            maintained("Failed", 2 * DAY),
+            maintained("Succeeded", HOUR),
+            maintained("Failed", 3 * DAY),
+          ],
+        }),
+        // One that has no start goes after the ones that have one.
+        repo("unstarted", {
+          ...ready,
+          recentMaintenance: [maintained("Failed", undefined), maintained("Succeeded", HOUR)],
+        }),
+        // A result the release does not write, and one not reported, are not known: neither failed.
+        repo("unknown", { ...ready, recentMaintenance: [maintained("Interrupted", HOUR)] }),
+        repo("unreported", { ...ready, recentMaintenance: [maintained("", HOUR)] }),
+        // No history.
+        repo("never", { phase: "Ready" }),
+        repo("emptied", { ...ready, recentMaintenance: [] }),
+        repo("nulled", { ...ready, recentMaintenance: null }),
+      ),
+      now,
+      "7d",
+    );
+
+    expect(rules(found)).toEqual([
+      ["A13", "failed"],
+      ["A13", "first"],
+    ]);
+    expect([item(found, "A13", "failed").time, item(found, "A13", "first").time]).toEqual([now - DAY, now - HOUR]);
+    // Not ready, and its newest maintenance failed: both, A12 first.
+    const both = attention(
+      repositories(repo("both", { phase: "NotReady", recentMaintenance: [maintained("Failed", HOUR)] })),
+      now,
+      "7d",
+    );
+
+    expect(rules(both)).toEqual([
+      ["A12", "both"],
+      ["A13", "both"],
+    ]);
+  });
+
+  it("says in A13 what Velero says, the start, and when the last maintenance that succeeded was", () => {
+    const found = attention(
+      repositories(
+        repo("failed", {
+          phase: "Ready",
+          lastMaintenanceTime: ago(3 * DAY),
+          recentMaintenance: [
+            maintained("Succeeded", 3 * DAY),
+            maintained("Failed", HOUR, "error to run the maintenance job: pod failed."),
+          ],
+        }),
+        repo("never", { phase: "Ready", recentMaintenance: [maintained("Failed", 2 * HOUR)] }),
+        // No entry has a start: the first in the object is the newest, as the list reads it, and it has no time.
+        repo("unstarted", {
+          phase: "Ready",
+          lastMaintenanceTime: ago(2 * DAY),
+          recentMaintenance: [maintained("Failed", undefined, "stopped"), maintained("Succeeded", undefined)],
+        }),
+      ),
+      now,
+      "7d",
+    );
+
+    expect(item(found, "A13", "failed")).toStrictEqual({
+      group: "storage",
+      kind: "backup-repository",
+      name: "failed",
+      title: "failed",
+      rule: "A13",
+      reason:
+        "Its newest maintenance failed: error to run the maintenance job: pod failed. The last maintenance that succeeded was 3d ago.",
+      time: now - HOUR,
+      stale: false,
+    });
+    expect(item(found, "A13", "never")).toStrictEqual({
+      group: "storage",
+      kind: "backup-repository",
+      name: "never",
+      title: "never",
+      rule: "A13",
+      reason: "Its newest maintenance failed, and Velero gives no message. No maintenance that succeeded is recorded.",
+      time: now - 2 * HOUR,
+      stale: false,
+    });
+    expect(item(found, "A13", "unstarted")).toStrictEqual({
+      group: "storage",
+      kind: "backup-repository",
+      name: "unstarted",
+      title: "unstarted",
+      rule: "A13",
+      reason:
+        "Its newest maintenance failed: stopped. That maintenance reports no start. The last maintenance that succeeded was 2d ago.",
+      stale: false,
+    });
+    // A last maintenance the clock of this machine is behind of is not said to be to come.
+    const ahead = attention(
+      repositories(
+        repo("ahead", {
+          phase: "Ready",
+          lastMaintenanceTime: ago(-HOUR),
+          recentMaintenance: [maintained("Failed", HOUR)],
+        }),
+      ),
+      now,
+      "7d",
+    );
+
+    expect(item(ahead, "A13", "ahead").reason).toBe(
+      `${REPOSITORY_RULE_WORDS.failedNoMessage} ${REPOSITORY_RULE_WORDS.lastSucceeded(formatDuration(0))}`,
+    );
+  });
+
+  it("puts the items of the repositories among the ones of the storage locations by name, A12 before A13", () => {
+    const found = attention(
+      reads({
+        storageLocations: succeeded(
+          [
+            location("z-old", { default: true }, { phase: "Available", lastValidationTime: ago(3 * DAY) }),
+            object("a-silent", { provider: "aws" }, undefined),
+          ],
+          now,
+        ),
+        backupRepositories: succeeded(
+          [
+            repo(
+              "m-both",
+              { phase: "NotReady", recentMaintenance: [maintained("Failed", HOUR)] },
+              { backupStorageLocation: "z-old" },
+            ),
+            repo("b-failed", { phase: "Ready", recentMaintenance: [maintained("Failed", 10 * DAY)] }),
+          ],
+          now,
+        ),
+      }),
+      now,
+      "7d",
+    );
+
+    // By name, whatever their time: a repository between two locations.
+    expect(found.items.map(({ group, rule, name }) => [group, rule, name])).toEqual([
+      ["storage", "A2", "a-silent"],
+      ["storage", "A13", "b-failed"],
+      ["storage", "A12", "m-both"],
+      ["storage", "A13", "m-both"],
+      ["storage", "A3", "z-old"],
+    ]);
+    expect(item(found, "A12", "m-both").related).toEqual({ kind: "storage-location", name: "z-old" });
+    // The line of a location says the rules of the location, and none of a repository: the repositories have no
+    // line in the bands of the schedules and of the storage.
+    const same = reads({ backupRepositories: succeeded([repo("default", { phase: "NotReady" })], now) });
+    const named = attention(same, now, "7d");
+    const located = locationLines(same, now, named);
+
+    expect(rules(named)).toEqual([["A12", "default"]]);
+    expect(located.state === "listed" && located.items.map((line) => [line.view.name, line.rules])).toEqual([
+      ["default", []],
+    ]);
+  });
+
+  it("says of the items of a read of the repositories that is not the last one that they were read before", () => {
+    const both = { phase: "NotReady", recentMaintenance: [maintained("Failed", HOUR)] };
+    const earlier = attention(reads({ backupRepositories: stale([repo("both", both)]) }), now, "7d");
+
+    expect(shown(earlier)).toEqual([
+      ["A12", "both", "default", true],
+      ["A13", "both", "", true],
+    ]);
+    expect(earlier.earlier).toEqual(["backupRepositories"]);
+    expect(earlier.unchecked).toEqual([]);
+    expect(attentionSummary(earlier)).toBe(
+      "2 items in what was read. Part of it was read before the last read, which did not succeed.",
+    );
+    // The location A12 leads to is of an earlier read, and so is the item; A13 names no location.
+    const located = attention(
+      reads({
+        storageLocations: stale([fine]),
+        backupRepositories: succeeded([repo("both", both), repo("gone", both, { backupStorageLocation: "gone" })], now),
+      }),
+      now,
+      "7d",
+    );
+
+    expect(shown(located)).toEqual([
+      ["A12", "both", "default", true],
+      ["A13", "both", "", false],
+      // A location it does not find is not of what it says.
+      ["A12", "gone", "", false],
+      ["A13", "gone", "", false],
+    ]);
+  });
+
+  it("says in the sixth cell how many repositories were read, or the state of their read", () => {
+    const cell = (read: FamilyRead<BackupRepositoryResource>) => coverage(reads({ backupRepositories: read }))[5];
+    const of = { family: "backupRepositories", kind: "backup-repository" };
+
+    expect(coverage(reads()).map((found) => found.family)).toEqual([
+      "backups",
+      "restores",
+      "schedules",
+      "storageLocations",
+      "snapshotLocations",
+      "backupRepositories",
+    ]);
+    expect(cell(succeeded([repo("one", ready), repo("two", { phase: "NotReady" })], now))).toEqual({
+      ...of,
+      state: "read",
+      count: 2,
+    });
+    expect(cell(succeeded([], now))).toEqual({ ...of, state: "read", count: 0 });
+    expect(cell(stale([repo("one", ready)]))).toEqual({
+      ...of,
+      state: "stale",
+      count: 1,
+      at: now - MINUTE,
+      status: "failed",
+    });
+    expect(cell(denied())).toEqual({ ...of, state: "denied" });
+    expect(cell(failed(emptyRead(), "not-served"))).toEqual({ ...of, state: "not-served" });
+    expect(cell(failed(emptyRead(), "failed"))).toEqual({ ...of, state: "failed" });
+    expect(cell(emptyRead())).toEqual({ ...of, state: "not-read" });
+    expect(cell({ ...emptyRead<BackupRepositoryResource>(), status: "loading" })).toEqual({ ...of, state: "not-read" });
+  });
+
+  it("says that the repositories were not checked when they were not read, and that nothing was read only when none of the five families was", () => {
+    const line = (read: FamilyRead<BackupRepositoryResource>) =>
+      attention(reads({ backupRepositories: read }), now, "7d").unchecked;
+    const missing = "The readiness and the maintenance of the backup repositories were not checked";
+
+    expect(line(denied())).toEqual([
+      {
+        family: "backupRepositories",
+        kind: "backup-repository",
+        reason: "The backup repositories of this installation cannot be read: access is denied",
+        missing,
+      },
+    ]);
+    for (const read of [
+      failed(emptyRead<BackupRepositoryResource>(), "not-served"),
+      failed(emptyRead<BackupRepositoryResource>(), "failed"),
+      emptyRead<BackupRepositoryResource>(),
+    ]) {
+      expect(line(read)).toEqual([
+        {
+          family: "backupRepositories",
+          kind: "backup-repository",
+          reason: unread("backup repositories", read).reason,
+          missing,
+        },
+      ]);
+    }
+    // Of an earlier read, they were read: they are not a family that could not be checked.
+    expect(line(stale([repo("one", ready)]))).toEqual([]);
+    expect(attentionSummary(attention(reads({ backupRepositories: denied() }), now, "7d"))).toBe(
+      "Nothing in what was read needs attention. Not everything was read.",
+    );
+    // After the families the other rules look at, in their order.
+    expect(
+      attention(reads({ restores: denied(), backupRepositories: denied() }), now, "7d").unchecked.map(
+        (unchecked) => unchecked.family,
+      ),
+    ).toEqual(["restores", "backupRepositories"]);
+    expect(
+      attention(reads({ backups: denied(), backupRepositories: denied() }), now, "7d").unchecked.map(
+        (unchecked) => unchecked.family,
+      ),
+    ).toEqual(["backups", "backupRepositories"]);
+    // The four families of before denied: the repositories were read, and their items are what was read.
+    const four: Partial<OverviewReads> = {
+      backups: denied(),
+      restores: denied(),
+      schedules: denied(),
+      storageLocations: denied(),
+    };
+    const repositoriesOnly = attention(
+      reads({ ...four, backupRepositories: succeeded([repo("not-ready", { phase: "NotReady" })], now) }),
+      now,
+      "7d",
+    );
+
+    expect(rules(repositoriesOnly)).toEqual([["A12", "not-ready"]]);
+    expect(attentionSummary(repositoriesOnly)).toBe("1 item in what was read. Not everything was read.");
+    expect(attentionSummary(attention(reads({ ...four, backupRepositories: denied() }), now, "7d"))).toBe(
+      "Nothing was read of what the rules look at: what needs attention is not known.",
+    );
   });
 });
 
