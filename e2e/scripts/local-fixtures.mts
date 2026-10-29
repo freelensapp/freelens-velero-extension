@@ -4830,6 +4830,36 @@ export function runRepository(items: KubeResource[], volumeNamespace: string, lo
   return found[0];
 }
 
+// How far ahead the next maintenance of the repository of the volume must be for the views to be placed: the
+// suites that follow a placement run for hours, and the maintenance Job reads the repository and its location
+// through the API server, in the group of Velero, which their guard counts.
+export const MAINTENANCE_MARGIN = 24 * 3_600_000;
+
+// The next maintenance of the repository of the volume of the run, by the clock of this machine as the views count
+// due: its last maintenance and its frequency. Refused when it is less than a day away, or when the repository says
+// no last maintenance or no frequency, which is due now.
+export function assertMaintenanceAhead(items: KubeResource[], run: string, now: number): { next: number } {
+  const repository = runRepository(items, fixtureNames(run).source);
+  const last = Date.parse(
+    (repository.status as { lastMaintenanceTime?: string } | undefined)?.lastMaintenanceTime ?? "",
+  );
+  const frequency = durationMilliseconds(
+    String((repository.spec as { maintenanceFrequency?: unknown } | undefined)?.maintenanceFrequency ?? ""),
+  );
+  const next = last + (frequency ?? Number.NaN);
+
+  requireCondition(
+    Number.isFinite(next) && next - now >= MAINTENANCE_MARGIN,
+    `The repository ${repository.metadata.name} of the volume of the run is due for its maintenance ` +
+      (Number.isFinite(next)
+        ? `at ${new Date(next).toISOString()}, less than a day from now`
+        : "now, since it names no last maintenance or no frequency") +
+      ": its Job would run while the suites run. Create the environment again with `pnpm demo:down` and " +
+      "`pnpm demo:up`.",
+  );
+  return { next };
+}
+
 export interface VolumeRecord {
   pod: { name: string; uid: string; node: string };
   restoredPod: { name: string; uid: string; node: string };

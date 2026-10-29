@@ -41,6 +41,7 @@ import {
   allowsFixtureArtifact,
   assertFixtureNamespaceContents,
   assertFixtureOperationsRemoved,
+  assertMaintenanceAhead,
   assertStoreRequest,
   awaitRealSchedule,
   awaitRequestsBeforeCleanup,
@@ -75,6 +76,7 @@ import {
   liveVolumeBackup,
   liveVolumePod,
   liveVolumeRestore,
+  MAINTENANCE_MARGIN,
   NEWEST_OF_THE_HISTORY,
   NOT_COUNTED,
   NOT_STARTED,
@@ -12083,6 +12085,45 @@ describe("the volume of the environment", () => {
         names.source,
       ).metadata.name,
     ).toBe("b");
+  });
+
+  it("places the views only more than a day before the next maintenance of the repository of the volume", () => {
+    const name = `velero-source-${run}-default-kopia`;
+    const now = Date.parse("2026-10-29T20:00:00Z");
+    const maintained = (last: string | undefined, frequency = "168h0m0s") => [
+      {
+        ...repository(
+          name,
+          labelled(),
+          last === undefined ? { lastMaintenanceTime: undefined } : { lastMaintenanceTime: last },
+        ),
+        spec: { maintenanceFrequency: frequency },
+      },
+    ];
+    const due = (at: string, when: string) =>
+      `The repository ${name} of the volume of the run is due for its maintenance ${at === "" ? when : `at ${at}, ${when}`}: its Job would run while the suites run. Create the environment again with \`pnpm demo:down\` and \`pnpm demo:up\`.`;
+
+    expect(MAINTENANCE_MARGIN).toBe(24 * HOUR);
+    // Maintained at its initialization an hour ago: the next is in 167 hours.
+    expect(assertMaintenanceAhead(maintained("2026-10-29T19:00:00Z"), run, now)).toEqual({
+      next: Date.parse("2026-11-05T19:00:00Z"),
+    });
+    // Exactly a day before, it is placed; a second less, it is not.
+    expect(() => assertMaintenanceAhead(maintained("2026-10-23T20:00:00Z"), run, now)).not.toThrow();
+    expect(() => assertMaintenanceAhead(maintained("2026-10-23T20:00:00Z"), run, now + 1000)).toThrow(
+      due("2026-10-30T20:00:00.000Z", "less than a day from now"),
+    );
+    // No last maintenance, or no frequency, is due now.
+    expect(() => assertMaintenanceAhead(maintained(undefined), run, now)).toThrow(
+      due("", "now, since it names no last maintenance or no frequency"),
+    );
+    expect(() => assertMaintenanceAhead(maintained("2026-10-29T19:00:00Z", ""), run, now)).toThrow(
+      due("", "now, since it names no last maintenance or no frequency"),
+    );
+    // No repository of the run, or two: the environment does not hold the volume of the run as it was made.
+    expect(() => assertMaintenanceAhead([], run, now)).toThrow(
+      `No repository is labelled for velero-source-${run}, default and kopia in velero-demo`,
+    );
   });
 
   it("records the repository of the run as soon as it is found, before it is checked Ready", () => {

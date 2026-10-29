@@ -30,6 +30,7 @@ import { DIRECT_PROOF_ORIGIN, runDownloadProof, runIdentityProof, tlsProofResour
 import {
   assertFixtureNamespaceContents,
   assertFixtureOperationsRemoved,
+  assertMaintenanceAhead,
   awaitRequestsBeforeCleanup,
   awaitRequestsRemoved,
   awaitVolumeOperationsRemoved,
@@ -2710,6 +2711,27 @@ function placeViewsAndTabs(): {
   );
   const run = journal.fixtureRun.id;
   const names = fixtureNames(run);
+
+  // The repository of the volume of the run is maintained once a week: no placement is made less than a day before
+  // its next maintenance, which would run while the suites that follow it run.
+  assertMaintenanceAhead(
+    (
+      JSON.parse(
+        kubectl([
+          "get",
+          "backuprepositories.velero.io",
+          "--namespace",
+          DEMO_NAMESPACE,
+          "--selector",
+          `velero.io/volume-namespace=${names.source},velero.io/storage-location=default,velero.io/repository-type=kopia`,
+          "-o",
+          "json",
+        ]),
+      ) as { items: KubeResource[] }
+    ).items,
+    run,
+    Date.now(),
+  );
   // The times of the fixtures are taken from when the run was started: a second call asks for the same objects.
   const started = Date.parse(journal.fixtureRun.started);
   const runtime = fixtureRuntime();
