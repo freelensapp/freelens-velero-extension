@@ -661,13 +661,23 @@ const SETTLE = 1500;
 /** The views read again every fifteen seconds: what is measured between two reads ends before the second. */
 const BETWEEN_READS = 12_000;
 
+/** Whether two counts are the same: the same requests, each counted as many times. */
+function sameCounts(one: Record<string, number>, other: Record<string, number>): boolean {
+  const keys = Object.keys(one);
+
+  return keys.length === Object.keys(other).length && keys.every((key) => one[key] === other[key]);
+}
+
 /**
  * What the API server counted of the families while a step was taken, in the
  * time between two reads of the installation. Others read the cluster too: the
  * controllers of the installation, in their own namespace. A step that asks
- * nothing is one that was taken once with nothing counted; the step is taken
- * again, after `again` has undone it, when something was. A step that asks
- * the cluster is counted every time it is taken.
+ * what is `expected`, nothing unless said, is one that was taken once with
+ * that counted and nothing else; the step is taken again, after `again` has
+ * undone it, when something else was. A step that asks the cluster is counted
+ * every time it is taken: a view that asks a family when it opens asks it
+ * again at each try, since the read of the installation each try begins after
+ * drops what the view that closed let go.
  *
  * The time is the one of the application: the moment its last read ended, and
  * the moment the counters were read after the step and after what the step
@@ -679,6 +689,7 @@ export async function readsDuring(
   step: () => Promise<void>,
   again: () => Promise<void>,
   tries = 3,
+  expected: Record<string, number> = {},
 ): Promise<Record<string, number>> {
   let asked: Record<string, number> = {};
 
@@ -695,7 +706,7 @@ export async function readsDuring(
     const late = state.reading || state.read !== read || taken - Number(read) > BETWEEN_READS;
 
     asked = counted(familyReads(before), familyReads(after));
-    if (!late && Object.keys(asked).length === 0) return {};
+    if (!late && sameCounts(asked, expected)) return asked;
     if (late) asked = { ...asked, "a read of the installation began before the counters were read": 1 };
     if (attempt < tries) await again();
   }
@@ -1892,6 +1903,79 @@ export async function notices(frame: Frame, expected?: string[]): Promise<Record
     if (Date.now() > deadline) return found;
     await frame.waitForTimeout(200);
   }
+}
+
+/** What the band of the volume operations of the view of a backup or of a restore shows. */
+export interface VolumeBandShown {
+  // The kind of the operations of the band: PodVolumeBackup or PodVolumeRestore.
+  kind: string;
+  // `rows` when it has rows, or the state its words say: none, loading, denied, failed, not-served, not-read.
+  state: string;
+  // What the release does with the operations, by the phase of the backup or the restore.
+  sentence: string;
+  // The words of its state, when it has no rows.
+  words: string;
+  // How many operations it holds, in words, and their counts by phase in the order it gives them.
+  count: string;
+  groups: [phase: string, count: number][];
+  // The operations of its rows, from the first it shows, and whether it offers ten more.
+  rows: string[];
+  more: boolean;
+  // What it says of rows of an earlier read, and when.
+  stale: string;
+}
+
+/**
+ * The band of the volume operations of the view that is shown, once its family
+ * is not being read for the first time: the view asks it when it opens, and
+ * says until then that it is being read. With the state that is expected, the
+ * band is waited for until it is in that state; the one it is in when the time
+ * is over is answered.
+ */
+export async function volumeBand(frame: Frame, expected?: string): Promise<VolumeBandShown> {
+  await frame
+    .locator("[data-testid=velero-volume-band]")
+    .first()
+    .waitFor({ state: "visible", timeout: ELEMENT_TIMEOUT });
+  await frame
+    .waitForFunction(
+      (wanted) => {
+        const root = document.querySelector("[data-testid=velero-volume-band]");
+        const state = root
+          ? (root.querySelector("[data-testid=velero-volume-state]")?.getAttribute("data-state") ?? "rows")
+          : "";
+
+        return wanted ? state === wanted : state !== "" && state !== "loading" && state !== "not-read";
+      },
+      expected,
+      { timeout: ELEMENT_TIMEOUT, polling: 100 },
+    )
+    .catch(() => undefined);
+
+  return frame.evaluate(() => {
+    const root = document.querySelector<HTMLElement>("[data-testid=velero-volume-band]");
+
+    if (!root) throw new Error("The band of the volume operations went while it was read");
+    const said = (id: string) =>
+      (root.querySelector<HTMLElement>(`[data-testid=${id}]`)?.textContent ?? "").replace(/\s+/g, " ").trim();
+
+    return {
+      kind: root.getAttribute("data-kind") ?? "",
+      state: root.querySelector("[data-testid=velero-volume-state]")?.getAttribute("data-state") ?? "rows",
+      sentence: said("velero-volume-sentence"),
+      words: said("velero-volume-state"),
+      count: said("velero-volume-count"),
+      groups: [...root.querySelectorAll<HTMLElement>("[data-testid=velero-volume-groups] > li")].map(
+        (group) =>
+          [group.getAttribute("data-phase") ?? "", Number(group.getAttribute("data-count"))] as [string, number],
+      ),
+      rows: [...root.querySelectorAll<HTMLElement>("[data-testid=velero-volume-rows] tbody tr")].map(
+        (row) => row.getAttribute("data-operation") ?? "",
+      ),
+      more: root.querySelector("[data-testid=velero-volume-more]") !== null,
+      stale: said("velero-volume-stale"),
+    };
+  });
 }
 
 /** Asks the views to read again, and waits for the read to end. */

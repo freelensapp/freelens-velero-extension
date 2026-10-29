@@ -80,8 +80,10 @@ describe("restores with restricted access", () => {
     "keeps the restore and says that its source cannot be read, which is not that it is not there",
     async () => {
       await cluster.openWorkspace(frame, MAPPED, RESTORES);
+      // The view of a restore shows the band of its pod volume restores, which this identity may not read: their
+      // family is denied over it, after the backups, in the order of what the view reads.
       const shown = async () => ({
-        notices: await cluster.notices(frame, ["backups"]),
+        notices: await cluster.notices(frame, ["backups", "podVolumeRestores"]),
         status: (await frame.locator("[data-testid=velero-restore-status]").innerText()).replace(/\s+/g, " "),
         source: await cluster.reference(frame, `velero-reference-Backup-${SCHEDULED}`, "inaccessible"),
         location: await frame.locator("[data-testid=velero-reference-BackupStorageLocation-none]").innerText(),
@@ -90,8 +92,9 @@ describe("restores with restricted access", () => {
       });
       const first = await shown();
 
-      expect(Object.keys(first.notices)).toEqual(["backups"]);
+      expect(Object.keys(first.notices)).toEqual(["backups", "podVolumeRestores"]);
       expect(first.notices.backups).toContain("access is denied");
+      expect(first.notices.podVolumeRestores).toContain("access is denied");
       expect(first.status).toContain("Waiting for plugin operations");
       expect(first.source.state).toBe("inaccessible");
       expect(first.source.text).toContain("access is denied");

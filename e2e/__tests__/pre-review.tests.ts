@@ -895,6 +895,9 @@ describe("pre-review of the views", () => {
     async () => {
       await cluster.showList(frame);
       await cluster.openWorkspace(frame, OPENED);
+      // The summary holds the band of the volumes, which says here that the installation holds no pod volume backup
+      // of the backup, with no row. T51-PR2-PENDING: the room of its rows at 900 by 650 and at twice the zoom is
+      // seen once the fixtures place operations of a backup, and a run shows them.
       await everyLayout("workspace");
       await everyLayout("workspace-references", async () => {
         await frame.locator("[data-testid=velero-backup-references]").scrollIntoViewIfNeeded();
@@ -1009,6 +1012,8 @@ describe("pre-review of the views", () => {
     async () => {
       await cluster.showList(frame);
       await cluster.openWorkspace(frame, RESTORED, RESTORES);
+      // The summary holds the band of the volumes, with no row here, as for a backup. T51-PR2-PENDING: the room of
+      // its rows at 900 by 650 and at twice the zoom.
       await everyLayout("restore-workspace", undefined, RESTORES);
       await everyLayout(
         "restore-workspace-into",

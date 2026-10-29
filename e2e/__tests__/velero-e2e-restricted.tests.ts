@@ -84,9 +84,12 @@ describe("views with restricted access", () => {
     "keeps the backup and says which of its references cannot be read",
     async () => {
       await cluster.openWorkspace(frame, SCHEDULED);
-      const shown = await cluster.notices(frame, ["restores", "snapshotLocations"]);
+      // The view of a backup shows the band of its pod volume backups, which this identity may not read: their
+      // family is denied over it as well, the moment the view asked it.
+      const shown = await cluster.notices(frame, ["podVolumeBackups", "restores", "snapshotLocations"]);
 
-      expect(Object.keys(shown).sort()).toEqual(["restores", "snapshotLocations"]);
+      expect(Object.keys(shown).sort()).toEqual(["podVolumeBackups", "restores", "snapshotLocations"]);
+      expect(shown.podVolumeBackups).toContain("access is denied");
       expect(shown.restores).toContain("access is denied");
       expect(shown.snapshotLocations).toContain("access is denied");
       expect(await frame.locator("[data-testid=velero-backup-status]").innerText()).toContain("Completed");
