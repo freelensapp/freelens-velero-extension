@@ -11,7 +11,7 @@ import {
   restore,
 } from "../../test/volume-builders";
 import { operationState } from "./phases";
-import { backupBand, phaseGroups, repositoryUses, restoreBand } from "./volume-band";
+import { backupBand, phaseGroups, repositoryUses, restoreBand, rowKey, volumeWays } from "./volume-band";
 import { volumeIndex } from "./volume-index";
 import { bandSentence } from "./volume-words";
 
@@ -281,5 +281,48 @@ describe("what used a repository", () => {
       ["ready", 0],
       ["ready", 0],
     ]);
+  });
+});
+
+describe("the ways of the rows of the Volumes tab", () => {
+  it("lead to the pod volume backup or restore of the owner by the namespace of the pod, the pod and the volume", () => {
+    const made = index(
+      [
+        podVolumeBackup(
+          "nightly-new",
+          { phase: "Completed", startTimestamp: before(MINUTE) },
+          ownedBy("Backup", nightly),
+        ),
+        // The same pod and volume, older: the newest is the way.
+        podVolumeBackup(
+          "nightly-old",
+          { phase: "Failed", startTimestamp: before(9 * MINUTE) },
+          ownedBy("Backup", nightly),
+        ),
+        podVolumeBackup(
+          "nightly-cache",
+          { phase: "Completed" },
+          { ...ownedBy("Backup", nightly), spec: { volume: "cache" } },
+        ),
+      ],
+      [restored("Completed", "monday-a")],
+    );
+
+    expect([...volumeWays(made, "Backup", nightly.metadata)]).toEqual([
+      [rowKey("shop", "cart-0", "data"), { kind: "pod-volume-backup", name: "nightly-new" }],
+      [rowKey("shop", "cart-0", "cache"), { kind: "pod-volume-backup", name: "nightly-cache" }],
+    ]);
+    expect([...volumeWays(made, "Restore", monday.metadata)]).toEqual([
+      [rowKey("shop-restored", "cart-0", "data"), { kind: "pod-volume-restore", name: "monday-a" }],
+    ]);
+  });
+
+  it("are none for another owner of the same pod and volume, and none when the family was denied", () => {
+    const weekly = backup("weekly", "Completed", { uid: "backup-weekly-1" });
+    const made = index([podVolumeBackup("nightly-a", { phase: "Completed" }, ownedBy("Backup", nightly))]);
+
+    expect(volumeWays(made, "Backup", weekly.metadata).size).toBe(0);
+    expect(volumeWays(made, "Backup", { namespace: "velero" }).size).toBe(0);
+    expect(volumeWays(index([], [], { backups: "forbidden" }), "Backup", nightly.metadata).size).toBe(0);
   });
 });

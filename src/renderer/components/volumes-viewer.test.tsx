@@ -3,6 +3,9 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { otherShape } from "../../common/artifact-volumes";
+import { rowKey } from "../../common/volume-band";
+import { TAB_WAY_WORDS } from "../../common/volume-words";
+import { closeViews, openViews } from "../navigation";
 import { CONTENT } from "./artifact-viewer";
 import { time } from "./status";
 import { VolumesViewer } from "./volumes-viewer";
@@ -565,5 +568,81 @@ describe("the volumes of an operation", () => {
     // A row that is opened after it is of the text that is shown.
     fireEvent.click(toggle(0));
     expect(Object.keys(fields(0))).toEqual(["Pod volume backup"]);
+  });
+});
+
+describe("the way of a row to the operation of the installation that made it", () => {
+  const RESTORED_ROW = {
+    pvcName: "cache",
+    pvcNamespace: "shop",
+    pvName: "pv-9",
+    restoreMethod: "PodVolumeRestore",
+    snapshotDataMoved: false,
+    pvrInfo: {
+      snapshotHandle: "kopia-1",
+      size: 4096,
+      uploaderType: "kopia",
+      volumeName: "cache",
+      podName: "cart-0",
+      podNamespace: "shop",
+    },
+  };
+  const way = (row: number) => screen.queryByTestId(`${ID}-way-${row}`);
+
+  afterEach(() => {
+    act(() => closeViews());
+  });
+
+  it("is in the details of a row of a pod volume backup the installation holds, by its pod and its volume, and opens it", () => {
+    const ways = new Map([
+      [rowKey("shop", "cart-0", "cache"), { kind: "pod-volume-backup" as const, name: "nightly-x7k2p" }],
+    ]);
+
+    render(<VolumesViewer id={ID} text={JSON.stringify(ALL)} of="Backup" ways={ways} />);
+    for (const index of [0, 1, 2, 3, 4]) fireEvent.click(toggle(index));
+    // The row of the pod volume backup, and no other: the others were not backed up by one.
+    expect([0, 1, 2, 3, 4].map((index) => way(index)?.textContent ?? null)).toEqual([
+      null,
+      "Open the pod volume backup nightly-x7k2p",
+      null,
+      null,
+      null,
+    ]);
+    expect(way(1)?.textContent).toBe(TAB_WAY_WORDS.open("pod volume backup", "nightly-x7k2p"));
+    // Before the details of the row, which stay as they were.
+    expect(Object.keys(fields(1))).toEqual(["Operation", "Pod volume backup"]);
+    fireEvent.click(way(1) as HTMLElement);
+    expect(openViews()).toEqual([{ kind: "pod-volume-backup", name: "nightly-x7k2p" }]);
+  });
+
+  it("is in the details of a row of a pod volume restore, by the pod and the volume the restore names", () => {
+    const ways = new Map([
+      [rowKey("shop", "cart-0", "cache"), { kind: "pod-volume-restore" as const, name: "monday-q4z8" }],
+    ]);
+
+    render(<VolumesViewer id={ID} text={JSON.stringify([RESTORED_ROW])} of="Restore" ways={ways} />);
+    fireEvent.click(toggle(0));
+    expect(way(0)?.textContent).toBe("Open the pod volume restore monday-q4z8");
+  });
+
+  it("offers nothing and says nothing absent for a row no operation matches, or when there are no ways", () => {
+    const other = new Map([
+      [rowKey("shop", "cart-0", "data"), { kind: "pod-volume-backup" as const, name: "nightly-x7k2p" }],
+    ]);
+
+    render(<Shown entries={ALL} />);
+    fireEvent.click(toggle(1));
+    const alone = details(1)?.textContent;
+
+    cleanup();
+    for (const ways of [other, new Map(), undefined]) {
+      render(<VolumesViewer id={ID} text={JSON.stringify(ALL)} of="Backup" ways={ways} />);
+      fireEvent.click(toggle(1));
+      // The details are the ones of a row with no way: the detail of the row and nothing else, nothing said of an
+      // operation that is not there.
+      expect([way(1), details(1)?.textContent]).toEqual([null, alone]);
+      expect([Object.keys(fields(1)), details(1)?.querySelectorAll("p").length]).toEqual([["Pod volume backup"], 0]);
+      cleanup();
+    }
   });
 });

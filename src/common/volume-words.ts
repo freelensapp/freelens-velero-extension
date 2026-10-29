@@ -387,3 +387,9 @@ export const USED_BY_WORDS = {
   newest: "The newest",
   owners: (plural: string) => `Of the ${plural}`,
 };
+
+// The way from a row of the Volumes tab to the operation of the installation it was made by (REQ-188).
+export const TAB_WAY_WORDS = {
+  title: "Operation",
+  open: (noun: string, name: string) => `Open the ${noun} ${name}`,
+};

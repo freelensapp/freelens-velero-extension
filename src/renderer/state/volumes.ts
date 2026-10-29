@@ -1,5 +1,8 @@
+import { volumeWays } from "../../common/volume-band";
 import { volumeIndex } from "../../common/volume-index";
 
+import type { OperationKind } from "../../common/phases";
+import type { VolumeWays } from "../../common/volume-band";
 import type { VolumeIndex } from "../../common/volume-index";
 import type { Installation } from "./installation";
 
@@ -22,4 +25,30 @@ export function volumesOf(installation: Installation): VolumeIndex {
 
   MADE.set(installation, { key, index });
   return index;
+}
+
+// The ways of the rows of the Volumes tab of one backup or restore, which its viewer is given. They are the same
+// object for as long as they lead to the same operations: a read makes a new index, and a read that changes none of
+// them does not draw the viewer again.
+const WAYS = new WeakMap<Installation, { index: VolumeIndex; owner: string; key: string; ways: VolumeWays }>();
+
+export function volumeWaysOf(
+  installation: Installation,
+  kind: OperationKind,
+  owner: { namespace?: string; uid?: string },
+): VolumeWays {
+  const index = volumesOf(installation);
+  const of = `${kind}\u0000${owner.namespace ?? ""}\u0000${owner.uid ?? ""}`;
+  const made = WAYS.get(installation);
+
+  if (made && made.index === index && made.owner === of) return made.ways;
+  const ways = volumeWays(index, kind, owner);
+  const key = [...ways].map(([row, target]) => `${row}\u0001${target.kind}/${target.name}`).join("\u0002");
+
+  if (made && made.owner === of && made.key === key) {
+    WAYS.set(installation, { ...made, index });
+    return made.ways;
+  }
+  WAYS.set(installation, { index, owner: of, key, ways });
+  return ways;
 }

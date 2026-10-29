@@ -1,17 +1,20 @@
 import type { KeyboardEvent } from "react";
 
 import type { OperationKind } from "../../common/phases";
+import type { VolumeWays } from "../../common/volume-band";
 
 // What the viewer of an artifact is given by the tab that loaded it: the one copy of the text the tab
 // holds, the kind of operation it is of, and the name its parts are found by. The results are given as
 // well the counters the status of the object writes, and the phase it reports with them, to say when the
-// file counts otherwise and why it can.
+// file counts otherwise and why it can. The volumes are given the ways of their rows to the operations of the
+// installation that made them, the same object for as long as they lead to the same operations.
 export interface ArtifactViewerProps {
   id: string;
   text: string;
   of: OperationKind;
   counters?: { errors?: number; warnings?: number };
   phase?: string;
+  ways?: VolumeWays;
 }
 
 // The mark of the part of a viewer that is given the focus when its text arrives: the first line of what

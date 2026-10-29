@@ -2,8 +2,9 @@ import { runInAction } from "mobx";
 import { describe, expect, it } from "vitest";
 import { backup, NOW, ownedBy, podVolumeBackup, read } from "../../../test/volume-builders";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
+import { rowKey } from "../../common/volume-band";
 import { Installation } from "./installation";
-import { volumesOf } from "./volumes";
+import { volumesOf, volumeWaysOf } from "./volumes";
 
 import type { Resource } from "./installation";
 
@@ -71,5 +72,33 @@ describe("the index of the operations of an installation", () => {
     const other = installation();
 
     expect(volumesOf(one)).not.toBe(volumesOf(other));
+  });
+});
+
+describe("the ways of the Volumes tab of an installation", () => {
+  it("are the same object at a read that leads to the same operations, and a new one when they change", () => {
+    const made = installation();
+    const a = podVolumeBackup("nightly-a", { phase: "InProgress" }, ownedBy("Backup", nightly));
+
+    stored(made, "podVolumeBackups", [a]);
+    const first = volumeWaysOf(made, "Backup", nightly.metadata);
+
+    expect([...first]).toEqual([[rowKey("shop", "cart-0", "data"), { kind: "pod-volume-backup", name: "nightly-a" }]]);
+    // A tick, then a read that changes the phase and nothing of the ways.
+    expect(volumeWaysOf(made, "Backup", nightly.metadata)).toBe(first);
+    stored(made, "podVolumeBackups", [{ ...a, status: { phase: "Completed" } }]);
+    expect(volumesOf(made)).not.toBe(undefined);
+    expect(volumeWaysOf(made, "Backup", nightly.metadata)).toBe(first);
+    // A read that brings another operation of the owner changes them.
+    stored(made, "podVolumeBackups", [
+      a,
+      podVolumeBackup("nightly-b", { phase: "New" }, { ...ownedBy("Backup", nightly), spec: { volume: "cache" } }),
+    ]);
+    const second = volumeWaysOf(made, "Backup", nightly.metadata);
+
+    expect(second).not.toBe(first);
+    expect(second.size).toBe(2);
+    // Another owner has its own.
+    expect(volumeWaysOf(made, "Backup", { namespace: "velero", uid: "backup-weekly-1" }).size).toBe(0);
   });
 });

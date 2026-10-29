@@ -38,6 +38,9 @@ export interface VolumeRow {
   end?: string;
   // In bytes, from the detail that carries one.
   size?: number;
+  // The pod and the volume the detail of a pod volume backup or restore names, by which the operation of the
+  // installation that made it is found: each a text, and none when one of the three is not.
+  podVolume?: { podNamespace: string; pod: string; volume: string };
   details: VolumeDetail[];
   // The fields of the entry the tab does not know, each by its name and its value.
   others: VolumeField[];
@@ -144,6 +147,16 @@ function row(entry: Record<string, unknown>, of: "Backup" | "Restore"): VolumeRo
       title,
       fields: Object.keys(detail).map((name) => ({ name, value: shown(detail[name]) })),
     });
+  }
+  const info = entry[of === "Backup" ? "pvbInfo" : "pvrInfo"];
+
+  if (isObject(info)) {
+    const [podNamespace, pod, volume] = ["podNamespace", "podName", "volumeName"].map((key) =>
+      typeof info[key] === "string" ? info[key] : "",
+    );
+
+    // What the release leaves out when it is empty is left out here when it is written empty.
+    if (podNamespace && pod && volume) read.podVolume = { podNamespace, pod, volume };
   }
   for (const key of SIZED) {
     const size = (entry[key] as { size?: unknown } | undefined)?.size;

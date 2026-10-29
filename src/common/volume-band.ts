@@ -11,7 +11,7 @@ import type { OperationKind, OperationState } from "./phases";
 import type { FamilyRead } from "./read-state";
 import type { Reference } from "./references";
 import type { BackupRepositoryResource, BackupResource, ObjectMetadata, RestoreResource } from "./types";
-import type { ViewKind } from "./views";
+import type { ViewKind, ViewTarget } from "./views";
 import type { VolumeIndex } from "./volume-index";
 import type { VolumeKind, VolumeOperationState } from "./volume-phases";
 import type { VolumeOperation } from "./volume-references";
@@ -175,3 +175,32 @@ export const OPERATION_VIEW: Record<VolumeKind, ViewKind> = {
   PodVolumeBackup: "pod-volume-backup",
   PodVolumeRestore: "pod-volume-restore",
 };
+
+// The way of each row of the Volumes tab of a backup or a restore, by the namespace of its pod, its pod and its
+// volume, among the pod volume operations of that owner (REQ-188), the newest when more than one names the same. A
+// row that no operation matches has none.
+export type VolumeWays = ReadonlyMap<string, ViewTarget>;
+
+export function rowKey(podNamespace: string, pod: string, volume: string): string {
+  return `${podNamespace}\u0000${pod}\u0000${volume}`;
+}
+
+export function volumeWays(
+  index: VolumeIndex,
+  kind: OperationKind,
+  owner: { namespace?: string; uid?: string },
+): VolumeWays {
+  const ways = new Map<string, ViewTarget>();
+  const of: VolumeKind = kind === "Backup" ? "PodVolumeBackup" : "PodVolumeRestore";
+
+  for (const operation of ownedBy(index, kind, { name: "", namespace: owner.namespace, uid: owner.uid })) {
+    const pod = operation.spec?.pod;
+    const volume = operation.spec?.volume;
+
+    if (!pod?.namespace || !pod.name || !volume) continue;
+    const key = rowKey(pod.namespace, pod.name, volume);
+
+    if (!ways.has(key)) ways.set(key, { kind: OPERATION_VIEW[of], name: operation.metadata.name });
+  }
+  return ways;
+}

@@ -30,6 +30,7 @@ import {
 import { createdNothing } from "../../common/diagnostic-text";
 import { downloadRequestName } from "../../common/ipc";
 import { operationState } from "../../common/phases";
+import { volumeWaysOf } from "../state/volumes";
 import { CONTENT } from "./artifact-viewer";
 import { LogViewer } from "./log-viewer";
 import { ResourcesViewer } from "./resources-viewer";
@@ -518,6 +519,7 @@ export const ArtifactPanel = observer(({ installation, kind, tab, object, counte
           text={text.text}
           of={kind}
           {...(tab === "results" && counters ? { counters: counted, phase: object.status?.phase } : {})}
+          {...(tab === "volumes" ? { ways: volumeWaysOf(installation, kind, object.metadata) } : {})}
         />
       ) : null}
       {text ? (
