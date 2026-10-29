@@ -555,16 +555,23 @@ restores, and what is denied of them is not said over it.
 ### The Overview
 
 The [Overview](../../src/renderer/pages/overview-page.tsx) asks the cluster
-nothing of its own. It is computed from five of the six families read at every
-read of the installation, the backup repositories apart, by
+nothing of its own. It is computed from the six families read at every read of
+the installation, the backup repositories the sixth, by
 [pure functions](../../src/common/overview.ts) that are given the reads, the
 clock and the window: what was read, what needs attention, what is in flight, the
 newest backup that completed, the operations of the window, a line for each
 schedule and for each storage location. What was read of a family is what every
-view reads of it, with what the cluster says that it serves.
+view reads of it, with what the cluster says that it serves. The page holds no
+family of its own: none of the four families of the operations of the volumes is
+asked while it is shown with no view open over it.
 
-What needs attention is the items of eleven rules, each a function of what was
-read. Rule A11, the adherence of a schedule, reads the
+What needs attention is the items of thirteen rules, each a function of what was
+read. Rules A12 and A13, of the backup repositories, read each repository through
+the [view of a repository](../../src/common/repository-view.ts), the one its list
+and its workspace show: A12 a repository Velero reports NotReady, which leads to
+the storage location its spec names when that location was read in its namespace,
+and A13 one whose newest maintenance, by its start, failed. Rule A11, the
+adherence of a schedule, reads the
 [signal of a schedule](../../src/common/schedule-signal.ts) computed with what the
 views share of the adherence of the installation for a read and a tick of their
 clock, which is made of the same reads, and gives no item while the backups of the
@@ -577,7 +584,9 @@ adherence is not known, by reason, and leads to their list: such a schedule is
 never an item of A11, and the summary says the count as well, so that a page with
 no item does not read as one where every schedule is on time. The order is fixed:
 what is in flight, the storage, the schedules, what ended; each group from the
-newest, and by name where there is no time. No function computes a value for the
+newest, and by name where there is no time, but the storage, whose items, of the
+storage locations and of the backup repositories, are by name, and of one object
+in the order of the rules. No function computes a value for the
 installation as a whole, and the page has none.
 
 The [window](../../src/common/window.ts) of the recent operations is a
