@@ -694,9 +694,10 @@ that names that namespace, that pod and that volume, the newest when more than o
 names the same, opened over the backup or the restore by a command of the
 extension. When none matches, nothing is offered and nothing is said absent: the rows
 are what the store holds, and the operations may be gone; a family never read, or
-whose last read did not succeed, denied, failed or not served, has no operation to
-offer, even when a read before found one, since the tab cannot say that a way is of
-an earlier read, as the band says of the rows it keeps.
+denied, has no operation to offer, even when a read before found one, as the table
+of the states of SPEC-0014 says, while a read that failed, or of a kind no longer
+served, keeps the ways of the read before, as the band keeps its rows, the notice
+over the view saying when the family was read.
 The [ways](../../src/common/volume-band.ts) of the rows,
 from that namespace, that pod and that volume to the view they open, are given by the
 panel to the viewer of the volumes and to no other. The viewers are memoized, and the

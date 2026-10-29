@@ -317,6 +317,8 @@ describe("the band in each state of the read of its family", () => {
     ["not-served", [], undefined, "not-served", "The cluster does not serve the pod volume backups of Velero."],
     ["ready", [], NOW, "rows", "This backup has no pod volume backup among the ones the installation holds."],
     ["failed", [mine], NOW - MINUTE, "rows", undefined],
+    ["forbidden", [mine], NOW - MINUTE, "rows", undefined],
+    ["not-served", [mine], NOW - MINUTE, "rows", undefined],
   ] as const)("says what is known when the read is %s", (status, items, lastSuccess, state, words) => {
     const made = installation({}).installation;
 
