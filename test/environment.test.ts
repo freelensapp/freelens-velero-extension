@@ -46,6 +46,7 @@ import {
   awaitRequestsBeforeCleanup,
   awaitRequestsRemoved,
   awaitTabFixtures,
+  awaitVolumeOperationsRemoved,
   BACKUP_PHASES,
   CLEAR_STATES,
   clearTabFixtures,
@@ -93,12 +94,14 @@ import {
   REPOSITORY_LABELS,
   RESTORE_PHASES,
   type Recorded,
+  type RunRepository,
   readerKubeconfig,
   realTabArtifactPaths,
   recordSyncedBackups,
   refusedFixtures,
   removeFixtureBackup,
   removeRealSchedule,
+  removeRunRepository,
   restoreSpec,
   restrictedFixtures,
   runArtifactPaths,
@@ -12080,6 +12083,280 @@ describe("the volume of the environment", () => {
         names.source,
       ).metadata.name,
     ).toBe("b");
+  });
+
+  it("records the repository of the run as soon as it is found, before it is checked Ready", () => {
+    const kept: RunRepository[] = [];
+    const name = `velero-source-${run}-default-kopia`;
+    const { runtime } = volumeRuntime({
+      repositories: [repository(name, labelled(), { phase: "NotReady", message: "synthetic" })],
+    });
+
+    runtime.repository = { read: () => kept.at(-1), keep: (found) => kept.push(found), forget: () => undefined };
+    expect(() => runLiveVolume(runtime, run)).toThrow(`The repository ${name} of the volume is NotReady: synthetic`);
+    expect(kept).toEqual([{ name, uid: `uid-${name}`, labels: labelled() }]);
+  });
+
+  // The installation as the cleanup of the volume reads it: its repositories and its backups, the pod volume
+  // operations, and the one request it writes, the deletion of a repository by its path and its UID.
+  function removalRuntime(
+    start: {
+      repositories?: ReturnType<typeof repository>[];
+      backups?: string[];
+      operations?: KubeResource[];
+      recorded?: RunRepository;
+      goneAfter?: number;
+      stays?: boolean;
+    } = {},
+  ) {
+    let clock = 0;
+    let reads = 0;
+    let recorded = start.recorded;
+    let repositories = [...(start.repositories ?? [])];
+    let operations = [...(start.operations ?? [])];
+    const deleted: { path: string; uid: unknown }[] = [];
+    const runtime: FixtureRuntime = {
+      owner,
+      apply: () => {
+        throw new Error("The cleanup of the volume applies nothing");
+      },
+      elapsed: () => clock,
+      pause: (milliseconds) => {
+        clock += milliseconds;
+      },
+      repository: {
+        read: () => recorded,
+        keep: (found) => {
+          recorded = found;
+        },
+        forget: () => {
+          recorded = undefined;
+        },
+      },
+      kubectl: (args, input) => {
+        if (args[0] === "get" && args[1] === "backuprepositories.velero.io,backups.velero.io")
+          return JSON.stringify({
+            items: [
+              ...repositories,
+              ...(start.backups ?? []).map((name) => ({
+                apiVersion: "velero.io/v1",
+                kind: "Backup",
+                metadata: { name, namespace: "velero-demo" },
+              })),
+            ],
+          });
+        if (args[0] === "delete" && args[1] === "--raw" && args[2].includes("/backuprepositories/")) {
+          const uid = (JSON.parse(input ?? "{}") as { preconditions?: { uid?: string } }).preconditions?.uid;
+
+          deleted.push({ path: args[2], uid });
+          if (!start.stays) repositories = repositories.filter((item) => item.metadata.uid !== uid);
+          return "";
+        }
+        if (args[0] === "get" && ["podvolumebackups.velero.io", "podvolumerestores.velero.io"].includes(args[1])) {
+          const [label, value] = args[args.indexOf("--selector") + 1].split("=");
+
+          reads += 1;
+          if (start.goneAfter !== undefined && reads > start.goneAfter) operations = [];
+          return JSON.stringify({
+            items: operations.filter(
+              (item) => `${item.kind.toLowerCase()}s.velero.io` === args[1] && item.metadata.labels?.[label] === value,
+            ),
+          });
+        }
+        throw new Error(`The pretend runtime of the cleanup of the volume does not play: kubectl ${args.join(" ")}`);
+      },
+    };
+
+    return { runtime, deleted, recorded: () => recorded, clock: () => clock };
+  }
+
+  it("asks the server to delete the backup of the volume through a request, as the other backups of the run", () => {
+    expect(fixtureDeletionRequest(owner, run, "uid-backup", names.volumeBackup)).toMatchObject({
+      metadata: {
+        name: `${names.volumeBackup}-delete`,
+        labels: { "velero.io/backup-name": names.volumeBackup, "velero.io/backup-uid": "uid-backup" },
+      },
+      spec: { backupName: names.volumeBackup },
+    });
+    // The rule of the names lets the backup of the volume through: what stops this removal is its runtime.
+    expect(() =>
+      removeFixtureBackup({ owner, kubectl: () => "", apply: () => undefined }, run, names.volumeBackup),
+    ).toThrow("The removal of a backup of the fixtures needs the clock of the runtime");
+  });
+
+  it("waits for the pod volume operations of the volume to go with their owners, with a bound of its own, and names what is left", () => {
+    const of = (kind: string, name: string, labels: Record<string, string>) =>
+      ({ apiVersion: "velero.io/v1", kind, metadata: { name, namespace: "velero-demo", labels } }) as KubeResource;
+    const operations = [
+      of("PodVolumeBackup", `${names.volumeBackup}-x7k2p`, { "velero.io/backup-name": names.volumeBackup }),
+      of("PodVolumeRestore", `${names.volumeRestore}-q9m4z`, { "velero.io/restore-name": names.volumeRestore }),
+      // Of another backup: not waited for.
+      of("PodVolumeBackup", "another-backup-a1b2c", { "velero.io/backup-name": "another-backup" }),
+    ];
+    const going = removalRuntime({ operations, goneAfter: 4 });
+
+    expect(awaitVolumeOperationsRemoved(going.runtime, run)).toEqual({ waited: 2000 });
+    expect(awaitVolumeOperationsRemoved(removalRuntime().runtime, run)).toEqual({ waited: 0 });
+    const staying = removalRuntime({ operations });
+
+    expect(() => awaitVolumeOperationsRemoved(staying.runtime, run)).toThrow(
+      `The pod volume operations of the volume are still in velero-demo 120 seconds after their owners were deleted: the PodVolumeBackup ${names.volumeBackup}-x7k2p, the PodVolumeRestore ${names.volumeRestore}-q9m4z.`,
+    );
+    expect(staying.clock()).toBe(120_000);
+  });
+
+  it("removes the repository of the volume by the identity the run recorded once the backup of the volume is gone, waits until it is gone, and forgets it", () => {
+    const name = `velero-source-${run}-default-kopia`;
+    const recorded = { name, uid: `uid-${name}`, labels: labelled() };
+    const scene = removalRuntime({
+      repositories: [repository(name, labelled()), repository("other-default-kopia", labelled("default", "other"))],
+      recorded,
+    });
+
+    expect(removeRunRepository(scene.runtime, run)).toEqual({ removed: true, waited: 0 });
+    expect(scene.deleted).toEqual([
+      { path: `/apis/velero.io/v1/namespaces/velero-demo/backuprepositories/${name}`, uid: `uid-${name}` },
+    ]);
+    expect(scene.recorded()).toBeUndefined();
+    // None there: nothing is asked, and the record forgets it.
+    const none = removalRuntime({ recorded });
+
+    expect(removeRunRepository(none.runtime, run)).toEqual({ removed: false, waited: 0 });
+    expect(none.deleted).toEqual([]);
+    expect(none.recorded()).toBeUndefined();
+  });
+
+  it.each([
+    [
+      "while the backup of the volume is there",
+      { backups: [`fixture-volume-backup-${run}`] },
+      `The backup fixture-volume-backup-${run} of the volume is still in velero-demo: the repository it uses is removed once the server deleted it. Run the command again.`,
+    ],
+    [
+      "with another UID",
+      { uid: "uid-another" },
+      `The repository velero-source-${run}-default-kopia of velero-demo is not the one this run recorded, with the UID uid-velero-source-${run}-default-kopia and the labels of the volume: the one of those labels is velero-source-${run}-default-kopia, with the UID uid-another. It is not removed: the way out is to take the environment down, with \`pnpm demo:down\`.`,
+    ],
+    [
+      "with the recorded name and the labels of another location",
+      { location: "elsewhere" },
+      `The repository velero-source-${run}-default-kopia of velero-demo is not the one this run recorded, with the UID uid-velero-source-${run}-default-kopia and the labels of the volume: 0 carry those labels. It is not removed`,
+    ],
+    ["beside a second one of its labels", { second: true }, "2 carry those labels. It is not removed"],
+    [
+      "when the run recorded none",
+      { unrecorded: true },
+      `The repository velero-source-${run}-default-kopia of velero-demo carries the labels of the volume of this run, which recorded none: it is not removed`,
+    ],
+  ] as [
+    string,
+    { backups?: string[]; uid?: string; location?: string; second?: boolean; unrecorded?: boolean },
+    string,
+  ][])("refuses to remove the repository of the volume %s, and removes nothing", (_case, told, words) => {
+    const name = `velero-source-${run}-default-kopia`;
+    const found = repository(name, labelled(told.location ?? "default"));
+    const scene = removalRuntime({
+      repositories: [
+        told.uid ? { ...found, metadata: { ...found.metadata, uid: told.uid } } : found,
+        ...(told.second ? [repository(`${name}-second`, labelled())] : []),
+      ],
+      backups: told.backups,
+      recorded: told.unrecorded ? undefined : { name, uid: `uid-${name}`, labels: labelled() },
+    });
+
+    expect(() => removeRunRepository(scene.runtime, run)).toThrow(words);
+    expect(scene.deleted).toEqual([]);
+    if (!told.unrecorded) expect(scene.recorded()?.uid).toBe(`uid-${name}`);
+  });
+
+  it("refuses to wait past its bound for a repository that is still there once it was removed", () => {
+    const name = `velero-source-${run}-default-kopia`;
+    const scene = removalRuntime({
+      repositories: [repository(name, labelled())],
+      recorded: { name, uid: `uid-${name}`, labels: labelled() },
+      stays: true,
+    });
+
+    expect(() => removeRunRepository(scene.runtime, run)).toThrow(
+      `The repository ${name} of velero-demo is still there 120 seconds after it was removed: run the command again.`,
+    );
+    expect(scene.deleted).toHaveLength(1);
+    expect(scene.recorded()?.uid).toBe(`uid-${name}`);
+  });
+
+  it("names in the end check each object of the volume that is left in the installation", () => {
+    const items = [
+      {
+        kind: "PodVolumeBackup",
+        name: `${names.volumeBackup}-x7k2p`,
+        labels: { "velero.io/backup-name": names.volumeBackup },
+      },
+      {
+        kind: "PodVolumeRestore",
+        name: `${names.volumeRestore}-q9m4z`,
+        labels: { "velero.io/restore-name": names.volumeRestore },
+      },
+      { kind: "BackupRepository", name: `velero-source-${run}-default-kopia`, labels: labelled() },
+      // A repository of another namespace, and a pod volume backup of another backup, are not of the run.
+      { kind: "BackupRepository", name: "other-default-kopia", labels: labelled("default", "other") },
+      { kind: "PodVolumeBackup", name: "another-backup-a1b2c", labels: { "velero.io/backup-name": "another-backup" } },
+      { kind: "Backup", name: names.volumeBackup, labels: {} },
+      { kind: "Restore", name: names.volumeRestore, labels: {} },
+      { kind: "DeleteBackupRequest", name: `${names.volumeBackup}-delete`, labels: {} },
+    ].map(({ kind, name, labels }) => ({
+      apiVersion: "velero.io/v1",
+      kind,
+      metadata: { name, namespace: "velero-demo", labels },
+    }));
+    const runtime: FixtureRuntime = {
+      owner,
+      apply: () => undefined,
+      kubectl: () => JSON.stringify({ items }),
+      store: () => {
+        throw new Error("The store is not asked while an operation of the run is there");
+      },
+      journal: { entries: [], save: () => undefined },
+    };
+
+    expect(() => assertFixtureOperationsRemoved(runtime, run)).toThrow(
+      `The server has not removed every operation of the run from velero-demo: the PodVolumeBackup ${names.volumeBackup}-x7k2p, the PodVolumeRestore ${names.volumeRestore}-q9m4z, the BackupRepository velero-source-${run}-default-kopia, the Backup ${names.volumeBackup}, the Restore ${names.volumeRestore}, the DeleteBackupRequest ${names.volumeBackup}-delete are there.`,
+    );
+  });
+
+  it("removes a namespace of the volume with the events of its pod, and none with an event of an object that is not of the run", () => {
+    const pod = {
+      apiVersion: "v1",
+      kind: "Pod",
+      metadata: {
+        name: names.volumePod,
+        namespace: names.restored,
+        uid: "uid-pod",
+        labels: { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run },
+      },
+    };
+    const event = (regarded: { kind: string; name: string; uid: string }, apiVersion = "v1") => ({
+      apiVersion,
+      kind: "Event",
+      metadata: { name: `${names.volumePod}.18f0a1b2c3d4e5f6`, namespace: names.restored },
+      ...(apiVersion === "v1" ? { involvedObject: regarded } : { regarding: regarded }),
+    });
+    const of = { kind: "Pod", name: names.volumePod, uid: "uid-pod" };
+    const refused = `The namespace ${names.restored} of the fixtures holds the Event ${names.volumePod}.18f0a1b2c3d4e5f6, which is not of this run`;
+
+    expect(() => assertFixtureNamespaceContents(owner, run, names.restored, [pod, event(of)])).not.toThrow();
+    expect(() =>
+      assertFixtureNamespaceContents(owner, run, names.restored, [pod, event(of, "events.k8s.io/v1")]),
+    ).not.toThrow();
+    expect(() =>
+      assertFixtureNamespaceContents(owner, run, names.restored, [pod, event({ ...of, uid: "uid-other" })]),
+    ).toThrow(refused);
+    expect(() => assertFixtureNamespaceContents(owner, run, names.restored, [event(of)])).toThrow(refused);
+    expect(() =>
+      assertFixtureNamespaceContents(owner, run, names.restored, [
+        { ...pod, metadata: { ...pod.metadata, labels: { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: "b1b2b3b4" } } },
+        event(of),
+      ]),
+    ).toThrow(/holds the Pod/);
   });
 });
 

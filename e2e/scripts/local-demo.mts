@@ -32,6 +32,7 @@ import {
   assertFixtureOperationsRemoved,
   awaitRequestsBeforeCleanup,
   awaitRequestsRemoved,
+  awaitVolumeOperationsRemoved,
   clearTabFixtures,
   createStaticFixtures,
   type ExecPluginFiles,
@@ -52,6 +53,7 @@ import {
   recordSyncedBackups,
   removeFixtureBackup,
   removeRealSchedule,
+  removeRunRepository,
   restrictedFixtures,
   runLiveFixtures,
   tabFixtureFacts,
@@ -1617,14 +1619,6 @@ async function executeLiveFixtures(): Promise<void> {
   writeFileSync(join(STATE, "fixture-live-result.json"), JSON.stringify({ run: journal.fixtureRun.id, ...result }), {
     mode: 0o600,
   });
-  // The repository the server made for the volume carries no label of the demo: it is not among the resources of
-  // the journal, whose owner every check asks of each, and the record of the run keeps its identity, by which the
-  // cleanup removes it.
-  journal.fixtureRun.repository = {
-    name: result.volume.repository.name,
-    uid: result.volume.repository.uid,
-    labels: result.volume.repository.labels,
-  };
   journal.fixtureRun.phase = "live-verified";
   save();
   console.log(
@@ -1841,9 +1835,15 @@ async function cleanupFixtures(): Promise<void> {
     console.log(tabRemovalWords(clearTabFixtures(runtime, run)));
   }
   // A backup the scripts created is deleted by the controller, through a request of its own: the real one
-  // with the restores that name it, and the one that failed its validation, of which the store holds nothing.
-  // One a cleanup that was interrupted left while it was deleted is taken up from the request that is there.
-  for (const name of [names.backup, names.invalidBackup]) removeFixtureBackup(runtime, run, name);
+  // with the restores that name it, the one that failed its validation, of which the store holds nothing, and
+  // the one of the volume with its restore. One a cleanup that was interrupted left while it was deleted is taken
+  // up from the request that is there.
+  for (const name of [names.backup, names.invalidBackup, names.volumeBackup]) removeFixtureBackup(runtime, run, name);
+  // The pod volume backup and restore of the volume go with their owners, and are waited for with a bound of their
+  // own; then the repository the server made for the volume, by the identity the run recorded. Its data stays in
+  // the bucket until the environment is taken down.
+  const operationsOfTheVolume = awaitVolumeOperationsRemoved(runtime, run);
+  const repository = removeRunRepository(runtime, run);
   // The restore without a backup is of no backup the controller deletes: it is removed by its identity,
   // the one the cluster gives of the object that was just read as owned by this run. An apply that was
   // interrupted recorded the object without it.
@@ -1915,6 +1915,8 @@ async function cleanupFixtures(): Promise<void> {
       run,
       controllerDeletion: true,
       scheduleRemoved: yearly.removed,
+      volumeOperationsWaited: operationsOfTheVolume.waited,
+      repositoryRemoved: repository.removed,
       expectedArtifactsAbsent: keys,
       namespacesRemoved: removed,
       unrelatedResourcesPreserved: true,
@@ -1922,7 +1924,7 @@ async function cleanupFixtures(): Promise<void> {
     { mode: 0o600 },
   );
   console.log(
-    `PASS: real backup, associated restore and stored artifacts removed by the controller; ${yearly.removed ? `the schedule ${names.realSchedule} the controller validated removed with a UID check; ` : ""}${removed} owned fixture namespaces removed with UID checks. Demo infrastructure retained.`,
+    `PASS: real backup, associated restore and stored artifacts removed by the controller; the backup of the volume, its restore and their pod volume operations removed with them${repository.removed ? ", and the repository of the volume with a UID check" : ""}; ${yearly.removed ? `the schedule ${names.realSchedule} the controller validated removed with a UID check; ` : ""}${removed} owned fixture namespaces removed with UID checks. Demo infrastructure retained; the data of the repository of the volume stays in the bucket until pnpm demo:down.`,
   );
 }
 
@@ -2670,6 +2672,22 @@ function fixtureRuntime(): FixtureRuntime {
       save,
     },
     tabs: tabRecord(journal, TABS, save),
+    // The repository the server made for the volume of the run carries no label of the demo: it is not among the
+    // resources of the journal, whose owner every check asks of each, and the record of the run keeps its
+    // identity, by which the cleanup removes it.
+    repository: {
+      read: () => journal.fixtureRun?.repository,
+      keep: (found) => {
+        requireCondition(journal.fixtureRun, "No fixture run is recorded");
+        journal.fixtureRun.repository = found;
+        save();
+      },
+      forget: () => {
+        if (!journal.fixtureRun?.repository) return;
+        delete journal.fixtureRun.repository;
+        save();
+      },
+    },
   };
 }
 

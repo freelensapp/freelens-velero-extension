@@ -277,6 +277,27 @@ export function assertStoreRequest(request: {
   );
 }
 
+// An event the cluster wrote of an object of the run, such as a pod of the volume: it carries no label, and is told
+// by the object it regards, which is in the same namespace and carries the labels of the run, with its UID.
+function eventOfTheRun(owner: string, run: string, resource: KubeResource, resources: KubeResource[]): boolean {
+  if (resource.kind !== "Event") return false;
+  const event = resource as {
+    involvedObject?: { kind?: string; name?: string; uid?: string };
+    regarding?: { kind?: string; name?: string; uid?: string };
+  };
+  const regarded = event.involvedObject ?? event.regarding;
+
+  return resources.some(
+    (item) =>
+      item.kind === regarded?.kind &&
+      item.metadata.name === regarded.name &&
+      item.metadata.uid !== undefined &&
+      item.metadata.uid === regarded.uid &&
+      item.metadata.labels?.[OWNER_LABEL] === owner &&
+      item.metadata.labels?.[FIXTURE_LABEL] === run,
+  );
+}
+
 export function assertFixtureNamespaceContents(
   owner: string,
   run: string,
@@ -288,7 +309,8 @@ export function assertFixtureNamespaceContents(
     requireCondition(resource.metadata.namespace === namespace, "Cleanup inventory contains another namespace");
     const systemDefault =
       (resource.kind === "ConfigMap" && resource.metadata.name === "kube-root-ca.crt") ||
-      (resource.kind === "ServiceAccount" && resource.metadata.name === "default");
+      (resource.kind === "ServiceAccount" && resource.metadata.name === "default") ||
+      eventOfTheRun(owner, run, resource, resources);
 
     // What is not of the run is told by what it is, and left: the namespace is not removed with it inside.
     requireCondition(
@@ -302,8 +324,8 @@ export function assertFixtureNamespaceContents(
 }
 
 // The request that asks the controller to delete a backup of the fixtures: the real one, the one that
-// failed its validation, or one of the two the sync created from the store. No other backup is deleted
-// this way.
+// failed its validation, the one of the volume, or one of the two the sync created from the store. No other
+// backup is deleted this way.
 export function fixtureDeletionRequest(
   owner: string,
   run: string,
@@ -314,7 +336,9 @@ export function fixtureDeletionRequest(
 
   requireCondition(owner && backupUid, "Bound backup ownership is required for deletion");
   requireCondition(
-    [names.backup, names.invalidBackup, names.syncedBackup, names.syncedBackupWithoutLog].includes(backupName),
+    [names.backup, names.invalidBackup, names.volumeBackup, names.syncedBackup, names.syncedBackupWithoutLog].includes(
+      backupName,
+    ),
     "Only a backup of the fixtures is deleted",
   );
   return {
@@ -1466,6 +1490,15 @@ export interface FixtureRuntime {
   // The objects the journal of the runner records, by which `apply` knows what it may write over, and what
   // keeps a change of them.
   journal?: { entries: Recorded[]; save(): void };
+  // The repository the server made for the volume of the run, recorded with the run as soon as it is found: it
+  // carries no label of the demo, and the cleanup removes it by this identity.
+  repository?: { read(): RunRepository | undefined; keep(found: RunRepository): void; forget(): void };
+}
+
+export interface RunRepository {
+  name: string;
+  uid: string;
+  labels: Record<string, string>;
 }
 
 // How long what was removed is given to be gone, and how often the cluster is asked whether it is.
@@ -4417,7 +4450,7 @@ export function removeFixtureBackup(
   const { journal } = runtime;
 
   requireCondition(
-    [names.backup, names.invalidBackup].includes(name),
+    [names.backup, names.invalidBackup, names.volumeBackup].includes(name),
     "Only a backup the scripts created for the run is removed this way",
   );
   requireCondition(
@@ -4483,18 +4516,30 @@ export function assertFixtureOperationsRemoved(runtime: FixtureRuntime, run: str
       "journal of the objects of the run",
   );
   const store = runtime.store.bind(runtime);
-  const deletions = [names.backup, names.invalidBackup, names.syncedBackup, names.syncedBackupWithoutLog];
+  const deletions = [
+    names.backup,
+    names.invalidBackup,
+    names.volumeBackup,
+    names.syncedBackup,
+    names.syncedBackupWithoutLog,
+  ];
   const operations = [
     ...deletions.map((name) => ["Backup", name] as const),
-    ...[names.restore, names.invalidRestore, names.orphanRestore].map((name) => ["Restore", name] as const),
+    ...[names.restore, names.invalidRestore, names.orphanRestore, names.volumeRestore].map(
+      (name) => ["Restore", name] as const,
+    ),
     ...deletions.map((name) => ["DeleteBackupRequest", `${name}-delete`] as const),
     ["Schedule", names.realSchedule] as const,
   ];
+  // One read of the installation: the operations of the run by their names, and what the server and the node
+  // agent made for the volume of the run, each by what they write into it, the pod volume operations by the labels
+  // of the names of their owners, and the repository by its three labels.
   const items = (
     JSON.parse(
       runtime.kubectl([
         "get",
-        "backups.velero.io,restores.velero.io,deletebackuprequests.velero.io,schedules.velero.io",
+        "backups.velero.io,restores.velero.io,deletebackuprequests.velero.io,schedules.velero.io," +
+          "podvolumebackups.velero.io,podvolumerestores.velero.io,backuprepositories.velero.io",
         "--namespace",
         DEMO_NAMESPACE,
         "-o",
@@ -4502,7 +4547,20 @@ export function assertFixtureOperationsRemoved(runtime: FixtureRuntime, run: str
       ]),
     ) as { items: KubeResource[] }
   ).items;
+  const made = items.filter((item) => {
+    const labels = item.metadata.labels ?? {};
+
+    return (
+      (item.kind === "PodVolumeBackup" && labels["velero.io/backup-name"] === names.volumeBackup) ||
+      (item.kind === "PodVolumeRestore" && labels["velero.io/restore-name"] === names.volumeRestore) ||
+      (item.kind === "BackupRepository" &&
+        labels[REPOSITORY_LABELS.volumeNamespace] === names.source &&
+        labels[REPOSITORY_LABELS.location] === "default" &&
+        labels[REPOSITORY_LABELS.type] === "kopia")
+    );
+  });
   const there = [
+    ...made.map((item) => `the ${item.kind} ${item.metadata.name}`),
     ...operations
       .filter(([kind, name]) => items.some((item) => item.kind === kind && item.metadata.name === name))
       .map(([kind, name]) => `the ${kind} ${name}`),
@@ -4798,6 +4856,149 @@ export interface VolumeRecord {
   bytes: number;
 }
 
+// How long the pod volume operations of the volume are given to go with their owners once the server deleted the
+// backup of the volume and its restore, and the repository once it was removed.
+const VOLUME_REMOVAL_TIMEOUT = 120_000;
+
+// The pod volume backup and the pod volume restore of the volume, by the labels of the names of their owners: once
+// the server deleted the backup and its restore, the garbage collector removes them with their owners, and they are
+// waited for with a bound of their own. What is left at the bound is named.
+export function awaitVolumeOperationsRemoved(runtime: FixtureRuntime, run: string): { waited: number } {
+  const names = fixtureNames(run);
+
+  requireCondition(runtime.elapsed, "The wait for the pod volume operations needs the clock of the runtime");
+  const elapsed = runtime.elapsed.bind(runtime);
+  const began = elapsed();
+  const left = () =>
+    (
+      [
+        ["podvolumebackups", `velero.io/backup-name=${names.volumeBackup}`],
+        ["podvolumerestores", `velero.io/restore-name=${names.volumeRestore}`],
+      ] as const
+    ).flatMap(([kind, selector]) =>
+      (
+        JSON.parse(
+          runtime.kubectl([
+            "get",
+            `${kind}.velero.io`,
+            "--namespace",
+            DEMO_NAMESPACE,
+            "--selector",
+            selector,
+            "-o",
+            "json",
+          ]),
+        ) as { items: KubeResource[] }
+      ).items.map((item) => `the ${item.kind} ${item.metadata.name}`),
+    );
+
+  for (let there = left(); there.length; there = left()) {
+    requireCondition(
+      elapsed() - began < VOLUME_REMOVAL_TIMEOUT,
+      `The pod volume operations of the volume are still in ${DEMO_NAMESPACE} ${VOLUME_REMOVAL_TIMEOUT / 1000} ` +
+        `seconds after their owners were deleted: ${there.join(", ")}. Run the command again; for what is still ` +
+        "there after it, the way out is to take the environment down, with `pnpm demo:down`.",
+    );
+    pause(runtime, VOLUME_POLL);
+  }
+  return { waited: elapsed() - began };
+}
+
+// The repository the server made for the volume of the run, removed once the backup of the volume is gone, by the
+// identity the run recorded when it found it: the one that carries the three labels of the run, with that name and
+// that UID, is deleted with the UID as a precondition and waited for until it is gone; then the record forgets it.
+// Another UID, another name, two of the labels, or the one of the recorded name with other labels are refused, and
+// so is a removal while the backup of the volume is there. The data of the repository stays in the bucket: nothing
+// here removes a key of the store.
+export function removeRunRepository(runtime: FixtureRuntime, run: string): { removed: boolean; waited: number } {
+  const names = fixtureNames(run);
+
+  requireCondition(
+    runtime.elapsed && runtime.repository,
+    "The removal of the repository of the volume needs the clock of the runtime, and the record of the run",
+  );
+  const elapsed = runtime.elapsed.bind(runtime);
+  const record = runtime.repository;
+  const recorded = record.read();
+  const out = "the way out is to take the environment down, with `pnpm demo:down`.";
+  const expected = {
+    [REPOSITORY_LABELS.volumeNamespace]: names.source,
+    [REPOSITORY_LABELS.location]: "default",
+    [REPOSITORY_LABELS.type]: "kopia",
+  };
+  const read = () =>
+    (
+      JSON.parse(
+        runtime.kubectl([
+          "get",
+          "backuprepositories.velero.io,backups.velero.io",
+          "--namespace",
+          DEMO_NAMESPACE,
+          "-o",
+          "json",
+        ]),
+      ) as { items: KubeResource[] }
+    ).items;
+  const ofTheRun = (item: KubeResource) =>
+    item.kind === "BackupRepository" &&
+    Object.entries(expected).every(([label, value]) => item.metadata.labels?.[label] === value);
+  const items = read();
+  const labelled = items.filter(ofTheRun);
+  const named = recorded
+    ? items.find((item) => item.kind === "BackupRepository" && item.metadata.name === recorded.name)
+    : undefined;
+  const began = elapsed();
+
+  if (!labelled.length && !named) {
+    if (recorded) record.forget();
+    return { removed: false, waited: 0 };
+  }
+  requireCondition(
+    recorded,
+    `The repository ${labelled.map((item) => item.metadata.name).join(", ")} of ${DEMO_NAMESPACE} carries the ` +
+      `labels of the volume of this run, which recorded none: it is not removed, ${out}`,
+  );
+  requireCondition(
+    !items.some((item) => item.kind === "Backup" && item.metadata.name === names.volumeBackup),
+    `The backup ${names.volumeBackup} of the volume is still in ${DEMO_NAMESPACE}: the repository it uses is ` +
+      "removed once the server deleted it. Run the command again.",
+  );
+  const [found] = labelled;
+
+  requireCondition(
+    labelled.length === 1 &&
+      found.metadata.name === recorded.name &&
+      found.metadata.uid === recorded.uid &&
+      (!named || named === found),
+    `The repository ${recorded.name} of ${DEMO_NAMESPACE} is not the one this run recorded, with the UID ` +
+      `${recorded.uid} and the labels of the volume: ` +
+      (labelled.length === 1
+        ? `the one of those labels is ${found.metadata.name}, with the UID ${found.metadata.uid}`
+        : `${labelled.length} carry those labels`) +
+      `. It is not removed: ${out}`,
+  );
+  runtime.kubectl(
+    [
+      "delete",
+      "--raw",
+      `/apis/velero.io/v1/namespaces/${DEMO_NAMESPACE}/backuprepositories/${recorded.name}`,
+      "-f",
+      "-",
+    ],
+    JSON.stringify({ apiVersion: "v1", kind: "DeleteOptions", preconditions: { uid: recorded.uid } }),
+  );
+  while (read().some((item) => item.kind === "BackupRepository" && item.metadata.uid === recorded.uid)) {
+    requireCondition(
+      elapsed() - began < VOLUME_REMOVAL_TIMEOUT,
+      `The repository ${recorded.name} of ${DEMO_NAMESPACE} is still there ${VOLUME_REMOVAL_TIMEOUT / 1000} ` +
+        "seconds after it was removed: run the command again.",
+    );
+    pause(runtime, VOLUME_POLL);
+  }
+  record.forget();
+  return { removed: true, waited: elapsed() - began };
+}
+
 // Asks `read` once a second until it answers, within the bound of the volume; `read` refuses what will not change.
 function awaitVolume<Found>(runtime: FixtureRuntime, what: string, read: () => Found | undefined): Found {
   requireCondition(runtime.elapsed, "The live flow of the volume needs the clock of the runtime");
@@ -4926,6 +5127,15 @@ export function runLiveVolume(runtime: FixtureRuntime, run: string): VolumeRecor
     ).items,
     names.source,
   );
+  const repositoryLabels = Object.fromEntries(
+    Object.values(REPOSITORY_LABELS).map((label) => [label, repository.metadata.labels?.[label] ?? ""]),
+  );
+
+  runtime.repository?.keep({
+    name: repository.metadata.name,
+    uid: String(repository.metadata.uid),
+    labels: repositoryLabels,
+  });
   const repositoryStatus = (repository.status ?? {}) as {
     phase?: string;
     message?: string;
@@ -4999,9 +5209,7 @@ export function runLiveVolume(runtime: FixtureRuntime, run: string): VolumeRecor
     repository: {
       name: repository.metadata.name,
       uid: String(repository.metadata.uid),
-      labels: Object.fromEntries(
-        Object.values(REPOSITORY_LABELS).map((label) => [label, repository.metadata.labels?.[label] ?? ""]),
-      ),
+      labels: repositoryLabels,
       maintenanceFrequency: frequency,
       lastMaintenanceTime: repositoryStatus.lastMaintenanceTime,
     },
