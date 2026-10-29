@@ -4,9 +4,10 @@
  */
 
 // The views for who may read the restores and not the backups: an identity of
-// the test environment that reads the restores, the schedules and the locations
-// of one namespace. The source of a restore and the history of a schedule are
-// backups it cannot read: they are said denied, and are neither absent nor empty.
+// the test environment that reads the restores, the schedules, the locations,
+// the pod volume operations and the backup repositories of one namespace. The
+// source of a restore and the history of a schedule are backups it cannot
+// read: they are said denied, and are neither absent nor empty.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as cluster from "../../integration/helpers/velero-cluster";
@@ -324,6 +325,34 @@ describe("restores with restricted access", () => {
       expect(daily.lines.next).toContain(noOffset);
       expect(daily.lines.next).toContain("access is denied");
       await cluster.closeWorkspace(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "reads the backup repositories, the pod volume backups and the pod volume restores of its namespace, which holds none of them",
+    async () => {
+      // The identity reads the three kinds of the volumes beside the restores: each list is read and says that the
+      // namespace holds none, and no notice says that its family is denied. The backups stay denied.
+      for (const [of, family, noun] of [
+        [cluster.REPOSITORIES, "backupRepositories", "backup repository"],
+        [cluster.POD_VOLUME_BACKUPS, "podVolumeBackups", "pod volume backup"],
+        [cluster.POD_VOLUME_RESTORES, "podVolumeRestores", "pod volume restore"],
+      ] as const) {
+        await cluster.openPage(frame, of);
+        await frame.waitForSelector(`[data-testid=velero-${of.id}-empty]`, { timeout: 60_000 });
+        const words = (await frame.locator(`[data-testid=velero-${of.id}-empty] > span`).innerText())
+          .replace(/\s+/g, " ")
+          .trim();
+
+        expect([of.id, words]).toEqual([
+          of.id,
+          `No ${noun} is in the namespace ${cluster.E2E_VIEWS_NAMESPACE} of ${cluster.E2E_KUBE_CONTEXT}.`,
+        ]);
+        expect([of.id, await frame.locator(`[data-testid=velero-${of.id}-unavailable]`).count()]).toEqual([of.id, 0]);
+        expect([of.id, Object.keys(await cluster.notices(frame)).filter((key) => key === family)]).toEqual([of.id, []]);
+        expect([of.id, await cluster.layoutProblems(frame, of)]).toEqual([of.id, []]);
+      }
     },
     TIMEOUT,
   );

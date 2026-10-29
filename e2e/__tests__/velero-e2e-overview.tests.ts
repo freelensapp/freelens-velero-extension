@@ -913,16 +913,18 @@ describe("overview of an installation", () => {
       const operations = operationsOf(cluster.E2E_NAMESPACE);
       const of = (kind: string) => operations.filter((operation) => operation.kind === kind);
 
-      // The installation holds the backup its controllers ran and its restore, the two backups the server
-      // synced from the store, and the three operations it refused, all of this run: what was read is what
-      // the cluster holds, counted by the suite and not by the application.
+      // The installation holds the backup its controllers ran and its restore, the backup of the volume and its
+      // restore, the two backups the server synced from the store, and the three operations it refused, all of
+      // this run: what was read is what the cluster holds, counted by the suite and not by the application.
       expect(operations.map(({ kind, name }) => `${kind}/${name}`).sort()).toEqual(
         [
           `backup/${LIVE}`,
+          `backup/fixture-volume-backup-${run}`,
           `backup/fixture-synced-backup-${run}`,
           `backup/fixture-synced-backup-no-log-${run}`,
           `backup/fixture-invalid-backup-${run}`,
           `restore/fixture-restore-${run}`,
+          `restore/fixture-volume-restore-${run}`,
           `restore/fixture-invalid-restore-${run}`,
           `restore/fixture-orphan-restore-${run}`,
         ].sort(),

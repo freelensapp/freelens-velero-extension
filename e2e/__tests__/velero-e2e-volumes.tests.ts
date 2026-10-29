@@ -4,9 +4,10 @@
  */
 
 // The backup repositories, the pod volume backups and the pod volume restores, in a packaged Freelens, against
-// the test environment as its fixtures leave it today: no object of the three kinds is in it, in the namespace of
-// the views or in the one of the installation, where no backup of the file system ran yet. The suite proves the
-// lists of the three kinds with what they say of a namespace that holds none, and the reads of the pod volume
+// the test environment as its fixtures leave it: no object of the three kinds is in the namespace of the views,
+// and the installation holds what the volume of the run made there, one repository Ready, one pod volume backup and
+// one pod volume restore. The suite proves the lists of the three kinds with what they say of a namespace that
+// holds none, the repository of the installation as the cluster holds it, and the reads of the pod volume
 // operations, which the views ask only while a view that shows them is open, counted on the API server: their
 // lists, and the view of a backup and of a restore, whose band shows the operations of its own kind. The suite
 // reads the application and the cluster, and writes to neither.
@@ -114,15 +115,17 @@ describe("views of the backup repositories and of the pod volume operations", ()
   );
 
   it(
-    "lists no backup repository in the installation, where no backup of the file system ran yet",
+    "lists in the installation the one backup repository the volume of the run made, Ready, as the cluster holds it",
     async () => {
-      await cluster.openPage(frame, cluster.REPOSITORIES);
-      await cluster.selectInstallation(frame, cluster.E2E_NAMESPACE);
-      await frame.waitForSelector(`[data-testid=velero-${cluster.REPOSITORIES.id}-empty]`, { timeout: 60_000 });
-      expect(await empty(cluster.REPOSITORIES)).toBe(
-        `No backup repository is in the namespace ${cluster.E2E_NAMESPACE} of ${cluster.E2E_KUBE_CONTEXT}.`,
+      // The repository the server made for the volume of the run, read by the suite on the cluster by the three
+      // labels the release writes into it, never by its name, which the release says it may change.
+      const made = cluster.labelledObjects<{ metadata: { name: string }; status?: { phase?: string } }>(
+        "backuprepositories",
+        cluster.runRepositorySelector(),
       );
-      // The cluster says the same, read by the suite and not by the application.
+
+      expect(made.map((repository) => repository.status?.phase)).toEqual(["Ready"]);
+      // It is the one repository of the installation, read by the suite and not by the application.
       const held = cluster.kubectlE2E(
         "get",
         "backuprepositories.velero.io",
@@ -132,7 +135,16 @@ describe("views of the backup repositories and of the pod volume operations", ()
         "name",
       );
 
-      expect([held.status, held.stdout.trim()]).toEqual([0, ""]);
+      expect([held.status, held.stdout.trim()]).toEqual([0, `backuprepository.velero.io/${made[0].metadata.name}`]);
+      await cluster.openPage(frame, cluster.REPOSITORIES);
+      await cluster.selectInstallation(frame, cluster.E2E_NAMESPACE);
+      await frame.waitForSelector(
+        `[data-testid=velero-${cluster.REPOSITORIES.id}] [data-${cluster.REPOSITORIES.kind}-row]`,
+        { timeout: 60_000 },
+      );
+      expect(await cluster.mounted(frame, cluster.REPOSITORIES)).toEqual([made[0].metadata.name]);
+      expect(await cluster.notices(frame, [])).toEqual({});
+      expect(await cluster.layoutProblems(frame, cluster.REPOSITORIES)).toEqual([]);
       await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
     },
     TIMEOUT,
