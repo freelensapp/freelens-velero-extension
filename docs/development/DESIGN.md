@@ -230,9 +230,10 @@ commands open the explicit Velero operation, not an unrestricted YAML editor.
   the installation holds only when the family was read. The view of a repository
   ends with what used it, by kind: the operations of each kind counted by phase, the
   newest of them and the backups or the restores they belong to, ten at a time, each
-  a way when it is found; a kind not read is named, with why, and nothing of the
-  installation used it is said only when every kind was read and none names it. The
-  data movement joins both with the second slice of the spec.
+  a way when it is found; a kind not read is named, with why, a kind of an earlier
+  read says so in place, with its rows or with none, and that no pod volume operation
+  of the installation used it is said only when every kind was read now and none
+  names it. The data movement joins both with the second slice of the spec.
 - Logs use bounded rendering, search and clear loading/error/cancel states. Results
   group warnings/errors without losing namespace/resource context. Resource and
   volume views show completeness and filters rather than unbounded JSON blobs.

@@ -694,11 +694,14 @@ that names that namespace, that pod and that volume, the newest when more than o
 names the same, opened over the backup or the restore by a command of the
 extension. When none matches, nothing is offered and nothing is said absent: the rows
 are what the store holds, and the operations may be gone; a family never read, or
-denied with nothing read before, has no operation to offer. The [ways](../../src/common/volume-band.ts) of the rows,
+denied, has no operation to offer, even when a read before found one, since the tab
+cannot say that a way is of an earlier read, as the band says of the rows it keeps.
+The [ways](../../src/common/volume-band.ts) of the rows,
 from that namespace, that pod and that volume to the view they open, are given by the
 panel to the viewer of the volumes and to no other. The viewers are memoized, and the
 panel is drawn again at every tick of the clock of the views and at every read: the
-ways are the same object for as long as they lead to the same operations
+ways are the same object for as long as they lead to the same operations, in
+whatever order
 ([their memo](../../src/renderer/state/volumes.ts)), made again from the index when a
 read makes a new one and kept when the new ones are the same, so that the viewer is
 drawn again only when a read changes where its rows lead. A memo of the panel keyed by
