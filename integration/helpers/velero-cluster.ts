@@ -14,7 +14,7 @@ import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { captureWindowScreenshot, EXTENSION_NAME } from "./velero-extension";
-import { realScheduleSubmission, writesOf } from "./velero-guard";
+import { installedVersion, operationListsOf, realScheduleSubmission, writesOf } from "./velero-guard";
 
 import type { Frame, Locator, Page, Request } from "playwright";
 
@@ -395,10 +395,22 @@ export function fixturesReady(): boolean {
   return true;
 }
 
-// The kinds whose objects the snapshot of a suite compares before and after it: the ones its fixtures place.
-const SNAPSHOT_KINDS = ["backups", "restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"];
-// The kinds the views read: the families of an installation, which a suite reads and counts the reads of.
-const KINDS = [...SNAPSHOT_KINDS, "backuprepositories", "podvolumebackups", "podvolumerestores"];
+// The kinds whose objects the snapshot of a suite compares before and after it: the ones its fixtures place, with
+// the repositories and the pod volume operations of the views and of the long lists, by their versions, and the
+// real ones the volume of the run leaves in the installation, by their identities.
+const SNAPSHOT_KINDS = [
+  "backups",
+  "restores",
+  "schedules",
+  "backupstoragelocations",
+  "volumesnapshotlocations",
+  "backuprepositories",
+  "podvolumebackups",
+  "podvolumerestores",
+];
+// The kinds the views read: the families of an installation, which a suite reads and counts the reads of. They are
+// the kinds of the snapshot.
+const KINDS = [...SNAPSHOT_KINDS];
 // The kinds a read of Velero is asked through: a request of any of them is a write.
 const REQUESTS = ["downloadrequests", "serverstatusrequests", "deletebackuprequests"];
 
@@ -406,7 +418,9 @@ export interface ClusterSnapshot {
   /**
    * Every synthetic object with its version, which changes with every write; and each schedule of the namespace
    * of the installation, which is the one its controller validated, with its version and its status: a
-   * submission writes its last submission into it, and a patch that changes it changes its version.
+   * submission writes its last submission into it, and a patch that changes it changes its version. The real
+   * repository of the installation with its version and its status, or its status alone when the server writes
+   * it at each of its passes (`REPOSITORY_WRITTEN_AT_EACH_PASS`).
    */
   versions: Record<string, string>;
   /** The objects of the namespace of the installation, which its controllers may change. */
@@ -468,11 +482,11 @@ export function clusterSnapshot(): ClusterSnapshot {
       }
     }
     for (const item of list(kind, E2E_NAMESPACE)) {
+      const version = installedVersion(kind, item, REPOSITORY_WRITTEN_AT_EACH_PASS);
+
       installed.push(`${kind}/${item.metadata.name}/${item.metadata.uid}`);
-      if (kind === "schedules") {
-        versions[`${E2E_NAMESPACE}/${kind}/${item.metadata.name}/${item.metadata.uid}`] =
-          `${item.metadata.resourceVersion} ${JSON.stringify(item.status ?? {})}`;
-      }
+      if (version !== undefined)
+        versions[`${E2E_NAMESPACE}/${kind}/${item.metadata.name}/${item.metadata.uid}`] = version;
     }
   }
   for (const kind of REQUESTS) {
@@ -594,6 +608,27 @@ export function familyReads(counts: Record<string, number>): Record<string, numb
 export const SCHEDULE_PATCHED_AT_EVERY_LOOK: boolean = true;
 
 /**
+ * The verb of the request the server sends to the real repository at its
+ * pass, with no maintenance due, or none: the measure of the local integration
+ * of the volume of the environment says which, over fifteen minutes with no
+ * view open and nothing else reading or writing, and sets this. When it names
+ * one, `writes` leaves that verb of the repositories out, as it leaves out the
+ * PATCH of the locations, and what proves that a suite wrote nothing to a
+ * repository is the status of the real one and the versions of the synthetic
+ * ones, which the snapshot of every suite holds. Measured: T51-PR4-PENDING.
+ */
+export const REPOSITORY_WRITTEN_AT_EACH_PASS: string | undefined = undefined;
+
+/**
+ * Whether a controller of the installation lists the kinds of the operations
+ * of a volume in a namespace: the same measure says which, and sets this. When
+ * one does, what a view lists of them is what a window with the view open
+ * counted above a window of the same length with none (`operationLists`).
+ * Measured: T51-PR4-PENDING.
+ */
+export const OPERATIONS_LISTED_BY_A_CONTROLLER: boolean = false;
+
+/**
  * The requests that change something, or ask Velero for something, among the
  * ones counted between two readings of `apiRequests` (`writesOf`), the PATCH
  * of a schedule among them, but the ones its controller sends at every look
@@ -609,7 +644,26 @@ export function writes(before: Record<string, number>, after: Record<string, num
       "The writes are counted between two readings of apiRequests, which keep the moment they were asked",
     );
   }
-  return writesOf(counted(before, after), SCHEDULE_PATCHED_AT_EVERY_LOOK, (to - from) / 60_000);
+  return writesOf(
+    counted(before, after),
+    SCHEDULE_PATCHED_AT_EVERY_LOOK,
+    (to - from) / 60_000,
+    REPOSITORY_WRITTEN_AT_EACH_PASS,
+  );
+}
+
+/**
+ * The lists of the kinds of the operations of a volume in a namespace that a
+ * view asked, by kind, from what was counted over a window with the view open
+ * (`during`): when a controller of the installation lists them too
+ * (`OPERATIONS_LISTED_BY_A_CONTROLLER`), the ones above what a window of the
+ * same length with no view open counted (`without`).
+ */
+export function operationLists(
+  during: Record<string, number>,
+  without?: Record<string, number>,
+): Record<string, number> {
+  return operationListsOf(during, OPERATIONS_LISTED_BY_A_CONTROLLER, without);
 }
 
 /** What was counted between two readings of the counters: the requests that are more, with how many more. */

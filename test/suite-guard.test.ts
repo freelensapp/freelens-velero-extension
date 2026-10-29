@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { realScheduleSubmission, writesOf } from "../integration/helpers/velero-guard";
+import {
+  installedVersion,
+  OPERATION_KINDS,
+  operationListsOf,
+  realScheduleSubmission,
+  writesOf,
+} from "../integration/helpers/velero-guard";
 
 describe("the guard of the suites", () => {
   // What the API server counted, by verb, kind and scope, as the helpers read it from its counters.
@@ -44,6 +50,92 @@ describe("the guard of the suites", () => {
     for (const minutes of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
       expect(() => writesOf(counts, true, minutes)).toThrow(/window of minutes/);
     }
+  });
+
+  it("counts every write of a repository as a write while the server sends none at its pass, and leaves out the one verb it sends when it does", () => {
+    const always = {
+      "POST backups namespace": 1,
+      "DELETE schedules resource": 1,
+      "POST downloadrequests namespace": 1,
+      "PATCH schedules namespace": 1,
+      "PATCH schedules resource": 2,
+    };
+    const repositories = {
+      ...counts,
+      "PATCH backuprepositories resource": 4,
+      "PUT backuprepositories resource": 1,
+      "POST backuprepositories namespace": 1,
+      "LIST backuprepositories namespace": 2,
+      "WATCH backuprepositories namespace": 1,
+    };
+    const written = {
+      "PATCH backuprepositories resource": 4,
+      "PUT backuprepositories resource": 1,
+      "POST backuprepositories namespace": 1,
+    };
+
+    // The server sends nothing to the real repository at its pass: every write of a repository is a write.
+    expect(writesOf(repositories, false, 15)).toEqual({ ...always, ...written });
+    expect(writesOf(repositories, false, 15, undefined)).toEqual({ ...always, ...written });
+    // It sends a PATCH: the PATCH of the repositories is left out at every scope, as the one of the locations is,
+    // and every other verb of the repositories is a write.
+    expect(writesOf(repositories, false, 15, "PATCH")).toEqual({
+      ...always,
+      "PUT backuprepositories resource": 1,
+      "POST backuprepositories namespace": 1,
+    });
+    expect(writesOf(repositories, false, 15, "PUT")).toEqual({
+      ...always,
+      "PATCH backuprepositories resource": 4,
+      "POST backuprepositories namespace": 1,
+    });
+    // The verb of the repositories leaves out nothing of another kind.
+    expect(writesOf({ "PATCH podvolumebackups resource": 1 }, false, 0, "PATCH")).toEqual({
+      "PATCH podvolumebackups resource": 1,
+    });
+  });
+
+  it("holds the version and the status of a repository of the installation, or its status alone while the server writes it at each pass, beside the schedule", () => {
+    const status = { phase: "Ready", lastMaintenanceTime: "2026-10-29T20:00:00Z" };
+    const item = { metadata: { resourceVersion: "41" }, status };
+
+    expect(installedVersion("backuprepositories", item)).toBe(`41 ${JSON.stringify(status)}`);
+    expect(installedVersion("backuprepositories", item, "PATCH")).toBe(JSON.stringify(status));
+    expect(installedVersion("backuprepositories", { metadata: { resourceVersion: "42" } }, "PATCH")).toBe("{}");
+    // The schedule the controller validated keeps its version whatever the server sends to a repository.
+    expect(installedVersion("schedules", item)).toBe(`41 ${JSON.stringify(status)}`);
+    expect(installedVersion("schedules", item, "PATCH")).toBe(`41 ${JSON.stringify(status)}`);
+    // The other kinds of the installation are compared by their identities alone.
+    for (const kind of ["backups", "restores", "backupstoragelocations", "podvolumebackups", "podvolumerestores"]) {
+      expect([kind, installedVersion(kind, item)]).toEqual([kind, undefined]);
+      expect([kind, installedVersion(kind, item, "PATCH")]).toEqual([kind, undefined]);
+    }
+  });
+
+  it("names the lists of the operations a view asked: every one while no controller lists them, the ones above a window with no view open when one does", () => {
+    const during = {
+      "LIST podvolumebackups namespace": 3,
+      "LIST podvolumerestores namespace": 1,
+      "LIST datauploads namespace": 2,
+      "WATCH podvolumebackups namespace": 2,
+      "LIST backups namespace": 5,
+      "LIST datadownloads cluster": 1,
+    };
+    const without = { "LIST podvolumebackups namespace": 3, "LIST datauploads namespace": 1 };
+
+    expect(OPERATION_KINDS).toEqual(["podvolumebackups", "podvolumerestores", "datauploads", "datadownloads"]);
+    // No controller lists them: every list of a namespace is of the view, and a window with none is not asked.
+    expect(operationListsOf(during, false)).toEqual({ podvolumebackups: 3, podvolumerestores: 1, datauploads: 2 });
+    expect(operationListsOf(during, false, without)).toEqual({
+      podvolumebackups: 3,
+      podvolumerestores: 1,
+      datauploads: 2,
+    });
+    expect(operationListsOf({ "LIST backups namespace": 2 }, false)).toEqual({});
+    // One does: what the window with the view open counted above the one with none.
+    expect(operationListsOf(during, true, without)).toEqual({ podvolumerestores: 1, datauploads: 1 });
+    expect(operationListsOf(without, true, during)).toEqual({});
+    expect(() => operationListsOf(during, true)).toThrow(/window of the same length with no view open/);
   });
 
   it("says that the schedule the controller validated submitted a backup, by its last submission and by each backup that carries its label, and says nothing of one that submitted none", () => {
