@@ -2887,9 +2887,10 @@ export function proofIdentities(
 // The identity of the views that may not port-forward, which the runner of the suites makes for as long as
 // they run: an account of the namespace of the installation, of the run, with a role of that namespace. It
 // reads what the views and a download read of the installation at every read, the backup repositories among
-// it, creates and reads a DownloadRequest there, and reads the route to the store, its Service, its endpoint
-// slices and its Pod. It has neither verb of the port-forward, get nor create, and reads no Secret: a load of a
-// log is refused at the port-forward, once its request is in the cluster.
+// it, and the pod volume backups and the pod volume restores, which the view of a backup and of a restore asks
+// when it opens, for the band of its volumes; it creates and reads a DownloadRequest there, and reads the route
+// to the store, its Service, its endpoint slices and its Pod. It has neither verb of the port-forward, get nor
+// create, and reads no Secret: a load of a log is refused at the port-forward, once its request is in the cluster.
 export function viewIdentityWithoutPortForward(owner: string, run: string): KubeResource[] {
   requireCondition(owner, "Fixture ownership is required");
   fixtureNames(run);
@@ -2916,6 +2917,8 @@ export function viewIdentityWithoutPortForward(owner: string, run: string): Kube
             "backupstoragelocations",
             "volumesnapshotlocations",
             "backuprepositories",
+            "podvolumebackups",
+            "podvolumerestores",
           ],
           verbs: ["get", "list", "watch"],
         },
@@ -2938,9 +2941,10 @@ export function viewIdentityWithoutPortForward(owner: string, run: string): Kube
 // suites makes for as long as they run: an account of the namespace of the installation, of the run, with a
 // role of that namespace. It has what the documentation lists for the writes and for a download through the
 // cluster: it reads what the views read of the installation at every read, the backup repositories among it,
-// creates and reads the two requests the gate lets through, reads the Service of the store, its endpoint slices
-// and its Pod, and may create a port-forward. It reads no Secret: the storage location of the demo refers to none
-// for its certificate.
+// and the pod volume backups and the pod volume restores, which the view of a backup and of a restore asks when
+// it opens, for the band of its volumes; it creates and reads the two requests the gate lets through, reads the
+// Service of the store, its endpoint slices and its Pod, and may create a port-forward. It reads no Secret: the
+// storage location of the demo refers to none for its certificate.
 export function viewIdentityOfAnExecPlugin(owner: string, run: string): KubeResource[] {
   requireCondition(owner, "Fixture ownership is required");
   fixtureNames(run);
@@ -2967,6 +2971,8 @@ export function viewIdentityOfAnExecPlugin(owner: string, run: string): KubeReso
             "backupstoragelocations",
             "volumesnapshotlocations",
             "backuprepositories",
+            "podvolumebackups",
+            "podvolumerestores",
           ],
           verbs: ["get", "list", "watch"],
         },

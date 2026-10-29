@@ -18,6 +18,10 @@ import {
   volumesCount,
 } from "../../common/artifact-volumes";
 import { timestamp } from "../../common/duration";
+import { VIEWS } from "../../common/views";
+import { rowKey } from "../../common/volume-band";
+import { TAB_WAY_WORDS } from "../../common/volume-words";
+import { openView } from "../navigation";
 import { ArtifactLines } from "./artifact-lines";
 import { CONTENT } from "./artifact-viewer";
 import { time } from "./status";
@@ -27,6 +31,7 @@ import type { ReactNode } from "react";
 
 import type { Stated, VolumeField, VolumeRow } from "../../common/artifact-volumes";
 import type { OperationKind } from "../../common/phases";
+import type { VolumeWays } from "../../common/volume-band";
 import type { ArtifactViewerProps } from "./artifact-viewer";
 
 const {
@@ -212,11 +217,40 @@ function Fields({ name, title, fields }: { name: string; title: string; fields: 
   );
 }
 
+// The methods of the rows whose operation is a pod volume backup or a pod volume restore of the installation.
+const POD_VOLUME_METHODS = ["PodVolumeBackup", "PodVolumeRestore"];
+
+// The way from the details of a row to the operation of the installation that matches it, by the owner of the tab,
+// the namespace of the pod, the pod and the volume (REQ-188). When none matches, nothing is offered and nothing is
+// said absent: the rows are what the store holds, and the operations may be gone.
+function OperationWay({ id, index, row, ways }: { id: string; index: number; row: VolumeRow; ways?: VolumeWays }) {
+  const found =
+    row.method && POD_VOLUME_METHODS.includes(row.method.text) && row.podVolume
+      ? ways?.get(rowKey(row.podVolume.podNamespace, row.podVolume.pod, row.podVolume.volume))
+      : undefined;
+
+  if (!found) return null;
+  return (
+    <section className={styles.volumeDetail} data-detail="operation">
+      <h4 className={styles.volumeDetailTitle}>{TAB_WAY_WORDS.title}</h4>
+      <button
+        type="button"
+        className={styles.link}
+        data-testid={`${id}-way-${index}`}
+        data-way={`${found.kind}/${found.name}`}
+        onClick={() => openView(found)}
+      >
+        {TAB_WAY_WORDS.open(VIEWS[found.kind].noun, found.name)}
+      </button>
+    </section>
+  );
+}
+
 // The volume information of an operation: how many volumes Velero recorded, then one row for each in a
 // table of the host, with a command that opens the details of the row under it. The details are a row of
 // the table and not a drawer, which the host closes on a click outside it. The text is parsed once; one
 // that is not of the shape the release writes is shown as the lines it is.
-export function VolumesViewer({ id, text, of }: ArtifactViewerProps) {
+export function VolumesViewer({ id, text, of, ways }: ArtifactViewerProps) {
   const rows = React.useMemo(() => parseVolumes(text, of), [text, of]);
   // The rows that are open are rows of the text they were opened in: another text has none open.
   const [opened, setOpened] = React.useState<{ of: unknown; rows: ReadonlySet<number> }>({ of: rows, rows: new Set() });
@@ -283,6 +317,7 @@ export function VolumesViewer({ id, text, of }: ArtifactViewerProps) {
           aria-colspan={columns.length + 1}
           {...CELL}
         >
+          <OperationWay id={id} index={index} row={row} ways={ways} />
           {row.details.length || row.others.length ? null : <p className={styles.factNote}>{NO_DETAILS}</p>}
           {row.details.map((detail) => (
             <Fields key={detail.key} name={detail.key} title={detail.title} fields={detail.fields} />

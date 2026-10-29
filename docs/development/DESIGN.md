@@ -213,6 +213,27 @@ commands open the explicit Velero operation, not an unrestricted YAML editor.
   operations have the page, and are a table.
 - A compact relationship path can connect schedule, backup, storage and restore.
   It is not a freeform graph editor; missing references keep their explanation.
+- The summary of a backup and of a restore has a band of its volume operations,
+  titled Volumes, after its status: one sentence of what the release does with them
+  by the phase of the backup or the restore, then its pod volume backups or pod
+  volume restores counted by phase, in the groups and the order of `backup describe`
+  or of `restore describe`, with the mark and the label of each phase, and its rows
+  from the newest, ten at a time with a command that shows ten more and gives the
+  focus to the first it added. A row is the volume, a way to the view of the
+  operation that returns to the backup or the restore, the pod and the node as the
+  links of the host, the phase with its mark and the message of Velero in its tip,
+  and the bytes done of the total. The band says nothing of the items of the
+  operation, whose progress keeps its fact and its note. What was not read is not
+  known and is never none: the band says once that the family is being read, that
+  it cannot be read with no count, that the cluster does not serve it, or that its
+  rows were read before, and when; it says that the backup has none among the ones
+  the installation holds only when the family was read. The view of a repository
+  ends with what used it, by kind: the operations of each kind counted by phase, the
+  newest of them and the backups or the restores they belong to, ten at a time, each
+  a way when it is found; a kind not read is named, with why, a kind of an earlier
+  read says so in place, with its rows or with none, and that no pod volume operation
+  of the installation used it is said only when every kind was read now and none
+  names it. The data movement joins both with the second slice of the spec.
 - Logs use bounded rendering, search and clear loading/error/cancel states. Results
   group warnings/errors without losing namespace/resource context. Resource and
   volume views show completeness and filters rather than unbounded JSON blobs.
@@ -229,7 +250,9 @@ commands open the explicit Velero operation, not an unrestricted YAML editor.
   Velero, cluster and namespace, with their counts, and with the counter of the
   status beside them when it differs. The resources are one list with a filter,
   and for a restore what was done with each item. The volumes are a table, with
-  the details of a row under it. A text that is not of the shape its viewer was
+  the details of a row under it; the details of a row backed up or restored by a pod
+  volume operation lead to that operation when the installation holds it, and say
+  nothing of one it does not. A text that is not of the shape its viewer was
   written for is shown as its lines, with a note.
 - The restore flow reviews a concrete source by default, deliberate namespace
   mappings, existing-resource policy none, and an explicit choice for cluster scope.

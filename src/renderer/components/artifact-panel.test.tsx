@@ -34,6 +34,7 @@ import { downloadFailure } from "../../common/diagnostic-text";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { ARTIFACT_HOLD_MS } from "../../common/ipc";
 import { BACKUP_PHASES, operationState, RESTORE_PHASES } from "../../common/phases";
+import { rowKey } from "../../common/volume-band";
 import { Installation } from "../state/installation";
 import { ArtifactPanel, artifactPanelId } from "./artifact-panel";
 import { time } from "./status";
@@ -1109,12 +1110,56 @@ describe("the text a diagnostic tab loaded", () => {
     expect(viewers.given.at(-1)?.props.counters).toEqual({ errors: 5 });
   });
 
+  it("gives the volumes the ways of their rows, and draws them again only when a read changes the ways", async () => {
+    const operation = (name: string, volume: string) =>
+      object(
+        "PodVolumeBackup",
+        name,
+        { pod: { namespace: "shop", name: "cart-0" }, volume, uploaderType: "kopia", backupStorageLocation: "default" },
+        { phase: "Completed" },
+        { labels: { "velero.io/backup-name": "nightly", "velero.io/backup-uid": "backup-nightly-uid" } },
+      );
+    const mounted = mount(
+      { tab: "volumes" },
+      { table: answers({ [path("podVolumeBackups", A)]: list(operation("nightly-data", "data")) }) },
+    );
+    // The view of the backup holds the family of its operations, as the frame of its page does.
+    const release = mounted.installation.need({}, ["podVolumeBackups"]);
+
+    await writesOn(mounted);
+    await load(mounted);
+    await waitFor(() => expect(mounted.installation.read("podVolumeBackups").status).toBe("ready"));
+    const drawn = viewers.given.length;
+    const first = viewers.given.at(-1)?.props.ways as ReadonlyMap<string, unknown>;
+
+    expect([...first]).toEqual([
+      [rowKey("shop", "cart-0", "data"), { kind: "pod-volume-backup", name: "nightly-data" }],
+    ]);
+    // A read that leads to the same operations makes a new index, and draws no viewer again.
+    await act(() => mounted.installation.refresh());
+    mounted.show({});
+    expect(viewers.given).toHaveLength(drawn);
+    // A read that changes the ways draws it again, once, with them.
+    mounted.table[path("podVolumeBackups", A)] = list(
+      operation("nightly-data", "data"),
+      operation("nightly-cache", "cache"),
+    );
+    await act(() => mounted.installation.refresh());
+    mounted.show({});
+    expect(viewers.given).toHaveLength(drawn + 1);
+    const second = viewers.given.at(-1)?.props.ways as ReadonlyMap<string, unknown>;
+
+    expect([...second.keys()].sort()).toEqual([rowKey("shop", "cart-0", "cache"), rowKey("shop", "cart-0", "data")]);
+    release();
+  });
+
   it("gives each tab its own viewer, and the results the counters of the status with its phase, and only those", async () => {
     for (const [kind, name, tab, counted] of [
       ["Backup", "nightly", "results", { counters: { errors: 2 }, phase: "PartiallyFailed" }],
       ["Restore", "monday", "results", { counters: {}, phase: "Completed" }],
       ["Backup", "nightly", "resources", undefined],
-      ["Restore", "monday", "volumes", undefined],
+      // The volumes are given the ways of their rows, none where the installation holds no operation of the owner.
+      ["Restore", "monday", "volumes", { ways: new Map() }],
     ] as const) {
       const mounted = mount({ kind, name, tab });
 

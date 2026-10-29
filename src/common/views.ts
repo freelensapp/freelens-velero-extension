@@ -27,13 +27,26 @@ export interface ViewTarget {
 // something of the families it reads: what is missing of the others is not said over it. A family of the
 // operations of the volumes is read while a view that reads it is open, and only then. Each view reads the
 // families it shows, and no other: the families read at every read are asked whatever view is open, and a view
-// that reads fewer of them asks no less of the cluster.
+// that reads fewer of them asks no less of the cluster. A backup and a restore are shown with the band of their
+// operations of the volumes, each of its own kind.
 export const VIEWS: Record<
   ViewKind,
   { family: Family; reads: readonly Family[]; title: string; noun: string; plural: string }
 > = {
-  backup: { family: "backups", reads: BACKUPS_AND_LOCATIONS, title: "Backups", noun: "backup", plural: "backups" },
-  restore: { family: "restores", reads: BACKUPS_AND_LOCATIONS, title: "Restores", noun: "restore", plural: "restores" },
+  backup: {
+    family: "backups",
+    reads: [...BACKUPS_AND_LOCATIONS, "podVolumeBackups"],
+    title: "Backups",
+    noun: "backup",
+    plural: "backups",
+  },
+  restore: {
+    family: "restores",
+    reads: [...BACKUPS_AND_LOCATIONS, "podVolumeRestores"],
+    title: "Restores",
+    noun: "restore",
+    plural: "restores",
+  },
   schedule: {
     family: "schedules",
     reads: BACKUPS_AND_LOCATIONS,
@@ -56,11 +69,11 @@ export const VIEWS: Record<
     noun: "volume snapshot location",
     plural: "volume snapshot locations",
   },
-  // A repository is shown with the location it is kept in. The operations of the volumes that write into it or
-  // read from it come with the band that shows them.
+  // A repository is shown with the location it is kept in, and with what used it: the operations of the volumes that
+  // wrote into it or read from it, and the backups and the restores they belong to.
   "backup-repository": {
     family: "backupRepositories",
-    reads: ["backupRepositories", "storageLocations"],
+    reads: ["backupRepositories", "storageLocations", "podVolumeBackups", "podVolumeRestores", "backups", "restores"],
     title: "Backup Repositories",
     noun: "backup repository",
     plural: "backup repositories",

@@ -1407,7 +1407,8 @@ describe("foundation fixture boundaries", () => {
       roleRef: { apiGroup: "rbac.authorization.k8s.io", kind: "Role", name: identity },
       subjects: [{ kind: "ServiceAccount", name: identity, namespace: "velero-demo" }],
     });
-    // What the views read of the installation at every read, the backup repositories among it, the request a
+    // What the views read of the installation at every read, the backup repositories among it, the pod volume
+    // backups and the pod volume restores the view of a backup and of a restore asks when it opens, the request a
     // download creates and reads, and the route to the store: the Service, its endpoint slices and its Pod.
     // Neither verb of the port-forward, get nor create, no Secret, and nothing that deletes or changes.
     expect((resources[1] as unknown as { rules: unknown[] }).rules).toEqual([
@@ -1420,6 +1421,8 @@ describe("foundation fixture boundaries", () => {
           "backupstoragelocations",
           "volumesnapshotlocations",
           "backuprepositories",
+          "podvolumebackups",
+          "podvolumerestores",
         ],
         verbs: ["get", "list", "watch"],
       },
@@ -1447,9 +1450,10 @@ describe("foundation fixture boundaries", () => {
       roleRef: { apiGroup: "rbac.authorization.k8s.io", kind: "Role", name: identity },
       subjects: [{ kind: "ServiceAccount", name: identity, namespace: "velero-demo" }],
     });
-    // What the views read of the installation at every read, the backup repositories among it, the two requests
-    // the gate lets through, created and read, the route to the store, and the port-forward with the verb the
-    // documentation lists. No Secret, since the location of the demo refers to none, and nothing that deletes or
+    // What the views read of the installation at every read, the backup repositories among it, the pod volume
+    // backups and the pod volume restores the view of a backup and of a restore asks when it opens, the two
+    // requests the gate lets through, created and read, the route to the store, and the port-forward with the verb
+    // the documentation lists. No Secret, since the location of the demo refers to none, and nothing that deletes or
     // changes.
     expect((resources[1] as unknown as { rules: unknown[] }).rules).toEqual([
       {
@@ -1461,6 +1465,8 @@ describe("foundation fixture boundaries", () => {
           "backupstoragelocations",
           "volumesnapshotlocations",
           "backuprepositories",
+          "podvolumebackups",
+          "podvolumerestores",
         ],
         verbs: ["get", "list", "watch"],
       },

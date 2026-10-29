@@ -165,6 +165,23 @@ describe("when the next maintenance is due, by the clock of this machine", () =>
     );
   });
 
+  it("is not known yet while the storage locations were never answered, and not taken for one that is absent", () => {
+    const old = repositoryView(repository("r", { phase: "Ready", lastMaintenanceTime: before(30 * DAY) } as never));
+
+    expect(maintenanceDue(old, NOW, undefined, false)).toEqual({ state: "locations-being-read" });
+    // A location that was found says what it is, answered or not; one that is not found once they answered is not
+    // known.
+    expect(maintenanceDue(old, NOW, false, false)).toMatchObject({ state: "due" });
+    expect(maintenanceDue(old, NOW, undefined, true)).toEqual({ state: "access-unknown" });
+    // What is not computed for other reasons is said first, as it is when they answered.
+    expect(maintenanceDue(repositoryView(repository("r", { phase: "NotReady" })), NOW, undefined, false)).toEqual({
+      state: "not-ready",
+    });
+    expect(dueText({ state: "locations-being-read" })).toBe(
+      "Not known yet: the storage locations of the installation are being read, and the server runs no maintenance of a repository of a read-only one.",
+    );
+  });
+
   it("is none for a repository that is not ready, or of a read-only location", () => {
     expect(due({ phase: "NotReady", lastMaintenanceTime: before(30 * DAY) })).toEqual({ state: "not-ready" });
     expect(due({})).toEqual({ state: "not-ready" });

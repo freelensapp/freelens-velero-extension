@@ -4,6 +4,7 @@
 import { sizeText } from "./artifact-volumes";
 import { formatDuration } from "./duration";
 
+import type { OperationKind, OperationState } from "./phases";
 import type { ItemProgress } from "./progress";
 import type { VolumeKind, VolumeOperationState } from "./volume-phases";
 import type { VolumeSpan } from "./volume-time";
@@ -248,6 +249,8 @@ export const REPOSITORY_WORDS = {
   readOnly: "The storage location is read-only: the server runs no maintenance of a repository of it.",
   accessUnknown:
     "Not known: the storage location of the repository is not known, and the server runs no maintenance of a repository of a read-only one.",
+  locationsBeingRead:
+    "Not known yet: the storage locations of the installation are being read, and the server runs no maintenance of a repository of a read-only one.",
   frequencyNotSet:
     "No frequency is set: the server fills it with its own, or with the one of the type, at its next look. Nothing is computed until it does.",
   frequencyUnreadable: (written: string) =>
@@ -293,4 +296,103 @@ export const VOLUME_WORDS = {
     `The views read the ${plural} of another installation: whether this one is there is not known here.`,
   unknownFields: (names: string[]) =>
     `The object carries fields the reviewed release does not write, which are not read: ${names.join(", ")}.`,
+};
+
+// What the band of the volume operations of a backup or of a restore says of one kind of them, by the state of the
+// read of its family (SPEC-0014, what is not known): what was not read is not known, and is not none.
+export const BAND_WORDS = {
+  title: "Volumes",
+  loading: (plural: string) => `The ${plural} of the installation are being read.`,
+  none: (owner: string, noun: string) => `This ${owner} has no ${noun} among the ones the installation holds.`,
+  denied: (plural: string, owner: string) =>
+    `The ${plural} of this installation cannot be read: access is denied. How many this ${owner} has is not known.`,
+  "not-served": (plural: string) => `The cluster does not serve the ${plural} of Velero.`,
+  failed: (plural: string, owner: string) =>
+    `The ${plural} of this installation could not be read. How many this ${owner} has is not known.`,
+  "not-read": (plural: string, owner: string) =>
+    `The ${plural} of this installation were not read yet: how many this ${owner} has is not known.`,
+  stale: (plural: string, at: string) => `The ${plural} could not be read again: these are the ones read at ${at}.`,
+  count: (count: number, noun: string, plural: string) => `${count} ${count === 1 ? noun : plural}, from the newest`,
+  groups: (plural: string) => `The ${plural} by phase`,
+  more: "Show ten more",
+  way: (noun: string, name: string) => `Open the ${noun} ${name}`,
+  // The name of the way of a row: its volume first, which is what the column shows, then the operation it opens.
+  rowWay: (volume: string, noun: string, name: string) => `${volume}: ${BAND_WORDS.way(noun, name)}`,
+};
+
+type BandSentence = "waiting" | "validation" | "running" | "plugins" | "finalizing" | "ended" | "unknown";
+
+// A restore has no sentence of its deletion: the release writes no phase Deleting for a restore, and one that reports
+// it reports a phase the release does not write.
+const BAND_SENTENCES: { Backup: Record<BandSentence | "deleting", string>; Restore: Record<BandSentence, string> } = {
+  Backup: {
+    waiting: "The pod volume backups of a backup are made while it is InProgress: this one has not started.",
+    validation:
+      "The pod volume backups of a backup are made while it is InProgress: this one failed its validation, and did not run.",
+    running:
+      "The pod volume backups run while the backup is InProgress: it waits for all of them, and at its own timeout asks the ones that have not ended to cancel.",
+    plugins:
+      "The pod volume backups ran while the backup was InProgress. It waits for its plugin operations, which is when its data uploads run.",
+    finalizing: "The pod volume backups ran while the backup was InProgress.",
+    ended:
+      "The pod volume backups the installation holds of this backup are the ones its run made, or the ones a sync from the store made, in the phase they were stored in.",
+    deleting: "The backup is being deleted: its pod volume backups go with it.",
+    unknown:
+      "The backup reports a phase the release does not write: what the release does with its pod volume backups is not known.",
+  },
+  Restore: {
+    waiting: "The pod volume restores of a restore are made while it is InProgress: this one has not started.",
+    validation:
+      "The pod volume restores of a restore are made while it is InProgress: this one failed its validation, and did not run.",
+    running:
+      "The node agent of the node of each restored pod takes its pod volume restore when the init container restore-wait of that pod runs.",
+    plugins: "The restore waits for its plugin operations, which is when its data downloads run.",
+    finalizing: "The pod volume restores the installation holds of this restore are the ones its run made.",
+    ended: "The pod volume restores the installation holds of this restore are the ones its run made.",
+    unknown:
+      "The restore reports a phase the release does not write: what the release does with its pod volume restores is not known.",
+  },
+};
+
+// What the release does with the pod volume operations of a backup or a restore, by the phase of the backup or the
+// restore (SPEC-0014, what the release does). One that reports no phase is taken by the release as a new one.
+export function bandSentence(kind: OperationKind, state: OperationState): string {
+  const sentences: Record<BandSentence, string> & { deleting?: string } = BAND_SENTENCES[kind];
+
+  if (state.reported === undefined) return sentences.waiting;
+  if (!state.recognized) return sentences.unknown;
+  if (state.lifecycle === "deleting" && sentences.deleting) return sentences.deleting;
+  if (state.failure === "validation") return sentences.validation;
+  if (state.execution === "not-started") return sentences.waiting;
+  if (state.reported === "InProgress") return sentences.running;
+  if (state.reported?.startsWith("WaitingForPluginOperations")) return sentences.plugins;
+  if (state.reported?.startsWith("Finalizing")) return sentences.finalizing;
+  return state.lifecycle === "terminal" ? sentences.ended : sentences.unknown;
+}
+
+// What the view of a repository says of what used it (SPEC-0014, REQ-187): the kinds it could read are counted, and
+// the ones it could not are named. It reads the pod volume operations alone until the data movement is read, and
+// says nothing of what it does not read.
+export const USED_BY_WORDS = {
+  title: "Used by",
+  nothing: "No pod volume operation of the installation used it.",
+  none: (plural: string) => `None of the ${plural} of the installation names it.`,
+  loading: (plural: string) => `The ${plural} of the installation are being read.`,
+  denied: (plural: string) =>
+    `The ${plural} of this installation cannot be read: access is denied. What used it among them is not known.`,
+  "not-served": (plural: string) =>
+    `The cluster does not serve the ${plural} of Velero: what used it among them is not known.`,
+  failed: (plural: string) =>
+    `The ${plural} of this installation could not be read. What used it among them is not known.`,
+  "not-read": (plural: string) =>
+    `The ${plural} of this installation were not read yet: what used it among them is not known.`,
+  count: (count: number, noun: string, plural: string) => `${count} ${count === 1 ? noun : plural}`,
+  newest: "The newest",
+  owners: (plural: string) => `Of the ${plural}`,
+};
+
+// The way from a row of the Volumes tab to the operation of the installation it was made by (REQ-188).
+export const TAB_WAY_WORDS = {
+  title: "Operation",
+  open: (noun: string, name: string) => `Open the ${noun} ${name}`,
 };

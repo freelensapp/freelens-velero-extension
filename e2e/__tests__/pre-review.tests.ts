@@ -895,6 +895,11 @@ describe("pre-review of the views", () => {
     async () => {
       await cluster.showList(frame);
       await cluster.openWorkspace(frame, OPENED);
+      // The summary holds the band of the volumes, which says here that the installation holds no pod volume backup
+      // of the backup, with no row: the pictures are taken once it says so, and not while it is being read.
+      // The room of its rows at 900 by 650 and at twice the zoom is seen once the fixtures place operations of a
+      // backup.
+      expect((await cluster.volumeBand(frame, "none")).state).toBe("none");
       await everyLayout("workspace");
       await everyLayout("workspace-references", async () => {
         await frame.locator("[data-testid=velero-backup-references]").scrollIntoViewIfNeeded();
@@ -1009,6 +1014,10 @@ describe("pre-review of the views", () => {
     async () => {
       await cluster.showList(frame);
       await cluster.openWorkspace(frame, RESTORED, RESTORES);
+      // The summary holds the band of the volumes, with no row here, as for a backup, and the pictures are taken once
+      // it says so. The room of its rows at 900 by 650 and at twice the zoom is seen once the fixtures place operations
+      // of a restore.
+      expect((await cluster.volumeBand(frame, "none")).state).toBe("none");
       await everyLayout("restore-workspace", undefined, RESTORES);
       await everyLayout(
         "restore-workspace-into",

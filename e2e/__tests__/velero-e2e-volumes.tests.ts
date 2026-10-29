@@ -7,7 +7,8 @@
 // the test environment as its fixtures leave it today: no object of the three kinds is in it, in the namespace of
 // the views or in the one of the installation, where no backup of the file system ran yet. The suite proves the
 // lists of the three kinds with what they say of a namespace that holds none, and the reads of the pod volume
-// operations, which the views ask only while a view that shows them is open, counted on the API server. The suite
+// operations, which the views ask only while a view that shows them is open, counted on the API server: their
+// lists, and the view of a backup and of a restore, whose band shows the operations of its own kind. The suite
 // reads the application and the cluster, and writes to neither.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -28,6 +29,9 @@ const PVR = "LIST podvolumerestores namespace";
 const CYCLES = 3;
 // The report of the windows of the reads, with what was counted while each page was shown.
 const REPORT = "kind-02-reads-of-the-pod-volume-operations";
+// A backup and a restore of the installation of the views, whose views show the band of their volume operations.
+const BACKUP = "views-daily-20260901030000";
+const RESTORE = "restore-mapped";
 
 describe("views of the backup repositories and of the pod volume operations", () => {
   let started: velero.StartedApplication;
@@ -35,6 +39,9 @@ describe("views of the backup repositories and of the pod volume operations", ()
   const errors = velero.createErrorCollector();
   let before: cluster.ClusterSnapshot;
   let counted: Record<string, number>;
+  // The report is written after each window and before what is expected of it, so that a case that fails leaves
+  // the counts that tell why.
+  const report: Record<string, unknown> = { cycles: CYCLES };
   const empty = (of: cluster.ListOf) =>
     frame
       .locator(`[data-testid=velero-${of.id}-empty] > span`)
@@ -136,9 +143,6 @@ describe("views of the backup repositories and of the pod volume operations", ()
     async () => {
       await cluster.openPage(frame, cluster.POD_VOLUME_BACKUPS);
       await frame.waitForSelector(`[data-testid=velero-${cluster.POD_VOLUME_BACKUPS.id}-empty]`, { timeout: 60_000 });
-      // The report is written after each window and before what is expected of it, so that a case that fails
-      // leaves the counts that tell why.
-      const report: Record<string, unknown> = { cycles: CYCLES };
       const shown = await askedOver(CYCLES);
 
       report.podVolumeBackupsShown = shown;
@@ -175,6 +179,36 @@ describe("views of the backup repositories and of the pod volume operations", ()
         // of the test environment, whose counters showed none in either window on 2026-10-27.
         expect([of.id, elsewhere[PVB] ?? 0, elsewhere[PVR] ?? 0]).toEqual([of.id, 0, 0]);
         expect([of.id, (elsewhere["LIST backuprepositories namespace"] ?? 0) >= CYCLES]).toEqual([of.id, true]);
+      }
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "reads the pod volume backups while a backup is open and the pod volume restores while a restore is, once at each read, and not the family of the other",
+    async () => {
+      for (const [of, name, kind, own, other] of [
+        [cluster.BACKUPS, BACKUP, "backupOpen", PVB, PVR],
+        [cluster.RESTORES, RESTORE, "restoreOpen", PVR, PVB],
+      ] as const) {
+        await cluster.openPage(frame, of);
+        await cluster.waitForList(frame, of);
+        await cluster.openWorkspace(frame, name, of);
+        // The view asks the family of its band at once when it opens, alone: the window begins once the band was
+        // answered, and after the read of the installation that follows it ended.
+        expect([kind, (await cluster.volumeBand(frame)).state]).toEqual([kind, "none"]);
+        const open = await askedOver(CYCLES);
+
+        report[kind] = open;
+        await cluster.writeReport(REPORT, report);
+        // One list of the family of the band at each read the view waited for, and none of the other family, which
+        // no view that is open shows. The counters carry no namespace: what the node agent of the installation asks
+        // of the four kinds is counted with the reads of the views, as for the lists above, with the same bound.
+        // The run of the pattern on 2026-10-29 saw one list at each read, three of three, with a backup and with a
+        // restore open, and none of the other family; the bound stays the one of the lists.
+        expect([kind, (open[own] ?? 0) >= CYCLES, (open[own] ?? 0) <= CYCLES + 1]).toEqual([kind, true, true]);
+        expect([kind, open[other] ?? 0]).toEqual([kind, 0]);
+        await cluster.closeWorkspace(frame);
       }
     },
     TIMEOUT,

@@ -116,6 +116,8 @@ function answers(more: Answers = {}): Answers {
     [path("storageLocations", B)]: list(),
     [path("snapshotLocations", A)]: list(),
     [path("snapshotLocations", B)]: list(),
+    [path("podVolumeBackups", A)]: list(),
+    [path("podVolumeRestores", A)]: list(),
     ...more,
   };
 }
@@ -581,8 +583,12 @@ describe("workspace of a restore", () => {
     expect(within(workspace).getByTestId("velero-restore-operations").textContent).toBe("1 / 0 / 0");
     expect(within(workspace).queryByTestId("velero-restore-hooks")).toBeNull();
     expect(within(workspace).queryByTestId("velero-restore-completed-note")).toBeNull();
-    // Opening a restore asks nothing: what it shows was read with the installation.
-    expect(asked).toHaveLength(before);
+    // Opening a restore asks the pod volume restores of its installation at once, which its band is made of, and
+    // nothing else: what else it shows was read with the installation.
+    await waitFor(() =>
+      expect(within(workspace).getByTestId("velero-volume-band").getAttribute("data-state")).toBe("rows"),
+    );
+    expect(asked.slice(before)).toEqual([path("podVolumeRestores", A)]);
     expect(asked.every((address) => !/request/i.test(address))).toBe(true);
     expect(document.activeElement).toBe(screen.getByTestId("velero-back"));
     expect(screen.getByTestId("velero-back").textContent).toContain("Restores");

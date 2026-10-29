@@ -16,6 +16,7 @@ import { stageStrip } from "../../common/stages";
 import { ArtifactPanel } from "../components/artifact-panel";
 import { Phase, Signal, time } from "../components/status";
 import styles from "../components/views.module.css";
+import { VolumeBand } from "../components/volume-band";
 import { Fact, NotShown, Restores, Stale, Target, Workspace } from "../components/workspace";
 import { panelId, tabId, WorkspaceTabs } from "../components/workspace-tabs";
 import { openTab, showTab } from "../navigation";
@@ -169,6 +170,7 @@ const Summary = observer(({ installation, backup, now }: SummaryProps) => {
         </Fact>
       </div>
       {isStale(read) ? <Stale kind="backup" read={read} /> : null}
+      <VolumeBand installation={installation} kind="Backup" owner={backup} state={view.state} />
 
       <h3 className={styles.sectionTitle}>Current stage</h3>
       <ol className={styles.stages} data-testid="velero-backup-stages">

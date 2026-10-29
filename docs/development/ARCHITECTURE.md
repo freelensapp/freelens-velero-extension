@@ -303,11 +303,35 @@ families are asked again every 15 seconds: the details of the host, which the ho
 draws where no view of the extension is, compute with the last read of the views,
 and say its age when no view is open or when it is older than that period.
 
+The operations of the volumes are found the same way, in an
+[index](../../src/common/volume-index.ts) made once for a read
+([SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md), REQ-194), in one
+pass over each of the two families of the pod volume operations: the operations of
+each backup and of each restore by its namespace and the label of its UID, and the
+operations that name each repository by the namespace and the three labels the
+release names a repository with, the namespace of the volume and the location cut as
+the release cuts a long name, each list from the newest. The
+[memo](../../src/renderer/state/volumes.ts) is one entry for each installation,
+keyed by the reads of those two families as they are stored and by the availability
+of the API, never by what the installation gives of a family, which is a new object
+at each call: a tick of the clock makes no new index, a read makes one, since it
+makes a new array of items, and a family let go is dropped to a new empty read at the
+read after, so a new index then, once. The index is made of the two families alone:
+the owners and the repositories an operation names are found with the maps of the
+reads of their families, made once for each array of items
+([the references](../../src/common/volume-references.ts)), so a read of the backups,
+the restores or the repositories makes no new index. The band of a backup or of a
+restore, what used a repository and the ways of the Volumes tab each find their
+operations in one look of a map ([the band](../../src/common/volume-band.ts)): the
+band of a backup of 200 operations counts them by phase and draws ten of them, and
+the unit measure of the index times the index and that band against the budget of an
+interaction.
+
 The watch of the host is not used for these views. A list every 15 seconds while a
-view is open costs six requests, and one more for each family read on demand that a
-view holds, shows a failed read as such, with what was read before and when, and
-stops when the last view closes. The watch comes with the spec that needs what it
-gives.
+view is open costs six requests, and one more for each family read on demand that
+the views that are open hold, shows a failed read as such, with what was read before
+and when, and stops when the last view closes. The watch comes with the spec that
+needs what it gives.
 
 The families of an installation are one union of eight
 ([the families](../../src/common/discovery.ts)): six read at every read, and the
@@ -316,18 +340,27 @@ them is open ([SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md),
 REQ-178): an installation may hold thousands of them, and a view that does not show
 them does not pay for them. What a view needs of those is said by a holder, in one
 call that replaces what it needed before, and the call answers the function that
-lets it go. The frame of a page is a holder: it needs what its page and the view
-that is open over it read of the families on demand, since the list stays under the
-view, and calls again when the view changes, so that a view that changes from one
-kind to another never lets go of a family both need. A family needed and never read
+lets it go. The frame of a page is a holder: it needs what its page and every view of
+the way that is open over it read of the families on demand, since the list stays
+under the views and the way back leads to each of them, and calls again when the way
+changes, so that a way that changes never lets go of a family a view still on it
+needs. A backup, a pod volume backup opened from its band and the storage location
+of that operation keep the pod volume backups between them, and the way back draws
+the operation and the band from what was read, with no view that waits for its
+family again; the address names every view of the way as open, so a family is read
+while a view that needs it is open, at one list of it at each read while the way is,
+as decided while implementing, on 2026-10-29. A family needed and never read
 is asked at once, alone, in the generation, through the same guarded read; then at
 every read while it is held. A family no holder needs is not asked at the read after
 it was let go, and what was read of it goes then: a view opened again within a read
 finds it still read, and no timer is added. A new generation keeps the holders and
 empties the reads, and an answer of a family no holder needs any more is not taken.
-The Overview, the lists of the other kinds and the views of a backup, a restore, a
-schedule and a repository hold none; the sections of the details of the host hold
-none and ask nothing.
+The views of a backup and of a restore hold their family of the operations, the pod
+volume backups of a backup and the pod volume restores of a restore, which the band
+of their summary shows, and the view of a repository holds both, for what used it,
+since the second pull request of T5.1; the Overview, the lists of the other kinds and
+the views of a schedule and of a location hold none; the sections of the details of
+the host hold none and ask nothing.
 
 What is [known of a family](../../src/common/read-state.ts) is what the last read
 that ended said of it. A family that is asked again keeps that, and is marked as
@@ -415,14 +448,18 @@ T5.1 they are eight: the five of the first milestones, `backup-repository`,
 `pod-volume-backup` and `pod-volume-restore`, and a reference to a backup
 repository, a pod volume backup or a pod volume restore that is found leads to its
 view as the others do. Each view reads the families it shows, and the notices over
-it are of those alone, as decided while implementing, on 2026-10-26: a backup, a
-restore and a schedule the backups, the restores, the schedules and the two
-locations; a repository the repositories and the storage locations, the operations
-that use it coming with the band that shows them; an operation its own family,
-which the frame holds, the family of its owner, the storage locations and the
-repositories. The pod and the node of an operation are the links of the host to their
-details (`LinkToPod`, `LinkToNode`), which read nothing and leave the host to read
-the object when its drawer opens.
+it are of those alone, as decided while implementing, on 2026-10-26: a schedule the
+backups, the restores, the schedules and the two locations; a backup and a restore
+those, and since the second pull request of T5.1 their own family of the
+operations, the pod volume backups of a backup and the pod volume restores of a
+restore, which the frame holds for the band of their summary; a repository the
+repositories and the storage locations, and since that pull request the two families
+of the pod volume operations and the backups and the restores, which what used it
+counts and leads to, as decided while implementing, on 2026-10-29; an operation its
+own family, which the frame holds, the family of its owner, the storage locations
+and the repositories. The pod and the node of an operation are the links of the host
+to their details (`LinkToPod`, `LinkToNode`), which read nothing and leave the host
+to read the object when its drawer opens.
 
 ### The Time Of An Operation And The History Of A Schedule
 
@@ -620,7 +657,8 @@ copy it holds: the panel says until when it holds it. What the panel and the
 viewers say in numbers and in names they write as attributes as well, which the
 suites read beside the words.
 
-A viewer is given the text of its tab and nothing else of the load. The parsers of
+A viewer is given the text of its tab and nothing else of the load, and the viewer
+of the volumes the ways of its rows as well. The parsers of
 the [log](../../src/common/artifact-log.ts), of the
 [results](../../src/common/artifact-results.ts), of the
 [resources](../../src/common/artifact-resources.ts) and of the
@@ -645,6 +683,33 @@ list of lines, or the rows of the resources, take what the panel leaves, between
 a least and a most of their own, so that a list is whole in the room it is read
 in. Nothing is counted on the window: where the target bar leaves the view less
 than the room of a list, the page is scrolled.
+
+A row of the volumes whose method is PodVolumeBackup or PodVolumeRestore carries the
+namespace of its pod, its pod and its volume, as `pvbInfo` and `pvrInfo` write them,
+each a text, and none of the three when one is not. Its details lead to the pod
+volume operation of the installation that matches it
+([SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md), REQ-188): one of
+the operations of the owner of the tab, found in the index by the label of its UID,
+that names that namespace, that pod and that volume, the newest when more than one
+names the same, opened over the backup or the restore by a command of the
+extension. When none matches, nothing is offered and nothing is said absent: the rows
+are what the store holds, and the operations may be gone; a family never read, or
+denied, has no operation to offer, even when a read before found one, as the table
+of the states of SPEC-0014 says, while a read that failed, or of a kind no longer
+served, keeps the ways of the read before, as the band keeps its rows, the notice
+over the view saying when the family was read.
+The [ways](../../src/common/volume-band.ts) of the rows,
+from that namespace, that pod and that volume to the view they open, are given by the
+panel to the viewer of the volumes and to no other. The viewers are memoized, and the
+panel is drawn again at every tick of the clock of the views and at every read: the
+ways are the same object for as long as they lead to the same operations, in
+whatever order
+([their memo](../../src/renderer/state/volumes.ts)), made again from the index when a
+read makes a new one and kept when the new ones are the same, so that the viewer is
+drawn again only when a read changes where its rows lead. A memo of the panel keyed by
+the index would give a new object at each read, since each read makes a new index,
+and the viewer would be drawn again at each read, as decided while implementing, on
+2026-10-29.
 
 The tabs rest on facts of the host, which the
 [directives](../../AGENTS.md#host-facts-that-cost-a-run-to-find) record. Its input
