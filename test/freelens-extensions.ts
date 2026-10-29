@@ -1,6 +1,6 @@
 // What stands for the host in the tests: the API of `@freelensapp/extensions` as the host gives it on its global,
 // written from its source at the validation target, freelensapp/freelens at
-// 7801fb10a5f20af308093b39e5f79cd6e8c3461d, with a record of what was asked of it. Every part names the file
+// b9b53e16056578c5407312eba5823a089972f6d5, with a record of what was asked of it. Every part names the file
 // and the lines it follows. A namespace has the names it has a double for and refuses any other, recorded with
 // what the scaffold must not reach: a name the SDK of v2 does not export has no double, since a double of such a
 // name does not compile (the `satisfies` of each namespace below), so a component or a function the host

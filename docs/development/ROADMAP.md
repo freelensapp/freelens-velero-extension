@@ -12,11 +12,11 @@ every PR that starts, completes, or re-scopes a feature. The process is in
 the end of each milestone.
 
 The compatibility reference is Freelens v2, at the validation target of
-[SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md): the nightly
-v2.0.0-0-nightly-2026-10-25, built from freelensapp/freelens
-`7801fb10a5f20af308093b39e5f79cd6e8c3461d`, with `@freelensapp/extensions`
-2.0.0-0-nightly-2026-10-25 pinned exactly. The target moves with the
-[host drift watch](PROCESS.md#host-drift-watch) until Freelens 2.0.0 is released.
+[SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md): the release Freelens 2.0.0,
+built from freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, its
+tag v2.0.0, with `@freelensapp/extensions` 2.0.0 pinned exactly. The target moved
+with the [host drift watch](PROCESS.md#host-drift-watch) until Freelens 2.0.0 was
+released; the row of M6 below makes the pin of the SDK a range of versions.
 Velero is v1.18.4 with the AWS plugin v1.14.4 (see [RECON-T0.1.md](RECON-T0.1.md)).
 v1.0.0 ships for Freelens v2 and not for Freelens 1, which lists the package as
 Incompatible and runs none of it. The checks of M1 to M3 and of T3.1 and T3.2

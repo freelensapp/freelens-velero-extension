@@ -2780,7 +2780,7 @@ function prepareDemo(): void {
 }
 
 // The suites run from this repository, under its Vitest, and start the Freelens that FREELENS_APP names:
-// the nightly of the validation target on a machine of a developer, a build of the host from source in CI.
+// the package of the validation target on a machine of a developer, a build of the host from source in CI.
 // E2E_TEST_PATTERN names what is run: one name, or several separated by spaces, each a part of the names
 // of the files, as Vitest takes it. CI names every suite of the views and FND-10, in one run.
 function runViews(): void {

@@ -63,9 +63,9 @@ reviewed. Scope and progress toward v1.0.0 are in `docs/development/ROADMAP.md`.
   must not delay a ready release or justify omitted requirements.
 - The validation target is the one of
   [SPEC-0015](docs/specs/SPEC-0015-freelens-v2-host.md): Freelens v2 at
-  freelensapp/freelens `7801fb10a5f20af308093b39e5f79cd6e8c3461d`, the base of the
-  nightly v2.0.0-0-nightly-2026-10-25, with the SDK `@freelensapp/extensions`
-  2.0.0-0-nightly-2026-10-25 pinned exactly, the version the tests build against.
+  freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the
+  tag v2.0.0 of the release Freelens 2.0.0, with the SDK `@freelensapp/extensions`
+  2.0.0 pinned exactly, the version the tests build against.
   `engines.freelens` is `^2.0.0`. Until Freelens 2.0.0 is released the target moves
   with the [host drift watch](docs/development/PROCESS.md#host-drift-watch), read
   before every slice and before every merge; then the pin of the SDK becomes a
@@ -366,8 +366,8 @@ test environment and of the process of this repository.
   of the same environment; the proxy refuses with 403 a request that carries no
   token, as read in the source at the target
   (`packages/core/src/main/kubeconfig-manager/kubeconfig-manager.ts`, lines 177 to
-  191; `packages/core/src/main/kube-tools/kube-tools.ts`, lines 119 to 122;
-  `packages/core/src/main/freelens-proxy/freelens-proxy.ts`, lines 447 to 461). The
+  191; `packages/core/src/main/kube-tools/kube-tools.ts`, lines 124 to 127;
+  `packages/core/src/main/freelens-proxy/freelens-proxy.ts`, lines 455 to 473). The
   tunnel gives kubectl that environment whole: the plugin of the kubeconfig of a
   cluster runs in freelens-k8s-proxy alone, as the suite of the tabs proves with the
   identity of an `exec` plugin.
@@ -614,16 +614,18 @@ test environment and of the process of this repository.
   is the one of the API server, as read in the source at the target and in what it
   bundles. The proxy of the main process takes a read of the frame on `/api-kube` to
   the freelens-k8s-proxy of the cluster (`packages/core/src/main/freelens-proxy/freelens-proxy.ts`,
-  lines 463 to 522), on the fetch path of http-proxy-3 2.0.2, the version its
+  lines 475 to 534), on the fetch path of http-proxy-3 2.0.2, the version its
   lockfile resolves, with the `fetch` of undici 8.12.3 and its pool of HTTP/2 to that
-  proxy (`packages/core/src/main/cluster/freelens-k8s-proxy-target.ts`, lines 112 to
-  124 and 154 to 168). http-proxy-3 passes on every header of the answer of `fetch`
+  proxy (`packages/core/src/main/cluster/freelens-k8s-proxy-target.ts`, lines 111 to
+  123 and 152 to 166). http-proxy-3 passes on every header of the answer of `fetch`
   (`dist/lib/http-proxy/passes/web-incoming.js`, lines 350 to 356 and 369 to 374)
   but the hop-by-hop `transfer-encoding`, and `connection` and `keep-alive` on
   HTTP/2 (`web-outgoing.js`, lines 56 to 61 and 139 to 149), and the host changes no
-  header of an answer but the `location` of a redirect (`freelens-proxy.ts`, lines
-  359 to 373 and 420 to 434). Node, 24.22.0 in the Electron 43.8.3 of the target, as
-  the packaged application reports it, writes a Date only for an answer that has
+  header of an answer but the `location` of a redirect and `cache-control`, which it
+  sets to `no-store` on every answer of the API (`freelens-proxy.ts`, lines 93 to 98,
+  366 to 381, 428 to 442 and 455 to 458). Node, 24.22.1 in the Electron 44.10.0 of
+  the target, as the `DEPS` of Electron v44.10.0 names it, and with the same two
+  files as Node 24.22.0, writes a Date only for an answer that has
   none (`lib/internal/http2/core.js`, lines 2690 to 2701, and
   `lib/_http_outgoing.js`, lines 503 and 504, for HTTP/1.1). freelens-k8s-proxy
   2.0.0 passes the answer of the API server on with the proxy handler of kubectl
@@ -885,8 +887,8 @@ must not be mapped.
 
 The libraries of the host are devDependencies at the versions of the catalog of
 the host, React and its DOM 19.3.1, MobX 7.0.6, the bindings 10.0.2, with their
-types, and `electron` 43.8.3 for its types alone; `@freelensapp/extensions` is
-pinned exactly to the nightly of the validation target. pnpm runs with
+types, and `electron` 44.10.0 for its types alone; `@freelensapp/extensions` is
+pinned exactly to the version of the validation target. pnpm runs with
 `strictPeerDependencies`: a library shared with the host outside the peer range of
 the SDK fails the install.
 

@@ -5,7 +5,7 @@
 - **Milestone / tasks:** M3 / T2.3, in three pull requests
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, since the drift watch of 2026-10-13; written against v1.18.2, `c253c7fe37d78c9b7e55c68544f7c5b2608712d8`
 - **Reviewed main:** `e5d9354ddf7607e0bad3ebc7744a4964c24b489a`
-- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `7801fb10a5f20af308093b39e5f79cd6e8c3461d`, the base of the nightly v2.0.0-0-nightly-2026-10-25, which moves with the host drift watch until Freelens 2.0.0 is released; this spec was implemented and first verified on v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and verified again on v2 at T0.8
+- **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0, to which the host drift watch moved it; this spec was implemented and first verified on v1.10.3, `3da74415bff57a77c6e08cb5f538191ce87bac17`, and verified again on v2 at T0.8
 - **Dependencies:** [the write gate](SPEC-0009-write-gate.md), [the request and its transport](SPEC-0010-diagnostic-request-and-transport.md), [states and Backups](SPEC-0003-backup-read-only.md), [Restores](SPEC-0005-restore-read-only.md)
 - **Approval:** Approved by the lead maintainer on 2026-09-30, as drafted
 

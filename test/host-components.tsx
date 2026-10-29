@@ -1,5 +1,5 @@
 // What stands for the components of the host in the tests of the views, written from their source at the
-// validation target, freelensapp/freelens at 7801fb10a5f20af308093b39e5f79cd6e8c3461d. Each draws the markup
+// validation target, freelensapp/freelens at b9b53e16056578c5407312eba5823a089972f6d5. Each draws the markup
 // the component of the host draws for the props the extension gives it, with the classes the host gives,
 // and does what it does with the events a test sends; each names the file and the lines it follows. What a
 // component does that no test can see, its styles and its layout, is not drawn, and what it would do with a
