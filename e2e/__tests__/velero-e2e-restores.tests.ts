@@ -341,6 +341,7 @@ describe("views of the restores", () => {
       expect(await cluster.volumeBand(frame)).toMatchObject({
         kind: "PodVolumeRestore",
         state: "none",
+        sentence: "The restore waits for its plugin operations, which is when its data downloads run.",
         words: NO_POD_VOLUME_RESTORE,
         rows: [],
         more: false,

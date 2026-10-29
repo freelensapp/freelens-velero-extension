@@ -1687,9 +1687,7 @@ describe("the log, the results, the resources and the volumes of an operation", 
         await frame.locator("[data-testid=velero-volume-band] button, [data-testid=velero-volume-band] a").count(),
       ).toBe(0);
       // The band says nothing of the items of the backup, whose progress is in the status, with its note.
-      expect(await frame.locator("[data-testid=velero-volume-band] [data-testid=velero-backup-progress]").count()).toBe(
-        0,
-      );
+      expect(await frame.locator("[data-testid=velero-volume-band]").innerText()).not.toContain("item");
       expect(await frame.locator("[data-testid=velero-backup-progress]").count()).toBe(1);
       await expectNoWrite(earlier, writesBefore);
     },

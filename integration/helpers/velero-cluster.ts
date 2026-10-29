@@ -674,7 +674,9 @@ function sameCounts(one: Record<string, number>, other: Record<string, number>):
  * controllers of the installation, in their own namespace. A step that asks
  * what is `expected`, nothing unless said, is one that was taken once with
  * that counted and nothing else; the step is taken again, after `again` has
- * undone it, when something else was. A step that asks the cluster is counted
+ * undone it, when something else was. A count of zero in `expected` never
+ * matches, since what was not asked is not counted: a family that must not
+ * be asked is left out of it. A step that asks the cluster is counted
  * every time it is taken: a view that asks a family when it opens asks it
  * again at each try, since the read of the installation each try begins after
  * drops what the view that closed let go.
