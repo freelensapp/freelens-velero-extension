@@ -52,6 +52,7 @@ import {
   CLEAR_STATES,
   clearTabFixtures,
   createViewFixtures,
+  EARLIER_BACKUP_UID,
   EXEC_CREDENTIAL_VERSION,
   execPluginKubeconfig,
   FIXTURE_LABEL,
@@ -62,6 +63,7 @@ import {
   fixtureDeletionRequest,
   fixtureNames,
   fixtureNamespaces,
+  generatedName,
   isRefused,
   LIVE_RETENTION,
   LONG_BACKUP_NAME,
@@ -131,16 +133,19 @@ import {
   tabRemovalWords,
   UNAVAILABLE_MESSAGE,
   unlikeTheTakenBackup,
+  VIEW_ELSEWHERE,
   VIEW_OF_AN_EXEC_PLUGIN,
   VIEW_READER,
   VIEW_READER_OF_RESTORES,
   VIEW_WITHOUT_PORT_FORWARD,
+  VIEW_WORKLOADS,
   VOLUME_BYTES,
   VOLUME_NAME,
   VOLUME_SCRIPT,
   viewFixtures,
   viewIdentityOfAnExecPlugin,
   viewIdentityWithoutPortForward,
+  viewOperationFixtures,
   volumeArtifactPaths,
   volumeLog,
 } from "../e2e/scripts/local-fixtures.mts";
@@ -2500,6 +2505,8 @@ describe("foundation fixture boundaries", () => {
 
     expect(placed).toEqual({
       views: viewFixtures("synthetic-owner", run).filter((resource) => resource.kind !== "Namespace").length,
+      // Twenty-three pod volume operations and nine repositories.
+      operations: 32,
       overview: overviewFixtures("synthetic-owner", run, now).length,
       scale: SCALE_BACKUPS,
       restores: SCALE_RESTORES,
@@ -2543,6 +2550,230 @@ describe("foundation fixture boundaries", () => {
     expect(target.changes()).toBe(changes);
     expect(target.removed).toEqual([]);
     expect([...target.objects.entries()]).toEqual(objects);
+  });
+
+  // The owners of the operations of the views as the cluster gives them back: each with a UID of its own.
+  const viewOwners = (run: string) =>
+    viewFixtures("synthetic-owner", run).map((resource, index) => ({
+      ...resource,
+      metadata: { ...resource.metadata, uid: `owner-uid-${index}` },
+    }));
+
+  it("places the pod volume operations of the views after their owners, each naming the UID the cluster gave its owner", () => {
+    const names = fixtureNames(run);
+    const started = Date.parse("2026-09-28T07:31:17.123Z");
+    const target = cluster("synthetic-owner", Date.parse("2026-09-28T07:43:00Z"));
+
+    createViewFixtures(target.runtime as never, run, started, Date.parse("2026-09-28T07:45:00Z"));
+    const operations = [...target.objects.values()].filter(
+      (item) =>
+        (item.kind === "PodVolumeBackup" || item.kind === "PodVolumeRestore") &&
+        item.metadata.namespace === names.views,
+    );
+
+    expect(operations).toHaveLength(23);
+    for (const operation of operations) {
+      const kind = operation.kind === "PodVolumeBackup" ? "Backup" : "Restore";
+      const [reference] = operation.metadata.ownerReferences as { kind: string; name: string; uid: string }[];
+      const owner = target.find(kind, names.views, reference.name);
+      const labels = operation.metadata.labels as Record<string, string>;
+      const word = kind.toLowerCase();
+
+      expect(owner?.metadata.uid).toMatch(/^uid-\d+$/);
+      expect(operation.metadata.ownerReferences).toEqual([
+        { apiVersion: "velero.io/v1", kind, name: owner?.metadata.name, uid: owner?.metadata.uid, controller: true },
+      ]);
+      expect(labels[`velero.io/${word}-name`]).toBe(owner?.metadata.name);
+      expect(labels[`velero.io/${word}-uid`]).toBe(
+        owner?.metadata.name === "views-daily-20260901030000" ? EARLIER_BACKUP_UID : owner?.metadata.uid,
+      );
+      expect(labels).toMatchObject({ [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" });
+      expect(String(operation.metadata.name)).toMatch(new RegExp(`^${String(owner?.metadata.name)}-[a-z0-9]{5}$`));
+      // Created after its owner was read back.
+      expect(
+        target.order.indexOf(
+          `${String(operation.kind).toLowerCase()}/${names.views}/${String(operation.metadata.name)}`,
+        ),
+      ).toBeGreaterThan(target.order.indexOf(`${word}/${names.views}/${String(owner?.metadata.name)}`));
+    }
+    // The one of an earlier backup of the same name is the one of `views-daily-20260901030000`, and no other.
+    expect(
+      operations.filter(
+        (item) => (item.metadata.labels as Record<string, string>)["velero.io/backup-uid"] === EARLIER_BACKUP_UID,
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("refuses the operations of the views when an owner is not there or has no UID, and names it", () => {
+    const names = fixtureNames(run);
+    const started = Date.parse("2026-09-28T07:31:17.123Z");
+
+    for (const [kind, name] of [
+      ["Backup", "backup-inprogress"],
+      ["Backup", "views-history-4"],
+      ["Backup", LONG_BACKUP_NAME],
+      ["Backup", "views-daily-20260901030000"],
+      ["Restore", "restore-mapped"],
+    ]) {
+      const words = `The ${kind.toLowerCase()} ${name} of ${names.views} that owns pod volume operations of the views is not there`;
+      const without = viewOwners(run).filter((item) => !(item.kind === kind && item.metadata.name === name));
+      const unread = viewOwners(run).map((item) =>
+        item.kind === kind && item.metadata.name === name
+          ? { ...item, metadata: { ...item.metadata, uid: undefined } }
+          : item,
+      );
+
+      expect(() => viewOperationFixtures("synthetic-owner", run, started, without)).toThrow(words);
+      expect(() => viewOperationFixtures("synthetic-owner", run, started, unread)).toThrow(words);
+      expect(() =>
+        viewOperationFixtures("synthetic-owner", run, started, viewFixtures("synthetic-owner", run)),
+      ).toThrow("that owns pod volume operations of the views is not there");
+    }
+  });
+
+  it("gives the operations of the views the phases the release writes, with the times of each, and nothing of the data movement", () => {
+    const started = Date.parse("2026-09-28T07:31:17.123Z");
+    const made = viewOperationFixtures("synthetic-owner", run, started, viewOwners(run));
+    const of = (kind: string, owner: string) =>
+      made.filter((item) => item.kind === kind && item.metadata.ownerReferences?.[0]?.name === owner);
+    const phase = (item: KubeResource) => (item.status as { phase?: string } | undefined)?.phase;
+    const status = (item: KubeResource) => (item.status ?? {}) as Record<string, unknown>;
+
+    expect(of("PodVolumeBackup", "backup-inprogress").map(phase)).toEqual([
+      undefined,
+      "New",
+      "Accepted",
+      "Prepared",
+      "InProgress",
+      "InProgress",
+      "Canceling",
+      "Completed",
+      "Completed",
+      "Failed",
+      "Failed",
+      "Canceled",
+      "Completed",
+    ]);
+    expect(of("PodVolumeBackup", "views-history-4").map(phase)).toEqual(["Failed"]);
+    expect(of("PodVolumeBackup", LONG_BACKUP_NAME).map(phase)).toEqual(["InProgress"]);
+    expect(of("PodVolumeBackup", "views-daily-20260901030000").map(phase)).toEqual(["Completed"]);
+    expect(of("PodVolumeRestore", "restore-mapped").map(phase)).toEqual([
+      "New",
+      "Accepted",
+      "InProgress",
+      "Completed",
+      "Failed",
+      "Canceled",
+      "Completed",
+    ]);
+    expect(
+      made.map((item) => item.kind).filter((kind) => !kind.startsWith("Pod") && kind !== "BackupRepository"),
+    ).toEqual([]);
+    const backups = of("PodVolumeBackup", "backup-inprogress");
+    const restores = of("PodVolumeRestore", "restore-mapped");
+
+    // What each phase carries, as the node agent writes it: the accepted time from Accepted on, a start from
+    // InProgress, the completion of an end; the total of an InProgress or none; the bytes equal at Completed.
+    expect(Object.keys(status(backups[2])).sort()).toEqual(["acceptedTimestamp", "phase"]);
+    expect(status(backups[4]).progress).toEqual({ totalBytes: 256 * 1024 * 1024, bytesDone: 64 * 1024 * 1024 });
+    expect(status(backups[5]).progress).toEqual({ bytesDone: 32 * 1024 * 1024 });
+    expect(status(backups[7])).toMatchObject({
+      snapshotID: expect.stringMatching(/^[0-9a-f]{32}$/),
+      incrementalBytes: 8 * 1024 * 1024,
+    });
+    expect((status(backups[7]).progress as { totalBytes: number; bytesDone: number }).bytesDone).toBe(
+      (status(backups[7]).progress as { totalBytes: number }).totalBytes,
+    );
+    expect(status(backups[8])).toMatchObject({ message: "volume was empty so no snapshot was taken" });
+    expect(status(backups[8]).snapshotID).toBeUndefined();
+    expect(String(status(backups[9]).message).split("\n").length).toBeGreaterThan(1);
+    expect(status(backups[9]).startTimestamp).toBe(status(backups[9]).completionTimestamp);
+    expect(status(backups[10])).toEqual({
+      phase: "Failed",
+      acceptedTimestamp: status(backups[10]).acceptedTimestamp,
+      message: "timeout on preparing PVB",
+    });
+    expect(status(backups[11]).startTimestamp).toBe(status(backups[11]).completionTimestamp);
+    expect((backups[12].spec as { uploaderType?: string }).uploaderType).toBe("");
+    expect(status(restores[1])).toMatchObject({ node: "views-node-1" });
+    expect(status(restores[4])).toEqual({ phase: "Failed", message: "timeout on preparing PVR" });
+    expect((restores[6].spec as { uploaderType?: string }).uploaderType).toBe("restic");
+    expect(status(restores[6]).node).toBeUndefined();
+    // Every time is before the start of the run, counted from its hour.
+    for (const item of made) {
+      for (const [field, value] of Object.entries(status(item))) {
+        if (field.endsWith("Timestamp") || field === "lastMaintenanceTime") {
+          expect(Date.parse(String(value))).toBeLessThanOrEqual(Date.parse("2026-09-28T07:00:00Z"));
+        }
+      }
+    }
+    // The same run and start give the same objects, and another run other names.
+    expect(viewOperationFixtures("synthetic-owner", run, started + 60_000, viewOwners(run))).toEqual(made);
+    expect(generatedName(run, "restore-mapped", 0)).not.toBe(generatedName(`${run}x`, "restore-mapped", 0));
+  });
+
+  it("places the repositories of the views with the three labels the release writes, two of one triple, and names the triples the operations use", () => {
+    const started = Date.parse("2026-09-28T07:31:17.123Z");
+    const made = viewOperationFixtures("synthetic-owner", run, started, viewOwners(run));
+    const repositories = made.filter((item) => item.kind === "BackupRepository");
+    const triple = (item: KubeResource) => {
+      const labels = item.metadata.labels as Record<string, string>;
+
+      return [
+        labels[REPOSITORY_LABELS.volumeNamespace],
+        labels[REPOSITORY_LABELS.location],
+        labels[REPOSITORY_LABELS.type],
+      ].join("/");
+    };
+    const spec = (item: KubeResource) => item.spec as Record<string, string>;
+
+    expect(repositories).toHaveLength(9);
+    for (const repository of repositories) {
+      expect(triple(repository)).toBe(
+        [
+          spec(repository).volumeNamespace,
+          spec(repository).backupStorageLocation,
+          spec(repository).repositoryType,
+        ].join("/"),
+      );
+      expect(Object.values(repository.metadata.labels ?? {}).every((value) => value.length <= 63)).toBe(true);
+      expect(repository.metadata.name.length).toBeLessThanOrEqual(253);
+    }
+    expect(repositories.filter((item) => triple(item) === "views-twice/views-available/kopia")).toHaveLength(2);
+    expect(repositories.map((item) => item.metadata.name.length)).toEqual(expect.arrayContaining([63, 133]));
+    expect(repositories.map((item) => (item.status as { phase?: string } | undefined)?.phase)).toEqual([
+      "Ready",
+      "Ready",
+      "NotReady",
+      undefined,
+      "Ready",
+      "Ready",
+      "Ready",
+      "Ready",
+      "Ready",
+    ]);
+    // The triples of the operations: the ones of kopia and of restic of the workloads, and one of none.
+    const named = new Set(repositories.map(triple));
+    const used = made
+      .filter((item) => item.kind.startsWith("Pod"))
+      .map((item) => {
+        const of = item.spec as {
+          pod: { namespace: string };
+          sourceNamespace?: string;
+          backupStorageLocation: string;
+          uploaderType: string;
+        };
+
+        return [
+          of.sourceNamespace ?? of.pod.namespace,
+          of.backupStorageLocation,
+          of.uploaderType === "restic" ? "restic" : "kopia",
+        ].join("/");
+      });
+
+    expect(used).toContain(`${VIEW_WORKLOADS}/views-available/kopia`);
+    expect(used).toContain(`${VIEW_WORKLOADS}/views-available/restic`);
+    expect(used.filter((one) => !named.has(one))).toEqual([`${VIEW_ELSEWHERE}/views-available/kopia`]);
   });
 
   it("puts in place again what is placed by the clock when it is older than it is good for, and nothing else", () => {

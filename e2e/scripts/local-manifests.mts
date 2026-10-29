@@ -40,6 +40,7 @@ export interface KubeResource {
     labels?: Record<string, string>;
     annotations?: Record<string, string>;
     resourceVersion?: string;
+    ownerReferences?: { apiVersion: string; kind: string; name: string; uid: string; controller?: boolean }[];
   };
   [key: string]: unknown;
 }

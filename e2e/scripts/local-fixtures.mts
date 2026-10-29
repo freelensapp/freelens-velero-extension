@@ -967,6 +967,345 @@ export function viewFixtures(
   ];
 }
 
+// The name of an object the release creates with a generated name: the name it is given, a dash, and five
+// lower-case letters and digits. These are made of the run, the owner and the place of the object among the ones
+// of that owner, not drawn by chance, so that a second placement finds each by its name.
+export function generatedName(run: string, owner: string, index: number): string {
+  const characters = "abcdefghijklmnopqrstuvwxyz0123456789";
+  const digest = createHash("sha256").update(`${run}/${owner}/${index}`).digest();
+
+  return `${owner}-${[...digest.subarray(0, 5)].map((byte) => characters[byte % characters.length]).join("")}`;
+}
+
+// The workloads the operations of the views name, as text: no pod, namespace or node of these names exists.
+export const VIEW_WORKLOADS = "views-workloads";
+export const VIEW_ELSEWHERE = "views-elsewhere";
+// The UID the label of a pod volume backup carries when it was written for an earlier backup of the same name.
+export const EARLIER_BACKUP_UID = "00000000-0000-4000-8000-0000000000e1";
+
+// The pod volume operations and the repositories of the views. Each operation is owned by a backup or a restore
+// of the views that is there, given with the UID the cluster gave it: its owner reference names that UID with
+// `controller: true`, and its labels the name and the UID of its owner, as the release writes them. Every status
+// is one the release writes in that phase; no node agent reads the namespace, and nothing they name exists. The
+// repositories carry the three labels the release writes: the operations name the triples of the first two, and
+// one names a triple of none. Their times are counted back from the start, by the hour, as the ones of the views.
+export function viewOperationFixtures(
+  owner: string,
+  run: string,
+  started: number,
+  owners: KubeResource[],
+): KubeResource[] {
+  requireCondition(owner, "Fixture ownership is required");
+  requireCondition(Number.isFinite(started), "The time the fixtures were started is required");
+  const names = fixtureNames(run);
+  const MINUTE = 60_000;
+  const HOUR = 60 * MINUTE;
+  const start = Math.floor(started / HOUR) * HOUR;
+  const at = (minutes: number) => new Date(start - minutes * MINUTE).toISOString().replace(".000Z", "Z");
+  const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
+  const ownerOf = (kind: "Backup" | "Restore", name: string) => {
+    const found = owners.find(
+      (item) => item.kind === kind && item.metadata.name === name && item.metadata.namespace === names.views,
+    );
+
+    requireCondition(
+      found?.metadata.uid,
+      `The ${kind.toLowerCase()} ${name} of ${names.views} that owns pod volume operations of the views is not there`,
+    );
+    return { name, uid: String(found?.metadata.uid) };
+  };
+  const reference = (kind: "Backup" | "Restore", of: { name: string; uid: string }) => [
+    { apiVersion: "velero.io/v1", kind, name: of.name, uid: of.uid, controller: true },
+  ];
+  const MEBIBYTE = 1024 * 1024;
+  const snapshot = (index: number) =>
+    createHash("sha256").update(`${run}/snapshot/${index}`).digest("hex").slice(0, 32);
+  let made = 0;
+  const backupOf = (
+    of: { name: string; uid: string },
+    status: Record<string, unknown> | undefined,
+    more: { namespace?: string; uploaderType?: string; uidLabel?: string } = {},
+  ): KubeResource => {
+    const index = made++;
+    const pod = `views-app-${index}`;
+    const namespace = more.namespace ?? VIEW_WORKLOADS;
+
+    return {
+      apiVersion: "velero.io/v1",
+      kind: "PodVolumeBackup",
+      metadata: {
+        name: generatedName(run, of.name, index),
+        namespace: names.views,
+        labels: { ...labels, "velero.io/backup-name": of.name, "velero.io/backup-uid": more.uidLabel ?? of.uid },
+        ownerReferences: reference("Backup", of),
+      },
+      spec: {
+        node: "views-node-1",
+        pod: { kind: "Pod", namespace, name: pod, uid: `views-pod-uid-${index}` },
+        volume: `data-${index}`,
+        tags: {
+          backup: of.name,
+          "backup-uid": of.uid,
+          pod,
+          "pod-uid": `views-pod-uid-${index}`,
+          ns: namespace,
+          volume: `data-${index}`,
+        },
+        backupStorageLocation: "views-available",
+        repoIdentifier: "",
+        uploaderType: more.uploaderType ?? "kopia",
+      },
+      ...(status ? { status } : {}),
+    };
+  };
+  const restoreOf = (
+    of: { name: string; uid: string },
+    status: Record<string, unknown>,
+    uploaderType = "kopia",
+  ): KubeResource => {
+    const index = made++;
+
+    return {
+      apiVersion: "velero.io/v1",
+      kind: "PodVolumeRestore",
+      metadata: {
+        name: generatedName(run, of.name, index),
+        namespace: names.views,
+        labels: {
+          ...labels,
+          "velero.io/restore-name": of.name,
+          "velero.io/restore-uid": of.uid,
+          "velero.io/pod-uid": `views-pod-uid-${index}`,
+        },
+        ownerReferences: reference("Restore", of),
+      },
+      spec: {
+        pod: {
+          kind: "Pod",
+          namespace: `${VIEW_WORKLOADS}-restored`,
+          name: `views-app-${index}`,
+          uid: `views-pod-uid-${index}`,
+        },
+        volume: `data-${index}`,
+        backupStorageLocation: "views-available",
+        repoIdentifier: uploaderType === "restic" ? `s3:${STORAGE_ENDPOINT}/${BUCKET}/restic/${VIEW_WORKLOADS}` : "",
+        uploaderType,
+        snapshotID: snapshot(index),
+        sourceNamespace: VIEW_WORKLOADS,
+        snapshotSize: 64 * MEBIBYTE,
+      },
+      status,
+    };
+  };
+  const inProgress = ownerOf("Backup", "backup-inprogress");
+  const history = ownerOf("Backup", "views-history-4");
+  const long = ownerOf("Backup", LONG_BACKUP_NAME);
+  const daily = ownerOf("Backup", "views-daily-20260901030000");
+  const mapped = ownerOf("Restore", "restore-mapped");
+  const several = "data path failed: error to run kopia\nunable to read the source\npermission denied";
+  const operations = [
+    backupOf(inProgress, undefined),
+    backupOf(inProgress, { phase: "New" }),
+    backupOf(inProgress, { phase: "Accepted", acceptedTimestamp: at(9) }),
+    backupOf(inProgress, { phase: "Prepared", acceptedTimestamp: at(9) }),
+    backupOf(inProgress, {
+      phase: "InProgress",
+      acceptedTimestamp: at(9),
+      startTimestamp: at(8),
+      progress: { totalBytes: 256 * MEBIBYTE, bytesDone: 64 * MEBIBYTE },
+    }),
+    backupOf(inProgress, {
+      phase: "InProgress",
+      acceptedTimestamp: at(9),
+      startTimestamp: at(8),
+      progress: { bytesDone: 32 * MEBIBYTE },
+    }),
+    backupOf(inProgress, {
+      phase: "Canceling",
+      acceptedTimestamp: at(9),
+      startTimestamp: at(8),
+      progress: { totalBytes: 128 * MEBIBYTE, bytesDone: 16 * MEBIBYTE },
+    }),
+    backupOf(inProgress, {
+      phase: "Completed",
+      acceptedTimestamp: at(9),
+      startTimestamp: at(8),
+      completionTimestamp: at(6),
+      path: "/host_pods/views-pod-uid-7/volumes/kubernetes.io~empty-dir/data-7",
+      snapshotID: snapshot(7),
+      progress: { totalBytes: 96 * MEBIBYTE, bytesDone: 96 * MEBIBYTE },
+      incrementalBytes: 8 * MEBIBYTE,
+    }),
+    backupOf(inProgress, {
+      phase: "Completed",
+      acceptedTimestamp: at(9),
+      startTimestamp: at(8),
+      completionTimestamp: at(8),
+      path: "/host_pods/views-pod-uid-8/volumes/kubernetes.io~empty-dir/data-8",
+      message: "volume was empty so no snapshot was taken",
+    }),
+    backupOf(inProgress, {
+      phase: "Failed",
+      acceptedTimestamp: at(9),
+      startTimestamp: at(7),
+      completionTimestamp: at(7),
+      message: several,
+    }),
+    backupOf(inProgress, { phase: "Failed", acceptedTimestamp: at(45), message: "timeout on preparing PVB" }),
+    backupOf(inProgress, { phase: "Canceled", startTimestamp: at(5), completionTimestamp: at(5) }),
+    // The uploader the release reads as restic for the repository when it is empty.
+    backupOf(
+      inProgress,
+      {
+        phase: "Completed",
+        acceptedTimestamp: at(9),
+        startTimestamp: at(8),
+        completionTimestamp: at(7),
+        path: "/host_pods/views-pod-uid-12/volumes/kubernetes.io~empty-dir/data-12",
+        snapshotID: snapshot(12),
+        progress: { totalBytes: 4 * MEBIBYTE, bytesDone: 4 * MEBIBYTE },
+      },
+      { uploaderType: "" },
+    ),
+    // A volume of a namespace no repository of the views is for.
+    backupOf(
+      history,
+      {
+        phase: "Failed",
+        acceptedTimestamp: at(4 * 24 * 60 + 2),
+        startTimestamp: at(4 * 24 * 60 + 1),
+        completionTimestamp: at(4 * 24 * 60),
+        message: "data path failed: the volume of the pod could not be read",
+      },
+      { namespace: VIEW_ELSEWHERE },
+    ),
+    backupOf(long, {
+      phase: "InProgress",
+      acceptedTimestamp: at(3),
+      startTimestamp: at(2),
+      progress: { totalBytes: 10 * MEBIBYTE, bytesDone: 5 * MEBIBYTE },
+    }),
+    // Its label names the UID of an earlier backup of the same name; its owner reference, the one that is there.
+    backupOf(
+      daily,
+      {
+        phase: "Completed",
+        acceptedTimestamp: at(30),
+        startTimestamp: at(29),
+        completionTimestamp: at(28),
+        path: "/host_pods/views-pod-uid-16/volumes/kubernetes.io~empty-dir/data-16",
+        snapshotID: snapshot(16),
+        progress: { totalBytes: 2 * MEBIBYTE, bytesDone: 2 * MEBIBYTE },
+      },
+      { uidLabel: EARLIER_BACKUP_UID },
+    ),
+    restoreOf(mapped, { phase: "New" }),
+    restoreOf(mapped, { phase: "Accepted", acceptedTimestamp: at(9), node: "views-node-1" }),
+    restoreOf(mapped, {
+      phase: "InProgress",
+      acceptedTimestamp: at(9),
+      node: "views-node-1",
+      startTimestamp: at(8),
+      progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 16 * MEBIBYTE },
+    }),
+    restoreOf(mapped, {
+      phase: "Completed",
+      acceptedTimestamp: at(9),
+      node: "views-node-1",
+      startTimestamp: at(8),
+      completionTimestamp: at(6),
+      progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 64 * MEBIBYTE },
+    }),
+    restoreOf(mapped, { phase: "Failed", message: "timeout on preparing PVR" }),
+    restoreOf(mapped, {
+      phase: "Canceled",
+      acceptedTimestamp: at(9),
+      node: "views-node-1",
+      startTimestamp: at(8),
+      completionTimestamp: at(7),
+    }),
+    // The legacy controller of the uploader restic writes the start and the completion, and no node.
+    restoreOf(mapped, { phase: "Completed", startTimestamp: at(8), completionTimestamp: at(6) }, "restic"),
+  ];
+  const repository = (
+    volumeNamespace: string,
+    type: "kopia" | "restic",
+    status: Record<string, unknown> | undefined,
+    more: { name?: string; location?: string; frequency?: string } = {},
+  ): KubeResource => {
+    const location = more.location ?? "views-available";
+
+    return {
+      apiVersion: "velero.io/v1",
+      kind: "BackupRepository",
+      metadata: {
+        name: more.name ?? `${volumeNamespace}-${location}-${type}`,
+        namespace: names.views,
+        labels: {
+          ...labels,
+          [REPOSITORY_LABELS.volumeNamespace]: volumeNamespace,
+          [REPOSITORY_LABELS.location]: location,
+          [REPOSITORY_LABELS.type]: type,
+        },
+      },
+      spec: {
+        volumeNamespace,
+        backupStorageLocation: location,
+        repositoryType: type,
+        ...(type === "restic"
+          ? { resticIdentifier: `s3:${STORAGE_ENDPOINT}/${BUCKET}/restic/${volumeNamespace}` }
+          : {}),
+        maintenanceFrequency: more.frequency ?? "87600h0m0s",
+      },
+      ...(status ? { status } : {}),
+    };
+  };
+  const ready = { phase: "Ready", lastMaintenanceTime: at(60) };
+  const repositories = [
+    // Three recent maintenances, the newest failed: the last maintenance is the one before it.
+    repository(VIEW_WORKLOADS, "kopia", {
+      phase: "Ready",
+      lastMaintenanceTime: at(2 * 24 * 60 - 5),
+      recentMaintenance: [
+        { startTimestamp: at(3 * 24 * 60), completeTimestamp: at(3 * 24 * 60 - 5), result: "Succeeded" },
+        { startTimestamp: at(2 * 24 * 60), completeTimestamp: at(2 * 24 * 60 - 5), result: "Succeeded" },
+        {
+          startTimestamp: at(24 * 60),
+          completeTimestamp: at(24 * 60 - 5),
+          result: "Failed",
+          message: "error to run the maintenance of the repository: the lock is held",
+        },
+      ],
+    }),
+    // Ready with no maintenance yet: due.
+    repository(VIEW_WORKLOADS, "restic", { phase: "Ready" }, { frequency: "168h0m0s" }),
+    repository("views-unready", "kopia", {
+      phase: "NotReady",
+      message: "error to connect to the repository\nthe bucket answered 403\nthe credentials were refused",
+    }),
+    repository("views-unreported", "kopia", undefined),
+    repository(
+      "views-due",
+      "kopia",
+      { phase: "Ready", lastMaintenanceTime: at(30 * 24 * 60) },
+      { frequency: "168h0m0s" },
+    ),
+    // Two of the same three labels, which the release refuses.
+    repository("views-twice", "kopia", ready),
+    repository("views-twice", "kopia", ready, { name: "views-twice-views-available-kopia-again" }),
+    // A name of 63 characters, and the one the release makes for a namespace and a location of 63.
+    repository(LONG_NAMESPACE.slice(0, 41), "kopia", ready),
+    repository(`${LONG_NAMESPACE}1`, "kopia", ready, { location: LONG_LOCATION_NAME }),
+  ];
+  const all = [...operations, ...repositories];
+
+  requireCondition(
+    new Set(all.map((item) => `${item.kind}/${item.metadata.name}`)).size === all.length,
+    "Two operations or repositories of the views have one name",
+  );
+  return all;
+}
+
 // An identity that reads some kinds of Velero in one namespace, and nothing else: what it is denied is what
 // the views show of a family that cannot be read.
 function reader(name: string, namespace: string, labels: Record<string, string>, resources: string[]): KubeResource[] {
@@ -1977,7 +2316,14 @@ export function createViewFixtures(
   run: string,
   started: number,
   now = started,
-): { views: number; overview: number; scale: number; restores: number; again: string[] } {
+): {
+  views: number;
+  operations: number;
+  overview: number;
+  scale: number;
+  restores: number;
+  again: string[];
+} {
   const names = fixtureNames(run);
   // The newest backup of the schedule with a history goes first, after the namespaces: the time it was
   // created is the last submission of its schedule. A second call finds the backup, and asks for the
@@ -1993,6 +2339,8 @@ export function createViewFixtures(
 
   requireCondition(Number.isFinite(submitted), "The newest backup of the history has the time it was created");
   const views = createWithStatus(runtime, viewFixtures(runtime.owner, run, started, submitted));
+  // The pod volume operations of the views go after their owners, with the UIDs the cluster gave them.
+  const operations = createWithStatus(runtime, viewOperationFixtures(runtime.owner, run, started, views));
   const labels = { [OWNER_LABEL]: runtime.owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
 
   runtime.apply(scaleFixtures(runtime.owner, run, now).namespace);
@@ -2008,6 +2356,7 @@ export function createViewFixtures(
 
   return {
     views: views.length,
+    operations: operations.length,
     overview: overview.count,
     scale: SCALE_BACKUPS,
     restores: scale.count - SCALE_BACKUPS,
