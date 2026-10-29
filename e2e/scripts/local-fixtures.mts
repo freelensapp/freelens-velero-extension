@@ -4812,11 +4812,13 @@ export function liveVolumeRestore(owner: string, run: string): KubeResource {
       namespace: DEMO_NAMESPACE,
       labels: { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" },
     },
-    // No resource is named: the backup holds the pod alone, and a restore that leaves out the claims and the
-    // persistent volumes makes no pod volume restore.
+    // Pods only: the release restores the volumes of a pod it restores whose pod volume backups hold a snapshot,
+    // whatever else the restore leaves out (pkg/restore/restore.go:2046-2055 and pkg/podvolume/util.go:75-102 of
+    // the release; an emptyDir names no claim, pkg/podvolume/restorer.go:174-193).
     spec: {
       backupName: names.volumeBackup,
       includedNamespaces: [names.source],
+      includedResources: ["pods"],
       namespaceMapping: { [names.source]: names.restored },
       includeClusterResources: false,
       existingResourcePolicy: "none",

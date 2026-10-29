@@ -1367,9 +1367,11 @@ Decided while implementing, on 2026-10-29:
   the run and in `fixture-live-result.json`; it is told as of the run by its three
   labels, removed with `delete --raw` and `preconditions.uid`, refused when the
   labels or the UID differ.
-- The restore of the volume names no resource: its backup holds the pod alone, and
-  a restore that leaves out the claims and the persistent volumes makes no pod
-  volume restore (phase B confirms it: T51-PR4-PENDING).
+- The restore of the volume names the pods alone, as its backup does: the release
+  restores the volumes of a pod it restores whose pod volume backups hold a
+  snapshot, whatever else the restore leaves out, and an `emptyDir` names no claim
+  (`pkg/restore/restore.go:2046-2055`, `pkg/podvolume/util.go:75-102` and
+  `pkg/podvolume/restorer.go:174-193` of the source of the release).
 - The checksum of the restored data is read from the log of each pod, without an
   `exec`.
 - A namespace of the fixtures is removed with the events the cluster wrote of a pod

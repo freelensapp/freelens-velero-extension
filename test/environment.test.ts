@@ -11946,7 +11946,7 @@ describe("the volume of the environment", () => {
     expect(volumeLog("")).toBeUndefined();
   });
 
-  it("backs up the pod by the label of the run and restores it into the destination namespace, naming no resource", () => {
+  it("backs up the pod by the label of the run and restores it into the destination namespace, pods only", () => {
     expect(liveVolumeBackup(owner, run)).toMatchObject({
       metadata: { name: `fixture-volume-backup-${run}`, namespace: "velero-demo" },
       spec: {
@@ -11966,6 +11966,7 @@ describe("the volume of the environment", () => {
     expect(restore.spec).toEqual({
       backupName: names.volumeBackup,
       includedNamespaces: [names.source],
+      includedResources: ["pods"],
       namespaceMapping: { [names.source]: names.restored },
       includeClusterResources: false,
       existingResourcePolicy: "none",
