@@ -638,9 +638,11 @@ one check: none of the fourteen operations of the run is in the installation, ea
 looked for by its name, nor the schedule, nor a backup that carries its label,
 which would be a submission nothing here removes, nor a pod volume operation of the
 volume or its repository, each by its labels; and the store
-holds none of the twenty keys the client may ask of the run, nine of the fourteen
-the server wrote for the real backup and the real restore and the eleven of the
-tabs. A cleanup stopped at
+holds none of the twenty-nine keys the client may ask of the run, nine of the fourteen
+the server wrote for the real backup and the real restore, the eleven of the
+tabs, and the nine the server writes for the backup and the restore of the volume,
+laid out as the ones of the real operations; the keys of the repository of the
+volume, under the prefix of the location, are not asked. A cleanup stopped at
 any point is taken up by the next from what that one finds. A run placed with the
 fixtures of the adherence is cleaned by scripts that know them: scripts older than
 them know neither the three namespaces of the adherence nor the schedule the

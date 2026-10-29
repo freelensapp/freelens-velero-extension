@@ -200,8 +200,30 @@ export function realTabArtifactPaths(run: string) {
   };
 }
 
-// Every key of a run the client of the store may ask for: what the server wrote for the real operations, and
-// what the store is given for the tabs. Once a run is cleaned the store holds none of them.
+// The keys the server writes for the backup of the volume and its restore, laid out as the ones of the real backup
+// and restore: the archive, the log and the results of each, the list of the resources and the volume information.
+// The keys of the repository under the prefix of the location are not keys of an operation, and are not asked.
+export function volumeArtifactPaths(run: string) {
+  const names = fixtureNames(run);
+  const backup = `/${BUCKET}/backups/${names.volumeBackup}/${names.volumeBackup}`;
+  const restore = `/${BUCKET}/restores/${names.volumeRestore}`;
+
+  return {
+    archive: `${backup}.tar.gz`,
+    backupLog: `${backup}-logs.gz`,
+    backupResults: `${backup}-results.gz`,
+    backupResourceList: `${backup}-resource-list.json.gz`,
+    backupVolumeInfo: `${backup}-volumeinfo.json.gz`,
+    restoreLog: `${restore}/restore-${names.volumeRestore}-logs.gz`,
+    restoreResults: `${restore}/restore-${names.volumeRestore}-results.gz`,
+    restoreResourceList: `${restore}/restore-${names.volumeRestore}-resource-list.json.gz`,
+    restoreVolumeInfo: `${restore}/${names.volumeRestore}-volumeinfo.json.gz`,
+  };
+}
+
+// Every key of a run the client of the store may ask for: what the server wrote for the real operations and for
+// the ones of the volume, and what the store is given for the tabs. Once a run is cleaned the store holds none of
+// them.
 export function runArtifactPaths(run: string): string[] {
   const tabs = tabArtifactPaths(run);
 
@@ -210,6 +232,7 @@ export function runArtifactPaths(run: string): string[] {
     ...Object.values(realTabArtifactPaths(run)),
     ...Object.values(tabs.synced),
     ...Object.values(tabs.withoutLog),
+    ...Object.values(volumeArtifactPaths(run)),
   ];
 }
 

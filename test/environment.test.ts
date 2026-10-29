@@ -141,6 +141,7 @@ import {
   viewFixtures,
   viewIdentityOfAnExecPlugin,
   viewIdentityWithoutPortForward,
+  volumeArtifactPaths,
   volumeLog,
 } from "../e2e/scripts/local-fixtures.mts";
 import {
@@ -563,11 +564,28 @@ describe("foundation fixture boundaries", () => {
     const allowed = (path: string) => methods.filter((method) => allowsFixtureArtifact(method, path, run));
     const folder = `/velero-demo/backups/${names.syncedBackup}`;
 
+    const ofTheVolume = Object.values(volumeArtifactPaths(run));
+
     expect(stored).toHaveLength(11);
-    expect(new Set([...Object.values(verified), ...stored, ...read]).size).toBe(20);
-    // The twenty are the keys of the run, which a cleanup asks the store for one by one: the client may
-    // ask whether each is there, and may ask it of no other key.
-    expect(runArtifactPaths(run)).toEqual([...Object.values(verified), ...read, ...stored]);
+    expect(ofTheVolume).toHaveLength(9);
+    expect(new Set([...Object.values(verified), ...stored, ...read, ...ofTheVolume]).size).toBe(29);
+    // The twenty-nine are the keys of the run, which a cleanup asks the store for one by one: the client may
+    // ask whether each is there, and may ask it of no other key. The keys of the volume are the ones the server
+    // writes for its backup and its restore, laid out as the ones of the real operations.
+    expect(runArtifactPaths(run)).toEqual([...Object.values(verified), ...read, ...stored, ...ofTheVolume]);
+    expect(volumeArtifactPaths(run)).toEqual({
+      archive: `/velero-demo/backups/${names.volumeBackup}/${names.volumeBackup}.tar.gz`,
+      backupLog: `/velero-demo/backups/${names.volumeBackup}/${names.volumeBackup}-logs.gz`,
+      backupResults: `/velero-demo/backups/${names.volumeBackup}/${names.volumeBackup}-results.gz`,
+      backupResourceList: `/velero-demo/backups/${names.volumeBackup}/${names.volumeBackup}-resource-list.json.gz`,
+      backupVolumeInfo: `/velero-demo/backups/${names.volumeBackup}/${names.volumeBackup}-volumeinfo.json.gz`,
+      restoreLog: `/velero-demo/restores/${names.volumeRestore}/restore-${names.volumeRestore}-logs.gz`,
+      restoreResults: `/velero-demo/restores/${names.volumeRestore}/restore-${names.volumeRestore}-results.gz`,
+      restoreResourceList: `/velero-demo/restores/${names.volumeRestore}/restore-${names.volumeRestore}-resource-list.json.gz`,
+      restoreVolumeInfo: `/velero-demo/restores/${names.volumeRestore}/${names.volumeRestore}-volumeinfo.json.gz`,
+    });
+    // What the server wrote for the volume is asked whether it is there, and never read or written.
+    for (const path of ofTheVolume) expect([path, allowed(path)]).toEqual([path, ["HEAD"]]);
     expect(() => runArtifactPaths("personal-namespace")).toThrow();
     // What the store is given is written and asked for, never read back and never deleted.
     for (const path of stored) expect([path, allowed(path)]).toEqual([path, ["HEAD", "PUT"]]);
@@ -9256,8 +9274,8 @@ describe("foundation fixture boundaries", () => {
 
     // One read of the installation, which is in the log of the operations; the journal forgets the eleven
     // operations and the schedule, and keeps the rest; and each of the twenty keys of the run is asked for.
-    expect(ended(traces)).toEqual({ keys: 20 });
-    expect(runArtifactPaths(run)).toHaveLength(20);
+    expect(ended(traces)).toEqual({ keys: 29 });
+    expect(runArtifactPaths(run)).toHaveLength(29);
     expect(events).toEqual(["get", "save", ...runArtifactPaths(run).map((path) => `HEAD ${path}`)]);
     expect(clean.target.logged).toEqual([true]);
     expect(traces.left()).toEqual(clean.others);
@@ -9325,8 +9343,8 @@ describe("foundation fixture boundaries", () => {
       kind: "Backup",
       metadata: { name: names.backup, namespace: names.static },
     });
-    expect(ended(namesakes.from)).toEqual({ keys: 20 });
-    // A key of the run the store holds, any of the twenty, is told, and the run is not called cleaned. The
+    expect(ended(namesakes.from)).toEqual({ keys: 29 });
+    // A key of the run the store holds, any of the twenty-nine, is told, and the run is not called cleaned. The
     // journal forgot the operations before the store was asked: it names none of what the cluster no longer
     // holds.
     for (const path of runArtifactPaths(run)) {
@@ -9339,7 +9357,7 @@ describe("foundation fixture boundaries", () => {
           `of a backup with the backup, and nothing here removes a key. The way out is to take the environment ` +
           "down, with `pnpm demo:down`.",
       ]);
-      expect(target.requests).toHaveLength(20);
+      expect(target.requests).toHaveLength(29);
       expect(from.left()).toEqual(others);
     }
     // Nor on a store that does not say whether it holds a key.
