@@ -1435,3 +1435,173 @@ test, one for each kind of the first milestones, and ask no session of the three
 of SPEC-0014. Decided while implementing, on 2026-10-27, for the review of the
 milestone to confirm: the three kinds of SPEC-0014 get their sessions of the
 integration test with their fixtures, in a later pull request of T5.1.
+
+**The move of the pin to Freelens 2.0.0, on 2026-10-29** (REQ-218, HOST-23). The
+validation target moved from `7801fb10` to `b9b53e16056578c5407312eba5823a089972f6d5`,
+the commit of the tag v2.0.0 of the release Freelens 2.0.0, published on 2026-10-28,
+at which the application, its core and the SDK have the version 2.0.0. The SDK
+`@freelensapp/extensions` 2.0.0, the version of its npm tag `latest`, is pinned
+exactly: its declarations differ from the ones of 2.0.0-0-nightly-2026-10-25 in one
+line, the handler of the context menu of the terminal of the host, which returns a
+promise since freelensapp/freelens#2863, a component the extension does not use, and
+its shim is the same file. Its dependencies take chart.js `^4.6.1`, which the
+extension does not import; its peers are the ones of before, each optional: React and
+its DOM `^19.3.1`, MobX `^7.0.6`, mobx-react `^10.0.2`, the editor `^0.57.0`, which
+the extension does not use, and Electron `>=43.0.0`; it declares no engine. The pin
+moved in the header above, in the line `freelens_ref` of the workflows of the views
+and of the integration, in the manifest and its build test, and in every document that
+named the commit, the nightly or the SDK of before, but the history of the evidence,
+the records of the moves and the links of SPEC-0014, which T5.1 read at `7801fb10` and
+which hold their text at the same lines at the new commit. Electron 44.10.0, for its
+types, and pnpm 12.15.0 take the versions of the host at the tag, the catalog of its
+`pnpm-workspace.yaml` (line 56) and its `packageManager`, with the checksum the host
+gives; React, its DOM, their types, MobX, mobx-react, vite, TypeScript, Vitest,
+Playwright and react-window are at the versions of that catalog already, and its
+electron-builder, 26.18.0, is the one the workflows here build Freelens with at the
+target. Node and Biome stay as they are: the host names Node 24.22.1 in its `.nvmrc`
+and Biome 2.6.3, which the pull request of Renovate of the dependencies of Freelens
+carries apart from this move. The pull request of Renovate of Electron 44 is replaced
+by this move, which takes the version of the catalog of the host, as REQ-198 asks.
+
+The facts of the host above were read again at the new commit: of the 61 ranges their
+links cite, with the eight of ARCHITECTURE, 41 hold their text at the same lines and
+12 at other lines; six hold it once Biome 2.6.3 formatted the guides of the host, with
+their tables aligned and their emphasis written with underscores, five at the same
+lines and the styling at lines 1839 to 1887; and two say more. The contract of
+`Main.Shell` (`api.md`, lines 992 to 1084) adds that without a cluster the environment
+takes the proxy preference of the application as `HTTPS_PROXY`: the extension calls
+`getEnvironment` with its cluster always, which gives the proxy setting of that
+cluster, as before. The check of the token of the proxy of Freelens
+(`freelens-proxy.ts`, lines 455 to 473) sets `Cache-Control: no-store` before it. The
+eleven links of SPEC-0014 at `7801fb10` hold their text at the same lines. The stub
+and the doubles of the tests name the new commit: every file they cite is the same at
+both commits, the guide of the host but its formatting, and the build test keeps the
+lines of the catalog, 11 to 17, 56 and 120, where Electron is now 44.10.0.
+
+The watch of the move, read on 2026-10-29: the main branch of the host from `7801fb10`
+to the tag v2.0.0, `b9b53e16`, twenty-seven commits, of which the watch of the first
+pull request of T5.1 had read the first twenty-five, and one after the tag, to
+`09c7f693`, the badge of npm in the README of the host. What each changes for the
+extension:
+- `36f56fcd` (freelensapp/freelens#2864) and `e8e0837e` (freelensapp/freelens#2881):
+  Electron 44.9.3 and then 44.10.0, with Node 24.22.1, the fix of CVE-2026-111497, and
+  Chromium 152.0.7977.169, as the `DEPS` of Electron v44.10.0 names them, where
+  Electron 43.8.3 had Node 24.22.0 and Chromium 150.0.7871.250. Taken: the `electron`
+  devDependency at 44.10.0, for its types. The APIs Electron 44 removes,
+  `openAsHidden`, `wasOpenedAsHidden`, `restoreState` and `isUnityRunning`, are not
+  used here: the extension imports from `electron` the type `IpcMainInvokeEvent`
+  alone, and the nine programs check on the new declarations. Electron 44 runs on
+  macOS 13 or newer. The second commit also takes out the refusal of Brotli of the
+  main process of the host (`a4752de8`, freelensapp/freelens#2848, in the record of
+  2026-10-25), since the Node of Electron 44.10.0 has the fix: the transport of the
+  extension asks for `identity` and decodes gzip alone
+  (`src/main/diagnostic-transport.ts`), and its requests to the API server go through
+  the client of the host: nothing changes.
+- `4050b223` (freelensapp/freelens#2863): the renderer of the host copies with
+  `navigator.clipboard`, since Electron 44 removes its `clipboard` from the renderer,
+  and the guide of the host says so. The extension copies a line of an artifact with
+  `navigator.clipboard.writeText` already
+  (`src/renderer/components/artifact-lines.tsx`, line 298), and the suites read the
+  clipboard in the main process, which keeps it: nothing changes.
+- `95fe415c` (freelensapp/freelens#2872): the proxy of Freelens sets `cache-control`
+  to `no-store` on every answer of the API, in place of the `no-cache, private` of the
+  API server, and the main process clears the HTTP cache and the code cache of the
+  session on every start. The reads of the extension keep nothing in a cache and read
+  no `cache-control`; the header Date the frame reads is still the one of the API
+  server. AGENTS.md said that the host changes no header of an answer but the
+  `location` of a redirect, and says now that it changes `cache-control` too, with the
+  lines of the host.
+- `d9f8a95d` (freelensapp/freelens#2873): the terminal of the host gets its last
+  output again when it reconnects, and the main process clears the local storage of
+  the session before any window loads, since the origin of every page carries the port
+  of the proxy, which changes on each run. The extension keeps nothing in the local
+  storage: its state is in the store the host gives it.
+- `85c329ce` (freelensapp/freelens#2874): the host keeps the draft of an edit only
+  while it is not saved, and writes the JSON files of its storage for the user alone.
+  Nothing for the extension.
+- `23f1aea5` (freelensapp/freelens#2871): a development build of the host, with
+  `NODE_ENV` `development`, syncs no `~/.kube` unless it is added. The packaged
+  application and the build of the workflows here are not development builds, and the
+  helpers of the suites write the kubeconfigs they sync into the preferences of their
+  profile: nothing changes.
+- `f604cd94` (freelensapp/freelens#2878) and `da8153d9` (freelensapp/freelens#2879),
+  its test: the proxy preference of the host takes SOCKS5 and the certificate settings
+  in `Main.Util.fetch` and the dispatcher of the main process, and
+  `Main.Shell.getEnvironment` called without a cluster gives that preference as
+  `HTTPS_PROXY`. Called with a cluster, as the extension calls it always, it gives the
+  proxy setting of the cluster as before (`kube-tools.ts`, lines 124 to 132); the
+  extension uses neither `Main.Util.fetch` nor the dispatcher of the host: nothing
+  changes.
+- `7cb5f497` (freelensapp/freelens#2862): Biome 2.6.3 formats the Markdown of the
+  host, its guides among them: their words stay, and nine ranges the facts above cite
+  take new lines, with the new line of the guide on the clipboard. `f668e49d` takes
+  the reference to a decision out of a sentence of the migration guide, at line 715,
+  outside every range cited here.
+- `b70f1d89` (freelensapp/freelens#2837), pnpm 12.15.0: taken. `7477dbf9`
+  (freelensapp/freelens#2857), chart.js 4.6.1, a dependency of the SDK the extension
+  does not import: in the lockfile alone.
+- `b9b53e16` (freelensapp/freelens#2883): the version 2.0.0 of every package of the
+  host, the core and the SDK among them. The host checks `engines.freelens` against
+  2.0.0, which `^2.0.0` includes, as it included the version of the nightly with its
+  prerelease taken off.
+- The other thirteen, nothing for the extension: the editor of the host on the
+  DOMPurify of its catalog (`875fd251`, freelensapp/freelens#2866), the refresh of its
+  Helm charts (`14a491f1`, freelensapp/freelens#2868), the rules of its agents for
+  GitHub Actions moved out of its AGENTS.md (`f070d9c5`, freelensapp/freelens#2861),
+  where the section "Bundled Binary Versions" that the workflows here name stays, its
+  README, its logo and its star history (`de1d3c80`, `9f771a79`, `3cd3a982`,
+  `635fe99f`), its tools, mise, syft and grype (`22088faf`, `4b5c4f53`, `918538f1`),
+  the configuration of its Trunk (`a05be692`), and the workflows of its integration
+  tests, on Linux alone for a pull request (`113abe5d`, freelensapp/freelens#2876),
+  and of its release (`8bc5d277`, freelensapp/freelens#2877), which the workflows here
+  do not use.
+
+The main branch of the template moved from `c4f91f0d`, the commit the watch of the
+first pull request of T5.1 read, to `7bbbfdfc`, six commits. It pins the SDK 2.0.0 and
+Electron 44.10.0 as this move does, and takes Node 24.22.1
+(freelensapp/freelens-example-extension#399); it defines `__dirname` and `__filename`
+in its main bundle for a bundled package of CommonJS (`bd206b2f`), and the main bundle
+of the extension carries no package, as the build test proves; the rest is its skill
+of the port, the helpers of its integration test and its version. Nothing else to
+take.
+
+The chain of the header Date at the new target: the proxy of the main process,
+http-proxy-3 2.0.2 and undici 8.12.3 of the lockfile of the host, and
+freelens-k8s-proxy 2.0.0 of its `freelens/binaries.lock.json`, are the ones of the
+move of 2026-10-25, and the two files of Node the chain cites are the same in Node
+24.22.1 as in 24.22.0. The one change is the `cache-control` of the answers of the
+API, which leaves the header Date as the API server wrote it. AGENTS.md and
+ARCHITECTURE give the new lines of the host.
+
+Decided while implementing, on 2026-10-29:
+- The SDK is pinned exactly to 2.0.0, the version of the target, as REQ-198 and D6 pin
+  it until Freelens 2.0.0 and as the template pins it. The range of versions D10 gives
+  it at this release, the integration at the tag and the end of the host drift watch
+  stay the row of M6 of ROADMAP, which this move leaves Planned, with the sentences of
+  AGENTS.md, PROCESS and D10 on what follows the release.
+- The headers of the specs name the commit of the tag of the release and say that the
+  host drift watch moved the target there, in place of saying that it moves until
+  Freelens 2.0.0 is released.
+- AGENTS.md names the Node of the Electron of the target as the `DEPS` of Electron
+  v44.10.0 names it, with the two files of Node the chain cites the same in 24.22.0
+  and in 24.22.1; the packaged application reports its Node with the run of the
+  suites.
+- Two comments of the helpers of the packaged runs said that a developer runs the
+  nightly of the target; they say its package.
+
+The evidence of the move, on the machine of the runs (macOS, Node 24.21.0, pnpm
+12.15.0): the install with the new versions, then the install frozen; the type check
+of the nine programs with no error; lint, 298 files; the build, `dist/main.js` of
+112,714 bytes and `dist/renderer.js` of 584,846; the unit run, 95 files and 2,853
+tests with none failed, and the two measures within their budgets (VIEW-10 unit, the
+parser at 133.5 ms at the 95th percentile; ADH-16, the thousand schedules at 43.2 ms
+and one at 0.04 ms), after a first run in which one test of the Overview ran past its
+five seconds while the shared machine was loaded, and passed alone; knip, both passes
+with no finding; Trunk on the 34 files of the move, the lockfile left out by its
+configuration, with no issue; and the pin of the workflow of the views put back to
+`7801fb10`, which the test of the environment failed, then moved again. HOST-03 on the
+new SDK: with React and its DOM at 19.3.0, in a copy of the manifest, the lockfile and
+the workspace, pnpm stopped with `ERR_PNPM_PEER_DEP_ISSUES`, an unmet peer of
+`@freelensapp/extensions` 2.0.0 for each. The packaged suites on Freelens 2.0.0, the
+views, the pre-review and the integration, run after these checks, on another machine,
+and their evidence is written here with their run.
