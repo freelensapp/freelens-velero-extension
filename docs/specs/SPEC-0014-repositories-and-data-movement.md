@@ -1346,8 +1346,15 @@ environment again and fills every `T51-PR4-PENDING`.
   and the backup repositories of its namespace; the first keeps its three kinds.
 - The guard compares eight kinds; what the server sends at its pass and what the
   controllers list (LM4): T51-PR4-PENDING.
-- Operations, Repositories and Long lists (475-482): not placed by this phase;
-  T51-PR4-PENDING.
+- Operations (478): twenty-three pod volume operations in `velero-views-<run>`,
+  placed once with the views, each created after its owner with the UID the
+  cluster gave it, every status one the release writes in that phase; nothing of
+  the data movement, which a later pull request places. Deviation from the table:
+  one pod volume backup names a triple of no repository, to show the operation
+  whose repository is not there.
+- Repositories (479): nine in `velero-views-<run>`, with the three labels the
+  release writes, two of them of one triple.
+- Long lists (480): not placed by this phase; T51-PR4-PENDING.
 
 Decided while implementing, on 2026-10-29:
 
@@ -1374,6 +1381,15 @@ Decided while implementing, on 2026-10-29:
   `pkg/podvolume/restorer.go:174-193` of the source of the release).
 - The checksum of the restored data is read from the log of each pod, without an
   `exec`.
+- The pod volume operations of the views are owned by backups and restores of the
+  views that exist, so that no count of the backups and the restores of the views
+  moves; two repositories of one triple are placed in that namespace, which no
+  controller reads.
+- The operations of the views take the name of their owner, a dash and five
+  lower-case letters and digits made of the run, the owner and their place, not
+  drawn by chance, so that a second placement finds each by its name.
+- The volumes suite says its words of an empty list in the installation of the
+  defaults, now that the one of the views holds the three kinds.
 - A namespace of the fixtures is removed with the events the cluster wrote of a pod
   of the run, told by the object they regard.
 - Phase B is split: the environment, its measures, its placements, the cleanup
