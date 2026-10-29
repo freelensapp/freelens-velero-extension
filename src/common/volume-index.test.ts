@@ -59,6 +59,26 @@ describe("the index of the operations of the volumes", () => {
     expect(made.ofBackup.get(ownerKey("velero", "restore-monday-1"))).toBeUndefined();
   });
 
+  it("orders the operations of a restore from the newest as well, whatever their names", () => {
+    const made = index(
+      [],
+      [
+        podVolumeRestore(
+          "monday-a",
+          { phase: "Completed", startTimestamp: before(9 * MINUTE) },
+          ownedBy("Restore", monday),
+        ),
+        podVolumeRestore(
+          "monday-b",
+          { phase: "InProgress", startTimestamp: before(MINUTE) },
+          ownedBy("Restore", monday),
+        ),
+      ],
+    );
+
+    expect(names(made.ofRestore.get(ownerKey("velero", "restore-monday-1")))).toEqual(["monday-b", "monday-a"]);
+  });
+
   it("leaves out of an owner an operation with no label of a UID, one of another namespace, and one of another UID", () => {
     const labels = ownedBy("Backup", nightly);
     const made = index([
@@ -161,13 +181,14 @@ describe("the index of the operations of the volumes", () => {
 
   it("is made in one pass over each family", () => {
     const passes = { podVolumeBackups: 0, podVolumeRestores: 0 };
+    // Each item read, by any way through the array: a loop, an index or a method of the array all read the items by
+    // their index, so one pass reads each of them once, and a second pass reads them again.
+    const reads = { podVolumeBackups: 0, podVolumeRestores: 0 };
     const counted = <Item>(family: keyof typeof passes, items: Item[]): FamilyRead<Item> => {
       const proxied = new Proxy(items, {
         get(target, key, receiver) {
           if (key === Symbol.iterator) passes[family] += 1;
-          // Any other way through the items, by index or by a method of the array, is counted as a pass as well.
-          if (typeof key === "string" && ["forEach", "map", "filter", "find", "reduce", "some", "every"].includes(key))
-            passes[family] += 1;
+          if (typeof key === "string" && /^\d+$/.test(key)) reads[family] += 1;
           return Reflect.get(target, key, receiver);
         },
       });
@@ -185,5 +206,6 @@ describe("the index of the operations of the volumes", () => {
       ]),
     });
     expect(passes).toEqual({ podVolumeBackups: 1, podVolumeRestores: 1 });
+    expect(reads).toEqual({ podVolumeBackups: 2, podVolumeRestores: 1 });
   });
 });

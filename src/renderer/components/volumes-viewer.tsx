@@ -217,10 +217,6 @@ function Fields({ name, title, fields }: { name: string; title: string; fields: 
   );
 }
 
-// The volume information of an operation: how many volumes Velero recorded, then one row for each in a
-// table of the host, with a command that opens the details of the row under it. The details are a row of
-// the table and not a drawer, which the host closes on a click outside it. The text is parsed once; one
-// that is not of the shape the release writes is shown as the lines it is.
 // The methods of the rows whose operation is a pod volume backup or a pod volume restore of the installation.
 const POD_VOLUME_METHODS = ["PodVolumeBackup", "PodVolumeRestore"];
 
@@ -250,6 +246,10 @@ function OperationWay({ id, index, row, ways }: { id: string; index: number; row
   );
 }
 
+// The volume information of an operation: how many volumes Velero recorded, then one row for each in a
+// table of the host, with a command that opens the details of the row under it. The details are a row of
+// the table and not a drawer, which the host closes on a click outside it. The text is parsed once; one
+// that is not of the shape the release writes is shown as the lines it is.
 export function VolumesViewer({ id, text, of, ways }: ArtifactViewerProps) {
   const rows = React.useMemo(() => parseVolumes(text, of), [text, of]);
   // The rows that are open are rows of the text they were opened in: another text has none open.

@@ -28,8 +28,8 @@ export function volumesOf(installation: Installation): VolumeIndex {
 }
 
 // The ways of the rows of the Volumes tab of one backup or restore, which its viewer is given. They are the same
-// object for as long as they lead to the same operations: a read makes a new index, and a read that changes none of
-// them does not draw the viewer again.
+// object for as long as they lead to the same operations, in whatever order: a read makes a new index, and a read
+// that changes none of them does not draw the viewer again.
 const WAYS = new WeakMap<Installation, { index: VolumeIndex; owner: string; key: string; ways: VolumeWays }>();
 
 export function volumeWaysOf(
@@ -43,7 +43,10 @@ export function volumeWaysOf(
 
   if (made && made.index === index && made.owner === of) return made.ways;
   const ways = volumeWays(index, kind, owner);
-  const key = [...ways].map(([row, target]) => `${row}\u0001${target.kind}/${target.name}`).join("\u0002");
+  const key = [...ways]
+    .map(([row, target]) => `${row}\u0001${target.kind}/${target.name}`)
+    .sort()
+    .join("\u0002");
 
   if (made && made.owner === of && made.key === key) {
     WAYS.set(installation, { ...made, index });
