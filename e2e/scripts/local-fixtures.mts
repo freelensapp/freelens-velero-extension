@@ -15,7 +15,15 @@ import {
 } from "./local-artifacts.mts";
 import { mixedExpression } from "./local-expressions.mts";
 import { DEMO_CONTEXT, DEMO_NAMESPACE, type KindConfig, OWNER_LABEL, requireCondition } from "./local-kind.mts";
-import { BUCKET, type KubeResource, STORAGE_ENDPOINT } from "./local-manifests.mts";
+import {
+  BUCKET,
+  durationMilliseconds,
+  IMAGES,
+  type KubeResource,
+  MAINTAIN_FREQUENCY_HOURS,
+  preloadedImage,
+  STORAGE_ENDPOINT,
+} from "./local-manifests.mts";
 import { STORE_WAYS, type StoreAnswer, type StoreBody, type StoreWay } from "./local-store.mts";
 
 export const FIXTURE_LABEL = "freelensapp.io/velero-fixture-run";
@@ -76,6 +84,11 @@ export function fixtureNames(run: string) {
     adherenceScale: `velero-adherence-scale-${run}`,
     backup: `fixture-backup-${run}`,
     restore: `fixture-restore-${run}`,
+    // The volume of the run: a pod of the source namespace whose emptyDir the node agent backs up with the file
+    // system backup of the release, the backup of its pod and the restore of that backup.
+    volumePod: `fixture-volume-${run}`,
+    volumeBackup: `fixture-volume-backup-${run}`,
+    volumeRestore: `fixture-volume-restore-${run}`,
     // The operations the server refuses, which the transport proof asks the artifacts of: a backup and a
     // restore that fail their validation, and a restore asked from a schedule that has no backup.
     invalidBackup: `fixture-invalid-backup-${run}`,
@@ -4551,7 +4564,13 @@ async function waitCompleted(runtime: FixtureRuntime, expected: KubeResource): P
 export async function runLiveFixtures(
   runtime: FixtureRuntime,
   run: string,
-): Promise<{ configMaps: number; payloadBytes: number; backup: KubeResource; restore: KubeResource }> {
+): Promise<{
+  configMaps: number;
+  payloadBytes: number;
+  backup: KubeResource;
+  restore: KubeResource;
+  volume: VolumeRecord;
+}> {
   const names = fixtureNames(run);
   const labels = { [OWNER_LABEL]: runtime.owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" };
 
@@ -4607,5 +4626,386 @@ export async function runLiveFixtures(
       "Large restored fixture content differs",
     );
   }
-  return { configMaps: expected.size + 1, payloadBytes, backup, restore };
+  const volume = runLiveVolume(runtime, run);
+
+  return { configMaps: expected.size + 1, payloadBytes, backup, restore, volume };
+}
+
+// The volume of a run (REQ-195 of SPEC-0014): the bytes its pod writes, the name of its volume, and how long each
+// part of its flow is given, read once a second.
+export const VOLUME_NAME = "data";
+export const VOLUME_BYTES = 1024 * 1024;
+const VOLUME_CONTAINER = "volume";
+const VOLUME_TIMEOUT = 180_000;
+const VOLUME_POLL = 1000;
+// The labels the release writes into the repository of a volume namespace, a storage location and an uploader: the
+// repository is found by them, never by its name, which the release says it may change.
+export const REPOSITORY_LABELS = {
+  volumeNamespace: "velero.io/volume-namespace",
+  location: "velero.io/storage-location",
+  type: "velero.io/repository-type",
+} as const;
+
+// What the container of the volume runs: when the volume holds no bytes it writes a megabyte of random bytes and
+// their checksum, then it prints the checksum written, the checksum of what the volume holds and its size, and
+// waits. The restored pod runs the same command, and prints what the restore put into its volume.
+export const VOLUME_SCRIPT = [
+  "set -eu",
+  "cd /data",
+  `if [ ! -f bytes ]; then head -c ${VOLUME_BYTES} /dev/urandom > bytes; sha256sum bytes | cut -d " " -f 1 > written; fi`,
+  'echo "written $(cat written)"',
+  'echo "held $(sha256sum bytes | cut -d " " -f 1)"',
+  'echo "size $(wc -c < bytes | tr -d " ")"',
+  "while true; do sleep 3600; done",
+].join("; ");
+
+export function liveVolumePod(owner: string, run: string): KubeResource {
+  const names = fixtureNames(run);
+
+  requireCondition(owner, "Fixture ownership is required");
+  return {
+    apiVersion: "v1",
+    kind: "Pod",
+    metadata: {
+      name: names.volumePod,
+      namespace: names.source,
+      labels: { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" },
+      // The volume the file system backup of the release takes from this pod, by the annotation alone: the
+      // backup does not back up every volume by default.
+      annotations: { "backup.velero.io/backup-volumes": VOLUME_NAME },
+    },
+    spec: {
+      automountServiceAccountToken: false,
+      terminationGracePeriodSeconds: 1,
+      containers: [
+        {
+          name: VOLUME_CONTAINER,
+          // The image of the store, which the node holds: it is never pulled.
+          image: preloadedImage(IMAGES.storage),
+          imagePullPolicy: "Never",
+          command: ["sh", "-c", VOLUME_SCRIPT],
+          volumeMounts: [{ name: VOLUME_NAME, mountPath: "/data" }],
+          securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] } },
+        },
+      ],
+      volumes: [{ name: VOLUME_NAME, emptyDir: {} }],
+    },
+  };
+}
+
+export function liveVolumeBackup(owner: string, run: string): KubeResource {
+  const names = fixtureNames(run);
+
+  requireCondition(owner, "Fixture ownership is required");
+  return {
+    apiVersion: "velero.io/v1",
+    kind: "Backup",
+    metadata: {
+      name: names.volumeBackup,
+      namespace: DEMO_NAMESPACE,
+      labels: { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" },
+    },
+    spec: {
+      includedNamespaces: [names.source],
+      includedResources: ["pods"],
+      labelSelector: { matchLabels: { [FIXTURE_LABEL]: run } },
+      includeClusterResources: false,
+      storageLocation: "default",
+      snapshotVolumes: false,
+      // The annotation of the pod names the volume.
+      defaultVolumesToFsBackup: false,
+      ttl: LIVE_RETENTION,
+    },
+  };
+}
+
+export function liveVolumeRestore(owner: string, run: string): KubeResource {
+  const names = fixtureNames(run);
+
+  requireCondition(owner, "Fixture ownership is required");
+  return {
+    apiVersion: "velero.io/v1",
+    kind: "Restore",
+    metadata: {
+      name: names.volumeRestore,
+      namespace: DEMO_NAMESPACE,
+      labels: { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" },
+    },
+    // No resource is named: the backup holds the pod alone, and a restore that leaves out the claims and the
+    // persistent volumes makes no pod volume restore.
+    spec: {
+      backupName: names.volumeBackup,
+      includedNamespaces: [names.source],
+      namespaceMapping: { [names.source]: names.restored },
+      includeClusterResources: false,
+      existingResourcePolicy: "none",
+    },
+  };
+}
+
+// The checksums and the size the container of the volume printed, or nothing when its log does not hold them yet.
+export function volumeLog(log: string): { written: string; held: string; size: number } | undefined {
+  const line = (word: string) => new RegExp(`^${word} (\\S+)$`, "m").exec(log)?.[1] ?? "";
+  const [written, held, size] = [line("written"), line("held"), Number(line("size"))];
+
+  return /^[a-f0-9]{64}$/.test(written) && /^[a-f0-9]{64}$/.test(held) && Number.isInteger(size) && size > 0
+    ? { written, held, size }
+    : undefined;
+}
+
+// The one repository of a volume namespace, a storage location and an uploader among the ones listed, by the three
+// labels the release writes: two are refused, as the release refuses them, and so is none.
+export function runRepository(items: KubeResource[], volumeNamespace: string, location = "default", type = "kopia") {
+  const found = items.filter(
+    (item) =>
+      item.metadata.labels?.[REPOSITORY_LABELS.volumeNamespace] === volumeNamespace &&
+      item.metadata.labels?.[REPOSITORY_LABELS.location] === location &&
+      item.metadata.labels?.[REPOSITORY_LABELS.type] === type,
+  );
+
+  requireCondition(
+    found.length === 1,
+    found.length
+      ? `More than one repository is labelled for ${volumeNamespace}, ${location} and ${type}: ${found.map((item) => item.metadata.name).join(", ")}`
+      : `No repository is labelled for ${volumeNamespace}, ${location} and ${type} in ${DEMO_NAMESPACE}`,
+  );
+  return found[0];
+}
+
+export interface VolumeRecord {
+  pod: { name: string; uid: string; node: string };
+  restoredPod: { name: string; uid: string; node: string };
+  backup: { name: string; uid: string };
+  restore: { name: string; uid: string };
+  podVolumeBackup: {
+    name: string;
+    uid: string;
+    node: string;
+    snapshotID: string;
+    bytes: number;
+    started?: string;
+    completed?: string;
+  };
+  podVolumeRestore: { name: string; uid: string; node: string; bytes: number; started?: string; completed?: string };
+  repository: {
+    name: string;
+    uid: string;
+    labels: Record<string, string>;
+    maintenanceFrequency: string;
+    lastMaintenanceTime?: string;
+  };
+  checksum: string;
+  bytes: number;
+}
+
+// Asks `read` once a second until it answers, within the bound of the volume; `read` refuses what will not change.
+function awaitVolume<Found>(runtime: FixtureRuntime, what: string, read: () => Found | undefined): Found {
+  requireCondition(runtime.elapsed, "The live flow of the volume needs the clock of the runtime");
+  const began = runtime.elapsed();
+
+  for (;;) {
+    const found = read();
+
+    if (found !== undefined) return found;
+    requireCondition(runtime.elapsed() - began < VOLUME_TIMEOUT, `${what} within ${VOLUME_TIMEOUT / 1000} seconds`);
+    pause(runtime, VOLUME_POLL);
+  }
+}
+
+function awaitVolumePod(runtime: FixtureRuntime, name: string, namespace: string): KubeResource {
+  return awaitVolume(runtime, `The pod ${name} of the volume was not Running in ${namespace}`, () => {
+    const pod = readFixture(runtime, { apiVersion: "v1", kind: "Pod", metadata: { name, namespace } });
+    const status = (pod.status ?? {}) as {
+      phase?: string;
+      containerStatuses?: { ready?: boolean; state?: { waiting?: { reason?: string } } }[];
+    };
+    const waiting = (status.containerStatuses ?? []).map((item) => item.state?.waiting?.reason ?? "");
+
+    requireCondition(
+      !waiting.includes("ErrImageNeverPull"),
+      `The pod ${name} of the volume cannot start: the image of the store is not in the node, and it is never pulled`,
+    );
+    requireCondition(
+      !["Failed", "Succeeded"].includes(status.phase ?? ""),
+      `The pod ${name} of the volume ended in ${status.phase}`,
+    );
+    return status.phase === "Running" && (status.containerStatuses ?? []).every((item) => item.ready) ? pod : undefined;
+  });
+}
+
+function awaitVolumeOperation(runtime: FixtureRuntime, expected: KubeResource): KubeResource {
+  return awaitVolume(runtime, `The ${expected.kind} ${expected.metadata.name} of the volume did not complete`, () => {
+    const actual = readFixture(runtime, expected);
+    const status = actual.status as { phase?: string; errors?: number } | undefined;
+
+    requireCondition(
+      !["Failed", "FailedValidation", "PartiallyFailed"].includes(status?.phase ?? ""),
+      `The ${expected.kind} ${expected.metadata.name} of the volume ended in ${status?.phase}`,
+    );
+    if (status?.phase !== "Completed") return undefined;
+    requireCondition(!status.errors, `The ${expected.kind} ${expected.metadata.name} of the volume reported errors`);
+    return actual;
+  });
+}
+
+// The one pod volume operation of an operation of the volume, by the labels of the name and the UID of its owner,
+// which the release writes; refused when it is not Completed, since its owner is.
+function volumeOperationOf(
+  runtime: FixtureRuntime,
+  kind: "podvolumebackups" | "podvolumerestores",
+  owner: KubeResource,
+) {
+  const of = kind === "podvolumebackups" ? "backup" : "restore";
+  const selector = `velero.io/${of}-name=${owner.metadata.name},velero.io/${of}-uid=${owner.metadata.uid}`;
+  const items = (
+    JSON.parse(
+      runtime.kubectl([
+        "get",
+        `${kind}.velero.io`,
+        "--namespace",
+        DEMO_NAMESPACE,
+        "--selector",
+        selector,
+        "-o",
+        "json",
+      ]),
+    ) as { items: KubeResource[] }
+  ).items;
+  const [operation] = items;
+  const status = (operation?.status ?? {}) as { phase?: string; message?: string };
+
+  requireCondition(
+    items.length === 1,
+    `The ${of} ${owner.metadata.name} of the volume has ${items.length} pod volume ${of}s, not one`,
+  );
+  requireCondition(
+    status.phase === "Completed",
+    `The pod volume ${of} ${operation.metadata.name} of the ${of} ${owner.metadata.name} is ${status.phase ?? "without a phase"}` +
+      (status.message ? `: ${status.message}` : ""),
+  );
+  return operation;
+}
+
+// The live flow of the volume, after the one of the ConfigMaps: the pod, the backup of its volume by the node agent,
+// the repository it made, the restore of the pod and its volume into the destination namespace, and the checksum of
+// the restored bytes against the one of the bytes written. Each waited for with its bound, each refused with words
+// when it ends otherwise, and every object of Velero found by what the release writes into it.
+export function runLiveVolume(runtime: FixtureRuntime, run: string): VolumeRecord {
+  const names = fixtureNames(run);
+  const podManifest = liveVolumePod(runtime.owner, run);
+
+  runtime.apply(podManifest);
+  const pod = awaitVolumePod(runtime, names.volumePod, names.source);
+  const source = awaitVolume(runtime, `The pod ${names.volumePod} printed no checksum`, () =>
+    volumeLog(runtime.kubectl(["logs", names.volumePod, "--namespace", names.source, "--container", VOLUME_CONTAINER])),
+  );
+
+  requireCondition(
+    source.written === source.held && source.size === VOLUME_BYTES,
+    `The pod ${names.volumePod} holds other bytes than it wrote`,
+  );
+  const backupManifest = liveVolumeBackup(runtime.owner, run);
+
+  runtime.apply(backupManifest);
+  const backup = awaitVolumeOperation(runtime, backupManifest);
+  const podVolumeBackup = volumeOperationOf(runtime, "podvolumebackups", backup);
+  const repository = runRepository(
+    (
+      JSON.parse(
+        runtime.kubectl([
+          "get",
+          "backuprepositories.velero.io",
+          "--namespace",
+          DEMO_NAMESPACE,
+          "--selector",
+          `${REPOSITORY_LABELS.volumeNamespace}=${names.source},${REPOSITORY_LABELS.location}=default,${REPOSITORY_LABELS.type}=kopia`,
+          "-o",
+          "json",
+        ]),
+      ) as { items: KubeResource[] }
+    ).items,
+    names.source,
+  );
+  const repositoryStatus = (repository.status ?? {}) as {
+    phase?: string;
+    message?: string;
+    lastMaintenanceTime?: string;
+  };
+  const frequency = String(
+    (repository.spec as { maintenanceFrequency?: unknown } | undefined)?.maintenanceFrequency ?? "",
+  );
+
+  requireCondition(
+    repositoryStatus.phase === "Ready",
+    `The repository ${repository.metadata.name} of the volume is ${repositoryStatus.phase ?? "without a phase"}` +
+      (repositoryStatus.message ? `: ${repositoryStatus.message}` : ""),
+  );
+  requireCondition(
+    durationMilliseconds(frequency) === MAINTAIN_FREQUENCY_HOURS * 3_600_000,
+    `The repository ${repository.metadata.name} is maintained every ${frequency || "period the release chooses"}, not every ${MAINTAIN_FREQUENCY_HOURS} hours: bring the environment up again, pnpm demo:down then pnpm demo:up`,
+  );
+  const restoreManifest = liveVolumeRestore(runtime.owner, run);
+
+  runtime.apply(restoreManifest);
+  const restore = awaitVolumeOperation(runtime, restoreManifest);
+  const podVolumeRestore = volumeOperationOf(runtime, "podvolumerestores", restore);
+  const restoredPod = awaitVolumePod(runtime, names.volumePod, names.restored);
+  const restored = awaitVolume(runtime, `The restored pod ${names.volumePod} printed no checksum`, () =>
+    volumeLog(
+      runtime.kubectl(["logs", names.volumePod, "--namespace", names.restored, "--container", VOLUME_CONTAINER]),
+    ),
+  );
+
+  requireCondition(
+    restored.held === source.written && restored.size === VOLUME_BYTES,
+    `The restored volume of ${names.volumePod} holds other bytes than the pod wrote`,
+  );
+  const backupStatus = (podVolumeBackup.status ?? {}) as {
+    snapshotID?: string;
+    progress?: { bytesDone?: number };
+    startTimestamp?: string;
+    completionTimestamp?: string;
+  };
+  const restoreStatus = (podVolumeRestore.status ?? {}) as {
+    node?: string;
+    progress?: { bytesDone?: number };
+    startTimestamp?: string;
+    completionTimestamp?: string;
+  };
+  const nodeOf = (item: KubeResource) => String((item.spec as { nodeName?: string } | undefined)?.nodeName ?? "");
+
+  return {
+    pod: { name: pod.metadata.name, uid: String(pod.metadata.uid), node: nodeOf(pod) },
+    restoredPod: { name: restoredPod.metadata.name, uid: String(restoredPod.metadata.uid), node: nodeOf(restoredPod) },
+    backup: { name: backup.metadata.name, uid: String(backup.metadata.uid) },
+    restore: { name: restore.metadata.name, uid: String(restore.metadata.uid) },
+    podVolumeBackup: {
+      name: podVolumeBackup.metadata.name,
+      uid: String(podVolumeBackup.metadata.uid),
+      node: String((podVolumeBackup.spec as { node?: string } | undefined)?.node ?? ""),
+      snapshotID: backupStatus.snapshotID ?? "",
+      bytes: backupStatus.progress?.bytesDone ?? 0,
+      started: backupStatus.startTimestamp,
+      completed: backupStatus.completionTimestamp,
+    },
+    podVolumeRestore: {
+      name: podVolumeRestore.metadata.name,
+      uid: String(podVolumeRestore.metadata.uid),
+      node: restoreStatus.node ?? "",
+      bytes: restoreStatus.progress?.bytesDone ?? 0,
+      started: restoreStatus.startTimestamp,
+      completed: restoreStatus.completionTimestamp,
+    },
+    repository: {
+      name: repository.metadata.name,
+      uid: String(repository.metadata.uid),
+      labels: Object.fromEntries(
+        Object.values(REPOSITORY_LABELS).map((label) => [label, repository.metadata.labels?.[label] ?? ""]),
+      ),
+      maintenanceFrequency: frequency,
+      lastMaintenanceTime: repositoryStatus.lastMaintenanceTime,
+    },
+    checksum: source.written,
+    bytes: source.size,
+  };
 }

@@ -54,6 +54,7 @@ import {
   execPluginKubeconfig,
   FIXTURE_LABEL,
   FIXTURE_MODE,
+  type FixtureRuntime,
   fixtureArtifactPath,
   fixtureArtifactPaths,
   fixtureDeletionRequest,
@@ -70,6 +71,9 @@ import {
   liveBackup,
   liveRestore,
   liveSchedule,
+  liveVolumeBackup,
+  liveVolumePod,
+  liveVolumeRestore,
   NEWEST_OF_THE_HISTORY,
   NOT_COUNTED,
   NOT_STARTED,
@@ -86,6 +90,7 @@ import {
   proofIdentities,
   REAL_SCHEDULE_EXPRESSION,
   REFUSALS,
+  REPOSITORY_LABELS,
   RESTORE_PHASES,
   type Recorded,
   readerKubeconfig,
@@ -97,6 +102,8 @@ import {
   restoreSpec,
   restrictedFixtures,
   runArtifactPaths,
+  runLiveVolume,
+  runRepository,
   SCALE_BACKUPS,
   SCALE_RESTORES,
   SERVER_EAST,
@@ -123,9 +130,13 @@ import {
   VIEW_READER,
   VIEW_READER_OF_RESTORES,
   VIEW_WITHOUT_PORT_FORWARD,
+  VOLUME_BYTES,
+  VOLUME_NAME,
+  VOLUME_SCRIPT,
   viewFixtures,
   viewIdentityOfAnExecPlugin,
   viewIdentityWithoutPortForward,
+  volumeLog,
 } from "../e2e/scripts/local-fixtures.mts";
 import {
   assertEgressRules,
@@ -11737,6 +11748,338 @@ describe("local storage setup contracts", () => {
       type: "ClusterIP",
       ports: [{ port: 8333 }],
     });
+  });
+});
+
+describe("the volume of the environment", () => {
+  const run = "a1b2c3d4";
+  const owner = "synthetic-owner";
+  const names = fixtureNames(run);
+  const written = "c".repeat(64);
+  const printed = (held = written) => `written ${written}\nheld ${held}\nsize ${VOLUME_BYTES}\n`;
+  const labelled = (location = "default", namespace = names.source) => ({
+    [REPOSITORY_LABELS.volumeNamespace]: namespace,
+    [REPOSITORY_LABELS.location]: location,
+    [REPOSITORY_LABELS.type]: "kopia",
+  });
+  const repository = (name: string, labels: Record<string, string>, status: Record<string, unknown> = {}) => ({
+    apiVersion: "velero.io/v1",
+    kind: "BackupRepository",
+    metadata: { name, namespace: "velero-demo", uid: `uid-${name}`, labels },
+    spec: { volumeNamespace: names.source, backupStorageLocation: "default", maintenanceFrequency: "168h0m0s" },
+    status: { phase: "Ready", lastMaintenanceTime: "2026-10-29T20:00:00Z", ...status },
+  });
+
+  // What the node agent and the server do for the volume of a run, as narrowly as its flow asks: the pod Running
+  // with what it printed, the backup Completed with one pod volume backup and the repository Ready, the restore
+  // Completed with one pod volume restore, and the restored pod. It plays no other command: it refuses each with
+  // its words, a read of a repository by its name among them.
+  function volumeRuntime(
+    told: {
+      pod?: { phase?: string; waiting?: string };
+      backup?: string;
+      restore?: string;
+      podVolumeBackup?: string;
+      podVolumeRestore?: string;
+      repositories?: ReturnType<typeof repository>[];
+      restoredLog?: string;
+    } = {},
+  ) {
+    let clock = 0;
+    const applied: KubeResource[] = [];
+    const asked: string[] = [];
+    const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" };
+    const json = (value: unknown) => JSON.stringify(value);
+    const list = (items: unknown[]) => json({ items });
+    const operation = (kind: string, name: string, phase: string | undefined, of: Record<string, string>) => ({
+      apiVersion: "velero.io/v1",
+      kind,
+      metadata: { name, namespace: "velero-demo", uid: `uid-${name}`, labels: of },
+      spec: { node: "freelens-velero-dev-control-plane", volume: VOLUME_NAME },
+      status: {
+        ...(phase ? { phase } : {}),
+        ...(phase === "Completed" ? {} : { message: "synthetic failure\nof two lines" }),
+        snapshotID: "f".repeat(32),
+        node: "freelens-velero-dev-control-plane",
+        progress: { bytesDone: VOLUME_BYTES, totalBytes: VOLUME_BYTES },
+        startTimestamp: "2026-10-29T20:00:01Z",
+        completionTimestamp: "2026-10-29T20:00:03Z",
+      },
+    });
+    const runtime: FixtureRuntime = {
+      owner,
+      apply: (resource) => {
+        applied.push(structuredClone(resource));
+      },
+      elapsed: () => clock,
+      pause: (milliseconds) => {
+        clock += milliseconds;
+      },
+      kubectl: (args) => {
+        const at = (flag: string) => (args.includes(flag) ? args[args.indexOf(flag) + 1] : undefined);
+        const namespace = at("--namespace");
+        const selector = at("--selector");
+        const has = (kind: string) => applied.some((resource) => resource.kind === kind);
+
+        asked.push(args.slice(0, 2).join(" "));
+        if (args[0] === "logs" && args[1] === names.volumePod && namespace === names.source) return printed();
+        if (args[0] === "logs" && args[1] === names.volumePod && namespace === names.restored)
+          return told.restoredLog ?? printed();
+        if (args[0] === "get" && args[1] === "Pod" && args[2] === names.volumePod && has("Pod"))
+          return json({
+            apiVersion: "v1",
+            kind: "Pod",
+            metadata: { name: names.volumePod, namespace, uid: `uid-pod-${namespace}`, labels },
+            spec: { nodeName: "freelens-velero-dev-control-plane" },
+            status: {
+              phase: told.pod?.phase ?? "Running",
+              containerStatuses: [
+                told.pod?.waiting
+                  ? { ready: false, state: { waiting: { reason: told.pod.waiting } } }
+                  : { ready: (told.pod?.phase ?? "Running") === "Running", state: { running: {} } },
+              ],
+            },
+          });
+        if (args[0] === "get" && args[1] === "Backup.velero.io" && args[2] === names.volumeBackup && has("Backup"))
+          return json({
+            ...liveVolumeBackup(owner, run),
+            metadata: { ...liveVolumeBackup(owner, run).metadata, uid: "uid-backup" },
+            status: { phase: told.backup ?? "Completed" },
+          });
+        if (args[0] === "get" && args[1] === "Restore.velero.io" && args[2] === names.volumeRestore && has("Restore"))
+          return json({
+            ...liveVolumeRestore(owner, run),
+            metadata: { ...liveVolumeRestore(owner, run).metadata, uid: "uid-restore" },
+            status: { phase: told.restore ?? "Completed" },
+          });
+        // A list by labels, as the API server answers one: the objects that carry every label of the selector.
+        const matching = (items: { metadata: { labels?: Record<string, string> } }[]) =>
+          items.filter((item) =>
+            (selector ?? "")
+              .split(",")
+              .every((pair) => item.metadata.labels?.[pair.split("=")[0]] === pair.split("=")[1]),
+          );
+        if (args[0] === "get" && args.length === 8 && selector && namespace === "velero-demo") {
+          if (args[1] === "podvolumebackups.velero.io")
+            return list(
+              matching([
+                operation("PodVolumeBackup", `${names.volumeBackup}-x7k2p`, told.podVolumeBackup ?? "Completed", {
+                  "velero.io/backup-name": names.volumeBackup,
+                  "velero.io/backup-uid": "uid-backup",
+                }),
+              ]),
+            );
+          if (args[1] === "podvolumerestores.velero.io")
+            return list(
+              matching([
+                operation("PodVolumeRestore", `${names.volumeRestore}-q9m4z`, told.podVolumeRestore ?? "Completed", {
+                  "velero.io/restore-name": names.volumeRestore,
+                  "velero.io/restore-uid": "uid-restore",
+                }),
+              ]),
+            );
+          if (args[1] === "backuprepositories.velero.io")
+            return list(matching(told.repositories ?? [repository(`${names.source}-default-kopia`, labelled())]));
+        }
+        throw new Error(`The pretend runtime of the volume does not play: kubectl ${args.join(" ")}`);
+      },
+    };
+
+    return { runtime, applied, asked, clock: () => clock };
+  }
+
+  it("places a pod that writes a megabyte into its emptyDir, annotated for the file system backup, of the image of the store never pulled", () => {
+    const pod = liveVolumePod(owner, run);
+    const spec = pod.spec as {
+      containers: {
+        name: string;
+        image: string;
+        imagePullPolicy: string;
+        command: string[];
+        volumeMounts: { name: string; mountPath: string }[];
+      }[];
+      volumes: { name: string; emptyDir?: Record<string, never> }[];
+    };
+
+    expect(pod.metadata).toEqual({
+      name: `fixture-volume-${run}`,
+      namespace: `velero-source-${run}`,
+      labels: { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" },
+      annotations: { "backup.velero.io/backup-volumes": "data" },
+    });
+    expect(spec.containers).toHaveLength(1);
+    expect(spec.containers[0].image).toBe(preloadedImage(IMAGES.storage));
+    expect(spec.containers[0].imagePullPolicy).toBe("Never");
+    expect(spec.containers[0].command).toEqual(["sh", "-c", VOLUME_SCRIPT]);
+    expect(spec.containers[0].volumeMounts).toEqual([{ name: "data", mountPath: "/data" }]);
+    expect(spec.volumes).toEqual([{ name: "data", emptyDir: {} }]);
+    // The bytes are written once, when the volume holds none: the restored pod prints what the restore put there.
+    expect(VOLUME_SCRIPT).toContain(`if [ ! -f bytes ]; then head -c ${1024 * 1024} /dev/urandom > bytes;`);
+    expect(VOLUME_SCRIPT).toContain('echo "written $(cat written)"');
+    expect(VOLUME_SCRIPT).toContain('echo "held $(sha256sum bytes | cut -d " " -f 1)"');
+    expect(VOLUME_SCRIPT.endsWith("while true; do sleep 3600; done")).toBe(true);
+    expect(volumeLog(printed())).toEqual({ written, held: written, size: VOLUME_BYTES });
+    expect(volumeLog(`written ${written}\n`)).toBeUndefined();
+    expect(volumeLog("")).toBeUndefined();
+  });
+
+  it("backs up the pod by the label of the run and restores it into the destination namespace, naming no resource", () => {
+    expect(liveVolumeBackup(owner, run)).toMatchObject({
+      metadata: { name: `fixture-volume-backup-${run}`, namespace: "velero-demo" },
+      spec: {
+        includedNamespaces: [names.source],
+        includedResources: ["pods"],
+        labelSelector: { matchLabels: { [FIXTURE_LABEL]: run } },
+        includeClusterResources: false,
+        storageLocation: "default",
+        snapshotVolumes: false,
+        defaultVolumesToFsBackup: false,
+        ttl: LIVE_RETENTION,
+      },
+    });
+    const restore = liveVolumeRestore(owner, run);
+
+    expect(restore.metadata.name).toBe(`fixture-volume-restore-${run}`);
+    expect(restore.spec).toEqual({
+      backupName: names.volumeBackup,
+      includedNamespaces: [names.source],
+      namespaceMapping: { [names.source]: names.restored },
+      includeClusterResources: false,
+      existingResourcePolicy: "none",
+    });
+  });
+
+  it("waits for the pod, the backup and the restore of the volume, and records what the node agent and the server made, found by their labels", () => {
+    const { runtime, applied, asked } = volumeRuntime();
+    const record = runLiveVolume(runtime, run);
+
+    expect(applied.map((resource) => `${resource.kind}/${resource.metadata.name}`)).toEqual([
+      `Pod/${names.volumePod}`,
+      `Backup/${names.volumeBackup}`,
+      `Restore/${names.volumeRestore}`,
+    ]);
+    expect(record).toEqual({
+      pod: { name: names.volumePod, uid: `uid-pod-${names.source}`, node: "freelens-velero-dev-control-plane" },
+      restoredPod: {
+        name: names.volumePod,
+        uid: `uid-pod-${names.restored}`,
+        node: "freelens-velero-dev-control-plane",
+      },
+      backup: { name: names.volumeBackup, uid: "uid-backup" },
+      restore: { name: names.volumeRestore, uid: "uid-restore" },
+      podVolumeBackup: {
+        name: `${names.volumeBackup}-x7k2p`,
+        uid: `uid-${names.volumeBackup}-x7k2p`,
+        node: "freelens-velero-dev-control-plane",
+        snapshotID: "f".repeat(32),
+        bytes: VOLUME_BYTES,
+        started: "2026-10-29T20:00:01Z",
+        completed: "2026-10-29T20:00:03Z",
+      },
+      podVolumeRestore: {
+        name: `${names.volumeRestore}-q9m4z`,
+        uid: `uid-${names.volumeRestore}-q9m4z`,
+        node: "freelens-velero-dev-control-plane",
+        bytes: VOLUME_BYTES,
+        started: "2026-10-29T20:00:01Z",
+        completed: "2026-10-29T20:00:03Z",
+      },
+      repository: {
+        name: `${names.source}-default-kopia`,
+        uid: `uid-${names.source}-default-kopia`,
+        labels: labelled(),
+        maintenanceFrequency: "168h0m0s",
+        lastMaintenanceTime: "2026-10-29T20:00:00Z",
+      },
+      checksum: written,
+      bytes: VOLUME_BYTES,
+    });
+    // Nothing of Velero is read by a name it generated, and nothing is written but the three objects applied.
+    expect(asked.filter((words) => !words.startsWith("get") && !words.startsWith("logs"))).toEqual([]);
+  });
+
+  it.each([
+    [{ backup: "PartiallyFailed" }, `The Backup fixture-volume-backup-${run} of the volume ended in PartiallyFailed`],
+    [{ restore: "Failed" }, `The Restore fixture-volume-restore-${run} of the volume ended in Failed`],
+    [
+      { podVolumeBackup: "Failed" },
+      `The pod volume backup fixture-volume-backup-${run}-x7k2p of the backup fixture-volume-backup-${run} is Failed: synthetic failure\nof two lines`,
+    ],
+    [
+      { podVolumeRestore: "Canceled" },
+      `The pod volume restore fixture-volume-restore-${run}-q9m4z of the restore fixture-volume-restore-${run} is Canceled: synthetic failure\nof two lines`,
+    ],
+    [
+      {
+        repositories: [
+          repository(`velero-source-${run}-default-kopia`, labelled(), {
+            phase: "NotReady",
+            message: "synthetic\nunready",
+          }),
+        ],
+      },
+      `The repository velero-source-${run}-default-kopia of the volume is NotReady: synthetic\nunready`,
+    ],
+    [
+      {
+        repositories: [
+          { ...repository(`velero-source-${run}-default-kopia`, labelled()), spec: { maintenanceFrequency: "1h0m0s" } },
+        ],
+      },
+      `The repository velero-source-${run}-default-kopia is maintained every 1h0m0s, not every 168 hours: bring the environment up again, pnpm demo:down then pnpm demo:up`,
+    ],
+    [
+      { backup: "InProgress" },
+      `The Backup fixture-volume-backup-${run} of the volume did not complete within 180 seconds`,
+    ],
+    [
+      { pod: { phase: "Pending" } },
+      `The pod fixture-volume-${run} of the volume was not Running in velero-source-${run} within 180 seconds`,
+    ],
+    [
+      { pod: { phase: "Pending", waiting: "ErrImageNeverPull" } },
+      `The pod fixture-volume-${run} of the volume cannot start: the image of the store is not in the node, and it is never pulled`,
+    ],
+    [
+      { restoredLog: printed("d".repeat(64)) },
+      `The restored volume of fixture-volume-${run} holds other bytes than the pod wrote`,
+    ],
+  ])("refuses with its words a volume that does not go as the release makes it go: %j", (told, words) => {
+    const { runtime, clock } = volumeRuntime(told as Parameters<typeof volumeRuntime>[0]);
+
+    expect(() => runLiveVolume(runtime, run)).toThrow(words);
+    // A bound passed is a bound of its own, and nothing waits longer than it.
+    expect(clock()).toBeLessThanOrEqual(180_000);
+  });
+
+  it("finds the repository of the run by its three labels, never by its name", () => {
+    const named = `velero-source-${run}-default-kopia`;
+
+    // The name the release gives the repository, with the labels of another location: not the one of the run.
+    expect(() =>
+      runLiveVolume(volumeRuntime({ repositories: [repository(named, labelled("elsewhere"))] }).runtime, run),
+    ).toThrow(`No repository is labelled for velero-source-${run}, default and kopia in velero-demo`);
+    // Another name with the labels of the run is the one.
+    expect(
+      runLiveVolume(volumeRuntime({ repositories: [repository(`${named}-renamed`, labelled())] }).runtime, run)
+        .repository.name,
+    ).toBe(`${named}-renamed`);
+    // Two of the same three labels are said so, as the release refuses them.
+    expect(() =>
+      runLiveVolume(
+        volumeRuntime({ repositories: [repository(named, labelled()), repository(`${named}-second`, labelled())] })
+          .runtime,
+        run,
+      ),
+    ).toThrow(
+      `More than one repository is labelled for velero-source-${run}, default and kopia: ${named}, ${named}-second`,
+    );
+    expect(
+      runRepository(
+        [repository("a", labelled("default", "other")), repository("b", labelled())] as KubeResource[],
+        names.source,
+      ).metadata.name,
+    ).toBe("b");
   });
 });
 

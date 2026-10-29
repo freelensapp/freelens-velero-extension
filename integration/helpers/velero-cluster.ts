@@ -367,13 +367,36 @@ export function fixturesReady(): boolean {
     [E2E_ADHERENCE_SCALE_NAMESPACE, "schedules.velero.io", "schedule-300"],
   ];
 
+  // What the volume of the run leaves in the installation, each found by what the release writes into it, one of
+  // each: the repository of the source namespace by its three labels, never by its name, and the pod volume backup
+  // and the pod volume restore of the volume by the label of the name of their owner.
+  const labelled: [namespace: string, resource: string, selector: string][] = [
+    [E2E_NAMESPACE, "backuprepositories.velero.io", runRepositorySelector()],
+    [E2E_NAMESPACE, "podvolumebackups.velero.io", `velero.io/backup-name=fixture-volume-backup-${E2E_FIXTURE_RUN}`],
+    [E2E_NAMESPACE, "podvolumerestores.velero.io", `velero.io/restore-name=fixture-volume-restore-${E2E_FIXTURE_RUN}`],
+  ];
+
   // A run is eight hexadecimal characters: without one, no name of the run is probed.
   const found =
     /^[a-f0-9]{8}$/.test(E2E_FIXTURE_RUN) &&
     probes.every(
       ([namespace, resource, name]) =>
         namespace !== "" && kubectlE2E("get", resource, name, "--namespace", namespace, "-o", "name").status === 0,
-    );
+    ) &&
+    labelled.every(([namespace, resource, selector]) => {
+      const { status, stdout } = kubectlE2E(
+        "get",
+        resource,
+        "--namespace",
+        namespace,
+        "--selector",
+        selector,
+        "-o",
+        "name",
+      );
+
+      return status === 0 && stdout.split("\n").filter(Boolean).length === 1;
+    });
 
   if (!found) return false;
   const installed = kubectlE2E(
@@ -393,6 +416,44 @@ export function fixturesReady(): boolean {
 
   if (submitted) throw new Error(submitted);
   return true;
+}
+
+/**
+ * The labels the release writes into the repository the volume of the run
+ * made, as a selector: the source namespace of the run, the location
+ * `default` and the uploader kopia. The repository is found by them, never by
+ * its name, which the release says it may change.
+ */
+export function runRepositorySelector(): string {
+  return [
+    `velero.io/volume-namespace=velero-source-${E2E_FIXTURE_RUN}`,
+    "velero.io/storage-location=default",
+    "velero.io/repository-type=kopia",
+  ].join(",");
+}
+
+/**
+ * The objects of a family of Velero in a namespace that carry the labels of
+ * `selector`, as the API server holds them: how a suite reads what the server
+ * and the node agent made, whose names they generated.
+ */
+export function labelledObjects<Read>(resource: string, selector: string, namespace = E2E_NAMESPACE): Read[] {
+  if (!KINDS.includes(resource)) {
+    throw new Error(`"${resource}" is not a family of Velero: a request is read by its name, never whole`);
+  }
+  const { status, stdout, stderr } = kubectlE2E(
+    "get",
+    `${resource}.velero.io`,
+    "--namespace",
+    namespace,
+    "--selector",
+    selector,
+    "-o",
+    "json",
+  );
+
+  if (status !== 0) throw new Error(`kubectl get ${resource} --selector ${selector} failed: ${stderr}`);
+  return (JSON.parse(stdout) as { items: Read[] }).items;
 }
 
 // The kinds whose objects the snapshot of a suite compares before and after it: the ones its fixtures place, with

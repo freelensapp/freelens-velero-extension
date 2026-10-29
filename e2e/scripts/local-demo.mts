@@ -201,7 +201,12 @@ interface Journal {
   temporaryChecks?: (ResourceIdentity & { owner: string })[];
   // `tabs` is what the placement of the fixtures of the tabs has reached, recorded before the store is
   // given anything: the metadata it stored is in a file of its own.
-  fixtureRun?: { id: string; started: string; phase: string } & NonNullable<RunJournal["fixtureRun"]>;
+  fixtureRun?: {
+    id: string;
+    started: string;
+    phase: string;
+    repository?: { name: string; uid: string; labels: Record<string, string> };
+  } & NonNullable<RunJournal["fixtureRun"]>;
 }
 
 let journal: Journal;
@@ -1602,7 +1607,9 @@ async function executeLiveFixtures(): Promise<void> {
     journal.fixtureRun?.phase === "static-ready",
     "Static fixtures must be prepared before live verification",
   );
-  const runtime = { owner: journal.owner, kubectl, apply: applyOwned };
+  // The runtime with the clock, which the waits of the volume are bounded by, and the journal, which learns the pod,
+  // the backup and the restore of the volume as they are applied.
+  const runtime = fixtureRuntime();
   const result = await runLiveFixtures(runtime, journal.fixtureRun.id);
   const snapshots = JSON.parse(readFileSync(join(STATE, "fixture-static-snapshots.json"), "utf8")) as KubeResource[];
 
@@ -1610,10 +1617,18 @@ async function executeLiveFixtures(): Promise<void> {
   writeFileSync(join(STATE, "fixture-live-result.json"), JSON.stringify({ run: journal.fixtureRun.id, ...result }), {
     mode: 0o600,
   });
+  // The repository the server made for the volume carries no label of the demo: it is not among the resources of
+  // the journal, whose owner every check asks of each, and the record of the run keeps its identity, by which the
+  // cleanup removes it.
+  journal.fixtureRun.repository = {
+    name: result.volume.repository.name,
+    uid: result.volume.repository.uid,
+    labels: result.volume.repository.labels,
+  };
   journal.fixtureRun.phase = "live-verified";
   save();
   console.log(
-    `PASS: live Backup and Restore Completed; ${result.configMaps} ConfigMaps and ${result.payloadBytes} payload bytes match, and ${snapshots.length} synthetic object versions/statuses are unchanged.`,
+    `PASS: live Backup and Restore Completed; ${result.configMaps} ConfigMaps and ${result.payloadBytes} payload bytes match, and ${snapshots.length} synthetic object versions/statuses are unchanged. The volume of the run backed up and restored by the node agent: ${result.volume.bytes} bytes match, the repository ${result.volume.repository.name} is Ready and maintained every ${result.volume.repository.maintenanceFrequency}.`,
   );
 }
 
