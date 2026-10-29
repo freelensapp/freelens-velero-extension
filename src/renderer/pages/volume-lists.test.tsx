@@ -16,7 +16,7 @@ import {
   repository,
   restore,
 } from "../../../test/volume-builders";
-import { emptyPreferences, heldPreferences, RESOURCES, TITLES } from "../../common/discovery";
+import { ALWAYS, emptyPreferences, heldPreferences, ON_DEMAND, RESOURCES, TITLES } from "../../common/discovery";
 import { VIEWS } from "../../common/views";
 import {
   LIST_NOTES,
@@ -758,7 +758,16 @@ describe("the families of the pod volume operations, read where they are shown",
       await vi.advanceTimersByTimeAsync(2 * READ_EVERY);
     });
     expect([count(overview.asked, PVB), count(overview.asked, PVR)]).toEqual([0, 0]);
+    // What the Overview reads is what every view reads at every read, the backup repositories among it: each of the
+    // six at each of the three reads, and none of the families read on demand.
+    expect(ALWAYS.map((family) => [family, count(overview.asked, path(family))])).toEqual(
+      ALWAYS.map((family) => [family, 3]),
+    );
+    expect(ON_DEMAND.map((family) => count(overview.asked, path(family)))).toEqual(ON_DEMAND.map(() => 0));
+    // The page open reads by a timer, and the page closed leaves none.
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
     cleanup();
+    expect(vi.getTimerCount()).toBe(0);
     const shown = mount(answers(), (installation) => <PodVolumeBackupsPage installation={installation} />);
 
     await waitFor(() => expect(rows("pod-volume-backup")).toHaveLength(pvbs.length));
