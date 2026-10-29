@@ -224,7 +224,10 @@ describe("restores with restricted access", () => {
 
       expect(shown.read.backups).toEqual({ text: "Backups Access denied", state: "denied" });
       expect(shown.read.restores).toEqual({ text: "Restores 6", state: "read" });
-      expect(shown.unchecked).toEqual(["backups"]);
+      // The role of this identity does not name the backup repositories yet, as the one of the first reader never
+      // does: their cell says that they are denied, and their line what was not checked.
+      expect(shown.read.backupRepositories).toEqual({ text: "Backup Repositories Access denied", state: "denied" });
+      expect(shown.unchecked).toEqual(["backups", "backupRepositories"]);
       // The backups denied, none gives the zone of the server: the adherence of the six schedules of five fields that
       // name no zone is not known, and so is the adherence of the two Velero has not read, counted and said.
       expect(shown.summary).toMatch(
@@ -239,6 +242,9 @@ describe("restores with restricted access", () => {
       expect(attention).toContain("The backups of this installation cannot be read: access is denied.");
       expect(attention).toContain(
         "Whether a backup in flight carries a failure, whether one ended with a failure, and how the newest backup of each schedule ended were not checked.",
+      );
+      expect(attention).toContain(
+        "The backup repositories of this installation cannot be read: access is denied. The readiness and the maintenance of the backup repositories were not checked.",
       );
       // No item is of a backup or names one, and no schedule is said to have a newest backup that failed.
       expect(await frame.locator("[data-testid=velero-overview] [data-testid^=velero-open-backup-]").count()).toBe(0);

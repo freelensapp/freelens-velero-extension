@@ -2630,7 +2630,7 @@ export async function groupTabs(frame: Frame): Promise<{ tabs: string[]; active:
 }
 
 export interface OverviewShown {
-  /** What was read of each family: the words of its cell, and its state. */
+  /** What was read of each of the six families, by family: the words of its cell, and its state. */
   read: Record<string, { text: string; state: string }>;
   summary: string;
   /** The items that are shown, in their order: the rule, and what each one names. */
@@ -2656,16 +2656,17 @@ export interface OverviewShown {
 }
 
 /**
- * Waits for the Overview to have read the installation that is selected, and
- * answers what it shows, in the words of each of its parts and without the
- * names of the marks.
+ * Waits for the Overview to have read the installation that is selected, which
+ * is its six cells of what was read, one for each family it reads, the backup
+ * repositories the sixth, each with a state, and answers what it shows, in the
+ * words of each of its parts and without the names of the marks.
  */
 export async function overview(frame: Frame): Promise<OverviewShown> {
   await frame.waitForFunction(
     () => {
       const cells = [...document.querySelectorAll("[data-testid^=velero-overview-read-]")];
 
-      return cells.length === 5 && cells.every((cell) => cell.getAttribute("data-read") !== "not-read");
+      return cells.length === 6 && cells.every((cell) => cell.getAttribute("data-read") !== "not-read");
     },
     undefined,
     { timeout: ELEMENT_TIMEOUT },
