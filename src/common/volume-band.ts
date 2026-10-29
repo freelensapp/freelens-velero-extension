@@ -178,8 +178,8 @@ export const OPERATION_VIEW: Record<VolumeKind, ViewKind> = {
 
 // The way of each row of the Volumes tab of a backup or a restore, by the namespace of its pod, its pod and its
 // volume, among the pod volume operations of that owner (REQ-188), the newest when more than one names the same. A
-// row that no operation matches has none, and none has one while the family is denied: the tab cannot say that a
-// way is of an earlier read, as the band does of its rows.
+// row that no operation matches has none, and none has one while the last read of the family did not succeed,
+// denied, failed or not served: the tab cannot say that a way is of an earlier read, as the band does of its rows.
 export type VolumeWays = ReadonlyMap<string, ViewTarget>;
 
 export function rowKey(podNamespace: string, pod: string, volume: string): string {
@@ -195,7 +195,7 @@ export function volumeWays(
   const of: VolumeKind = kind === "Backup" ? "PodVolumeBackup" : "PodVolumeRestore";
   const read = kind === "Backup" ? index.reads.podVolumeBackups : index.reads.podVolumeRestores;
 
-  if (read.status === "forbidden") return ways;
+  if (read.status !== "ready") return ways;
   for (const operation of ownedBy(index, kind, { name: "", namespace: owner.namespace, uid: owner.uid })) {
     const pod = operation.spec?.pod;
     const volume = operation.spec?.volume;

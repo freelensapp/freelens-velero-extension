@@ -338,17 +338,26 @@ describe("the ways of the rows of the Volumes tab", () => {
     expect(volumeWays(index([], [], { backups: "forbidden" }), "Backup", nightly.metadata).size).toBe(0);
   });
 
-  it("are none when the family is denied after a read that found them, which the band still shows as of that read", () => {
+  it("are none when the last read of the family did not succeed after a read that found them, which the band still shows as of that read", () => {
     const mine = [podVolumeBackup("nightly-a", { phase: "Completed" }, ownedBy("Backup", nightly))];
-    const denied = (status: ReadStatus) =>
-      volumeIndex({ podVolumeBackups: read(mine, status, NOW - MINUTE), podVolumeRestores: read([]) });
+    const after = (status: ReadStatus, reading = false) =>
+      volumeIndex({
+        podVolumeBackups: { ...read(mine, status, NOW - MINUTE), reading },
+        podVolumeRestores: read([]),
+      });
 
-    expect(volumeWays(denied("ready"), "Backup", nightly.metadata).size).toBe(1);
-    expect(volumeWays(denied("forbidden"), "Backup", nightly.metadata).size).toBe(0);
-    expect(
-      backupBand(denied("forbidden"), nightly, operationState("Backup", "Completed")).operations.map(
-        (operation) => operation.metadata.name,
-      ),
-    ).toEqual(["nightly-a"]);
+    expect(volumeWays(after("ready"), "Backup", nightly.metadata).size).toBe(1);
+    expect(volumeWays(after("ready", true), "Backup", nightly.metadata).size).toBe(1);
+    for (const status of ["forbidden", "failed", "not-served"] as const) {
+      expect(volumeWays(after(status), "Backup", nightly.metadata).size, status).toBe(0);
+    }
+    for (const status of ["forbidden", "failed"] as const) {
+      expect(
+        backupBand(after(status), nightly, operationState("Backup", "Completed")).operations.map(
+          (operation) => operation.metadata.name,
+        ),
+        status,
+      ).toEqual(["nightly-a"]);
+    }
   });
 });

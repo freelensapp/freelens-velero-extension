@@ -382,7 +382,7 @@ phases of the backup, as the table above records it.
 | Empty | The list says of what it is the list; the host says that it is empty | The band says that the backup has no volume operation among the ones the installation holds; the repository says that nothing of the installation used it |
 | Restricted | The list is not shown, and says that access is denied and that how many there are is not known | The band says that the kind cannot be read; a reference says denied; the Volumes tab offers no way |
 | Partial | A kind read and another denied: each list and each half of a band on its own | The repository counts the kinds it could read and says which it could not |
-| Stale | The rows of the last read that succeeded, with when; the column of the operation marked when its family is of an earlier read, by the notice over the list that names the family and when it was read | The band says that its operations were read before, and when |
+| Stale | The rows of the last read that succeeded, with when; the column of the operation marked when its family is of an earlier read, by the notice over the list that names the family and when it was read | The band says that its operations were read before, and when; the Volumes tab offers no way, since it cannot say that a way is of an earlier read |
 | Unknown | A phase or a value the release does not write, as text with its mark; an operation New without a node agent read | A reference whose family failed is not known, with the reason |
 | Failure | A read that failed keeps the last rows and says so | A failed operation shows its message; a failed maintenance its message |
 | Not served | A kind the version of the API does not serve, said so by the list and by the band, with nothing else affected | The same |
@@ -994,8 +994,9 @@ The unit and component evidence, by check:
   and none when one of the three is empty or not a text
   (`src/common/artifact-volumes.test.ts`); the ways of an owner by them, the newest
   when two name the same, none for another owner of the same pod and volume, and none
-  when the family was denied, even after a read that found them, while the band keeps
-  them as of that read (`src/common/volume-band.test.ts`); the way in the
+  when the last read of the family did not succeed, denied, failed or not served, even
+  after a read that found them, while the band keeps them as of that read, but kept
+  while the family is asked again (`src/common/volume-band.test.ts`); the way in the
   details of a row of a pod volume backup and of a pod volume restore, which opens
   the view of the operation, and nothing offered and nothing said for a row that no
   operation matches, or with no ways
@@ -1146,10 +1147,11 @@ Decided while implementing, on 2026-10-29:
   alone as well, and says that no pod volume operation of the installation used it,
   where the table of the states says that nothing of the installation used it, which
   holds once the data movement is read.
-- A row of the Volumes tab has no way while the family of the operations of its
-  owner is denied, even when a read before found its operation: the tab cannot say
-  that a way is of an earlier read, as the band says of the rows it keeps
-  (`src/common/volume-band.ts`). The way of a row of the band is named by its volume,
+- A row of the Volumes tab has a way only while the last read of the family of the
+  operations of its owner succeeded: denied, failed or not served, it has none, even
+  when a read before found its operation, since the tab cannot say that a way is of
+  an earlier read, as the band says of the rows it keeps (REQ-192;
+  `src/common/volume-band.ts`). A read asked again keeps the ways until it ends. The way of a row of the band is named by its volume,
   then by the operation it opens, since the pods of one StatefulSet share the name of
   a volume.
 - The rows of the band after the first ten, and the backups and the restores of
