@@ -369,11 +369,19 @@ export function fixturesReady(): boolean {
 
   // What the volume of the run leaves in the installation, each found by what the release writes into it, one of
   // each: the repository of the source namespace by its three labels, never by its name, and the pod volume backup
-  // and the pod volume restore of the volume by the label of the name of their owner.
-  const labelled: [namespace: string, resource: string, selector: string][] = [
-    [E2E_NAMESPACE, "backuprepositories.velero.io", runRepositorySelector()],
-    [E2E_NAMESPACE, "podvolumebackups.velero.io", `velero.io/backup-name=fixture-volume-backup-${E2E_FIXTURE_RUN}`],
-    [E2E_NAMESPACE, "podvolumerestores.velero.io", `velero.io/restore-name=fixture-volume-restore-${E2E_FIXTURE_RUN}`],
+  // and the pod volume restore of the volume by the label of the name of their owner. In the views, whose operations
+  // have generated names: the seven pod volume restores of their restore, and the two repositories of one triple.
+  const labelled: [namespace: string, resource: string, selector: string, count: number][] = [
+    [E2E_NAMESPACE, "backuprepositories.velero.io", runRepositorySelector(), 1],
+    [E2E_NAMESPACE, "podvolumebackups.velero.io", `velero.io/backup-name=fixture-volume-backup-${E2E_FIXTURE_RUN}`, 1],
+    [
+      E2E_NAMESPACE,
+      "podvolumerestores.velero.io",
+      `velero.io/restore-name=fixture-volume-restore-${E2E_FIXTURE_RUN}`,
+      1,
+    ],
+    [E2E_VIEWS_NAMESPACE, "podvolumerestores.velero.io", "velero.io/restore-name=restore-mapped", 7],
+    [E2E_VIEWS_NAMESPACE, "backuprepositories.velero.io", "velero.io/volume-namespace=views-twice", 2],
   ];
 
   // A run is eight hexadecimal characters: without one, no name of the run is probed.
@@ -383,7 +391,7 @@ export function fixturesReady(): boolean {
       ([namespace, resource, name]) =>
         namespace !== "" && kubectlE2E("get", resource, name, "--namespace", namespace, "-o", "name").status === 0,
     ) &&
-    labelled.every(([namespace, resource, selector]) => {
+    labelled.every(([namespace, resource, selector, count]) => {
       const { status, stdout } = kubectlE2E(
         "get",
         resource,
@@ -395,7 +403,7 @@ export function fixturesReady(): boolean {
         "name",
       );
 
-      return status === 0 && stdout.split("\n").filter(Boolean).length === 1;
+      return namespace !== "" && status === 0 && stdout.split("\n").filter(Boolean).length === count;
     });
 
   if (!found) return false;
