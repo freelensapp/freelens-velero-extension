@@ -19,7 +19,7 @@ import {
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { operationState } from "../../common/phases";
 import { BAND_WORDS, bandSentence, REPOSITORY_WORDS, USED_BY_WORDS } from "../../common/volume-words";
-import { VolumeBand } from "../components/volume-band";
+import { UsedBy, VolumeBand } from "../components/volume-band";
 import { closeView, closeViews, openView, openViews } from "../navigation";
 import { Installation, READ_EVERY } from "../state/installation";
 import { BackupsPage } from "./backups-page";
@@ -179,6 +179,8 @@ describe("the band of the volume operations of a backup", () => {
     const way = within(first).getByTestId("velero-open-pod-volume-backup-nightly-00");
 
     expect(way.getAttribute("title")).toBe(BAND_WORDS.way("pod volume backup", "nightly-00"));
+    // Its name begins with the volume the column shows, and says which operation it opens.
+    expect(way.getAttribute("aria-label")).toBe("data: Open the pod volume backup nightly-00");
     fireEvent.click(way);
     await screen.findByTestId("velero-pod-volume-backup-workspace");
     expect(openViews()).toEqual([
@@ -412,6 +414,50 @@ describe("the reads of the views of a backup and of a restore", () => {
     expect(rows()).toHaveLength(10);
     expect(count(asked, "podVolumeRestores")).toBe(0);
   });
+
+  it("hold the family of the first view of the way: a repository, a pod volume backup it names, its location", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const { asked, installation: made } = mount(answers(), (made) => <RepositoriesPage installation={made} />);
+
+    act(() => openView({ kind: "backup-repository", name: "shop-default-kopia" }));
+    const kept = await screen.findByTestId("velero-backup-repository-workspace");
+
+    fireEvent.click(await within(kept).findByTestId("velero-open-pod-volume-backup-nightly-00"));
+    const operation = await screen.findByTestId("velero-pod-volume-backup-workspace");
+
+    fireEvent.click(within(operation).getByTestId("velero-open-storage-location-default"));
+    await screen.findByTestId("velero-storage-location-workspace");
+    const start = count(asked, "podVolumeRestores");
+
+    // Only the repository, under the two views on top, reads the pod volume restores.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(READ_EVERY);
+    });
+    expect(count(asked, "podVolumeRestores")).toBe(start + 1);
+    expect(made.read("podVolumeRestores").status).toBe("ready");
+  });
+
+  it("hold the family of a view in the middle of the way: a pod volume restore, its repository, its location", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const { asked, installation: made } = mount(answers(), (made) => <RestoresPage installation={made} />);
+
+    act(() => openView({ kind: "pod-volume-restore", name: "monday-a" }));
+    const operation = await screen.findByTestId("velero-pod-volume-restore-workspace");
+
+    fireEvent.click(await within(operation).findByTestId("velero-open-backup-repository-shop-default-kopia"));
+    const kept = await screen.findByTestId("velero-backup-repository-workspace");
+
+    fireEvent.click(await within(kept).findByTestId("velero-open-storage-location-default"));
+    await screen.findByTestId("velero-storage-location-workspace");
+    const start = count(asked, "podVolumeBackups");
+
+    // Only the repository, between the first view and the one on top, reads the pod volume backups.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(READ_EVERY);
+    });
+    expect(count(asked, "podVolumeBackups")).toBe(start + 1);
+    expect(made.read("podVolumeBackups").status).toBe("ready");
+  });
 });
 
 describe("what used a repository", () => {
@@ -489,9 +535,106 @@ describe("what used a repository", () => {
     ));
     act(() => openView({ kind: "backup-repository", name: "shop-default-kopia" }));
     workspace = await screen.findByTestId("velero-backup-repository-workspace");
-    expect((await within(workspace).findByTestId("velero-used-by-nothing")).textContent).toBe(
-      "Nothing of the installation used it.",
+    expect((await within(workspace).findByTestId("velero-used-by-nothing")).textContent).toBe(USED_BY_WORDS.nothing);
+  });
+
+  it("shows the backups it belongs to ten at a time, with the focus on the first it added", async () => {
+    const owners = Array.from({ length: 11 }, (_, at) =>
+      backup(`daily-${String(at).padStart(2, "0")}`, "Completed", { uid: `backup-daily-${at}` }),
     );
+    const operations = owners.map((owner, at) =>
+      podVolumeBackup(
+        `${owner.metadata.name}-a`,
+        { phase: "Completed", startTimestamp: before((at + 1) * MINUTE) },
+        ownedBy("Backup", owner),
+      ),
+    );
+
+    mount(answers({ [path("backups")]: list(...owners), [path("podVolumeBackups")]: list(...operations) }), (made) => (
+      <RepositoriesPage installation={made} />
+    ));
+    act(() => openView({ kind: "backup-repository", name: "shop-default-kopia" }));
+    const workspace = await screen.findByTestId("velero-backup-repository-workspace");
+    const used = () => within(workspace).getByTestId("velero-used-by-pod-volume-backup");
+    const named = () =>
+      [...within(used()).getByTestId("velero-used-by-owners").querySelectorAll("li")].map((owner) => owner.textContent);
+
+    await waitFor(() => expect(named()).toEqual(owners.slice(0, 10).map((owner) => owner.metadata.name)));
+    // The command of the owners is not the one of the rows of a band.
+    fireEvent.click(within(used()).getByTestId("velero-used-by-more"));
+    await waitFor(() => expect(named()).toHaveLength(11));
+    expect(document.activeElement?.getAttribute("data-testid")).toBe("velero-open-backup-daily-10");
+    expect(within(used()).queryByTestId("velero-used-by-more")).toBeNull();
+  });
+});
+
+describe("what used a repository in each state of the read of its families", () => {
+  const owner = backup("nightly", "Completed", { uid: "backup-nightly-2" });
+  const mine = podVolumeBackup("nightly-a", { phase: "Completed" }, ownedBy("Backup", owner));
+
+  function shown(backups: ReturnType<typeof read>) {
+    const made = installation({}).installation;
+
+    runInAction(() => {
+      made.reads = { ...made.reads, podVolumeBackups: backups as never, podVolumeRestores: read([]) };
+    });
+    render(<UsedBy installation={made} repository={kopia} />);
+  }
+
+  it.each([
+    [
+      "idle",
+      [],
+      undefined,
+      "not-read",
+      "The pod volume backups of this installation were not read yet: what used it among them is not known.",
+    ],
+    ["loading", [], undefined, "loading", "The pod volume backups of the installation are being read."],
+    [
+      "forbidden",
+      [],
+      undefined,
+      "denied",
+      "The pod volume backups of this installation cannot be read: access is denied. What used it among them is not known.",
+    ],
+    [
+      "failed",
+      [],
+      undefined,
+      "failed",
+      "The pod volume backups of this installation could not be read. What used it among them is not known.",
+    ],
+    [
+      "not-served",
+      [],
+      undefined,
+      "not-served",
+      "The cluster does not serve the pod volume backups of Velero: what used it among them is not known.",
+    ],
+    ["failed", [], NOW - MINUTE, "none", "None of the pod volume backups of the installation names it."],
+    ["forbidden", [mine], NOW - MINUTE, "rows", "1 pod volume backup"],
+  ] as const)("says what is known of a kind when its read is %s", (status, items, lastSuccess, state, words) => {
+    shown(read(items as unknown as Resource[], status as ReadStatus, lastSuccess));
+    const used = screen.getByTestId("velero-used-by-pod-volume-backup");
+    const said =
+      state === "rows" ? within(used).getByTestId("velero-used-by-count") : used.querySelector("p[data-state]");
+
+    expect([said?.getAttribute("data-state") ?? "rows", said?.textContent]).toEqual([state, words]);
+    // What is of an earlier read says so in place, with or without rows, and nothing is said unused.
+    expect(within(used).queryByTestId("velero-volume-stale")?.textContent).toBe(
+      lastSuccess === undefined
+        ? undefined
+        : `The pod volume backups could not be read again: these are the ones read at ${new Date(lastSuccess).toLocaleTimeString()}.`,
+    );
+    expect(screen.queryByTestId("velero-used-by-nothing")).toBeNull();
+  });
+
+  it("says that no pod volume operation of the installation used it only when each kind was read now and none names it", () => {
+    shown(read([]));
+    expect(screen.getByTestId("velero-used-by-nothing").textContent).toBe(
+      "No pod volume operation of the installation used it.",
+    );
+    expect(screen.queryByTestId("velero-used-by-pod-volume-backup")).toBeNull();
   });
 });
 

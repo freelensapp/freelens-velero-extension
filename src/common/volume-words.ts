@@ -316,12 +316,15 @@ export const BAND_WORDS = {
   groups: (plural: string) => `The ${plural} by phase`,
   more: "Show ten more",
   way: (noun: string, name: string) => `Open the ${noun} ${name}`,
+  // The name of the way of a row: its volume first, which is what the column shows, then the operation it opens.
+  rowWay: (volume: string, noun: string, name: string) => `${volume}: ${BAND_WORDS.way(noun, name)}`,
 };
 
-const BAND_SENTENCES: Record<
-  OperationKind,
-  Record<"waiting" | "validation" | "running" | "plugins" | "finalizing" | "ended" | "deleting" | "unknown", string>
-> = {
+type BandSentence = "waiting" | "validation" | "running" | "plugins" | "finalizing" | "ended" | "unknown";
+
+// A restore has no sentence of its deletion: the release writes no phase Deleting for a restore, and one that reports
+// it reports a phase the release does not write.
+const BAND_SENTENCES: { Backup: Record<BandSentence | "deleting", string>; Restore: Record<BandSentence, string> } = {
   Backup: {
     waiting: "The pod volume backups of a backup are made while it is InProgress: this one has not started.",
     validation:
@@ -346,7 +349,6 @@ const BAND_SENTENCES: Record<
     plugins: "The restore waits for its plugin operations, which is when its data downloads run.",
     finalizing: "The pod volume restores the installation holds of this restore are the ones its run made.",
     ended: "The pod volume restores the installation holds of this restore are the ones its run made.",
-    deleting: "The restore is being deleted: its pod volume restores go with it.",
     unknown:
       "The restore reports a phase the release does not write: what the release does with its pod volume restores is not known.",
   },
@@ -355,11 +357,11 @@ const BAND_SENTENCES: Record<
 // What the release does with the pod volume operations of a backup or a restore, by the phase of the backup or the
 // restore (SPEC-0014, what the release does). One that reports no phase is taken by the release as a new one.
 export function bandSentence(kind: OperationKind, state: OperationState): string {
-  const sentences = BAND_SENTENCES[kind];
+  const sentences: Record<BandSentence, string> & { deleting?: string } = BAND_SENTENCES[kind];
 
   if (state.reported === undefined) return sentences.waiting;
   if (!state.recognized) return sentences.unknown;
-  if (state.lifecycle === "deleting") return sentences.deleting;
+  if (state.lifecycle === "deleting" && sentences.deleting) return sentences.deleting;
   if (state.failure === "validation") return sentences.validation;
   if (state.execution === "not-started") return sentences.waiting;
   if (state.reported === "InProgress") return sentences.running;
@@ -369,10 +371,11 @@ export function bandSentence(kind: OperationKind, state: OperationState): string
 }
 
 // What the view of a repository says of what used it (SPEC-0014, REQ-187): the kinds it could read are counted, and
-// the ones it could not are named.
+// the ones it could not are named. It reads the pod volume operations alone until the data movement is read, and
+// says nothing of what it does not read.
 export const USED_BY_WORDS = {
   title: "Used by",
-  nothing: "Nothing of the installation used it.",
+  nothing: "No pod volume operation of the installation used it.",
   none: (plural: string) => `None of the ${plural} of the installation names it.`,
   loading: (plural: string) => `The ${plural} of the installation are being read.`,
   denied: (plural: string) =>

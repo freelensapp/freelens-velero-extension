@@ -3,6 +3,7 @@ import {
   backup,
   before,
   MINUTE,
+  NOW,
   ownedBy,
   podVolumeBackup,
   podVolumeRestore,
@@ -50,6 +51,9 @@ describe("the counts of the band by phase", () => {
       phased("Canceling", "h"),
       phased("Canceled", "i"),
       phased("Prepared", "j"),
+      // A phase written empty, or as null, is none.
+      podVolumeBackup("k", { phase: "" as never }, ownedBy("Backup", nightly)),
+      podVolumeBackup("l", { phase: null as never }, ownedBy("Backup", nightly)),
     ];
 
     expect(
@@ -62,7 +66,7 @@ describe("the counts of the band by phase", () => {
       ["Canceling", "Canceling", 1],
       ["Prepared", "Prepared", 1],
       ["Accepted", "Accepted", 1],
-      ["New", "New", 2],
+      ["New", "New", 4],
     ]);
   });
 
@@ -202,6 +206,14 @@ describe("the band of a backup and of a restore", () => {
     expect(restores("New")).toBe(
       "The pod volume restores of a restore are made while it is InProgress: this one has not started.",
     );
+    expect(restores("Paused")).toBe(
+      "The restore reports a phase the release does not write: what the release does with its pod volume restores is not known.",
+    );
+    // The release writes no phase Deleting for a restore.
+    expect(restores("Deleting")).toBe(restores("Paused"));
+    // A phase the release does not write is not known, even when it begins as one it does.
+    expect(backups("FinalizingSoon")).toBe(backups("Paused"));
+    expect(restores("WaitingForPluginOperationsSoon")).toBe(restores("Paused"));
   });
 });
 
@@ -324,5 +336,19 @@ describe("the ways of the rows of the Volumes tab", () => {
     expect(volumeWays(made, "Backup", weekly.metadata).size).toBe(0);
     expect(volumeWays(made, "Backup", { namespace: "velero" }).size).toBe(0);
     expect(volumeWays(index([], [], { backups: "forbidden" }), "Backup", nightly.metadata).size).toBe(0);
+  });
+
+  it("are none when the family is denied after a read that found them, which the band still shows as of that read", () => {
+    const mine = [podVolumeBackup("nightly-a", { phase: "Completed" }, ownedBy("Backup", nightly))];
+    const denied = (status: ReadStatus) =>
+      volumeIndex({ podVolumeBackups: read(mine, status, NOW - MINUTE), podVolumeRestores: read([]) });
+
+    expect(volumeWays(denied("ready"), "Backup", nightly.metadata).size).toBe(1);
+    expect(volumeWays(denied("forbidden"), "Backup", nightly.metadata).size).toBe(0);
+    expect(
+      backupBand(denied("forbidden"), nightly, operationState("Backup", "Completed")).operations.map(
+        (operation) => operation.metadata.name,
+      ),
+    ).toEqual(["nightly-a"]);
   });
 });

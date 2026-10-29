@@ -80,7 +80,7 @@ function GroupMark({ state }: { state: VolumeOperationState }) {
 // The rows of a half, ten at a time, from the newest: each the pod and the volume, the phase, the bytes and the node,
 // the volume a way to the view of the operation, which returns to where it was opened from.
 function Rows({ kind, operations }: { kind: VolumeKind; operations: readonly VolumeOperation[] }) {
-  const { shown, more, within } = usePages(operations);
+  const { shown, more, within } = usePages(operations, "velero-volume-more");
   const view = OPERATION_VIEW[kind];
 
   return (
@@ -113,6 +113,7 @@ function Rows({ kind, operations }: { kind: VolumeKind; operations: readonly Vol
                     type="button"
                     className={styles.link}
                     title={BAND_WORDS.way(noun(kind), name)}
+                    aria-label={BAND_WORDS.rowWay(volume ?? NOT_REPORTED, noun(kind), name)}
                     data-way={name}
                     data-testid={`velero-open-${view}-${name}`}
                     onClick={() => openView({ kind: view, name })}
@@ -152,8 +153,8 @@ function Rows({ kind, operations }: { kind: VolumeKind; operations: readonly Vol
 }
 
 // Ten at a time, and the command that shows ten more, which gives the focus to the first it added: where the focus
-// was, the command may be gone.
-function usePages<Item>(items: readonly Item[]) {
+// was, the command may be gone. Each list has its command, with its own test id.
+function usePages<Item>(items: readonly Item[], command: string) {
   const [pages, setPages] = React.useState(1);
   const [focusAt, setFocusAt] = React.useState<number | undefined>(undefined);
   const within = React.useRef<HTMLElement>(null);
@@ -171,7 +172,7 @@ function usePages<Item>(items: readonly Item[]) {
       <button
         type="button"
         className={styles.link}
-        data-testid="velero-volume-more"
+        data-testid={command}
         onClick={() => {
           setFocusAt(shown.length);
           setPages(pages + 1);
@@ -186,7 +187,7 @@ function usePages<Item>(items: readonly Item[]) {
 
 // The backups or the restores the operations that used a repository belong to, ten at a time.
 function Owners({ owners }: { owners: Reference[] }) {
-  const { shown, more, within } = usePages(owners);
+  const { shown, more, within } = usePages(owners, "velero-used-by-more");
 
   return (
     <>
@@ -286,15 +287,16 @@ export const VolumeBand = observer(({ installation, kind, owner, state }: Volume
 });
 
 // What used a repository, by kind (SPEC-0014, REQ-187): the kinds read are counted by phase with the newest of each
-// and the backups and restores they belong to, each a way; the kinds not read are named. Nothing used it is said
-// only when every kind was read and none names it.
+// and the backups and restores they belong to, each a way; the kinds not read are named, and a kind of an earlier
+// read says so in place, as the band does. That no operation of the kinds it reads used it is said only when every
+// kind was read now and none names it.
 export const UsedBy = observer(
   ({ installation, repository }: { installation: Installation; repository: BackupRepositoryResource }) => {
     const uses = repositoryUses(volumesOf(installation), repository, {
       backups: installation.read("backups"),
       restores: installation.read("restores"),
     });
-    const nothing = uses.every((use) => halfState(use.read) === "rows" && !use.operations.length);
+    const nothing = uses.every((use) => halfState(use.read) === "rows" && !isStale(use.read) && !use.operations.length);
 
     return (
       <section data-testid="velero-used-by">
@@ -323,9 +325,12 @@ function Use({ use }: { use: ReturnType<typeof repositoryUses>[number] }) {
           {USED_BY_WORDS[state](plural(kind))}
         </p>
       ) : !use.operations.length ? (
-        <p className={styles.stateText} data-state="none">
-          {USED_BY_WORDS.none(plural(kind))}
-        </p>
+        <>
+          <p className={styles.stateText} data-state="none">
+            {USED_BY_WORDS.none(plural(kind))}
+          </p>
+          <StaleRead kind={kind} read={use.read} />
+        </>
       ) : (
         <>
           <p className={styles.factNote} data-testid="velero-used-by-count">
