@@ -43,10 +43,10 @@ const manifest: Manifest = JSON.parse(readFileSync(resolve("package.json"), "utf
 const MAIN = resolve("dist/main.js");
 const RENDERER = resolve("dist/renderer.js");
 
-// The nightly of the validation target of SPEC-0015, and the versions of the catalog of the host at that commit
-// (pnpm-workspace.yaml of freelensapp/freelens at 7801fb10a5f20af308093b39e5f79cd6e8c3461d, lines 11 to 17, 56
+// The release of the validation target of SPEC-0015, and the versions of the catalog of the host at its commit
+// (pnpm-workspace.yaml of freelensapp/freelens at b9b53e16056578c5407312eba5823a089972f6d5, lines 11 to 17, 56
 // and 120).
-const SDK = "2.0.0-0-nightly-2026-10-25";
+const SDK = "2.0.0";
 const HOST_LIBRARIES = {
   react: "19.3.1",
   "react-dom": "19.3.1",
@@ -54,7 +54,7 @@ const HOST_LIBRARIES = {
   "@types/react-dom": "19.3.0",
   mobx: "7.0.6",
   "mobx-react": "10.0.2",
-  electron: "43.8.3",
+  electron: "44.10.0",
 };
 const REACT_WINDOW = "2.3.4";
 
@@ -81,7 +81,7 @@ describe("the manifest", () => {
     expect(manifest.private).toBeUndefined();
   });
 
-  it("pins the SDK exactly to the nightly of the validation target, and takes no other package of Freelens", () => {
+  it("pins the SDK exactly to the version of the validation target, and takes no other package of Freelens", () => {
     const all = [
       manifest.dependencies,
       manifest.devDependencies,

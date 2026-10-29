@@ -5,7 +5,7 @@
 - **Milestone / tasks:** Foundation / T0.7, T0.8
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, unchanged
 - **Reviewed main:** not relevant: the subject of this spec is the host, and it reads or changes no behavior of Velero
-- **Freelens validation target:** freelensapp/freelens `7801fb10a5f20af308093b39e5f79cd6e8c3461d`, the base of the nightly v2.0.0-0-nightly-2026-10-25, with `@freelensapp/extensions` 2.0.0-0-nightly-2026-10-25; it moves with the host drift watch until Freelens 2.0.0 is released
+- **Freelens validation target:** freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0, with `@freelensapp/extensions` 2.0.0; the host drift watch moved it to this release, and the range of versions of the SDK of D10 is work of M6
 - **Dependencies:** [local foundation](SPEC-0001-local-foundation.md); [test environment](SPEC-0004-test-environment-every-platform.md); [the write gate](SPEC-0009-write-gate.md); [the diagnostic request and its transport](SPEC-0010-diagnostic-request-and-transport.md); [the viewers](SPEC-0011-artifact-viewers.md); for the re-verification, the specs of M1 to M3, SPEC-0002 to SPEC-0012, and [the adherence of a schedule](SPEC-0013-schedule-adherence.md) for T3.1 and T3.2
 - **Approval:** Approved by the lead maintainer on 2026-10-16, as drafted. The version and release plan, D10, was decided by the lead maintainer the same day
 
