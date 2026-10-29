@@ -1,5 +1,5 @@
 import { isAbsolute } from "node:path";
-import { DEMO_NAMESPACE, OWNER_LABEL, requireCondition, SUBNETS } from "./local-kind.mts";
+import { DEMO_CONTEXT, DEMO_NAMESPACE, OWNER_LABEL, requireCondition, SUBNETS } from "./local-kind.mts";
 
 export const IMAGES = {
   node: "docker.io/kindest/node:v1.34.11@sha256:44e222ee2132dab25ff87301682f89eb82c7880ea3a1bf543bfe9708fd08d67d",
@@ -122,6 +122,113 @@ export function prepareVeleroResources(owner: string, generated: { items: KubeRe
     }
   }
   return resources;
+}
+
+// The frequency of the maintenance the server gives every repository it makes: a week, so that no maintenance Job runs
+// while the suites run and the repository of the volume of a run keeps the maintenance time of its initialization.
+export const MAINTAIN_FREQUENCY = "168h";
+export const MAINTAIN_FREQUENCY_HOURS = 168;
+const MAINTAIN_FREQUENCY_FLAG = "--default-repo-maintain-frequency";
+
+// The flags of the installer that the probe of the images finds in its help before the install passes them.
+export const INSTALLER_FLAGS = [
+  "--dry-run",
+  "--output",
+  "--namespace",
+  "--use-node-agent",
+  "--image",
+  "--plugins",
+  "--use-volume-snapshots",
+  "--backup-location-config",
+  "--secret-file",
+  MAINTAIN_FREQUENCY_FLAG,
+];
+
+// The arguments of the installer after its entry point: the server and the node agent of the pinned images, the local
+// store, no snapshot of a volume, and the maintenance frequency of the repositories.
+export function veleroInstallArguments(): string[] {
+  return [
+    "install",
+    "--dry-run",
+    "--output=json",
+    "--kubeconfig=/local-kubeconfig",
+    `--kubecontext=${DEMO_CONTEXT}`,
+    `--namespace=${DEMO_NAMESPACE}`,
+    "--provider=aws",
+    `--bucket=${BUCKET}`,
+    "--secret-file=/local-credentials",
+    `--image=${preloadedImage(IMAGES.velero)}`,
+    `--plugins=${preloadedImage(IMAGES.plugin)}`,
+    "--use-volume-snapshots=false",
+    "--use-node-agent",
+    `${MAINTAIN_FREQUENCY_FLAG}=${MAINTAIN_FREQUENCY}`,
+    `--backup-location-config=region=us-east-1,s3ForcePathStyle=true,s3Url=${STORAGE_ENDPOINT}`,
+  ];
+}
+
+const DURATION_UNITS: Record<string, number> = { h: 3_600_000, m: 60_000, s: 1_000, ms: 1, us: 0.001, ns: 0.000_001 };
+
+// A duration written as the server reads one: the installer writes the week of the flag as "168h0m0s" into the
+// Deployment, which is the same duration as "168h". None when the text is not a duration.
+export function durationMilliseconds(text: string): number | undefined {
+  if (!/^(\d+(\.\d+)?(h|ms|m|s|us|ns))+$/.test(text)) return undefined;
+  let total = 0;
+
+  for (const [, value, unit] of text.matchAll(/(\d+(?:\.\d+)?)(h|ms|m|s|us|ns)/g))
+    total += Number(value) * DURATION_UNITS[unit];
+  return total;
+}
+
+// The maintenance frequency the server of the installation runs with, in hours, read on its Deployment in either form
+// of the argument (one word with "=", or the flag and its value); none when the server runs without it.
+export function maintainFrequencyHours(deployment: KubeResource): number | undefined {
+  const spec = deployment.spec as { template?: { spec?: { containers?: { args?: string[] }[] } } } | undefined;
+  const words = (spec?.template?.spec?.containers ?? []).flatMap((container) => container.args ?? []);
+  const at = words.findIndex(
+    (word) => word === MAINTAIN_FREQUENCY_FLAG || word.startsWith(`${MAINTAIN_FREQUENCY_FLAG}=`),
+  );
+
+  if (at < 0) return undefined;
+  const value =
+    words[at] === MAINTAIN_FREQUENCY_FLAG ? words[at + 1] : words[at].slice(MAINTAIN_FREQUENCY_FLAG.length + 1);
+  const milliseconds = value === undefined ? undefined : durationMilliseconds(value);
+
+  return milliseconds === undefined ? undefined : milliseconds / 3_600_000;
+}
+
+// An environment made before the server took the frequency maintains the repository of the volume every hour, as a Job
+// that the guard of the suites would count: it is brought up again, never patched in place.
+export function assertMaintainFrequency(deployment: KubeResource): void {
+  const hours = maintainFrequencyHours(deployment);
+
+  requireCondition(
+    hours === MAINTAIN_FREQUENCY_HOURS,
+    hours === undefined
+      ? `The Velero server of the environment runs without ${MAINTAIN_FREQUENCY_FLAG}=${MAINTAIN_FREQUENCY}: the environment was made before its repositories were maintained once a week. Bring it up again: pnpm demo:down, then pnpm demo:up`
+      : `The Velero server of the environment maintains its repositories every ${hours} hours, not ${MAINTAIN_FREQUENCY_HOURS}. Bring it up again: pnpm demo:down, then pnpm demo:up`,
+  );
+}
+
+// The kinds of which a verified installation holds no object: the operations the fixtures and the suites make, and the
+// repositories and the operations the server and the node agent make for the volume of a run, which its cleanup removes.
+export const FIXTURE_FREE_KINDS = [
+  "backups.velero.io",
+  "restores.velero.io",
+  "schedules.velero.io",
+  "downloadrequests.velero.io",
+  "serverstatusrequests.velero.io",
+  "backuprepositories.velero.io",
+  "podvolumebackups.velero.io",
+  "podvolumerestores.velero.io",
+  "datauploads.velero.io",
+  "datadownloads.velero.io",
+];
+
+export function assertFixtureFreeInstallation(items: KubeResource[]): void {
+  requireCondition(
+    items.length === 0,
+    `T0.4 readiness requires a fixture-free installation; it holds ${items.map((item) => `${item.kind} ${item.metadata.name}`).join(", ")}`,
+  );
 }
 
 export function kindConfiguration(hostsFile: string) {

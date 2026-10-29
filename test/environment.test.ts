@@ -151,16 +151,24 @@ import {
   subnetsOverlap,
 } from "../e2e/scripts/local-kind.mts";
 import {
+  assertFixtureFreeInstallation,
+  assertMaintainFrequency,
   BUCKET,
+  durationMilliseconds,
+  FIXTURE_FREE_KINDS,
   IMAGES,
+  INSTALLER_FLAGS,
   KIND_HOSTS,
   type KubeResource,
   kindConfiguration,
+  MAINTAIN_FREQUENCY,
+  maintainFrequencyHours,
   preloadedImage,
   prepareVeleroResources,
   STORAGE_ENDPOINT,
   storageConfiguration,
   storageManifests,
+  veleroInstallArguments,
 } from "../e2e/scripts/local-manifests.mts";
 import {
   assertBinary,
@@ -10926,6 +10934,79 @@ describe("local storage setup contracts", () => {
     });
     resource.spec.template.spec.containers[0].image = "unapproved/image:latest";
     expect(() => prepareVeleroResources("synthetic-owner", { items: [resource] })).toThrow();
+  });
+
+  it("installs the server with the maintenance frequency of a week, a flag the probe of the images finds first", () => {
+    const words = veleroInstallArguments();
+
+    expect(MAINTAIN_FREQUENCY).toBe("168h");
+    expect(words).toContain("--default-repo-maintain-frequency=168h");
+    expect(words[0]).toBe("install");
+    expect(words).toContain("--use-node-agent");
+    expect(words).toContain("--use-volume-snapshots=false");
+    expect(INSTALLER_FLAGS).toContain("--default-repo-maintain-frequency");
+    // Every flag the probe finds is one the install passes, and the one of the frequency is among them.
+    for (const flag of INSTALLER_FLAGS)
+      expect(words.some((word) => word === flag || word.startsWith(`${flag}=`))).toBe(true);
+  });
+
+  it("reads the maintenance frequency on the Deployment of the server in either form, and says to bring the environment up again without it", () => {
+    const deployment = (...args: string[]): KubeResource => ({
+      apiVersion: "apps/v1",
+      kind: "Deployment",
+      metadata: { name: "velero", namespace: "velero-demo" },
+      spec: {
+        template: { spec: { containers: [{ name: "velero", args: ["server", "--uploader-type=kopia", ...args] }] } },
+      },
+    });
+
+    // The installer writes the duration as the server prints one; the flag says it as a person writes it.
+    expect(maintainFrequencyHours(deployment("--default-repo-maintain-frequency=168h0m0s"))).toBe(168);
+    expect(maintainFrequencyHours(deployment("--default-repo-maintain-frequency=168h"))).toBe(168);
+    expect(maintainFrequencyHours(deployment("--default-repo-maintain-frequency", "10080m"))).toBe(168);
+    expect(maintainFrequencyHours(deployment("--default-repo-maintain-frequency=1h0m0s"))).toBe(1);
+    expect(maintainFrequencyHours(deployment())).toBeUndefined();
+    expect(maintainFrequencyHours(deployment("--default-repo-maintain-frequency=168"))).toBeUndefined();
+    expect(durationMilliseconds("1h30m")).toBe(5_400_000);
+    expect(durationMilliseconds("1.5h")).toBe(5_400_000);
+    expect(durationMilliseconds("a week")).toBeUndefined();
+    expect(() => assertMaintainFrequency(deployment("--default-repo-maintain-frequency=168h0m0s"))).not.toThrow();
+    expect(() => assertMaintainFrequency(deployment("--default-repo-maintain-frequency=168h"))).not.toThrow();
+    // An environment made before the flag: its server maintains every repository every hour.
+    expect(() => assertMaintainFrequency(deployment())).toThrow(
+      "The Velero server of the environment runs without --default-repo-maintain-frequency=168h: the environment was made before its repositories were maintained once a week. Bring it up again: pnpm demo:down, then pnpm demo:up",
+    );
+    expect(() => assertMaintainFrequency(deployment("--default-repo-maintain-frequency=1h0m0s"))).toThrow(
+      "The Velero server of the environment maintains its repositories every 1 hours, not 168. Bring it up again: pnpm demo:down, then pnpm demo:up",
+    );
+  });
+
+  it("verifies an installation that holds no object of the kinds the fixtures, the suites and the volume of a run make", () => {
+    for (const kind of [
+      "backups",
+      "restores",
+      "schedules",
+      "downloadrequests",
+      "serverstatusrequests",
+      "backuprepositories",
+      "podvolumebackups",
+      "podvolumerestores",
+      "datauploads",
+      "datadownloads",
+    ])
+      expect(FIXTURE_FREE_KINDS).toContain(`${kind}.velero.io`);
+    expect(FIXTURE_FREE_KINDS).toHaveLength(10);
+    expect(() => assertFixtureFreeInstallation([])).not.toThrow();
+    for (const [apiVersion, kind, name] of [
+      ["velero.io/v1", "BackupRepository", "velero-source-run-default-kopia"],
+      ["velero.io/v1", "PodVolumeBackup", "fixture-volume-backup-run-abcde"],
+      ["velero.io/v1", "PodVolumeRestore", "fixture-volume-restore-run-abcde"],
+      ["velero.io/v2alpha1", "DataUpload", "synthetic-upload"],
+      ["velero.io/v2alpha1", "DataDownload", "synthetic-download"],
+    ])
+      expect(() =>
+        assertFixtureFreeInstallation([{ apiVersion, kind, metadata: { name, namespace: "velero-demo" } }]),
+      ).toThrow(`T0.4 readiness requires a fixture-free installation; it holds ${kind} ${name}`);
   });
 
   it("pins every image and the loopback-only kind API", () => {

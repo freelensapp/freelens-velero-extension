@@ -91,10 +91,13 @@ import {
   subnetsOverlap,
 } from "./local-kind.mts";
 import {
+  assertFixtureFreeInstallation,
+  assertMaintainFrequency,
   BUCKET,
   type Credentials,
   DATA_DIRECTORY,
   DIRECT_PROOF_IMAGE,
+  FIXTURE_FREE_KINDS,
   IMAGES,
   KIND_HOSTS,
   type KubeResource,
@@ -103,6 +106,7 @@ import {
   prepareVeleroResources,
   STORAGE_ENDPOINT,
   storageManifests,
+  veleroInstallArguments,
 } from "./local-manifests.mts";
 import {
   assertBinary,
@@ -1079,20 +1083,7 @@ function installVelero(): void {
       `type=bind,src=${CONFIG},dst=/local-kubeconfig,readonly`,
       "--entrypoint=/velero",
       IMAGES.velero,
-      "install",
-      "--dry-run",
-      "--output=json",
-      "--kubeconfig=/local-kubeconfig",
-      `--kubecontext=${DEMO_CONTEXT}`,
-      `--namespace=${DEMO_NAMESPACE}`,
-      "--provider=aws",
-      `--bucket=${BUCKET}`,
-      "--secret-file=/local-credentials",
-      `--image=${preloadedImage(IMAGES.velero)}`,
-      `--plugins=${preloadedImage(IMAGES.plugin)}`,
-      "--use-volume-snapshots=false",
-      "--use-node-agent",
-      `--backup-location-config=region=us-east-1,s3ForcePathStyle=true,s3Url=${STORAGE_ENDPOINT}`,
+      ...veleroInstallArguments(),
     ]),
   ) as { items: KubeResource[] };
   const resources = prepareVeleroResources(journal.owner, generated);
@@ -1286,23 +1277,19 @@ async function verifyEnvironment(): Promise<void> {
   for (const workload of ["deployment/seaweedfs", "deployment/velero", "daemonset/node-agent"]) {
     kubectl(["rollout", "status", workload, "--namespace", DEMO_NAMESPACE, "--timeout=60s"], undefined, 90_000);
   }
+  assertMaintainFrequency(
+    JSON.parse(kubectl(["get", "deployment/velero", "--namespace", DEMO_NAMESPACE, "-o", "json"])) as KubeResource,
+  );
   const location = JSON.parse(
     kubectl(["get", "backupstoragelocation/default", "--namespace", DEMO_NAMESPACE, "-o", "json"]),
   ) as { status?: { phase?: string } };
 
   requireCondition(location.status?.phase === "Available", "The local BackupStorageLocation is not Available");
   const operations = JSON.parse(
-    kubectl([
-      "get",
-      "backups.velero.io,restores.velero.io,schedules.velero.io,downloadrequests.velero.io,serverstatusrequests.velero.io",
-      "--namespace",
-      DEMO_NAMESPACE,
-      "-o",
-      "json",
-    ]),
-  ) as { items: unknown[] };
+    kubectl(["get", FIXTURE_FREE_KINDS.join(","), "--namespace", DEMO_NAMESPACE, "-o", "json"]),
+  ) as { items: KubeResource[] };
 
-  requireCondition(operations.items.length === 0, "T0.4 readiness requires a fixture-free installation");
+  assertFixtureFreeInstallation(operations.items);
   const pods = JSON.parse(
     kubectl([
       "get",

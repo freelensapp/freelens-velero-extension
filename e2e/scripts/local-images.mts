@@ -4,7 +4,7 @@ import { request } from "node:http";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEMO_CLUSTER, DOCKER_HOST, localEnvironment, requireCondition } from "./local-kind.mts";
-import { DIRECT_PROOF_IMAGE, IMAGES, KIND_HOSTS, storageManifests } from "./local-manifests.mts";
+import { DIRECT_PROOF_IMAGE, IMAGES, INSTALLER_FLAGS, KIND_HOSTS, storageManifests } from "./local-manifests.mts";
 import {
   assertIndexPlatforms,
   type DockerInfo,
@@ -155,18 +155,7 @@ function probe(): void {
     requireCondition(output.includes(argument.split("=")[0]), `Unsupported storage flag: ${argument.split("=")[0]}`);
   const velero = docker([...sandbox, "--entrypoint=/velero", IMAGES.velero, "install", "--help"]);
 
-  for (const flag of [
-    "--dry-run",
-    "--output",
-    "--namespace",
-    "--use-node-agent",
-    "--image",
-    "--plugins",
-    "--use-volume-snapshots",
-    "--backup-location-config",
-    "--secret-file",
-  ])
-    requireCondition(velero.includes(flag), `Missing installer flag: ${flag}`);
+  for (const flag of INSTALLER_FLAGS) requireCondition(velero.includes(flag), `Missing installer flag: ${flag}`);
   const hosts = join(privateDirectory, "hosts");
 
   writeFileSync(hosts, KIND_HOSTS, { mode: 0o644 });
