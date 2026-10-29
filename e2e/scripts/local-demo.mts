@@ -2759,7 +2759,7 @@ function prepareDemo(): void {
       "The demo is ready to be looked at in Freelens. The kubeconfigs name this cluster alone:",
       `  all the namespaces:     ${CONFIG}`,
       `  the reader of a part:   ${reader} (backups, schedules, storage locations; its credential lasts eight hours)`,
-      `  the second reader:      ${second} (restores, schedules, locations and no backup; eight hours)`,
+      `  the second reader:      ${second} (restores, schedules, locations, pod volume operations, repositories and no backup; eight hours)`,
       `The namespaces of Velero: ${DEMO_NAMESPACE}, ${names.static}, ${names.views}, ${names.defaults}, ${names.overview}; to be named: ${names.scale}, ${names.adherence}, ${names.adherenceSplit}, ${names.adherenceScale}.`,
       `What each artifact of the tabs holds, counted outside the extension: ${TABS.facts}`,
     ].join("\n"),

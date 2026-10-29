@@ -900,6 +900,9 @@ export function viewFixtures(
       "schedules",
       "backupstoragelocations",
       "volumesnapshotlocations",
+      "podvolumebackups",
+      "podvolumerestores",
+      "backuprepositories",
     ]),
   ];
 }

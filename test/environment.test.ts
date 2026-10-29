@@ -1715,7 +1715,9 @@ describe("foundation fixture boundaries", () => {
         verbs: ["get", "list", "watch"],
       },
     ]);
-    // The second reader reads the restores and what they refer to, and not the backups.
+    // The second reader reads the restores and what they refer to, the pod volume operations and the
+    // repositories, and not the backups: a pod volume restore whose restore it reads, a pod volume backup whose
+    // backup it is denied. The first reads none of the three.
     const roles = resources.filter((resource) => resource.kind === "Role");
     const bindings = resources.filter((resource) => resource.kind === "RoleBinding");
 
@@ -1723,7 +1725,15 @@ describe("foundation fixture boundaries", () => {
     expect(roles[1].rules).toEqual([
       {
         apiGroups: ["velero.io"],
-        resources: ["restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"],
+        resources: [
+          "restores",
+          "schedules",
+          "backupstoragelocations",
+          "volumesnapshotlocations",
+          "podvolumebackups",
+          "podvolumerestores",
+          "backuprepositories",
+        ],
         verbs: ["get", "list", "watch"],
       },
     ]);
