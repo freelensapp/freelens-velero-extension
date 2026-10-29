@@ -18,9 +18,9 @@ the views, and nothing else.
   `corepack pnpm`. kind and kubectl are installed by the first command, under
   the private state of the environment.
 - Freelens v2 at the validation target of
-  [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md): the nightly
-  v2.0.0-0-nightly-2026-10-25, built from freelensapp/freelens `7801fb10`, its
-  download checked against the checksum the release publishes beside it.
+  [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md): the release Freelens
+  2.0.0, built from freelensapp/freelens `b9b53e16`, its tag v2.0.0, its download
+  checked against the checksum the release publishes beside it.
   Freelens 1 lists the extension as Incompatible.
 
 ## 1. Bring the demo up
