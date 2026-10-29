@@ -689,14 +689,18 @@ component evidence, by check:
   time of the last read and the time of the API server as they were; no timer added
   (`src/renderer/state/installation.test.ts`,
   `src/renderer/pages/volume-lists.test.tsx`, `src/renderer/pages/overview-page.test.tsx`).
-  No family of the operations is asked by the view of a backup, of a restore or of
-  a schedule: the test of the reads of the view of a backup
-  (`src/renderer/pages/volume-lists.test.tsx`), and the tests that count what
-  opening a restore and a schedule asks, which fail when either view is given a
-  family of the operations (`src/renderer/pages/restores-page.test.tsx`, "opens
-  from a row and shows a restore that waits with a failure as in flight";
+  No family of the operations is asked by the view of a schedule, and none was by
+  the view of a backup or of a restore in this pull request: the test of the reads
+  of the view of a backup (`src/renderer/pages/volume-lists.test.tsx`), and the
+  tests that count what opening a restore and a schedule asks, which fail when
+  either view is given a family of the operations
+  (`src/renderer/pages/restores-page.test.tsx`, "opens from a row and shows a
+  restore that waits with a failure as in flight";
   `src/renderer/pages/schedules-page.test.tsx`, "shows what Velero says of the
-  schedule, and computes from its expression only its band of the adherence").
+  schedule, and computes from its expression only its band of the adherence"). The
+  second pull request gives the views of a backup and of a restore their family,
+  and restates the tests of the two (the paragraph of the second pull request,
+  below).
 - KIND-03 and KIND-04: the columns of the three lists, their stable identifiers
   and classes in the order of the Design, each cell in each state, the order of
   each column through the callbacks of the host both ways with none answering
@@ -713,9 +717,9 @@ component evidence, by check:
   with the rows, draw a message on its lines as the views do, lead to the view for
   the installation selected, say the age of the read they found the owner in, ask
   nothing and keep no timer once closed
-  (`src/renderer/pages/volume-workspaces.test.tsx`). The view of a repository has
-  no band of what used it until the second pull request, which shows the
-  operations of the volumes in it.
+  (`src/renderer/pages/volume-workspaces.test.tsx`). The view of a repository had
+  no band of what used it in this pull request: the second shows it, last in the
+  view (the paragraph of the second pull request, below).
 - KIND-06: the eight phases, none and an unknown one, for each of the two kinds,
   with their axes, their outcome and their words (`src/common/volume-phases.test.ts`);
   the message of Velero beside the phase, in the tip of a row and in the view, on a
@@ -764,8 +768,10 @@ component evidence, by check:
   waits for a node agent
   (`src/renderer/pages/volume-lists.test.tsx`,
   `src/renderer/pages/volume-workspaces.test.tsx`, `src/common/volume-words.test.ts`).
-  The words of the band of a backup and of a restore are of the second pull
-  request, which draws it.
+  The words of the band of a backup and of a restore, and of what used a
+  repository, are written beside these in `src/common/volume-words.ts` by the
+  second pull request, which draws them (the paragraph of the second pull request,
+  below).
 
 The packaged cases, on the fixtures that exist, where no object of the three kinds
 is: the journey with nine entries under Velero and the eight kinds out of the Custom
@@ -892,3 +898,228 @@ Decided while implementing, on 2026-10-27, for the review of the milestone to co
   from a temporary suite that is not kept, whose result the packaged cases record;
   the packaged proof with rows comes with the fixtures of the lists, in a later pull
   request of T5.1.
+
+T5.1, the second of its five pull requests: the band of the volume operations in
+the summary of a backup and of a restore, what used a repository last in its view,
+and the way from a row of the Volumes tab to the pod volume operation that matches
+it, with the index of the operations made once for a read, on 2026-10-29. From it
+the views of a backup and of a restore hold their family of the pod volume
+operations, and the view of a repository both.
+
+The gates of phase A, on 2026-10-29, on the branch made from main at `083d534`,
+with Node 24.21.0, pnpm 12.14.0, TypeScript 7.0.2, Vitest 5.0.5, Biome 2.5.15, Knip
+6.41.0 and the launcher of Trunk 1.3.4: `pnpm type:check`, the nine programs, and
+`pnpm lint:check`, 307 files, each with no error; `pnpm test:unit`, the build, then
+99 files and 2,898 tests, all passed, 4 files and 45 tests more than main, then the
+three measures within their budgets; `pnpm knip:check`, both passes with no finding;
+and Trunk on the 45 files the branch changes, with no issue. The second form of the
+unit run, with `VITE_PRESERVE_MODULES=false`, the measures on a quiet machine and
+each commit type-checked and linted alone: T51-PR2-PENDING.
+
+The unit and component evidence, by check:
+
+- KIND-02 and KIND-15: the view of a backup asks the pod volume backups at once,
+  alone, and at every read, and not the pod volume restores, the view of a restore
+  the converse, the view of a schedule neither, the repositories still asked at
+  every read; the view of a repository asks both at once and at every read, and a
+  pod volume backup opened from it keeps them; once the way closes, both are let go
+  at the read after (`src/renderer/pages/volume-lists.test.tsx`). Opening a backup
+  or a restore from its list asks the family of its band and nothing else
+  (`src/renderer/pages/backups-page.test.tsx`,
+  `src/renderer/pages/restores-page.test.tsx`), and the tabs of a backup count what
+  they ask once that read ended (`src/renderer/pages/operation-tabs.test.tsx`). A
+  backup and a pod volume backup opened from its band keep the family between them,
+  let go at the read after the way closes; a backup, a pod volume backup from its
+  band and the storage location of that operation keep it at every read, and the way
+  back draws the operation and the band with no spinner of a family asked again
+  (`src/renderer/pages/volume-band.test.tsx`). The notice of the pod volume backups
+  denied is said over a backup and over a repository, and not over a restore or a
+  schedule (`src/renderer/pages/volume-workspaces.test.tsx`). A read that fails
+  keeps the rows of the band and says when they were read
+  (`src/renderer/pages/volume-band.test.tsx`).
+- KIND-11: the index finds the operations of a backup and of a restore by the label
+  of the UID in their namespace, from the newest; an operation with no label of a
+  UID, one of another namespace and one that names the UID of another backup of the
+  same name are each left out of it, and it is made in one pass over each family
+  (`src/common/volume-index.test.ts`). The counts are in the groups of
+  `backup describe` for a backup and of `restore describe` for a restore, line by
+  line in their order, none and New together, Canceling of a restore and a phase the
+  release does not write each after them, no operation left out; the band of a
+  backup holds its own from the newest and none of another backup, and a restore of
+  the UID of a backup is not counted in it; a backup synced from the store holds the
+  operations whose label the sync rewrote to its UID, with the sentence of a backup
+  that ended; the sentence of each phase of a backup and of a restore; what used a
+  repository counted by kind and by phase, from the newest, with the backups and the
+  restores they belong to, a kind denied kept with its read and no count, and none
+  of each kind when nothing names it (`src/common/volume-band.test.ts`); what used a
+  repository found by its three labels through the cut of a location of 64
+  characters and whole at 63, an operation of another type or of another location not
+  counted, and a repository without the three labels named by none
+  (`src/common/volume-index.test.ts`). In the views: a backup of 23 pod volume backups
+  counted in its groups, ten rows from the newest then ten more twice, the focus on
+  the first row added, each row the volume as a way to the view of the operation,
+  which returns to the backup, the pod and the node as the links of the host, the
+  phase with its mark and the bytes done of the total; scenario 1, the band says
+  nothing of the items and the item progress keeps its fact; scenario 2, one Failed
+  counted, with the message of Velero in the tip of its row, beside the failure of
+  the backup in its status; a backup with none; a restore in the groups of
+  `restore describe`, Canceling after them, its row a way to the pod volume restore;
+  what used a repository last in its view, by kind and by phase, the newest of each
+  and the backups and the restores they belong to, each a way, a kind denied named
+  with why and the other counted, and nothing of the installation used it when both
+  were read and none names it (`src/renderer/pages/volume-band.test.tsx`). An
+  operation whose labels name its owner and carry no UID is left out of the band, as
+  REQ-187 says, while `backup describe` lists the pod volume backups by the label of
+  the name: the band follows the requirement, since the label of a long name is cut
+  and another object may take the name.
+- KIND-12: the namespace of the pod, the pod and the volume of a row of a pod volume
+  backup and of a pod volume restore, read as texts from `pvbInfo` and `pvrInfo`,
+  and none when one of the three is empty or not a text
+  (`src/common/artifact-volumes.test.ts`); the ways of an owner by them, the newest
+  when two name the same, none for another owner of the same pod and volume and none
+  when the family was denied (`src/common/volume-band.test.ts`); the way in the
+  details of a row of a pod volume backup and of a pod volume restore, which opens
+  the view of the operation, and nothing offered and nothing said for a row that no
+  operation matches, or with no ways
+  (`src/renderer/components/volumes-viewer.test.tsx`); the ways the same object at a
+  read that leads to the same operations and a new one when they change
+  (`src/renderer/state/volumes.test.ts`); the viewer of the volumes given the ways
+  and not drawn again at a read that changes none of them, and drawn again once, with
+  them, at a read that does (`src/renderer/components/artifact-panel.test.tsx`).
+- KIND-14: no control of the band writes: its rows are ways, and its one command
+  pages them (`src/renderer/pages/volume-band.test.tsx`).
+- KIND-15, the index of a read: one for each installation, the same object at every
+  drawing and every tick until a family it is made of is read again, a new one when
+  one is or when the availability of the API changes what a read is said to be, and
+  none at a read of the backups (`src/renderer/state/volumes.test.ts`).
+- KIND-16: the band in each state of the read of its family, each with its words:
+  not read yet, being read, said once, denied and failed with no count, not served,
+  none among the ones the installation holds, and of an earlier read with its rows
+  and when (`src/renderer/pages/volume-band.test.tsx`); when the next maintenance of
+  a repository is due, being read while the storage locations were never answered,
+  and computed once they are (`src/common/repository-view.test.ts`,
+  `src/renderer/pages/volume-band.test.tsx`). Every sentence is asserted once as a
+  literal and read from `src/common/volume-words.ts` elsewhere.
+- KIND-18, the index: the unit measure `test/volume-index.measure.ts`, which
+  `pnpm test:unit` runs after the other tests, of the index of 1,000 backups, 1,000
+  restores and 2,000 pod volume backups made for a read, and of the band of a
+  backup of 200 of them, twenty times after five that warm them: the index at
+  8.64 ms at the 95th percentile of 250 and the band at 0.05 ms, a tick of the clock
+  answering the index of the read, the band holding the 200 counted once each, in
+  the unit run of phase A, on 2026-10-29, at a load of 3.3 (the measure on a quiet
+  machine, T51-PR2-PENDING).
+
+The packaged cases, written in phase A and run in phase B: the suite of the tabs
+with the bands of the real backup and of the real restore of the demo, each saying
+that the installation holds none of its pod volume operations and what the release
+does with them, with no row and no way, nothing written; the two rows of the backup
+synced for the tabs that name a pod volume backup of a synthetic pod, which no
+operation of the installation matches, whose details offer no way and say nothing
+absent; the band of the real backup read, and not denied, through the two identities
+of the suite; the suite of the volumes with one list of the pod volume backups at
+each read while a backup is open and none of the pod volume restores, and the converse
+while a restore is open (KIND-02), within the bound of the lists, T51-PR2-PENDING
+until a run sees the counters; the suite of the restores with one list of the pod
+volume restores when a restore opens and nothing else, and the band of a restore with
+none and of one that failed its validation; the notices of the two restricted suites
+over a backup and over a restore with the families those views now read. Their runs:
+T51-PR2-PENDING.
+
+The unit measure of the index is of the 1,000 backups, the 1,000 restores and the
+2,000 pod volume backups of REQ-194, and of the band of a backup of 200 operations
+made from it. The 200 data uploads REQ-194 names beside them join the measure with
+the data movement, in T5.2, which reads them: until then the measure is of the pod
+volume operations alone, a deviation of the population of REQ-194.
+
+Decided while implementing, on 2026-10-29:
+
+- The frame of a page holds the families read on demand of every view of the way
+  that is open, not of the view on top alone: a backup, a pod volume backup opened
+  from its band and the storage location of that operation keep the pod volume
+  backups between them, and the way back draws the operation and the band from what
+  was read, with no view that waits for its family again. The address names every
+  view of the way as open, so a family is still read only while a view that needs
+  it is open (REQ-194), at one list of it at each read while the way is
+  (`src/renderer/components/views-frame.tsx`; the
+  [architecture](../development/ARCHITECTURE.md#the-reads-of-the-first-views) and
+  AGENTS.md restated).
+- Each view reads the families it shows, by the rule decided while implementing, on
+  2026-10-26: the view of a backup reads its family of the operations, the pod
+  volume backups, and the view of a restore the pod volume restores, the band
+  showing nothing of the repositories or of the other family; the view of a
+  repository reads the two families of the pod volume operations, and the backups
+  and the restores, which what used it counts and leads to. No read of the cluster
+  changes for the backups and the restores, which are read at every read: what
+  changes is the notices over the view of a repository for a reader denied them
+  (`src/common/views.ts`).
+- The two identities of the views the runner makes for the suite of the tabs are
+  given `get`, `list` and `watch` of the pod volume backups and the pod volume
+  restores, as their other rules (`e2e/scripts/local-fixtures.mts`,
+  `viewIdentityWithoutPortForward` and `viewIdentityOfAnExecPlugin`, pinned in
+  `test/environment.test.ts`): the views of a backup and of a restore ask their
+  family when they open, and the suite of the tabs opens a backup with the first.
+  The two readers of the restricted suites keep their kinds: the first never reads
+  the two families, and the second is given them with the fixtures of the fourth
+  pull request; until then the notices over a backup and over a restore name the
+  family that is denied.
+- When the next maintenance of a repository is due, on a first read where the
+  repositories answer before the storage locations: the view says that the
+  locations are being read, and that the server runs no maintenance of a repository
+  of a read-only one, in place of the words of a location that is not known, which
+  stay for one that is denied, failed, not served or absent
+  (`src/common/repository-view.ts`, its words in `src/common/volume-words.ts`).
+- The index of the operations is made of the two families of the pod volume
+  operations alone, and its memo, one entry for each installation, is keyed by
+  their reads as they are stored and by the availability of the API: the backups,
+  the restores and the repositories are not in the key, since the index is not made
+  of them, and a read of them makes no new index. It takes none of the maps of the
+  first pull request: the operations of a backup and of a restore are keyed by the
+  label of the UID, and what used a repository by its three labels through the cut,
+  keyed as the repository of an operation is found (`tripleKey`, exported for it
+  from `src/common/volume-references.ts` with no change of what it answers); the
+  owners named in what used a repository are resolved as the view of an operation
+  resolves its owner, through the maps of the reads of the backups and the restores
+  made once for each array of items (`src/common/volume-index.ts`,
+  `src/renderer/state/volumes.ts`).
+- No map of the rows of the Volumes tab is made in the index: the ways of a tab
+  are made from the operations of its owner, which the index holds from the newest,
+  by the namespace of the pod, the pod and the volume, the newest when more than
+  one names the same. A map of the rows of every owner would be made at each read
+  for tabs that are not open (`src/common/volume-band.ts`).
+- The ways given to the viewer of the volumes are the same object for as long as
+  they lead to the same operations, kept when a new index gives the same ways: each
+  read makes a new index, and ways made by a memo of the panel keyed by the index
+  would draw the viewer again at each read (`src/renderer/state/volumes.ts`).
+- The groups of the counts: an operation with no phase is counted with New, as
+  `backup describe` counts it, for both kinds, its row keeping the label "No phase
+  yet"; Canceling of a restore, which `restore describe` has no group for, and a
+  phase the release does not write are each counted in a group of their own after
+  the groups of the release, with their label and their mark, the second by its
+  text: no operation is left out of the counts.
+- The sentence of a backup that ended: no rule of the views tells a backup synced
+  from the store, and the band guesses none. It says that the pod volume backups the
+  installation holds of the backup are the ones its run made, or the ones a sync
+  from the store made, in the phase they were stored in. The sentences of a restore
+  say what the release does with its pod volume restores by its phase, the node
+  agent of the node of each restored pod taking its own when the init container
+  `restore-wait` of that pod runs.
+- An operation whose labels name its owner and carry no UID is left out of the
+  band of that owner, which finds its operations by the label of the UID as REQ-187
+  says, while its own view names its owner from the owner reference: the release
+  writes both labels.
+- Each half of the band has its own words: the half of the pod volume operations of
+  a backup says that it has no pod volume backup among the ones the installation
+  holds, and of a restore no pod volume restore, where What Is Not Known says it of
+  the volume operations of the whole band; the half of the data movement says its
+  own with the second slice.
+- The rows of the band after the first ten, and the backups and the restores of
+  what used a repository after the first ten, are given by "Show ten more", a
+  command of the band, which gives the focus to the first it added; the list cannot
+  be narrowed by owner. A row of the band shows no time, since the band names none
+  for a row (the workspaces, above): a tick of the clock of the views moves nothing
+  in it.
+- The two restricted suites restate the notices over the view of a backup and of a
+  restore with the families those views now read. The words of the band for a
+  reader denied the pod volume backups, with no count, are proven at the component
+  layer here, and in the packaged application by the fifth pull request (scenario
+  7).
