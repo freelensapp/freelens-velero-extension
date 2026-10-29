@@ -152,7 +152,8 @@ export interface RepositoryTriple {
   type: string;
 }
 
-function tripleKey(triple: RepositoryTriple): string {
+// The key of a triple, the same for a repository and for the operations that name it.
+export function tripleKey(triple: RepositoryTriple): string {
   return `${triple.volumeNamespace}\u0000${triple.location}\u0000${triple.type}`;
 }
 
