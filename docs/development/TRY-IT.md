@@ -283,6 +283,14 @@ read, and the history of one is said not known, which is not said empty. With
 either reader, and writes on, the band of the server says that the cluster refused
 the creation of the request: neither may create.
 
+The volume of the demo: in `velero-demo`, the backup `fixture-volume-backup-<run>`
+and the restore `fixture-volume-restore-<run>` are of the pod
+`fixture-volume-<run>` of `velero-source-<run>`, whose volume `data` the node
+agent backed up and restored into `velero-restored-<run>`. Backup Repositories
+lists one, `velero-source-<run>-default-kopia`, Ready and maintained every 168
+hours, its last maintenance the time of its initialization; Pod Volume Backups and
+Pod Volume Restores list one each, Completed (T51-PR4-PENDING).
+
 ## 4. The pass that precedes a review
 
 ```sh

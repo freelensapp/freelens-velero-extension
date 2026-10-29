@@ -593,6 +593,23 @@ is in the last column.
 | An expression it parses gives the phase Enabled with no validation error; the phase, `skipImmediately` and `lastSkipped` are patched when one of them changed, which the release decides by comparing pointers | [The parse](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/schedule_controller.go#L121-L132), [the patch](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/schedule_controller.go#L134-L154) | A PATCH at every look, with nothing changed: on 2026-10-26, over three minutes with nothing else reading or writing, the counters of the API server gave `PATCH schedules` of the scope `resource`, code 200, 19 to 22, one a minute, while the `resourceVersion` of the schedule (4314) and its status (`{"phase":"Enabled"}`) did not change; `POST backups` 1348 to 1348, `POST schedules` 338 to 338 |
 | The next run of `@every 8760h` is counted from the creation of the schedule, which has no last submission: nothing is submitted for a year | [The anchor](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/schedule_controller.go#L275-L289), [due](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/schedule_controller.go#L241-L251) | On 2026-10-26, within the hour of its creation and again before the cleanup after the suites: no `lastBackup` and no `lastSkipped` on the schedule, and no backup in `velero-demo` with its label `velero.io/schedule-name` |
 
+### With The Volume Of The Environment, T51-PR4-PENDING
+
+What the node agent and the server wrote into the real pod volume backup, pod
+volume restore and repository of the volume of a run, as seen in the environment
+created again with the fourth pull request of T5.1:
+
+| Fact | Seen |
+| --- | --- |
+| The pod volume backup: phase, bytes, snapshot ID, node, labels, `metadata.finalizers` | T51-PR4-PENDING |
+| The repository `velero-source-<run>-default-kopia`: phase, `maintenanceFrequency`, `lastMaintenanceTime`, labels | T51-PR4-PENDING |
+| The pod volume restore: phase, `status.node`, the snapshot size, its owner | T51-PR4-PENDING |
+| The init container of the restored pod and its image | T51-PR4-PENDING |
+| The checksum of the restored bytes against the one written | T51-PR4-PENDING |
+| What the server sends to the repository at its pass, and what the controllers list of the operations, over fifteen minutes | T51-PR4-PENDING |
+| The volume information of the backup and of the restore of the volume | T51-PR4-PENDING |
+| The layout of the kopia keys under the prefix of the location | T51-PR4-PENDING |
+
 ## Verification And Remaining Work
 
 Completed checks:

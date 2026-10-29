@@ -55,9 +55,9 @@ in the Design:
   ([upload](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/backup/actions/csi/pvc_action.go#L540-L597),
   [download](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/restore/actions/csi/pvc_action.go#L405-L453)).
 - The test environment installs the server and the node agent, with the volume
-  snapshots off ([the install](../../e2e/scripts/local-demo.mts#L1092-L1094)),
+  snapshots off ([the install](../../e2e/scripts/local-manifests.mts#L162-L163)),
   and its live backup is of ConfigMaps with `defaultVolumesToFsBackup: false`
-  ([the backup](../../e2e/scripts/local-fixtures.mts#L1959-L1984)): no object of
+  ([the backup](../../e2e/scripts/local-fixtures.mts#L2008-L2033)): no object of
   these five kinds exists in it today.
 
 Included: the five lists, the five workspaces, the five sections in the details
@@ -502,7 +502,15 @@ maintenance time its initialization wrote, and the server patches no repository
 at its pass. A maintenance history is seen for real in a demo brought up with a
 shorter frequency, a setting of the demo scripts that the suites never use; the
 suites expect the first maintenance time alone. The guard keeps its rule: the
-one write of the installation it expects is the validation of its location.
+writes of the installation it expects are the validation of its location and the
+PATCH the controller sends at each look to the schedule it validated, within a
+bound. What the server sends to the real repository at its pass, and whether a
+controller lists the kinds of the operations, are measured on the environment
+before any suite rests on them: when the server writes the repository at each
+pass, the guard leaves that verb of the repositories out of the writes and
+compares the status of the real repository and the versions of the synthetic
+ones; when a controller lists the operations, what a view lists is counted
+against a window of the same length with no view open (T51-PR4-PENDING).
 
 | Check | Layer | Requirements | Scenario and expected evidence |
 | --- | --- | --- | --- |
@@ -1312,3 +1320,60 @@ Decided while implementing, on 2026-10-29:
   which REQ-102 of [SPEC-0008](SPEC-0008-overview.md) names alone.
 - The index of the specs names the third pull request in the rows of SPEC-0014 and
   of SPEC-0008.
+
+T5.1, the fourth of its five pull requests, phase A of 2026-10-29: the
+environment places the volume of each run and removes it, the suites compare and
+read the three kinds, and the second reader reads them. Its phase B creates the
+environment again and fills every `T51-PR4-PENDING`.
+
+- Volumes (REQ-195): the server is installed with
+  `--default-repo-maintain-frequency=168h`, which the probe of the images finds in
+  the help of the installer, and the verification reads it on the Deployment of the
+  server, as `168h` or `168h0m0s`, and asks for the environment to be brought up
+  again without it; it refuses an installation that holds an object of the five
+  kinds. The live fixtures back up and restore a pod whose `emptyDir` named `data`
+  holds a megabyte of random bytes and their checksum, of the image of the store,
+  never pulled; the pod volume backup and restore are found by the labels of the
+  name and the UID of their owners, the repository by its three labels, and the
+  checksum of the restored bytes is read from the log of the restored pod. The
+  record of the live fixtures holds what was found: T51-PR4-PENDING.
+- The cleanup has the server delete the backup of the volume through a request,
+  with its restore; the pod volume operations go with their owners, waited for with
+  a bound of their own; the repository is deleted by the identity the run recorded,
+  with its UID as a precondition, once the backup is gone. The data of the
+  repository stays in the bucket until `pnpm demo:down`.
+- Reader: the second reader reads the pod volume backups, the pod volume restores
+  and the backup repositories of its namespace; the first keeps its three kinds.
+- The guard compares eight kinds; what the server sends at its pass and what the
+  controllers list (LM4): T51-PR4-PENDING.
+- Operations, Repositories and Long lists (475-482): not placed by this phase;
+  T51-PR4-PENDING.
+
+Decided while implementing, on 2026-10-29:
+
+- LM1: the live flow of the volume runs in the live fixtures, which `pnpm demo:up`,
+  the fixture suite and the transport proof run; the environment is created again
+  once, and the hosted job keeps its shape.
+- LM2: the pod runs the image of the store, preloaded and pinned, with
+  `imagePullPolicy: Never`; its entry point is checked first in phase B, and the
+  image of the helpers is its fallback, written only if that check refuses it.
+- LM3: the cleanup deletes the repository of the run by its UID after the backup
+  of the volume is gone, and its end check names it while it is there; its data
+  stays in the bucket until `pnpm demo:down`; no script removes a key of the store.
+- LM4: two constants beside the one of the schedule, set from the measure of phase
+  B, each branch a pure function of the guard tested both ways.
+- The repository is kept out of the resources of the journal, which ask the label
+  of the demo of each entry; its name, UID and three labels are in the record of
+  the run and in `fixture-live-result.json`; it is told as of the run by its three
+  labels, removed with `delete --raw` and `preconditions.uid`, refused when the
+  labels or the UID differ.
+- The restore of the volume names no resource: its backup holds the pod alone, and
+  a restore that leaves out the claims and the persistent volumes makes no pod
+  volume restore (phase B confirms it: T51-PR4-PENDING).
+- The checksum of the restored data is read from the log of each pod, without an
+  `exec`.
+- A namespace of the fixtures is removed with the events the cluster wrote of a pod
+  of the run, told by the object they regard.
+- Phase B is split: the environment, its measures, its placements, the cleanup
+  proof and `pnpm e2e` first; the suites and the pre-review once the pull request
+  is rebased on a main that holds the second and the third pull requests.

@@ -313,10 +313,13 @@ folder of the profile of its run, which goes with the run, through the dialog of
 the host, which it replaces in the main process of the application with one that
 answers what the case asks. The helper that runs
 `kubectl` for the suites refuses every verb but `get`. Each suite compares what
-the API server holds of Velero before and after: the version of every synthetic
-object, the identity of the objects of the real installation, the version and the
-status of the schedule its controller validated, and the absence of any request to
-Velero. A request is listed by its namespace, its kind and its name, and never
+the API server holds of Velero before and after, of eight kinds, the backup
+repositories and the pod volume operations among them: the version of every
+synthetic object, the identity of the objects of the real installation, the version
+and the status of the schedule its controller validated, the version and the status
+of the real repository (its status alone when the server writes it at each pass,
+which the measure of the environment says: T51-PR4-PENDING), and the absence of any
+request to Velero. A request is listed by its namespace, its kind and its name, and never
 read whole: the status of a DownloadRequest the server processed carries the URL it
 signed.
 
@@ -400,11 +403,12 @@ up, and the suite passes on its second start. The file goes when it is read.
 | Restores | `velero-views-<run>` | A restore as Velero keeps one it took: into two namespaces, in flight with a failure, with the schedule of its backup written beside the backup, the resources Velero excludes and the timeout it fills; one asked from a schedule that has no backup, which failed its validation; one of a backup that is not there any more |
 | Reader | `velero-views-<run>` | A service account that reads backups, schedules and storage locations of its namespace. Its token lasts two hours and its kubeconfig is in the private state for as long as the suites run |
 | Schedules | `velero-views-<run>` | One with a history: a backup a day for six days, two of them an hour from each other, and the newest that failed its validation and never started; one that names its time zone; three whose backups go to a location that is not there, to one that is read-only, and to the one marked default; two that Velero has not read, one of them created paused; one in the phase New, which the API has and the release does not write; one that was read, then paused and asked to skip; and, since the third pull request of T3.3 of SPEC-0013, two that submitted two days before the fixtures were started and have no backup, one of five fields, whose zone is not known for want of a submission with its backup in the installation, and an interval of six hours, overdue at every age of the environment. The ones Velero read carry `skipImmediately`, which it writes into every schedule it reads, and the last submission of the one with a history is the time its newest backup was created |
-| Second reader | `velero-views-<run>` | A service account that reads restores, schedules, storage locations and snapshot locations of its namespace, and not the backups |
+| Second reader | `velero-views-<run>` | A service account that reads restores, schedules, storage locations, snapshot locations, pod volume backups, pod volume restores and backup repositories of its namespace, and not the backups |
 | Locations | `velero-views-<run>` | Storage locations: one that names its frequency and one that names none, each with a validation that is days old; one whose name and bucket have 63 characters and whose prefix has many parts; one without a status; one unavailable, with a message of three lines; one that names the Secret of its credential and the one of its certificate, with the validation and the sync turned off and an address that carries a query. A snapshot location with a phase, and one without a status that names the Secret of its credential. No Secret is among the fixtures |
 | Defaults | `velero-defaults-<run>` | Two storage locations marked default, the one that is read-only created first. The one the release would keep is the one created last; of two created in the same second it is not settled which. The suite reads when each was created, and expects what the view says of that |
 | Overview | `velero-overview-<run>` | An installation no controller reads, placed by the clock: a default storage location validated two days before, one that is unavailable, one that reports nothing; twelve schedules, of which one was refused, one was not read and names the location that is unavailable, one is paused, and two carry the time of the last backup the release asked for them; backups and restores that ended one hour to forty days before, some with a failure; operations in flight, at work, waiting with its place in the queue, and with a failure; a backup a client asked from the schedule that was refused, and a restore, which failed their validation and never started |
 | Long lists | `velero-scale-<run>` | A thousand backups and a thousand restores in every phase, spread over the thirty days before they were placed, each restore of one of the backups, and no storage location: nothing suggests the namespace, the operator names it |
+| Volume | `velero-source-<run>`, `velero-restored-<run>`, `velero-demo` | A pod whose `emptyDir` named `data` holds a megabyte of random bytes and their checksum, annotated for the file system backup; a backup of it, which makes the node agent back up the volume and the server make the repository of the namespace, Ready and maintained once a week; and a restore of it into the destination namespace, whose pod prints the checksum of what was restored. Placed by the live fixtures, found by their labels |
 | Tabs | `velero-demo` | Two backups the server syncs from files the store is given: one that failed in part, with the four artifacts made for the tabs, and one that completed with no log. A backup and a restore the server refuses for naming both kinds of selector, and a restore asked from a schedule that has no backup. See [the fixtures of the tabs](#the-fixtures-of-the-tabs) |
 | Adherence | `velero-adherence-<run>` | An installation no controller reads and nothing suggests, placed by the clock in two phases: eight schedules, awaited, overdue by a day and more with no backup of its submission, held beyond the grace by a backup in progress asked by hand, submitted at every look, its zone derived from the backup of its own submission, with no submission and the offset of that one, with its last submission a day after the placement, and one with a name of 63 characters and an expression that names its zone. See [the fixtures of the adherence](#the-fixtures-of-the-adherence) |
 | Two offsets | `velero-adherence-split-<run>` | Two schedules of five fields whose submissions were named two hours east of UTC and at UTC, the older twenty seconds before the newer, placed by the clock in two phases |
@@ -624,10 +628,16 @@ anything is asked to be deleted, so that the server makes the backup it deletes
 the folder with. The real backup and the refused one are deleted by the same
 rules, the restore without a backup by its identity, and so is the schedule the
 controller validated, which the journal then forgets: the verification of the
-installation refuses one that holds a schedule. Before the namespaces of the run
-are removed, one check: none of the eleven operations of the run is in the
-installation, each looked for by its name, nor the schedule, nor a backup that
-carries its label, which would be a submission nothing here removes; and the store
+installation refuses one that holds a schedule. The backup of the volume goes by
+the same rules, with its restore; its pod volume operations go with their owners,
+waited for two minutes at most; the repository of the volume, which the record of
+the run names, is deleted by its UID once that backup is gone, and refused when its
+labels or its UID are not the recorded ones. The data of the repository stays in
+the bucket until `pnpm demo:down`. Before the namespaces of the run are removed,
+one check: none of the fourteen operations of the run is in the installation, each
+looked for by its name, nor the schedule, nor a backup that carries its label,
+which would be a submission nothing here removes, nor a pod volume operation of the
+volume or its repository, each by its labels; and the store
 holds none of the twenty keys the client may ask of the run, nine of the fourteen
 the server wrote for the real backup and the real restore and the eleven of the
 tabs. A cleanup stopped at
@@ -646,7 +656,10 @@ hosted runner for the first time with the pull request that added the step. In
 the final runs of that pull request, on 2026-10-07, after the twelve suites and
 the pre-review, the cleanup took 118 seconds, 42 of them the two deletions the
 server carried out, and the verification 22; on the hosted runner, on 2026-10-13,
-the step took 112 seconds for the cleanup and 9 for the verification. After this
+the step took 112 seconds for the cleanup and 9 for the verification. With the
+volume of the run, the live flow of the volume in `pnpm demo:up` takes
+T51-PR4-PENDING, the cleanup T51-PR4-PENDING, and `pnpm e2e`, which runs the live
+flow and its cleanup twice more, T51-PR4-PENDING. After this
 cleanup, or after `pnpm e2e`, the fixtures of the demo are gone with the fixtures
 of the tabs: `pnpm e2e:views` refuses by name, in a few seconds, until the two
 fixture steps of `pnpm demo:up` put them back, which takes about a hundred
