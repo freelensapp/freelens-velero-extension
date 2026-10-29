@@ -915,7 +915,7 @@ three measures within their budgets; `pnpm knip:check`, both passes with no find
 and Trunk on the 45 files the branch changes, with no issue; each commit
 type-checked and linted alone, on a copy of each, with no error. The second form of
 the unit run, with `VITE_PRESERVE_MODULES=false`, and the measures on a quiet
-machine: T51-PR2-PENDING.
+machine ran after the rebase, below.
 
 The gates again after the review of the second pull request, on 2026-10-29, on the
 same base and toolchain, with its fixes in three commits of code and suites and one
@@ -926,6 +926,19 @@ three measures within their budgets; Trunk on the 45 files the branch changes, w
 no issue; each of the nine commits type-checked and linted alone. A rebase on a main
 that moves the validation target runs them again with its toolchain, and is written
 here.
+
+The gates again after the rebase on main at `c16c159`, which moves the validation
+target to Freelens 2.0.0, on 2026-10-29, with no conflict, with pnpm 12.15.0, the SDK
+2.0.0 and Electron 44.10.0, and with the two commits of the ways of the Volumes tab
+after it, the second after the review of the fixes: on the machine of the runs,
+`pnpm type:check`, the nine programs, `pnpm lint:check`, 307 files, `pnpm build` and
+`pnpm knip:check`, each with no finding; Trunk on the 45 files the branch changes,
+with no issue; each commit type-checked and linted alone. On a second Linux machine,
+Ubuntu 26.04 under WSL 2 on 16 processors, from a bundle of the same code:
+`pnpm test:unit` with `VITE_PRESERVE_MODULES=false`, at a load of 0.50, then in its
+normal form, each in 23 seconds: the build, then 99 files and 2,913 tests, all
+passed, 4 files and 60 tests more than main, then the three measures within their
+budgets.
 
 The unit and component evidence, by check:
 
@@ -1031,8 +1044,9 @@ The unit and component evidence, by check:
   backup of 200 of them, twenty times after five that warm them: the index at
   8.64 ms at the 95th percentile of 250 and the band at 0.05 ms, a tick of the clock
   answering the index of the read, the band holding the 200 counted once each, in
-  the unit run of phase A, on 2026-10-29, at a load of 3.3 (the measure on a quiet
-  machine, T51-PR2-PENDING).
+  the unit run of phase A, on 2026-10-29, at a load of 3.3; on a quiet machine, the
+  second Linux machine at a load of 0.50 after the rebase, the index at 3.49 ms at the
+  95th percentile and 2.11 at the median, and the band at 0.04 ms.
 
 The packaged cases, written in phase A and run in phase B: the suite of the tabs
 with the bands of the real backup and of the real restore of the demo, each saying
@@ -1043,14 +1057,20 @@ operation of the installation matches, whose details offer no way and say nothin
 absent; the band of the real backup read, and not denied, through the two identities
 of the suite; the suite of the volumes with one list of the pod volume backups at
 each read while a backup is open and none of the pod volume restores, and the converse
-while a restore is open (KIND-02), within the bound of the lists, T51-PR2-PENDING
-until a run sees the counters; the suite of the restores with one list of the pod
-volume restores when a restore opens and nothing else, and the band of a restore with
+while a restore is open (KIND-02), within the bound of the lists, which the run of
+the pattern on 2026-10-29 met with one list at each read, three of three, with a
+backup and with a restore open, and none of the other family (the report
+`kind-02-reads-of-the-pod-volume-operations`); the suite of the restores with one
+list of the pod volume restores when a restore opens and nothing else, and the band
+of a restore with
 none, with the sentence of one that waits for its plugin operations, and of one that
 failed its validation; the notices of the two restricted suites over a backup and
 over a restore with the families those views now read; the pictures of the
 pre-review of the workspace of a backup and of a restore, taken once their band says
-that the installation holds none. Their runs: T51-PR2-PENDING. The two rows of the
+that the installation holds none. Their runs: on 2026-10-29, the pattern of the
+views job, 16 files and 255 cases, passed whole on Freelens 2.0.0 built at
+`b9b53e16`, on a second Linux machine and on the hosted runner, and the suite of the
+volumes alone on the second machine (TESTING.md). The two rows of the
 synced backup pass whatever the matching of a row does, since the installation of
 the views holds no pod volume backup: the row that leads to its operation, the real
 backup of the volumes of KIND-12, has its packaged case with the fixtures of the

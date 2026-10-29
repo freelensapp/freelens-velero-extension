@@ -204,8 +204,8 @@ describe("views of the backup repositories and of the pod volume operations", ()
         // One list of the family of the band at each read the view waited for, and none of the other family, which
         // no view that is open shows. The counters carry no namespace: what the node agent of the installation asks
         // of the four kinds is counted with the reads of the views, as for the lists above, with the same bound.
-        // T51-PR2-PENDING: the bound is the one of the lists until a run sees the counters with a backup and a
-        // restore open.
+        // The run of the pattern on 2026-10-29 saw one list at each read, three of three, with a backup and with a
+        // restore open, and none of the other family; the bound stays the one of the lists.
         expect([kind, (open[own] ?? 0) >= CYCLES, (open[own] ?? 0) <= CYCLES + 1]).toEqual([kind, true, true]);
         expect([kind, open[other] ?? 0]).toEqual([kind, 0]);
         await cluster.closeWorkspace(frame);
