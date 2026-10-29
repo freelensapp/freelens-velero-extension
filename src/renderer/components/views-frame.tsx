@@ -94,13 +94,13 @@ function ViewsFrameView({ id, title, installation, families, earlier, view, orig
     return installation.watch();
   }, [installation]);
 
-  // The frame holds what its page and the view that is open read of the families read on demand: the list stays
-  // under the view, so both are needed while the view is open. A view that changes from one kind to another
-  // replaces what the frame needs in one call, and lets go of nothing both need.
+  // The frame holds what its page and every view of the way that is open read of the families read on demand: the
+  // list stays under the views, and the way back leads to each of them, so all are needed while the way is open. A
+  // way that changes replaces what the frame needs in one call, and lets go of nothing the views before still need.
   const [holder] = React.useState(() => ({}));
   const release = React.useRef<() => void>(undefined);
   const held = ON_DEMAND.filter(
-    (family) => families.includes(family) || (open !== undefined && VIEWS[open.kind].reads.includes(family)),
+    (family) => families.includes(family) || path.some((view) => VIEWS[view.kind].reads.includes(family)),
   ).join(" ");
 
   React.useEffect(() => {

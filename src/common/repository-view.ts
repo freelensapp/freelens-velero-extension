@@ -115,11 +115,14 @@ export type Due =
   | { state: "not-ready" }
   // The server runs no maintenance of a repository of a read-only location.
   | { state: "read-only" }
-  // Whether the location is read-only is not known: it is not read, denied, or not there.
-  | { state: "access-unknown" };
+  // Whether the location is read-only is not known: it is denied, failed, not served or not there.
+  | { state: "access-unknown" }
+  // The storage locations were never answered yet: whether the location is read-only is not known until they are.
+  | { state: "locations-being-read" };
 
-// `readOnly` is undefined when the location of the repository is not known.
-export function maintenanceDue(view: RepositoryView, now: number, readOnly: boolean | undefined): Due {
+// `readOnly` is undefined when the location of the repository is not known, and `answered` says whether the storage
+// locations were answered once: before they are, the location is not known to be absent or denied.
+export function maintenanceDue(view: RepositoryView, now: number, readOnly: boolean | undefined, answered = true): Due {
   const { frequency } = view;
 
   if (!frequency.read) {
@@ -129,7 +132,7 @@ export function maintenanceDue(view: RepositoryView, now: number, readOnly: bool
   }
   if (view.readiness.readiness !== "ready") return { state: "not-ready" };
   if (readOnly) return { state: "read-only" };
-  if (readOnly === undefined) return { state: "access-unknown" };
+  if (readOnly === undefined) return answered ? { state: "access-unknown" } : { state: "locations-being-read" };
   if (view.lastMaintenance === undefined) return { state: "due-no-time" };
   const at = view.lastMaintenance + frequency.milliseconds;
 
@@ -152,6 +155,8 @@ export function dueText(due: Due): string {
       return REPOSITORY_WORDS.notReadyNoMaintenance;
     case "access-unknown":
       return REPOSITORY_WORDS.accessUnknown;
+    case "locations-being-read":
+      return REPOSITORY_WORDS.locationsBeingRead;
     default:
       return REPOSITORY_WORDS.readOnly;
   }

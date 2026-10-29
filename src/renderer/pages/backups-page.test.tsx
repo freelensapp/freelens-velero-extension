@@ -80,6 +80,8 @@ function answers(more: Answers = {}): Answers {
         [path("schedules", namespace), list()],
         [path("storageLocations", namespace), list({ metadata: { name: "default", namespace, uid: "location" } })],
         [path("snapshotLocations", namespace), list()],
+        [path("podVolumeBackups", namespace), list()],
+        [path("podVolumeRestores", namespace), list()],
       ]),
     ),
     ...more,
@@ -300,8 +302,12 @@ describe("workspace of a backup", () => {
     expect(within(workspace).getByTestId("velero-backup-counts-note").textContent).toContain(
       "The status reports 1 error and 0 warnings and does not say what they are: that is in the log and in the results of the backup, which the Log and Results tabs load when they are asked.",
     );
-    // Opening a backup asks nothing: what it shows was read with the installation.
-    expect(asked).toHaveLength(before);
+    // Opening a backup asks the pod volume backups of its installation at once, which its band is made of, and
+    // nothing else: what else it shows was read with the installation.
+    await waitFor(() =>
+      expect(within(workspace).getByTestId("velero-volume-band").getAttribute("data-state")).toBe("rows"),
+    );
+    expect(asked.slice(before)).toEqual([path("podVolumeBackups", A)]);
     expect(asked.every((address) => !/request/i.test(address))).toBe(true);
     expect(document.activeElement).toBe(screen.getByTestId("velero-back"));
     // The list is behind the workspace, as it was.

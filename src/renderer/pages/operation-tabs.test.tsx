@@ -338,11 +338,14 @@ describe("the tabs in the workspace of a backup", () => {
   });
 
   it("asks nothing and creates nothing when a tab is opened, with writes off and with writes on", async () => {
-    const { main, asked } = mount();
+    const { main, asked, installation } = mount();
 
     await listed("backup", 2);
     act(() => openView({ kind: "backup", name: "nightly" }));
     await screen.findByTestId("velero-backup-workspace");
+    // The view asks the family of its band at once when it opens: what the tabs ask is counted after that read.
+    await waitFor(() => expect(installation.read("podVolumeBackups").status).not.toBe("loading"));
+    await waitFor(() => expect(installation.reading).toBe(false));
     const read = asked.length;
 
     for (const title of ["Log", "Results", "Resources", "Volumes", "Summary"]) fireEvent.click(tab(title));
