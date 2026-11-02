@@ -207,16 +207,19 @@ describe("views of the backup repositories and of the pod volume operations", ()
   it(
     "reads the pod volume backups while a backup is open and the pod volume restores while a restore is, once at each read, and not the family of the other",
     async () => {
-      for (const [of, name, kind, own, other] of [
-        [cluster.BACKUPS, BACKUP, "backupOpen", PVB, PVR],
-        [cluster.RESTORES, RESTORE, "restoreOpen", PVR, PVB],
+      // The daily backup holds no operation of its own: its one pod volume backup names in its label the UID of an
+      // earlier backup of the same name, and its band says none. The mapped restore holds its seven pod volume
+      // restores, which its band shows in rows.
+      for (const [of, name, kind, own, other, band] of [
+        [cluster.BACKUPS, BACKUP, "backupOpen", PVB, PVR, "none"],
+        [cluster.RESTORES, RESTORE, "restoreOpen", PVR, PVB, "rows"],
       ] as const) {
         await cluster.openPage(frame, of);
         await cluster.waitForList(frame, of);
         await cluster.openWorkspace(frame, name, of);
         // The view asks the family of its band at once when it opens, alone: the window begins once the band was
         // answered, and after the read of the installation that follows it ended.
-        expect([kind, (await cluster.volumeBand(frame)).state]).toEqual([kind, "none"]);
+        expect([kind, (await cluster.volumeBand(frame, band)).state]).toEqual([kind, band]);
         const open = await askedOver(CYCLES);
 
         report[kind] = open;
