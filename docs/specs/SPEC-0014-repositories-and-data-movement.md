@@ -510,7 +510,9 @@ before any suite rests on them: when the server writes the repository at each
 pass, the guard leaves that verb of the repositories out of the writes and
 compares the status of the real repository and the versions of the synthetic
 ones; when a controller lists the operations, what a view lists is counted
-against a window of the same length with no view open (T51-PR4-PENDING).
+against a window of the same length with no view open. Measured on 2026-11-02 over
+fifteen minutes with no view open: the server wrote nothing to the repository, and
+no controller listed the operations, which they watch.
 
 | Check | Layer | Requirements | Scenario and expected evidence |
 | --- | --- | --- | --- |
@@ -1349,7 +1351,9 @@ environment again and fills every `T51-PR4-PENDING`.
 - Reader: the second reader reads the pod volume backups, the pod volume restores
   and the backup repositories of its namespace; the first keeps its three kinds.
 - The guard compares eight kinds; what the server sends at its pass and what the
-  controllers list (LM4): T51-PR4-PENDING.
+  controllers list (LM4), measured on 2026-11-02 over fifteen minutes with no view
+  open: nothing written to the repository, and no list of the operations, only
+  their watches; both constants keep their defaults.
 - Operations (478): twenty-three pod volume operations in `velero-views-<run>`,
   placed once with the views, each created after its owner with the UID the
   cluster gave it, every status one the release writes in that phase; nothing of

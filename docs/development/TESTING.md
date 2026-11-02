@@ -318,10 +318,10 @@ repositories and the pod volume operations among them: the version of every
 synthetic object, the identity of the objects of the real installation, the version
 and the status of the schedule its controller validated, the version and the status
 of the real repository (its status alone when the server writes it at each pass,
-which the measure of the environment says: T51-PR4-PENDING), and the absence of any
-request to Velero. A request is listed by its namespace, its kind and its name, and never
-read whole: the status of a DownloadRequest the server processed carries the URL it
-signed.
+which the measure of the environment of 2026-11-02 says it does not), and the
+absence of any request to Velero. A request is listed by its namespace, its kind
+and its name, and never read whole: the status of a DownloadRequest the server
+processed carries the URL it signed.
 
 What is asked of the cluster is counted by the API server, not by the driver of
 the test: on v2 the reads of a frame of a cluster, the host's and the views' alike,

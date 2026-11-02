@@ -686,7 +686,10 @@ export const SCHEDULE_PATCHED_AT_EVERY_LOOK: boolean = true;
  * one, `writes` leaves that verb of the repositories out, as it leaves out the
  * PATCH of the locations, and what proves that a suite wrote nothing to a
  * repository is the status of the real one and the versions of the synthetic
- * ones, which the snapshot of every suite holds. Measured: T51-PR4-PENDING.
+ * ones, which the snapshot of every suite holds. Measured on 2026-11-02, over
+ * fifteen minutes with no view open and nothing else reading or writing: the
+ * server sent the repositories nothing but its watches, with its repository
+ * Ready and no maintenance due, so no verb is left out.
  */
 export const REPOSITORY_WRITTEN_AT_EACH_PASS: string | undefined = undefined;
 
@@ -695,7 +698,10 @@ export const REPOSITORY_WRITTEN_AT_EACH_PASS: string | undefined = undefined;
  * of a volume in a namespace: the same measure says which, and sets this. When
  * one does, what a view lists of them is what a window with the view open
  * counted above a window of the same length with none (`operationLists`).
- * Measured: T51-PR4-PENDING.
+ * Measured on 2026-11-02, over the same fifteen minutes: no list of the pod
+ * volume backups or of the pod volume restores, in a namespace or in the
+ * cluster, only the watches of the server and of the node agent, so what a view
+ * lists of them is counted alone.
  */
 export const OPERATIONS_LISTED_BY_A_CONTROLLER: boolean = false;
 

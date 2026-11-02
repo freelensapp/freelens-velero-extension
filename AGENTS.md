@@ -476,7 +476,7 @@ test environment and of the process of this repository.
   (they carry no finalizer, seen on 2026-11-02). What the server sends to the repository at
   its pass and what the controllers list of the operations are measured and set as
   `REPOSITORY_WRITTEN_AT_EACH_PASS` and `OPERATIONS_LISTED_BY_A_CONTROLLER`
-  (T51-PR4-PENDING).
+  (measured on 2026-11-02: neither happens, so both keep their defaults).
 - What the suite of the adherence expects of a fixture is computed by the helper
   of the suites, `integration/helpers/velero-adherence.ts`, from the objects as
   the cluster holds them and from the clock, at the clock before a read of the
