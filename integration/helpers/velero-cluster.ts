@@ -370,7 +370,8 @@ export function fixturesReady(): boolean {
   // What the volume of the run leaves in the installation, each found by what the release writes into it, one of
   // each: the repository of the source namespace by its three labels, never by its name, and the pod volume backup
   // and the pod volume restore of the volume by the label of the name of their owner. In the views, whose operations
-  // have generated names: the seven pod volume restores of their restore, and the two repositories of one triple.
+  // have generated names: the seven pod volume restores of their restore, and the two repositories of one triple. In
+  // the long lists, placed after their owners: the two hundred pod volume backups of their last backup.
   const labelled: [namespace: string, resource: string, selector: string, count: number][] = [
     [E2E_NAMESPACE, "backuprepositories.velero.io", runRepositorySelector(), 1],
     [E2E_NAMESPACE, "podvolumebackups.velero.io", `velero.io/backup-name=fixture-volume-backup-${E2E_FIXTURE_RUN}`, 1],
@@ -382,6 +383,7 @@ export function fixturesReady(): boolean {
     ],
     [E2E_VIEWS_NAMESPACE, "podvolumerestores.velero.io", "velero.io/restore-name=restore-mapped", 7],
     [E2E_VIEWS_NAMESPACE, "backuprepositories.velero.io", "velero.io/volume-namespace=views-twice", 2],
+    [E2E_SCALE_NAMESPACE, "podvolumebackups.velero.io", "velero.io/backup-name=backup-1000", 200],
   ];
 
   // A run is eight hexadecimal characters: without one, no name of the run is probed.

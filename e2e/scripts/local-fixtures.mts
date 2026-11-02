@@ -66,6 +66,23 @@ export const VIEW_OF_AN_EXEC_PLUGIN = "views-exec-plugin";
 export const EXEC_CREDENTIAL_VERSION = "client.authentication.k8s.io/v1";
 export const SCALE_BACKUPS = 1000;
 export const SCALE_RESTORES = 1000;
+// The pod volume backups of the long lists: two of each of the first nine hundred backups, and two hundred of the
+// last one, whose view reads them at once. The backups between them have none.
+export const SCALE_OWNERS_OF_TWO = 900;
+export const SCALE_OPERATIONS_OF_THE_LAST = 200;
+export const SCALE_OPERATIONS = 2 * SCALE_OWNERS_OF_TWO + SCALE_OPERATIONS_OF_THE_LAST;
+// The phases the pod volume backups of the long lists are in, in turn: each one the release writes, and never
+// none, which the placement by the clock refuses.
+export const SCALE_OPERATION_PHASES = [
+  "New",
+  "Accepted",
+  "Prepared",
+  "InProgress",
+  "Canceling",
+  "Completed",
+  "Failed",
+  "Canceled",
+] as const;
 
 export function fixtureNames(run: string) {
   requireCondition(/^[a-f0-9]{8}$/.test(run), "A generated local fixture run ID is required");
@@ -1348,13 +1365,25 @@ function placedAt(placed: number): { annotations: Record<string, string> } {
   return { annotations: { [PLACED_ANNOTATION]: new Date(placed).toISOString() } };
 }
 
+// The UID a pod volume backup of the long lists names for its backup before the cluster gave that backup one: the
+// operations made with it are the ones the digest of the long lists is made of, and none is created.
+export function scalePlaceholderUid(index: number): string {
+  return `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`;
+}
+
 // A thousand backups and a thousand restores, spread over the thirty days before they were put in place:
-// every window of the recent operations holds some of them.
+// every window of the recent operations holds some of them. With them the pod volume backups of the first nine
+// hundred backups and of the last one, each owned by its backup as the release writes it: its owner reference
+// names the UID the cluster gave the backup, with `controller: true`, and its labels the name and that UID. Each
+// is accepted a minute after its backup started, the ones of one backup a second apart, in the phases of
+// `SCALE_OPERATION_PHASES` in turn. Without the UIDs of the backups, which the cluster gives when it creates
+// them, each names a placeholder UID: that is what the digest is made of, and none of them is created.
 export function scaleFixtures(
   owner: string,
   run: string,
   placed = Date.parse("2026-09-01T00:00:00Z"),
-): { namespace: KubeResource; backups: KubeResource[]; restores: KubeResource[] } {
+  owners?: Record<string, string>,
+): { namespace: KubeResource; backups: KubeResource[]; restores: KubeResource[]; operations: KubeResource[] } {
   requireCondition(owner, "Fixture ownership is required");
   const names = fixtureNames(run);
   const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
@@ -1362,6 +1391,97 @@ export function scaleFixtures(
   // The last of them started a step before they were put in place: none is of a time that is to come.
   const first = Math.floor(placed / 1000) * 1000 - 30 * DAY;
   const at = placedAt(placed);
+  const MEBIBYTE = 1024 * 1024;
+  const operations: KubeResource[] = [];
+  const taken = new Set<string>();
+
+  for (let index = 0; index < SCALE_BACKUPS; index += 1) {
+    const count = index < SCALE_OWNERS_OF_TWO ? 2 : index === SCALE_BACKUPS - 1 ? SCALE_OPERATIONS_OF_THE_LAST : 0;
+    const backup = `backup-${String(index + 1).padStart(4, "0")}`;
+    const uid = owners ? owners[backup] : scalePlaceholderUid(index);
+
+    requireCondition(
+      count === 0 || uid,
+      `The backup ${backup} of ${names.scale} that owns pod volume backups of the long lists is not there`,
+    );
+    for (let place = 0; place < count; place += 1) {
+      const time = first + index * step + 60_000 + place * 1000;
+      const second = (offset: number) => new Date(time + offset * 1000).toISOString().replace(".000Z", "Z");
+      const phase = SCALE_OPERATION_PHASES[operations.length % SCALE_OPERATION_PHASES.length];
+      const pod = `scale-app-${place}`;
+      const podUid = `scale-pod-uid-${index + 1}-${place}`;
+      // A generated name, drawn again when two of one backup would be the same.
+      let name = generatedName(run, backup, place);
+
+      for (let draw = 1; taken.has(name); draw += 1) name = generatedName(run, backup, place + draw * 100_000);
+      taken.add(name);
+      const statuses: Record<(typeof SCALE_OPERATION_PHASES)[number], Record<string, unknown>> = {
+        New: { phase },
+        Accepted: { phase, acceptedTimestamp: second(0) },
+        Prepared: { phase, acceptedTimestamp: second(0) },
+        InProgress: {
+          phase,
+          acceptedTimestamp: second(0),
+          startTimestamp: second(1),
+          progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 16 * MEBIBYTE },
+        },
+        Canceling: {
+          phase,
+          acceptedTimestamp: second(0),
+          startTimestamp: second(1),
+          progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 32 * MEBIBYTE },
+        },
+        Completed: {
+          phase,
+          acceptedTimestamp: second(0),
+          startTimestamp: second(1),
+          completionTimestamp: second(2),
+          path: `/host_pods/${podUid}/volumes/kubernetes.io~empty-dir/data-${place}`,
+          snapshotID: createHash("sha256").update(`${run}/scale/${name}`).digest("hex").slice(0, 32),
+          progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 64 * MEBIBYTE },
+        },
+        Failed: {
+          phase,
+          acceptedTimestamp: second(0),
+          startTimestamp: second(1),
+          completionTimestamp: second(2),
+          message: "data path failed: the volume of the pod could not be read",
+        },
+        Canceled: { phase, startTimestamp: second(1), completionTimestamp: second(2) },
+      };
+
+      operations.push({
+        apiVersion: "velero.io/v1",
+        kind: "PodVolumeBackup",
+        metadata: {
+          name,
+          namespace: names.scale,
+          labels: { ...labels, "velero.io/backup-name": backup, "velero.io/backup-uid": String(uid) },
+          ownerReferences: [
+            { apiVersion: "velero.io/v1", kind: "Backup", name: backup, uid: String(uid), controller: true },
+          ],
+          ...at,
+        },
+        spec: {
+          node: "scale-node-1",
+          pod: { kind: "Pod", namespace: names.source, name: pod, uid: podUid },
+          volume: `data-${place}`,
+          tags: {
+            backup,
+            "backup-uid": String(uid),
+            pod,
+            "pod-uid": podUid,
+            ns: names.source,
+            volume: `data-${place}`,
+          },
+          backupStorageLocation: `scale-location-${(index % 3) + 1}`,
+          repoIdentifier: "",
+          uploaderType: "kopia",
+        },
+        status: statuses[phase],
+      });
+    }
+  }
 
   return {
     namespace: { apiVersion: "v1", kind: "Namespace", metadata: { name: names.scale, labels } },
@@ -1396,6 +1516,7 @@ export function scaleFixtures(
         first + index * step + step / 2,
       ),
     })),
+    operations,
   };
 }
 
@@ -2048,15 +2169,21 @@ export const SUBMISSIONS_AT_ONCE = 50;
 // The phase and the last submission of each schedule created then are read back with the rest: the views read
 // them, and a cluster that did not keep them as they were written is refused, as is a schedule found with no phase
 // at a later call.
+//
+// The long lists are created in two phases by their owners, and nothing else is: the backups and the restores first,
+// then the pod volume backups, made with the UIDs the cluster gave the backups (see `scaleFixtures`), in one create.
+// They are removed first as well, and read until they are gone, before the rest: removed with their owners, they
+// would be left to the collector of the cluster.
 export function placeByTheClock(
   runtime: FixtureRuntime,
   run: string,
   namespace: string,
   now: number,
-  make: (placed: number, submissions?: Submissions) => KubeResource[],
-  twoPhases = false,
+  make: (placed: number, submissions?: Submissions, owners?: Record<string, string>) => KubeResource[],
+  placement: Placement = "one phase",
 ): { placed: number; count: number; again: boolean } {
   const names = fixtureNames(run);
+  const twoPhases = placement === "submissions";
 
   // The other namespaces of the run hold fixtures whose times are fixed, with the labels of the run: they
   // would be removed with what is placed by the clock.
@@ -2064,16 +2191,22 @@ export function placeByTheClock(
     [names.overview, names.scale, names.adherence, names.adherenceSplit, names.adherenceScale].includes(namespace),
     "Refusing to place fixtures outside the namespaces that are placed by the clock",
   );
+  // What is made for now, once: the long lists are four thousand objects.
+  const fixtures = make(now);
+
   requireCondition(
-    make(now).every((resource) => resource.metadata.namespace === namespace),
+    fixtures.every((resource) => resource.metadata.namespace === namespace),
     `Refusing to place in ${namespace} what is made for another namespace`,
   );
+  const adherence = [names.adherence, names.adherenceSplit, names.adherenceScale].includes(namespace);
+
   requireCondition(
-    twoPhases === [names.adherence, names.adherenceSplit, names.adherenceScale].includes(namespace),
-    `Refusing to place ${namespace} in ${twoPhases ? "two phases" : "one phase"}: the installations of the ` +
-      "adherence are placed in two phases, and no other namespace is",
+    placement === (adherence ? "submissions" : namespace === names.scale ? "owners" : "one phase"),
+    `Refusing to place ${namespace} ${PLACEMENTS[placement]}: the installations of the adherence are placed in two ` +
+      "phases by the clock of their submissions, the long lists in two phases by their owners, and no other " +
+      "namespace in two",
   );
-  const submitted = make(now)
+  const submitted = fixtures
     .filter((resource) => resource.kind === "Backup")
     .map((backup) => backup.metadata.labels?.["velero.io/schedule-name"] ?? "");
 
@@ -2104,19 +2237,21 @@ export function placeByTheClock(
       600_000,
       false,
     );
-  const kinds = [...new Set(make(now).map((resource) => `${resource.kind}.velero.io`.toLowerCase()))].sort();
-  const listed = () =>
+  const kinds = [...new Set(fixtures.map((resource) => `${resource.kind}.velero.io`.toLowerCase()))].sort();
+  const listed = (of = kinds) =>
     (
       JSON.parse(
-        runtime.kubectl(["get", kinds.join(","), "--namespace", namespace, "-o", "json"], undefined, undefined, false),
+        runtime.kubectl(["get", of.join(","), "--namespace", namespace, "-o", "json"], undefined, undefined, false),
       ) as { items: (KubeResource & { status?: { phase?: string } })[] }
     ).items;
+  // What is removed first, and read until it is gone, before the rest.
+  const dependents = placement === "owners" ? kinds.filter((kind) => kind === "podvolumebackup.velero.io") : [];
   const times = (items: KubeResource[]) =>
     items.map((item) => Date.parse(item.metadata.annotations?.[PLACED_ANNOTATION] ?? ""));
   const before = listed();
   let made: KubeResource[] = [];
   const good =
-    before.length === make(now).length &&
+    before.length === fixtures.length &&
     before.every((item) => item.metadata.annotations?.[SHAPE_ANNOTATION] === shape) &&
     times(before).every((time) => Number.isFinite(time) && time <= now && now - time <= PLACED_FOR);
 
@@ -2130,13 +2265,13 @@ export function placeByTheClock(
       ),
       "The namespace holds what is not of this run; nothing is removed",
     );
-    if (before.length) {
-      // The client waits for what it removed one object at a time, which is minutes for two thousand:
-      // it is asked not to, and the namespace is read until nothing of it is left.
+    // The client waits for what it removed one object at a time, which is minutes for two thousand:
+    // it is asked not to, and the namespace is read until nothing of it is left.
+    for (const removing of before.length ? (dependents.length ? [dependents, kinds] : [kinds]) : []) {
       runtime.kubectl(
         [
           "delete",
-          kinds.join(","),
+          removing.join(","),
           "--namespace",
           namespace,
           "--selector",
@@ -2149,7 +2284,7 @@ export function placeByTheClock(
       );
       const started = Date.now();
 
-      for (let left = listed().length; left > 0; left = listed().length) {
+      for (let left = listed(removing).length; left > 0; left = listed(removing).length) {
         requireCondition(
           Date.now() - started < REMOVAL_TIMEOUT,
           `${left} fixtures of ${namespace} are still there after they were removed`,
@@ -2158,13 +2293,14 @@ export function placeByTheClock(
       }
     }
     if (twoPhases) made = createInTwoPhases(runtime, namespace, make, create);
-    else create(make(now));
+    else if (placement === "owners") createAfterOwners(runtime, namespace, now, fixtures, make, create);
+    else create(fixtures);
   }
   const found = listed();
   const placed = Math.min(...times(found));
 
   requireCondition(
-    found.length === make(now).length &&
+    found.length === fixtures.length &&
       found.every(
         (item) =>
           item.metadata.labels?.[OWNER_LABEL] === runtime.owner &&
@@ -2195,6 +2331,46 @@ export function placeByTheClock(
     );
   }
   return { placed, count: found.length, again: !good && before.length > 0 };
+}
+
+// How a namespace placed by the clock is created: in one phase; in two by the clock of their submissions, the
+// installations of the adherence; in two by their owners, the long lists.
+export type Placement = "one phase" | "submissions" | "owners";
+
+const PLACEMENTS: Record<Placement, string> = {
+  "one phase": "in one phase",
+  submissions: "in two phases by the clock of their submissions",
+  owners: "in two phases by their owners",
+};
+
+// The two phases of a placement of the long lists, in a namespace that holds nothing of the run: what is not a pod
+// volume backup first, then the pod volume backups, made with the UIDs the cluster gave their backups, which are
+// read back once, in one create. A backup that is not there is refused by what makes them.
+function createAfterOwners(
+  runtime: FixtureRuntime,
+  namespace: string,
+  now: number,
+  fixtures: KubeResource[],
+  make: (placed: number, submissions?: Submissions, owners?: Record<string, string>) => KubeResource[],
+  create: (items: KubeResource[]) => void,
+): void {
+  const isOperation = (resource: KubeResource) => resource.kind === "PodVolumeBackup";
+
+  create(fixtures.filter((resource) => !isOperation(resource)));
+  const owners = Object.fromEntries(
+    (
+      JSON.parse(
+        runtime.kubectl(
+          ["get", "backups.velero.io", "--namespace", namespace, "-o", "json"],
+          undefined,
+          undefined,
+          false,
+        ),
+      ) as { items: KubeResource[] }
+    ).items.map((backup) => [backup.metadata.name, String(backup.metadata.uid ?? "")]),
+  );
+
+  create(make(now, undefined, owners).filter(isOperation));
 }
 
 // The two phases of a placement of backups of submissions, in a namespace that holds nothing of the run. Each backup
@@ -2295,7 +2471,7 @@ export function placeAdherenceFixtures(
         namespace,
         clock(),
         (at, submissions) => fixtures(runtime.owner, run, at, submissions),
-        true,
+        "submissions",
       ),
     };
   });
@@ -2322,6 +2498,7 @@ export function createViewFixtures(
   overview: number;
   scale: number;
   restores: number;
+  scaleOperations: number;
   again: string[];
 } {
   const names = fixtureNames(run);
@@ -2348,18 +2525,26 @@ export function createViewFixtures(
   const overview = placeByTheClock(runtime, run, names.overview, now, (placed) =>
     overviewFixtures(runtime.owner, run, placed),
   );
-  const scale = placeByTheClock(runtime, run, names.scale, now, (placed) => {
-    const made = scaleFixtures(runtime.owner, run, placed);
+  const scale = placeByTheClock(
+    runtime,
+    run,
+    names.scale,
+    now,
+    (placed, _submissions, owners) => {
+      const made = scaleFixtures(runtime.owner, run, placed, owners);
 
-    return [...made.backups, ...made.restores];
-  });
+      return [...made.backups, ...made.restores, ...made.operations];
+    },
+    "owners",
+  );
 
   return {
     views: views.length,
     operations: operations.length,
     overview: overview.count,
     scale: SCALE_BACKUPS,
-    restores: scale.count - SCALE_BACKUPS,
+    restores: scale.count - SCALE_BACKUPS - SCALE_OPERATIONS,
+    scaleOperations: SCALE_OPERATIONS,
     again: [...(overview.again ? [names.overview] : []), ...(scale.again ? [names.scale] : [])],
   };
 }
@@ -3854,7 +4039,7 @@ export function placementWords(
   const again = [...views.again, ...adherence.again];
 
   return [
-    `PASS: ${views.views} objects of the views in ${names.views} and ${names.defaults}, ${views.overview} of the Overview in ${names.overview}, and ${views.scale} backups and ${views.restores} restores of the long lists in ${names.scale}, are in place, outside the reach of the controllers.`,
+    `PASS: ${views.views} objects of the views in ${names.views} and ${names.defaults}, ${views.overview} of the Overview in ${names.overview}, and ${views.scale} backups, ${views.restores} restores and ${views.scaleOperations} pod volume backups of the long lists in ${names.scale}, are in place, outside the reach of the controllers.`,
     `PASS: ${adherence.states} objects of the adherence in ${names.adherence}, ${adherence.split} in ${names.adherenceSplit} and ${adherence.budget} in ${names.adherenceScale}, the backups of their submissions named by the clock of their placement, are in place, outside the reach of the controllers.`,
     ...(again.length
       ? [`NOTE: the fixtures that are placed by the clock were put in place again in ${listed(again)}.`]

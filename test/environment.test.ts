@@ -86,6 +86,7 @@ import {
   overviewFixtures,
   PLACED_ANNOTATION,
   PLACED_FOR,
+  type Placement,
   placeAdherenceFixtures,
   placeByTheClock,
   placementWords,
@@ -112,6 +113,10 @@ import {
   runLiveVolume,
   runRepository,
   SCALE_BACKUPS,
+  SCALE_OPERATION_PHASES,
+  SCALE_OPERATIONS,
+  SCALE_OPERATIONS_OF_THE_LAST,
+  SCALE_OWNERS_OF_TWO,
   SCALE_RESTORES,
   SERVER_EAST,
   SHAPE_ANNOTATION,
@@ -122,6 +127,7 @@ import {
   SYNCED_SELECTOR,
   SYNCED_SNAPSHOT_LOCATION,
   scaleFixtures,
+  scalePlaceholderUid,
   staticFixtures,
   storeTabFixtures,
   syncedBackups,
@@ -2510,6 +2516,8 @@ describe("foundation fixture boundaries", () => {
       overview: overviewFixtures("synthetic-owner", run, now).length,
       scale: SCALE_BACKUPS,
       restores: SCALE_RESTORES,
+      // Two thousand pod volume backups of the long lists.
+      scaleOperations: SCALE_OPERATIONS,
       // What is placed by the clock was not there: it was put in place, not again, and nothing was removed.
       again: [],
     });
@@ -2550,7 +2558,69 @@ describe("foundation fixture boundaries", () => {
     expect(target.changes()).toBe(changes);
     expect(target.removed).toEqual([]);
     expect([...target.objects.entries()]).toEqual(objects);
-  });
+  }, 30_000);
+
+  it("places the long lists in two phases by their owners, and removes their pod volume backups before the rest", () => {
+    const names = fixtureNames(run);
+    const started = Date.parse("2026-09-28T07:31:17.123Z");
+    const target = cluster("synthetic-owner", Date.parse("2026-09-28T07:43:00Z"));
+    const now = Date.parse("2026-09-28T07:45:00Z");
+    const inScale = (prefix: string) => (name: string) => name.startsWith(`${prefix}/${names.scale}/`);
+
+    expect(createViewFixtures(target.runtime as never, run, started, now)).toMatchObject({
+      scale: SCALE_BACKUPS,
+      restores: SCALE_RESTORES,
+      scaleOperations: SCALE_OPERATIONS,
+    });
+    // The backups and the restores first, then the pod volume backups, each naming the UID the cluster gave its
+    // backup, in its owner reference and in its label, with the digest of the others.
+    const order = target.order.filter((name) => name.includes(`/${names.scale}/`));
+    const first = order.findIndex(inScale("podvolumebackup"));
+
+    expect(first).toBe(SCALE_BACKUPS + SCALE_RESTORES);
+    expect(order.slice(first).every(inScale("podvolumebackup"))).toBe(true);
+    const shape = (
+      target.find("Backup", names.scale, "backup-0001")?.metadata.annotations as Record<string, string> | undefined
+    )?.[SHAPE_ANNOTATION];
+    const operations = order.slice(first).map((name) => {
+      const found = target.find("PodVolumeBackup", names.scale, name.split("/")[2]);
+
+      if (!found) throw new Error(`${name} is not there`);
+      return found as unknown as KubeResource;
+    });
+
+    expect(operations).toHaveLength(SCALE_OPERATIONS);
+    for (const operation of operations) {
+      const backup = String(operation.metadata.labels?.["velero.io/backup-name"]);
+      const uid = target.find("Backup", names.scale, backup)?.metadata.uid;
+
+      expect([operation.metadata.name, operation.metadata.ownerReferences?.[0].uid]).toEqual([
+        operation.metadata.name,
+        uid,
+      ]);
+      expect([operation.metadata.name, operation.metadata.labels?.["velero.io/backup-uid"]]).toEqual([
+        operation.metadata.name,
+        uid,
+      ]);
+      expect(operation.metadata.annotations?.[SHAPE_ANNOTATION]).toBe(shape);
+    }
+    // Once they are older than they are good for, the pod volume backups are removed and read until they are gone,
+    // then the rest, and they are created again after their backups, with the UIDs of the new ones.
+    const before = target.find("Backup", names.scale, "backup-1000")?.metadata.uid;
+    const again = createViewFixtures(target.runtime as never, run, started, now + PLACED_FOR + 1000);
+    const removed = target.removed.filter((name) => name.includes(`/${names.scale}/`));
+
+    expect(again.again).toEqual([names.overview, names.scale]);
+    expect(removed).toHaveLength(SCALE_BACKUPS + SCALE_RESTORES + SCALE_OPERATIONS);
+    expect(removed.slice(0, SCALE_OPERATIONS).every(inScale("podvolumebackup"))).toBe(true);
+    const renewed = target.find("Backup", names.scale, "backup-1000")?.metadata.uid;
+    const last = target.find("PodVolumeBackup", names.scale, operations[operations.length - 1].metadata.name) as
+      | KubeResource
+      | undefined;
+
+    expect(renewed).not.toBe(before);
+    expect(last?.metadata.ownerReferences?.[0].uid).toBe(renewed);
+  }, 30_000);
 
   // The owners of the operations of the views as the cluster gives them back: each with a UID of its own.
   const viewOwners = (run: string) =>
@@ -2602,7 +2672,7 @@ describe("foundation fixture boundaries", () => {
         (item) => (item.metadata.labels as Record<string, string>)["velero.io/backup-uid"] === EARLIER_BACKUP_UID,
       ),
     ).toHaveLength(1);
-  });
+  }, 30_000);
 
   it("refuses the operations of the views when an owner is not there or has no UID, and names it", () => {
     const names = fixtureNames(run);
@@ -2809,7 +2879,7 @@ describe("foundation fixture boundaries", () => {
     const overview = overviewFixtures("synthetic-owner", run, after).length;
 
     expect(again).toMatchObject({ again: [names.overview, names.scale], overview, scale: SCALE_BACKUPS });
-    expect(target.removed).toHaveLength(overview + SCALE_BACKUPS + SCALE_RESTORES);
+    expect(target.removed).toHaveLength(overview + SCALE_BACKUPS + SCALE_RESTORES + SCALE_OPERATIONS);
     expect(
       target.removed.every((name) => name.includes(`/${names.overview}/`) || name.includes(`/${names.scale}/`)),
     ).toBe(true);
@@ -2846,7 +2916,7 @@ describe("foundation fixture boundaries", () => {
       "The namespace holds what is not of this run; nothing is removed",
     );
     expect(target.removed).toHaveLength(removed);
-  });
+  }, 30_000);
 
   it("puts in place again what is not made as it would be made now, whatever its age", () => {
     const names = fixtureNames(run);
@@ -2878,7 +2948,7 @@ describe("foundation fixture boundaries", () => {
     expect(createViewFixtures(target.runtime as never, run, started, now + 120_000).again).toEqual([names.overview]);
     expect(shape(names.overview, "Restore", "restored-3h")).toBe(overview);
     expect(target.removed.every((name) => name.includes(`/${names.overview}/`))).toBe(true);
-  });
+  }, 30_000);
 
   it("puts in place again what says that it was placed after now", () => {
     const names = fixtureNames(run);
@@ -2901,14 +2971,14 @@ describe("foundation fixture boundaries", () => {
     ]);
     // What was in place was removed before the ones of now were created, and nothing else was.
     expect(target.removed).toHaveLength(
-      overviewFixtures("synthetic-owner", run, before).length + SCALE_BACKUPS + SCALE_RESTORES,
+      overviewFixtures("synthetic-owner", run, before).length + SCALE_BACKUPS + SCALE_RESTORES + SCALE_OPERATIONS,
     );
     expect(
       target.removed.every((name) => name.includes(`/${names.overview}/`) || name.includes(`/${names.scale}/`)),
     ).toBe(true);
     expect(placedAt(names.overview, "recent-1h")).toBe(new Date(before).toISOString());
     expect(placedAt(names.scale, "backup-0001")).toBe(new Date(before).toISOString());
-  });
+  }, 30_000);
 
   it("stops when what it placed is not what the cluster holds", () => {
     const names = fixtureNames(run);
@@ -2991,7 +3061,7 @@ describe("foundation fixture boundaries", () => {
     (foreign.metadata.labels as Record<string, string>)[FIXTURE_LABEL] = "b1b2b3b4";
     expect(() => createViewFixtures(good.runtime as never, run, started, now + HOUR)).toThrow(refused);
     expect(good.removed).toEqual([]);
-  });
+  }, 30_000);
 
   it("places nothing by the clock in a namespace that is not of the run", () => {
     const names = fixtureNames(run);
@@ -3037,7 +3107,7 @@ describe("foundation fixture boundaries", () => {
     expect(target.removed).toEqual([]);
     expect(target.order).toHaveLength(created);
     expect([...target.objects.entries()]).toEqual(objects);
-  });
+  }, 30_000);
 
   it("gives the fixtures of the Overview what the release writes into the objects it takes", () => {
     const placed = Date.parse("2026-09-28T07:45:30.250Z");
@@ -3090,7 +3160,7 @@ describe("foundation fixture boundaries", () => {
     } finally {
       vi.useRealTimers();
     }
-  });
+  }, 30_000);
 
   // What the views take of the backups of the submissions of an installation, by the rule of SPEC-0013 (REQ-162): a
   // backup of a schedule by its label, named by the schedule and fourteen digits, created within a minute of the
@@ -3647,7 +3717,7 @@ describe("foundation fixture boundaries", () => {
               ...resource,
               metadata: { ...resource.metadata, namespace },
             })),
-          true,
+          "submissions",
         ),
       ).toThrow("Refusing to place fixtures outside the namespaces that are placed by the clock");
     }
@@ -3658,31 +3728,44 @@ describe("foundation fixture boundaries", () => {
         names.adherence,
         Date.parse("2026-10-27T09:00:00Z"),
         (placed, submissions) => adherenceSplitFixtures("synthetic-owner", run, placed, submissions),
-        true,
+        "submissions",
       ),
     ).toThrow(`Refusing to place in ${names.adherence} what is made for another namespace`);
-    // The installations of the adherence are placed in two phases, and nothing else is.
-    expect(() =>
-      placeByTheClock(target.runtime as never, run, names.adherence, Date.parse("2026-10-27T09:00:00Z"), (placed) =>
-        adherenceFixtures("synthetic-owner", run, placed),
-      ),
-    ).toThrow(
-      `Refusing to place ${names.adherence} in one phase: the installations of the adherence are placed in two ` +
-        "phases, and no other namespace is",
-    );
-    expect(() =>
+    // The installations of the adherence are placed in two phases by the clock of their submissions, the long lists
+    // in two phases by their owners, and nothing else in two.
+    const rule =
+      "the installations of the adherence are placed in two phases by the clock of their submissions, the long " +
+      "lists in two phases by their owners, and no other namespace in two";
+    const longLists = (placed: number, owners?: Record<string, string>) => {
+      const made = scaleFixtures("synthetic-owner", run, placed, owners);
+
+      return [...made.backups, ...made.restores, ...made.operations];
+    };
+    const placing = (namespace: string, placement?: Placement) => () =>
       placeByTheClock(
         target.runtime as never,
         run,
-        names.overview,
+        namespace,
         Date.parse("2026-10-27T09:00:00Z"),
-        (placed) => overviewFixtures("synthetic-owner", run, placed),
-        true,
-      ),
-    ).toThrow(
-      `Refusing to place ${names.overview} in two phases: the installations of the adherence are placed in two ` +
-        "phases, and no other namespace is",
-    );
+        (placed, submissions, owners) =>
+          namespace === names.overview
+            ? overviewFixtures("synthetic-owner", run, placed)
+            : namespace === names.scale
+              ? longLists(placed, owners)
+              : adherenceFixtures("synthetic-owner", run, placed, submissions),
+        placement,
+      );
+
+    for (const [namespace, placement, said] of [
+      [names.adherence, undefined, "in one phase"],
+      [names.adherence, "owners", "in two phases by their owners"],
+      [names.overview, "submissions", "in two phases by the clock of their submissions"],
+      [names.overview, "owners", "in two phases by their owners"],
+      [names.scale, undefined, "in one phase"],
+      [names.scale, "submissions", "in two phases by the clock of their submissions"],
+    ] as const) {
+      expect(placing(namespace, placement)).toThrow(`Refusing to place ${namespace} ${said}: ${rule}`);
+    }
     // In two phases each backup is of one schedule, which names it in its label, and no two of the same.
     const relabelled = (label: (backup: KubeResource) => Record<string, string>) =>
       placeByTheClock(
@@ -3696,7 +3779,7 @@ describe("foundation fixture boundaries", () => {
               ? { ...resource, metadata: { ...resource.metadata, labels: label(resource) } }
               : resource,
           ),
-        true,
+        "submissions",
       );
     const without = ({ metadata }: KubeResource) =>
       Object.fromEntries(Object.entries(metadata.labels ?? {}).filter(([name]) => name !== "velero.io/schedule-name"));
@@ -3732,7 +3815,7 @@ describe("foundation fixture boundaries", () => {
         names.adherence,
         Date.parse("2026-10-26T09:00:00Z"),
         (placed, submissions) => adherenceFixtures("synthetic-owner", run, placed, submissions),
-        true,
+        "submissions",
       ),
     ).toThrow("A placement in two phases needs the clock of this machine");
     expect([clockless.asked, clockless.applied]).toEqual([[], []]);
@@ -5826,9 +5909,9 @@ describe("foundation fixture boundaries", () => {
     // for the backups took once the other fixtures were placed, and the operations it placed.
     const views = (placement: typeof placed) =>
       `PASS: ${placement.views.views} objects of the views in ${names.views} and ${names.defaults}, ` +
-      `${placement.views.overview} of the Overview in ${names.overview}, and ${SCALE_BACKUPS} backups and ` +
-      `${SCALE_RESTORES} restores of the long lists in ${names.scale}, are in place, outside the reach of the ` +
-      "controllers.";
+      `${placement.views.overview} of the Overview in ${names.overview}, and ${SCALE_BACKUPS} backups, ` +
+      `${SCALE_RESTORES} restores and ${SCALE_OPERATIONS} pod volume backups of the long lists in ${names.scale}, ` +
+      "are in place, outside the reach of the controllers.";
     const created =
       `the server created ${names.syncedBackup} and ${names.syncedBackupWithoutLog} from them as they were ` +
       "stored: once the fixtures of the views and of the adherence, the refused operations and the schedule its " +
@@ -5906,7 +5989,7 @@ describe("foundation fixture boundaries", () => {
     expect(later.stored).toEqual(again.stored);
     expect(later.refused).toEqual(again.refused);
     expect(target.requests).toHaveLength(before.requests);
-  });
+  }, 30_000);
 
   it("says of a placement and of a removal of the tabs what each did, a thing that was done once as one", () => {
     const names = fixtureNames(run);
@@ -9770,6 +9853,75 @@ describe("foundation fixture boundaries", () => {
         items.every((item) => item.metadata.annotations?.[PLACED_ANNOTATION] === new Date(placed).toISOString()),
       ).toBe(true);
     }
+  });
+
+  it("makes the pod volume backups of the long lists for their backups, in the phases of the release in turn, with placeholder UIDs until the cluster gave the backups theirs", () => {
+    const names = fixtureNames(run);
+    const placed = Date.parse("2026-09-28T07:45:30Z");
+    const { backups, operations } = scaleFixtures("synthetic-owner", run, placed);
+    const of = (backup: string) =>
+      operations.filter((operation) => operation.metadata.labels?.["velero.io/backup-name"] === backup);
+    const times = operations.flatMap((operation) =>
+      ["acceptedTimestamp", "startTimestamp", "completionTimestamp"].flatMap((time) => {
+        const value = (operation.status as Record<string, string>)[time];
+
+        return value === undefined ? [] : [Date.parse(value)];
+      }),
+    );
+
+    // Two of each of the first nine hundred backups, none of the ones after them, and two hundred of the last.
+    expect(operations).toHaveLength(SCALE_OPERATIONS);
+    expect(SCALE_OPERATIONS).toBe(2000);
+    expect(backups.map((backup) => of(backup.metadata.name).length)).toEqual(
+      backups.map((_, index) =>
+        index < SCALE_OWNERS_OF_TWO ? 2 : index === backups.length - 1 ? SCALE_OPERATIONS_OF_THE_LAST : 0,
+      ),
+    );
+    // Each in the namespace of the long lists, owned by its backup as the release writes it, by the placeholder UID
+    // of that backup, with a name the release would generate and no two of the same.
+    for (const operation of operations) {
+      const backup = String(operation.metadata.labels?.["velero.io/backup-name"]);
+      const uid = scalePlaceholderUid(Number(backup.slice("backup-".length)) - 1);
+
+      expect([operation.metadata.name, operation.kind, operation.metadata.namespace]).toEqual([
+        operation.metadata.name,
+        "PodVolumeBackup",
+        names.scale,
+      ]);
+      expect(operation.metadata.name).toMatch(new RegExp(`^${backup}-[a-z0-9]{5}$`));
+      expect(operation.metadata.labels?.["velero.io/backup-uid"]).toBe(uid);
+      expect(operation.metadata.ownerReferences).toEqual([
+        { apiVersion: "velero.io/v1", kind: "Backup", name: backup, uid, controller: true },
+      ]);
+      expect(operation.metadata.annotations?.[PLACED_ANNOTATION]).toBe(new Date(placed).toISOString());
+    }
+    expect(new Set(operations.map((operation) => operation.metadata.name)).size).toBe(SCALE_OPERATIONS);
+    // In the phases the release writes, in turn, and never none.
+    expect(operations.map((operation) => (operation.status as { phase?: string }).phase)).toEqual(
+      operations.map((_, index) => SCALE_OPERATION_PHASES[index % SCALE_OPERATION_PHASES.length]),
+    );
+    // Over the thirty days before they were placed, none of a time to come.
+    expect(Math.min(...times)).toBeGreaterThanOrEqual(placed - 30 * 24 * HOUR);
+    expect(Math.max(...times)).toBeLessThan(placed);
+    // With the UIDs the cluster gave the backups, the operations name them; a backup that is not there is refused.
+    const owners = Object.fromEntries(backups.map((backup, index) => [backup.metadata.name, `given-uid-${index}`]));
+    const given = scaleFixtures("synthetic-owner", run, placed, owners).operations;
+
+    expect(given.map((operation) => operation.metadata.ownerReferences?.[0].uid)).toEqual(
+      operations.map((operation) => owners[String(operation.metadata.labels?.["velero.io/backup-name"])]),
+    );
+    expect(given.map(({ metadata: { name } }) => name)).toEqual(operations.map(({ metadata: { name } }) => name));
+    const without = (backup: string) => Object.fromEntries(Object.entries(owners).filter(([name]) => name !== backup));
+
+    expect(() => scaleFixtures("synthetic-owner", run, placed, without("backup-1000"))).toThrow(
+      `The backup backup-1000 of ${names.scale} that owns pod volume backups of the long lists is not there`,
+    );
+    // A backup with no operation needs no UID.
+    expect(scaleFixtures("synthetic-owner", run, placed, without("backup-0950")).operations).toHaveLength(
+      SCALE_OPERATIONS,
+    );
+    // The same moment gives the same objects.
+    expect(scaleFixtures("synthetic-owner", run, placed).operations).toEqual(operations);
   });
 
   it("gives the views schedules whose backups go where none is taken, and one that names its time zone", () => {
