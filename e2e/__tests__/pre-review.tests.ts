@@ -1295,8 +1295,8 @@ describe("pre-review of the views", () => {
           [one, other],
         );
 
-      // T51-PR3-PENDING: the six cells of what was read, the backup repositories the sixth, at 900 by 650 and at
-      // twice the zoom, which no run has shown yet.
+      // The six cells of what was read, the backup repositories the sixth: two rows of three at 900 by 650, and
+      // rows of two at twice the zoom, where the picture shows the first row and the page scrolls to the others.
       await everyLayout(
         "overview",
         async () => {

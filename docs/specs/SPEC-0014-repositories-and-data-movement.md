@@ -1196,11 +1196,18 @@ from main at `c16c159`. The gates on the machine of the phase, on 2026-10-29, wi
 Node 24.21.0, pnpm 12.15.0, TypeScript 7.0.2, Vitest 5.0.5, Biome 2.5.15, Knip 6.41.0
 and the launcher of Trunk 1.3.4: `pnpm type:check`, the nine programs, and
 `pnpm lint:check`, 298 files, each with no error; `pnpm test:unit`, the
-build, then 95 files and 2866 tests, all passed, then the two
+build, then 95 files and 2,866 tests, all passed, then the two
 measures within their budgets; `pnpm knip:check`, both passes with no finding; Trunk
 on the files the branch changes, with no issue. Its second form with
-`VITE_PRESERVE_MODULES=false`, and each commit type-checked and linted alone:
-T51-PR3-PENDING. The unit and component evidence, by check:
+`VITE_PRESERVE_MODULES=false`, and each commit type-checked and linted alone, ran
+after the rebase on main at `e4e8b2f`, on 2026-11-02, with the same toolchain:
+`pnpm type:check`, the nine programs, `pnpm lint:check`, 307 files, and
+`pnpm knip:check`, each with no finding; Trunk on the 18 files the branch changes,
+with no issue; each of the six commits type-checked and linted alone, with no
+error; and `pnpm test:unit` in both forms on a second Linux machine, Ubuntu 26.04
+under WSL 2, 99 files and 2,927 tests passed in each, 14 more than main at
+`e4e8b2f`, then the three measures within their budgets. The unit and component
+evidence, by check:
 
 - KIND-13, the rules and the cell (`src/common/overview.ts`,
   `src/common/overview.test.ts`): A12 for NotReady and for no other phase, Ready,
@@ -1243,22 +1250,31 @@ T51-PR3-PENDING. The unit and component evidence, by check:
   repositories among them, asked at each of the three, none of `ON_DEMAND`, and no
   timer left when the page closes. The one read counted inside the test of the cells
   of the page stays as it was.
+- KIND-07 (`src/common/repository-view.test.ts`, "takes the later in the list as the
+  newer of two with the same start or with none, as the release appends them"): of
+  two maintenances with the same start, or with none, the later in
+  `status.recentMaintenance` is the newer, in the view of a repository and so in A13;
+  seen failing first on the order of the object. 1 test added.
 
-The packaged cases, written on the fixtures that exist, where no repository is, and
-not run in this phase: `velero-e2e-overview` with six cells in each installation,
+The packaged cases, written in phase A on the fixtures that exist, where no
+repository is, and run in phase B: `velero-e2e-overview` with six cells in each installation,
 `Backup Repositories 0` where the suite counts none on the cluster, the sixth cell
 leading to the list of the repositories and back, and no item of A12 or A13 in any
 installation of the fixtures; both readers of the restricted suites denied the
 repositories, with the cell, the line of what was not checked and, for the first,
 the way of the cell to the list, which says the same; and `overview()` of the
-helper waiting for six cells: T51-PR3-PENDING. The count of KIND-13 on the API
+helper waiting for six cells: green in the packaged application on 2026-11-02,
+with every suite of the views, the pre-review and FND-10, 255 cases in 16 files,
+in 48 minutes 10 seconds on the second Linux machine. The count of KIND-13 on the API
 server, no read of the operations with the Overview open, is the window of
-`velero-e2e-volumes` (`e2e/__tests__/velero-e2e-volumes.tests.ts:166-178`): three
+`velero-e2e-volumes` (`e2e/__tests__/velero-e2e-volumes.tests.ts:170-182`): three
 reads with the Overview shown, none of the two kinds of the pod volume operations
 and the repositories at every read, green on 2026-10-27 (above). The first case of
 the suite of the Overview keeps its count of the six families read and none of the
 two once an installation is chosen. The room of the six cells at 900 by 650 and at
-twice the zoom is seen in the pre-review: T51-PR3-PENDING.
+twice the zoom is seen in the pre-review, in both themes, with no problem of the
+layout: two rows of three at 900 by 650 and rows of two at twice the zoom, on
+2026-11-02.
 
 Decided while implementing, on 2026-10-29:
 
@@ -1268,8 +1284,9 @@ Decided while implementing, on 2026-10-29:
   request restates it with the objects in place, as it restates the suite of the
   volumes.
 - The third pull request is written from main while the second is reviewed, with no
-  stack, and is merged after it: the two change no common file of the code, and the
-  rebase of the third meets the second in the documents.
+  stack, and is merged after it: the rebase of the third on the second merged with no
+  conflict the seven files of the code and of the suites that both change, and met
+  the second in three documents only.
 - A repository NotReady whose newest maintenance failed gives both items, A12
   before A13.
 - The words of A12, of A13 and of the line of the repositories are written in
