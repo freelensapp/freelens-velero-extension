@@ -1370,7 +1370,10 @@ environment again and fills every `T51-PR4-PENDING`.
   release writes in turn and never none. Their digest is made with placeholder
   UIDs. Placed again, the operations are removed first and read until they are
   gone, then the rest. The 200 data uploads are of a later pull request. The probe
-  of the fixtures finds the two hundred of the last backup by its label.
+  of the fixtures finds the two hundred of the last backup by its label. On
+  2026-11-02 `pnpm demo:views` placed them in 117 seconds with the other fixtures
+  of the views, and the two hundred of the last backup, read back, name its UID in
+  their owner reference and in their label, twenty-five in each phase.
 
 Decided while implementing, on 2026-10-29:
 
