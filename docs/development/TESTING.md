@@ -861,7 +861,9 @@ first run of the job of the pull request, 50 minutes 49 seconds, its suites 48
 minutes 47 seconds, in a job of 56 minutes 8 seconds of its 150. The third pull
 request of T5.1 adds no case, 16 files and 255 cases: on 2026-11-02, on Freelens
 2.0.0, 48 minutes 10 seconds on the second Linux machine, its suites 46 minutes
-48 seconds, and on the hosted runner T51-PR3-HOSTED.
+48 seconds, and on the hosted runner, in the first run of the job of the pull
+request, 49 minutes 38 seconds, its suites 48 minutes 16 seconds, in a job of 55
+minutes 43 seconds of its 150.
 
 ## Critical Journeys
 
