@@ -289,7 +289,7 @@ and the restore `fixture-volume-restore-<run>` are of the pod
 agent backed up and restored into `velero-restored-<run>`. Backup Repositories
 lists one, `velero-source-<run>-default-kopia`, Ready and maintained every 168
 hours, its last maintenance the time of its initialization; Pod Volume Backups and
-Pod Volume Restores list one each, Completed (T51-PR4-PENDING).
+Pod Volume Restores list one each, Completed (seen on 2026-11-02).
 
 ## 4. The pass that precedes a review
 

@@ -1337,7 +1337,10 @@ environment again and fills every `T51-PR4-PENDING`.
   never pulled; the pod volume backup and restore are found by the labels of the
   name and the UID of their owners, the repository by its three labels, and the
   checksum of the restored bytes is read from the log of the restored pod. The
-  record of the live fixtures holds what was found: T51-PR4-PENDING.
+  record of the live fixtures holds what was found: on 2026-11-02 the pod volume
+  backup and restore Completed within seconds, 1,048,641 bytes each, the repository
+  Ready and maintained every `168h0m0s`, and the restored checksum the one written
+  (RECON-T0.1, "With The Volume Of The Environment").
 - The cleanup has the server delete the backup of the volume through a request,
   with its restore; the pod volume operations go with their owners, waited for with
   a bound of their own; the repository is deleted by the identity the run recorded,
@@ -1419,3 +1422,9 @@ Decided while implementing, on 2026-11-02:
   taken.
 - The count the views placement says of the long lists names their pod volume
   backups; the restores are what was found, less the backups and the operations.
+- The path a synthetic pod volume backup that completed reports is a slash and a
+  UID made of the run and of its key: the release writes a slash and the UID of the
+  pod volume backup, where its node agent mounts the volume (seen with the volume of
+  the environment, RECON-T0.1), and the UID of a synthetic one is given by the
+  cluster when it is created. The path of the volume on the node, which the
+  operations of the views carried before, is not what this release writes.

@@ -994,6 +994,15 @@ export function generatedName(run: string, owner: string, index: number): string
   return `${owner}-${[...digest.subarray(0, 5)].map((byte) => characters[byte % characters.length]).join("")}`;
 }
 
+// The path a pod volume backup that completed reports, of the shape the release writes: a slash and the UID of the
+// pod volume backup, which its node agent mounts the volume at (seen on 2026-11-02 with v1.18.4). The UID of a
+// synthetic one is the cluster's, given when it is created: its path is a UID made of the run and its key instead.
+export function volumePath(run: string, key: string): string {
+  const hex = createHash("sha256").update(`${run}/path/${key}`).digest("hex");
+
+  return `/${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+
 // The workloads the operations of the views name, as text: no pod, namespace or node of these names exists.
 export const VIEW_WORKLOADS = "views-workloads";
 export const VIEW_ELSEWHERE = "views-elsewhere";
@@ -1148,7 +1157,7 @@ export function viewOperationFixtures(
       acceptedTimestamp: at(9),
       startTimestamp: at(8),
       completionTimestamp: at(6),
-      path: "/host_pods/views-pod-uid-7/volumes/kubernetes.io~empty-dir/data-7",
+      path: volumePath(run, "views-7"),
       snapshotID: snapshot(7),
       progress: { totalBytes: 96 * MEBIBYTE, bytesDone: 96 * MEBIBYTE },
       incrementalBytes: 8 * MEBIBYTE,
@@ -1158,7 +1167,7 @@ export function viewOperationFixtures(
       acceptedTimestamp: at(9),
       startTimestamp: at(8),
       completionTimestamp: at(8),
-      path: "/host_pods/views-pod-uid-8/volumes/kubernetes.io~empty-dir/data-8",
+      path: volumePath(run, "views-8"),
       message: "volume was empty so no snapshot was taken",
     }),
     backupOf(inProgress, {
@@ -1178,7 +1187,7 @@ export function viewOperationFixtures(
         acceptedTimestamp: at(9),
         startTimestamp: at(8),
         completionTimestamp: at(7),
-        path: "/host_pods/views-pod-uid-12/volumes/kubernetes.io~empty-dir/data-12",
+        path: volumePath(run, "views-12"),
         snapshotID: snapshot(12),
         progress: { totalBytes: 4 * MEBIBYTE, bytesDone: 4 * MEBIBYTE },
       },
@@ -1210,7 +1219,7 @@ export function viewOperationFixtures(
         acceptedTimestamp: at(30),
         startTimestamp: at(29),
         completionTimestamp: at(28),
-        path: "/host_pods/views-pod-uid-16/volumes/kubernetes.io~empty-dir/data-16",
+        path: volumePath(run, "views-16"),
         snapshotID: snapshot(16),
         progress: { totalBytes: 2 * MEBIBYTE, bytesDone: 2 * MEBIBYTE },
       },
@@ -1436,7 +1445,7 @@ export function scaleFixtures(
           acceptedTimestamp: second(0),
           startTimestamp: second(1),
           completionTimestamp: second(2),
-          path: `/host_pods/${podUid}/volumes/kubernetes.io~empty-dir/data-${place}`,
+          path: volumePath(run, name),
           snapshotID: createHash("sha256").update(`${run}/scale/${name}`).digest("hex").slice(0, 32),
           progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 64 * MEBIBYTE },
         },

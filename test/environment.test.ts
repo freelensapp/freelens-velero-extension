@@ -154,6 +154,7 @@ import {
   viewOperationFixtures,
   volumeArtifactPaths,
   volumeLog,
+  volumePath,
 } from "../e2e/scripts/local-fixtures.mts";
 import {
   assertEgressRules,
@@ -9853,6 +9854,28 @@ describe("foundation fixture boundaries", () => {
         items.every((item) => item.metadata.annotations?.[PLACED_ANNOTATION] === new Date(placed).toISOString()),
       ).toBe(true);
     }
+  });
+
+  it("gives a pod volume backup that completed the path the release writes, a slash and a UID", () => {
+    const placed = Date.parse("2026-09-28T07:45:30Z");
+    const completed = [
+      ...viewOperationFixtures("synthetic-owner", run, placed, viewOwners(run)),
+      ...scaleFixtures("synthetic-owner", run, placed).operations,
+    ].filter(
+      (operation) =>
+        operation.kind === "PodVolumeBackup" &&
+        (operation.status as { phase?: string } | undefined)?.phase === "Completed",
+    );
+    const paths = completed.map((operation) => (operation.status as { path?: string }).path);
+
+    // The four of the views and the two hundred and fifty of the long lists that completed.
+    expect(completed).toHaveLength(254);
+    for (const path of paths)
+      expect(path).toMatch(/^\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(new Set(paths).size).toBe(paths.length);
+    // Made of the run and of the key: the same for a second placement, another for another run.
+    expect(volumePath(run, "views-7")).toBe(volumePath(run, "views-7"));
+    expect(volumePath(run, "views-7")).not.toBe(volumePath("b1b2b3b4", "views-7"));
   });
 
   it("makes the pod volume backups of the long lists for their backups, in the phases of the release in turn, with placeholder UIDs until the cluster gave the backups theirs", () => {
