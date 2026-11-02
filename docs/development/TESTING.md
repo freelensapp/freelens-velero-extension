@@ -667,9 +667,11 @@ the final runs of that pull request, on 2026-10-07, after the twelve suites and
 the pre-review, the cleanup took 118 seconds, 42 of them the two deletions the
 server carried out, and the verification 22; on the hosted runner, on 2026-10-13,
 the step took 112 seconds for the cleanup and 9 for the verification. With the
-volume of the run, the live flow of the volume in `pnpm demo:up` takes
-T51-PR4-PENDING, the cleanup T51-PR4-PENDING, and `pnpm e2e`, which runs the live
-flow and its cleanup twice more, T51-PR4-PENDING. After this
+volume of the run, on 2026-11-02 on the second Linux machine, `pnpm demo:up`
+took 134 and 149 seconds, the pod volume backup and restore of the volume 11
+seconds from the acceptance of the one to the completion of the other; the
+cleanup after the suites 151 seconds and the verification 10; and `pnpm e2e`,
+which runs the live flow and its cleanup twice more, T51-PR4-PENDING. After this
 cleanup, or after `pnpm e2e`, the fixtures of the demo are gone with the fixtures
 of the tabs: `pnpm e2e:views` refuses by name, in a few seconds, until the two
 fixture steps of `pnpm demo:up` put them back, which takes about a hundred
