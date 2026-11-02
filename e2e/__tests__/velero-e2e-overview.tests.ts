@@ -973,15 +973,17 @@ describe("overview of an installation", () => {
       expect(text(await frame.locator("[data-testid=velero-overview-in-flight-none]").innerText())).toBe(
         "No backup and no restore is in flight.",
       );
-      // The newest completed backup is the one the controllers ran, by the time each one completed, as the page
-      // orders them: the synced backup that completed was created after it, and completed four hundred days
-      // back.
+      // The newest completed backup is the last one the controllers ran, by the time each one completed, as the
+      // page orders them: the backup of the volume of the run, which completed after the real backup; the synced
+      // backup that completed was created after them, and completed four hundred days back.
+      const volume = `fixture-volume-backup-${run}`;
+
       expect(
         of("backup")
           .filter(({ phase }) => phase === "Completed")
           .sort(completedFirst)[0]?.name,
-      ).toBe(LIVE);
-      expect(shown.completed).toMatch(new RegExp(`^${LIVE} completed \\S`));
+      ).toBe(volume);
+      expect(shown.completed).toMatch(new RegExp(`^${volume} completed \\S`));
       // The schedule the controller validated has its line, with its next run and its adherence: awaited, its run
       // an instant a year after its creation. No schedule of the installation is not known.
       expect(shown.schedules).toEqual([`fixture-yearly-${run}`]);

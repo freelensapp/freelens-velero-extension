@@ -251,8 +251,15 @@ describe("restores with restricted access", () => {
         "Whether a backup in flight carries a failure, whether one ended with a failure, and how the newest backup of each schedule ended were not checked.",
       );
       expect(attention).not.toContain("The backup repositories of this installation cannot be read");
-      // No item is of a backup or names one, and no schedule is said to have a newest backup that failed.
-      expect(await frame.locator("[data-testid=velero-overview] [data-testid^=velero-open-backup-]").count()).toBe(0);
+      // No item is of a backup or names one, and no schedule is said to have a newest backup that failed. The ways
+      // of the items of the repositories begin as the ways of a backup do, and are not of one.
+      expect(
+        await frame
+          .locator(
+            "[data-testid=velero-overview] [data-testid^=velero-open-backup-]:not([data-testid^=velero-open-backup-repository-])",
+          )
+          .count(),
+      ).toBe(0);
       expect(shown.items.filter(([rule]) => rule === "A7")).toEqual([]);
       // The newest backup that completed is not known, which is not that none completed.
       expect(shown.completed).toBe("Not known: the backups of this installation cannot be read: access is denied");

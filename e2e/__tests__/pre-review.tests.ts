@@ -37,9 +37,9 @@ const OPENED = "backup-finalizingpartiallyfailed";
 const RESTORES = cluster.RESTORES;
 const RESTORED = "restore-mapped";
 const LONG_RESTORE = cluster.LONG_RESTORE_NAME;
-// The views that are checked, each in both themes at every size: eight of the tabs, then the thirty-one
+// The views that are checked, each in both themes at every size: eight of the tabs, then the thirty-two
 // of the pages, four of them of the adherence of the schedules.
-const VIEWS = 39;
+const VIEWS = 40;
 const OVERVIEW = cluster.OVERVIEW;
 const SCHEDULES = cluster.SCHEDULES;
 const SCHEDULED = "views-history";
@@ -986,8 +986,15 @@ describe("pre-review of the views", () => {
       await frame.waitForSelector(`[data-testid=velero-restore-name] >> text="${RESTORED}"`, { timeout: 60_000 });
       expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
       // From the way back the keyboard goes through the five tabs of the workspace, each one a stop as the
-      // tabs of the host are, and then reaches the way to the backup: six presses.
-      expect(await cluster.tabTo(frame, (focus) => focus.startsWith("velero-open-backup-"), 10)).toBe(6);
+      // tabs of the host are, then the band of its volumes, whose rows, the seven pod volume restores of the
+      // restore, each hold a way to the operation and a link to its pod, and then reaches the way to the backup.
+      expect((await cluster.volumeBand(frame, "rows")).rows).toHaveLength(7);
+      const stops = await frame
+        .locator("[data-testid=velero-volume-band] a, [data-testid=velero-volume-band] button")
+        .count();
+
+      expect(stops).toBeGreaterThanOrEqual(7);
+      expect(await cluster.tabTo(frame, (focus) => focus.startsWith("velero-open-backup-"), 40)).toBe(6 + stops);
       await started.window.keyboard.press("Enter");
       await frame.waitForSelector("[data-testid=velero-backup-workspace]", { timeout: 60_000 });
       expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
@@ -1014,11 +1021,18 @@ describe("pre-review of the views", () => {
     async () => {
       await cluster.showList(frame);
       await cluster.openWorkspace(frame, RESTORED, RESTORES);
-      // The summary holds the band of the volumes, with no row here, as for a backup, and the pictures are taken once
-      // it says so. The room of its rows at 900 by 650 and at twice the zoom is seen once the fixtures place operations
-      // of a restore.
-      expect((await cluster.volumeBand(frame, "none")).state).toBe("none");
+      // The summary holds the band of the volumes, with the seven pod volume restores the views place for the restore
+      // in its rows, and the pictures are taken once it shows them: the room of its rows at 900 by 650 and at twice
+      // the zoom is seen in the pictures of the band.
+      expect((await cluster.volumeBand(frame, "rows")).state).toBe("rows");
       await everyLayout("restore-workspace", undefined, RESTORES);
+      await everyLayout(
+        "restore-workspace-volumes",
+        async () => {
+          await frame.locator("[data-testid=velero-volume-band]").scrollIntoViewIfNeeded();
+        },
+        RESTORES,
+      );
       await everyLayout(
         "restore-workspace-into",
         async () => {
@@ -1035,6 +1049,7 @@ describe("pre-review of the views", () => {
       );
       await cluster.closeWorkspace(frame);
       expect(found("restore-workspace")).toEqual({});
+      expect(found("restore-workspace-volumes")).toEqual({});
       expect(found("restore-workspace-into")).toEqual({});
       expect(found("restore-workspace-scope")).toEqual({});
     },

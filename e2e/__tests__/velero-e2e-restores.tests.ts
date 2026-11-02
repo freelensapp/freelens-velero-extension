@@ -24,6 +24,8 @@ const MAPPED = "restore-mapped";
 const PVR = "LIST podvolumerestores namespace";
 // What the band of a restore of the installation of the views says: it holds no pod volume restore of any.
 const NO_POD_VOLUME_RESTORE = "This restore has no pod volume restore among the ones the installation holds.";
+// The volumes of the seven pod volume restores the views place for the mapped restore, as its band orders them.
+const VOLUMES_OF_MAPPED = ["data-20", "data-17", "data-16", "data-21", "data-18", "data-19", "data-22"];
 const text = (value: string) => value.replace(/\s+/g, " ").trim();
 // How long what must not happen is waited for: longer than the frame the host opens a menu in.
 const NOTHING = 1500;
@@ -333,26 +335,32 @@ describe("views of the restores", () => {
 
       expect(tabs.tabs.map(({ title }) => title)).toEqual(artifacts.TABS.map(({ title }) => title));
       expect([tabs.open, tabs.selected]).toEqual(["summary", [artifacts.PARTS.tab("restore", "summary")]]);
+      // The band of the volumes shows the seven pod volume restores the views place for the restore, before the
+      // references, each row a way named by its volume, in the order of the groups of their phases.
       expect(
         (await workspace.locator(`[data-testid=${artifacts.PARTS.shown("restore")}] button`).allInnerTexts()).map(text),
-      ).toEqual([SCHEDULED, "views-daily", "views-available"]);
-      // The band of the volumes has no row: the installation of the views holds no pod volume restore of the
-      // restore, and the band adds no way and no link of the host to what is counted below.
-      expect(await cluster.volumeBand(frame)).toMatchObject({
+      ).toEqual([...VOLUMES_OF_MAPPED, SCHEDULED, "views-daily", "views-available"]);
+      const band = await cluster.volumeBand(frame, "rows");
+
+      expect(band).toMatchObject({
         kind: "PodVolumeRestore",
-        state: "none",
+        state: "rows",
         sentence: "The restore waits for its plugin operations, which is when its data downloads run.",
-        words: NO_POD_VOLUME_RESTORE,
-        rows: [],
         more: false,
       });
+      expect(band.rows).toHaveLength(VOLUMES_OF_MAPPED.length);
       expect((await workspace.locator("button").allInnerTexts()).map(text)).toEqual([
         "arrow_back Restores",
+        ...VOLUMES_OF_MAPPED,
         SCHEDULED,
         "views-daily",
         "views-available",
       ]);
-      expect(await workspace.locator("a, input, select, textarea").count()).toBe(0);
+      // The links of the host are the ones of the pods of the rows of the band, and nothing is a field.
+      expect(await workspace.locator("a").count()).toBe(
+        await workspace.locator("[data-testid=velero-volume-band] a").count(),
+      );
+      expect(await workspace.locator("input, select, textarea").count()).toBe(0);
       expect(await cluster.notices(frame, [])).toEqual({});
       expect(await cluster.layoutProblems(frame, RESTORES)).toEqual([]);
       await cluster.captureScreenshot(frame, "dark-restore-workspace");
