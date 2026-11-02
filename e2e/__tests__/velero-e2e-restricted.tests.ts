@@ -318,17 +318,19 @@ describe("views with restricted access", () => {
         text: "Volume Snapshot Locations Access denied",
         state: "denied",
       });
+      expect(shown.read.backupRepositories).toEqual({ text: "Backup Repositories Access denied", state: "denied" });
       expect([shown.read.backups.state, shown.read.schedules.state, shown.read.storageLocations.state]).toEqual([
         "read",
         "read",
         "read",
       ]);
       expect(shown.read.backups.text).toMatch(/^Backups \d+$/);
-      // The rules looked at what was read, and say what they did not look at: the restores. No rule is
-      // of the snapshot locations, and nothing is said of them among what needs attention. The backups are
-      // read, and none of them gives the zone of the server: the adherence of the six schedules of five fields
-      // that name no zone is not known, and so is the adherence of the two Velero has not read, which is said.
-      expect(shown.unchecked).toEqual(["restores"]);
+      // The rules looked at what was read, and say what they did not look at: the restores and the backup
+      // repositories. No rule is of the snapshot locations, and nothing is said of them among what needs attention.
+      // The backups are read, and none of them gives the zone of the server: the adherence of the six schedules of
+      // five fields that name no zone is not known, and so is the adherence of the two Velero has not read, which is
+      // said.
+      expect(shown.unchecked).toEqual(["restores", "backupRepositories"]);
       expect(shown.summary).toMatch(
         /^\d+ items in what was read\. The adherence of 8 schedules is not known\. Not everything was read\.$/,
       );
@@ -342,8 +344,15 @@ describe("views with restricted access", () => {
       expect(attention).toContain(
         "Whether a restore in flight carries a failure, and whether one ended with a failure, were not checked.",
       );
-      // No item is of a restore, and the restores are not said none: in flight, and on the line of time.
+      expect(attention).toContain(
+        "The backup repositories of this installation cannot be read: access is denied. The readiness and the maintenance of the backup repositories were not checked.",
+      );
+      // No item is of a restore or of a repository, and the restores are not said none: in flight, and on the line
+      // of time.
       expect(await frame.locator("[data-testid=velero-overview] [data-testid^=velero-open-restore-]").count()).toBe(0);
+      expect(
+        await frame.locator("[data-testid=velero-overview] [data-testid^=velero-open-backup-repository-]").count(),
+      ).toBe(0);
       expect(await frame.locator("[data-testid=velero-overview-in-flight-none]").count()).toBe(0);
       expect(
         (await frame.locator("[data-testid=velero-overview-in-flight]").innerText()).replace(/\s+/g, " "),
@@ -369,9 +378,13 @@ describe("views with restricted access", () => {
       expect(await cluster.valuesOfTheWhole(frame)).toEqual([]);
       expect(await cluster.layoutProblems(frame, cluster.OVERVIEW)).toEqual([]);
       await cluster.captureScreenshot(frame, "dark-restricted-overview");
-      // The cell of what is denied leads to its list, which says the same.
+      // The cell of what is denied leads to its list, which says the same: the restores, and the backup repositories.
       await frame.click("[data-testid=velero-overview-read-restores]");
       await frame.waitForSelector("[data-testid=velero-restores-unavailable]", { timeout: 60_000 });
+      await cluster.openPage(frame, cluster.OVERVIEW);
+      await cluster.overview(frame);
+      await frame.click("[data-testid=velero-overview-read-backupRepositories]");
+      await frame.waitForSelector(`[data-testid=velero-${cluster.REPOSITORIES.id}-unavailable]`, { timeout: 60_000 });
     },
     TIMEOUT,
   );

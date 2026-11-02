@@ -186,7 +186,9 @@ commands open the explicit Velero operation, not an unrestricted YAML editor.
   grace in words, with the marks of the states each beside its word.
 - The Overview is bands without frames, in the order an operator would look: what
   was read, what needs attention beside the newest completed backup and what is in
-  flight, the recent operations, the schedules and the storage. At 1,000 pixels
+  flight, the recent operations, the schedules and the storage. What was read is
+  six cells, one for each family, the backup repositories the sixth, each with its
+  number or its state. At 1,000 pixels
   or more the bands of a row are side by side, under that one is under the other;
   the schedules and the storage are side by side only where the lines of both have
   the room of their columns, and in a window of 1440 by 900 the storage is under
@@ -200,8 +202,9 @@ commands open the explicit Velero operation, not an unrestricted YAML editor.
   ten items and the way to the ones after them. Every cell, item, mark and line
   is a way to an object or to a list. What needs attention is in four groups,
   in this order: what is in flight, the storage, the schedules, what ended. The
-  storage is by name, and the others from the newest: the order does not change
-  while the operator reads. Before the items are what the rules did not look at
+  storage, the items of the storage locations and of the backup repositories, is
+  by name, and the others from the newest: the order does not change while the
+  operator reads. Before the items are what the rules did not look at
   and then the schedules whose adherence is not known, how many for each reason,
   with the way to their list: none of them is an item, the line says that this is
   not that they need nothing, and the summary over the items says how many they

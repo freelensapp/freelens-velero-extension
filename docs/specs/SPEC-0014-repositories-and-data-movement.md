@@ -844,7 +844,7 @@ Decided while implementing, on 2026-10-26:
   three, and the second is given them with the fixtures of the fourth pull request.
 - The records of the Overview, its kinds and its plurals, are keyed by the five
   families it reads, and not by every family: the sixth is the repositories, with
-  the third pull request.
+  the third pull request, which keys them by the six (its paragraph below).
 - The column of the backup or the restore of an operation is titled by the kind
   it names, Backup or Restore, with the stable identifier `operation`.
 - An operation with no phase is labelled "No phase yet", beside the New of the
@@ -1189,3 +1189,126 @@ Decided while implementing, on 2026-10-29:
   reader denied the pod volume backups, with no count, are proven at the component
   layer here, and in the packaged application by the fifth pull request (scenario
   7).
+
+T5.1, the third of its five pull requests: the backup repositories in the Overview,
+their cell among what was read and the rules A12 and A13, on 2026-10-29, written
+from main at `c16c159`. The gates on the machine of the phase, on 2026-10-29, with
+Node 24.21.0, pnpm 12.15.0, TypeScript 7.0.2, Vitest 5.0.5, Biome 2.5.15, Knip 6.41.0
+and the launcher of Trunk 1.3.4: `pnpm type:check`, the nine programs, and
+`pnpm lint:check`, 298 files, each with no error; `pnpm test:unit`, the
+build, then 95 files and 2,866 tests, all passed, then the two
+measures within their budgets; `pnpm knip:check`, both passes with no finding; Trunk
+on the files the branch changes, with no issue. Its second form with
+`VITE_PRESERVE_MODULES=false`, and each commit type-checked and linted alone, ran
+after the rebase on main at `e4e8b2f`, on 2026-11-02, with the same toolchain:
+`pnpm type:check`, the nine programs, `pnpm lint:check`, 307 files, and
+`pnpm knip:check`, each with no finding; Trunk on the 18 files the branch changes,
+with no issue; each of the six commits type-checked and linted alone, with no
+error; and `pnpm test:unit` in both forms on a second Linux machine, Ubuntu 26.04
+under WSL 2, 99 files and 2,927 tests passed in each, 14 more than main at
+`e4e8b2f`, then the three measures within their budgets. The unit and component
+evidence, by check:
+
+- KIND-13, the rules and the cell (`src/common/overview.ts`,
+  `src/common/overview.test.ts`): A12 for NotReady and for no other phase, Ready,
+  New, none and a phase the release does not write giving no item; its reason with
+  the message of Velero, with no message, and with a volume namespace and a location
+  not set, in the words of the repositories; the location it leads to found by
+  `spec.backupStorageLocation` in the namespace of the repository, absent, of another
+  namespace, of a name of 64 characters whose labels carry it cut, and none when the
+  locations are denied; A13 for the newest maintenance by its start that failed,
+  whatever the order of the entries in the object, and none for one that succeeded,
+  a result not known, no history and an older entry that failed under a newer one
+  that succeeded; its time the start of that entry, and none when no entry has a
+  start, which its reason says; its two sentences of the last maintenance that
+  succeeded, its age and none recorded; a repository NotReady whose newest
+  maintenance failed giving both, A12 first; the items of the storage by name, a
+  repository between two locations; the items of a stale read, and A12 of an earlier
+  read when the location it leads to is; the sixth cell read, stale with the time of
+  its read, denied, not served, failed and not read yet; the line of what was not
+  checked of the repositories, after the one of the restores, and the summary, which
+  says that nothing was read only when none of the five families the rules look at
+  was, and not when the four of before are denied and the repositories are read. The
+  records of the Overview, its kinds, its plurals and its lines of what was not
+  checked, are keyed by its six families, as the first pull request announced. The
+  tests that list every cell, every rule and the families that were not read are
+  restated with the repositories: 52 tests, 9 of them added. No line of the
+  repositories is in the bands of the schedules and of the storage: the rules of a
+  line are taken by the kind of an item, never by the object it leads to.
+- KIND-13 and KIND-16 at the component layer
+  (`src/renderer/pages/overview-page.test.tsx`): the stub answers the repositories of
+  both installations, none, so that every test of before reads the sixth family as
+  the page does, and each one the sixth read moves is restated, none weakened; the
+  sixth cell in each of its states with its way to the list of the repositories; the
+  items of A12 and A13 with their reasons, their times and their ways, to the
+  repository and to the location of A12, in the order of the page among the items of
+  the storage; the line of the repositories with its way to their list; the summary;
+  and an item of an earlier read. 59 tests, 4 of them added.
+- KIND-02 (`src/renderer/pages/volume-lists.test.tsx`, "are read while their list
+  is shown, at every read, and not while the Overview or another list is"): with the
+  Overview shown over three reads, each of the six families of `ALWAYS`, the
+  repositories among them, asked at each of the three, none of `ON_DEMAND`, and no
+  timer left when the page closes. The one read counted inside the test of the cells
+  of the page stays as it was.
+- KIND-07 (`src/common/repository-view.test.ts`, "takes the later in the list as the
+  newer of two with the same start or with none, as the release appends them"): of
+  two maintenances with the same start, or with none, the later in
+  `status.recentMaintenance` is the newer, in the view of a repository and so in A13;
+  seen failing first on the order of the object. 1 test added.
+
+The packaged cases, written in phase A on the fixtures that exist, where no
+repository is, and run in phase B: `velero-e2e-overview` with six cells in each installation,
+`Backup Repositories 0` where the suite counts none on the cluster, the sixth cell
+leading to the list of the repositories and back, and no item of A12 or A13 in any
+installation of the fixtures; both readers of the restricted suites denied the
+repositories, with the cell, the line of what was not checked and, for the first,
+the way of the cell to the list, which says the same; and `overview()` of the
+helper waiting for six cells: green in the packaged application on 2026-11-02,
+with every suite of the views, the pre-review and FND-10, 255 cases in 16 files,
+in 48 minutes 10 seconds on the second Linux machine. The count of KIND-13 on the API
+server, no read of the operations with the Overview open, is the window of
+`velero-e2e-volumes` (`e2e/__tests__/velero-e2e-volumes.tests.ts:170-182`): three
+reads with the Overview shown, none of the two kinds of the pod volume operations
+and the repositories at every read, green on 2026-10-27 (above). The first case of
+the suite of the Overview keeps its count of the six families read and none of the
+two once an installation is chosen. The room of the six cells at 900 by 650 and at
+twice the zoom is seen in the pre-review, in both themes, with no problem of the
+layout: two rows of three at 900 by 650 and rows of two at twice the zoom, on
+2026-11-02.
+
+Decided while implementing, on 2026-10-29:
+
+- The count of KIND-13 on the API server is the window of the suite of the volumes
+  above, cited, and no window of three reads is added to the suite of the Overview,
+  which would cost it about 45 seconds for the same assertion; the fourth pull
+  request restates it with the objects in place, as it restates the suite of the
+  volumes.
+- The third pull request is written from main while the second is reviewed, with no
+  stack, and is merged after it: the rebase of the third on the second merged with no
+  conflict the seven files of the code and of the suites that both change, and met
+  the second in three documents only.
+- A repository NotReady whose newest maintenance failed gives both items, A12
+  before A13.
+- The words of A12, of A13 and of the line of the repositories are written in
+  `src/common/overview.ts` beside the reasons of A1 to A11, with the words of the
+  repositories for a value that is not set. The reason of A13 is made of whole
+  sentences, and the age of the last maintenance that succeeded is said as the ages
+  of A1 and A3 are, by the clock of this machine.
+- An item of A12 is of an earlier read when the repositories are, or when the
+  location it leads to is; an item of A13 when the repositories are. An item of A13
+  whose newest entry has no start has no time, and its reason says so.
+- The newest maintenance of a repository, which A13 reads and the view of a
+  repository lists first: by the start, then, of two with the same start or with
+  none, the later in `status.recentMaintenance`, where the first pull request kept
+  the order of the object. Velero v1.18.4 appends each maintenance to the list and
+  keeps the last three (`pkg/controller/backup_repository_controller.go:559-573`),
+  and lists them from the oldest when it gathers them again from the Jobs
+  (`consolidateHistory`, 436-476); every maintenance it writes has a start, the
+  creation of its Job (`pkg/repository/maintenance/maintenance.go:699-708`) or the
+  time of a Job that could not start (`backup_repository_controller.go:515-517`), so
+  the place decides only for an object the release did not write
+  (`src/common/repository-view.ts`).
+- No line of the repositories is in the bands of the schedules and of the storage,
+  which REQ-102 of [SPEC-0008](SPEC-0008-overview.md) names alone.
+- The index of the specs names the third pull request in the rows of SPEC-0014 and
+  of SPEC-0008.

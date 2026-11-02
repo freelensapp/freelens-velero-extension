@@ -21,7 +21,9 @@ installation to one colour or one number.
 ## Scope Baseline
 
 The page is computed from the five lists the state of an installation already
-reads: it asks the cluster nothing of its own. It is the last slice of the
+reads, and since the third pull request of T5.1 of
+[SPEC-0014](SPEC-0014-repositories-and-data-movement.md) from a sixth, the backup
+repositories: it asks the cluster nothing of its own. It is the last slice of the
 milestone because every line of it leads to a view of the four slices before.
 
 Included: the page, its rules and its history of the recent operations. Excluded,
@@ -33,7 +35,11 @@ the adherence of the schedules that [SPEC-0013](SPEC-0013-schedule-adherence.md)
 computes (REQ-171): rule A11 among the rules, the count of the schedules whose
 adherence is not known before the items, and the next run and the adherence on the
 line of a schedule; a run that was missed is never named, as the history of a
-schedule never names one.
+schedule never names one. Since the third pull request of T5.1 of
+[SPEC-0014](SPEC-0014-repositories-and-data-movement.md) the page reads the backup
+repositories as well, with a cell among what was read and the rules A12 and A13
+(REQ-189), and none of the four kinds of the operations of the volumes; the other
+secondary kinds are not on the page.
 
 ## User Scenarios
 
@@ -63,9 +69,9 @@ schedule never names one.
 | ID | Contract | Acceptance check |
 | --- | --- | --- |
 | REQ-093 | The Overview is the first entry under Velero and the page the entry of Velero opens. Opening it asks the cluster what every other view asks, and nothing more | OVER-01 |
-| REQ-094 | Say what was read: for each of the five families the number of its objects when it was read, its state when it was not, and the time of the read when it is stale. Each leads to its list | OVER-02 |
+| REQ-094 | Say what was read: for each of the five families, six since the third pull request of T5.1 of [SPEC-0014](SPEC-0014-repositories-and-data-movement.md) with the backup repositories, the number of its objects when it was read, its state when it was not, and the time of the read when it is stale. Each leads to its list | OVER-02 |
 | REQ-095 | Give no value for the installation as a whole: no score, no percentage, no single mark. Every number says what it counts. The words healthy, protected and safe are not used | OVER-03 |
-| REQ-096 | List what needs attention by the rules of the table below and by no other. Each item names its object, its reason in words and the time the reason refers to when there is one, and leads to the object, or to the list when the item is of no single object. Since the second pull request of T3.3 the table has rule A11, the adherence of a schedule of [SPEC-0013](SPEC-0013-schedule-adherence.md) (REQ-171), and before the items the page says of how many schedules the adherence is not known, by reason: such a schedule is never an item of A11, and is never counted as one that needs nothing | OVER-04 |
+| REQ-096 | List what needs attention by the rules of the table below and by no other. Each item names its object, its reason in words and the time the reason refers to when there is one, and leads to the object, or to the list when the item is of no single object. Since the second pull request of T3.3 the table has rule A11, the adherence of a schedule of [SPEC-0013](SPEC-0013-schedule-adherence.md) (REQ-171), and before the items the page says of how many schedules the adherence is not known, by reason: such a schedule is never an item of A11, and is never counted as one that needs nothing. Since the third pull request of T5.1 of [SPEC-0014](SPEC-0014-repositories-and-data-movement.md) the table has the rules A12 and A13 of the backup repositories (REQ-189 of SPEC-0014) | OVER-04 |
 | REQ-097 | A rule gives items only from families that were read. Items from a stale read say that they were read before. A family that was not read gives one line that says what could not be checked | OVER-05 |
 | REQ-098 | When no rule gives an item, say that nothing in what was read needs attention, and list what was not read. Never say that all is well | OVER-06 |
 | REQ-099 | List the backups and the restores in flight, with phase, failure, item progress and elapsed time, from the oldest by the time of the operation. The elapsed time of one that has no start time is said not reported | OVER-07 |
@@ -93,11 +99,25 @@ The rules of REQ-096, each one a pure function on what was read:
 | A9 | A backup or a restore in flight carries a failure | Its phase and its failure |
 | A10 | A restore, or a backup that is of no schedule, ended with a failure, and the time of the operation is in the window | Its phase and its failure |
 | A11 | A schedule that is not paused and is Enabled is overdue, or held beyond the grace, with its zone established, or Velero submits it at every look since its expression has no instant, by the signal of [SPEC-0013](SPEC-0013-schedule-adherence.md) (REQ-171) | The sentence of its state, with the words of the derived offset it was computed with, and that whether a backup holds the submissions is not known when the backups were not read; its time is the expected run, or the last submission of one at every look; the backup that holds the submissions is the other object it leads to |
+| A12 | A backup repository reports NotReady | The message of Velero, the volume namespace and the location |
+| A13 | The newest entry of the recent maintenance of a repository is Failed | Its message, its start time, and when the last maintenance succeeded |
+
+A12 and A13 are the rules of the backup repositories of
+[SPEC-0014](SPEC-0014-repositories-and-data-movement.md) (REQ-189), in the table
+since the third pull request of T5.1. A12 is of the phase NotReady and of no
+other: a repository that reports none or New is not initialized yet, and a phase
+the release does not write is not known. Its location is the one its spec names,
+which the item leads to when it is among the locations read in the namespace of
+the repository. A13 reads the newest entry by its start, whatever the order of the
+entries in the object, and of two with the same start or with none the later in the
+object, as Velero appends them; its time is that start. Both are items of the storage,
+by name among the items of the locations, A12 before A13 for one repository.
 
 ## Design
 
 - **Standard or ad hoc view, and why.** Ad hoc. The task is to decide where to
-  look first, across five kinds: no list of one kind answers it. The page is made
+  look first, across five kinds, six since the third pull request of T5.1 of
+  SPEC-0014: no list of one kind answers it. The page is made
   of bands without frames, in the typography and with the tokens of the host, and
   every band is a way into the views of the other specs.
 - **Safety.** The page writes nothing and asks nothing of its own. The suite counts
@@ -115,8 +135,8 @@ maintainer on 2026-10-25, with the second pull request of T3.3 of SPEC-0013.
 | Row | Band | Content | Source | A click leads to |
 | --- | --- | --- | --- | --- |
 | 1 | Target bar | The cluster and the installation | The state of the installation | The choice of the installation |
-| 2 | What was read | Five cells: Backups, Restores, Schedules, Backup Storage Locations, Volume Snapshot Locations, each with its number or its state | The five reads | The list of the kind |
-| 3, left | Needs attention | What the rules did not look at, then the schedules whose adherence is not known, by reason, then the items of the rules, in the order below | The rules A1 to A11, and the adherence of the schedules | The object, or the list |
+| 2 | What was read | Six cells, five before the third pull request of T5.1 of SPEC-0014: Backups, Restores, Schedules, Backup Storage Locations, Volume Snapshot Locations, Backup Repositories, each with its number or its state | The six reads | The list of the kind |
+| 3, left | Needs attention | What the rules did not look at, then the schedules whose adherence is not known, by reason, then the items of the rules, in the order below | The rules A1 to A13, A12 and A13 of the backup repositories since the third pull request of T5.1 of SPEC-0014, and the adherence of the schedules | The object, or the list |
 | 3, right | Newest completed backup | Of the installation | The backups | The backup |
 | 3, right | In flight | The operations in flight, the ones that wait among them | The backups and the restores | The operation |
 | 4 | Recent operations | The line of time, the choice of the window, the list | The backups and the restores | The operation |
@@ -154,9 +174,9 @@ older than its windows puts them in place again.
 | Check | Layer | Requirements | Scenario and expected evidence |
 | --- | --- | --- | --- |
 | OVER-01 | Packaged app | REQ-093 | Velero opens the Overview; the API server counts, for the kinds of Velero, one list of the cluster for each read and no write |
-| OVER-02 | Component/local RBAC/packaged | REQ-094 | Five families read; one denied; one stale: a number, a state, a time |
+| OVER-02 | Component/local RBAC/packaged | REQ-094 | Five families read, six since the third pull request of T5.1 of SPEC-0014 with the backup repositories; one denied; one stale: a number, a state, a time |
 | OVER-03 | Component/packaged | REQ-095 | The words and the marks of the page searched for a value of the whole, in every state of the fixtures: none |
-| OVER-04 | Table-driven unit/component/packaged | REQ-096 | Each rule with a case that gives an item and one that gives none; a paused schedule gives none for A6, A7 and A8; a schedule whose newest backup failed its validation gives A7; the items of the fixtures on the cluster. Restated with the second pull request of T3.3: rule A11 with the cases of ADH-12 of [SPEC-0013](SPEC-0013-schedule-adherence.md), overdue, held within and beyond the grace, at every look, paused, refused, not read and the zone not known; the count of what is not known, by reason, before the items; on the cluster, the count of each installation, and A11 when its schedule is late |
+| OVER-04 | Table-driven unit/component/packaged | REQ-096 | Each rule with a case that gives an item and one that gives none; a paused schedule gives none for A6, A7 and A8; a schedule whose newest backup failed its validation gives A7; the items of the fixtures on the cluster. Restated with the second pull request of T3.3: rule A11 with the cases of ADH-12 of [SPEC-0013](SPEC-0013-schedule-adherence.md), overdue, held within and beyond the grace, at every look, paused, refused, not read and the zone not known; the count of what is not known, by reason, before the items; on the cluster, the count of each installation, and A11 when its schedule is late. Restated with the third pull request of T5.1 of SPEC-0014: the rules A12 and A13 of the backup repositories with the cases of KIND-13 of SPEC-0014, each with a case that gives an item and one that gives none |
 | OVER-05 | Unit/component | REQ-097 | The restores denied: no item of a restore, and the line that says so; the storage stale: its items marked |
 | OVER-06 | Unit/component | REQ-098 | No item with everything read; no item with a family denied |
 | OVER-07 | Unit/component/packaged | REQ-099 | Operations in flight in every phase, with and without progress, with and without a start time; none |
@@ -213,8 +233,9 @@ release and the one after it, but the field of the Restore the
 
 What the page says of an installation is computed by
 [pure functions](../../src/common/overview.ts) from the five reads of the
-installation, the clock and the [window](../../src/common/window.ts): they are
-given plain data and ask nothing. The [page](../../src/renderer/pages/overview-page.tsx)
+installation, six since the third pull request of T5.1 of SPEC-0014, the clock
+and the [window](../../src/common/window.ts): they are given plain data and ask
+nothing. The [page](../../src/renderer/pages/overview-page.tsx)
 shows what they answer, in bands. The line of time is the
 [one](../../src/common/operation-line.ts) of the history of a schedule, drawn in
 [two rows](../../src/renderer/components/operation-lines.tsx). What is around the
@@ -224,17 +245,17 @@ the pages of the lists have.
 
 | Check | Evidence |
 | --- | --- |
-| OVER-01 | Packaged: the Overview is the first entry under Velero and the first tab of the group, and the entry of Velero is marked while it is shown; the entry of Velero opens its group, leads to no page and asks the cluster nothing; before an installation is chosen the API server counted one list of the storage locations of the cluster and no read of a family; once one is chosen, a list of each of the five families in its namespace and nothing more of the cluster; the Overview opened from another page, between two reads of the installation, is counted no read at all |
-| OVER-02 | Unit and component: a number for a family that was read, its state for one that is denied, not served, failed or not read yet, the time of the read for one that is stale; each cell leads to its list. Packaged: the five numbers of the installation of the fixtures are the ones the suite counts on the cluster; with the first reader the restores and the snapshot locations are said denied, with the second the backups, and none is a count of zero |
+| OVER-01 | Packaged: the Overview is the first entry under Velero and the first tab of the group, and the entry of Velero is marked while it is shown; the entry of Velero opens its group, leads to no page and asks the cluster nothing; before an installation is chosen the API server counted one list of the storage locations of the cluster and no read of a family; once one is chosen, a list of each of the five families in its namespace and nothing more of the cluster; the Overview opened from another page, between two reads of the installation, is counted no read at all. Restated with the third pull request of T5.1 of SPEC-0014: once an installation is chosen, a list of each of the six families the page has a cell for, the backup repositories the sixth, and none of the pod volume backups and restores, which only a view that shows them reads |
+| OVER-02 | Unit and component: a number for a family that was read, its state for one that is denied, not served, failed or not read yet, the time of the read for one that is stale; each cell leads to its list. Packaged: the five numbers of the installation of the fixtures are the ones the suite counts on the cluster; with the first reader the restores and the snapshot locations are said denied, with the second the backups, and none is a count of zero. Restated with the third pull request of T5.1 of SPEC-0014: unit and component, the cell of the backup repositories read, stale with the time of its read, denied, not served, failed and not read yet, and its way to their list; packaged, the cell says the count of repositories the suite reads on the cluster, none in every installation of the fixtures, and both readers are said denied the repositories, the first following the cell to their list, which says the same, green in the packaged application on 2026-11-02 |
 | OVER-03 | Unit: no function answers a value of the whole. Component: the words of a verdict, a percentage outside the progress of an operation and a meter are looked for in every state of the page. Packaged: the same in six installations, the one of the long lists among them, in what is shown and in what the marks say to who points at them |
-| OVER-04 | Unit, table-driven: each of the ten rules with a case that gives an item and one that gives none; a paused schedule gives none for A6, A7 and A8; a schedule whose newest backup failed its validation gives A7, by the time the backup was created; an installation with no storage location; a backup whose schedule is not there any more; objects of the same name in another namespace and of another kind; the order of the groups and inside a group. Packaged: the fourteen items of the installation of the fixtures in the order of the page, ten shown and four asked for, with the reason of each rule in words; every rule gave an item on the cluster, in one installation or in another. Restated with the second pull request of T3.3: unit, rule A11 with a case that gives an item and one that gives none for each state of ADH-12 of SPEC-0013, the time and the backup each item names, the words of the derived offset, an interval overdue when the backups are denied, said with the hold not known, an item at a tick of the clock with no read, and the count of what is not known by reason, of the schedules that were read and of no other, with the summary; component, the items of A11 in the order of the page beside A5 to A8, the count before them with its way to the list of the schedules, nothing of the adherence until the backups were answered once, which the line of the backups says, and nothing of the installation selected before; packaged, the summary and the count of each installation of the fixtures, the fourteen items of the installation of the Overview and no item of A11 there, and A11 in the installation of the views exactly when its schedule that names its zone is overdue, green in the packaged application on 2026-10-25, when that schedule was awaited, so that the run took the branch with no item of A11 there |
-| OVER-05 | Unit and component: with the restores denied no item is of a restore, and one line says what the rules did not look at; the items of a read that is not the last one say that they were read before, and the page says beside their number that a part of what was read is of an earlier read. Packaged: the same line for the restores with the first reader and for the backups with the second, with no item of what was denied |
-| OVER-06 | Unit and component: no item with everything read, and no item with a family denied, which the page says beside what was not read; with none of the four families the rules look at read, the page says that nothing was read, and not that nothing needs attention. Packaged, since the fixtures of the tabs, on the installation the controllers of Velero are at work in, computed from what the cluster holds: what ended with a failure inside the window, which is the three operations the server refused, listed by rule A10 in the order of the page, each with its validation errors, and counted by the summary, which the case expects to say that nothing in what was read needs attention when no item is left, a branch no run reached; the backups the server synced from the store, which started four hundred days back, no item; nothing in flight; and the newest completed backup the one the controllers ran, by the time each completed. An installation where no rule finds anything is among the fixtures no more: REQ-098 is proven at the unit and component layers, as decided below |
+| OVER-04 | Unit, table-driven: each of the ten rules with a case that gives an item and one that gives none; a paused schedule gives none for A6, A7 and A8; a schedule whose newest backup failed its validation gives A7, by the time the backup was created; an installation with no storage location; a backup whose schedule is not there any more; objects of the same name in another namespace and of another kind; the order of the groups and inside a group. Packaged: the fourteen items of the installation of the fixtures in the order of the page, ten shown and four asked for, with the reason of each rule in words; every rule gave an item on the cluster, in one installation or in another. Restated with the second pull request of T3.3: unit, rule A11 with a case that gives an item and one that gives none for each state of ADH-12 of SPEC-0013, the time and the backup each item names, the words of the derived offset, an interval overdue when the backups are denied, said with the hold not known, an item at a tick of the clock with no read, and the count of what is not known by reason, of the schedules that were read and of no other, with the summary; component, the items of A11 in the order of the page beside A5 to A8, the count before them with its way to the list of the schedules, nothing of the adherence until the backups were answered once, which the line of the backups says, and nothing of the installation selected before; packaged, the summary and the count of each installation of the fixtures, the fourteen items of the installation of the Overview and no item of A11 there, and A11 in the installation of the views exactly when its schedule that names its zone is overdue, green in the packaged application on 2026-10-25, when that schedule was awaited, so that the run took the branch with no item of A11 there. Restated with the third pull request of T5.1 of SPEC-0014: unit, table-driven, A12 for NotReady and for no other phase (Ready, New, none, a phase not known), with and without a message, a missing volume namespace or location said not set, the location found by the spec in the namespace of the repository, absent, of another namespace, of a name of 64 characters, and none to lead to when the locations are denied; A13 for the newest maintenance by its start, Failed, and none for Succeeded, a result not known, no history and an older entry that failed under a newer one that succeeded, with the entries in another order than by their start and none with a start, its time and its two sentences of the last maintenance that succeeded; a repository NotReady whose newest maintenance failed gives both; the order of the storage by name, a repository between two locations; the items of a stale read; component, the items of A12 and A13 with their reasons, their times and their ways, the repository and the location of A12, in the order of the page among the items of the storage; packaged, no item of A12 or A13 in any installation of the fixtures, which hold no repository, and the rules that gave an item on the cluster the eleven of before, green in the packaged application on 2026-11-02 |
+| OVER-05 | Unit and component: with the restores denied no item is of a restore, and one line says what the rules did not look at; the items of a read that is not the last one say that they were read before, and the page says beside their number that a part of what was read is of an earlier read. Packaged: the same line for the restores with the first reader and for the backups with the second, with no item of what was denied. Restated with the third pull request of T5.1 of SPEC-0014: the line of the backup repositories, which says that their readiness and their maintenance were not checked, at the unit and component layers, and in the packaged application for both readers, green on 2026-11-02 |
+| OVER-06 | Unit and component: no item with everything read, and no item with a family denied, which the page says beside what was not read; with none of the four families the rules look at read, the page says that nothing was read, and not that nothing needs attention. Packaged, since the fixtures of the tabs, on the installation the controllers of Velero are at work in, computed from what the cluster holds: what ended with a failure inside the window, which is the three operations the server refused, listed by rule A10 in the order of the page, each with its validation errors, and counted by the summary, which the case expects to say that nothing in what was read needs attention when no item is left, a branch no run reached; the backups the server synced from the store, which started four hundred days back, no item; nothing in flight; and the newest completed backup the one the controllers ran, by the time each completed. An installation where no rule finds anything is among the fixtures no more: REQ-098 is proven at the unit and component layers, as decided below. Restated with the third pull request of T5.1 of SPEC-0014: the families the rules look at are five, the backup repositories the fifth, each with its line of what was not checked; the page says that nothing was read when none of the five was, and the four of before denied with the repositories read is not that nothing was read |
 | OVER-07 | Unit: the operations in flight in every phase, from the oldest, the ones with no time last. Component and packaged: with and without progress, with and without a start; one that waits is at the time it was created, which is said, and did not start; none in flight is said when both kinds were read; with one kind read and the other not, that none of the first is in flight and that the second is not known |
 | OVER-08 | Unit and component: the newest completed backup by the time of its completion and not of its start, of the installation and of each schedule; one that completed and does not say when; none among the backups that exist; not known when the backups were not read or are not served, with the reason in words. Packaged: the one of the installation and the ones of three schedules, one of which has a newer backup that failed its validation; not known with the second reader |
 | OVER-09 | Unit: the three windows, an operation at the edge of the window and one a millisecond before it, operations at the same time, one without a start, a store that holds what is not a window; a window chosen in the frame of a cluster kept when the frame of another keeps a namespace, and taken by the other at its next read. Component: the window kept, with no request for it; the operations of a mark forgotten when another window is chosen; the ones of a mark that was chosen counted as they are shown, after a read and when the window moves past them with no read, and said of many, of one and of none, to who does not see the page as well; the operations that report no time counted, and said of one and of many; what a mark says in words of what did not start and of a failure among many; the two rows on one line, which ends at the newest operation when the clock of the cluster is ahead. Packaged: the operations of each window in the list, from the newest, ten at a time, and the same on the line of time, each in the row of its kind; a mark of many shows its operations alone; the operation that did not start has its mark. The choice is in the store after it is made, and is the window of the next start |
 | OVER-10 | Unit and component: ten lines at most of the schedules and of the storage locations, the ones a rule names first, then by name, with the number of the others and the way to their list. Packaged: ten of the twelve schedules, the two the rules name first, the number of the others and the way to the list, which has the twelve; the three storage locations, with the facts their list shows. Restated with the second pull request of T3.3: unit and component, the next run and the adherence of each line, from the signal of the row of the list, with their tips, A11 among the rules that put a line first, and the two cells empty until the backups were answered once; packaged, the two cells of the lines of the installation of the Overview; in the window of 1440 by 900 the band of the schedules alone on its row and the one of the storage under it, each table of lines showing all its columns in the room of its band with nothing reached by scrolling it, no words clipped and none off the line of their row, written in the report `overview-lines.json`, green in the packaged application on 2026-10-25, each band 1,053 pixels wide with all the columns of its table, and failing with the two bands on one row |
-| OVER-11 | Component: the focus is on what a view was opened from at every return and not at the first alone, where the object is named in three places, from a mark, with the keyboard; a view that opens from the address gives it to where the object is named. Packaged: the five cells to their lists; an item to its object and to the other object its reason names; the newest completed backup, an operation in flight, one of the list, a line of a schedule and one of a storage location, a mark of the line, each to its view over the Overview, which is the way back; from a view to another one and back in two steps; the focus on what the view was opened from, at the first view and after ten. Component: the focus on the mark that was chosen when what it holds is not shown alone any more, and on the window when the mark is not there. Every way of the page names an object that the suite finds on the cluster, of a kind that has a view, and the page has no button that is not a way, a window, a mark or what shows more of a list |
+| OVER-11 | Component: the focus is on what a view was opened from at every return and not at the first alone, where the object is named in three places, from a mark, with the keyboard; a view that opens from the address gives it to where the object is named. Packaged: the five cells to their lists, six since the third pull request of T5.1 of SPEC-0014; an item to its object and to the other object its reason names; the newest completed backup, an operation in flight, one of the list, a line of a schedule and one of a storage location, a mark of the line, each to its view over the Overview, which is the way back; from a view to another one and back in two steps; the focus on what the view was opened from, at the first view and after ten. Component: the focus on the mark that was chosen when what it holds is not shown alone any more, and on the window when the mark is not there. Every way of the page names an object that the suite finds on the cluster, of a kind that has a view, and the page has no button that is not a way, a window, a mark or what shows more of a list |
 | OVER-12 | Packaged performance: the measure below. Packaged: with what was asked of the bands shown, the page scrolled and the installation read again, by the command and by itself, the page is where it was and shows the same items |
 | OVER-13 | Component: for each of the four families the bands made from it denied or failed, not served, and not read yet, while the others are read; an installation with nothing in it; what was read of a band, and of a row of the line of time, kept when its family stops answering, with the day and the time it was read |
 | OVER-14 | Pre-review: the page, its recent operations, its schedules and its storage, and the page of the installation the controllers of Velero are at work in, as the fixtures of the tabs leave it, in both themes, at 1440x900, at 900x650 and at twice the zoom; the bands of a row side by side at 1440 and one under the other at the two others; every mark of the line with a shape or a number, and its words, and the shape of a failure beside the ones that carry one and no other; a page that stands still, with no scrollbar, at the widths around the one its target bar goes to a second line at; a window chosen and the line of time read with the keyboard alone, a mark opened and the focus back on it |
@@ -306,14 +327,18 @@ What was decided while implementing, inside the requirements:
   which moves at every validation: by it, two locations that Velero validates
   every minute would change places while they are read, and the same design
   asks that the order does not change while the operator reads. The time is
-  shown beside the name.
+  shown beside the name. Since the third pull request of T5.1 of SPEC-0014 the
+  items of the backup repositories are among them, by name, A12 before A13 for
+  one repository.
 - **A backup that carries the name of a schedule that is not among the schedules
   is one of no schedule**, for rule A10: no schedule is there to be an item of,
   and its failure would be in no item. When the schedules were not read, whose
   backup it is cannot be said: the line of what was not checked says so.
 - **The page says beside the number of its items what the rules did not look at
   and what they looked at as it was before.** With none of the four families
-  read it says that nothing was read, and not that nothing needs attention.
+  read, five since the third pull request of T5.1 of SPEC-0014 with the backup
+  repositories, it says that nothing was read, and not that nothing needs
+  attention.
 - **A failure is a shape beside a mark of the line of time**, as well as a
   colour: a mark of many operations, and one of an operation in flight, are
   drawn the same with a failure and without. A mark of many names the five
@@ -489,3 +514,38 @@ fixtures that exist, and run green on 2026-10-25 with every suite of the views a
 the pre-review, and again after the corrections of the independent review, which
 gave the band of the schedules its own row in the window of 1440 by 900, as the lead
 maintainer decided.
+
+**Since the third pull request of T5.1 of SPEC-0014, on 2026-10-29: the backup
+repositories.** The page reads the backup repositories as the sixth family of what
+was read, as REQ-189 of [SPEC-0014](SPEC-0014-repositories-and-data-movement.md)
+asks: their cell, Backup Repositories, says the number of their objects or their
+state as the five before it do, and leads to their list, which restates OVER-02;
+the rules A12 and A13 join the table of REQ-096, which restates OVER-04. A12 is a
+repository Velero reports NotReady, with the message of Velero, or that it gives
+none, its volume namespace and its storage location, and leads to that location
+when it is among the locations read in its namespace; A13 is a repository whose
+newest maintenance by its start failed, with its message, its start as its time,
+and when the last maintenance succeeded, or that none is recorded. Both are items
+of the storage, by name among the items of the locations. When the repositories
+were not read, one line says that their readiness and their maintenance were not
+checked, and the page says that nothing was read only when none of the five
+families the rules look at was, which restates OVER-05 and OVER-06. The page asks
+none of the four families of the operations of the volumes, as before. The rules A1
+to A11 and their cases are as they were. Nine unit tests of
+[the rules](../../src/common/overview.test.ts) are added, 52 now: A12 and A13 with
+a case that gives an item and one that gives none for each phase and each result,
+their reasons, their times and the location A12 leads to, the order of the storage,
+the items of a stale read, the cell in each of its states, the line of what was not
+checked and the summary; the tests that list the cells, the rules and the families
+that were not read have the repositories beside them. Four component tests
+of [the page](../../src/renderer/pages/overview-page.test.tsx) are added,
+59 now: the cell in each of its states with its way to the list, the
+items of A12 and A13 with their reasons, times and ways in the order of the page,
+the line of the repositories with its way, the summary, and an item of an earlier
+read. Three tests of the components were restated with them: the cells of what
+was read and the page where nothing was read, the stub of the page answering the
+repositories of both installations, and the count of what the Overview asks over
+three reads, every family read at every read at each of them. In the packaged application the suites of the
+Overview and of the two readers are restated on the fixtures that exist, which hold
+no repository: green on 2026-11-02, with every suite of the views, the
+pre-review and FND-10, 255 cases in 16 files.

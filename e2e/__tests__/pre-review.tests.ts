@@ -1295,6 +1295,8 @@ describe("pre-review of the views", () => {
           [one, other],
         );
 
+      // The six cells of what was read, the backup repositories the sixth: two rows of three at 900 by 650, and
+      // rows of two at twice the zoom, where the picture shows the first row and the page scrolls to the others.
       await everyLayout(
         "overview",
         async () => {

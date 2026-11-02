@@ -37,7 +37,7 @@ export interface RepositoryView {
   message?: { value: string; shortened: boolean };
   // The time of the last maintenance that succeeded, which is what the release writes there.
   lastMaintenance?: number;
-  // The recent maintenances, the newest first by their start, whatever their order in the object.
+  // The recent maintenances, the newest first by their start, then by their place in the object.
   maintenances: Maintenance[];
   // The newest of them failed: a mark beside the time of the last one that succeeded.
   newestFailed: boolean;
@@ -48,12 +48,25 @@ function text(value: unknown): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined;
 }
 
-// Newest first, by the start; what has no start goes after what has one.
-function newestFirst(one: Maintenance, other: Maintenance): number {
-  if (one.started === undefined || other.started === undefined) {
-    return one.started === other.started ? 0 : one.started === undefined ? 1 : -1;
+interface Listed {
+  maintenance: Maintenance;
+  // Its place in the list of the object.
+  place: number;
+}
+
+// Newest first, by the start; what has no start goes after what has one. Of two with the same start, or with none,
+// the later in the list is the newer: Velero appends each maintenance to the list and keeps the last three, and lists
+// them from the oldest when it gathers them again (`updateRepoMaintenanceHistory` and `consolidateHistory` of the
+// release). Every maintenance the release writes has a start; the place decides for an object it did not write.
+function newestFirst(one: Listed, other: Listed): number {
+  const [first, second] = [one.maintenance.started, other.maintenance.started];
+
+  if (first !== second) {
+    if (first === undefined) return 1;
+    if (second === undefined) return -1;
+    return second - first;
   }
-  return other.started - one.started;
+  return other.place - one.place;
 }
 
 export function repositoryView(repository: BackupRepositoryResource): RepositoryView {
@@ -61,11 +74,11 @@ export function repositoryView(repository: BackupRepositoryResource): Repository
   const recent = Array.isArray(status?.recentMaintenance) ? status.recentMaintenance : [];
   const maintenances = recent
     .filter((entry) => entry !== null && typeof entry === "object")
-    .map((entry): Maintenance => {
+    .map((entry, place): Listed => {
       const started = timestamp(entry.startTimestamp);
       const completed = timestamp(entry.completeTimestamp);
 
-      return {
+      const maintenance: Maintenance = {
         result: maintenanceResult(entry.result),
         ...(started === undefined ? {} : { started }),
         ...(completed === undefined ? {} : { completed }),
@@ -74,8 +87,11 @@ export function repositoryView(repository: BackupRepositoryResource): Repository
           : {}),
         ...(text(entry.message) ? { message: shownText(entry.message ?? "") } : {}),
       };
+
+      return { maintenance, place };
     })
-    .sort(newestFirst);
+    .sort(newestFirst)
+    .map((listed) => listed.maintenance);
   const config = spec?.repositoryConfig && typeof spec.repositoryConfig === "object" ? spec.repositoryConfig : {};
   const last = timestamp(status?.lastMaintenanceTime);
   const created = timestamp(repository.metadata.creationTimestamp);

@@ -18,11 +18,18 @@ import type { Frame } from "playwright";
 const TIMEOUT = 10 * 60 * 1000;
 const OVERVIEW = cluster.OVERVIEW;
 const DISCOVERY = "LIST backupstoragelocations cluster";
-// The five families the Overview has a cell for.
-const KINDS = ["backups", "restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"];
-// The six read at every read of an installation, and the two of the pod volume operations, which only a view that
-// shows them reads: the Overview holds neither.
-const READ_ALWAYS = [...KINDS, "backuprepositories"];
+// The six families the Overview has a cell for, the backup repositories the sixth.
+const KINDS = [
+  "backups",
+  "restores",
+  "schedules",
+  "backupstoragelocations",
+  "volumesnapshotlocations",
+  "backuprepositories",
+];
+// The six are the ones read at every read of an installation, and the two of the pod volume operations are read only
+// by a view that shows them: the Overview holds neither.
+const READ_ALWAYS = KINDS;
 const ON_DEMAND = ["podvolumebackups", "podvolumerestores"];
 const BUDGET = 250;
 // How long what must not happen is waited for.
@@ -341,7 +348,7 @@ describe("overview of an installation", () => {
   );
 
   it(
-    "says how many objects of each of the five families were read",
+    "says how many objects of each of the six families were read",
     async () => {
       const shown = await cluster.overview(frame);
 
@@ -351,9 +358,11 @@ describe("overview of an installation", () => {
         schedules: { text: "Schedules 12", state: "read" },
         storageLocations: { text: "Backup Storage Locations 3", state: "read" },
         snapshotLocations: { text: "Volume Snapshot Locations 0", state: "read" },
+        // No backup of the file system runs in this installation: it holds no repository.
+        backupRepositories: { text: "Backup Repositories 0", state: "read" },
       });
       // The numbers are the ones of the cluster, read by the suite and not by the application.
-      expect(KINDS.map((kind) => held(kind, cluster.E2E_OVERVIEW_NAMESPACE).length)).toEqual([13, 6, 12, 3, 0]);
+      expect(KINDS.map((kind) => held(kind, cluster.E2E_OVERVIEW_NAMESPACE).length)).toEqual([13, 6, 12, 3, 0, 0]);
       expect(await cluster.notices(frame, [])).toEqual({});
       expect(await cluster.layoutProblems(frame, OVERVIEW)).toEqual([]);
       await cluster.captureScreenshot(frame, "dark-overview");
@@ -734,6 +743,7 @@ describe("overview of an installation", () => {
         ["schedules", cluster.SCHEDULES],
         ["storageLocations", cluster.STORAGE_LOCATIONS],
         ["snapshotLocations", cluster.SNAPSHOT_LOCATIONS],
+        ["backupRepositories", cluster.REPOSITORIES],
       ] as const) {
         await frame.click(`[data-testid=velero-overview-read-${family}]`);
         await frame.waitForSelector(`[data-testid=velero-${list.id}-page]`, { timeout: 60_000 });
@@ -923,6 +933,8 @@ describe("overview of an installation", () => {
         schedules: { text: "Schedules 1", state: "read" },
         storageLocations: { text: "Backup Storage Locations 1", state: "read" },
         snapshotLocations: { text: "Volume Snapshot Locations 0", state: "read" },
+        // Its backups move no volume through the file system: it holds no repository.
+        backupRepositories: { text: "Backup Repositories 0", state: "read" },
       });
       // What ended with a failure is an item while its time is inside the window: the creation of what the
       // server refused, which did not start, and the start of the backups synced from the store, four hundred
@@ -1033,13 +1045,20 @@ describe("overview of an installation", () => {
           namespace,
           { timeout: 60_000 },
         );
-        // The five families are read in any order: what needs attention is shown whole once they all are.
+        // The six families are read in any order: what needs attention is shown whole once they all are.
         await cluster.overview(frame);
         await showEvery("attention");
         const read = Date.now();
         const shown = await cluster.overview(frame);
         const count = Object.values(unknown[namespace]).reduce((all, one) => all + one, 0);
 
+        // No backup of the fixtures moves a volume through the file system: no installation holds a repository, and
+        // neither rule of the repositories gives an item.
+        expect([namespace, shown.read.backupRepositories]).toEqual([
+          namespace,
+          { text: "Backup Repositories 0", state: "read" },
+        ]);
+        expect([namespace, shown.items.filter(([rule]) => rule === "A12" || rule === "A13")]).toEqual([namespace, []]);
         rules[namespace] = [...new Set(shown.items.map(([rule]) => rule))].sort();
         defaults[namespace] = shown.items.filter(([rule]) => rule === "A4").map(([, name]) => name);
         expect([namespace, await cluster.valuesOfTheWhole(frame)]).toEqual([namespace, []]);
@@ -1087,8 +1106,9 @@ describe("overview of an installation", () => {
       expect(defaults[cluster.E2E_STATIC_NAMESPACE]).toEqual(["Default storage location"]);
       expect(defaults[cluster.E2E_DEFAULTS_NAMESPACE]).toEqual(["defaults-older"]);
       expect(defaults[cluster.E2E_OVERVIEW_NAMESPACE]).toEqual([]);
-      // Every rule gave an item on the cluster, in one installation or in another: A11 of the interval of the views,
-      // whatever the hour, and of the schedule that names its zone once it is overdue.
+      // Every rule of the operations, of the storage locations and of the schedules gave an item on the cluster, in one
+      // installation or in another: A11 of the interval of the views, whatever the hour, and of the schedule that names
+      // its zone once it is overdue. The two of the repositories gave none, as no installation holds a repository.
       expect([...new Set(Object.values(rules).flat())].sort()).toEqual(
         ["A1", "A10", "A11", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9"].sort(),
       );

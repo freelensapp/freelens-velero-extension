@@ -3,10 +3,17 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { submissionOf } from "../../../test/adherence-builders";
+import { repository } from "../../../test/volume-builders";
 import { ALWAYS, emptyPreferences, heldPreferences, ON_DEMAND, RESOURCES, TITLES } from "../../common/discovery";
 import { formatDuration } from "../../common/duration";
 import { unread } from "../../common/location-users";
-import { BACKUPS_AND_ADHERENCE_MISSING, COMPLETED_NOTE, GROUP_TITLES, NOT_KNOWN_WORDS } from "../../common/overview";
+import {
+  BACKUPS_AND_ADHERENCE_MISSING,
+  COMPLETED_NOTE,
+  GROUP_TITLES,
+  NOT_KNOWN_WORDS,
+  REPOSITORY_RULE_WORDS,
+} from "../../common/overview";
 import { emptyRead, failed } from "../../common/read-state";
 import { SIGNAL_WORDS, scheduleSignal } from "../../common/schedule-signal";
 import { adherenceTip } from "../components/adherence";
@@ -134,6 +141,9 @@ const served: Answer = { status: 200, body: { resources: Object.values(RESOURCES
 function answers(more: Answers = {}): Answers {
   return {
     [DISCOVERY]: served,
+    // No repository in either installation: what the cases below say of the other families holds with them read.
+    [path("backupRepositories", A)]: list(),
+    [path("backupRepositories", B)]: list(),
     [LOCATIONS]: list({ metadata: { name: "default", namespace: A } }, { metadata: { name: "default", namespace: B } }),
     [path("backups", A)]: list(...backups),
     [path("restores", A)]: list(...restores),
@@ -227,12 +237,15 @@ afterEach(() => {
 });
 
 describe("what was read", () => {
-  it("says of each of the five families how many of its objects were read, and leads to its list", async () => {
+  it("says of each of the six families how many of its objects were read, and leads to its list", async () => {
     const { asked } = mount(answers());
 
     await page();
+    await waitFor(() => expect(cell("backupRepositories").getAttribute("data-read")).toBe("read"));
     expect(
-      (["backups", "restores", "schedules", "storageLocations", "snapshotLocations"] as const).map((family) => [
+      (
+        ["backups", "restores", "schedules", "storageLocations", "snapshotLocations", "backupRepositories"] as const
+      ).map((family) => [
         cell(family).textContent,
         cell(family).getAttribute("data-read"),
         cell(family).getAttribute("href"),
@@ -243,6 +256,7 @@ describe("what was read", () => {
       ["Schedules4", "read", "/extension/freelensapp--velero-extension/schedules"],
       ["Backup Storage Locations3", "read", "/extension/freelensapp--velero-extension/storage-locations"],
       ["Volume Snapshot Locations1", "read", "/extension/freelensapp--velero-extension/snapshot-locations"],
+      ["Backup Repositories0", "read", "/extension/freelensapp--velero-extension/backup-repositories"],
     ]);
     // The page asks what every other view asks at every read, and nothing of its own: none of the families read on
     // demand, which only a view that shows them holds.
@@ -410,14 +424,16 @@ describe("what needs attention", () => {
         [path("restores", A)]: { status: 403 },
         [path("schedules", A)]: { status: 403 },
         [path("storageLocations", A)]: { status: 403 },
+        [path("backupRepositories", A)]: { status: 403 },
       }),
     );
     await page();
+    await waitFor(() => expect(cell("backupRepositories").getAttribute("data-read")).toBe("denied"));
     expect(screen.getByTestId("velero-overview-attention-summary").textContent).toBe(
       "Nothing was read of what the rules look at: what needs attention is not known.",
     );
     expect(items()).toEqual([]);
-    expect([...band("attention").querySelectorAll("[data-unchecked]")]).toHaveLength(4);
+    expect([...band("attention").querySelectorAll("[data-unchecked]")]).toHaveLength(5);
     noValueOfTheWhole();
   });
 
@@ -1621,6 +1637,199 @@ describe("the adherence of the schedules: rule A11 and what is not known (SPEC-0
     expect(reasons()).toEqual([["no-offset", "1"]]);
     expect((line("nightly").querySelector("[data-adherence]") as HTMLElement).getAttribute("data-reason")).toBe(
       "no-offset",
+    );
+  });
+});
+
+describe("the backup repositories: their cell, and rules A12 and A13 (SPEC-0014)", () => {
+  const REPOSITORIES_LIST = "/extension/freelensapp--velero-extension/backup-repositories";
+  const repo = (name: string, status: object | undefined, spec: object = {}) =>
+    repository(name, status, { namespace: A, spec });
+  const maintained = (result: string, started: number, message?: string) => ({
+    result,
+    startTimestamp: ago(started),
+    completeTimestamp: ago(started - MINUTE),
+    ...(message === undefined ? {} : { message }),
+  });
+  const summary = () => screen.getByTestId("velero-overview-attention-summary").textContent;
+  const repositoryCell = () => [
+    cell("backupRepositories").textContent,
+    cell("backupRepositories").getAttribute("data-read"),
+    cell("backupRepositories").getAttribute("href"),
+  ];
+
+  it("says in the sixth cell how many repositories were read, or the state of their read, and leads to their list", async () => {
+    const { installation, table, clock } = mount(
+      answers({ [path("backupRepositories", A)]: list(repo("shop-default-kopia", { phase: "Ready" })) }),
+    );
+
+    await page();
+    await waitFor(() => expect(cell("backupRepositories").getAttribute("data-read")).toBe("read"));
+    expect(repositoryCell()).toEqual(["Backup Repositories1", "read", REPOSITORIES_LIST]);
+    const read = new Date(clock.now).toLocaleString();
+
+    clock.now += MINUTE;
+    table[path("backupRepositories", A)] = { status: 500 };
+    await act(() => installation.refresh());
+    expect(repositoryCell()).toEqual([
+      `Backup Repositories1Read at ${read}: they could not be read since then`,
+      "stale",
+      REPOSITORIES_LIST,
+    ]);
+    cleanup();
+    for (const [answer, words, state] of [
+      [{ status: 403 }, "Access denied", "denied"],
+      [{ status: 404 }, "Not served by the cluster", "not-served"],
+      [{ status: 500 }, "Could not be read", "failed"],
+    ] as const) {
+      mount(answers({ [path("backupRepositories", A)]: answer }));
+      await page();
+      await waitFor(() => expect(cell("backupRepositories").getAttribute("data-read")).toBe(state));
+      expect(repositoryCell()).toEqual([`Backup Repositories${words}`, state, REPOSITORIES_LIST]);
+      cleanup();
+    }
+    // Its first answer has not come.
+    mount(answers({ [path("backupRepositories", A)]: () => new Promise<Answer>(() => undefined) }));
+    await page();
+    expect(repositoryCell()).toEqual(["Backup RepositoriesNot read yet", "not-read", REPOSITORIES_LIST]);
+    noValueOfTheWhole();
+  });
+
+  it("lists A12 and A13 among the items of the storage by name, with their reasons, their times and their ways", async () => {
+    mount(
+      answers({
+        [path("backupRepositories", A)]: list(
+          repo("by-hand-repo", {
+            phase: "Ready",
+            lastMaintenanceTime: ago(3 * DAY),
+            recentMaintenance: [maintained("Failed", HOUR, "pod failed"), maintained("Succeeded", 3 * DAY)],
+          }),
+          repo(
+            "archive-repo",
+            { phase: "NotReady", message: "error to connect" },
+            { backupStorageLocation: "archive" },
+          ),
+          repo("default-repo", { phase: "NotReady", recentMaintenance: [maintained("Failed", 2 * HOUR)] }),
+          repo("ready-repo", { phase: "Ready", recentMaintenance: [maintained("Succeeded", HOUR)] }),
+        ),
+      }),
+    );
+    await page();
+    await waitFor(() => expect(items()).toContainEqual(["A12", "archive-repo"]));
+    // Twelve items: the page shows ten, and the two others when they are asked.
+    fireEvent.click(screen.getByTestId("velero-overview-attention-more"));
+    expect(items()).toEqual([
+      ["A9", "restoring"],
+      ["A9", "waiting"],
+      // The storage by name: the repositories among the locations, A12 before A13 for one repository.
+      ["A12", "archive-repo"],
+      ["A1", "broken"],
+      ["A3", "broken"],
+      ["A13", "by-hand-repo"],
+      ["A12", "default-repo"],
+      ["A13", "default-repo"],
+      ["A7", "nightly"],
+      ["A5", "broken"],
+      ["A8", "to-archive"],
+      ["A10", "failed"],
+    ]);
+    expect(summary()).toBe(`12 items in what was read. ${NOT_KNOWN_WORDS.summary(2)}`);
+    const of = (rule: string, name: string) =>
+      [...band("attention").querySelectorAll(`[data-rule="${rule}"]`)].find(
+        (item) => item.querySelector("button, a")?.textContent === name,
+      ) as HTMLElement;
+    const ways = (item: HTMLElement) =>
+      within(item)
+        .getAllByRole("button")
+        .map((button) => button.getAttribute("data-testid"));
+    const notReady = of("A12", "archive-repo");
+    const failedMaintenance = of("A13", "by-hand-repo");
+
+    // No time: what A12 says is of now.
+    expect(notReady.textContent).toBe(
+      `storage${GROUP_TITLES.storage}: archive-repo${REPOSITORY_RULE_WORDS.notReady("error to connect")} ${REPOSITORY_RULE_WORDS.of("shop", "archive")} archive`,
+    );
+    expect(ways(notReady)).toEqual([
+      "velero-open-backup-repository-archive-repo",
+      "velero-open-storage-location-archive",
+    ]);
+    // The time of A13 is the start of the maintenance that failed.
+    expect(failedMaintenance.textContent).toBe(
+      `storage${GROUP_TITLES.storage}: by-hand-repo ${shown(HOUR)}${REPOSITORY_RULE_WORDS.failed("pod failed")} ${REPOSITORY_RULE_WORDS.lastSucceeded("3d")}`,
+    );
+    expect(ways(failedMaintenance)).toEqual(["velero-open-backup-repository-by-hand-repo"]);
+    expect(ways(of("A12", "default-repo"))).toEqual([
+      "velero-open-backup-repository-default-repo",
+      "velero-open-storage-location-default",
+    ]);
+    expect(of("A13", "default-repo").textContent).toContain(shown(2 * HOUR));
+    // The way of an item opens the view of the repository over the page.
+    fireEvent.click(within(failedMaintenance).getByTestId("velero-open-backup-repository-by-hand-repo"));
+    await screen.findByTestId("velero-backup-repository-workspace");
+    expect(screen.getByTestId("velero-back").textContent).toBe("arrow_backOverview");
+    // A repository has no line in the bands of the schedules and of the storage.
+    expect(lines("velero-overview-storage-list")).not.toContain("archive-repo");
+    expect(lines("velero-overview-schedules-list")).not.toContain("archive-repo");
+    noValueOfTheWhole();
+  });
+
+  it("says that the repositories were not checked when they were not read, with the way to their list", async () => {
+    mount(answers({ [path("backupRepositories", A)]: { status: 403 } }));
+    await page();
+    await waitFor(() => expect(cell("backupRepositories").getAttribute("data-read")).toBe("denied"));
+    const line = band("attention").querySelector('[data-unchecked="backupRepositories"]') as HTMLElement;
+
+    expect(line.textContent).toBe(
+      "help_outlineBackup RepositoriesThe backup repositories of this installation cannot be read: access is denied. The readiness and the maintenance of the backup repositories were not checked.",
+    );
+    expect(screen.getByTestId("velero-overview-unchecked-backupRepositories").getAttribute("href")).toBe(
+      REPOSITORIES_LIST,
+    );
+    expect(items().filter(([rule]) => rule === "A12" || rule === "A13")).toEqual([]);
+    expect(summary()).toBe(`8 items in what was read. ${NOT_KNOWN_WORDS.summary(2)} Not everything was read.`);
+    // The lines of what was not checked are in the order the rules look at the families.
+    cleanup();
+    mount(answers({ [path("restores", A)]: { status: 403 }, [path("backupRepositories", A)]: { status: 404 } }));
+    await page();
+    await waitFor(() => expect(cell("backupRepositories").getAttribute("data-read")).toBe("not-served"));
+    expect(
+      [...band("attention").querySelectorAll("[data-unchecked]")].map((unchecked) =>
+        unchecked.getAttribute("data-unchecked"),
+      ),
+    ).toEqual(["restores", "backupRepositories"]);
+    expect(
+      (band("attention").querySelector('[data-unchecked="backupRepositories"]') as HTMLElement).textContent,
+    ).toContain("The cluster does not serve the backup repositories. The readiness and the maintenance");
+  });
+
+  it("says of the items of an earlier read of the repositories that they were read before", async () => {
+    const { installation, table, clock } = mount(
+      answers({
+        [path("backupRepositories", A)]: list(
+          repo("default-repo", { phase: "NotReady", recentMaintenance: [maintained("Failed", HOUR)] }),
+        ),
+      }),
+    );
+
+    await page();
+    await waitFor(() => expect(items()).toContainEqual(["A12", "default-repo"]));
+    clock.now += MINUTE;
+    table[path("backupRepositories", A)] = { status: 500 };
+    await act(() => installation.refresh());
+    expect(
+      [...band("attention").querySelectorAll('[data-rule="A12"], [data-rule="A13"]')].map((item) => [
+        item.getAttribute("data-rule"),
+        item.getAttribute("data-stale"),
+      ]),
+    ).toEqual([
+      ["A12", "true"],
+      ["A13", "true"],
+    ]);
+    expect((band("attention").querySelector('[data-rule="A13"]') as HTMLElement).textContent).toContain(
+      "It was read before the last read, which did not succeed.",
+    );
+    expect(summary()).toBe(
+      `10 items in what was read. ${NOT_KNOWN_WORDS.summary(2)} Part of it was read before the last read, which did not succeed.`,
     );
   });
 });

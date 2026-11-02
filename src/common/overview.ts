@@ -1,5 +1,5 @@
 import { backupView } from "./backup-view";
-import { timestamp } from "./duration";
+import { formatDuration, timestamp } from "./duration";
 import { unread } from "./location-users";
 import {
   defaults,
@@ -13,10 +13,12 @@ import { phaseText, signalText } from "./operation-text";
 import { newestFirst, operationTime } from "./operation-time";
 import { hasItems, isStale } from "./read-state";
 import { locationWarning } from "./references";
+import { repositoryView } from "./repository-view";
 import { restoreView } from "./restore-view";
 import { backupsOf } from "./schedule-history";
 import { SIGNAL_WORDS, scheduleSignal } from "./schedule-signal";
 import { NOTES, scheduleView } from "./schedule-view";
+import { REPOSITORY_WORDS } from "./volume-words";
 import { WINDOW_LENGTH } from "./window";
 
 import type { BackupView } from "./backup-view";
@@ -29,6 +31,7 @@ import type { RestoreView } from "./restore-view";
 import type { AdherenceContext, NotKnownReason, ScheduleSignal } from "./schedule-signal";
 import type { ScheduleView } from "./schedule-view";
 import type {
+  BackupRepositoryResource,
   BackupResource,
   BackupStorageLocationResource,
   RestoreResource,
@@ -38,7 +41,7 @@ import type {
 import type { ViewKind, ViewTarget } from "./views";
 import type { Window } from "./window";
 
-// What the Overview says of an installation, from the five lists that were read of it and from nothing
+// What the Overview says of an installation, from the six lists that were read of it and from nothing
 // else but, for the adherence of its schedules, what the views share of it for a read and a tick of their
 // clock (SPEC-0013), which is made of the same reads. It gives no value for the installation as a whole:
 // what needs attention is a list of items, each of one rule and of the objects the rule read, beside what
@@ -50,6 +53,7 @@ export interface OverviewReads {
   schedules: FamilyRead<ScheduleResource>;
   storageLocations: FamilyRead<BackupStorageLocationResource>;
   snapshotLocations: FamilyRead<VolumeSnapshotLocationResource>;
+  backupRepositories: FamilyRead<BackupRepositoryResource>;
 }
 
 export { DEFAULT_WINDOW, readWindow, WINDOW_LENGTH, WINDOW_TITLES, WINDOWS } from "./window";
@@ -70,6 +74,7 @@ const KINDS: Record<OverviewFamily, ViewKind> = {
   schedules: "schedule",
   storageLocations: "storage-location",
   snapshotLocations: "snapshot-location",
+  backupRepositories: "backup-repository",
 };
 const PLURALS: Record<OverviewFamily, string> = {
   backups: "backups",
@@ -77,6 +82,7 @@ const PLURALS: Record<OverviewFamily, string> = {
   schedules: "schedules",
   storageLocations: "backup storage locations",
   snapshotLocations: "volume snapshot locations",
+  backupRepositories: "backup repositories",
 };
 
 // What was read of a family: the number of its objects when it was read, its state when it was not.
@@ -313,7 +319,7 @@ export function recent(reads: OverviewReads, now: number, window: Window): Recen
 
 // What needs attention. Each item is of one rule, names its object and its reason, and leads to the object,
 // or to the list of its kind when it is of no single object.
-export const RULES = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11"] as const;
+export const RULES = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9", "A10", "A11", "A12", "A13"] as const;
 export type Rule = (typeof RULES)[number];
 export type Group = "in-flight" | "storage" | "schedules" | "ended";
 
@@ -379,6 +385,7 @@ const MISSING: Partial<Record<OverviewFamily, string>> = {
     "The validation of the schedules, their newest backups and the locations their templates name were not checked",
   storageLocations:
     "The availability of the storage locations, their last validation, the default and the locations the schedules name were not checked",
+  backupRepositories: "The readiness and the maintenance of the backup repositories were not checked",
 };
 
 // While the backups were never answered the adherence of the schedules is not computed either, and the line of the
@@ -398,8 +405,13 @@ function when(time: OperationTime): { time?: number } {
   return time.of === "none" ? {} : { time: time.time };
 }
 
+// The words of a message of Velero, without the full stop it may end with: the reason goes on after it.
+function messageWords(message: string | undefined): string {
+  return (message ?? "").replace(/[\s.]+$/, "");
+}
+
 function said(message: string | undefined): string {
-  const words = (message ?? "").replace(/[\s.]+$/, "");
+  const words = messageWords(message);
 
   return words ? `: ${words}` : "";
 }
@@ -477,6 +489,86 @@ function storageItems(reads: OverviewReads, now: number): AttentionItem[] {
         title: "Default storage location",
         reason:
           "No storage location is marked default. The server of Velero may name one in its settings, which this view does not read: a backup that names no location goes there.",
+      });
+    }
+  }
+  return items;
+}
+
+// The reasons of the rules of the backup repositories, each made of whole sentences: what Velero says of one that it
+// reports not ready (A12), and of one whose newest maintenance failed (A13).
+export const REPOSITORY_RULE_WORDS = {
+  notReady: (message: string) => `Velero reports it not ready: ${message}.`,
+  notReadyNoMessage: "Velero reports it not ready, and gives no message.",
+  of: (volumeNamespace: string, location: string) =>
+    `Volume namespace: ${volumeNamespace}. Storage location: ${location}.`,
+  failed: (message: string) => `Its newest maintenance failed: ${message}.`,
+  failedNoMessage: "Its newest maintenance failed, and Velero gives no message.",
+  noStart: "That maintenance reports no start.",
+  lastSucceeded: (ago: string) => `The last maintenance that succeeded was ${ago} ago.`,
+  noneSucceeded: "No maintenance that succeeded is recorded.",
+};
+
+// Rules A12 and A13 (REQ-189 of SPEC-0014): a repository Velero reports NotReady, and one whose newest maintenance,
+// by its start and whatever the order of the entries in the object, and of two with the same start or with none the
+// later in the object, failed. Both are items of the storage.
+function repositoryItems(reads: OverviewReads, now: number): AttentionItem[] {
+  const read = reads.backupRepositories;
+
+  if (!hasItems(read)) return [];
+  const stale = read.status !== "ready";
+  const locations = reads.storageLocations;
+  const items: AttentionItem[] = [];
+
+  for (const repository of read.items) {
+    const view = repositoryView(repository);
+    const of = { group: "storage" as const, kind: "backup-repository" as const, name: view.name, title: view.name };
+
+    // NotReady alone: a repository that reports no phase or New is not initialized yet, and a phase the release
+    // does not write is not known; neither is said to be not ready.
+    if (view.readiness.readiness === "not-ready") {
+      const message = messageWords(view.message?.value);
+      // The location the spec names, in the namespace of the repository: its labels carry the name cut, and a
+      // location of another installation is not its location.
+      const location =
+        view.location !== undefined && hasItems(locations)
+          ? locations.items.find(
+              (item) => item.metadata.name === view.location && (item.metadata.namespace ?? "") === view.namespace,
+            )
+          : undefined;
+
+      items.push({
+        ...of,
+        rule: "A12",
+        reason: [
+          message ? REPOSITORY_RULE_WORDS.notReady(message) : REPOSITORY_RULE_WORDS.notReadyNoMessage,
+          REPOSITORY_RULE_WORDS.of(
+            view.volumeNamespace ?? REPOSITORY_WORDS.notSet,
+            view.location ?? REPOSITORY_WORDS.notSet,
+          ),
+        ].join(" "),
+        ...(location ? { related: { kind: "storage-location" as const, name: location.metadata.name } } : {}),
+        // The location it leads to is of the read of the locations as well.
+        stale: stale || (location !== undefined && locations.status !== "ready"),
+      });
+    }
+    const newest = view.maintenances[0];
+
+    if (newest && view.newestFailed) {
+      const message = messageWords(newest.message?.value);
+
+      items.push({
+        ...of,
+        rule: "A13",
+        reason: [
+          message ? REPOSITORY_RULE_WORDS.failed(message) : REPOSITORY_RULE_WORDS.failedNoMessage,
+          ...(newest.started === undefined ? [REPOSITORY_RULE_WORDS.noStart] : []),
+          view.lastMaintenance === undefined
+            ? REPOSITORY_RULE_WORDS.noneSucceeded
+            : REPOSITORY_RULE_WORDS.lastSucceeded(formatDuration(Math.max(0, now - view.lastMaintenance))),
+        ].join(" "),
+        ...(newest.started === undefined ? {} : { time: newest.started }),
+        stale,
       });
     }
   }
@@ -702,6 +794,7 @@ export function attention(reads: OverviewReads, now: number, window: Window, adh
     items: [
       ...operationItems(reads, now, window),
       ...storageItems(reads, now),
+      ...repositoryItems(reads, now),
       ...scheduleItems(reads, now, signals),
     ].sort(inOrder),
     unchecked,
