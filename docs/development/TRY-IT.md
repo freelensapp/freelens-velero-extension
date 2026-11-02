@@ -58,7 +58,7 @@ wrote. Take the environment down first, with `pnpm demo:down`.
 | `velero-views-<run>` | A backup with every reference in place, backups that name what is not there, a name of 63 characters, a backup that reports nothing; a restore into two namespaces, one that failed its validation, one of a backup that is not there; a schedule with the history of a week, the schedules Velero has not read, and two that submitted two days back with no backup of it; storage locations that are late, unavailable, silent, and one that names its Secrets |
 | `velero-defaults-<run>` | Two storage locations marked default, and nothing else |
 | `velero-overview-<run>` | An installation for the Overview: operations of the last hours and of the last weeks, some in flight, twelve schedules, three storage locations |
-| `velero-scale-<run>` | A thousand backups, a thousand restores and no storage location |
+| `velero-scale-<run>` | A thousand backups, a thousand restores, 2,000 pod volume backups of their backups and no storage location |
 | `velero-adherence-<run>` | Eight schedules in the states of the adherence an environment can hold for twelve hours, awaited, overdue, held and at every look among them, placed by the clock, a backup in progress and the backup of a submission, and no storage location |
 | `velero-adherence-split-<run>` | Two schedules whose submissions say two offsets of the server, and no storage location |
 | `velero-adherence-scale-<run>` | Three hundred schedules of mixed expressions with the backups of their submissions, and no storage location |

@@ -1321,9 +1321,10 @@ Decided while implementing, on 2026-10-29:
 - The index of the specs names the third pull request in the rows of SPEC-0014 and
   of SPEC-0008.
 
-T5.1, the fourth of its five pull requests, phase A of 2026-10-29: the
-environment places the volume of each run and removes it, the suites compare and
-read the three kinds, and the second reader reads them. Its phase B creates the
+T5.1, the fourth of its five pull requests, phase A of 2026-10-29 and 2026-11-02:
+the environment places the volume of each run and removes it, the views and the
+long lists hold pod volume operations, the suites compare and read the three
+kinds, and the second reader reads them. Its phase B creates the
 environment again and fills every `T51-PR4-PENDING`.
 
 - Volumes (REQ-195): the server is installed with
@@ -1354,7 +1355,15 @@ environment again and fills every `T51-PR4-PENDING`.
   whose repository is not there.
 - Repositories (479): nine in `velero-views-<run>`, with the three labels the
   release writes, two of them of one triple.
-- Long lists (480): not placed by this phase; T51-PR4-PENDING.
+- Long lists (480): 2,000 pod volume backups in `velero-scale-<run>`, two of each
+  of the first nine hundred backups and two hundred of the last, placed by the
+  clock in two phases by their owners: the backups and the restores first, their
+  UIDs read, then the operations in one create, each owned by its backup as the
+  release writes it, accepted a minute after its backup started, in the phases the
+  release writes in turn and never none. Their digest is made with placeholder
+  UIDs. Placed again, the operations are removed first and read until they are
+  gone, then the rest. The 200 data uploads are of a later pull request. The probe
+  of the fixtures finds the two hundred of the last backup by its label.
 
 Decided while implementing, on 2026-10-29:
 
@@ -1395,3 +1404,18 @@ Decided while implementing, on 2026-10-29:
 - Phase B is split: the environment, its measures, its placements, the cleanup
   proof and `pnpm e2e` first; the suites and the pre-review once the pull request
   is rebased on a main that holds the second and the third pull requests.
+
+Decided while implementing, on 2026-11-02:
+
+- The placement by the clock has three ways, each for its namespaces and refused
+  for any other: in one phase, the Overview; in two by the clock of their
+  submissions, the installations of the adherence; in two by their owners, the
+  long lists.
+- The backups between the nine hundredth and the last own no pod volume backup,
+  so that the list of the operations of a backup is empty, short and long among
+  the long lists.
+- Two operations of one backup whose generated names would be the same: the second
+  is drawn again from another seed, so that no create is refused for a name that is
+  taken.
+- The count the views placement says of the long lists names their pod volume
+  backups; the restores are what was found, less the backups and the operations.
