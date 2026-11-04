@@ -4489,6 +4489,8 @@ export function tabFixtureFacts(runtime: FixtureRuntime, run: string, expected: 
 const CLEAR_ROUNDS = 3;
 const DELETION_TIMEOUT = 180_000;
 const DELETION_POLL = 1000;
+// The sync of the repositories, five minutes, and a minute for the check it makes.
+const REPOSITORY_TIMEOUT = 360_000;
 // The phases of a backup the server deletes when it is asked to: the ones it ended in, and the one it was
 // left in by a deletion that did not end, which is asked for again.
 const DELETABLE = ["Completed", "PartiallyFailed", "Failed", "FailedValidation", "Deleting"];
@@ -4597,6 +4599,39 @@ function backupRemoval(
       pause(runtime, DELETION_POLL);
     }
   };
+  // The server forgets the snapshots of the pod volume backups of a backup through the repository of their
+  // volume namespace, and refuses at once a repository that is not Ready (`pkg/repository/ensurer.go:118-141`
+  // and `pkg/repository/backup_repo_op.go:81-83` of the source of Velero v1.18.4); a change of the storage
+  // location makes every repository of that location NotReady until the controller establishes it again
+  // (`pkg/controller/backup_repository_controller.go:114-160` and `579-608`), as the transport proof does
+  // twice. A check that failed is made again by the sync, five minutes later (`repoSyncPeriod`, line 54). So
+  // the repository of that namespace is read again until it is Ready, and nothing else is asked meanwhile, six
+  // minutes at most; one that is not there is left to the server, which makes it.
+  const repositoryReady = (volumeNamespace: string, backups: string[]) => {
+    const since = elapsed();
+    const ofTheVolume = (item: KubeResource) =>
+      item.metadata.labels?.[REPOSITORY_LABELS.volumeNamespace] === volumeNamespace &&
+      item.metadata.labels?.[REPOSITORY_LABELS.location] === "default" &&
+      item.metadata.labels?.[REPOSITORY_LABELS.type] === "kopia";
+
+    for (;;) {
+      const repository = (
+        JSON.parse(
+          runtime.kubectl(["get", "backuprepositories.velero.io", "--namespace", DEMO_NAMESPACE, "-o", "json"]),
+        ) as { items: KubeResource[] }
+      ).items.find(ofTheVolume);
+      const phase = phaseOf(repository);
+
+      if (!repository || phase === "Ready") return;
+      requireCondition(
+        elapsed() - since < REPOSITORY_TIMEOUT,
+        `The repository ${repository.metadata.name} is ${phase ?? "in no phase"}, and the server forgets no ` +
+          `snapshot through a repository that is not Ready: the deletion of ${backups.join(" and ")} was not ` +
+          `asked in ${REPOSITORY_TIMEOUT / 60_000} minutes. Run the command again once the repository is Ready.`,
+      );
+      pause(runtime, DELETION_POLL);
+    }
+  };
   // Has the server delete a backup that is there, and waits until that backup is gone, or until the one of
   // its name is another, which the server created since.
   //
@@ -4683,7 +4718,22 @@ function backupRemoval(
     withdraw(name, found);
   };
 
-  return { down, request, kinds, read, one, phaseOf, ofTheRun, entry, forget, deletable, available, deletes, settle };
+  return {
+    down,
+    request,
+    kinds,
+    read,
+    one,
+    phaseOf,
+    ofTheRun,
+    entry,
+    forget,
+    deletable,
+    available,
+    repositoryReady,
+    deletes,
+    settle,
+  };
 }
 
 // Removes the fixtures of the tabs: the two backups the server created from the store, and with them the
@@ -5058,6 +5108,8 @@ export function removeFixtureBackup(
       carried = now;
       continue;
     }
+    // The pod volume backups of the backup of the volume hold the snapshots the server forgets with it.
+    if (name === names.volumeBackup) removal.repositoryReady(names.source, [name]);
     asked += 1;
     removal.deletes(items, backup, replaced);
   }

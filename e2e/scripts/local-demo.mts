@@ -2200,7 +2200,11 @@ async function runTransportProof(): Promise<void> {
     certificates = await createTlsFixture(new URL(STORAGE_ENDPOINT).hostname, [new URL(DIRECT_PROOF_ORIGIN).hostname]);
     const tls = tlsProofResources(journal.owner, active.id, originals, certificates);
 
-    for (const resource of tls) {
+    // The storage location changes once the store serves again: the server makes every repository of the
+    // location NotReady when it changes and checks each again at once
+    // (`pkg/controller/backup_repository_controller.go:114-160` of the source of Velero v1.18.4); a check while
+    // the store restarts fails, and the next comes with the sync, five minutes later (`repoSyncPeriod`, 54).
+    for (const resource of tls.filter((item) => item.kind !== "BackupStorageLocation")) {
       if (resource.kind === "Secret") secrets.push(resource);
       applyOwned(resource);
     }
@@ -2209,6 +2213,7 @@ async function runTransportProof(): Promise<void> {
       undefined,
       150_000,
     );
+    for (const resource of tls.filter((item) => item.kind === "BackupStorageLocation")) applyOwned(resource);
     const readyPods = JSON.parse(
       kubectl([
         "get",
@@ -2273,13 +2278,15 @@ async function runTransportProof(): Promise<void> {
       "PASS: compiled main found its route and downloaded 16 real artifacts through direct HTTPS, once the private address was allowed, and HTTP/HTTPS Kubernetes tunnels, with inline/referenced CA and negative signature/Host/CA checks; the store had no log for a backup and a restore that failed their validation, and no request was created for a restore without a backup; three identities were refused, at the creation, at the Service and the certificate, and at the port-forward, and the one with the documented permissions downloaded.",
     );
   } finally {
-    for (const resource of originals) applyOwned(resource);
+    // The location goes back once the store serves again, as above.
+    for (const resource of originals.filter((item) => item.kind !== "BackupStorageLocation")) applyOwned(resource);
     if (originals.length) {
       kubectl(
         ["rollout", "status", "deployment/seaweedfs", "--namespace", DEMO_NAMESPACE, "--timeout=120s"],
         undefined,
         150_000,
       );
+      for (const resource of originals.filter((item) => item.kind === "BackupStorageLocation")) applyOwned(resource);
       kubectl(
         [
           "wait",
