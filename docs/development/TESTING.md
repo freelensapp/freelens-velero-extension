@@ -671,7 +671,10 @@ volume of the run, on 2026-11-02 on the second Linux machine, `pnpm demo:up`
 took 134 and 149 seconds, the pod volume backup and restore of the volume 11
 seconds from the acceptance of the one to the completion of the other; the
 cleanup after the suites 151 seconds and the verification 10; and `pnpm e2e`,
-which runs the live flow and its cleanup twice more, T51-PR4-PENDING. After this
+which runs the live flow and its cleanup twice more, 384 seconds on 2026-11-04.
+The cleanup after the transport proof waits for the repository of the volume to be
+Ready before it asks the deletion of the backup of the volume, six minutes at most
+(SPEC-0014, the decisions of 2026-11-04). After this
 cleanup, or after `pnpm e2e`, the fixtures of the demo are gone with the fixtures
 of the tabs: `pnpm e2e:views` refuses by name, in a few seconds, until the two
 fixture steps of `pnpm demo:up` put them back, which takes about a hundred

@@ -1326,8 +1326,12 @@ Decided while implementing, on 2026-10-29:
 T5.1, the fourth of its five pull requests, phase A of 2026-10-29 and 2026-11-02:
 the environment places the volume of each run and removes it, the views and the
 long lists hold pod volume operations, the suites compare and read the three
-kinds, and the second reader reads them. Its phase B creates the
-environment again and fills every `T51-PR4-PENDING`.
+kinds, and the second reader reads them. Its phase B, on 2026-11-02 and
+2026-11-04, created the environment again, read back what the volume left
+(RECON-T0.1), ran every suite of the views, the pre-review and FND-10 green in the
+packaged application, 256 cases in 16 files, and found the deletion of the backup
+of the volume refused after the transport proof, which the decisions of 2026-11-04
+settle.
 
 - Volumes (REQ-195): the server is installed with
   `--default-repo-maintain-frequency=168h`, which the probe of the images finds in
@@ -1435,3 +1439,22 @@ Decided while implementing, on 2026-11-02:
   the environment, RECON-T0.1), and the UID of a synthetic one is given by the
   cluster when it is created. The path of the volume on the node, which the
   operations of the views carried before, is not what this release writes.
+
+Decided while implementing, on 2026-11-04:
+
+- The cleanup asks the deletion of the backup of the volume once the repository of
+  the volume is Ready, read again for six minutes at most, and the transport proof
+  changes the storage location only once the rollout of the store has ended, at
+  its start and at its end. `pnpm e2e` failed twice that day at the cleanup after
+  the proof: the server ended the request with "backup repository is not ready:
+  error to check backup repo: error to connect to storage", and left the backup
+  with its files. The release makes every repository of a location NotReady when
+  the location changes and checks each again at once, a check while the store
+  restarts fails, and the next comes with the sync, five minutes later
+  (`pkg/controller/backup_repository_controller.go:54` and `114-160`); and the
+  server refuses at once to forget the snapshots of a backup through a repository
+  that is not Ready (`pkg/repository/ensurer.go:118-141` and
+  `pkg/repository/backup_repo_op.go:81-83`).
+- The evidence of phase B is read from the store through the filer of its own pod,
+  at `127.0.0.1`, with no credentials and nothing written; the scripts of the
+  environment keep asking the store only what `assertStoreRequest` allows.
