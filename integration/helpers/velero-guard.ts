@@ -23,12 +23,17 @@ const SCHEDULE_PATCH = "PATCH schedules resource";
  * another scope, are writes. The counters carry no namespace, and a PATCH of
  * a synthetic schedule within the bound is left out with the ones of the
  * controller, which the version of that schedule in the snapshot still
- * catches.
+ * catches. When `repositoryWrittenAtEachPass` names the verb of the request
+ * the server sends to the real repository at its pass, that verb of the
+ * repositories is left out as the PATCH of the locations is, and the status of
+ * the real repository and the versions of the synthetic ones in the snapshot
+ * catch a write of a suite.
  */
 export function writesOf(
   counts: Record<string, number>,
   patchedAtEveryLook: boolean,
   minutes: number,
+  repositoryWrittenAtEachPass?: string,
 ): Record<string, number> {
   if (!Number.isFinite(minutes) || minutes < 0) {
     throw new Error(`The writes are counted over a window of minutes, and ${minutes} is not one`);
@@ -40,10 +45,69 @@ export function writesOf(
       .filter(([key]) => {
         const [verb, kind] = key.split(" ");
 
-        return !["GET", "LIST", "WATCH"].includes(verb) && !(verb === "PATCH" && kind === "backupstoragelocations");
+        return (
+          !["GET", "LIST", "WATCH"].includes(verb) &&
+          !(verb === "PATCH" && kind === "backupstoragelocations") &&
+          !(verb === repositoryWrittenAtEachPass && kind === "backuprepositories")
+        );
       })
       .map(([key, count]) => [key, key === SCHEDULE_PATCH ? Math.max(0, count - looks) : count] as const)
       .filter(([key, count]) => key !== SCHEDULE_PATCH || count > 0),
+  );
+}
+
+/**
+ * What the snapshot of a suite holds of an object of the namespace of the
+ * installation beside its identity, which a write of the suite would change:
+ * the version and the status of a schedule, the one the controller validated,
+ * whose submission writes into its status; the version and the status of a
+ * repository, or its status alone when the server writes the repository at
+ * each of its passes (`repositoryWrittenAtEachPass`). Nothing of the other
+ * kinds, which the server and the node agent write only while a backup or a
+ * restore is at work, and no suite runs beside one.
+ */
+export function installedVersion(
+  kind: string,
+  item: { metadata: { resourceVersion: string }; status?: unknown },
+  repositoryWrittenAtEachPass?: string,
+): string | undefined {
+  const status = JSON.stringify(item.status ?? {});
+
+  if (kind === "schedules") return `${item.metadata.resourceVersion} ${status}`;
+  if (kind === "backuprepositories")
+    return repositoryWrittenAtEachPass ? status : `${item.metadata.resourceVersion} ${status}`;
+  return undefined;
+}
+
+/** The kinds of the operations of a volume, which a view lists in a namespace only while it shows them. */
+export const OPERATION_KINDS = ["podvolumebackups", "podvolumerestores", "datauploads", "datadownloads"];
+
+/**
+ * The lists of the kinds of the operations of a volume in a namespace, among
+ * the ones counted over a window with a view open (`during`), by kind: every
+ * one, when no controller of the installation lists them; when one does
+ * (`listedByAController`), the ones above what a window of the same length
+ * with no view open counted (`without`), which is then required. A kind that
+ * was listed no more is not named.
+ */
+export function operationListsOf(
+  during: Record<string, number>,
+  listedByAController: boolean,
+  without?: Record<string, number>,
+): Record<string, number> {
+  if (listedByAController && without === undefined) {
+    throw new Error(
+      "A controller of the installation lists the operations: the lists of a view are counted against a window of the same length with no view open",
+    );
+  }
+  const lists = (counts: Record<string, number>) =>
+    OPERATION_KINDS.map((kind) => [kind, counts[`LIST ${kind} namespace`] ?? 0] as const);
+  const base = new Map(listedByAController ? lists(without ?? {}) : []);
+
+  return Object.fromEntries(
+    lists(during)
+      .map(([kind, count]) => [kind, Math.max(0, count - (base.get(kind) ?? 0))] as const)
+      .filter(([, count]) => count > 0),
   );
 }
 

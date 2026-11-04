@@ -41,24 +41,29 @@ import {
   allowsFixtureArtifact,
   assertFixtureNamespaceContents,
   assertFixtureOperationsRemoved,
+  assertMaintenanceAhead,
   assertStoreRequest,
   awaitRealSchedule,
   awaitRequestsBeforeCleanup,
   awaitRequestsRemoved,
   awaitTabFixtures,
+  awaitVolumeOperationsRemoved,
   BACKUP_PHASES,
   CLEAR_STATES,
   clearTabFixtures,
   createViewFixtures,
+  EARLIER_BACKUP_UID,
   EXEC_CREDENTIAL_VERSION,
   execPluginKubeconfig,
   FIXTURE_LABEL,
   FIXTURE_MODE,
+  type FixtureRuntime,
   fixtureArtifactPath,
   fixtureArtifactPaths,
   fixtureDeletionRequest,
   fixtureNames,
   fixtureNamespaces,
+  generatedName,
   isRefused,
   LIVE_RETENTION,
   LONG_BACKUP_NAME,
@@ -70,6 +75,10 @@ import {
   liveBackup,
   liveRestore,
   liveSchedule,
+  liveVolumeBackup,
+  liveVolumePod,
+  liveVolumeRestore,
+  MAINTENANCE_MARGIN,
   NEWEST_OF_THE_HISTORY,
   NOT_COUNTED,
   NOT_STARTED,
@@ -77,6 +86,7 @@ import {
   overviewFixtures,
   PLACED_ANNOTATION,
   PLACED_FOR,
+  type Placement,
   placeAdherenceFixtures,
   placeByTheClock,
   placementWords,
@@ -86,18 +96,27 @@ import {
   proofIdentities,
   REAL_SCHEDULE_EXPRESSION,
   REFUSALS,
+  REPOSITORY_LABELS,
   RESTORE_PHASES,
   type Recorded,
+  type RunRepository,
   readerKubeconfig,
   realTabArtifactPaths,
   recordSyncedBackups,
   refusedFixtures,
   removeFixtureBackup,
   removeRealSchedule,
+  removeRunRepository,
   restoreSpec,
   restrictedFixtures,
   runArtifactPaths,
+  runLiveVolume,
+  runRepository,
   SCALE_BACKUPS,
+  SCALE_OPERATION_PHASES,
+  SCALE_OPERATIONS,
+  SCALE_OPERATIONS_OF_THE_LAST,
+  SCALE_OWNERS_OF_TWO,
   SCALE_RESTORES,
   SERVER_EAST,
   SHAPE_ANNOTATION,
@@ -108,6 +127,7 @@ import {
   SYNCED_SELECTOR,
   SYNCED_SNAPSHOT_LOCATION,
   scaleFixtures,
+  scalePlaceholderUid,
   staticFixtures,
   storeTabFixtures,
   syncedBackups,
@@ -119,13 +139,22 @@ import {
   tabRemovalWords,
   UNAVAILABLE_MESSAGE,
   unlikeTheTakenBackup,
+  VIEW_ELSEWHERE,
   VIEW_OF_AN_EXEC_PLUGIN,
   VIEW_READER,
   VIEW_READER_OF_RESTORES,
   VIEW_WITHOUT_PORT_FORWARD,
+  VIEW_WORKLOADS,
+  VOLUME_BYTES,
+  VOLUME_NAME,
+  VOLUME_SCRIPT,
   viewFixtures,
   viewIdentityOfAnExecPlugin,
   viewIdentityWithoutPortForward,
+  viewOperationFixtures,
+  volumeArtifactPaths,
+  volumeLog,
+  volumePath,
 } from "../e2e/scripts/local-fixtures.mts";
 import {
   assertEgressRules,
@@ -151,16 +180,24 @@ import {
   subnetsOverlap,
 } from "../e2e/scripts/local-kind.mts";
 import {
+  assertFixtureFreeInstallation,
+  assertMaintainFrequency,
   BUCKET,
+  durationMilliseconds,
+  FIXTURE_FREE_KINDS,
   IMAGES,
+  INSTALLER_FLAGS,
   KIND_HOSTS,
   type KubeResource,
   kindConfiguration,
+  MAINTAIN_FREQUENCY,
+  maintainFrequencyHours,
   preloadedImage,
   prepareVeleroResources,
   STORAGE_ENDPOINT,
   storageConfiguration,
   storageManifests,
+  veleroInstallArguments,
 } from "../e2e/scripts/local-manifests.mts";
 import {
   assertBinary,
@@ -539,11 +576,28 @@ describe("foundation fixture boundaries", () => {
     const allowed = (path: string) => methods.filter((method) => allowsFixtureArtifact(method, path, run));
     const folder = `/velero-demo/backups/${names.syncedBackup}`;
 
+    const ofTheVolume = Object.values(volumeArtifactPaths(run));
+
     expect(stored).toHaveLength(11);
-    expect(new Set([...Object.values(verified), ...stored, ...read]).size).toBe(20);
-    // The twenty are the keys of the run, which a cleanup asks the store for one by one: the client may
-    // ask whether each is there, and may ask it of no other key.
-    expect(runArtifactPaths(run)).toEqual([...Object.values(verified), ...read, ...stored]);
+    expect(ofTheVolume).toHaveLength(9);
+    expect(new Set([...Object.values(verified), ...stored, ...read, ...ofTheVolume]).size).toBe(29);
+    // The twenty-nine are the keys of the run, which a cleanup asks the store for one by one: the client may
+    // ask whether each is there, and may ask it of no other key. The keys of the volume are the ones the server
+    // writes for its backup and its restore, laid out as the ones of the real operations.
+    expect(runArtifactPaths(run)).toEqual([...Object.values(verified), ...read, ...stored, ...ofTheVolume]);
+    expect(volumeArtifactPaths(run)).toEqual({
+      archive: `/velero-demo/backups/${names.volumeBackup}/${names.volumeBackup}.tar.gz`,
+      backupLog: `/velero-demo/backups/${names.volumeBackup}/${names.volumeBackup}-logs.gz`,
+      backupResults: `/velero-demo/backups/${names.volumeBackup}/${names.volumeBackup}-results.gz`,
+      backupResourceList: `/velero-demo/backups/${names.volumeBackup}/${names.volumeBackup}-resource-list.json.gz`,
+      backupVolumeInfo: `/velero-demo/backups/${names.volumeBackup}/${names.volumeBackup}-volumeinfo.json.gz`,
+      restoreLog: `/velero-demo/restores/${names.volumeRestore}/restore-${names.volumeRestore}-logs.gz`,
+      restoreResults: `/velero-demo/restores/${names.volumeRestore}/restore-${names.volumeRestore}-results.gz`,
+      restoreResourceList: `/velero-demo/restores/${names.volumeRestore}/restore-${names.volumeRestore}-resource-list.json.gz`,
+      restoreVolumeInfo: `/velero-demo/restores/${names.volumeRestore}/${names.volumeRestore}-volumeinfo.json.gz`,
+    });
+    // What the server wrote for the volume is asked whether it is there, and never read or written.
+    for (const path of ofTheVolume) expect([path, allowed(path)]).toEqual([path, ["HEAD"]]);
     expect(() => runArtifactPaths("personal-namespace")).toThrow();
     // What the store is given is written and asked for, never read back and never deleted.
     for (const path of stored) expect([path, allowed(path)]).toEqual([path, ["HEAD", "PUT"]]);
@@ -1707,7 +1761,9 @@ describe("foundation fixture boundaries", () => {
         verbs: ["get", "list", "watch"],
       },
     ]);
-    // The second reader reads the restores and what they refer to, and not the backups.
+    // The second reader reads the restores and what they refer to, the pod volume operations and the
+    // repositories, and not the backups: a pod volume restore whose restore it reads, a pod volume backup whose
+    // backup it is denied. The first reads none of the three.
     const roles = resources.filter((resource) => resource.kind === "Role");
     const bindings = resources.filter((resource) => resource.kind === "RoleBinding");
 
@@ -1715,7 +1771,15 @@ describe("foundation fixture boundaries", () => {
     expect(roles[1].rules).toEqual([
       {
         apiGroups: ["velero.io"],
-        resources: ["restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"],
+        resources: [
+          "restores",
+          "schedules",
+          "backupstoragelocations",
+          "volumesnapshotlocations",
+          "podvolumebackups",
+          "podvolumerestores",
+          "backuprepositories",
+        ],
         verbs: ["get", "list", "watch"],
       },
     ]);
@@ -2448,9 +2512,13 @@ describe("foundation fixture boundaries", () => {
 
     expect(placed).toEqual({
       views: viewFixtures("synthetic-owner", run).filter((resource) => resource.kind !== "Namespace").length,
+      // Twenty-three pod volume operations and nine repositories.
+      operations: 32,
       overview: overviewFixtures("synthetic-owner", run, now).length,
       scale: SCALE_BACKUPS,
       restores: SCALE_RESTORES,
+      // Two thousand pod volume backups of the long lists.
+      scaleOperations: SCALE_OPERATIONS,
       // What is placed by the clock was not there: it was put in place, not again, and nothing was removed.
       again: [],
     });
@@ -2491,6 +2559,292 @@ describe("foundation fixture boundaries", () => {
     expect(target.changes()).toBe(changes);
     expect(target.removed).toEqual([]);
     expect([...target.objects.entries()]).toEqual(objects);
+  }, 30_000);
+
+  it("places the long lists in two phases by their owners, and removes their pod volume backups before the rest", () => {
+    const names = fixtureNames(run);
+    const started = Date.parse("2026-09-28T07:31:17.123Z");
+    const target = cluster("synthetic-owner", Date.parse("2026-09-28T07:43:00Z"));
+    const now = Date.parse("2026-09-28T07:45:00Z");
+    const inScale = (prefix: string) => (name: string) => name.startsWith(`${prefix}/${names.scale}/`);
+
+    expect(createViewFixtures(target.runtime as never, run, started, now)).toMatchObject({
+      scale: SCALE_BACKUPS,
+      restores: SCALE_RESTORES,
+      scaleOperations: SCALE_OPERATIONS,
+    });
+    // The backups and the restores first, then the pod volume backups, each naming the UID the cluster gave its
+    // backup, in its owner reference and in its label, with the digest of the others.
+    const order = target.order.filter((name) => name.includes(`/${names.scale}/`));
+    const first = order.findIndex(inScale("podvolumebackup"));
+
+    expect(first).toBe(SCALE_BACKUPS + SCALE_RESTORES);
+    expect(order.slice(first).every(inScale("podvolumebackup"))).toBe(true);
+    const shape = (
+      target.find("Backup", names.scale, "backup-0001")?.metadata.annotations as Record<string, string> | undefined
+    )?.[SHAPE_ANNOTATION];
+    const operations = order.slice(first).map((name) => {
+      const found = target.find("PodVolumeBackup", names.scale, name.split("/")[2]);
+
+      if (!found) throw new Error(`${name} is not there`);
+      return found as unknown as KubeResource;
+    });
+
+    expect(operations).toHaveLength(SCALE_OPERATIONS);
+    for (const operation of operations) {
+      const backup = String(operation.metadata.labels?.["velero.io/backup-name"]);
+      const uid = target.find("Backup", names.scale, backup)?.metadata.uid;
+
+      expect([operation.metadata.name, operation.metadata.ownerReferences?.[0].uid]).toEqual([
+        operation.metadata.name,
+        uid,
+      ]);
+      expect([operation.metadata.name, operation.metadata.labels?.["velero.io/backup-uid"]]).toEqual([
+        operation.metadata.name,
+        uid,
+      ]);
+      expect(operation.metadata.annotations?.[SHAPE_ANNOTATION]).toBe(shape);
+    }
+    // Once they are older than they are good for, the pod volume backups are removed and read until they are gone,
+    // then the rest, and they are created again after their backups, with the UIDs of the new ones.
+    const before = target.find("Backup", names.scale, "backup-1000")?.metadata.uid;
+    const again = createViewFixtures(target.runtime as never, run, started, now + PLACED_FOR + 1000);
+    const removed = target.removed.filter((name) => name.includes(`/${names.scale}/`));
+
+    expect(again.again).toEqual([names.overview, names.scale]);
+    expect(removed).toHaveLength(SCALE_BACKUPS + SCALE_RESTORES + SCALE_OPERATIONS);
+    expect(removed.slice(0, SCALE_OPERATIONS).every(inScale("podvolumebackup"))).toBe(true);
+    const renewed = target.find("Backup", names.scale, "backup-1000")?.metadata.uid;
+    const last = target.find("PodVolumeBackup", names.scale, operations[operations.length - 1].metadata.name) as
+      | KubeResource
+      | undefined;
+
+    expect(renewed).not.toBe(before);
+    expect(last?.metadata.ownerReferences?.[0].uid).toBe(renewed);
+  }, 30_000);
+
+  // The owners of the operations of the views as the cluster gives them back: each with a UID of its own.
+  const viewOwners = (run: string) =>
+    viewFixtures("synthetic-owner", run).map((resource, index) => ({
+      ...resource,
+      metadata: { ...resource.metadata, uid: `owner-uid-${index}` },
+    }));
+
+  it("places the pod volume operations of the views after their owners, each naming the UID the cluster gave its owner", () => {
+    const names = fixtureNames(run);
+    const started = Date.parse("2026-09-28T07:31:17.123Z");
+    const target = cluster("synthetic-owner", Date.parse("2026-09-28T07:43:00Z"));
+
+    createViewFixtures(target.runtime as never, run, started, Date.parse("2026-09-28T07:45:00Z"));
+    const operations = [...target.objects.values()].filter(
+      (item) =>
+        (item.kind === "PodVolumeBackup" || item.kind === "PodVolumeRestore") &&
+        item.metadata.namespace === names.views,
+    );
+
+    expect(operations).toHaveLength(23);
+    for (const operation of operations) {
+      const kind = operation.kind === "PodVolumeBackup" ? "Backup" : "Restore";
+      const [reference] = operation.metadata.ownerReferences as { kind: string; name: string; uid: string }[];
+      const owner = target.find(kind, names.views, reference.name);
+      const labels = operation.metadata.labels as Record<string, string>;
+      const word = kind.toLowerCase();
+
+      expect(owner?.metadata.uid).toMatch(/^uid-\d+$/);
+      expect(operation.metadata.ownerReferences).toEqual([
+        { apiVersion: "velero.io/v1", kind, name: owner?.metadata.name, uid: owner?.metadata.uid, controller: true },
+      ]);
+      expect(labels[`velero.io/${word}-name`]).toBe(owner?.metadata.name);
+      expect(labels[`velero.io/${word}-uid`]).toBe(
+        owner?.metadata.name === "views-daily-20260901030000" ? EARLIER_BACKUP_UID : owner?.metadata.uid,
+      );
+      expect(labels).toMatchObject({ [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" });
+      expect(String(operation.metadata.name)).toMatch(new RegExp(`^${String(owner?.metadata.name)}-[a-z0-9]{5}$`));
+      // Created after its owner was read back.
+      expect(
+        target.order.indexOf(
+          `${String(operation.kind).toLowerCase()}/${names.views}/${String(operation.metadata.name)}`,
+        ),
+      ).toBeGreaterThan(target.order.indexOf(`${word}/${names.views}/${String(owner?.metadata.name)}`));
+    }
+    // The one of an earlier backup of the same name is the one of `views-daily-20260901030000`, and no other.
+    expect(
+      operations.filter(
+        (item) => (item.metadata.labels as Record<string, string>)["velero.io/backup-uid"] === EARLIER_BACKUP_UID,
+      ),
+    ).toHaveLength(1);
+  }, 30_000);
+
+  it("refuses the operations of the views when an owner is not there or has no UID, and names it", () => {
+    const names = fixtureNames(run);
+    const started = Date.parse("2026-09-28T07:31:17.123Z");
+
+    for (const [kind, name] of [
+      ["Backup", "backup-inprogress"],
+      ["Backup", "views-history-4"],
+      ["Backup", LONG_BACKUP_NAME],
+      ["Backup", "views-daily-20260901030000"],
+      ["Restore", "restore-mapped"],
+    ]) {
+      const words = `The ${kind.toLowerCase()} ${name} of ${names.views} that owns pod volume operations of the views is not there`;
+      const without = viewOwners(run).filter((item) => !(item.kind === kind && item.metadata.name === name));
+      const unread = viewOwners(run).map((item) =>
+        item.kind === kind && item.metadata.name === name
+          ? { ...item, metadata: { ...item.metadata, uid: undefined } }
+          : item,
+      );
+
+      expect(() => viewOperationFixtures("synthetic-owner", run, started, without)).toThrow(words);
+      expect(() => viewOperationFixtures("synthetic-owner", run, started, unread)).toThrow(words);
+      expect(() =>
+        viewOperationFixtures("synthetic-owner", run, started, viewFixtures("synthetic-owner", run)),
+      ).toThrow("that owns pod volume operations of the views is not there");
+    }
+  });
+
+  it("gives the operations of the views the phases the release writes, with the times of each, and nothing of the data movement", () => {
+    const started = Date.parse("2026-09-28T07:31:17.123Z");
+    const made = viewOperationFixtures("synthetic-owner", run, started, viewOwners(run));
+    const of = (kind: string, owner: string) =>
+      made.filter((item) => item.kind === kind && item.metadata.ownerReferences?.[0]?.name === owner);
+    const phase = (item: KubeResource) => (item.status as { phase?: string } | undefined)?.phase;
+    const status = (item: KubeResource) => (item.status ?? {}) as Record<string, unknown>;
+
+    expect(of("PodVolumeBackup", "backup-inprogress").map(phase)).toEqual([
+      undefined,
+      "New",
+      "Accepted",
+      "Prepared",
+      "InProgress",
+      "InProgress",
+      "Canceling",
+      "Completed",
+      "Completed",
+      "Failed",
+      "Failed",
+      "Canceled",
+      "Completed",
+    ]);
+    expect(of("PodVolumeBackup", "views-history-4").map(phase)).toEqual(["Failed"]);
+    expect(of("PodVolumeBackup", LONG_BACKUP_NAME).map(phase)).toEqual(["InProgress"]);
+    expect(of("PodVolumeBackup", "views-daily-20260901030000").map(phase)).toEqual(["Completed"]);
+    expect(of("PodVolumeRestore", "restore-mapped").map(phase)).toEqual([
+      "New",
+      "Accepted",
+      "InProgress",
+      "Completed",
+      "Failed",
+      "Canceled",
+      "Completed",
+    ]);
+    expect(
+      made.map((item) => item.kind).filter((kind) => !kind.startsWith("Pod") && kind !== "BackupRepository"),
+    ).toEqual([]);
+    const backups = of("PodVolumeBackup", "backup-inprogress");
+    const restores = of("PodVolumeRestore", "restore-mapped");
+
+    // What each phase carries, as the node agent writes it: the accepted time from Accepted on, a start from
+    // InProgress, the completion of an end; the total of an InProgress or none; the bytes equal at Completed.
+    expect(Object.keys(status(backups[2])).sort()).toEqual(["acceptedTimestamp", "phase"]);
+    expect(status(backups[4]).progress).toEqual({ totalBytes: 256 * 1024 * 1024, bytesDone: 64 * 1024 * 1024 });
+    expect(status(backups[5]).progress).toEqual({ bytesDone: 32 * 1024 * 1024 });
+    expect(status(backups[7])).toMatchObject({
+      snapshotID: expect.stringMatching(/^[0-9a-f]{32}$/),
+      incrementalBytes: 8 * 1024 * 1024,
+    });
+    expect((status(backups[7]).progress as { totalBytes: number; bytesDone: number }).bytesDone).toBe(
+      (status(backups[7]).progress as { totalBytes: number }).totalBytes,
+    );
+    expect(status(backups[8])).toMatchObject({ message: "volume was empty so no snapshot was taken" });
+    expect(status(backups[8]).snapshotID).toBeUndefined();
+    expect(String(status(backups[9]).message).split("\n").length).toBeGreaterThan(1);
+    expect(status(backups[9]).startTimestamp).toBe(status(backups[9]).completionTimestamp);
+    expect(status(backups[10])).toEqual({
+      phase: "Failed",
+      acceptedTimestamp: status(backups[10]).acceptedTimestamp,
+      message: "timeout on preparing PVB",
+    });
+    expect(status(backups[11]).startTimestamp).toBe(status(backups[11]).completionTimestamp);
+    expect((backups[12].spec as { uploaderType?: string }).uploaderType).toBe("");
+    expect(status(restores[1])).toMatchObject({ node: "views-node-1" });
+    expect(status(restores[4])).toEqual({ phase: "Failed", message: "timeout on preparing PVR" });
+    expect((restores[6].spec as { uploaderType?: string }).uploaderType).toBe("restic");
+    expect(status(restores[6]).node).toBeUndefined();
+    // Every time is before the start of the run, counted from its hour.
+    for (const item of made) {
+      for (const [field, value] of Object.entries(status(item))) {
+        if (field.endsWith("Timestamp") || field === "lastMaintenanceTime") {
+          expect(Date.parse(String(value))).toBeLessThanOrEqual(Date.parse("2026-09-28T07:00:00Z"));
+        }
+      }
+    }
+    // The same run and start give the same objects, and another run other names.
+    expect(viewOperationFixtures("synthetic-owner", run, started + 60_000, viewOwners(run))).toEqual(made);
+    expect(generatedName(run, "restore-mapped", 0)).not.toBe(generatedName(`${run}x`, "restore-mapped", 0));
+  });
+
+  it("places the repositories of the views with the three labels the release writes, two of one triple, and names the triples the operations use", () => {
+    const started = Date.parse("2026-09-28T07:31:17.123Z");
+    const made = viewOperationFixtures("synthetic-owner", run, started, viewOwners(run));
+    const repositories = made.filter((item) => item.kind === "BackupRepository");
+    const triple = (item: KubeResource) => {
+      const labels = item.metadata.labels as Record<string, string>;
+
+      return [
+        labels[REPOSITORY_LABELS.volumeNamespace],
+        labels[REPOSITORY_LABELS.location],
+        labels[REPOSITORY_LABELS.type],
+      ].join("/");
+    };
+    const spec = (item: KubeResource) => item.spec as Record<string, string>;
+
+    expect(repositories).toHaveLength(9);
+    for (const repository of repositories) {
+      expect(triple(repository)).toBe(
+        [
+          spec(repository).volumeNamespace,
+          spec(repository).backupStorageLocation,
+          spec(repository).repositoryType,
+        ].join("/"),
+      );
+      expect(Object.values(repository.metadata.labels ?? {}).every((value) => value.length <= 63)).toBe(true);
+      expect(repository.metadata.name.length).toBeLessThanOrEqual(253);
+    }
+    expect(repositories.filter((item) => triple(item) === "views-twice/views-available/kopia")).toHaveLength(2);
+    expect(repositories.map((item) => item.metadata.name.length)).toEqual(expect.arrayContaining([63, 133]));
+    expect(repositories.map((item) => (item.status as { phase?: string } | undefined)?.phase)).toEqual([
+      "Ready",
+      "Ready",
+      "NotReady",
+      undefined,
+      "Ready",
+      "Ready",
+      "Ready",
+      "Ready",
+      "Ready",
+    ]);
+    // The triples of the operations: the ones of kopia and of restic of the workloads, and one of none.
+    const named = new Set(repositories.map(triple));
+    const used = made
+      .filter((item) => item.kind.startsWith("Pod"))
+      .map((item) => {
+        const of = item.spec as {
+          pod: { namespace: string };
+          sourceNamespace?: string;
+          backupStorageLocation: string;
+          uploaderType: string;
+        };
+
+        return [
+          of.sourceNamespace ?? of.pod.namespace,
+          of.backupStorageLocation,
+          of.uploaderType === "restic" ? "restic" : "kopia",
+        ].join("/");
+      });
+
+    expect(used).toContain(`${VIEW_WORKLOADS}/views-available/kopia`);
+    expect(used).toContain(`${VIEW_WORKLOADS}/views-available/restic`);
+    expect(used.filter((one) => !named.has(one))).toEqual([`${VIEW_ELSEWHERE}/views-available/kopia`]);
   });
 
   it("puts in place again what is placed by the clock when it is older than it is good for, and nothing else", () => {
@@ -2526,7 +2880,7 @@ describe("foundation fixture boundaries", () => {
     const overview = overviewFixtures("synthetic-owner", run, after).length;
 
     expect(again).toMatchObject({ again: [names.overview, names.scale], overview, scale: SCALE_BACKUPS });
-    expect(target.removed).toHaveLength(overview + SCALE_BACKUPS + SCALE_RESTORES);
+    expect(target.removed).toHaveLength(overview + SCALE_BACKUPS + SCALE_RESTORES + SCALE_OPERATIONS);
     expect(
       target.removed.every((name) => name.includes(`/${names.overview}/`) || name.includes(`/${names.scale}/`)),
     ).toBe(true);
@@ -2563,7 +2917,7 @@ describe("foundation fixture boundaries", () => {
       "The namespace holds what is not of this run; nothing is removed",
     );
     expect(target.removed).toHaveLength(removed);
-  });
+  }, 30_000);
 
   it("puts in place again what is not made as it would be made now, whatever its age", () => {
     const names = fixtureNames(run);
@@ -2595,7 +2949,7 @@ describe("foundation fixture boundaries", () => {
     expect(createViewFixtures(target.runtime as never, run, started, now + 120_000).again).toEqual([names.overview]);
     expect(shape(names.overview, "Restore", "restored-3h")).toBe(overview);
     expect(target.removed.every((name) => name.includes(`/${names.overview}/`))).toBe(true);
-  });
+  }, 30_000);
 
   it("puts in place again what says that it was placed after now", () => {
     const names = fixtureNames(run);
@@ -2618,14 +2972,14 @@ describe("foundation fixture boundaries", () => {
     ]);
     // What was in place was removed before the ones of now were created, and nothing else was.
     expect(target.removed).toHaveLength(
-      overviewFixtures("synthetic-owner", run, before).length + SCALE_BACKUPS + SCALE_RESTORES,
+      overviewFixtures("synthetic-owner", run, before).length + SCALE_BACKUPS + SCALE_RESTORES + SCALE_OPERATIONS,
     );
     expect(
       target.removed.every((name) => name.includes(`/${names.overview}/`) || name.includes(`/${names.scale}/`)),
     ).toBe(true);
     expect(placedAt(names.overview, "recent-1h")).toBe(new Date(before).toISOString());
     expect(placedAt(names.scale, "backup-0001")).toBe(new Date(before).toISOString());
-  });
+  }, 30_000);
 
   it("stops when what it placed is not what the cluster holds", () => {
     const names = fixtureNames(run);
@@ -2708,7 +3062,7 @@ describe("foundation fixture boundaries", () => {
     (foreign.metadata.labels as Record<string, string>)[FIXTURE_LABEL] = "b1b2b3b4";
     expect(() => createViewFixtures(good.runtime as never, run, started, now + HOUR)).toThrow(refused);
     expect(good.removed).toEqual([]);
-  });
+  }, 30_000);
 
   it("places nothing by the clock in a namespace that is not of the run", () => {
     const names = fixtureNames(run);
@@ -2754,7 +3108,7 @@ describe("foundation fixture boundaries", () => {
     expect(target.removed).toEqual([]);
     expect(target.order).toHaveLength(created);
     expect([...target.objects.entries()]).toEqual(objects);
-  });
+  }, 30_000);
 
   it("gives the fixtures of the Overview what the release writes into the objects it takes", () => {
     const placed = Date.parse("2026-09-28T07:45:30.250Z");
@@ -2807,7 +3161,7 @@ describe("foundation fixture boundaries", () => {
     } finally {
       vi.useRealTimers();
     }
-  });
+  }, 30_000);
 
   // What the views take of the backups of the submissions of an installation, by the rule of SPEC-0013 (REQ-162): a
   // backup of a schedule by its label, named by the schedule and fourteen digits, created within a minute of the
@@ -3364,7 +3718,7 @@ describe("foundation fixture boundaries", () => {
               ...resource,
               metadata: { ...resource.metadata, namespace },
             })),
-          true,
+          "submissions",
         ),
       ).toThrow("Refusing to place fixtures outside the namespaces that are placed by the clock");
     }
@@ -3375,31 +3729,44 @@ describe("foundation fixture boundaries", () => {
         names.adherence,
         Date.parse("2026-10-27T09:00:00Z"),
         (placed, submissions) => adherenceSplitFixtures("synthetic-owner", run, placed, submissions),
-        true,
+        "submissions",
       ),
     ).toThrow(`Refusing to place in ${names.adherence} what is made for another namespace`);
-    // The installations of the adherence are placed in two phases, and nothing else is.
-    expect(() =>
-      placeByTheClock(target.runtime as never, run, names.adherence, Date.parse("2026-10-27T09:00:00Z"), (placed) =>
-        adherenceFixtures("synthetic-owner", run, placed),
-      ),
-    ).toThrow(
-      `Refusing to place ${names.adherence} in one phase: the installations of the adherence are placed in two ` +
-        "phases, and no other namespace is",
-    );
-    expect(() =>
+    // The installations of the adherence are placed in two phases by the clock of their submissions, the long lists
+    // in two phases by their owners, and nothing else in two.
+    const rule =
+      "the installations of the adherence are placed in two phases by the clock of their submissions, the long " +
+      "lists in two phases by their owners, and no other namespace in two";
+    const longLists = (placed: number, owners?: Record<string, string>) => {
+      const made = scaleFixtures("synthetic-owner", run, placed, owners);
+
+      return [...made.backups, ...made.restores, ...made.operations];
+    };
+    const placing = (namespace: string, placement?: Placement) => () =>
       placeByTheClock(
         target.runtime as never,
         run,
-        names.overview,
+        namespace,
         Date.parse("2026-10-27T09:00:00Z"),
-        (placed) => overviewFixtures("synthetic-owner", run, placed),
-        true,
-      ),
-    ).toThrow(
-      `Refusing to place ${names.overview} in two phases: the installations of the adherence are placed in two ` +
-        "phases, and no other namespace is",
-    );
+        (placed, submissions, owners) =>
+          namespace === names.overview
+            ? overviewFixtures("synthetic-owner", run, placed)
+            : namespace === names.scale
+              ? longLists(placed, owners)
+              : adherenceFixtures("synthetic-owner", run, placed, submissions),
+        placement,
+      );
+
+    for (const [namespace, placement, said] of [
+      [names.adherence, undefined, "in one phase"],
+      [names.adherence, "owners", "in two phases by their owners"],
+      [names.overview, "submissions", "in two phases by the clock of their submissions"],
+      [names.overview, "owners", "in two phases by their owners"],
+      [names.scale, undefined, "in one phase"],
+      [names.scale, "submissions", "in two phases by the clock of their submissions"],
+    ] as const) {
+      expect(placing(namespace, placement)).toThrow(`Refusing to place ${namespace} ${said}: ${rule}`);
+    }
     // In two phases each backup is of one schedule, which names it in its label, and no two of the same.
     const relabelled = (label: (backup: KubeResource) => Record<string, string>) =>
       placeByTheClock(
@@ -3413,7 +3780,7 @@ describe("foundation fixture boundaries", () => {
               ? { ...resource, metadata: { ...resource.metadata, labels: label(resource) } }
               : resource,
           ),
-        true,
+        "submissions",
       );
     const without = ({ metadata }: KubeResource) =>
       Object.fromEntries(Object.entries(metadata.labels ?? {}).filter(([name]) => name !== "velero.io/schedule-name"));
@@ -3449,7 +3816,7 @@ describe("foundation fixture boundaries", () => {
         names.adherence,
         Date.parse("2026-10-26T09:00:00Z"),
         (placed, submissions) => adherenceFixtures("synthetic-owner", run, placed, submissions),
-        true,
+        "submissions",
       ),
     ).toThrow("A placement in two phases needs the clock of this machine");
     expect([clockless.asked, clockless.applied]).toEqual([[], []]);
@@ -5543,9 +5910,9 @@ describe("foundation fixture boundaries", () => {
     // for the backups took once the other fixtures were placed, and the operations it placed.
     const views = (placement: typeof placed) =>
       `PASS: ${placement.views.views} objects of the views in ${names.views} and ${names.defaults}, ` +
-      `${placement.views.overview} of the Overview in ${names.overview}, and ${SCALE_BACKUPS} backups and ` +
-      `${SCALE_RESTORES} restores of the long lists in ${names.scale}, are in place, outside the reach of the ` +
-      "controllers.";
+      `${placement.views.overview} of the Overview in ${names.overview}, and ${SCALE_BACKUPS} backups, ` +
+      `${SCALE_RESTORES} restores and ${SCALE_OPERATIONS} pod volume backups of the long lists in ${names.scale}, ` +
+      "are in place, outside the reach of the controllers.";
     const created =
       `the server created ${names.syncedBackup} and ${names.syncedBackupWithoutLog} from them as they were ` +
       "stored: once the fixtures of the views and of the adherence, the refused operations and the schedule its " +
@@ -5623,7 +5990,7 @@ describe("foundation fixture boundaries", () => {
     expect(later.stored).toEqual(again.stored);
     expect(later.refused).toEqual(again.refused);
     expect(target.requests).toHaveLength(before.requests);
-  });
+  }, 30_000);
 
   it("says of a placement and of a removal of the tabs what each did, a thing that was done once as one", () => {
     const names = fixtureNames(run);
@@ -9222,8 +9589,8 @@ describe("foundation fixture boundaries", () => {
 
     // One read of the installation, which is in the log of the operations; the journal forgets the eleven
     // operations and the schedule, and keeps the rest; and each of the twenty keys of the run is asked for.
-    expect(ended(traces)).toEqual({ keys: 20 });
-    expect(runArtifactPaths(run)).toHaveLength(20);
+    expect(ended(traces)).toEqual({ keys: 29 });
+    expect(runArtifactPaths(run)).toHaveLength(29);
     expect(events).toEqual(["get", "save", ...runArtifactPaths(run).map((path) => `HEAD ${path}`)]);
     expect(clean.target.logged).toEqual([true]);
     expect(traces.left()).toEqual(clean.others);
@@ -9291,8 +9658,8 @@ describe("foundation fixture boundaries", () => {
       kind: "Backup",
       metadata: { name: names.backup, namespace: names.static },
     });
-    expect(ended(namesakes.from)).toEqual({ keys: 20 });
-    // A key of the run the store holds, any of the twenty, is told, and the run is not called cleaned. The
+    expect(ended(namesakes.from)).toEqual({ keys: 29 });
+    // A key of the run the store holds, any of the twenty-nine, is told, and the run is not called cleaned. The
     // journal forgot the operations before the store was asked: it names none of what the cluster no longer
     // holds.
     for (const path of runArtifactPaths(run)) {
@@ -9305,7 +9672,7 @@ describe("foundation fixture boundaries", () => {
           `of a backup with the backup, and nothing here removes a key. The way out is to take the environment ` +
           "down, with `pnpm demo:down`.",
       ]);
-      expect(target.requests).toHaveLength(20);
+      expect(target.requests).toHaveLength(29);
       expect(from.left()).toEqual(others);
     }
     // Nor on a store that does not say whether it holds a key.
@@ -9487,6 +9854,108 @@ describe("foundation fixture boundaries", () => {
         items.every((item) => item.metadata.annotations?.[PLACED_ANNOTATION] === new Date(placed).toISOString()),
       ).toBe(true);
     }
+  });
+
+  it("gives a pod volume backup that completed the path the release writes, a slash and a UID", () => {
+    const placed = Date.parse("2026-09-28T07:45:30Z");
+    const completed = [
+      ...viewOperationFixtures("synthetic-owner", run, placed, viewOwners(run)),
+      ...scaleFixtures("synthetic-owner", run, placed).operations,
+    ].filter(
+      (operation) =>
+        operation.kind === "PodVolumeBackup" &&
+        (operation.status as { phase?: string } | undefined)?.phase === "Completed",
+    );
+    const paths = completed.map((operation) => (operation.status as { path?: string }).path);
+
+    // The four of the views and the two hundred and fifty of the long lists that completed.
+    expect(completed).toHaveLength(254);
+    for (const path of paths)
+      expect(path).toMatch(/^\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(new Set(paths).size).toBe(paths.length);
+    // Made of the run and of the key: the same for a second placement, another for another run.
+    expect(volumePath(run, "views-7")).toBe(volumePath(run, "views-7"));
+    expect(volumePath(run, "views-7")).not.toBe(volumePath("b1b2b3b4", "views-7"));
+  });
+
+  it("makes the pod volume backups of the long lists for their backups, in the phases of the release in turn, with placeholder UIDs until the cluster gave the backups theirs", () => {
+    const names = fixtureNames(run);
+    const placed = Date.parse("2026-09-28T07:45:30Z");
+    const { backups, operations } = scaleFixtures("synthetic-owner", run, placed);
+    const of = (backup: string) =>
+      operations.filter((operation) => operation.metadata.labels?.["velero.io/backup-name"] === backup);
+    const times = operations.flatMap((operation) =>
+      ["acceptedTimestamp", "startTimestamp", "completionTimestamp"].flatMap((time) => {
+        const value = (operation.status as Record<string, string>)[time];
+
+        return value === undefined ? [] : [Date.parse(value)];
+      }),
+    );
+
+    // Two of each of the first nine hundred backups, none of the ones after them, and two hundred of the last.
+    expect(operations).toHaveLength(SCALE_OPERATIONS);
+    expect(SCALE_OPERATIONS).toBe(2000);
+    expect(backups.map((backup) => of(backup.metadata.name).length)).toEqual(
+      backups.map((_, index) =>
+        index < SCALE_OWNERS_OF_TWO ? 2 : index === backups.length - 1 ? SCALE_OPERATIONS_OF_THE_LAST : 0,
+      ),
+    );
+    // Each in the namespace of the long lists, owned by its backup as the release writes it, by the placeholder UID
+    // of that backup, with a name the release would generate and no two of the same.
+    for (const operation of operations) {
+      const backup = String(operation.metadata.labels?.["velero.io/backup-name"]);
+      const uid = scalePlaceholderUid(Number(backup.slice("backup-".length)) - 1);
+
+      expect([operation.metadata.name, operation.kind, operation.metadata.namespace]).toEqual([
+        operation.metadata.name,
+        "PodVolumeBackup",
+        names.scale,
+      ]);
+      expect(operation.metadata.name).toMatch(new RegExp(`^${backup}-[a-z0-9]{5}$`));
+      expect(operation.metadata.labels?.["velero.io/backup-uid"]).toBe(uid);
+      expect(operation.metadata.ownerReferences).toEqual([
+        { apiVersion: "velero.io/v1", kind: "Backup", name: backup, uid, controller: true },
+      ]);
+      expect(operation.metadata.annotations?.[PLACED_ANNOTATION]).toBe(new Date(placed).toISOString());
+    }
+    expect(new Set(operations.map((operation) => operation.metadata.name)).size).toBe(SCALE_OPERATIONS);
+    // In the phases the release writes, in turn, and never none.
+    expect(operations.map((operation) => (operation.status as { phase?: string }).phase)).toEqual(
+      operations.map((_, index) => SCALE_OPERATION_PHASES[index % SCALE_OPERATION_PHASES.length]),
+    );
+    // With the times the release writes for each: one canceled was canceled before it started, with no accepted
+    // time and a start at its completion.
+    const canceled = operations.filter((operation) => (operation.status as { phase?: string }).phase === "Canceled");
+
+    expect(canceled.length).toBeGreaterThan(0);
+    for (const operation of canceled) {
+      const status = operation.status as Record<string, unknown>;
+
+      expect(status.acceptedTimestamp).toBeUndefined();
+      expect(status.startTimestamp).toBe(status.completionTimestamp);
+    }
+    // Over the thirty days before they were placed, none of a time to come.
+    expect(Math.min(...times)).toBeGreaterThanOrEqual(placed - 30 * 24 * HOUR);
+    expect(Math.max(...times)).toBeLessThan(placed);
+    // With the UIDs the cluster gave the backups, the operations name them; a backup that is not there is refused.
+    const owners = Object.fromEntries(backups.map((backup, index) => [backup.metadata.name, `given-uid-${index}`]));
+    const given = scaleFixtures("synthetic-owner", run, placed, owners).operations;
+
+    expect(given.map((operation) => operation.metadata.ownerReferences?.[0].uid)).toEqual(
+      operations.map((operation) => owners[String(operation.metadata.labels?.["velero.io/backup-name"])]),
+    );
+    expect(given.map(({ metadata: { name } }) => name)).toEqual(operations.map(({ metadata: { name } }) => name));
+    const without = (backup: string) => Object.fromEntries(Object.entries(owners).filter(([name]) => name !== backup));
+
+    expect(() => scaleFixtures("synthetic-owner", run, placed, without("backup-1000"))).toThrow(
+      `The backup backup-1000 of ${names.scale} that owns pod volume backups of the long lists is not there`,
+    );
+    // A backup with no operation needs no UID.
+    expect(scaleFixtures("synthetic-owner", run, placed, without("backup-0950")).operations).toHaveLength(
+      SCALE_OPERATIONS,
+    );
+    // The same moment gives the same objects.
+    expect(scaleFixtures("synthetic-owner", run, placed).operations).toEqual(operations);
   });
 
   it("gives the views schedules whose backups go where none is taken, and one that names its time zone", () => {
@@ -10928,6 +11397,79 @@ describe("local storage setup contracts", () => {
     expect(() => prepareVeleroResources("synthetic-owner", { items: [resource] })).toThrow();
   });
 
+  it("installs the server with the maintenance frequency of a week, a flag the probe of the images finds first", () => {
+    const words = veleroInstallArguments();
+
+    expect(MAINTAIN_FREQUENCY).toBe("168h");
+    expect(words).toContain("--default-repo-maintain-frequency=168h");
+    expect(words[0]).toBe("install");
+    expect(words).toContain("--use-node-agent");
+    expect(words).toContain("--use-volume-snapshots=false");
+    expect(INSTALLER_FLAGS).toContain("--default-repo-maintain-frequency");
+    // Every flag the probe finds is one the install passes, and the one of the frequency is among them.
+    for (const flag of INSTALLER_FLAGS)
+      expect(words.some((word) => word === flag || word.startsWith(`${flag}=`))).toBe(true);
+  });
+
+  it("reads the maintenance frequency on the Deployment of the server in either form, and says to bring the environment up again without it", () => {
+    const deployment = (...args: string[]): KubeResource => ({
+      apiVersion: "apps/v1",
+      kind: "Deployment",
+      metadata: { name: "velero", namespace: "velero-demo" },
+      spec: {
+        template: { spec: { containers: [{ name: "velero", args: ["server", "--uploader-type=kopia", ...args] }] } },
+      },
+    });
+
+    // The installer writes the duration as the server prints one; the flag says it as a person writes it.
+    expect(maintainFrequencyHours(deployment("--default-repo-maintain-frequency=168h0m0s"))).toBe(168);
+    expect(maintainFrequencyHours(deployment("--default-repo-maintain-frequency=168h"))).toBe(168);
+    expect(maintainFrequencyHours(deployment("--default-repo-maintain-frequency", "10080m"))).toBe(168);
+    expect(maintainFrequencyHours(deployment("--default-repo-maintain-frequency=1h0m0s"))).toBe(1);
+    expect(maintainFrequencyHours(deployment())).toBeUndefined();
+    expect(maintainFrequencyHours(deployment("--default-repo-maintain-frequency=168"))).toBeUndefined();
+    expect(durationMilliseconds("1h30m")).toBe(5_400_000);
+    expect(durationMilliseconds("1.5h")).toBe(5_400_000);
+    expect(durationMilliseconds("a week")).toBeUndefined();
+    expect(() => assertMaintainFrequency(deployment("--default-repo-maintain-frequency=168h0m0s"))).not.toThrow();
+    expect(() => assertMaintainFrequency(deployment("--default-repo-maintain-frequency=168h"))).not.toThrow();
+    // An environment made before the flag: its server maintains every repository every hour.
+    expect(() => assertMaintainFrequency(deployment())).toThrow(
+      "The Velero server of the environment runs without --default-repo-maintain-frequency=168h: the environment was made before its repositories were maintained once a week. Bring it up again: pnpm demo:down, then pnpm demo:up",
+    );
+    expect(() => assertMaintainFrequency(deployment("--default-repo-maintain-frequency=1h0m0s"))).toThrow(
+      "The Velero server of the environment maintains its repositories every 1 hours, not 168. Bring it up again: pnpm demo:down, then pnpm demo:up",
+    );
+  });
+
+  it("verifies an installation that holds no object of the kinds the fixtures, the suites and the volume of a run make", () => {
+    for (const kind of [
+      "backups",
+      "restores",
+      "schedules",
+      "downloadrequests",
+      "serverstatusrequests",
+      "backuprepositories",
+      "podvolumebackups",
+      "podvolumerestores",
+      "datauploads",
+      "datadownloads",
+    ])
+      expect(FIXTURE_FREE_KINDS).toContain(`${kind}.velero.io`);
+    expect(FIXTURE_FREE_KINDS).toHaveLength(10);
+    expect(() => assertFixtureFreeInstallation([])).not.toThrow();
+    for (const [apiVersion, kind, name] of [
+      ["velero.io/v1", "BackupRepository", "velero-source-run-default-kopia"],
+      ["velero.io/v1", "PodVolumeBackup", "fixture-volume-backup-run-abcde"],
+      ["velero.io/v1", "PodVolumeRestore", "fixture-volume-restore-run-abcde"],
+      ["velero.io/v2alpha1", "DataUpload", "synthetic-upload"],
+      ["velero.io/v2alpha1", "DataDownload", "synthetic-download"],
+    ])
+      expect(() =>
+        assertFixtureFreeInstallation([{ apiVersion, kind, metadata: { name, namespace: "velero-demo" } }]),
+      ).toThrow(`T0.4 readiness requires a fixture-free installation; it holds ${kind} ${name}`);
+  });
+
   it("pins every image and the loopback-only kind API", () => {
     for (const image of Object.values(IMAGES)) expect(image).toMatch(/@sha256:[a-f0-9]{64}$/);
     const configuration = kindConfiguration("/synthetic-private/kind-hosts");
@@ -11646,6 +12188,682 @@ describe("local storage setup contracts", () => {
       type: "ClusterIP",
       ports: [{ port: 8333 }],
     });
+  });
+});
+
+describe("the volume of the environment", () => {
+  const run = "a1b2c3d4";
+  const owner = "synthetic-owner";
+  const names = fixtureNames(run);
+  const written = "c".repeat(64);
+  const printed = (held = written, size = VOLUME_BYTES) => `written ${written}\nheld ${held}\nsize ${size}\n`;
+  const labelled = (location = "default", namespace = names.source) => ({
+    [REPOSITORY_LABELS.volumeNamespace]: namespace,
+    [REPOSITORY_LABELS.location]: location,
+    [REPOSITORY_LABELS.type]: "kopia",
+  });
+  const repository = (name: string, labels: Record<string, string>, status: Record<string, unknown> = {}) => ({
+    apiVersion: "velero.io/v1",
+    kind: "BackupRepository",
+    metadata: { name, namespace: "velero-demo", uid: `uid-${name}`, labels },
+    spec: { volumeNamespace: names.source, backupStorageLocation: "default", maintenanceFrequency: "168h0m0s" },
+    status: { phase: "Ready", lastMaintenanceTime: "2026-10-29T20:00:00Z", ...status },
+  });
+
+  // What the node agent and the server do for the volume of a run, as narrowly as its flow asks: the pod Running
+  // with what it printed, the backup Completed with one pod volume backup and the repository Ready, the restore
+  // Completed with one pod volume restore, and the restored pod. It plays no other command: it refuses each with
+  // its words, a read of a repository by its name among them.
+  function volumeRuntime(
+    told: {
+      pod?: { phase?: string; waiting?: string };
+      backup?: string;
+      restore?: string;
+      podVolumeBackup?: string;
+      podVolumeRestore?: string;
+      repositories?: ReturnType<typeof repository>[];
+      sourceLog?: string;
+      restoredLog?: string;
+    } = {},
+  ) {
+    let clock = 0;
+    const applied: KubeResource[] = [];
+    const asked: string[] = [];
+    const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" };
+    const json = (value: unknown) => JSON.stringify(value);
+    const list = (items: unknown[]) => json({ items });
+    const operation = (kind: string, name: string, phase: string | undefined, of: Record<string, string>) => ({
+      apiVersion: "velero.io/v1",
+      kind,
+      metadata: { name, namespace: "velero-demo", uid: `uid-${name}`, labels: of },
+      spec: { node: "freelens-velero-dev-control-plane", volume: VOLUME_NAME },
+      status: {
+        ...(phase ? { phase } : {}),
+        ...(phase === "Completed" ? {} : { message: "synthetic failure\nof two lines" }),
+        snapshotID: "f".repeat(32),
+        node: "freelens-velero-dev-control-plane",
+        progress: { bytesDone: VOLUME_BYTES, totalBytes: VOLUME_BYTES },
+        startTimestamp: "2026-10-29T20:00:01Z",
+        completionTimestamp: "2026-10-29T20:00:03Z",
+      },
+    });
+    const runtime: FixtureRuntime = {
+      owner,
+      apply: (resource) => {
+        applied.push(structuredClone(resource));
+      },
+      elapsed: () => clock,
+      pause: (milliseconds) => {
+        clock += milliseconds;
+      },
+      kubectl: (args) => {
+        const at = (flag: string) => (args.includes(flag) ? args[args.indexOf(flag) + 1] : undefined);
+        const namespace = at("--namespace");
+        const selector = at("--selector");
+        const has = (kind: string) => applied.some((resource) => resource.kind === kind);
+
+        asked.push(args.slice(0, 2).join(" "));
+        if (args[0] === "logs" && args[1] === names.volumePod && namespace === names.source)
+          return told.sourceLog ?? printed();
+        if (args[0] === "logs" && args[1] === names.volumePod && namespace === names.restored)
+          return told.restoredLog ?? printed();
+        if (args[0] === "get" && args[1] === "Pod" && args[2] === names.volumePod && has("Pod"))
+          return json({
+            apiVersion: "v1",
+            kind: "Pod",
+            metadata: { name: names.volumePod, namespace, uid: `uid-pod-${namespace}`, labels },
+            spec: { nodeName: "freelens-velero-dev-control-plane" },
+            status: {
+              phase: told.pod?.phase ?? "Running",
+              containerStatuses: [
+                told.pod?.waiting
+                  ? { ready: false, state: { waiting: { reason: told.pod.waiting } } }
+                  : { ready: (told.pod?.phase ?? "Running") === "Running", state: { running: {} } },
+              ],
+            },
+          });
+        if (args[0] === "get" && args[1] === "Backup.velero.io" && args[2] === names.volumeBackup && has("Backup"))
+          return json({
+            ...liveVolumeBackup(owner, run),
+            metadata: { ...liveVolumeBackup(owner, run).metadata, uid: "uid-backup" },
+            status: { phase: told.backup ?? "Completed" },
+          });
+        if (args[0] === "get" && args[1] === "Restore.velero.io" && args[2] === names.volumeRestore && has("Restore"))
+          return json({
+            ...liveVolumeRestore(owner, run),
+            metadata: { ...liveVolumeRestore(owner, run).metadata, uid: "uid-restore" },
+            status: { phase: told.restore ?? "Completed" },
+          });
+        // A list by labels, as the API server answers one: the objects that carry every label of the selector.
+        const matching = (items: { metadata: { labels?: Record<string, string> } }[]) =>
+          items.filter((item) =>
+            (selector ?? "")
+              .split(",")
+              .every((pair) => item.metadata.labels?.[pair.split("=")[0]] === pair.split("=")[1]),
+          );
+        if (args[0] === "get" && args.length === 8 && selector && namespace === "velero-demo") {
+          if (args[1] === "podvolumebackups.velero.io")
+            return list(
+              matching([
+                operation("PodVolumeBackup", `${names.volumeBackup}-x7k2p`, told.podVolumeBackup ?? "Completed", {
+                  "velero.io/backup-name": names.volumeBackup,
+                  "velero.io/backup-uid": "uid-backup",
+                }),
+              ]),
+            );
+          if (args[1] === "podvolumerestores.velero.io")
+            return list(
+              matching([
+                operation("PodVolumeRestore", `${names.volumeRestore}-q9m4z`, told.podVolumeRestore ?? "Completed", {
+                  "velero.io/restore-name": names.volumeRestore,
+                  "velero.io/restore-uid": "uid-restore",
+                }),
+              ]),
+            );
+          if (args[1] === "backuprepositories.velero.io")
+            return list(matching(told.repositories ?? [repository(`${names.source}-default-kopia`, labelled())]));
+        }
+        throw new Error(`The pretend runtime of the volume does not play: kubectl ${args.join(" ")}`);
+      },
+    };
+
+    return { runtime, applied, asked, clock: () => clock };
+  }
+
+  it("places a pod that writes a megabyte into its emptyDir, annotated for the file system backup, of the image of the store never pulled", () => {
+    const pod = liveVolumePod(owner, run);
+    const spec = pod.spec as {
+      containers: {
+        name: string;
+        image: string;
+        imagePullPolicy: string;
+        command: string[];
+        volumeMounts: { name: string; mountPath: string }[];
+      }[];
+      volumes: { name: string; emptyDir?: Record<string, never> }[];
+    };
+
+    expect(pod.metadata).toEqual({
+      name: `fixture-volume-${run}`,
+      namespace: `velero-source-${run}`,
+      labels: { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" },
+      annotations: { "backup.velero.io/backup-volumes": "data" },
+    });
+    expect(spec.containers).toHaveLength(1);
+    expect(spec.containers[0].image).toBe(preloadedImage(IMAGES.storage));
+    expect(spec.containers[0].imagePullPolicy).toBe("Never");
+    expect(spec.containers[0].command).toEqual(["sh", "-c", VOLUME_SCRIPT]);
+    expect(spec.containers[0].volumeMounts).toEqual([{ name: "data", mountPath: "/data" }]);
+    expect(spec.volumes).toEqual([{ name: "data", emptyDir: {} }]);
+    // The bytes are written once, when the volume holds none: the restored pod prints what the restore put there.
+    expect(VOLUME_SCRIPT).toContain(`if [ ! -f bytes ]; then head -c ${1024 * 1024} /dev/urandom > bytes;`);
+    expect(VOLUME_SCRIPT).toContain('echo "written $(cat written)"');
+    expect(VOLUME_SCRIPT).toContain('echo "held $(sha256sum bytes | cut -d " " -f 1)"');
+    expect(VOLUME_SCRIPT.endsWith("while true; do sleep 3600; done")).toBe(true);
+    expect(volumeLog(printed())).toEqual({ written, held: written, size: VOLUME_BYTES });
+    expect(volumeLog(`written ${written}\n`)).toBeUndefined();
+    expect(volumeLog("")).toBeUndefined();
+  });
+
+  it("backs up the pod by the label of the run and restores it into the destination namespace, pods only", () => {
+    expect(liveVolumeBackup(owner, run)).toMatchObject({
+      metadata: { name: `fixture-volume-backup-${run}`, namespace: "velero-demo" },
+      spec: {
+        includedNamespaces: [names.source],
+        includedResources: ["pods"],
+        labelSelector: { matchLabels: { [FIXTURE_LABEL]: run } },
+        includeClusterResources: false,
+        storageLocation: "default",
+        snapshotVolumes: false,
+        defaultVolumesToFsBackup: false,
+        ttl: LIVE_RETENTION,
+      },
+    });
+    const restore = liveVolumeRestore(owner, run);
+
+    expect(restore.metadata.name).toBe(`fixture-volume-restore-${run}`);
+    expect(restore.spec).toEqual({
+      backupName: names.volumeBackup,
+      includedNamespaces: [names.source],
+      includedResources: ["pods"],
+      namespaceMapping: { [names.source]: names.restored },
+      includeClusterResources: false,
+      existingResourcePolicy: "none",
+    });
+  });
+
+  it("waits for the pod, the backup and the restore of the volume, and records what the node agent and the server made, found by their labels", () => {
+    const { runtime, applied, asked } = volumeRuntime();
+    const record = runLiveVolume(runtime, run);
+
+    expect(applied.map((resource) => `${resource.kind}/${resource.metadata.name}`)).toEqual([
+      `Pod/${names.volumePod}`,
+      `Backup/${names.volumeBackup}`,
+      `Restore/${names.volumeRestore}`,
+    ]);
+    expect(record).toEqual({
+      pod: { name: names.volumePod, uid: `uid-pod-${names.source}`, node: "freelens-velero-dev-control-plane" },
+      restoredPod: {
+        name: names.volumePod,
+        uid: `uid-pod-${names.restored}`,
+        node: "freelens-velero-dev-control-plane",
+      },
+      backup: { name: names.volumeBackup, uid: "uid-backup" },
+      restore: { name: names.volumeRestore, uid: "uid-restore" },
+      podVolumeBackup: {
+        name: `${names.volumeBackup}-x7k2p`,
+        uid: `uid-${names.volumeBackup}-x7k2p`,
+        node: "freelens-velero-dev-control-plane",
+        snapshotID: "f".repeat(32),
+        bytes: VOLUME_BYTES,
+        started: "2026-10-29T20:00:01Z",
+        completed: "2026-10-29T20:00:03Z",
+      },
+      podVolumeRestore: {
+        name: `${names.volumeRestore}-q9m4z`,
+        uid: `uid-${names.volumeRestore}-q9m4z`,
+        node: "freelens-velero-dev-control-plane",
+        bytes: VOLUME_BYTES,
+        started: "2026-10-29T20:00:01Z",
+        completed: "2026-10-29T20:00:03Z",
+      },
+      repository: {
+        name: `${names.source}-default-kopia`,
+        uid: `uid-${names.source}-default-kopia`,
+        labels: labelled(),
+        maintenanceFrequency: "168h0m0s",
+        lastMaintenanceTime: "2026-10-29T20:00:00Z",
+      },
+      checksum: written,
+      bytes: VOLUME_BYTES,
+    });
+    // Nothing of Velero is read by a name it generated, and nothing is written but the three objects applied.
+    expect(asked.filter((words) => !words.startsWith("get") && !words.startsWith("logs"))).toEqual([]);
+  });
+
+  it.each([
+    [{ backup: "PartiallyFailed" }, `The Backup fixture-volume-backup-${run} of the volume ended in PartiallyFailed`],
+    [{ restore: "Failed" }, `The Restore fixture-volume-restore-${run} of the volume ended in Failed`],
+    [
+      { podVolumeBackup: "Failed" },
+      `The pod volume backup fixture-volume-backup-${run}-x7k2p of the backup fixture-volume-backup-${run} is Failed: synthetic failure\nof two lines`,
+    ],
+    [
+      { podVolumeRestore: "Canceled" },
+      `The pod volume restore fixture-volume-restore-${run}-q9m4z of the restore fixture-volume-restore-${run} is Canceled: synthetic failure\nof two lines`,
+    ],
+    [
+      {
+        repositories: [
+          repository(`velero-source-${run}-default-kopia`, labelled(), {
+            phase: "NotReady",
+            message: "synthetic\nunready",
+          }),
+        ],
+      },
+      `The repository velero-source-${run}-default-kopia of the volume is NotReady: synthetic\nunready`,
+    ],
+    [
+      {
+        repositories: [
+          { ...repository(`velero-source-${run}-default-kopia`, labelled()), spec: { maintenanceFrequency: "1h0m0s" } },
+        ],
+      },
+      `The repository velero-source-${run}-default-kopia is maintained every 1h0m0s, not every 168 hours: bring the environment up again, pnpm demo:down then pnpm demo:up`,
+    ],
+    [
+      { backup: "InProgress" },
+      `The Backup fixture-volume-backup-${run} of the volume did not complete within 180 seconds`,
+    ],
+    [
+      { pod: { phase: "Pending" } },
+      `The pod fixture-volume-${run} of the volume was not Running in velero-source-${run} within 180 seconds`,
+    ],
+    [
+      { pod: { phase: "Pending", waiting: "ErrImageNeverPull" } },
+      `The pod fixture-volume-${run} of the volume cannot start: the image of the store is not in the node, and it is never pulled`,
+    ],
+    [
+      { restoredLog: printed("d".repeat(64)) },
+      `The restored volume of fixture-volume-${run} holds other bytes than the pod wrote`,
+    ],
+    // The source holds the megabyte it wrote: fewer bytes, or other ones, are refused before the backup.
+    [
+      { sourceLog: printed(written, VOLUME_BYTES - 1) },
+      `The pod fixture-volume-${run} holds other bytes than it wrote`,
+    ],
+    [{ sourceLog: printed("e".repeat(64)) }, `The pod fixture-volume-${run} holds other bytes than it wrote`],
+  ])("refuses with its words a volume that does not go as the release makes it go: %j", (told, words) => {
+    const { runtime, clock } = volumeRuntime(told as Parameters<typeof volumeRuntime>[0]);
+
+    expect(() => runLiveVolume(runtime, run)).toThrow(words);
+    // A bound passed is a bound of its own, and nothing waits longer than it.
+    expect(clock()).toBeLessThanOrEqual(180_000);
+  });
+
+  it("finds the repository of the run by its three labels, never by its name", () => {
+    const named = `velero-source-${run}-default-kopia`;
+
+    // The name the release gives the repository, with the labels of another location: not the one of the run.
+    expect(() =>
+      runLiveVolume(volumeRuntime({ repositories: [repository(named, labelled("elsewhere"))] }).runtime, run),
+    ).toThrow(`No repository is labelled for velero-source-${run}, default and kopia in velero-demo`);
+    // Another name with the labels of the run is the one.
+    expect(
+      runLiveVolume(volumeRuntime({ repositories: [repository(`${named}-renamed`, labelled())] }).runtime, run)
+        .repository.name,
+    ).toBe(`${named}-renamed`);
+    // Two of the same three labels are said so, as the release refuses them.
+    expect(() =>
+      runLiveVolume(
+        volumeRuntime({ repositories: [repository(named, labelled()), repository(`${named}-second`, labelled())] })
+          .runtime,
+        run,
+      ),
+    ).toThrow(
+      `More than one repository is labelled for velero-source-${run}, default and kopia: ${named}, ${named}-second`,
+    );
+    expect(
+      runRepository(
+        [repository("a", labelled("default", "other")), repository("b", labelled())] as KubeResource[],
+        names.source,
+      ).metadata.name,
+    ).toBe("b");
+  });
+
+  it("places the views only more than a day before the next maintenance of the repository of the volume", () => {
+    const name = `velero-source-${run}-default-kopia`;
+    const now = Date.parse("2026-10-29T20:00:00Z");
+    const maintained = (last: string | undefined, frequency = "168h0m0s") => [
+      {
+        ...repository(
+          name,
+          labelled(),
+          last === undefined ? { lastMaintenanceTime: undefined } : { lastMaintenanceTime: last },
+        ),
+        spec: { maintenanceFrequency: frequency },
+      },
+    ];
+    const due = (at: string, when: string) =>
+      `The repository ${name} of the volume of the run is due for its maintenance ${at === "" ? when : `at ${at}, ${when}`}: its Job would run while the suites run. Create the environment again with \`pnpm demo:down\` and \`pnpm demo:up\`.`;
+
+    expect(MAINTENANCE_MARGIN).toBe(24 * HOUR);
+    // Maintained at its initialization an hour ago: the next is in 167 hours.
+    expect(assertMaintenanceAhead(maintained("2026-10-29T19:00:00Z"), run, now)).toEqual({
+      next: Date.parse("2026-11-05T19:00:00Z"),
+    });
+    // Exactly a day before, it is placed; a second less, it is not.
+    expect(() => assertMaintenanceAhead(maintained("2026-10-23T20:00:00Z"), run, now)).not.toThrow();
+    expect(() => assertMaintenanceAhead(maintained("2026-10-23T20:00:00Z"), run, now + 1000)).toThrow(
+      due("2026-10-30T20:00:00.000Z", "less than a day from now"),
+    );
+    // No last maintenance, or no frequency, is due now.
+    expect(() => assertMaintenanceAhead(maintained(undefined), run, now)).toThrow(
+      due("", "now, since it names no last maintenance or no frequency"),
+    );
+    expect(() => assertMaintenanceAhead(maintained("2026-10-29T19:00:00Z", ""), run, now)).toThrow(
+      due("", "now, since it names no last maintenance or no frequency"),
+    );
+    // No repository of the run, or two: the environment does not hold the volume of the run as it was made.
+    expect(() => assertMaintenanceAhead([], run, now)).toThrow(
+      `No repository is labelled for velero-source-${run}, default and kopia in velero-demo`,
+    );
+  });
+
+  // The server makes the repository before the pod volume backup: a backup of the volume that fails after it
+  // leaves the repository labelled for the run, which the cleanup removes only when the run recorded it.
+  it.each([
+    [{ backup: "PartiallyFailed" }, `The Backup fixture-volume-backup-${run} of the volume ended in PartiallyFailed`],
+    [
+      { podVolumeBackup: "Failed" },
+      `The pod volume backup fixture-volume-backup-${run}-x7k2p of the backup fixture-volume-backup-${run} is Failed`,
+    ],
+    [
+      { backup: "InProgress" },
+      `The Backup fixture-volume-backup-${run} of the volume did not complete within 180 seconds`,
+    ],
+  ])("records the repository the server made when the backup of the volume fails: %j", (told, words) => {
+    const kept: RunRepository[] = [];
+    const name = `velero-source-${run}-default-kopia`;
+    const { runtime } = volumeRuntime(told);
+
+    runtime.repository = { read: () => kept.at(-1), keep: (found) => kept.push(found), forget: () => undefined };
+    expect(() => runLiveVolume(runtime, run)).toThrow(words);
+    expect(kept).toEqual([{ name, uid: `uid-${name}`, labels: labelled() }]);
+  });
+
+  it("records the repository of the run as soon as it is found, before it is checked Ready", () => {
+    const kept: RunRepository[] = [];
+    const name = `velero-source-${run}-default-kopia`;
+    const { runtime } = volumeRuntime({
+      repositories: [repository(name, labelled(), { phase: "NotReady", message: "synthetic" })],
+    });
+
+    runtime.repository = { read: () => kept.at(-1), keep: (found) => kept.push(found), forget: () => undefined };
+    expect(() => runLiveVolume(runtime, run)).toThrow(`The repository ${name} of the volume is NotReady: synthetic`);
+    expect(kept).toEqual([{ name, uid: `uid-${name}`, labels: labelled() }]);
+  });
+
+  // The installation as the cleanup of the volume reads it: its repositories and its backups, the pod volume
+  // operations, and the one request it writes, the deletion of a repository by its path and its UID.
+  function removalRuntime(
+    start: {
+      repositories?: ReturnType<typeof repository>[];
+      backups?: string[];
+      operations?: KubeResource[];
+      recorded?: RunRepository;
+      goneAfter?: number;
+      stays?: boolean;
+    } = {},
+  ) {
+    let clock = 0;
+    let reads = 0;
+    let recorded = start.recorded;
+    let repositories = [...(start.repositories ?? [])];
+    let operations = [...(start.operations ?? [])];
+    const deleted: { path: string; uid: unknown }[] = [];
+    const runtime: FixtureRuntime = {
+      owner,
+      apply: () => {
+        throw new Error("The cleanup of the volume applies nothing");
+      },
+      elapsed: () => clock,
+      pause: (milliseconds) => {
+        clock += milliseconds;
+      },
+      repository: {
+        read: () => recorded,
+        keep: (found) => {
+          recorded = found;
+        },
+        forget: () => {
+          recorded = undefined;
+        },
+      },
+      kubectl: (args, input) => {
+        if (args[0] === "get" && args[1] === "backuprepositories.velero.io,backups.velero.io")
+          return JSON.stringify({
+            items: [
+              ...repositories,
+              ...(start.backups ?? []).map((name) => ({
+                apiVersion: "velero.io/v1",
+                kind: "Backup",
+                metadata: { name, namespace: "velero-demo" },
+              })),
+            ],
+          });
+        if (args[0] === "delete" && args[1] === "--raw" && args[2].includes("/backuprepositories/")) {
+          const uid = (JSON.parse(input ?? "{}") as { preconditions?: { uid?: string } }).preconditions?.uid;
+
+          deleted.push({ path: args[2], uid });
+          if (!start.stays) repositories = repositories.filter((item) => item.metadata.uid !== uid);
+          return "";
+        }
+        if (args[0] === "get" && ["podvolumebackups.velero.io", "podvolumerestores.velero.io"].includes(args[1])) {
+          const [label, value] = args[args.indexOf("--selector") + 1].split("=");
+
+          reads += 1;
+          if (start.goneAfter !== undefined && reads > start.goneAfter) operations = [];
+          return JSON.stringify({
+            items: operations.filter(
+              (item) => `${item.kind.toLowerCase()}s.velero.io` === args[1] && item.metadata.labels?.[label] === value,
+            ),
+          });
+        }
+        throw new Error(`The pretend runtime of the cleanup of the volume does not play: kubectl ${args.join(" ")}`);
+      },
+    };
+
+    return { runtime, deleted, recorded: () => recorded, clock: () => clock };
+  }
+
+  it("asks the server to delete the backup of the volume through a request, as the other backups of the run", () => {
+    expect(fixtureDeletionRequest(owner, run, "uid-backup", names.volumeBackup)).toMatchObject({
+      metadata: {
+        name: `${names.volumeBackup}-delete`,
+        labels: { "velero.io/backup-name": names.volumeBackup, "velero.io/backup-uid": "uid-backup" },
+      },
+      spec: { backupName: names.volumeBackup },
+    });
+    // The rule of the names lets the backup of the volume through: what stops this removal is its runtime.
+    expect(() =>
+      removeFixtureBackup({ owner, kubectl: () => "", apply: () => undefined }, run, names.volumeBackup),
+    ).toThrow("The removal of a backup of the fixtures needs the clock of the runtime");
+  });
+
+  it("waits for the pod volume operations of the volume to go with their owners, with a bound of its own, and names what is left", () => {
+    const of = (kind: string, name: string, labels: Record<string, string>) =>
+      ({ apiVersion: "velero.io/v1", kind, metadata: { name, namespace: "velero-demo", labels } }) as KubeResource;
+    const operations = [
+      of("PodVolumeBackup", `${names.volumeBackup}-x7k2p`, { "velero.io/backup-name": names.volumeBackup }),
+      of("PodVolumeRestore", `${names.volumeRestore}-q9m4z`, { "velero.io/restore-name": names.volumeRestore }),
+      // Of another backup: not waited for.
+      of("PodVolumeBackup", "another-backup-a1b2c", { "velero.io/backup-name": "another-backup" }),
+    ];
+    const going = removalRuntime({ operations, goneAfter: 4 });
+
+    expect(awaitVolumeOperationsRemoved(going.runtime, run)).toEqual({ waited: 2000 });
+    expect(awaitVolumeOperationsRemoved(removalRuntime().runtime, run)).toEqual({ waited: 0 });
+    const staying = removalRuntime({ operations });
+
+    expect(() => awaitVolumeOperationsRemoved(staying.runtime, run)).toThrow(
+      `The pod volume operations of the volume are still in velero-demo 120 seconds after their owners were deleted: the PodVolumeBackup ${names.volumeBackup}-x7k2p, the PodVolumeRestore ${names.volumeRestore}-q9m4z.`,
+    );
+    expect(staying.clock()).toBe(120_000);
+  });
+
+  it("removes the repository of the volume by the identity the run recorded once the backup of the volume is gone, waits until it is gone, and forgets it", () => {
+    const name = `velero-source-${run}-default-kopia`;
+    const recorded = { name, uid: `uid-${name}`, labels: labelled() };
+    const scene = removalRuntime({
+      repositories: [repository(name, labelled()), repository("other-default-kopia", labelled("default", "other"))],
+      recorded,
+    });
+
+    expect(removeRunRepository(scene.runtime, run)).toEqual({ removed: true, waited: 0 });
+    expect(scene.deleted).toEqual([
+      { path: `/apis/velero.io/v1/namespaces/velero-demo/backuprepositories/${name}`, uid: `uid-${name}` },
+    ]);
+    expect(scene.recorded()).toBeUndefined();
+    // None there: nothing is asked, and the record forgets it.
+    const none = removalRuntime({ recorded });
+
+    expect(removeRunRepository(none.runtime, run)).toEqual({ removed: false, waited: 0 });
+    expect(none.deleted).toEqual([]);
+    expect(none.recorded()).toBeUndefined();
+  });
+
+  it.each([
+    [
+      "while the backup of the volume is there",
+      { backups: [`fixture-volume-backup-${run}`] },
+      `The backup fixture-volume-backup-${run} of the volume is still in velero-demo: the repository it uses is removed once the server deleted it. Run the command again.`,
+    ],
+    [
+      "with another UID",
+      { uid: "uid-another" },
+      `The repository velero-source-${run}-default-kopia of velero-demo is not the one this run recorded, with the UID uid-velero-source-${run}-default-kopia and the labels of the volume: the one of those labels is velero-source-${run}-default-kopia, with the UID uid-another. It is not removed: the way out is to take the environment down, with \`pnpm demo:down\`.`,
+    ],
+    [
+      "with the recorded name and the labels of another location",
+      { location: "elsewhere" },
+      `The repository velero-source-${run}-default-kopia of velero-demo is not the one this run recorded, with the UID uid-velero-source-${run}-default-kopia and the labels of the volume: 0 carry those labels. It is not removed`,
+    ],
+    ["beside a second one of its labels", { second: true }, "2 carry those labels. It is not removed"],
+    [
+      "when the run recorded none",
+      { unrecorded: true },
+      `The repository velero-source-${run}-default-kopia of velero-demo carries the labels of the volume of this run, which recorded none: it is not removed`,
+    ],
+  ] as [
+    string,
+    { backups?: string[]; uid?: string; location?: string; second?: boolean; unrecorded?: boolean },
+    string,
+  ][])("refuses to remove the repository of the volume %s, and removes nothing", (_case, told, words) => {
+    const name = `velero-source-${run}-default-kopia`;
+    const found = repository(name, labelled(told.location ?? "default"));
+    const scene = removalRuntime({
+      repositories: [
+        told.uid ? { ...found, metadata: { ...found.metadata, uid: told.uid } } : found,
+        ...(told.second ? [repository(`${name}-second`, labelled())] : []),
+      ],
+      backups: told.backups,
+      recorded: told.unrecorded ? undefined : { name, uid: `uid-${name}`, labels: labelled() },
+    });
+
+    expect(() => removeRunRepository(scene.runtime, run)).toThrow(words);
+    expect(scene.deleted).toEqual([]);
+    if (!told.unrecorded) expect(scene.recorded()?.uid).toBe(`uid-${name}`);
+  });
+
+  it("refuses to wait past its bound for a repository that is still there once it was removed", () => {
+    const name = `velero-source-${run}-default-kopia`;
+    const scene = removalRuntime({
+      repositories: [repository(name, labelled())],
+      recorded: { name, uid: `uid-${name}`, labels: labelled() },
+      stays: true,
+    });
+
+    expect(() => removeRunRepository(scene.runtime, run)).toThrow(
+      `The repository ${name} of velero-demo is still there 120 seconds after it was removed: run the command again.`,
+    );
+    expect(scene.deleted).toHaveLength(1);
+    expect(scene.recorded()?.uid).toBe(`uid-${name}`);
+  });
+
+  it("names in the end check each object of the volume that is left in the installation", () => {
+    const items = [
+      {
+        kind: "PodVolumeBackup",
+        name: `${names.volumeBackup}-x7k2p`,
+        labels: { "velero.io/backup-name": names.volumeBackup },
+      },
+      {
+        kind: "PodVolumeRestore",
+        name: `${names.volumeRestore}-q9m4z`,
+        labels: { "velero.io/restore-name": names.volumeRestore },
+      },
+      { kind: "BackupRepository", name: `velero-source-${run}-default-kopia`, labels: labelled() },
+      // A repository of another namespace, and a pod volume backup of another backup, are not of the run.
+      { kind: "BackupRepository", name: "other-default-kopia", labels: labelled("default", "other") },
+      { kind: "PodVolumeBackup", name: "another-backup-a1b2c", labels: { "velero.io/backup-name": "another-backup" } },
+      { kind: "Backup", name: names.volumeBackup, labels: {} },
+      { kind: "Restore", name: names.volumeRestore, labels: {} },
+      { kind: "DeleteBackupRequest", name: `${names.volumeBackup}-delete`, labels: {} },
+    ].map(({ kind, name, labels }) => ({
+      apiVersion: "velero.io/v1",
+      kind,
+      metadata: { name, namespace: "velero-demo", labels },
+    }));
+    const runtime: FixtureRuntime = {
+      owner,
+      apply: () => undefined,
+      kubectl: () => JSON.stringify({ items }),
+      store: () => {
+        throw new Error("The store is not asked while an operation of the run is there");
+      },
+      journal: { entries: [], save: () => undefined },
+    };
+
+    expect(() => assertFixtureOperationsRemoved(runtime, run)).toThrow(
+      `The server has not removed every operation of the run from velero-demo: the PodVolumeBackup ${names.volumeBackup}-x7k2p, the PodVolumeRestore ${names.volumeRestore}-q9m4z, the BackupRepository velero-source-${run}-default-kopia, the Backup ${names.volumeBackup}, the Restore ${names.volumeRestore}, the DeleteBackupRequest ${names.volumeBackup}-delete are there.`,
+    );
+  });
+
+  it("removes a namespace of the volume with the events of its pod, and none with an event of an object that is not of the run", () => {
+    const pod = {
+      apiVersion: "v1",
+      kind: "Pod",
+      metadata: {
+        name: names.volumePod,
+        namespace: names.restored,
+        uid: "uid-pod",
+        labels: { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run },
+      },
+    };
+    const event = (regarded: { kind: string; name: string; uid: string }, apiVersion = "v1") => ({
+      apiVersion,
+      kind: "Event",
+      metadata: { name: `${names.volumePod}.18f0a1b2c3d4e5f6`, namespace: names.restored },
+      ...(apiVersion === "v1" ? { involvedObject: regarded } : { regarding: regarded }),
+    });
+    const of = { kind: "Pod", name: names.volumePod, uid: "uid-pod" };
+    const refused = `The namespace ${names.restored} of the fixtures holds the Event ${names.volumePod}.18f0a1b2c3d4e5f6, which is not of this run`;
+
+    expect(() => assertFixtureNamespaceContents(owner, run, names.restored, [pod, event(of)])).not.toThrow();
+    expect(() =>
+      assertFixtureNamespaceContents(owner, run, names.restored, [pod, event(of, "events.k8s.io/v1")]),
+    ).not.toThrow();
+    expect(() =>
+      assertFixtureNamespaceContents(owner, run, names.restored, [pod, event({ ...of, uid: "uid-other" })]),
+    ).toThrow(refused);
+    expect(() => assertFixtureNamespaceContents(owner, run, names.restored, [event(of)])).toThrow(refused);
+    expect(() =>
+      assertFixtureNamespaceContents(owner, run, names.restored, [
+        { ...pod, metadata: { ...pod.metadata, labels: { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: "b1b2b3b4" } } },
+        event(of),
+      ]),
+    ).toThrow(/holds the Pod/);
   });
 });
 

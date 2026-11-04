@@ -55,9 +55,9 @@ in the Design:
   ([upload](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/backup/actions/csi/pvc_action.go#L540-L597),
   [download](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/restore/actions/csi/pvc_action.go#L405-L453)).
 - The test environment installs the server and the node agent, with the volume
-  snapshots off ([the install](../../e2e/scripts/local-demo.mts#L1092-L1094)),
+  snapshots off ([the install](../../e2e/scripts/local-manifests.mts#L163-L164)),
   and its live backup is of ConfigMaps with `defaultVolumesToFsBackup: false`
-  ([the backup](../../e2e/scripts/local-fixtures.mts#L1959-L1984)): no object of
+  ([the backup](../../e2e/scripts/local-fixtures.mts#L2575-L2600)): no object of
   these five kinds exists in it today.
 
 Included: the five lists, the five workspaces, the five sections in the details
@@ -502,7 +502,17 @@ maintenance time its initialization wrote, and the server patches no repository
 at its pass. A maintenance history is seen for real in a demo brought up with a
 shorter frequency, a setting of the demo scripts that the suites never use; the
 suites expect the first maintenance time alone. The guard keeps its rule: the
-one write of the installation it expects is the validation of its location.
+writes of the installation it expects are the validation of its location and the
+PATCH the controller sends at each look to the schedule it validated, within a
+bound. What the server sends to the real repository at its pass, and whether a
+controller lists the kinds of the operations, are measured on the environment
+before any suite rests on them: when the server writes the repository at each
+pass, the guard leaves that verb of the repositories out of the writes and
+compares the status of the real repository and the versions of the synthetic
+ones; when a controller lists the operations, what a view lists is counted
+against a window of the same length with no view open. Measured on 2026-11-02 over
+fifteen minutes with no view open: the server wrote nothing to the repository, and
+no controller listed the operations, which they watch.
 
 | Check | Layer | Requirements | Scenario and expected evidence |
 | --- | --- | --- | --- |
@@ -1312,3 +1322,148 @@ Decided while implementing, on 2026-10-29:
   which REQ-102 of [SPEC-0008](SPEC-0008-overview.md) names alone.
 - The index of the specs names the third pull request in the rows of SPEC-0014 and
   of SPEC-0008.
+
+T5.1, the fourth of its five pull requests, phase A of 2026-10-29 and 2026-11-02:
+the environment places the volume of each run and removes it, the views and the
+long lists hold pod volume operations, the suites compare and read the three
+kinds, and the second reader reads them. Its phase B, on 2026-11-02 and
+2026-11-04, created the environment again, read back what the volume left
+(RECON-T0.1), ran every suite of the views, the pre-review and FND-10 green in the
+packaged application, 256 cases in 16 files, and found the deletion of the backup
+of the volume refused after the transport proof, which the decisions of 2026-11-04
+settle.
+
+- Volumes (REQ-195): the server is installed with
+  `--default-repo-maintain-frequency=168h`, which the probe of the images finds in
+  the help of the installer, and the verification reads it on the Deployment of the
+  server, as `168h` or `168h0m0s`, and asks for the environment to be brought up
+  again without it; it refuses an installation that holds an object of the five
+  kinds. The live fixtures back up and restore a pod whose `emptyDir` named `data`
+  holds a megabyte of random bytes and their checksum, of the image of the store,
+  never pulled; the pod volume backup and restore are found by the labels of the
+  name and the UID of their owners, the repository by its three labels, and the
+  checksum of the restored bytes is read from the log of the restored pod. The
+  record of the live fixtures holds what was found: on 2026-11-02 the pod volume
+  backup and restore Completed within seconds, 1,048,641 bytes each, the repository
+  Ready and maintained every `168h0m0s`, and the restored checksum the one written
+  (RECON-T0.1, "With The Volume Of The Environment").
+- The cleanup has the server delete the backup of the volume through a request,
+  with its restore; the pod volume operations go with their owners, waited for with
+  a bound of their own; the repository is deleted by the identity the run recorded,
+  with its UID as a precondition, once the backup is gone. The data of the
+  repository stays in the bucket until `pnpm demo:down`.
+- Reader: the second reader reads the pod volume backups, the pod volume restores
+  and the backup repositories of its namespace; the first keeps its three kinds.
+- The guard compares eight kinds; what the server sends at its pass and what the
+  controllers list (LM4), measured on 2026-11-02 over fifteen minutes with no view
+  open: nothing written to the repository, and no list of the operations, only
+  their watches; both constants keep their defaults.
+- Operations (478): twenty-three pod volume operations in `velero-views-<run>`,
+  placed once with the views, each created after its owner with the UID the
+  cluster gave it, every status one the release writes in that phase; nothing of
+  the data movement, which a later pull request places. Deviation from the table:
+  one pod volume backup names a triple of no repository, to show the operation
+  whose repository is not there.
+- Repositories (479): nine in `velero-views-<run>`, with the three labels the
+  release writes, two of them of one triple.
+- Long lists (480): 2,000 pod volume backups in `velero-scale-<run>`, two of each
+  of the first nine hundred backups and two hundred of the last, placed by the
+  clock in two phases by their owners: the backups and the restores first, their
+  UIDs read, then the operations in one create, each owned by its backup as the
+  release writes it, accepted a minute after its backup started, in the phases the
+  release writes in turn and never none. Their digest is made with placeholder
+  UIDs. Placed again, the operations are removed first and read until they are
+  gone, then the rest. The 200 data uploads are of a later pull request. The probe
+  of the fixtures finds the two hundred of the last backup by its label. On
+  2026-11-02 `pnpm demo:views` placed them in 117 seconds with the other fixtures
+  of the views, and the two hundred of the last backup, read back, name its UID in
+  their owner reference and in their label, twenty-five in each phase.
+
+Decided while implementing, on 2026-10-29:
+
+- LM1: the live flow of the volume runs in the live fixtures, which `pnpm demo:up`,
+  the fixture suite and the transport proof run; the environment is created again
+  once, and the hosted job keeps its shape. A placement of the views that finds the
+  repository of the volume less than a day from its next maintenance stops and says
+  to create the environment again, about six days after `pnpm demo:up` with `168h`.
+- The end check of the cleanup asks the store, HEAD only, for the nine keys the
+  server writes for the backup and the restore of the volume, beside the ones of
+  the real operations; the keys of the repository of the volume are not asked, since
+  its data stays in the bucket until `pnpm demo:down`.
+- LM2: the pod runs the image of the store, preloaded and pinned, with
+  `imagePullPolicy: Never`; its entry point is checked first in phase B, and the
+  image of the helpers is its fallback, written only if that check refuses it.
+- LM3: the cleanup deletes the repository of the run by its UID after the backup
+  of the volume is gone, and its end check names it while it is there; its data
+  stays in the bucket until `pnpm demo:down`; no script removes a key of the store.
+- LM4: two constants beside the one of the schedule, set from the measure of phase
+  B, each branch a pure function of the guard tested both ways.
+- The repository is kept out of the resources of the journal, which ask the label
+  of the demo of each entry; its name, UID and three labels are in the record of
+  the run and in `fixture-live-result.json`; it is told as of the run by its three
+  labels, removed with `delete --raw` and `preconditions.uid`, refused when the
+  labels or the UID differ.
+- The restore of the volume names the pods alone, as its backup does: the release
+  restores the volumes of a pod it restores whose pod volume backups hold a
+  snapshot, whatever else the restore leaves out, and an `emptyDir` names no claim
+  (`pkg/restore/restore.go:2046-2055`, `pkg/podvolume/util.go:75-102` and
+  `pkg/podvolume/restorer.go:174-193` of the source of the release).
+- The checksum of the restored data is read from the log of each pod, without an
+  `exec`.
+- The pod volume operations of the views are owned by backups and restores of the
+  views that exist, so that no count of the backups and the restores of the views
+  moves; two repositories of one triple are placed in that namespace, which no
+  controller reads.
+- The operations of the views take the name of their owner, a dash and five
+  lower-case letters and digits made of the run, the owner and their place, not
+  drawn by chance, so that a second placement finds each by its name.
+- The volumes suite says its words of an empty list in the installation of the
+  defaults, now that the one of the views holds the three kinds.
+- A namespace of the fixtures is removed with the events the cluster wrote of a pod
+  of the run, told by the object they regard.
+- Phase B is split: the environment, its measures, its placements, the cleanup
+  proof and `pnpm e2e` first; the suites and the pre-review once the pull request
+  is rebased on a main that holds the second and the third pull requests.
+
+Decided while implementing, on 2026-11-02:
+
+- The placement by the clock has three ways, each for its namespaces and refused
+  for any other: in one phase, the Overview; in two by the clock of their
+  submissions, the installations of the adherence; in two by their owners, the
+  long lists.
+- The backups between the nine hundredth and the last own no pod volume backup,
+  so that the list of the operations of a backup is empty, short and long among
+  the long lists.
+- Two operations of one backup whose generated names would be the same: the second
+  is drawn again from another seed, so that no create is refused for a name that is
+  taken.
+- The count the views placement says of the long lists names their pod volume
+  backups; the restores are what was found, less the backups and the operations.
+- The path a synthetic pod volume backup that completed reports is a slash and a
+  UID made of the run and of its key: the release writes a slash and the UID of the
+  pod volume backup, where its node agent mounts the volume (seen with the volume of
+  the environment, RECON-T0.1), and the UID of a synthetic one is given by the
+  cluster when it is created. The path of the volume on the node, which the
+  operations of the views carried before, is not what this release writes.
+- The pod volume backups of the long lists take no account of the phase of their
+  backup: a backup that never started or failed its validation owns operations
+  that completed. No view reads the phase of the owner beside its operations.
+
+Decided while implementing, on 2026-11-04:
+
+- The cleanup asks the deletion of the backup of the volume once the repository of
+  the volume is Ready, read again for six minutes at most, and the transport proof
+  changes the storage location only once the rollout of the store has ended, at
+  its start and at its end. `pnpm e2e` failed twice that day at the cleanup after
+  the proof: the server ended the request with "backup repository is not ready:
+  error to check backup repo: error to connect to storage", and left the backup
+  with its files. The release makes every repository of a location NotReady when
+  the location changes and checks each again at once, a check while the store
+  restarts fails, and the next comes with the sync, five minutes later
+  (`pkg/controller/backup_repository_controller.go:54` and `114-160`); and the
+  server refuses at once to forget the snapshots of a backup through a repository
+  that is not Ready (`pkg/repository/ensurer.go:118-141` and
+  `pkg/repository/backup_repo_op.go:81-83`).
+- The evidence of phase B is read from the store through the filer of its own pod,
+  at `127.0.0.1`, with no credentials and nothing written; the scripts of the
+  environment keep asking the store only what `assertStoreRequest` allows.

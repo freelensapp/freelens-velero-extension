@@ -4,12 +4,15 @@
  */
 
 // The backup repositories, the pod volume backups and the pod volume restores, in a packaged Freelens, against
-// the test environment as its fixtures leave it today: no object of the three kinds is in it, in the namespace of
-// the views or in the one of the installation, where no backup of the file system ran yet. The suite proves the
-// lists of the three kinds with what they say of a namespace that holds none, and the reads of the pod volume
-// operations, which the views ask only while a view that shows them is open, counted on the API server: their
-// lists, and the view of a backup and of a restore, whose band shows the operations of its own kind. The suite
-// reads the application and the cluster, and writes to neither.
+// the test environment as its fixtures leave it: the namespace of the views holds the pod volume operations and the
+// repositories of its fixtures, the one of the defaults none of the three kinds, and the installation what the
+// volume of the run made there, one repository Ready, one pod volume backup and one pod volume restore; its cases
+// read the repository, and the two operations are probed by `fixturesReady`, which calls them missing. The suite
+// proves the lists of the three kinds with what they say of a namespace that holds none, the repository of the
+// installation as the cluster holds it, and the reads of the pod volume operations, which the views ask only while
+// a view that shows them is open, counted on the API server: their lists, and the view of a backup and of a
+// restore, whose band shows the operations of its own kind. The suite reads the application and the cluster, and
+// writes to neither.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as cluster from "../../integration/helpers/velero-cluster";
@@ -83,15 +86,15 @@ describe("views of the backup repositories and of the pod volume operations", ()
   }, TIMEOUT);
 
   it(
-    "lists none of the three kinds in the installation of the views, and says of each list of what it is",
+    "lists none of the three kinds in the installation of the defaults, and says of each list of what it is",
     async () => {
       for (const [of, noun] of LISTS) {
         await cluster.openPage(frame, of);
-        if (of === cluster.REPOSITORIES) await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+        if (of === cluster.REPOSITORIES) await cluster.selectInstallation(frame, cluster.E2E_DEFAULTS_NAMESPACE);
         await frame.waitForSelector(`[data-testid=velero-${of.id}-empty]`, { timeout: 60_000 });
         expect([of.id, await empty(of)]).toEqual([
           of.id,
-          `No ${noun} is in the namespace ${cluster.E2E_VIEWS_NAMESPACE} of ${cluster.E2E_KUBE_CONTEXT}.`,
+          `No ${noun} is in the namespace ${cluster.E2E_DEFAULTS_NAMESPACE} of ${cluster.E2E_KUBE_CONTEXT}.`,
         ]);
         // The host says that the list is empty: no row, and the count of none, which is a count.
         expect([of.id, await cluster.mounted(frame, of)]).toEqual([of.id, []]);
@@ -114,15 +117,17 @@ describe("views of the backup repositories and of the pod volume operations", ()
   );
 
   it(
-    "lists no backup repository in the installation, where no backup of the file system ran yet",
+    "lists in the installation the one backup repository the volume of the run made, Ready, as the cluster holds it",
     async () => {
-      await cluster.openPage(frame, cluster.REPOSITORIES);
-      await cluster.selectInstallation(frame, cluster.E2E_NAMESPACE);
-      await frame.waitForSelector(`[data-testid=velero-${cluster.REPOSITORIES.id}-empty]`, { timeout: 60_000 });
-      expect(await empty(cluster.REPOSITORIES)).toBe(
-        `No backup repository is in the namespace ${cluster.E2E_NAMESPACE} of ${cluster.E2E_KUBE_CONTEXT}.`,
+      // The repository the server made for the volume of the run, read by the suite on the cluster by the three
+      // labels the release writes into it, never by its name, which the release says it may change.
+      const made = cluster.labelledObjects<{ metadata: { name: string }; status?: { phase?: string } }>(
+        "backuprepositories",
+        cluster.runRepositorySelector(),
       );
-      // The cluster says the same, read by the suite and not by the application.
+
+      expect(made.map((repository) => repository.status?.phase)).toEqual(["Ready"]);
+      // It is the one repository of the installation, read by the suite and not by the application.
       const held = cluster.kubectlE2E(
         "get",
         "backuprepositories.velero.io",
@@ -132,7 +137,16 @@ describe("views of the backup repositories and of the pod volume operations", ()
         "name",
       );
 
-      expect([held.status, held.stdout.trim()]).toEqual([0, ""]);
+      expect([held.status, held.stdout.trim()]).toEqual([0, `backuprepository.velero.io/${made[0].metadata.name}`]);
+      await cluster.openPage(frame, cluster.REPOSITORIES);
+      await cluster.selectInstallation(frame, cluster.E2E_NAMESPACE);
+      await frame.waitForSelector(
+        `[data-testid=velero-${cluster.REPOSITORIES.id}] [data-${cluster.REPOSITORIES.kind}-row]`,
+        { timeout: 60_000 },
+      );
+      expect(await cluster.mounted(frame, cluster.REPOSITORIES)).toEqual([made[0].metadata.name]);
+      expect(await cluster.notices(frame, [])).toEqual({});
+      expect(await cluster.layoutProblems(frame, cluster.REPOSITORIES)).toEqual([]);
       await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
     },
     TIMEOUT,
@@ -141,8 +155,12 @@ describe("views of the backup repositories and of the pod volume operations", ()
   it(
     "reads the pod volume backups while their list is shown, once at each read, and not while another page is",
     async () => {
+      // The installation of the views holds pod volume backups and pod volume restores of its fixtures.
       await cluster.openPage(frame, cluster.POD_VOLUME_BACKUPS);
-      await frame.waitForSelector(`[data-testid=velero-${cluster.POD_VOLUME_BACKUPS.id}-empty]`, { timeout: 60_000 });
+      await frame.waitForSelector(
+        `[data-testid=velero-${cluster.POD_VOLUME_BACKUPS.id}] [data-${cluster.POD_VOLUME_BACKUPS.kind}-row]`,
+        { timeout: 60_000 },
+      );
       const shown = await askedOver(CYCLES);
 
       report.podVolumeBackupsShown = shown;
@@ -158,7 +176,10 @@ describe("views of the backup repositories and of the pod volume operations", ()
       expect(shown[PVB] ?? 0).toBeLessThanOrEqual(CYCLES + 1);
       expect(shown[PVR] ?? 0).toBe(0);
       await cluster.openPage(frame, cluster.POD_VOLUME_RESTORES);
-      await frame.waitForSelector(`[data-testid=velero-${cluster.POD_VOLUME_RESTORES.id}-empty]`, { timeout: 60_000 });
+      await frame.waitForSelector(
+        `[data-testid=velero-${cluster.POD_VOLUME_RESTORES.id}] [data-${cluster.POD_VOLUME_RESTORES.kind}-row]`,
+        { timeout: 60_000 },
+      );
       const restores = await askedOver(CYCLES);
 
       report.podVolumeRestoresShown = restores;
@@ -187,16 +208,19 @@ describe("views of the backup repositories and of the pod volume operations", ()
   it(
     "reads the pod volume backups while a backup is open and the pod volume restores while a restore is, once at each read, and not the family of the other",
     async () => {
-      for (const [of, name, kind, own, other] of [
-        [cluster.BACKUPS, BACKUP, "backupOpen", PVB, PVR],
-        [cluster.RESTORES, RESTORE, "restoreOpen", PVR, PVB],
+      // The daily backup holds no operation of its own: its one pod volume backup names in its label the UID of an
+      // earlier backup of the same name, and its band says none. The mapped restore holds its seven pod volume
+      // restores, which its band shows in rows.
+      for (const [of, name, kind, own, other, band] of [
+        [cluster.BACKUPS, BACKUP, "backupOpen", PVB, PVR, "none"],
+        [cluster.RESTORES, RESTORE, "restoreOpen", PVR, PVB, "rows"],
       ] as const) {
         await cluster.openPage(frame, of);
         await cluster.waitForList(frame, of);
         await cluster.openWorkspace(frame, name, of);
         // The view asks the family of its band at once when it opens, alone: the window begins once the band was
         // answered, and after the read of the installation that follows it ended.
-        expect([kind, (await cluster.volumeBand(frame)).state]).toEqual([kind, "none"]);
+        expect([kind, (await cluster.volumeBand(frame, band)).state]).toEqual([kind, band]);
         const open = await askedOver(CYCLES);
 
         report[kind] = open;

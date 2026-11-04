@@ -14,7 +14,7 @@ import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { captureWindowScreenshot, EXTENSION_NAME } from "./velero-extension";
-import { realScheduleSubmission, writesOf } from "./velero-guard";
+import { installedVersion, operationListsOf, realScheduleSubmission, writesOf } from "./velero-guard";
 
 import type { Frame, Locator, Page, Request } from "playwright";
 
@@ -367,13 +367,47 @@ export function fixturesReady(): boolean {
     [E2E_ADHERENCE_SCALE_NAMESPACE, "schedules.velero.io", "schedule-300"],
   ];
 
+  // What the volume of the run leaves in the installation, each found by what the release writes into it, one of
+  // each: the repository of the source namespace by its three labels, never by its name, and the pod volume backup
+  // and the pod volume restore of the volume by the label of the name of their owner. In the views, whose operations
+  // have generated names: the seven pod volume restores of their restore, and the two repositories of one triple. In
+  // the long lists, placed after their owners: the two hundred pod volume backups of their last backup.
+  const labelled: [namespace: string, resource: string, selector: string, count: number][] = [
+    [E2E_NAMESPACE, "backuprepositories.velero.io", runRepositorySelector(), 1],
+    [E2E_NAMESPACE, "podvolumebackups.velero.io", `velero.io/backup-name=fixture-volume-backup-${E2E_FIXTURE_RUN}`, 1],
+    [
+      E2E_NAMESPACE,
+      "podvolumerestores.velero.io",
+      `velero.io/restore-name=fixture-volume-restore-${E2E_FIXTURE_RUN}`,
+      1,
+    ],
+    [E2E_VIEWS_NAMESPACE, "podvolumerestores.velero.io", "velero.io/restore-name=restore-mapped", 7],
+    [E2E_VIEWS_NAMESPACE, "backuprepositories.velero.io", "velero.io/volume-namespace=views-twice", 2],
+    [E2E_SCALE_NAMESPACE, "podvolumebackups.velero.io", "velero.io/backup-name=backup-1000", 200],
+  ];
+
   // A run is eight hexadecimal characters: without one, no name of the run is probed.
   const found =
     /^[a-f0-9]{8}$/.test(E2E_FIXTURE_RUN) &&
     probes.every(
       ([namespace, resource, name]) =>
         namespace !== "" && kubectlE2E("get", resource, name, "--namespace", namespace, "-o", "name").status === 0,
-    );
+    ) &&
+    labelled.every(([namespace, resource, selector, count]) => {
+      if (namespace === "") return false;
+      const { status, stdout } = kubectlE2E(
+        "get",
+        resource,
+        "--namespace",
+        namespace,
+        "--selector",
+        selector,
+        "-o",
+        "name",
+      );
+
+      return status === 0 && stdout.split("\n").filter(Boolean).length === count;
+    });
 
   if (!found) return false;
   const installed = kubectlE2E(
@@ -395,10 +429,60 @@ export function fixturesReady(): boolean {
   return true;
 }
 
-// The kinds whose objects the snapshot of a suite compares before and after it: the ones its fixtures place.
-const SNAPSHOT_KINDS = ["backups", "restores", "schedules", "backupstoragelocations", "volumesnapshotlocations"];
-// The kinds the views read: the families of an installation, which a suite reads and counts the reads of.
-const KINDS = [...SNAPSHOT_KINDS, "backuprepositories", "podvolumebackups", "podvolumerestores"];
+/**
+ * The labels the release writes into the repository the volume of the run
+ * made, as a selector: the source namespace of the run, the location
+ * `default` and the uploader kopia. The repository is found by them, never by
+ * its name, which the release says it may change.
+ */
+export function runRepositorySelector(): string {
+  return [
+    `velero.io/volume-namespace=velero-source-${E2E_FIXTURE_RUN}`,
+    "velero.io/storage-location=default",
+    "velero.io/repository-type=kopia",
+  ].join(",");
+}
+
+/**
+ * The objects of a family of Velero in a namespace that carry the labels of
+ * `selector`, as the API server holds them: how a suite reads what the server
+ * and the node agent made, whose names they generated.
+ */
+export function labelledObjects<Read>(resource: string, selector: string, namespace = E2E_NAMESPACE): Read[] {
+  if (!KINDS.includes(resource)) {
+    throw new Error(`"${resource}" is not a family of Velero: a request is read by its name, never whole`);
+  }
+  const { status, stdout, stderr } = kubectlE2E(
+    "get",
+    `${resource}.velero.io`,
+    "--namespace",
+    namespace,
+    "--selector",
+    selector,
+    "-o",
+    "json",
+  );
+
+  if (status !== 0) throw new Error(`kubectl get ${resource} --selector ${selector} failed: ${stderr}`);
+  return (JSON.parse(stdout) as { items: Read[] }).items;
+}
+
+// The kinds whose objects the snapshot of a suite compares before and after it: the ones its fixtures place, with
+// the repositories and the pod volume operations of the views and of the long lists, by their versions, and the
+// real ones the volume of the run leaves in the installation, by their identities.
+const SNAPSHOT_KINDS = [
+  "backups",
+  "restores",
+  "schedules",
+  "backupstoragelocations",
+  "volumesnapshotlocations",
+  "backuprepositories",
+  "podvolumebackups",
+  "podvolumerestores",
+];
+// The kinds the views read: the families of an installation, which a suite reads and counts the reads of. They are
+// the kinds of the snapshot.
+const KINDS = [...SNAPSHOT_KINDS];
 // The kinds a read of Velero is asked through: a request of any of them is a write.
 const REQUESTS = ["downloadrequests", "serverstatusrequests", "deletebackuprequests"];
 
@@ -406,7 +490,9 @@ export interface ClusterSnapshot {
   /**
    * Every synthetic object with its version, which changes with every write; and each schedule of the namespace
    * of the installation, which is the one its controller validated, with its version and its status: a
-   * submission writes its last submission into it, and a patch that changes it changes its version.
+   * submission writes its last submission into it, and a patch that changes it changes its version. The real
+   * repository of the installation with its version and its status, or its status alone when the server writes
+   * it at each of its passes (`REPOSITORY_WRITTEN_AT_EACH_PASS`).
    */
   versions: Record<string, string>;
   /** The objects of the namespace of the installation, which its controllers may change. */
@@ -468,11 +554,11 @@ export function clusterSnapshot(): ClusterSnapshot {
       }
     }
     for (const item of list(kind, E2E_NAMESPACE)) {
+      const version = installedVersion(kind, item, REPOSITORY_WRITTEN_AT_EACH_PASS);
+
       installed.push(`${kind}/${item.metadata.name}/${item.metadata.uid}`);
-      if (kind === "schedules") {
-        versions[`${E2E_NAMESPACE}/${kind}/${item.metadata.name}/${item.metadata.uid}`] =
-          `${item.metadata.resourceVersion} ${JSON.stringify(item.status ?? {})}`;
-      }
+      if (version !== undefined)
+        versions[`${E2E_NAMESPACE}/${kind}/${item.metadata.name}/${item.metadata.uid}`] = version;
     }
   }
   for (const kind of REQUESTS) {
@@ -594,6 +680,33 @@ export function familyReads(counts: Record<string, number>): Record<string, numb
 export const SCHEDULE_PATCHED_AT_EVERY_LOOK: boolean = true;
 
 /**
+ * The verb of the request the server sends to the real repository at its
+ * pass, with no maintenance due, or none: the measure of the local integration
+ * of the volume of the environment says which, over fifteen minutes with no
+ * view open and nothing else reading or writing, and sets this. When it names
+ * one, `writes` leaves that verb of the repositories out, as it leaves out the
+ * PATCH of the locations, and what proves that a suite wrote nothing to a
+ * repository is the status of the real one and the versions of the synthetic
+ * ones, which the snapshot of every suite holds. Measured on 2026-11-02, over
+ * fifteen minutes with no view open and nothing else reading or writing: the
+ * server sent the repositories nothing but its watches, with its repository
+ * Ready and no maintenance due, so no verb is left out.
+ */
+export const REPOSITORY_WRITTEN_AT_EACH_PASS: string | undefined = undefined;
+
+/**
+ * Whether a controller of the installation lists the kinds of the operations
+ * of a volume in a namespace: the same measure says which, and sets this. When
+ * one does, what a view lists of them is what a window with the view open
+ * counted above a window of the same length with none (`operationLists`).
+ * Measured on 2026-11-02, over the same fifteen minutes: no list of the pod
+ * volume backups or of the pod volume restores, in a namespace or in the
+ * cluster, only the watches of the server and of the node agent, so what a view
+ * lists of them is counted alone.
+ */
+export const OPERATIONS_LISTED_BY_A_CONTROLLER: boolean = false;
+
+/**
  * The requests that change something, or ask Velero for something, among the
  * ones counted between two readings of `apiRequests` (`writesOf`), the PATCH
  * of a schedule among them, but the ones its controller sends at every look
@@ -609,7 +722,26 @@ export function writes(before: Record<string, number>, after: Record<string, num
       "The writes are counted between two readings of apiRequests, which keep the moment they were asked",
     );
   }
-  return writesOf(counted(before, after), SCHEDULE_PATCHED_AT_EVERY_LOOK, (to - from) / 60_000);
+  return writesOf(
+    counted(before, after),
+    SCHEDULE_PATCHED_AT_EVERY_LOOK,
+    (to - from) / 60_000,
+    REPOSITORY_WRITTEN_AT_EACH_PASS,
+  );
+}
+
+/**
+ * The lists of the kinds of the operations of a volume in a namespace that a
+ * view asked, by kind, from what was counted over a window with the view open
+ * (`during`): when a controller of the installation lists them too
+ * (`OPERATIONS_LISTED_BY_A_CONTROLLER`), the ones above what a window of the
+ * same length with no view open counted (`without`).
+ */
+export function operationLists(
+  during: Record<string, number>,
+  without?: Record<string, number>,
+): Record<string, number> {
+  return operationListsOf(during, OPERATIONS_LISTED_BY_A_CONTROLLER, without);
 }
 
 /** What was counted between two readings of the counters: the requests that are more, with how many more. */

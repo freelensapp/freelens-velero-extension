@@ -55,10 +55,10 @@ wrote. Take the environment down first, with `pnpm demo:down`.
 | --- | --- |
 | `velero-demo` | The installation: Velero, its storage location, the real backup and its restore; and for the tabs, two backups the server synced from its store, which began four hundred days before the environment, and three operations it refused: a backup and a restore that name both kinds of selector, and a restore asked from a schedule that has no backup; and a schedule its controller validated, `fixture-yearly-<run>`, whose next run is a year after its creation |
 | `velero-static-<run>` | A backup and a restore for every phase, three schedules, storage locations that are available and not |
-| `velero-views-<run>` | A backup with every reference in place, backups that name what is not there, a name of 63 characters, a backup that reports nothing; a restore into two namespaces, one that failed its validation, one of a backup that is not there; a schedule with the history of a week, the schedules Velero has not read, and two that submitted two days back with no backup of it; storage locations that are late, unavailable, silent, and one that names its Secrets |
+| `velero-views-<run>` | A backup with every reference in place, backups that name what is not there, a name of 63 characters, a backup that reports nothing; a restore into two namespaces, one that failed its validation, one of a backup that is not there; a schedule with the history of a week, the schedules Velero has not read, and two that submitted two days back with no backup of it; storage locations that are late, unavailable, silent, and one that names its Secrets; 23 pod volume operations of its backups and restores, and 9 backup repositories |
 | `velero-defaults-<run>` | Two storage locations marked default, and nothing else |
 | `velero-overview-<run>` | An installation for the Overview: operations of the last hours and of the last weeks, some in flight, twelve schedules, three storage locations |
-| `velero-scale-<run>` | A thousand backups, a thousand restores and no storage location |
+| `velero-scale-<run>` | A thousand backups, a thousand restores, 2,000 pod volume backups of their backups and no storage location |
 | `velero-adherence-<run>` | Eight schedules in the states of the adherence an environment can hold for twelve hours, awaited, overdue, held and at every look among them, placed by the clock, a backup in progress and the backup of a submission, and no storage location |
 | `velero-adherence-split-<run>` | Two schedules whose submissions say two offsets of the server, and no storage location |
 | `velero-adherence-scale-<run>` | Three hundred schedules of mixed expressions with the backups of their submissions, and no storage location |
@@ -282,6 +282,14 @@ and the source of one is said denied, which is not said absent; the schedules ar
 read, and the history of one is said not known, which is not said empty. With
 either reader, and writes on, the band of the server says that the cluster refused
 the creation of the request: neither may create.
+
+The volume of the demo: in `velero-demo`, the backup `fixture-volume-backup-<run>`
+and the restore `fixture-volume-restore-<run>` are of the pod
+`fixture-volume-<run>` of `velero-source-<run>`, whose volume `data` the node
+agent backed up and restored into `velero-restored-<run>`. Backup Repositories
+lists one, `velero-source-<run>-default-kopia`, Ready and maintained every 168
+hours, its last maintenance the time of its initialization; Pod Volume Backups and
+Pod Volume Restores list one each, Completed (seen on 2026-11-02).
 
 ## 4. The pass that precedes a review
 

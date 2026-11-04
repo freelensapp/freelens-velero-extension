@@ -467,6 +467,17 @@ test environment and of the process of this repository.
   (`SCHEDULE_PATCHED_AT_EVERY_LOOK`, `writesOf`), so `writes` takes two readings
   of `apiRequests`, which keep the moment they were asked; the version and the
   status of the schedule in the snapshot prove that nothing changed it.
+- The live fixtures back up and restore a pod volume: the pod runs the image of
+  the store, preloaded, never pulled (its shell ran the command of the volume in
+  the sandbox of the probe of the images when it was checked once, on 2026-11-02;
+  the probe itself checks the flags of the installer only); the server is installed with `--default-repo-maintain-frequency=168h`
+  and `verify` refuses an environment without it; the repository the server makes
+  carries no label of the demo, so the record of the run keeps its identity and the
+  cleanup removes it by its UID; the pod volume operations go with their owners
+  (they carry no finalizer, seen on 2026-11-02). What the server sends to the repository at
+  its pass and what the controllers list of the operations are measured and set as
+  `REPOSITORY_WRITTEN_AT_EACH_PASS` and `OPERATIONS_LISTED_BY_A_CONTROLLER`
+  (measured on 2026-11-02: neither happens, so both keep their defaults).
 - What the suite of the adherence expects of a fixture is computed by the helper
   of the suites, `integration/helpers/velero-adherence.ts`, from the objects as
   the cluster holds them and from the clock, at the clock before a read of the

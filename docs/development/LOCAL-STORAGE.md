@@ -122,6 +122,12 @@ nothing, and the server removes those keys with their backups. Do not silently
 disable checksums, authentication or signature validation merely to obtain a
 successful backup.
 
+The volume of each run of the fixtures is backed up by the node agent into a kopia
+repository under the prefix of the location in the bucket. The cleanup of the run
+removes the BackupRepository object by its UID, and the data of the repository
+stays in the bucket: nothing in the scripts removes a key of the store, and
+`pnpm demo:down` takes the bucket down with the environment.
+
 For the unreachable-store case, preserve a cluster-internal hostname in generated
 URLs. Do not rewrite BSL publicUrl to localhost, configure `s3.externalUrl` to mask
 a changed Host, or add proxy headers to bypass the test. The client transport must

@@ -913,16 +913,18 @@ describe("overview of an installation", () => {
       const operations = operationsOf(cluster.E2E_NAMESPACE);
       const of = (kind: string) => operations.filter((operation) => operation.kind === kind);
 
-      // The installation holds the backup its controllers ran and its restore, the two backups the server
-      // synced from the store, and the three operations it refused, all of this run: what was read is what
-      // the cluster holds, counted by the suite and not by the application.
+      // The installation holds the backup its controllers ran and its restore, the backup of the volume and its
+      // restore, the two backups the server synced from the store, and the three operations it refused, all of
+      // this run: what was read is what the cluster holds, counted by the suite and not by the application.
       expect(operations.map(({ kind, name }) => `${kind}/${name}`).sort()).toEqual(
         [
           `backup/${LIVE}`,
+          `backup/fixture-volume-backup-${run}`,
           `backup/fixture-synced-backup-${run}`,
           `backup/fixture-synced-backup-no-log-${run}`,
           `backup/fixture-invalid-backup-${run}`,
           `restore/fixture-restore-${run}`,
+          `restore/fixture-volume-restore-${run}`,
           `restore/fixture-invalid-restore-${run}`,
           `restore/fixture-orphan-restore-${run}`,
         ].sort(),
@@ -933,8 +935,12 @@ describe("overview of an installation", () => {
         schedules: { text: "Schedules 1", state: "read" },
         storageLocations: { text: "Backup Storage Locations 1", state: "read" },
         snapshotLocations: { text: "Volume Snapshot Locations 0", state: "read" },
-        // Its backups move no volume through the file system: it holds no repository.
-        backupRepositories: { text: "Backup Repositories 0", state: "read" },
+        // The node agent backs up the volume of the run through the file system: the installation holds the one
+        // repository of that volume, which the suite counts on the cluster.
+        backupRepositories: {
+          text: `Backup Repositories ${held("backuprepositories", cluster.E2E_NAMESPACE).length}`,
+          state: "read",
+        },
       });
       // What ended with a failure is an item while its time is inside the window: the creation of what the
       // server refused, which did not start, and the start of the backups synced from the store, four hundred
@@ -967,15 +973,17 @@ describe("overview of an installation", () => {
       expect(text(await frame.locator("[data-testid=velero-overview-in-flight-none]").innerText())).toBe(
         "No backup and no restore is in flight.",
       );
-      // The newest completed backup is the one the controllers ran, by the time each one completed, as the page
-      // orders them: the synced backup that completed was created after it, and completed four hundred days
-      // back.
+      // The newest completed backup is the last one the controllers ran, by the time each one completed, as the
+      // page orders them: the backup of the volume of the run, which completed after the real backup; the synced
+      // backup that completed was created after them, and completed four hundred days back.
+      const volume = `fixture-volume-backup-${run}`;
+
       expect(
         of("backup")
           .filter(({ phase }) => phase === "Completed")
           .sort(completedFirst)[0]?.name,
-      ).toBe(LIVE);
-      expect(shown.completed).toMatch(new RegExp(`^${LIVE} completed \\S`));
+      ).toBe(volume);
+      expect(shown.completed).toMatch(new RegExp(`^${volume} completed \\S`));
       // The schedule the controller validated has its line, with its next run and its adherence: awaited, its run
       // an instant a year after its creation. No schedule of the installation is not known.
       expect(shown.schedules).toEqual([`fixture-yearly-${run}`]);
@@ -1052,13 +1060,22 @@ describe("overview of an installation", () => {
         const shown = await cluster.overview(frame);
         const count = Object.values(unknown[namespace]).reduce((all, one) => all + one, 0);
 
-        // No backup of the fixtures moves a volume through the file system: no installation holds a repository, and
-        // neither rule of the repositories gives an item.
+        // The repositories are the ones the suite counts on the cluster: the nine of the views, and none in the other
+        // installations. Of the nine, one is not ready and the newest maintenance of another failed: A12 and A13 give
+        // an item each in the views, among the items of the storage by name, and none elsewhere.
         expect([namespace, shown.read.backupRepositories]).toEqual([
           namespace,
-          { text: "Backup Repositories 0", state: "read" },
+          { text: `Backup Repositories ${held("backuprepositories", namespace).length}`, state: "read" },
         ]);
-        expect([namespace, shown.items.filter(([rule]) => rule === "A12" || rule === "A13")]).toEqual([namespace, []]);
+        expect([namespace, shown.items.filter(([rule]) => rule === "A12" || rule === "A13")]).toEqual([
+          namespace,
+          namespace === cluster.E2E_VIEWS_NAMESPACE
+            ? [
+                ["A12", "views-unready-views-available-kopia"],
+                ["A13", "views-workloads-views-available-kopia"],
+              ]
+            : [],
+        ]);
         rules[namespace] = [...new Set(shown.items.map(([rule]) => rule))].sort();
         defaults[namespace] = shown.items.filter(([rule]) => rule === "A4").map(([, name]) => name);
         expect([namespace, await cluster.valuesOfTheWhole(frame)]).toEqual([namespace, []]);
@@ -1106,11 +1123,11 @@ describe("overview of an installation", () => {
       expect(defaults[cluster.E2E_STATIC_NAMESPACE]).toEqual(["Default storage location"]);
       expect(defaults[cluster.E2E_DEFAULTS_NAMESPACE]).toEqual(["defaults-older"]);
       expect(defaults[cluster.E2E_OVERVIEW_NAMESPACE]).toEqual([]);
-      // Every rule of the operations, of the storage locations and of the schedules gave an item on the cluster, in one
-      // installation or in another: A11 of the interval of the views, whatever the hour, and of the schedule that names
-      // its zone once it is overdue. The two of the repositories gave none, as no installation holds a repository.
+      // Every rule gave an item on the cluster, in one installation or in another: A11 of the interval of the views,
+      // whatever the hour, and of the schedule that names its zone once it is overdue, and the two of the repositories
+      // in the views.
       expect([...new Set(Object.values(rules).flat())].sort()).toEqual(
-        ["A1", "A10", "A11", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9"].sort(),
+        ["A1", "A10", "A11", "A12", "A13", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "A9"].sort(),
       );
     },
     TIMEOUT,

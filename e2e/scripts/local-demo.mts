@@ -30,8 +30,10 @@ import { DIRECT_PROOF_ORIGIN, runDownloadProof, runIdentityProof, tlsProofResour
 import {
   assertFixtureNamespaceContents,
   assertFixtureOperationsRemoved,
+  assertMaintenanceAhead,
   awaitRequestsBeforeCleanup,
   awaitRequestsRemoved,
+  awaitVolumeOperationsRemoved,
   clearTabFixtures,
   createStaticFixtures,
   type ExecPluginFiles,
@@ -47,11 +49,13 @@ import {
   placeViewAndTabFixtures,
   proofIdentities,
   REAL_ARTIFACT_BOUND,
+  REPOSITORY_LABELS,
   readerKubeconfig,
   readFixture,
   recordSyncedBackups,
   removeFixtureBackup,
   removeRealSchedule,
+  removeRunRepository,
   restrictedFixtures,
   runLiveFixtures,
   tabFixtureFacts,
@@ -91,10 +95,13 @@ import {
   subnetsOverlap,
 } from "./local-kind.mts";
 import {
+  assertFixtureFreeInstallation,
+  assertMaintainFrequency,
   BUCKET,
   type Credentials,
   DATA_DIRECTORY,
   DIRECT_PROOF_IMAGE,
+  FIXTURE_FREE_KINDS,
   IMAGES,
   KIND_HOSTS,
   type KubeResource,
@@ -103,6 +110,7 @@ import {
   prepareVeleroResources,
   STORAGE_ENDPOINT,
   storageManifests,
+  veleroInstallArguments,
 } from "./local-manifests.mts";
 import {
   assertBinary,
@@ -197,7 +205,12 @@ interface Journal {
   temporaryChecks?: (ResourceIdentity & { owner: string })[];
   // `tabs` is what the placement of the fixtures of the tabs has reached, recorded before the store is
   // given anything: the metadata it stored is in a file of its own.
-  fixtureRun?: { id: string; started: string; phase: string } & NonNullable<RunJournal["fixtureRun"]>;
+  fixtureRun?: {
+    id: string;
+    started: string;
+    phase: string;
+    repository?: { name: string; uid: string; labels: Record<string, string> };
+  } & NonNullable<RunJournal["fixtureRun"]>;
 }
 
 let journal: Journal;
@@ -1079,20 +1092,7 @@ function installVelero(): void {
       `type=bind,src=${CONFIG},dst=/local-kubeconfig,readonly`,
       "--entrypoint=/velero",
       IMAGES.velero,
-      "install",
-      "--dry-run",
-      "--output=json",
-      "--kubeconfig=/local-kubeconfig",
-      `--kubecontext=${DEMO_CONTEXT}`,
-      `--namespace=${DEMO_NAMESPACE}`,
-      "--provider=aws",
-      `--bucket=${BUCKET}`,
-      "--secret-file=/local-credentials",
-      `--image=${preloadedImage(IMAGES.velero)}`,
-      `--plugins=${preloadedImage(IMAGES.plugin)}`,
-      "--use-volume-snapshots=false",
-      "--use-node-agent",
-      `--backup-location-config=region=us-east-1,s3ForcePathStyle=true,s3Url=${STORAGE_ENDPOINT}`,
+      ...veleroInstallArguments(),
     ]),
   ) as { items: KubeResource[] };
   const resources = prepareVeleroResources(journal.owner, generated);
@@ -1286,23 +1286,19 @@ async function verifyEnvironment(): Promise<void> {
   for (const workload of ["deployment/seaweedfs", "deployment/velero", "daemonset/node-agent"]) {
     kubectl(["rollout", "status", workload, "--namespace", DEMO_NAMESPACE, "--timeout=60s"], undefined, 90_000);
   }
+  assertMaintainFrequency(
+    JSON.parse(kubectl(["get", "deployment/velero", "--namespace", DEMO_NAMESPACE, "-o", "json"])) as KubeResource,
+  );
   const location = JSON.parse(
     kubectl(["get", "backupstoragelocation/default", "--namespace", DEMO_NAMESPACE, "-o", "json"]),
   ) as { status?: { phase?: string } };
 
   requireCondition(location.status?.phase === "Available", "The local BackupStorageLocation is not Available");
   const operations = JSON.parse(
-    kubectl([
-      "get",
-      "backups.velero.io,restores.velero.io,schedules.velero.io,downloadrequests.velero.io,serverstatusrequests.velero.io",
-      "--namespace",
-      DEMO_NAMESPACE,
-      "-o",
-      "json",
-    ]),
-  ) as { items: unknown[] };
+    kubectl(["get", FIXTURE_FREE_KINDS.join(","), "--namespace", DEMO_NAMESPACE, "-o", "json"]),
+  ) as { items: KubeResource[] };
 
-  requireCondition(operations.items.length === 0, "T0.4 readiness requires a fixture-free installation");
+  assertFixtureFreeInstallation(operations.items);
   const pods = JSON.parse(
     kubectl([
       "get",
@@ -1615,7 +1611,9 @@ async function executeLiveFixtures(): Promise<void> {
     journal.fixtureRun?.phase === "static-ready",
     "Static fixtures must be prepared before live verification",
   );
-  const runtime = { owner: journal.owner, kubectl, apply: applyOwned };
+  // The runtime with the clock, which the waits of the volume are bounded by, and the journal, which learns the pod,
+  // the backup and the restore of the volume as they are applied.
+  const runtime = fixtureRuntime();
   const result = await runLiveFixtures(runtime, journal.fixtureRun.id);
   const snapshots = JSON.parse(readFileSync(join(STATE, "fixture-static-snapshots.json"), "utf8")) as KubeResource[];
 
@@ -1626,7 +1624,7 @@ async function executeLiveFixtures(): Promise<void> {
   journal.fixtureRun.phase = "live-verified";
   save();
   console.log(
-    `PASS: live Backup and Restore Completed; ${result.configMaps} ConfigMaps and ${result.payloadBytes} payload bytes match, and ${snapshots.length} synthetic object versions/statuses are unchanged.`,
+    `PASS: live Backup and Restore Completed; ${result.configMaps} ConfigMaps and ${result.payloadBytes} payload bytes match, and ${snapshots.length} synthetic object versions/statuses are unchanged. The volume of the run backed up and restored by the node agent: ${result.volume.bytes} bytes match, the repository ${result.volume.repository.name} is Ready and maintained every ${result.volume.repository.maintenanceFrequency}.`,
   );
 }
 
@@ -1839,9 +1837,15 @@ async function cleanupFixtures(): Promise<void> {
     console.log(tabRemovalWords(clearTabFixtures(runtime, run)));
   }
   // A backup the scripts created is deleted by the controller, through a request of its own: the real one
-  // with the restores that name it, and the one that failed its validation, of which the store holds nothing.
-  // One a cleanup that was interrupted left while it was deleted is taken up from the request that is there.
-  for (const name of [names.backup, names.invalidBackup]) removeFixtureBackup(runtime, run, name);
+  // with the restores that name it, the one that failed its validation, of which the store holds nothing, and
+  // the one of the volume with its restore. One a cleanup that was interrupted left while it was deleted is taken
+  // up from the request that is there.
+  for (const name of [names.backup, names.invalidBackup, names.volumeBackup]) removeFixtureBackup(runtime, run, name);
+  // The pod volume backup and restore of the volume go with their owners, and are waited for with a bound of their
+  // own; then the repository the server made for the volume, by the identity the run recorded. Its data stays in
+  // the bucket until the environment is taken down.
+  const operationsOfTheVolume = awaitVolumeOperationsRemoved(runtime, run);
+  const repository = removeRunRepository(runtime, run);
   // The restore without a backup is of no backup the controller deletes: it is removed by its identity,
   // the one the cluster gives of the object that was just read as owned by this run. An apply that was
   // interrupted recorded the object without it.
@@ -1913,6 +1917,8 @@ async function cleanupFixtures(): Promise<void> {
       run,
       controllerDeletion: true,
       scheduleRemoved: yearly.removed,
+      volumeOperationsWaited: operationsOfTheVolume.waited,
+      repositoryRemoved: repository.removed,
       expectedArtifactsAbsent: keys,
       namespacesRemoved: removed,
       unrelatedResourcesPreserved: true,
@@ -1920,7 +1926,7 @@ async function cleanupFixtures(): Promise<void> {
     { mode: 0o600 },
   );
   console.log(
-    `PASS: real backup, associated restore and stored artifacts removed by the controller; ${yearly.removed ? `the schedule ${names.realSchedule} the controller validated removed with a UID check; ` : ""}${removed} owned fixture namespaces removed with UID checks. Demo infrastructure retained.`,
+    `PASS: real backup, associated restore and stored artifacts removed by the controller; the backup of the volume, its restore and their pod volume operations removed with them${repository.removed ? ", and the repository of the volume with a UID check" : ""}; ${yearly.removed ? `the schedule ${names.realSchedule} the controller validated removed with a UID check; ` : ""}${removed} owned fixture namespaces removed with UID checks. Demo infrastructure retained; the data of the repository of the volume stays in the bucket until pnpm demo:down.`,
   );
 }
 
@@ -2195,7 +2201,11 @@ async function runTransportProof(): Promise<void> {
     certificates = await createTlsFixture(new URL(STORAGE_ENDPOINT).hostname, [new URL(DIRECT_PROOF_ORIGIN).hostname]);
     const tls = tlsProofResources(journal.owner, active.id, originals, certificates);
 
-    for (const resource of tls) {
+    // The storage location changes once the store serves again: the server makes every repository of the
+    // location NotReady when it changes and checks each again at once
+    // (`pkg/controller/backup_repository_controller.go:114-160` of the source of Velero v1.18.4); a check while
+    // the store restarts fails, and the next comes with the sync, five minutes later (`repoSyncPeriod`, 54).
+    for (const resource of tls.filter((item) => item.kind !== "BackupStorageLocation")) {
       if (resource.kind === "Secret") secrets.push(resource);
       applyOwned(resource);
     }
@@ -2204,6 +2214,7 @@ async function runTransportProof(): Promise<void> {
       undefined,
       150_000,
     );
+    for (const resource of tls.filter((item) => item.kind === "BackupStorageLocation")) applyOwned(resource);
     const readyPods = JSON.parse(
       kubectl([
         "get",
@@ -2268,13 +2279,15 @@ async function runTransportProof(): Promise<void> {
       "PASS: compiled main found its route and downloaded 16 real artifacts through direct HTTPS, once the private address was allowed, and HTTP/HTTPS Kubernetes tunnels, with inline/referenced CA and negative signature/Host/CA checks; the store had no log for a backup and a restore that failed their validation, and no request was created for a restore without a backup; three identities were refused, at the creation, at the Service and the certificate, and at the port-forward, and the one with the documented permissions downloaded.",
     );
   } finally {
-    for (const resource of originals) applyOwned(resource);
+    // The location goes back once the store serves again, as above.
+    for (const resource of originals.filter((item) => item.kind !== "BackupStorageLocation")) applyOwned(resource);
     if (originals.length) {
       kubectl(
         ["rollout", "status", "deployment/seaweedfs", "--namespace", DEMO_NAMESPACE, "--timeout=120s"],
         undefined,
         150_000,
       );
+      for (const resource of originals.filter((item) => item.kind === "BackupStorageLocation")) applyOwned(resource);
       kubectl(
         [
           "wait",
@@ -2668,6 +2681,22 @@ function fixtureRuntime(): FixtureRuntime {
       save,
     },
     tabs: tabRecord(journal, TABS, save),
+    // The repository the server made for the volume of the run carries no label of the demo: it is not among the
+    // resources of the journal, whose owner every check asks of each, and the record of the run keeps its
+    // identity, by which the cleanup removes it.
+    repository: {
+      read: () => journal.fixtureRun?.repository,
+      keep: (found) => {
+        requireCondition(journal.fixtureRun, "No fixture run is recorded");
+        journal.fixtureRun.repository = found;
+        save();
+      },
+      forget: () => {
+        if (!journal.fixtureRun?.repository) return;
+        delete journal.fixtureRun.repository;
+        save();
+      },
+    },
   };
 }
 
@@ -2690,6 +2719,27 @@ function placeViewsAndTabs(): {
   );
   const run = journal.fixtureRun.id;
   const names = fixtureNames(run);
+
+  // The repository of the volume of the run is maintained once a week: no placement is made less than a day before
+  // its next maintenance, which would run while the suites that follow it run.
+  assertMaintenanceAhead(
+    (
+      JSON.parse(
+        kubectl([
+          "get",
+          "backuprepositories.velero.io",
+          "--namespace",
+          DEMO_NAMESPACE,
+          "--selector",
+          `${REPOSITORY_LABELS.volumeNamespace}=${names.source},${REPOSITORY_LABELS.location}=default,${REPOSITORY_LABELS.type}=kopia`,
+          "-o",
+          "json",
+        ]),
+      ) as { items: KubeResource[] }
+    ).items,
+    run,
+    Date.now(),
+  );
   // The times of the fixtures are taken from when the run was started: a second call asks for the same objects.
   const started = Date.parse(journal.fixtureRun.started);
   const runtime = fixtureRuntime();
@@ -2772,7 +2822,7 @@ function prepareDemo(): void {
       "The demo is ready to be looked at in Freelens. The kubeconfigs name this cluster alone:",
       `  all the namespaces:     ${CONFIG}`,
       `  the reader of a part:   ${reader} (backups, schedules, storage locations; its credential lasts eight hours)`,
-      `  the second reader:      ${second} (restores, schedules, locations and no backup; eight hours)`,
+      `  the second reader:      ${second} (restores, schedules, locations, pod volume operations, repositories and no backup; eight hours)`,
       `The namespaces of Velero: ${DEMO_NAMESPACE}, ${names.static}, ${names.views}, ${names.defaults}, ${names.overview}; to be named: ${names.scale}, ${names.adherence}, ${names.adherenceSplit}, ${names.adherenceScale}.`,
       `What each artifact of the tabs holds, counted outside the extension: ${TABS.facts}`,
     ].join("\n"),
