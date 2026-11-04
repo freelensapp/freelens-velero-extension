@@ -9923,6 +9923,17 @@ describe("foundation fixture boundaries", () => {
     expect(operations.map((operation) => (operation.status as { phase?: string }).phase)).toEqual(
       operations.map((_, index) => SCALE_OPERATION_PHASES[index % SCALE_OPERATION_PHASES.length]),
     );
+    // With the times the release writes for each: one canceled was canceled before it started, with no accepted
+    // time and a start at its completion.
+    const canceled = operations.filter((operation) => (operation.status as { phase?: string }).phase === "Canceled");
+
+    expect(canceled.length).toBeGreaterThan(0);
+    for (const operation of canceled) {
+      const status = operation.status as Record<string, unknown>;
+
+      expect(status.acceptedTimestamp).toBeUndefined();
+      expect(status.startTimestamp).toBe(status.completionTimestamp);
+    }
     // Over the thirty days before they were placed, none of a time to come.
     expect(Math.min(...times)).toBeGreaterThanOrEqual(placed - 30 * 24 * HOUR);
     expect(Math.max(...times)).toBeLessThan(placed);
@@ -12185,7 +12196,7 @@ describe("the volume of the environment", () => {
   const owner = "synthetic-owner";
   const names = fixtureNames(run);
   const written = "c".repeat(64);
-  const printed = (held = written) => `written ${written}\nheld ${held}\nsize ${VOLUME_BYTES}\n`;
+  const printed = (held = written, size = VOLUME_BYTES) => `written ${written}\nheld ${held}\nsize ${size}\n`;
   const labelled = (location = "default", namespace = names.source) => ({
     [REPOSITORY_LABELS.volumeNamespace]: namespace,
     [REPOSITORY_LABELS.location]: location,
@@ -12211,6 +12222,7 @@ describe("the volume of the environment", () => {
       podVolumeBackup?: string;
       podVolumeRestore?: string;
       repositories?: ReturnType<typeof repository>[];
+      sourceLog?: string;
       restoredLog?: string;
     } = {},
   ) {
@@ -12251,7 +12263,8 @@ describe("the volume of the environment", () => {
         const has = (kind: string) => applied.some((resource) => resource.kind === kind);
 
         asked.push(args.slice(0, 2).join(" "));
-        if (args[0] === "logs" && args[1] === names.volumePod && namespace === names.source) return printed();
+        if (args[0] === "logs" && args[1] === names.volumePod && namespace === names.source)
+          return told.sourceLog ?? printed();
         if (args[0] === "logs" && args[1] === names.volumePod && namespace === names.restored)
           return told.restoredLog ?? printed();
         if (args[0] === "get" && args[1] === "Pod" && args[2] === names.volumePod && has("Pod"))
@@ -12474,6 +12487,12 @@ describe("the volume of the environment", () => {
       { restoredLog: printed("d".repeat(64)) },
       `The restored volume of fixture-volume-${run} holds other bytes than the pod wrote`,
     ],
+    // The source holds the megabyte it wrote: fewer bytes, or other ones, are refused before the backup.
+    [
+      { sourceLog: printed(written, VOLUME_BYTES - 1) },
+      `The pod fixture-volume-${run} holds other bytes than it wrote`,
+    ],
+    [{ sourceLog: printed("e".repeat(64)) }, `The pod fixture-volume-${run} holds other bytes than it wrote`],
   ])("refuses with its words a volume that does not go as the release makes it go: %j", (told, words) => {
     const { runtime, clock } = volumeRuntime(told as Parameters<typeof volumeRuntime>[0]);
 
@@ -12549,6 +12568,28 @@ describe("the volume of the environment", () => {
     expect(() => assertMaintenanceAhead([], run, now)).toThrow(
       `No repository is labelled for velero-source-${run}, default and kopia in velero-demo`,
     );
+  });
+
+  // The server makes the repository before the pod volume backup: a backup of the volume that fails after it
+  // leaves the repository labelled for the run, which the cleanup removes only when the run recorded it.
+  it.each([
+    [{ backup: "PartiallyFailed" }, `The Backup fixture-volume-backup-${run} of the volume ended in PartiallyFailed`],
+    [
+      { podVolumeBackup: "Failed" },
+      `The pod volume backup fixture-volume-backup-${run}-x7k2p of the backup fixture-volume-backup-${run} is Failed`,
+    ],
+    [
+      { backup: "InProgress" },
+      `The Backup fixture-volume-backup-${run} of the volume did not complete within 180 seconds`,
+    ],
+  ])("records the repository the server made when the backup of the volume fails: %j", (told, words) => {
+    const kept: RunRepository[] = [];
+    const name = `velero-source-${run}-default-kopia`;
+    const { runtime } = volumeRuntime(told);
+
+    runtime.repository = { read: () => kept.at(-1), keep: (found) => kept.push(found), forget: () => undefined };
+    expect(() => runLiveVolume(runtime, run)).toThrow(words);
+    expect(kept).toEqual([{ name, uid: `uid-${name}`, labels: labelled() }]);
   });
 
   it("records the repository of the run as soon as it is found, before it is checked Ready", () => {

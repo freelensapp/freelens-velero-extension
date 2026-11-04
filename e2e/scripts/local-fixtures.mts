@@ -1456,7 +1456,8 @@ export function scaleFixtures(
           completionTimestamp: second(2),
           message: "data path failed: the volume of the pod could not be read",
         },
-        Canceled: { phase, startTimestamp: second(1), completionTimestamp: second(2) },
+        // Canceled before it started, as the release writes it: a start when there was none, at the completion.
+        Canceled: { phase, startTimestamp: second(1), completionTimestamp: second(1) },
       };
 
       operations.push({
@@ -5445,7 +5446,7 @@ export function runRepository(items: KubeResource[], volumeNamespace: string, lo
     found.length === 1,
     found.length
       ? `More than one repository is labelled for ${volumeNamespace}, ${location} and ${type}: ${found.map((item) => item.metadata.name).join(", ")}`
-      : `No repository is labelled for ${volumeNamespace}, ${location} and ${type} in ${DEMO_NAMESPACE}`,
+      : `No repository is labelled for ${volumeNamespace}, ${location} and ${type} in ${DEMO_NAMESPACE}: bring the environment up again, pnpm demo:down then pnpm demo:up`,
   );
   return found[0];
 }
@@ -5756,11 +5757,7 @@ export function runLiveVolume(runtime: FixtureRuntime, run: string): VolumeRecor
     `The pod ${names.volumePod} holds other bytes than it wrote`,
   );
   const backupManifest = liveVolumeBackup(runtime.owner, run);
-
-  runtime.apply(backupManifest);
-  const backup = awaitVolumeOperation(runtime, backupManifest);
-  const podVolumeBackup = volumeOperationOf(runtime, "podvolumebackups", backup);
-  const repository = runRepository(
+  const labelled = () =>
     (
       JSON.parse(
         runtime.kubectl([
@@ -5774,18 +5771,39 @@ export function runLiveVolume(runtime: FixtureRuntime, run: string): VolumeRecor
           "json",
         ]),
       ) as { items: KubeResource[] }
-    ).items,
-    names.source,
-  );
-  const repositoryLabels = Object.fromEntries(
-    Object.values(REPOSITORY_LABELS).map((label) => [label, repository.metadata.labels?.[label] ?? ""]),
-  );
+    ).items;
+  const labelsOf = (found: KubeResource) =>
+    Object.fromEntries(Object.values(REPOSITORY_LABELS).map((label) => [label, found.metadata.labels?.[label] ?? ""]));
+  const keep = (found: KubeResource) =>
+    runtime.repository?.keep({ name: found.metadata.name, uid: String(found.metadata.uid), labels: labelsOf(found) });
+  // The server makes the repository before the pod volume backup, so a backup of the volume that fails after it
+  // leaves the repository labelled for the run: it is recorded all the same, for the cleanup to remove it, and a
+  // read that fails then is passed over, so that the failure of the backup is the one that is told.
+  const { backup, podVolumeBackup, repository } = (() => {
+    let kept = false;
 
-  runtime.repository?.keep({
-    name: repository.metadata.name,
-    uid: String(repository.metadata.uid),
-    labels: repositoryLabels,
-  });
+    try {
+      runtime.apply(backupManifest);
+      const backup = awaitVolumeOperation(runtime, backupManifest);
+      const podVolumeBackup = volumeOperationOf(runtime, "podvolumebackups", backup);
+      const repository = runRepository(labelled(), names.source);
+
+      keep(repository);
+      kept = true;
+      return { backup, podVolumeBackup, repository };
+    } finally {
+      if (!kept) {
+        try {
+          const found = labelled();
+
+          if (found.length === 1) keep(found[0]);
+        } catch {
+          // The failure of the backup is the one that is told.
+        }
+      }
+    }
+  })();
+  const repositoryLabels = labelsOf(repository);
   const repositoryStatus = (repository.status ?? {}) as {
     phase?: string;
     message?: string;

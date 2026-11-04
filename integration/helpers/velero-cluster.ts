@@ -394,6 +394,7 @@ export function fixturesReady(): boolean {
         namespace !== "" && kubectlE2E("get", resource, name, "--namespace", namespace, "-o", "name").status === 0,
     ) &&
     labelled.every(([namespace, resource, selector, count]) => {
+      if (namespace === "") return false;
       const { status, stdout } = kubectlE2E(
         "get",
         resource,
@@ -405,7 +406,7 @@ export function fixturesReady(): boolean {
         "name",
       );
 
-      return namespace !== "" && status === 0 && stdout.split("\n").filter(Boolean).length === count;
+      return status === 0 && stdout.split("\n").filter(Boolean).length === count;
     });
 
   if (!found) return false;
