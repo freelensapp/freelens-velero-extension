@@ -468,8 +468,9 @@ test environment and of the process of this repository.
   of `apiRequests`, which keep the moment they were asked; the version and the
   status of the schedule in the snapshot prove that nothing changed it.
 - The live fixtures back up and restore a pod volume: the pod runs the image of
-  the store, preloaded, never pulled (its shell runs the command of the volume in
-  the sandbox of the probe of the images, checked on 2026-11-02); the server is installed with `--default-repo-maintain-frequency=168h`
+  the store, preloaded, never pulled (its shell ran the command of the volume in
+  the sandbox of the probe of the images when it was checked once, on 2026-11-02;
+  the probe itself checks the flags of the installer only); the server is installed with `--default-repo-maintain-frequency=168h`
   and `verify` refuses an environment without it; the repository the server makes
   carries no label of the demo, so the record of the run keeps its identity and the
   cleanup removes it by its UID; the pod volume operations go with their owners

@@ -55,9 +55,9 @@ in the Design:
   ([upload](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/backup/actions/csi/pvc_action.go#L540-L597),
   [download](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/restore/actions/csi/pvc_action.go#L405-L453)).
 - The test environment installs the server and the node agent, with the volume
-  snapshots off ([the install](../../e2e/scripts/local-manifests.mts#L162-L163)),
+  snapshots off ([the install](../../e2e/scripts/local-manifests.mts#L163-L164)),
   and its live backup is of ConfigMaps with `defaultVolumesToFsBackup: false`
-  ([the backup](../../e2e/scripts/local-fixtures.mts#L2008-L2033)): no object of
+  ([the backup](../../e2e/scripts/local-fixtures.mts#L2575-L2600)): no object of
   these five kinds exists in it today.
 
 Included: the five lists, the five workspaces, the five sections in the details
@@ -1383,7 +1383,13 @@ Decided while implementing, on 2026-10-29:
 
 - LM1: the live flow of the volume runs in the live fixtures, which `pnpm demo:up`,
   the fixture suite and the transport proof run; the environment is created again
-  once, and the hosted job keeps its shape.
+  once, and the hosted job keeps its shape. A placement of the views that finds the
+  repository of the volume less than a day from its next maintenance stops and says
+  to create the environment again, about six days after `pnpm demo:up` with `168h`.
+- The end check of the cleanup asks the store, HEAD only, for the nine keys the
+  server writes for the backup and the restore of the volume, beside the ones of
+  the real operations; the keys of the repository of the volume are not asked, since
+  its data stays in the bucket until `pnpm demo:down`.
 - LM2: the pod runs the image of the store, preloaded and pinned, with
   `imagePullPolicy: Never`; its entry point is checked first in phase B, and the
   image of the helpers is its fallback, written only if that check refuses it.
@@ -1439,6 +1445,9 @@ Decided while implementing, on 2026-11-02:
   the environment, RECON-T0.1), and the UID of a synthetic one is given by the
   cluster when it is created. The path of the volume on the node, which the
   operations of the views carried before, is not what this release writes.
+- The pod volume backups of the long lists take no account of the phase of their
+  backup: a backup that never started or failed its validation owns operations
+  that completed. No view reads the phase of the owner beside its operations.
 
 Decided while implementing, on 2026-11-04:
 

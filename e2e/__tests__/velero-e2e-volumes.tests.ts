@@ -6,7 +6,8 @@
 // The backup repositories, the pod volume backups and the pod volume restores, in a packaged Freelens, against
 // the test environment as its fixtures leave it: the namespace of the views holds the pod volume operations and the
 // repositories of its fixtures, the one of the defaults none of the three kinds, and the installation what the
-// volume of the run made there, one repository Ready, one pod volume backup and one pod volume restore. The suite
+// volume of the run made there, one repository Ready, one pod volume backup and one pod volume restore; its cases
+// read the repository, and the two operations are probed by `fixturesReady`, which calls them missing. The suite
 // proves the lists of the three kinds with what they say of a namespace that holds none, the repository of the
 // installation as the cluster holds it, and the reads of the pod volume operations, which the views ask only while
 // a view that shows them is open, counted on the API server: their lists, and the view of a backup and of a
