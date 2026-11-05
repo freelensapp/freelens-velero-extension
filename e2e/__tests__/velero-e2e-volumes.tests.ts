@@ -261,6 +261,55 @@ describe("views of the backup repositories and of the pod volume operations", ()
   );
 
   it(
+    "says in the view of a pod volume backup of each phase what the phase means, as the release writes it",
+    async () => {
+      // The pod volume backups of the backup in progress, read by the suite on the cluster, one of each phase: the
+      // first of each in the order of their names.
+      const owner = cluster.veleroObject<{ metadata: { uid?: string } }>(
+        "backups",
+        "backup-inprogress",
+        cluster.E2E_VIEWS_NAMESPACE,
+      );
+      const own = cluster
+        .labelledObjects<{ metadata: { name: string; labels?: Record<string, string> }; status?: { phase?: string } }>(
+          "podvolumebackups",
+          "velero.io/backup-name=backup-inprogress",
+          cluster.E2E_VIEWS_NAMESPACE,
+        )
+        .filter(({ metadata }) => metadata.labels?.["velero.io/backup-uid"] === owner?.metadata.uid)
+        .sort((one, other) => one.metadata.name.localeCompare(other.metadata.name));
+      const ofEach = new Map<string, string>();
+
+      for (const { metadata, status } of own) {
+        if (!ofEach.has(status?.phase || "New")) ofEach.set(status?.phase || "New", metadata.name);
+      }
+      expect([...ofEach.keys()].sort()).toEqual(Object.keys(volumes.BACKUP_PHASE_SENTENCES).sort());
+      await cluster.openPage(frame, cluster.BACKUPS);
+      await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+      await cluster.waitForList(frame, cluster.BACKUPS);
+      await cluster.openWorkspace(frame, "backup-inprogress", cluster.BACKUPS);
+      for (const [phase, name] of ofEach) {
+        const way = frame.locator(`[data-testid="velero-open-pod-volume-backup-${name}"]`);
+
+        await cluster.volumeBand(frame, "rows");
+        // The band shows ten rows at first: the command shows the others.
+        if (!(await way.count())) await frame.locator("[data-testid=velero-volume-more]").click();
+        await way.click();
+        const view = frame.locator("[data-testid=velero-pod-volume-backup-workspace]");
+
+        await view.waitFor({ state: "visible", timeout: 60_000 });
+        expect([phase, (await view.innerText()).replace(/\s+/g, " ")]).toEqual([
+          phase,
+          expect.stringContaining(volumes.BACKUP_PHASE_SENTENCES[phase]),
+        ]);
+        await cluster.closeWorkspace(frame);
+      }
+      await cluster.closeWorkspace(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "counts the pod volume backups of the backup in progress by their phases, shows ten and ten more, each a way and back",
     async () => {
       // The operations of the backup in progress, read by the suite on the cluster by the label of its name and of
