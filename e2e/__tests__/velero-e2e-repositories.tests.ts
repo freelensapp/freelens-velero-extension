@@ -267,6 +267,47 @@ describe("the backup repositories of the views", () => {
   );
 
   it(
+    "gives the details of the host the reading of the row, and a way to the view of the repository",
+    async () => {
+      const repository = held.find((item) => volumes.readinessOf(item) === volumes.READINESS.notReady);
+
+      if (!repository) throw new Error("No repository of the views is not ready");
+      const name = repository.metadata.name;
+
+      await cluster.openPage(frame, REPOSITORIES);
+      await cluster.waitForList(frame, REPOSITORIES);
+      const cells = await cluster.cellsOf(REPOSITORIES, frame, name);
+
+      // The list the host has of the kind, by its address, the one way to it while the extension keeps the kind out
+      // of the Custom Resources tree; the section of the extension in its details says what the row says, and the
+      // lines of the message of Velero.
+      await cluster.navigate(frame, "/crd/velero.io/backuprepositories");
+      await cluster.selectHostNamespace(frame, cluster.E2E_VIEWS_NAMESPACE);
+      const details = await cluster.hostDetails(
+        frame,
+        name,
+        cells.readiness,
+        cells["volume-namespace"],
+        cells.location,
+        cells["repository-type"],
+      );
+
+      for (const line of (repository.status?.message ?? "").split("\n")) expect(details).toContain(line);
+      const link = frame.locator("[data-testid=velero-backup-repository-details-link]");
+
+      expect(await link.count()).toBe(1);
+      await cluster.captureScreenshot(frame, "dark-backup-repository-host-details");
+      // The way of the section opens the view of the repository in the page of the extension.
+      await link.click();
+      await frame.waitForSelector("[data-testid=velero-backup-repository-workspace]", { timeout: 60_000 });
+      expect((await cluster.shownView(frame))?.name).toBe(name);
+      if ((await cluster.hostDetailsShown(frame)).drawer) await cluster.closeDetails(frame);
+      await cluster.closeWorkspace(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "leaves the objects of Velero as they were, writes nothing, and asks Velero for nothing",
     async () => {
       const after = cluster.clusterSnapshot();
