@@ -456,6 +456,39 @@ describe("views of the backup repositories and of the pod volume operations", ()
   );
 
   it(
+    "says of the pod volume backup of the name of the daily backup that its owner reference names the backup that is there, which its labels do not name",
+    async () => {
+      // Its labels name the daily backup with the UID of an earlier backup of that name; its owner reference names
+      // the one that is there, with the UID the cluster gave it. Both read by the suite on the cluster.
+      const daily = cluster.veleroObject<{ metadata: { uid?: string } }>(
+        "backups",
+        BACKUP,
+        cluster.E2E_VIEWS_NAMESPACE,
+      );
+      const [operation] = cluster.labelledObjects<{
+        metadata: { name: string; ownerReferences?: { kind?: string; name?: string; uid?: string }[] };
+      }>("podvolumebackups", `velero.io/backup-name=${BACKUP}`, cluster.E2E_VIEWS_NAMESPACE);
+
+      expect(operation.metadata.ownerReferences?.map(({ kind, name, uid }) => [kind, name, uid])).toEqual([
+        ["Backup", BACKUP, daily?.metadata.uid],
+      ]);
+      await cluster.openPage(frame, cluster.POD_VOLUME_BACKUPS);
+      await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+      await cluster.waitForList(frame, cluster.POD_VOLUME_BACKUPS);
+      await cluster.openWorkspace(frame, operation.metadata.name, cluster.POD_VOLUME_BACKUPS);
+      const view = frame.locator("[data-testid=velero-pod-volume-backup-workspace]");
+
+      await view.locator("[data-testid=velero-volume-belongs]").waitFor({ state: "visible", timeout: 60_000 });
+      expect((await view.locator("[data-testid=velero-volume-belongs]").innerText()).replace(/\s+/g, " ")).toContain(
+        `Its owner reference names the backup ${BACKUP} of UID ${daily?.metadata.uid}, which its labels do not name`,
+      );
+      await cluster.captureScreenshot(frame, "dark-pod-volume-backup-of-another-uid");
+      await cluster.closeWorkspace(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "shows the pod volume backup of the real backup of the volume as the cluster holds it, and the way to its repository and back",
     async () => {
       // What the node agent wrote for the volume of the run, read by the suite on the cluster by the label of the
