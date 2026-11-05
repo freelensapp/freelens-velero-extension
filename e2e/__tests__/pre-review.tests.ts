@@ -1354,6 +1354,43 @@ describe("pre-review of the views", () => {
   );
 
   it(
+    "reads the band of the backup in progress with the keyboard alone: ten more, a row, its view, Escape and back on the row",
+    async () => {
+      await cluster.showList(frame);
+      await cluster.openPage(frame, cluster.BACKUPS);
+      await cluster.waitForList(frame, cluster.BACKUPS);
+      await cluster.openWorkspace(frame, "backup-inprogress", cluster.BACKUPS);
+      expect((await cluster.volumeBand(frame, "rows")).rows).toHaveLength(10);
+      // From the way back the keyboard reaches the command that shows ten more, and Enter shows them.
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      await cluster.tabTo(frame, (focus) => focus === "velero-volume-more", 80);
+      await started.window.keyboard.press("Enter");
+      await frame.waitForFunction(
+        () => document.querySelectorAll("[data-testid=velero-volume-rows] tbody tr").length > 10,
+        undefined,
+        { timeout: 60_000 },
+      );
+      // A way of a row, which Enter follows to the view of its operation; Escape comes back with the focus on it.
+      await cluster.tabTo(frame, (focus) => focus.startsWith("velero-open-pod-volume-backup-"), 40);
+      const way = await cluster.focused(frame);
+
+      await started.window.keyboard.press("Enter");
+      await frame.waitForSelector("[data-testid=velero-pod-volume-backup-workspace]", { timeout: 60_000 });
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      await started.window.keyboard.press("Escape");
+      await frame.waitForSelector("[data-testid=velero-pod-volume-backup-workspace]", {
+        state: "detached",
+        timeout: 60_000,
+      });
+      expect(await cluster.focusOn(frame, way)).toBe(way);
+      await started.window.keyboard.press("Escape");
+      await frame.waitForSelector("[data-testid=velero-backup-workspace]", { state: "detached", timeout: 60_000 });
+      expect(await cluster.focusOn(frame, "backup-inprogress")).toBe("backup-inprogress");
+    },
+    TIMEOUT,
+  );
+
+  it(
     "shows the Overview in both themes, at every size, with its bands side by side where there is room",
     async () => {
       await cluster.showList(frame);
