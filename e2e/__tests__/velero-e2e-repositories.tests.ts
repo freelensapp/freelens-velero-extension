@@ -308,6 +308,56 @@ describe("the backup repositories of the views", () => {
   );
 
   it(
+    "says what used the real repository of the installation, the pod volume backup and the pod volume restore of the volume of the run, each a way and back",
+    async () => {
+      // What the volume of the run made, read by the suite on the cluster by the labels the release writes: the
+      // repository by its three, the operations by the names of their backup and restore.
+      const [repository, ...more] = cluster.labelledObjects<{ metadata: { name: string } }>(
+        "backuprepositories",
+        cluster.runRepositorySelector(),
+      );
+      const [backup] = cluster.labelledObjects<{ metadata: { name: string } }>(
+        "podvolumebackups",
+        `velero.io/backup-name=fixture-volume-backup-${cluster.E2E_FIXTURE_RUN}`,
+      );
+      const [restore] = cluster.labelledObjects<{ metadata: { name: string } }>(
+        "podvolumerestores",
+        `velero.io/restore-name=fixture-volume-restore-${cluster.E2E_FIXTURE_RUN}`,
+      );
+
+      expect([more.length, Boolean(repository), Boolean(backup), Boolean(restore)]).toEqual([0, true, true, true]);
+      await cluster.openPage(frame, REPOSITORIES);
+      await cluster.selectInstallation(frame, cluster.E2E_NAMESPACE);
+      await cluster.waitForList(frame, REPOSITORIES);
+      await cluster.openWorkspace(frame, repository.metadata.name, REPOSITORIES);
+      // For each kind: one operation, the newest a way to its view, and the backup or the restore it belongs to.
+      for (const [kind, operation, owner] of [
+        ["pod-volume-backup", backup.metadata.name, `fixture-volume-backup-${cluster.E2E_FIXTURE_RUN}`],
+        ["pod-volume-restore", restore.metadata.name, `fixture-volume-restore-${cluster.E2E_FIXTURE_RUN}`],
+      ] as const) {
+        const use = frame.locator(`[data-testid=velero-used-by-${kind}]`);
+
+        await use.locator("[data-testid=velero-used-by-count]").waitFor({ state: "visible", timeout: 60_000 });
+        expect([kind, (await use.locator("[data-testid=velero-used-by-count]").innerText()).trim()]).toEqual([
+          kind,
+          `1 ${kind.replaceAll("-", " ")}`,
+        ]);
+        expect([kind, (await use.innerText()).replace(/\s+/g, " ")]).toEqual([kind, expect.stringContaining(owner)]);
+        await use.locator(`[data-testid="velero-open-${kind}-${operation}"]`).click();
+        await frame.waitForSelector(`[data-testid=velero-${kind}-workspace]`, { timeout: 60_000 });
+        expect([kind, (await cluster.shownView(frame))?.name]).toEqual([kind, operation]);
+        await cluster.closeWorkspace(frame);
+        expect([kind, (await cluster.shownView(frame))?.name]).toEqual([kind, repository.metadata.name]);
+      }
+      await cluster.captureScreenshot(frame, "dark-backup-repository-used-by");
+      await cluster.closeWorkspace(frame);
+      expect(await cluster.shownView(frame)).toBeUndefined();
+      await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "leaves the objects of Velero as they were, writes nothing, and asks Velero for nothing",
     async () => {
       const after = cluster.clusterSnapshot();
