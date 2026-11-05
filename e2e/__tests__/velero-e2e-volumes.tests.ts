@@ -209,8 +209,29 @@ describe("views of the backup repositories and of the pod volume operations", ()
     "reads the pod volume backups while a backup is open and the pod volume restores while a restore is, once at each read, and not the family of the other",
     async () => {
       // The daily backup holds no operation of its own: its one pod volume backup names in its label the UID of an
-      // earlier backup of the same name, and its band says none. The mapped restore holds its seven pod volume
+      // earlier backup of the same name, and its band says none. The suite reads that pod volume backup on the
+      // cluster, by the label of the name, before the windows of the reads begin, so that the band says none of an
+      // operation the views placed, not of one that is not there. The mapped restore holds its seven pod volume
       // restores, which its band shows in rows.
+      const daily = cluster.veleroObject<{ metadata: { uid?: string } }>(
+        "backups",
+        BACKUP,
+        cluster.E2E_VIEWS_NAMESPACE,
+      );
+      const ofTheName = cluster.labelledObjects<{ metadata: { labels?: Record<string, string> } }>(
+        "podvolumebackups",
+        `velero.io/backup-name=${BACKUP}`,
+        cluster.E2E_VIEWS_NAMESPACE,
+      );
+
+      expect(daily?.metadata.uid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+      expect(
+        ofTheName.map(({ metadata }) => {
+          const uid = metadata.labels?.["velero.io/backup-uid"];
+
+          return { labelled: uid !== undefined, ofTheBackup: uid === daily?.metadata.uid };
+        }),
+      ).toEqual([{ labelled: true, ofTheBackup: false }]);
       for (const [of, name, kind, own, other, band] of [
         [cluster.BACKUPS, BACKUP, "backupOpen", PVB, PVR, "none"],
         [cluster.RESTORES, RESTORE, "restoreOpen", PVR, PVB, "rows"],
