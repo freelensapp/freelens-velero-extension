@@ -17,6 +17,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as cluster from "../../integration/helpers/velero-cluster";
 import * as velero from "../../integration/helpers/velero-extension";
+import * as volumes from "../../integration/helpers/velero-volumes";
 
 import type { Frame } from "playwright";
 
@@ -255,6 +256,58 @@ describe("views of the backup repositories and of the pod volume operations", ()
         expect([kind, open[other] ?? 0]).toEqual([kind, 0]);
         await cluster.closeWorkspace(frame);
       }
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows the pod volume backup of the real backup of the volume as the cluster holds it, and the way to its repository and back",
+    async () => {
+      // What the node agent wrote for the volume of the run, read by the suite on the cluster by the label of the
+      // backup, never by its name, which the release makes; and the repository the server made for it.
+      const backup = `fixture-volume-backup-${cluster.E2E_FIXTURE_RUN}`;
+      const operations = cluster.labelledObjects<{
+        metadata: { name: string };
+        spec?: { node?: string; volume?: string; pod?: { namespace?: string } };
+        status?: { phase?: string; snapshotID?: string };
+      }>("podvolumebackups", `velero.io/backup-name=${backup}`);
+      const [repository] = cluster.labelledObjects<{ metadata: { name: string } }>(
+        "backuprepositories",
+        cluster.runRepositorySelector(),
+      );
+
+      expect(operations.map(({ status }) => status?.phase)).toEqual(["Completed"]);
+      const [operation] = operations;
+
+      expect(operation.status?.snapshotID).toBeTruthy();
+      await cluster.openPage(frame, cluster.BACKUPS);
+      await cluster.selectInstallation(frame, cluster.E2E_NAMESPACE);
+      await cluster.waitForList(frame, cluster.BACKUPS);
+      await cluster.openWorkspace(frame, backup, cluster.BACKUPS);
+      expect((await cluster.volumeBand(frame, "rows")).rows).toHaveLength(1);
+      // The row of the band is the way to the view of the pod volume backup.
+      await frame.locator(`[data-testid="velero-open-pod-volume-backup-${operation.metadata.name}"]`).click();
+      const view = frame.locator("[data-testid=velero-pod-volume-backup-workspace]");
+
+      await view.waitFor({ state: "visible", timeout: 60_000 });
+      expect((await cluster.shownView(frame))?.name).toBe(operation.metadata.name);
+      expect(await volumes.factOf(view, "Phase")).toMatch(/^Completed\b/);
+      expect(await volumes.factOf(view, "Snapshot ID")).toBe(operation.status?.snapshotID);
+      expect(await volumes.factOf(view, "Node")).toBe(operation.spec?.node);
+      expect(await volumes.factOf(view, "Volume")).toBe(operation.spec?.volume);
+      expect(await volumes.factOf(view, "Pod namespace")).toBe(operation.spec?.pod?.namespace);
+      await cluster.captureScreenshot(frame, "dark-pod-volume-backup-of-the-volume");
+      // Its repository, found by the three labels, is a way to the view of the repository, and the way back leads to
+      // the pod volume backup again, then to the backup, then to the list.
+      await frame.locator(`[data-testid="velero-open-backup-repository-${repository.metadata.name}"]`).click();
+      await frame.waitForSelector("[data-testid=velero-backup-repository-workspace]", { timeout: 60_000 });
+      expect((await cluster.shownView(frame))?.name).toBe(repository.metadata.name);
+      await cluster.closeWorkspace(frame);
+      expect((await cluster.shownView(frame))?.name).toBe(operation.metadata.name);
+      await cluster.closeWorkspace(frame);
+      expect((await cluster.shownView(frame))?.name).toBe(backup);
+      await cluster.closeWorkspace(frame);
+      expect(await cluster.shownView(frame)).toBeUndefined();
     },
     TIMEOUT,
   );

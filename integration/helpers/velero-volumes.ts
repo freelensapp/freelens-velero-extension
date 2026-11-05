@@ -8,6 +8,19 @@
 // records, and never by the code of the extension. The words are the ones the module of the words writes, copied
 // here as they are written; a time and a duration are written here in the form of the views.
 
+import type { Locator } from "playwright";
+
+/**
+ * The value of a fact of a view, by the name it is given: the text of the part beside its name, whitespace made one
+ * space. The facts of a view are drawn as a name and a value, the value right after the name.
+ */
+export async function factOf(view: Locator, name: string): Promise<string> {
+  const value = view.locator(`xpath=.//div[normalize-space(.)="${name}"]/following-sibling::div[1]`).first();
+
+  await value.waitFor({ state: "visible", timeout: 60_000 });
+  return (await value.innerText()).replace(/\s+/g, " ").trim();
+}
+
 /** The words of the views of a repository, as the module of the words writes them. */
 export const REPOSITORY_WORDS = {
   notSet: "Not set",
