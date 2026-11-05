@@ -1467,3 +1467,55 @@ Decided while implementing, on 2026-11-04:
 - The evidence of phase B is read from the store through the filer of its own pod,
   at `127.0.0.1`, with no credentials and nothing written; the scripts of the
   environment keep asking the store only what `assertStoreRequest` allows.
+
+T5.1, the fifth of its five pull requests, on 2026-11-05: the three kinds proven in
+the packaged application on the fixtures of the fourth, with their sessions of the
+integration test, the measure of their long list and the pre-review of their views.
+Its runs were made on a second Linux machine, in Freelens built at the validation
+target `b9b53e16`; T51-PR5-PENDING: the final runs, the hosted runs and the record of
+the changes made on purpose.
+
+- The sessions of the integration test (REQ-215 of SPEC-0015): a BackupRepository, a
+  PodVolumeBackup and a PodVolumeRestore, each in a namespace no controller of the
+  release reads, their nine cases green in 35 seconds and each seen failing for its
+  own reason; the whole integration test, nine files and thirty cases, green in 97
+  seconds.
+- KIND-03, KIND-07, KIND-19 (the suite of the repositories): the nine repositories of
+  the views against what the cluster holds of each, read with `kubectl` in their
+  namespace before the page; the last maintenance how long ago between two readings
+  of the clock, the first moved back by what the clock of the views may lag, with the
+  mark of a newest one that failed; the orders of the readiness and of the last
+  maintenance, each both ways; the search; the three maintenances of the one whose
+  newest failed, newest first; the next maintenance of each; the identifier of the
+  one of restic as written; what used the real repository of the installation, its
+  pod volume backup and its pod volume restore, each a way and back.
+- KIND-05 (the details of the host): for a repository, a pod volume backup and a pod
+  volume restore, the section reads as the row and its way leads to the view.
+- KIND-06, KIND-09, KIND-10, KIND-11 (the suite of the volumes): the sentence of each
+  phase of a pod volume backup; the band of the backup in progress counted by phase
+  as `velero backup describe` counts an operation with no phase, ten rows and ten
+  more; the backup that partially failed, its one pod volume backup failed with its
+  message and no repository for its namespace; the pod volume backup of the name of
+  the daily backup, read on the cluster before the band says none, whose owner
+  reference names the backup its labels do not; the pod volume backup of the real
+  backup of the volume with its phase, snapshot ID, node, volume and namespace of the
+  pod as the cluster holds them, and the way to its repository and back.
+- KIND-14 (no write): no way to select, edit, cancel or delete a repository or a pod
+  volume operation, by pointer or by keyboard; nothing written. The Jobs of the
+  maintenance are not counted yet: the server lists them at its own passes, which the
+  count has to tell from the views.
+- KIND-16 (the readers): to the first reader the band says that the pod volume
+  backups cannot be read and how many the backup has is not known, with no count; to
+  the second, a pod volume restore with the restore it belongs to, and a pod volume
+  backup with its backup denied.
+- KIND-17 (the pre-review): the three lists, the view of the repository whose newest
+  maintenance failed, the band of the backup in progress whole and the view of its
+  pod volume backup that failed with a message of several lines, in both themes at
+  every size, forty-six views in all; the band read with the keyboard alone. The
+  restores suite and the pre-review count the eleven links the band of the mapped
+  restore draws.
+- KIND-18 (the long list): the two thousand pod volume backups, a hundred rows
+  mounted at most, twenty interactions against the budget of 250 milliseconds at the
+  95th percentile, reported as `kind-18-volumes-performance`. T51-PR5-PENDING: the
+  workspace of the backup of 200 operations, the reads counted while the list is
+  open.
