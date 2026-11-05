@@ -46,6 +46,23 @@ const RESTORE_SEARCHES = [
   "completed",
 ];
 
+// The pod volume backups of the long list: two for each of the first nine hundred backups, and two hundred of the
+// thousandth, each named by its backup and a suffix the run makes.
+const POD_VOLUME_BACKUPS = 2000;
+// The same for the pod volume backups: by their phases and by the backups they belong to, which their names begin with.
+const POD_VOLUME_BACKUP_SEARCHES = [
+  "failed",
+  "backup-09",
+  "completed",
+  "backup-0123",
+  "accepted",
+  "backup-1000",
+  "canceled",
+  "prepared",
+  "backup-07",
+  "in progress",
+];
+
 function percentile(values: number[], fraction: number): number {
   const sorted = [...values].sort((one, other) => one - other);
 
@@ -346,6 +363,60 @@ describe("long list of backups", () => {
       expect(Math.abs(back.scroll - state.scroll)).toBeLessThanOrEqual(2);
       expect(back.first).toBe(state.first);
       await cluster.captureScreenshot(frame, "dark-restores-thousand-filtered-after-back");
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows all the two thousand pod volume backups of the namespace, and mounts a part of them",
+    async () => {
+      const of = cluster.POD_VOLUME_BACKUPS;
+
+      await cluster.showList(frame);
+      await cluster.openPage(frame, of);
+      await cluster.waitForList(frame, of);
+      expect((await cluster.target(frame)).namespace).toBe(`${cluster.E2E_SCALE_NAMESPACE} (configured)`);
+      await frame.waitForSelector(`[data-testid=velero-pod-volume-backups] >> text="${POD_VOLUME_BACKUPS} items"`, {
+        timeout: 60_000,
+      });
+      const mounted = await cluster.mounted(frame, of);
+
+      expect(mounted.length).toBeGreaterThan(0);
+      expect(mounted.length).toBeLessThanOrEqual(MOUNTED);
+      // No record is hidden: the two hundred of the thousandth backup are found by the search, a part of them mounted.
+      const found = await cluster.search(frame, "backup-1000", of);
+
+      expect(found.length).toBeGreaterThan(0);
+      expect(found.length).toBeLessThanOrEqual(MOUNTED);
+      expect(found.filter((name) => !name.startsWith("backup-1000-"))).toEqual([]);
+      await cluster.search(frame, "", of);
+      await frame.waitForSelector(`[data-testid=velero-pod-volume-backups] >> text="${POD_VOLUME_BACKUPS} items"`, {
+        timeout: 60_000,
+      });
+      await endOfList(frame, of, mounted);
+      expect((await cluster.mounted(frame, of)).length).toBeLessThanOrEqual(MOUNTED);
+      await cluster.scrollList(frame, 0, of);
+      await cluster.captureScreenshot(frame, "dark-pod-volume-backups-two-thousand");
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "answers a search and a selection of the pod volume backups within the budget, twenty times over",
+    async () => {
+      const { objects, ...measured } = await measureList(frame, cluster.POD_VOLUME_BACKUPS, POD_VOLUME_BACKUP_SEARCHES);
+      const report = { podVolumeBackups: objects, ...measured };
+
+      // The report is written before anything is asserted of it: a case that fails leaves what was measured.
+      console.log(`KIND-18 ${JSON.stringify(report)}`);
+      await cluster.writeReport("kind-18-volumes-performance", report);
+      expect(objects).toBe(POD_VOLUME_BACKUPS);
+      expect(report.interactions).toBe(20);
+      expect(new Set(report.times.map((time) => time.interaction)).size).toBe(20);
+      expect(report.times.filter((time) => !(time.total > 0) || time.response > time.total)).toEqual([]);
+      expect(report.mounted).toBeGreaterThan(0);
+      expect(report.mounted).toBeLessThanOrEqual(MOUNTED);
+      expect(report.response.p95).toBeLessThan(BUDGET);
     },
     TIMEOUT,
   );
