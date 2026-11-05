@@ -271,6 +271,32 @@ describe("the backup repositories of the views", () => {
   );
 
   it(
+    "shows the identifier of the repository of restic as the release writes it, and none for one of kopia",
+    async () => {
+      const restic = held.find((repository) => repository.spec?.repositoryType === "restic");
+      const kopia = held.find((repository) => repository.spec?.repositoryType === "kopia");
+
+      if (!restic || !kopia) throw new Error("The views hold no repository of restic or none of kopia");
+      const written = restic.spec?.resticIdentifier ?? "";
+
+      expect(written).toMatch(/^s3:/);
+      await cluster.openPage(frame, REPOSITORIES);
+      await cluster.waitForList(frame, REPOSITORIES);
+      await cluster.openWorkspace(frame, restic.metadata.name, REPOSITORIES);
+      const identifier = frame.locator("[data-testid=velero-backup-repository-identifier]");
+
+      await identifier.waitFor({ state: "visible", timeout: 60_000 });
+      expect((await identifier.innerText()).trim()).toBe(written);
+      await cluster.closeWorkspace(frame);
+      await cluster.openWorkspace(frame, kopia.metadata.name, REPOSITORIES);
+      await frame.waitForSelector("[data-testid=velero-backup-repository-of]", { timeout: 60_000 });
+      expect(await identifier.count()).toBe(0);
+      await cluster.closeWorkspace(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "gives the details of the host the reading of the row, and a way to the view of the repository",
     async () => {
       const repository = held.find((item) => volumes.readinessOf(item) === volumes.READINESS.notReady);

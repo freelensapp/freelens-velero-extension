@@ -115,6 +115,7 @@ export interface RepositoryObject {
     volumeNamespace?: string;
     backupStorageLocation?: string;
     repositoryType?: string;
+    resticIdentifier?: string;
     maintenanceFrequency?: string;
   };
   status?: {
