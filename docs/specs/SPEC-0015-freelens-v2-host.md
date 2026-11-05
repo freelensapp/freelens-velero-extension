@@ -1450,7 +1450,9 @@ the product made on purpose: with no way in the section of a repository and a wr
 installation in the section of the operations, the three cases of the details failed
 and the six others passed; with the rows of every list renamed and an item of the
 extension in the menu of the three kinds, the nine failed, the lists and the details
-waiting for their rows, the menus holding the item.
+waiting for their rows, the menus holding the item. The whole integration test then
+passed there, FND-10 and the eight sessions, nine files and thirty cases, the run of
+`local-demo.mts integration` taking 97 seconds on the cluster of its job.
 
 **The move of the pin to Freelens 2.0.0, on 2026-10-29** (REQ-218, HOST-23). The
 validation target moved from `7801fb10` to `b9b53e16056578c5407312eba5823a089972f6d5`,
