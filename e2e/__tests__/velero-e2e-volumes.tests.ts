@@ -261,6 +261,62 @@ describe("views of the backup repositories and of the pod volume operations", ()
   );
 
   it(
+    "counts the pod volume backups of the backup in progress by their phases, shows ten and ten more, each a way and back",
+    async () => {
+      // The operations of the backup in progress, read by the suite on the cluster by the label of its name and of
+      // its UID, as the release labels them; one with no phase is counted with New, as `velero backup describe`
+      // counts it.
+      const owner = cluster.veleroObject<{ metadata: { uid?: string } }>(
+        "backups",
+        "backup-inprogress",
+        cluster.E2E_VIEWS_NAMESPACE,
+      );
+      const own = cluster
+        .labelledObjects<{ metadata: { name: string; labels?: Record<string, string> }; status?: { phase?: string } }>(
+          "podvolumebackups",
+          "velero.io/backup-name=backup-inprogress",
+          cluster.E2E_VIEWS_NAMESPACE,
+        )
+        .filter(({ metadata }) => metadata.labels?.["velero.io/backup-uid"] === owner?.metadata.uid);
+      const counts = new Map<string, number>();
+
+      for (const { status } of own) counts.set(status?.phase || "New", (counts.get(status?.phase || "New") ?? 0) + 1);
+      expect(own.length).toBeGreaterThan(10);
+      expect(own.length).toBeLessThanOrEqual(20);
+      await cluster.openPage(frame, cluster.BACKUPS);
+      await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+      await cluster.waitForList(frame, cluster.BACKUPS);
+      await cluster.openWorkspace(frame, "backup-inprogress", cluster.BACKUPS);
+      const first = await cluster.volumeBand(frame, "rows");
+
+      expect([...first.groups].sort()).toEqual([...counts.entries()].sort());
+      expect(first.rows).toHaveLength(10);
+      expect(first.more).toBe(true);
+      await frame.locator("[data-testid=velero-volume-more]").click();
+      await frame.waitForFunction(
+        (shown) => document.querySelectorAll("[data-testid=velero-volume-rows] tbody tr").length === shown,
+        own.length,
+        { timeout: 60_000 },
+      );
+      const all = await cluster.volumeBand(frame, "rows");
+
+      expect([...all.rows].sort()).toEqual(own.map(({ metadata }) => metadata.name).sort());
+      expect(all.more).toBe(false);
+      await cluster.captureScreenshot(frame, "dark-backup-inprogress-band");
+      // A row is a way to the view of its operation, and the way back leads to the backup again.
+      for (const name of [all.rows[0], all.rows[all.rows.length - 1]]) {
+        await frame.locator(`[data-testid="velero-open-pod-volume-backup-${name}"]`).click();
+        await frame.waitForSelector("[data-testid=velero-pod-volume-backup-workspace]", { timeout: 60_000 });
+        expect((await cluster.shownView(frame))?.name).toBe(name);
+        await cluster.closeWorkspace(frame);
+        expect((await cluster.shownView(frame))?.name).toBe("backup-inprogress");
+      }
+      await cluster.closeWorkspace(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "shows the pod volume backup of the real backup of the volume as the cluster holds it, and the way to its repository and back",
     async () => {
       // What the node agent wrote for the volume of the run, read by the suite on the cluster by the label of the
