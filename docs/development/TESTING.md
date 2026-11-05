@@ -113,17 +113,24 @@ that:
   line at the level of an error, nor does what either process wrote.
 
 No cluster takes part in FND-10. Beside it, the integration test of the template
-has a session for each of the five kinds of the first milestones (the three of
-SPEC-0014 get theirs with their fixtures, in a later pull request of T5.1, as the
-amendment of 2026-10-27 of SPEC-0015 says), each a file of its own,
+has a session for each of the eight kinds the extension shows: the five of the first
+milestones and the three of SPEC-0014 under `velero.io/v1`, which the last pull
+request of T5.1 added, as the amendment of 2026-10-27 of SPEC-0015 says. Each is a
+file of its own,
 [`backups`](../../integration/__tests__/backups.tests.ts),
 [`restores`](../../integration/__tests__/restores.tests.ts),
 [`schedules`](../../integration/__tests__/schedules.tests.ts),
-[`storage-locations`](../../integration/__tests__/storage-locations.tests.ts) and
+[`storage-locations`](../../integration/__tests__/storage-locations.tests.ts),
 [`snapshot-locations`](../../integration/__tests__/snapshot-locations.tests.ts),
+[`backup-repositories`](../../integration/__tests__/backup-repositories.tests.ts),
+[`pod-volume-backups`](../../integration/__tests__/pod-volume-backups.tests.ts) and
+[`pod-volume-restores`](../../integration/__tests__/pod-volume-restores.tests.ts),
 made from [one helper](../../integration/helpers/velero-kinds.ts). A session places
 one synthetic object of its kind, which the CRD of the reviewed release accepts, in
-a namespace of its own, `velero-integration-<list>`, which no server of Velero reads,
+a namespace of its own, `velero-integration-<list>`, which no server of Velero reads
+(the cache of the server holds its own namespace, and the node agent selects the pod
+volume operations of its own by a field, v1.18.4 `pkg/cmd/server/server.go:272-276`
+and `pkg/cmd/cli/nodeagent/server.go:183-193`),
 both labelled `freelensapp.io/velero-integration-session`, after it removed what an
 earlier run left; it starts Freelens with the isolation of the suites, with the
 kubeconfig of the environment as the one cluster of the catalog, and checks three

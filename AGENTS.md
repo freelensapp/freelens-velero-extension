@@ -231,7 +231,7 @@ pnpm demo:up              # The cluster with the fixtures left in place
 pnpm demo:views           # What the views need beside them, and where the kubeconfigs of the demo are
 pnpm e2e:views            # The suites of the views in the Freelens FREELENS_APP names, against the fixtures
 pnpm pre-review           # Both themes, the sizes of the window, the zoom and the keyboard
-pnpm e2e:integration      # FND-10 and a session for each of the five kinds, in the Freelens FREELENS_APP names
+pnpm e2e:integration      # FND-10 and a session for each of the eight kinds, in the Freelens FREELENS_APP names
 
 # Build
 pnpm build                # Both Vite runs, renderer then main, without the type check
@@ -263,7 +263,7 @@ src/
   common/                   # Pure helpers on plain data, and the store of the preferences
 build/                      # Vite plugins of the template: modules of the host, standard decorators, CSS module declarations
 environment-tests/          # Probes of the programs of each process, which fail on an API of another environment
-integration/                # FND-10, a session for each of the five kinds, and the helpers of the suites of the views
+integration/                # FND-10, a session for each of the eight kinds, and the helpers of the suites of the views
 test/                       # The stub of the SDK, the doubles of the host, the build and environment tests, the measures
 e2e/scripts/                # Disposable kind cluster with Velero and S3, fixtures, transport proof, stand-ins of the host
 e2e/__tests__/              # The suites of the views, run in the Freelens that FREELENS_APP names
@@ -924,7 +924,7 @@ The hosted checks run on every pull request and on main, on synthetic data only:
 - `trunk-check.yaml`: Trunk on every file.
 - `unit-tests.yaml`: `pnpm test:unit`, the build first, then the tests and the
   measures alone.
-- `integration-tests.yaml`: FND-10 and the five sessions of the integration test,
+- `integration-tests.yaml`: FND-10 and the eight sessions of the integration test,
   in Freelens built from source at the commit of the validation target, on the
   disposable kind cluster `pnpm e2e:cluster:up` makes, taken down whatever happens.
 - `views-tests.yaml`: every suite of the views, the pre-review and FND-10, in one

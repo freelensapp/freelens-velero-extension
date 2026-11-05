@@ -151,7 +151,7 @@ its fixtures left in place:
 pnpm demo:up            # the environment with the fixtures left in place
 pnpm e2e:views          # the suites of the views, in the Freelens FREELENS_APP names
 pnpm pre-review         # both themes, the sizes of the window, the keyboard
-pnpm e2e:integration    # the integration test, a session for each of the five kinds
+pnpm e2e:integration    # the integration test, a session for each of the eight kinds
 ```
 
 They start the Freelens that `FREELENS_APP` names: on a machine of a

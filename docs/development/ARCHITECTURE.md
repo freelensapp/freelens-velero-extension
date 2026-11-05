@@ -120,7 +120,7 @@ range of the SDK fails the install.
 
 The hosted checks are the ones of the other extensions of the organization, on
 every pull request and on main: the build, the type check, lint and Knip; Trunk;
-the unit tests; the integration tests, FND-10 and a session for each of the five
+the unit tests; the integration tests, FND-10 and a session for each of the eight
 kinds of the template's integration test, which install the packed build in a
 Freelens built from source at the commit of the validation target, on a disposable
 kind cluster of the scripts of this repository; the end-to-end tests, which bring
