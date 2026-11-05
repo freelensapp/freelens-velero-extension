@@ -1436,6 +1436,22 @@ of SPEC-0014. Decided while implementing, on 2026-10-27, for the review of the
 milestone to confirm: the three kinds of SPEC-0014 get their sessions of the
 integration test with their fixtures, in a later pull request of T5.1.
 
+**The sessions of the three kinds of SPEC-0014, on 2026-11-05** (REQ-215, HOST-20).
+The integration test holds eight sessions: BackupRepository, PodVolumeBackup and
+PodVolumeRestore joined the five, each in a namespace of its own that no controller
+of Velero reads, since the cache of the server of v1.18.4 holds its own namespace
+(`pkg/cmd/server/server.go:272-276`) and the node agent selects the pod volume
+operations of its own namespace by a field
+(`pkg/cmd/cli/nodeagent/server.go:183-193`), each object with a synthetic spec that
+holds the fields the CRD of the release requires. On a second Linux machine, in
+Freelens built at the validation target `b9b53e16`, the three files passed their nine
+cases in 35 seconds. Each case was seen failing for its own reason with a change of
+the product made on purpose: with no way in the section of a repository and a wrong
+installation in the section of the operations, the three cases of the details failed
+and the six others passed; with the rows of every list renamed and an item of the
+extension in the menu of the three kinds, the nine failed, the lists and the details
+waiting for their rows, the menus holding the item.
+
 **The move of the pin to Freelens 2.0.0, on 2026-10-29** (REQ-218, HOST-23). The
 validation target moved from `7801fb10` to `b9b53e16056578c5407312eba5823a089972f6d5`,
 the commit of the tag v2.0.0 of the release Freelens 2.0.0, published on 2026-10-28,
