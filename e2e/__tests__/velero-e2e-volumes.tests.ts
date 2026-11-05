@@ -541,6 +541,51 @@ describe("views of the backup repositories and of the pod volume operations", ()
   );
 
   it(
+    "offers no way to select, edit, cancel or delete a pod volume backup or a pod volume restore, by pointer or by keyboard",
+    async () => {
+      // What must not happen is waited for, for longer than the host takes to open a menu, and is expected not to
+      // have happened: the host opens the menu of a row in the frame after the click.
+      const appears = (selector: string) =>
+        frame.waitForSelector(selector, { state: "visible", timeout: 1500 }).then(
+          () => true,
+          () => false,
+        );
+
+      for (const of of [cluster.POD_VOLUME_BACKUPS, cluster.POD_VOLUME_RESTORES]) {
+        const list = frame.locator(`[data-testid=velero-${of.id}]`);
+
+        await cluster.showList(frame);
+        await cluster.openPage(frame, of);
+        await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+        await cluster.waitForList(frame, of);
+        const [name] = await cluster.mounted(frame, of);
+
+        expect([of.id, Boolean(name)]).toEqual([of.id, true]);
+        expect([of.id, await list.locator(".TableCell.checkbox, .Checkbox, input[type=checkbox]").count()]).toEqual([
+          of.id,
+          0,
+        ]);
+        expect([of.id, await list.locator(".TableCell.menu .Icon, .MenuActions").count()]).toEqual([of.id, 0]);
+        await frame.locator(`[data-${of.kind}-row="${name}"]`).click({ button: "right" });
+        expect([of.id, await appears(".Menu .MenuItem")]).toEqual([of.id, false]);
+        await cluster.showList(frame);
+        await frame.locator(`[data-${of.kind}-row="${name}"]`).focus();
+        for (const key of ["Delete", "Backspace", "Control+a", "Meta+Backspace"]) {
+          await started.window.keyboard.press(key);
+          expect([of.id, key, await appears('[data-testid="confirmation-dialog"], .Dialog, .ConfirmDialog')]).toEqual([
+            of.id,
+            key,
+            false,
+          ]);
+          expect([of.id, key, await cluster.shownView(frame)]).toEqual([of.id, key, undefined]);
+        }
+        expect([of.id, await list.locator(".TableRow.selected, .TableRow.checked").count()]).toEqual([of.id, 0]);
+      }
+    },
+    TIMEOUT,
+  );
+
+  it(
     "leaves the objects of Velero as they were, writes nothing, and asks Velero for nothing",
     async () => {
       const after = cluster.clusterSnapshot();
