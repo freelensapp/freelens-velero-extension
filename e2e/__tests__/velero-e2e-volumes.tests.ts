@@ -317,6 +317,52 @@ describe("views of the backup repositories and of the pod volume operations", ()
   );
 
   it(
+    "shows the one pod volume backup of a backup that partially failed, failed with its message beside the failure of the backup, and no repository of the views for it",
+    async () => {
+      const name = "views-history-4";
+      const owner = cluster.veleroObject<{ metadata: { uid?: string }; status?: { phase?: string } }>(
+        "backups",
+        name,
+        cluster.E2E_VIEWS_NAMESPACE,
+      );
+      const own = cluster
+        .labelledObjects<{
+          metadata: { name: string; labels?: Record<string, string> };
+          status?: { phase?: string; message?: string };
+        }>("podvolumebackups", `velero.io/backup-name=${name}`, cluster.E2E_VIEWS_NAMESPACE)
+        .filter(({ metadata }) => metadata.labels?.["velero.io/backup-uid"] === owner?.metadata.uid);
+
+      expect(owner?.status?.phase).toBe("PartiallyFailed");
+      expect(own.map(({ status }) => status?.phase)).toEqual(["Failed"]);
+      const [operation] = own;
+
+      await cluster.openPage(frame, cluster.BACKUPS);
+      await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+      await cluster.waitForList(frame, cluster.BACKUPS);
+      await cluster.openWorkspace(frame, name, cluster.BACKUPS);
+      const band = await cluster.volumeBand(frame, "rows");
+
+      expect(band.groups).toEqual([["Failed", 1]]);
+      expect(band.rows).toEqual([operation.metadata.name]);
+      // The failure of the backup itself is beside the band, in the status of the backup.
+      expect(await frame.locator("[data-testid=velero-backup-status]").innerText()).toContain("Partially failed");
+      await frame.locator(`[data-testid="velero-open-pod-volume-backup-${operation.metadata.name}"]`).click();
+      const view = frame.locator("[data-testid=velero-pod-volume-backup-workspace]");
+
+      await view.waitFor({ state: "visible", timeout: 60_000 });
+      expect((await view.locator("[data-testid=velero-volume-message]").innerText()).trim()).toBe(
+        operation.status?.message,
+      );
+      // Its pod is of a namespace no repository of the views is for: none is found by the three labels.
+      expect(await view.locator("[data-testid=velero-volume-repository]").getAttribute("data-reference")).toBe("none");
+      await cluster.closeWorkspace(frame);
+      await cluster.closeWorkspace(frame);
+      expect(await cluster.shownView(frame)).toBeUndefined();
+    },
+    TIMEOUT,
+  );
+
+  it(
     "shows the pod volume backup of the real backup of the volume as the cluster holds it, and the way to its repository and back",
     async () => {
       // What the node agent wrote for the volume of the run, read by the suite on the cluster by the label of the
