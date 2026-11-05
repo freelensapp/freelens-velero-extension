@@ -12,13 +12,19 @@ import type { Locator } from "playwright";
 
 /**
  * The value of a fact of a view, by the name it is given: the text of the part beside its name, whitespace made one
- * space. The facts of a view are drawn as a name and a value, the value right after the name.
+ * space and the names of its icons left out. The facts of a view are drawn as a name and a value, the value right after the name.
  */
 export async function factOf(view: Locator, name: string): Promise<string> {
   const value = view.locator(`xpath=.//div[normalize-space(.)="${name}"]/following-sibling::div[1]`).first();
 
   await value.waitFor({ state: "visible", timeout: 60_000 });
-  return (await value.innerText()).replace(/\s+/g, " ").trim();
+  // Without the names of its icons, which the font draws as marks: as the cells of a row are read.
+  return value.evaluate((element) => {
+    const copy = element.cloneNode(true) as HTMLElement;
+
+    for (const icon of copy.querySelectorAll(".Icon")) icon.remove();
+    return (copy.textContent ?? "").replace(/\s+/g, " ").trim();
+  });
 }
 
 /** The words of the views of a repository, as the module of the words writes them. */

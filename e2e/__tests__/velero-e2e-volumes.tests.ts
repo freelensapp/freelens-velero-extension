@@ -354,7 +354,12 @@ describe("views of the backup repositories and of the pod volume operations", ()
       await cluster.captureScreenshot(frame, "dark-backup-inprogress-band");
       // A row is a way to the view of its operation, and the way back leads to the backup again.
       for (const name of [all.rows[0], all.rows[all.rows.length - 1]]) {
-        await frame.locator(`[data-testid="velero-open-pod-volume-backup-${name}"]`).click();
+        const way = frame.locator(`[data-testid="velero-open-pod-volume-backup-${name}"]`);
+
+        // The view of the backup, shown again, shows ten rows of the band: the command shows the others.
+        await cluster.volumeBand(frame, "rows");
+        if (!(await way.count())) await frame.locator("[data-testid=velero-volume-more]").click();
+        await way.click();
         await frame.waitForSelector("[data-testid=velero-pod-volume-backup-workspace]", { timeout: 60_000 });
         expect((await cluster.shownView(frame))?.name).toBe(name);
         await cluster.closeWorkspace(frame);

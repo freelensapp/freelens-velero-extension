@@ -331,8 +331,15 @@ describe("the backup repositories of the views", () => {
       await link.click();
       await frame.waitForSelector("[data-testid=velero-backup-repository-workspace]", { timeout: 60_000 });
       expect((await cluster.shownView(frame))?.name).toBe(name);
+      // The host closes its details once the address leaves them. Escape, which closes the details, closes the view
+      // as well: the view is closed by its way back, and the details only if they are still shown.
+      await frame
+        .locator(".Drawer.KubeObjectDetails")
+        .first()
+        .waitFor({ state: "hidden", timeout: 10_000 })
+        .catch(() => undefined);
       if ((await cluster.hostDetailsShown(frame)).drawer) await cluster.closeDetails(frame);
-      await cluster.closeWorkspace(frame);
+      if (await cluster.shownView(frame)) await cluster.closeWorkspace(frame);
     },
     TIMEOUT,
   );
