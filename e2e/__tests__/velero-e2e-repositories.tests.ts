@@ -26,6 +26,10 @@ const REPOSITORIES = cluster.REPOSITORIES;
 // Every repository of the views carries the three labels the release writes; the one of the type selects them all.
 const ANY_REPOSITORY = "velero.io/repository-type";
 const HEAD = "[data-testid=velero-backup-repositories] .TableHead .TableCell";
+// How long what must not happen is waited for: longer than the frame the host opens a menu in.
+const NOTHING = 1500;
+const MENU = ".Menu .MenuItem";
+const DIALOG = '[data-testid="confirmation-dialog"], .Dialog, .ConfirmDialog';
 
 describe("the backup repositories of the views", () => {
   let started: velero.StartedApplication;
@@ -353,6 +357,49 @@ describe("the backup repositories of the views", () => {
       await cluster.closeWorkspace(frame);
       expect(await cluster.shownView(frame)).toBeUndefined();
       await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "offers no way to select, edit or delete a repository, by pointer or by keyboard",
+    async () => {
+      const name = held[0]?.metadata.name ?? "";
+      const list = frame.locator("[data-testid=velero-backup-repositories]");
+      // What must not happen is waited for, for longer than the host takes to open a menu, and is expected not to
+      // have happened: the host opens the menu of a row in the frame after the click.
+      const appears = (selector: string) =>
+        frame.waitForSelector(selector, { state: "visible", timeout: NOTHING }).then(
+          () => true,
+          () => false,
+        );
+
+      await cluster.openPage(frame, REPOSITORIES);
+      await cluster.waitForList(frame, REPOSITORIES);
+      expect(await list.locator(".TableCell.checkbox, .Checkbox, input[type=checkbox]").count()).toBe(0);
+      expect(await list.locator(".TableCell.menu .Icon, .MenuActions").count()).toBe(0);
+      expect(await list.locator(".AddRemoveButtons button, .add-button, .remove-button").count()).toBe(0);
+      await frame.locator(`[data-backup-repository-row="${name}"]`).click({ button: "right" });
+      expect(await appears(MENU)).toBe(false);
+      await cluster.showList(frame);
+      await frame.locator(`[data-backup-repository-row="${name}"]`).focus();
+      for (const key of ["Delete", "Backspace", "Control+a", "Meta+Backspace"]) {
+        await started.window.keyboard.press(key);
+        expect([key, await appears(DIALOG)]).toEqual([key, false]);
+        expect([key, await cluster.shownView(frame)]).toEqual([key, undefined]);
+      }
+      expect(await list.locator(".TableRow.selected, .TableRow.checked").count()).toBe(0);
+      // The same click on the list the host shows of the same objects opens its menu: what is looked for above is
+      // what the host shows when it offers to edit and to delete.
+      await cluster.navigate(frame, "/crd/velero.io/backuprepositories");
+      await cluster.selectHostNamespace(frame, cluster.E2E_VIEWS_NAMESPACE);
+      await frame.locator(".TableRow", { hasText: name }).first().click({ button: "right" });
+      await frame.waitForSelector(MENU, { state: "visible", timeout: 60_000 });
+      expect((await frame.locator(MENU).allInnerTexts()).join(" ")).toMatch(/Delete/);
+      await started.window.keyboard.press("Escape");
+      await frame.waitForSelector(MENU, { state: "hidden", timeout: 60_000 });
+      await cluster.openPage(frame, REPOSITORIES);
+      await cluster.waitForList(frame, REPOSITORIES);
     },
     TIMEOUT,
   );
