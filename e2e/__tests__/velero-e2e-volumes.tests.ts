@@ -363,6 +363,50 @@ describe("views of the backup repositories and of the pod volume operations", ()
   );
 
   it(
+    "gives the details of the host of a pod volume backup and of a pod volume restore the reading of their views, and a way to each",
+    async () => {
+      // A pod volume backup that failed with a message, of the backup that partially failed, and the pod volume
+      // restore of the mapped restore that completed with no node, of the legacy controller of restic: each read by
+      // the suite on the cluster by the label of its owner.
+      const [backup] = cluster
+        .labelledObjects<{ metadata: { name: string }; status?: { phase?: string; message?: string } }>(
+          "podvolumebackups",
+          "velero.io/backup-name=views-history-4",
+          cluster.E2E_VIEWS_NAMESPACE,
+        )
+        .filter(({ status }) => status?.phase === "Failed");
+      const [restore] = cluster
+        .labelledObjects<{ metadata: { name: string }; spec?: { uploaderType?: string }; status?: { phase?: string } }>(
+          "podvolumerestores",
+          `velero.io/restore-name=${RESTORE}`,
+          cluster.E2E_VIEWS_NAMESPACE,
+        )
+        .filter(({ spec, status }) => status?.phase === "Completed" && spec?.uploaderType === "restic");
+
+      expect([Boolean(backup), Boolean(restore)]).toEqual([true, true]);
+      for (const [resource, kind, name, texts] of [
+        [
+          "podvolumebackups",
+          "pod-volume-backup",
+          backup.metadata.name,
+          ["Failed", backup.status?.message ?? "", "views-history-4"],
+        ],
+        ["podvolumerestores", "pod-volume-restore", restore.metadata.name, ["Completed", RESTORE]],
+      ] as const) {
+        await cluster.navigate(frame, `/crd/velero.io/${resource}`);
+        await cluster.selectHostNamespace(frame, cluster.E2E_VIEWS_NAMESPACE);
+        const details = await cluster.hostDetails(frame, name, ...texts, cluster.E2E_VIEWS_NAMESPACE);
+
+        expect([kind, details.includes("Velero")]).toEqual([kind, true]);
+        expect([kind, await frame.locator(`[data-testid=velero-${kind}-details-link]`).count()]).toEqual([kind, 1]);
+        await cluster.captureScreenshot(frame, `dark-${kind}-host-details`);
+        await cluster.closeDetails(frame);
+      }
+    },
+    TIMEOUT,
+  );
+
+  it(
     "shows the pod volume backup of the real backup of the volume as the cluster holds it, and the way to its repository and back",
     async () => {
       // What the node agent wrote for the volume of the run, read by the suite on the cluster by the label of the
