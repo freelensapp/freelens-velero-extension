@@ -92,7 +92,7 @@ describe("the backup repositories of the views", () => {
       );
       for (const repository of held) {
         const name = repository.metadata.name;
-        const readFrom = Date.now();
+        const readFrom = Date.now() - volumes.VIEW_CLOCK_LAG;
         const cells = await cluster.expectCells(REPOSITORIES, frame, name, volumes.repositoryCells(repository));
         const readTo = Date.now();
 
@@ -185,6 +185,83 @@ describe("the backup repositories of the views", () => {
       }
       await cluster.search(frame, "", REPOSITORIES);
       expect((await cluster.mounted(frame, REPOSITORIES)).length).toBe(9);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows the recent maintenances of a repository newest first, the newest failed with its message, and the last that succeeded as its last maintenance",
+    async () => {
+      const repository = held.find(volumes.newestMaintenanceFailed);
+
+      if (!repository) throw new Error("No repository of the views has a newest maintenance that failed");
+      const name = repository.metadata.name;
+      const last = repository.status?.lastMaintenanceTime ?? "";
+
+      await cluster.openPage(frame, REPOSITORIES);
+      await cluster.waitForList(frame, REPOSITORIES);
+      await cluster.openWorkspace(frame, name, REPOSITORIES);
+      const workspace = frame.locator("[data-testid=velero-backup-repository-workspace]");
+      const table = workspace.locator("[data-testid=velero-backup-repository-maintenances]");
+
+      await table.waitFor({ state: "visible", timeout: 60_000 });
+      // The three of the release, newest first: the newest failed, with its message; the two before it succeeded.
+      const rows = await table.locator("tbody tr").evaluateAll((elements) =>
+        elements.map((row) => {
+          const cells = [...row.querySelectorAll("td")].map((cell) =>
+            (cell.textContent ?? "").replace(/\s+/g, " ").trim(),
+          );
+
+          return { result: cells[0], duration: cells[3], message: cells[4] };
+        }),
+      );
+
+      expect(rows).toEqual(volumes.maintenanceRows(repository));
+      expect(rows.map(({ result }) => result)).toEqual(["Failed", "Succeeded", "Succeeded"]);
+      // The last maintenance is the time of the last that succeeded, with how long ago and the mark of the newest that
+      // failed, and the note that says so.
+      const maintained = workspace.locator("[data-testid=velero-backup-repository-maintained]");
+      const readFrom = Date.now() - volumes.VIEW_CLOCK_LAG;
+      const text = (await maintained.innerText()).replace(/\s+/g, " ").trim();
+      const readTo = Date.now();
+
+      expect(await maintained.getAttribute("data-newest-failed")).toBe("true");
+      expect(volumes.agoTexts(last, readFrom, readTo).some((ago) => text.endsWith(ago))).toBe(true);
+      expect((await workspace.innerText()).replace(/\s+/g, " ")).toContain(volumes.REPOSITORY_WORDS.newestFailedNote);
+      await cluster.captureScreenshot(frame, "dark-backup-repository-maintenances");
+      await cluster.closeWorkspace(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "says when the next maintenance of each repository is due by the clock of this machine, or why none is",
+    async () => {
+      await cluster.openPage(frame, REPOSITORIES);
+      await cluster.waitForList(frame, REPOSITORIES);
+      for (const repository of held) {
+        const name = repository.metadata.name;
+
+        await cluster.openWorkspace(frame, name, REPOSITORIES);
+        const due = frame.locator("[data-testid=velero-backup-repository-due]");
+        // The view says what it knows once the storage locations of the installation were answered: before, that they
+        // are being read. What it says then is read again until it is one of what the cluster and the clock allow, a
+        // minute at most.
+        const deadline = Date.now() + 60_000;
+        let text = "";
+        let expected: string[] = [];
+
+        do {
+          const readFrom = Date.now() - volumes.VIEW_CLOCK_LAG;
+
+          text = (await due.innerText()).replace(/\s+/g, " ").trim();
+          expected = volumes.dueTexts(repository, readFrom, Date.now());
+          if (expected.includes(text)) break;
+          await frame.waitForTimeout(250);
+        } while (Date.now() < deadline);
+        expect([name, expected.includes(text) ? text : expected]).toEqual([name, text]);
+        await cluster.closeWorkspace(frame);
+      }
     },
     TIMEOUT,
   );

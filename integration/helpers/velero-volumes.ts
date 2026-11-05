@@ -13,7 +13,80 @@ export const REPOSITORY_WORDS = {
   notSet: "Not set",
   neverMaintained: "Never maintained",
   newestFailed: "the newest maintenance failed",
+  newestFailedNote: "The newest maintenance failed: this is the last that succeeded.",
+  notReadyNoMaintenance: "A repository that is not ready is not maintained.",
+  dueNoTime: "Due now: the repository is ready and has no time of a last maintenance.",
+  due: (late: string) =>
+    `Due: the last maintenance is older than the frequency, by ${late}, by the clock of this machine.`,
+  notDue: (left: string) => `Due in ${left}, by the clock of this machine.`,
 };
+
+/**
+ * The milliseconds of a duration the way the fixtures and the release write a frequency, hours, minutes and seconds,
+ * as `168h0m0s`; undefined for another form, which no fixture writes.
+ */
+export function goDurationMilliseconds(written: string | undefined): number | undefined {
+  const parts = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/.exec(written ?? "");
+
+  if (!written || !parts) return undefined;
+  const [, hours = "0", minutes = "0", seconds = "0"] = parts;
+
+  return ((Number(hours) * 60 + Number(minutes)) * 60 + Number(seconds)) * 1000;
+}
+
+/**
+ * What the next maintenance of a repository of a location that can be written may say when it is read between two
+ * readings of the clock: that a repository that is not ready is not maintained; due now, with no time of a last
+ * maintenance; due, late by how long; or due in how long. The server looks at a repository every five minutes, and
+ * starts a maintenance that is due at its next look.
+ */
+export function dueTexts(repository: RepositoryObject, readFrom: number, readTo: number): string[] {
+  const frequency = goDurationMilliseconds(repository.spec?.maintenanceFrequency);
+  const last = repository.status?.lastMaintenanceTime;
+
+  if (frequency === undefined) throw new Error(`The fixture ${repository.metadata.name} writes no frequency`);
+  if (readinessOf(repository) !== READINESS.ready) return [REPOSITORY_WORDS.notReadyNoMaintenance];
+  if (!last) return [REPOSITORY_WORDS.dueNoTime];
+  const at = Date.parse(last) + frequency;
+
+  return [
+    ...new Set(
+      [readFrom, readTo].map((now) =>
+        at <= now ? REPOSITORY_WORDS.due(durationText(now - at)) : REPOSITORY_WORDS.notDue(durationText(at - now)),
+      ),
+    ),
+  ];
+}
+
+/**
+ * The recent maintenances of a repository as its view lists them, newest first: the result, the duration between
+ * the start and the completion, and the message.
+ */
+export function maintenanceRows(repository: RepositoryObject): { result: string; duration: string; message: string }[] {
+  return [...(repository.status?.recentMaintenance ?? [])]
+    .sort((one, other) => Date.parse(other.startTimestamp ?? "") - Date.parse(one.startTimestamp ?? ""))
+    .map((maintenance) => ({
+      result: maintenance.result ?? "",
+      duration: durationText(
+        Date.parse(maintenance.completeTimestamp ?? "") - Date.parse(maintenance.startTimestamp ?? ""),
+      ),
+      message: maintenance.message ?? "",
+    }));
+}
+
+/**
+ * How much older than the moment a view is read its clock may be: the views take the clock again every five seconds,
+ * with a second more for the frame that draws them. A suite reads the clock before and after it reads a view, and
+ * moves the first reading back by this much.
+ */
+export const VIEW_CLOCK_LAG = 6000;
+
+/** How long ago a time was, as a view writes it in parentheses after the time, at either of two readings of the clock. */
+export function agoTexts(time: string, readFrom: number, readTo: number): string[] {
+  const at = Date.parse(time);
+
+  return [...new Set([readFrom, readTo].map((now) => `(${durationText(now - at)} ago)`))];
+}
 
 /** The readiness of a repository, by the phase the release writes into its status. */
 export const READINESS = {
