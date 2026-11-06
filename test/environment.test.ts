@@ -11105,6 +11105,54 @@ describe("platform of the test environment", () => {
     expect(workflow).toMatch(/^permissions:\n {2}contents: read$/m);
   });
 
+  it("runs every suite of the views, the pre-review and FND-10 in one part of the job of the views, and no session of the integration test", () => {
+    const workflow = readFileSync(new URL("../.github/workflows/views-tests.yaml", import.meta.url), "utf8");
+    const matrix = workflow.slice(workflow.indexOf("\n    strategy:\n"), workflow.indexOf("\n    steps:\n"));
+    const parts: { name: string; suites: string[] }[] = [];
+
+    for (const line of matrix.split("\n")) {
+      const part = /^ {10}- name: ([a-z-]+)$/.exec(line)?.[1];
+      const suite = /^ {14}- ([a-z0-9-]+)$/.exec(line)?.[1];
+
+      if (part) parts.push({ name: part, suites: [] });
+      if (suite) parts.at(-1)?.suites.push(suite);
+    }
+    // The files Vitest runs for the integration test and the suites, by their path in the repository: a name of
+    // the pattern runs every file whose path it is a part of, as Vitest takes it.
+    const files = ["e2e/__tests__", "integration/__tests__"].flatMap((directory) =>
+      readdirSync(new URL(`../${directory}`, import.meta.url), { encoding: "utf8", recursive: true })
+        .filter((name) => name.endsWith(".tests.ts"))
+        .map((name) => `${directory}/${name}`),
+    );
+    const partsOf = (file: string) =>
+      parts.filter((part) => part.suites.some((suite) => file.includes(suite))).map((part) => part.name);
+
+    expect(parts.map((part) => part.name)).toEqual(["artifacts", "pre-review", "volumes-and-server", "other-views"]);
+    // Each part names suites, few enough for the name of the directory of its reports, and runs them; and the job
+    // of the name of the check passes only when every part passed, whatever happened to the run.
+    expect(parts.filter((part) => part.suites.length === 0 || part.suites.join("+").length > 255)).toEqual([]);
+    expect(workflow).toMatch(/\n {10}E2E_TEST_PATTERN: \$\{\{ join\(matrix\.part\.suites, ' '\) \}\}\n/);
+    expect(workflow).toMatch(
+      /\n {2}views:\n {4}name: views in Freelens v2\n {4}needs: test-views\n {4}if: \$\{\{ always\(\) \}\}\n/,
+    );
+    expect(workflow).toMatch(
+      /\n {10}RESULT: \$\{\{ needs\.test-views\.result \}\}\n {8}run: \|-\n {10}echo [^\n]+\n {10}test "\$\{RESULT\}" = success\n/,
+    );
+    expect(files.length).toBeGreaterThan(16);
+    expect(Object.fromEntries(files.map((file) => [file, partsOf(file)]))).toEqual(
+      Object.fromEntries(
+        files.map((file) => [
+          file,
+          file.startsWith("e2e/") || file === "integration/__tests__/extensions.tests.ts" ? [expect.any(String)] : [],
+        ]),
+      ),
+    );
+    // Every name of a part runs a file.
+    expect(parts.flatMap((part) => part.suites).filter((suite) => !files.some((file) => file.includes(suite)))).toEqual(
+      [],
+    );
+  });
+
   it("uploads from the integration tests their screenshots, and nothing of the state", () => {
     // What the workflow does, without what it says of itself in its comments.
     const workflow = readFileSync(new URL("../.github/workflows/integration-tests.yaml", import.meta.url), "utf8")

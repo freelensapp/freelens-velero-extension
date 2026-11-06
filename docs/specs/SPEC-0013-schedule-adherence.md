@@ -704,6 +704,9 @@ and verdict.
     with no change of the workflow; the times of its first hosted run are read and
     recorded before anything else is decided. A step of its own in the job, with
     its own bound, is a decision for the lead maintainer after those times.
+    Amendment of 2026-11-06: the hosted job of the views runs in four parts side
+    by side, and the suite runs in the part of the other views, named
+    `velero-e2e-adherence`, by the same runner: no step and no bound of its own.
 
 No NEEDS CLARIFICATION marker: every decision above has a default with its reasons,
 and the ones the lead maintainer may overturn at approval are named as such.

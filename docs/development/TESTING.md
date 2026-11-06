@@ -225,7 +225,7 @@ commit. On a Linux without a display the runner starts them under `xvfb-run`.
 | `pnpm demo:up` | The environment with the fixtures left in place, once |
 | `pnpm demo:views` | The fixtures of the views and of their tabs, and for who looks at the demo by hand the kubeconfigs of its two readers and what each artifact of the tabs holds: see [TRY-IT.md](TRY-IT.md) |
 | `pnpm e2e:views` | Builds and packs the extension, puts the fixtures of the views and of their tabs in place, waits for the server to remove the requests to Velero it removes, tells the suites what the artifacts of the tabs hold, makes for the run the identity of the views that may not port-forward and the one whose token an `exec` plugin gives, and gives the suites the kubeconfig of the first in `E2E_NO_PORT_FORWARD_KUBECONFIG`, the one of the second in `E2E_EXEC_PLUGIN_KUBECONFIG`, and in `E2E_EXEC_PLUGIN_RUNS` the file of the private state where its plugin, [`local-exec-credential.sh`](../../e2e/scripts/local-exec-credential.sh), names the executable of the process of each of its runs, runs the suites, then removes the two identities, their kubeconfigs, the token of the plugin and that file |
-| `E2E_TEST_PATTERN=velero-e2e-journey pnpm e2e:views` | The same for one suite. The pattern is a part of the names of the files, or several separated by spaces: CI runs `velero-e2e pre-review extensions`, every suite, the pre-review and FND-10, in one run |
+| `E2E_TEST_PATTERN=velero-e2e-journey pnpm e2e:views` | The same for one suite. The pattern is a part of the names of the files, or several separated by spaces: CI runs every suite, the pre-review and FND-10 in four parts side by side, each a job with an environment of its own: `velero-e2e-artifacts`; `pre-review`; `velero-e2e-volumes velero-e2e-server`; and the other suites of the views with `extensions`, FND-10 |
 | `pnpm pre-review` | The pass before the review of a milestone |
 
 | Suite | What it proves |
@@ -531,11 +531,22 @@ the answers 50.4 ms at the 95th percentile, the longest frame of a gesture 21.3 
 Their [workflow](../../.github/workflows/views-tests.yaml) builds Freelens from
 source at the commit of the validation target, or takes the build the cache keeps
 for that commit, and runs every suite, the pre-review and FND-10 on the hosted
-runner for every pull request, in one run of the runner of `pnpm e2e:views`, within
-two hours; then, whatever the suites found, once the environment came up, it
-removes the fixtures of the tabs with the cleanup of the fixtures and verifies the
-installation they leave. It uploads the directory of their screenshots and reports,
-`e2e-artifacts/`, as `views`, and nothing else:
+runner for every pull request, in four parts side by side: the suite of the
+artifacts; the pre-review; the suites of the volumes and of the server; and the
+other suites of the views with FND-10. Each part is a job that brings up an
+environment of its own, places its fixtures and runs its suites in one run of the
+runner of `pnpm e2e:views`, within two hours; then, whatever the suites found,
+once the environment came up, it removes the fixtures of the tabs with the cleanup
+of the fixtures and verifies the installation they leave. A run takes about as
+long as its longest part: on 2026-11-06 the one job took 57 minutes, and the first
+run of the four parts 21, its longest part 20 minutes 56 seconds, each part about
+eight minutes of environment, placement and cleanup beside its suites. The parts
+are divided by the time of their suites in the one job: 853, 729, 745 and 610
+seconds. The job `views in Freelens v2` passes when the
+four parts passed, and a unit test fails if a file of the suites is in no part or
+in two, or a session of the integration test in any. Each part uploads the
+directory of its screenshots and reports, `e2e-artifacts/`, as `views-` and the
+name of the part, and nothing else:
 the private state of the environment is elsewhere, and a test of the workflow
 fails if a path of it is ever named there. Since the pin moved to a commit of the
 host with the fix of its list layout, the scale suite holds BACK-12 and REST-11 to
@@ -658,8 +669,8 @@ controller validated, would call the run cleaned with that schedule left in
 `velero-demo`, and the verification would then refuse the installation. Nothing in the scripts
 removes a key of the store: when files of the tabs are in the store and no backup
 comes of them, or a key is left, the cleanup stops and names them, and the way out
-is `pnpm demo:down`. The hosted job of the views places the fixtures of the tabs
-on every run and, after the pre-review, runs this cleanup and then the
+is `pnpm demo:down`. Each part of the hosted job of the views places the fixtures of
+the tabs on every run and, after its suites, runs this cleanup and then the
 verification of the installation it leaves, before it uploads the reports and
 takes the environment down: the removal of the namespaces of the views runs on the
 hosted runner for the first time with the pull request that added the step. In
@@ -867,8 +878,8 @@ starting no application, which run alone with `pnpm exec vitest run --config
 vitest.integration.config.ts e2e/__tests__/velero-e2e-adherence.tests.ts -t
 "what the suite of the adherence expects, computed by the rules of the
 controller"`. The suite reads the cluster only with `kubectl get` in a namespace
-and the counters of the API server, never inside a measure, and runs in the run
-of the pattern `velero-e2e`, as the hosted job runs it (LM6 of SPEC-0013). It
+and the counters of the API server, never inside a measure, and runs in the part
+of the other views of the hosted job (LM6 of SPEC-0013, and its amendment). It
 took 137.97 and 132.81 seconds alone on the machine of the runs on 2026-10-26, 4
 minutes 11 seconds and 4 minutes 1 second with the build, the pack and the start
 of its runner, 133.85 seconds in the run of the pattern on 2026-10-27, and
