@@ -110,6 +110,7 @@ import {
   prepareVeleroResources,
   STORAGE_ENDPOINT,
   storageManifests,
+  veleroDefinitionsArguments,
   veleroInstallArguments,
 } from "./local-manifests.mts";
 import {
@@ -1139,6 +1140,92 @@ function installVelero(): void {
   save();
   console.log(
     "PASS: official Velero server, node-agent and 13 CRDs installed; the local BackupStorageLocation is Available. No backup or restore was created.",
+  );
+}
+
+// The CRDs of the pinned release alone, from its installer, for the integration test: each of its sessions places an
+// object of its own that no controller reads, so neither the server, the node agent nor the store is installed. Without
+// a controller the sessions cannot depend on what one would do, and a run does not wait for it.
+function installVeleroDefinitions(): void {
+  verifyPreloadedImages();
+  const user = process.getuid?.();
+  const group = process.getgid?.();
+
+  requireCondition(typeof user === "number" && typeof group === "number", "Local Unix identity is required");
+  const generated = JSON.parse(
+    docker([
+      "run",
+      "--rm",
+      "--pull=never",
+      "--network=none",
+      "--read-only",
+      "--cap-drop=ALL",
+      "--security-opt=no-new-privileges",
+      `--user=${user}:${group}`,
+      "--mount",
+      `type=bind,src=${CONFIG},dst=/local-kubeconfig,readonly`,
+      "--entrypoint=/velero",
+      IMAGES.velero,
+      ...veleroDefinitionsArguments(),
+    ]),
+  ) as { items: KubeResource[] };
+  const definitions = prepareVeleroResources(journal.owner, generated);
+
+  requireCondition(
+    definitions.length === 13 && definitions.every((resource) => resource.kind === "CustomResourceDefinition"),
+    "Expected the 13 reviewed Velero CRDs and nothing else",
+  );
+  for (const definition of definitions) applyOwned(definition);
+  kubectl(
+    [
+      "wait",
+      "--for=condition=Established",
+      "customresourcedefinitions",
+      "--selector",
+      `${OWNER_LABEL}=${journal.owner}`,
+      "--timeout=60s",
+    ],
+    undefined,
+    90_000,
+  );
+  journal.phase = "definitions-ready";
+  save();
+  console.log("PASS: the 13 CRDs of the pinned Velero release installed alone: no server, node agent or store.");
+}
+
+// The environment is ready for the sessions once the API server serves every kind of the release as it does where
+// Velero runs. It publishes the discovery and the OpenAPI of new CRDs a moment after they are Established, and, from
+// Kubernetes 1.31, it answers 429 Too Many Requests to the reads of a kind whose watch cache is still being filled,
+// as each new CRD's is until a first client reads it: a session that opened a view first got those answers in its
+// console. Where Velero runs its server has read every kind; here a list of each, which kubectl retries on a 429,
+// fills the caches before a session reads one.
+async function waitForServedDefinitions(): Promise<void> {
+  const started = Date.now();
+  const versions = ["velero.io/v1", "velero.io/v2alpha1"];
+
+  for (;;) {
+    let kinds: string[] = [];
+    let paths: string[] = [];
+    let listed = false;
+
+    try {
+      kinds = kubectl(["api-resources", "--api-group=velero.io", "-o", "name"]).trim().split("\n").filter(Boolean);
+      paths = Object.keys(
+        (JSON.parse(kubectl(["get", "--raw", "/openapi/v3"])) as { paths?: Record<string, unknown> }).paths ?? {},
+      );
+      if (kinds.length === 13 && versions.every((version) => paths.includes(`apis/${version}`))) {
+        for (const kind of kinds) kubectl(["get", kind, "--all-namespaces", "-o", "name"]);
+        listed = true;
+      }
+    } catch {
+      // Not served yet: the API server may refuse a read while it publishes the CRDs or fills a cache.
+    }
+    if (listed) break;
+    requireCondition(Date.now() - started < 120_000, "The API server did not serve the 13 Velero CRDs in two minutes");
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
+  console.log(
+    `PASS: the API server serves the 13 CRDs, published and listed once each, ${Date.now() - started} ms after they were Established.`,
   );
 }
 
@@ -2549,6 +2636,23 @@ async function bringUp(): Promise<void> {
   await verifyEnvironment();
 }
 
+// The environment of the integration test: the cluster and the CRDs of the release, without the server, the node
+// agent and the store of `up`.
+async function bringUpDefinitions(): Promise<void> {
+  await installTools();
+  execFileSync(process.execPath, [fileURLToPath(new URL("./local-images.mts", import.meta.url)), "pull"], {
+    env: childEnvironment(process.env, { HOME: homedir() }),
+    stdio: "inherit",
+    timeout: 1_800_000,
+  });
+  const [existing] = journal.nodeId ? nodes() : [];
+
+  if (existing && !existing.State.Running) await startCluster();
+  else await setupCluster();
+  installVeleroDefinitions();
+  await waitForServedDefinitions();
+}
+
 // What was generated for this environment stays in its files. The log is read in pieces, it grows with every run.
 function assertPrivateLog(): void {
   if (!existsSync(LOG)) return;
@@ -3033,6 +3137,7 @@ async function main(): Promise<void> {
   requireCondition(
     [
       "up",
+      "up-definitions",
       "down",
       "tools",
       "cluster",
@@ -3057,13 +3162,14 @@ async function main(): Promise<void> {
       flag === "--context" &&
       context === DEMO_CONTEXT &&
       !extra.length,
-    `Usage: node e2e/scripts/local-demo.mts <up|down|tools|cluster|storage|bucket|velero|verify|transport-proof|fixtures|fixtures-static|fixtures-live|fixtures-artifacts|fixtures-permissions|fixtures-cleanup|start|stop|remove-failed-node|views|integration|demo> --context ${DEMO_CONTEXT}`,
+    `Usage: node e2e/scripts/local-demo.mts <up|up-definitions|down|tools|cluster|storage|bucket|velero|verify|transport-proof|fixtures|fixtures-static|fixtures-live|fixtures-artifacts|fixtures-permissions|fixtures-cleanup|start|stop|remove-failed-node|views|integration|demo> --context ${DEMO_CONTEXT}`,
   );
   let lock: number | undefined;
 
   try {
     lock = initialize();
     if (action === "up") await bringUp();
+    else if (action === "up-definitions") await bringUpDefinitions();
     else if (action === "down") takeDown();
     else if (action === "tools") await installTools();
     else if (action === "cluster") await setupCluster();

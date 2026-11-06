@@ -225,6 +225,7 @@ pnpm knip:check           # Unused files, unused and unlisted dependencies (knip
 # Tests
 pnpm test:unit            # Builds first, then vitest, then the measures alone
 pnpm e2e:cluster:up       # Disposable kind cluster with Velero and S3 (needs Docker)
+pnpm e2e:cluster:up:definitions  # The same cluster with the CRDs of the release alone (integration tests)
 pnpm e2e                  # Fixtures and transport proof against that cluster
 pnpm e2e:cluster:down     # Removes the cluster, its network and its state
 pnpm demo:up              # The cluster with the fixtures left in place

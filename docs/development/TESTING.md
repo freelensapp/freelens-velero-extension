@@ -91,9 +91,12 @@ isolated profile, as the [suites of the views](#suites-of-the-views) start it.
 disposable environment of this repository, checking its target before and after;
 the [workflow](../../.github/workflows/integration-tests.yaml) builds Freelens from
 source at the commit of the validation target, cached by that commit, brings the
-environment up with `pnpm e2e:cluster:up`, which installs Velero and the CRDs of
-the reviewed release and places no fixture, runs them, uploads the screenshots of
-a failure as `integration` and always takes the environment down.
+environment up with `pnpm e2e:cluster:up:definitions`, which installs the CRDs of
+the reviewed release alone, with no Velero server, node agent or store, and places
+no fixture, runs them, uploads the screenshots of a failure as `integration` and
+always takes the environment down. Each session places an object of its own that
+no controller reads: the sessions test the views, not Velero, so they cannot depend
+on what a controller would do, and a run does not wait for one.
 
 FND-10, the [test of the installation](../../integration/__tests__/extensions.tests.ts),
 installs the tarball from the Extensions page of an isolated profile and checks
@@ -148,6 +151,7 @@ official release pinned by digest. The contract is
 | Command | What it does |
 | --- | --- |
 | `pnpm e2e:cluster:up` | Installs the pinned kind and kubectl, pulls the images, creates the cluster, installs the storage and Velero, verifies the environment. Run again, it resumes the environment it owns |
+| `pnpm e2e:cluster:up:definitions` | Installs the pinned kind and kubectl, pulls the images, creates the cluster and installs the CRDs of the release alone: no server, node agent or store. The environment of the integration tests |
 | `pnpm e2e` | Builds the extension, then runs the fixtures and the transport proof: real backups and restores of synthetic data, their artifacts fetched through the compiled main |
 | `pnpm e2e:cluster:down` | Deletes the node, the network and the state the journal owns, after the identity check. The installed binaries stay |
 | `pnpm demo:up` | Brings the environment up and leaves the fixtures in place, to look at them in Freelens |

@@ -150,7 +150,7 @@ which none is kept; the work of M6 at Freelens 2.0.0, which D10 names.
 | REQ-212 | The extension runs on the React 19 and the MobX 7 of the host, one copy of each. `observableRef` replaces `observable.ref`; a decorated observable field is `@observable accessor`, and no class calls `makeObservable(this)` without its annotations; a class whose instances are serialized keeps plain fields with an annotation map. An `observer` reads its props in its render, and a callback the host calls from its own derivations, `getItems` or `customizeHeader` of the list, carries the values it needs from there. A change of a preference made through MobX reaches the views | HOST-17 |
 | REQ-213 | The lines of a log and the resources viewer are windowed by react-window 2, bundled at the version of the catalog of the host, in place of the virtual list the host no longer offers. What SPEC-0011 says of the lists of lines stays: at most a hundred rows mounted, each line whole with its wrap, the search that brings its match into view, the focus on the first line after a load, and the keyboard. The budgets of REQ-147 of SPEC-0011, measured again in the packaged Freelens v2, are the acceptance | HOST-18 |
 | REQ-214 | The unit and component tests run on the stub of `@freelensapp/extensions` of the template, grown as the tests need, with Testing Library 16 on React 19. The doubles of the host are written again from the source of the host at the commit of the validation target, each component with the behavior it has there and the file and line it was read at. The tests of the frames use the addresses of v2. The build test pins the manifest of REQ-196 and REQ-198 and loads the bundles as REQ-199 says | HOST-19 |
-| REQ-215 | The suites of the views and FND-10 run in a Freelens built from source at the commit of the validation target, in CI on every pull request and on main, the build cached by that commit and not by a version. On a machine of a developer they run on the nightly application built from the same commit, its download checked against its published checksum. The integration test of the template runs beside them, with a session for each of the five kinds, on the disposable kind cluster of its job. The host facts of AGENTS.md that the suites rest on are proven again on v2, or removed | HOST-20 |
+| REQ-215 | The suites of the views and FND-10 run in a Freelens built from source at the commit of the validation target, in CI on every pull request and on main, the build cached by that commit and not by a version. On a machine of a developer they run on the nightly application built from the same commit, its download checked against its published checksum. The integration test of the template runs beside them, with a session for each of the five kinds, on the disposable kind cluster of its job, which holds the CRDs of the release alone: no Velero server, node agent or store. The host facts of AGENTS.md that the suites rest on are proven again on v2, or removed | HOST-20 |
 | REQ-216 | The version line is 1.0.0. Main takes a prerelease of it, `1.0.0-N`, from the pull request of the version workflow, never from a change by hand. A prerelease is tagged, published on the npm tag `next`, and released on GitHub as a prerelease. 1.0.0 is published on `latest` only after Freelens 2.0.0 is released and M6 is done, since installing by name takes the newest version that is not a prerelease, whatever its `engines`. With Freelens 2.0.0 the pin of the SDK becomes a range of versions and the integration runs at the tag v2.0.0, as work of M6 | HOST-21 |
 | REQ-217 | The documents name Freelens v2 as the reference, with T0.7: ROADMAP, with the plan of D10 in its releases, ARCHITECTURE, TESTING, the README of the project, AGENTS.md with its section of the host facts written again for v2, RECON-T0.1, DEPENDENCY-AUDIT, LOCAL-STORAGE and TRY-IT. The headers of SPEC-0013 and SPEC-0014, approved and to be implemented on v2, name the v2 target. No document but the history of the evidence names Freelens 1.10.3 as the reference | HOST-22 |
 | REQ-218 | PROCESS has a host drift watch: until Freelens 2.0.0 is released, the main branch of the host and the one of the template are read before every slice and before every merge. A change to what the extension uses is taken in before the slice goes on, with the pin of the validation target moved and recorded in this spec | HOST-23 |
@@ -605,7 +605,7 @@ no fixture holds real data.
 | HOST-17 | Component/packaged | REQ-212 | An `observer` that follows a change of the store of the preferences; the callbacks of the list reading no props outside the render. Packaged: an allowance taken back in the target bar gone from it at once, and a namespace chosen there followed by every page |
 | HOST-18 | Component/unit measure/packaged | REQ-213 | At most a hundred rows mounted while a log scrolls, a line whole with its wrap, a match brought into view, the focus on the first line; the measure of the unit run on 500,000 lines; packaged: VIEW-10 on the log of 200,000 lines, within its budgets |
 | HOST-19 | Unit | REQ-214 | The unit run on the stub with Testing Library 16, with its files and its count; each double naming the file and line of the host it follows; the build test pinning v2 |
-| HOST-20 | CI | REQ-215 | The workflows of the views and of the integration building Freelens at the commit of the validation target, cached by that commit; the five sessions of the integration test of the template green; a local run on the nightly application recorded with its checksum |
+| HOST-20 | CI | REQ-215 | The workflows of the views and of the integration building Freelens at the commit of the validation target, cached by that commit; the five sessions of the integration test of the template green on the CRDs of the release alone, with no Velero server, node agent or store; a local run on the nightly application recorded with its checksum |
 | HOST-21 | Workflow | REQ-216 | The first prerelease after it is asked for: its tag, the npm tag `next`, the GitHub release marked as a prerelease, and `latest` untouched |
 | HOST-22 | Review | REQ-217 | A search of the documents: Freelens 1.10.3 named as the reference nowhere but in the history of the evidence |
 | HOST-23 | Review | REQ-218 | The section of PROCESS, and the watch recorded in every pull request until Freelens 2.0.0 |
@@ -1605,3 +1605,34 @@ the workspace, pnpm stopped with `ERR_PNPM_PEER_DEP_ISSUES`, an unmet peer of
 `@freelensapp/extensions` 2.0.0 for each. The packaged suites on Freelens 2.0.0, the
 views, the pre-review and the integration, run after these checks, on another machine,
 and their evidence is written here with their run.
+
+**Amendment of 2026-11-06: the integration test without a controller** (REQ-215,
+HOST-20). The integration job brings its environment up with
+`pnpm e2e:cluster:up:definitions`: the cluster with the 13 CRDs of the reviewed
+release alone, from its installer with `--crds-only`, and no longer the Velero server,
+the node agent and the store of `pnpm e2e:cluster:up`. Each of its sessions places an
+object of its own that no controller reads, so they never needed one: without it they
+cannot come to depend on what a controller does, a run does not wait for one, and the
+same sessions can run on the CRDs of more than one release. This is the practice of
+the other extensions of the organization, whose integration tests apply the CRDs of a
+release and static objects with no controller, and test the views, not the controller.
+Approved by the lead maintainer on 2026-11-06, to be applied without losing quality and
+saving time where it can be done correctly. REQ-215 and HOST-20 are rewritten in
+place, with this paragraph beside them. The suites of the views keep the controller of
+the release for now: which of their cases move to static objects, and which stay in a
+job with the real controller, is decided in a later pull request.
+
+A first run on the CRDs alone failed only on the console of its first session: an API
+server of Kubernetes 1.31 or later answers 429 Too Many Requests to the reads of a kind
+whose watch cache it is still filling, as it is for each new CRD until a first client
+reads it, and where Velero runs its server has read every kind before anyone opens a
+view. Of the five reads that got the answer, all were first reads of a kind of the
+release: the storage locations of the cluster, then the backups, the schedules, the
+snapshot locations and the repositories of the namespace of the session. The
+environment now waits until the discovery and the OpenAPI of the API server name the 13
+CRDs, then lists each kind once, which kubectl retries on a 429. On 2026-11-06, on
+another machine, at the commit of the validation target, the integration test on this
+environment passed, FND-10 and the five sessions with their 21 cases, with no answer
+429: the environment up in 55 s, the wait 1,993 ms of it, and the sessions in 61 s,
+where the full installation took 87 s and 63 s on the same branch, the same machine and
+the same evening.
