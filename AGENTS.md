@@ -927,10 +927,13 @@ The hosted checks run on every pull request and on main, on synthetic data only:
 - `integration-tests.yaml`: FND-10 and the five sessions of the integration test,
   in Freelens built from source at the commit of the validation target, on the
   disposable kind cluster `pnpm e2e:cluster:up` makes, taken down whatever happens.
-- `views-tests.yaml`: every suite of the views, the pre-review and FND-10, in one
-  run of the runner of `pnpm e2e:views`, in Freelens built at the same commit,
-  against the fixtures of `pnpm demo:up`; then the cleanup of the fixtures and the
-  verification of the environment.
+- `views-tests.yaml`: every suite of the views, the pre-review and FND-10, in four
+  parts side by side, each a job with the environment and the fixtures of
+  `pnpm demo:up` of its own and one run of the runner of `pnpm e2e:views`, in
+  Freelens built at the same commit; then in each part the cleanup of the fixtures
+  and the verification of the environment. The job `views in Freelens v2` passes
+  when the four parts passed, and a unit test checks that they name every suite
+  once.
 - `e2e-tests.yaml`: the environment brought up, the fixtures and the transport
   proof, and the environment taken down.
 - `osv-scanner.yaml`, and `mise-lock-check.yaml` for a pull request that changes

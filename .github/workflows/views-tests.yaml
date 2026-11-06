@@ -20,10 +20,45 @@ env:
 
 jobs:
   # The views in Freelens built from source at the validation target, against
-  # the test environment with its fixtures left in place. The application is
-  # built as the integration tests build it, and cached by the same key.
+  # the test environment with its fixtures left in place, in four parts side by
+  # side: each part is a job with an environment of its own, and a run takes as
+  # long as its longest part instead of the sum of them. The application is
+  # built as the integration tests build it, and cached by the same key. A unit
+  # test checks that the parts name every suite of the views, the pre-review and
+  # FND-10, each in one part.
   test-views:
-    name: views in Freelens v2
+    name: views in Freelens v2 (${{ matrix.part.name }})
+
+    strategy:
+      # A part that fails does not stop the others: a run reports every suite.
+      fail-fast: false
+      matrix:
+        part:
+          # On the hosted runner, on 2026-11-06, the suites of the four parts
+          # took 853, 729, 745 and 610 seconds, and 2,937 in one job.
+          - name: artifacts
+            suites:
+              - velero-e2e-artifacts
+          - name: pre-review
+            suites:
+              - pre-review
+          - name: volumes-and-server
+            suites:
+              - velero-e2e-volumes
+              - velero-e2e-server
+          - name: other-views
+            suites:
+              - velero-e2e-adherence
+              - velero-e2e-gate
+              - velero-e2e-journey
+              - velero-e2e-locations
+              - velero-e2e-overview
+              - velero-e2e-preferences
+              - velero-e2e-restores
+              - velero-e2e-restricted
+              - velero-e2e-scale
+              - velero-e2e-schedules
+              - extensions
 
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 150
@@ -331,15 +366,15 @@ jobs:
           sudo chmod 4755 freelens/freelens/dist/linux*-unpacked/chrome-sandbox
           echo "FREELENS_APP=$(echo "$PWD"/freelens/freelens/dist/linux*-unpacked)" >> "$GITHUB_ENV"
 
-      # Every suite of the views and FND-10, in one run from this repository,
-      # as `pnpm e2e:views` runs them: the runner places the fixtures of the
-      # views and of their tabs, waits for the requests the server removes, and
-      # runs the suites one at a time under xvfb, each in a new profile of the
+      # The suites of the part, in one run from this repository, as
+      # `pnpm e2e:views` runs them: the runner places the fixtures of the views
+      # and of their tabs, waits for the requests the server removes, and runs
+      # the suites one at a time under xvfb, each in a new profile of the
       # application. A suite that fails is not run again.
-      - name: Run the suites of the views and the integration test
+      - name: Run the suites of the part
         run: node e2e/scripts/local-demo.mts views --context kind-freelens-velero-dev
         env:
-          E2E_TEST_PATTERN: velero-e2e pre-review extensions
+          E2E_TEST_PATTERN: ${{ join(matrix.part.suites, ' ') }}
 
       # The cleanup of the fixtures of the tabs, which has the server delete the
       # backups it synced from the store and removes the namespaces of the run,
@@ -358,7 +393,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: views
+          name: views-${{ matrix.part.name }}
           path: e2e-artifacts/
           if-no-files-found: ignore
           retention-days: 14
@@ -366,3 +401,19 @@ jobs:
       - name: Take the test environment down
         if: always()
         run: node e2e/scripts/local-demo.mts down --context kind-freelens-velero-dev
+
+  # The four parts as one check, under the name of the job they divide: it
+  # passes when every part passed.
+  views:
+    name: views in Freelens v2
+    needs: test-views
+    if: ${{ !cancelled() }}
+
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+
+    steps:
+      - name: Check that every part passed
+        env:
+          RESULT: ${{ needs.test-views.result }}
+        run: test "${RESULT}" = success

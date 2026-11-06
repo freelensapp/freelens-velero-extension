@@ -2832,7 +2832,8 @@ function prepareDemo(): void {
 // The suites run from this repository, under its Vitest, and start the Freelens that FREELENS_APP names:
 // the package of the validation target on a machine of a developer, a build of the host from source in CI.
 // E2E_TEST_PATTERN names what is run: one name, or several separated by spaces, each a part of the names
-// of the files, as Vitest takes it. CI names every suite of the views and FND-10, in one run.
+// of the files, as Vitest takes it. CI runs the suites of the views and FND-10 in four parts side by side, each
+// with an environment of its own and one run of this runner (.github/workflows/views-tests.yaml).
 function runViews(): void {
   const suites = (process.env.E2E_TEST_PATTERN ?? "velero-e2e").split(/\s+/).filter(Boolean);
   const pattern = suites.join("+");
@@ -2934,8 +2935,8 @@ function runViews(): void {
           E2E_ARTIFACTS_DIR: artifacts,
         }),
         stdio: "inherit",
-        // Two hours, as long as the identities made for the run last: every suite of the views is one run in
-        // CI, and the ones that run last must still find them.
+        // Two hours, as long as the identities made for the run last: the suites that run last must still find
+        // them.
         timeout: 7_200_000,
       },
     ).status;
