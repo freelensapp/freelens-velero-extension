@@ -457,16 +457,16 @@ test environment and of the process of this repository.
   of this machine, would give the views no offset, and they would say "not known"
   with nothing to tell why.
 - The verification of the test environment refuses an installation that holds a
-  schedule, and the hosted job runs it after the cleanup of the fixtures: the
-  schedule the controller of the installation validates, a fixture of the
-  adherence, goes with that cleanup, by its identity, before it. That controller
-  sends a PATCH of the schedule at each of its looks with nothing changed, once a
-  minute (measured on 2026-10-26), which every suite would count as a write: the
-  helpers leave out of the writes the PATCH of a schedule by name, no more of them
-  than the whole minutes between the two readings of the counters and two
-  (`SCHEDULE_PATCHED_AT_EVERY_LOOK`, `writesOf`), so `writes` takes two readings
-  of `apiRequests`, which keep the moment they were asked; the version and the
-  status of the schedule in the snapshot prove that nothing changed it.
+  schedule, and each part of the hosted job runs it after the cleanup of the
+  fixtures: the schedule the controller of the installation validates, a fixture
+  of the adherence, goes with that cleanup, by its identity, before it. That
+  controller sends a PATCH of the schedule at each of its looks with nothing
+  changed, once a minute (measured on 2026-10-26), which every suite would count
+  as a write: the helpers leave out of the writes the PATCH of a schedule by name,
+  no more of them than the whole minutes between the two readings of the counters
+  and two (`SCHEDULE_PATCHED_AT_EVERY_LOOK`, `writesOf`), so `writes` takes two
+  readings of `apiRequests`, which keep the moment they were asked; the version
+  and the status of the schedule in the snapshot prove that nothing changed it.
 - The live fixtures back up and restore a pod volume: the pod runs the image of
   the store, preloaded, never pulled (its shell ran the command of the volume in
   the sandbox of the probe of the images when it was checked once, on 2026-11-02;
@@ -481,18 +481,19 @@ test environment and of the process of this repository.
 - What the suite of the adherence expects of a fixture is computed by the helper
   of the suites, `integration/helpers/velero-adherence.ts`, from the objects as
   the cluster holds them and from the clock, at the clock before a read of the
-  page less twenty seconds and after it plus a second, and never with the code
-  of the extension: the helper runs in Node, and the page in the Electron of the
+  page less twenty seconds and after it plus a second, and never with the code of
+  the extension: the helper runs in Node, and the page in the Electron of the
   host. That `Intl` knows `America/Argentina/Buenos_Aires`, the zone of the
   schedule with a name of 63 characters, in the nightly
   v2.0.0-0-nightly-2026-10-25 (runs of 2026-10-26); an application that did not
   would show that schedule not known, and the suite says which in one constant.
   The suite took 133 to 138 seconds alone on the machine of the runs, about four
-  minutes with the build, the pack and the start of its runner, and the hosted
-  job runs it in the run of the pattern `velero-e2e`. The list of three hundred
-  schedules ordered by a column of the host answers in 100 to 113 ms, alike for
-  each column and direction, and a search of it in 62 to 309 ms, about a quarter
-  of a second more from the key, which the host waits before it searches.
+  minutes with the build, the pack and the start of its runner, and the hosted job
+  runs it in its part of the other views, by the name `velero-e2e-adherence`. The
+  list of three hundred schedules ordered by a column of the host answers in 100
+  to 113 ms, alike for each column and direction, and a search of it in 62 to 309
+  ms, about a quarter of a second more from the key, which the host waits before
+  it searches.
 - A mark of the views, `.status`, is an inline box in the middle of its line: in
   a table cell at the top of a row of plain words its word sits about a pixel
   under the others, past the pixel the pre-review allows at twice the zoom. The

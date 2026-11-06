@@ -2845,6 +2845,12 @@ function runViews(): void {
     suites.length > 0 && suites.every((suite) => /^[a-z0-9-]+$/.test(suite)),
     "The pattern of the suites is a list of names, not of paths",
   );
+  // The names make the directory of the reports, whose name a file system takes up to 255 bytes long: said before
+  // the fixtures are placed, not after.
+  requireCondition(
+    pattern.length <= 255,
+    "The names of the suites make the name of the directory of their reports too long: name fewer suites",
+  );
   requireCondition(
     application !== "" && existsSync(application),
     "FREELENS_APP names no application: the suites start the Freelens it names, see docs/development/TESTING.md",

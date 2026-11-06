@@ -537,9 +537,12 @@ other suites of the views with FND-10. Each part is a job that brings up an
 environment of its own, places its fixtures and runs its suites in one run of the
 runner of `pnpm e2e:views`, within two hours; then, whatever the suites found,
 once the environment came up, it removes the fixtures of the tabs with the cleanup
-of the fixtures and verifies the installation they leave. A run takes as long as
-its longest part: on 2026-11-06 the suites took 2,937 seconds in one job, and 853
-in the longest of the four parts. The job `views in Freelens v2` passes when the
+of the fixtures and verifies the installation they leave. A run takes about as
+long as its longest part: on 2026-11-06 the one job took 57 minutes, and the first
+run of the four parts 21, its longest part 20 minutes 56 seconds, each part about
+eight minutes of environment, placement and cleanup beside its suites. The parts
+are divided by the time of their suites in the one job: 853, 729, 745 and 610
+seconds. The job `views in Freelens v2` passes when the
 four parts passed, and a unit test fails if a file of the suites is in no part or
 in two, or a session of the integration test in any. Each part uploads the
 directory of its screenshots and reports, `e2e-artifacts/`, as `views-` and the
@@ -875,8 +878,8 @@ starting no application, which run alone with `pnpm exec vitest run --config
 vitest.integration.config.ts e2e/__tests__/velero-e2e-adherence.tests.ts -t
 "what the suite of the adherence expects, computed by the rules of the
 controller"`. The suite reads the cluster only with `kubectl get` in a namespace
-and the counters of the API server, never inside a measure, and runs in the run
-of the pattern `velero-e2e`, as the hosted job runs it (LM6 of SPEC-0013). It
+and the counters of the API server, never inside a measure, and runs in the part
+of the other views of the hosted job (LM6 of SPEC-0013, and its amendment). It
 took 137.97 and 132.81 seconds alone on the machine of the runs on 2026-10-26, 4
 minutes 11 seconds and 4 minutes 1 second with the build, the pack and the start
 of its runner, 133.85 seconds in the run of the pattern on 2026-10-27, and

@@ -34,8 +34,10 @@ jobs:
       fail-fast: false
       matrix:
         part:
-          # On the hosted runner, on 2026-11-06, the suites of the four parts
-          # took 853, 729, 745 and 610 seconds, and 2,937 in one job.
+          # On the hosted runner, on 2026-11-06, the one job took 57 minutes;
+          # the first run of these parts took 21 minutes, its parts 20.9,
+          # 20.3, 20.5 and 18.3. The suites of each part took 853, 729, 745 and
+          # 610 seconds in the one job, which is how they were divided.
           - name: artifacts
             suites:
               - velero-e2e-artifacts
@@ -403,11 +405,13 @@ jobs:
         run: node e2e/scripts/local-demo.mts down --context kind-freelens-velero-dev
 
   # The four parts as one check, under the name of the job they divide: it
-  # passes when every part passed.
+  # passes when every part passed. It runs whatever happened, also in a run
+  # that was cancelled, so that the check is never skipped while a part did not
+  # pass.
   views:
     name: views in Freelens v2
     needs: test-views
-    if: ${{ !cancelled() }}
+    if: ${{ always() }}
 
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 5
@@ -416,4 +420,6 @@ jobs:
       - name: Check that every part passed
         env:
           RESULT: ${{ needs.test-views.result }}
-        run: test "${RESULT}" = success
+        run: |-
+          echo "The parts of the views: ${RESULT}"
+          test "${RESULT}" = success

@@ -11128,6 +11128,16 @@ describe("platform of the test environment", () => {
       parts.filter((part) => part.suites.some((suite) => file.includes(suite))).map((part) => part.name);
 
     expect(parts.map((part) => part.name)).toEqual(["artifacts", "pre-review", "volumes-and-server", "other-views"]);
+    // Each part names suites, few enough for the name of the directory of its reports, and runs them; and the job
+    // of the name of the check passes only when every part passed, whatever happened to the run.
+    expect(parts.filter((part) => part.suites.length === 0 || part.suites.join("+").length > 255)).toEqual([]);
+    expect(workflow).toMatch(/\n {10}E2E_TEST_PATTERN: \$\{\{ join\(matrix\.part\.suites, ' '\) \}\}\n/);
+    expect(workflow).toMatch(
+      /\n {2}views:\n {4}name: views in Freelens v2\n {4}needs: test-views\n {4}if: \$\{\{ always\(\) \}\}\n/,
+    );
+    expect(workflow).toMatch(
+      /\n {10}RESULT: \$\{\{ needs\.test-views\.result \}\}\n {8}run: \|-\n {10}echo [^\n]+\n {10}test "\$\{RESULT\}" = success\n/,
+    );
     expect(files.length).toBeGreaterThan(16);
     expect(Object.fromEntries(files.map((file) => [file, partsOf(file)]))).toEqual(
       Object.fromEntries(
