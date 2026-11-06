@@ -19,13 +19,14 @@ env:
   freelens_ref: b9b53e16056578c5407312eba5823a089972f6d5
 
 jobs:
-  # The views in Freelens built from source at the validation target, against
-  # the test environment with its fixtures left in place, in four parts side by
-  # side: each part is a job with an environment of its own, and a run takes as
-  # long as its longest part instead of the sum of them. The application is
-  # built as the integration tests build it, and cached by the same key. A unit
-  # test checks that the parts name every suite of the views, the pre-review and
-  # FND-10, each in one part.
+  # The views in Freelens built from source at the validation target, in parts
+  # side by side: each part is a job with an environment of its own, the test
+  # environment with its fixtures left in place or the CRDs of the release
+  # alone, and a run takes as long as its longest part instead of the sum of
+  # them. The application is built as the integration tests build it, and
+  # cached by the same key. A unit test checks that the parts name every suite
+  # of the views, the pre-review and FND-10, each in one part, and that a part
+  # with no controller names only suites that read none.
   test-views:
     name: views in Freelens v2 (${{ matrix.part.name }})
 
@@ -37,30 +38,41 @@ jobs:
           # On the hosted runner, on 2026-11-06, the one job took 57 minutes;
           # the first run of these parts took 21 minutes, its parts 20.9,
           # 20.3, 20.5 and 18.3. The suites of each part took 853, 729, 745 and
-          # 610 seconds in the one job, which is how they were divided.
+          # 610 seconds in the one job, which is how they were divided. A part
+          # on `demo` runs on the environment with its fixtures, the server of
+          # the release among them; one on `definitions` on the CRDs of the
+          # release alone, with static fixtures and no controller, for the
+          # suites that read only what the fixtures wrote.
           - name: artifacts
+            environment: demo
             suites:
               - velero-e2e-artifacts
           - name: pre-review
+            environment: demo
             suites:
               - pre-review
           - name: volumes-and-server
+            environment: demo
             suites:
               - velero-e2e-volumes
               - velero-e2e-server
           - name: other-views
+            environment: demo
             suites:
               - velero-e2e-adherence
-              - velero-e2e-gate
               - velero-e2e-journey
               - velero-e2e-locations
               - velero-e2e-overview
-              - velero-e2e-preferences
               - velero-e2e-restores
+              - extensions
+          - name: static-views
+            environment: definitions
+            suites:
+              - velero-e2e-gate
+              - velero-e2e-preferences
               - velero-e2e-restricted
               - velero-e2e-scale
               - velero-e2e-schedules
-              - extensions
 
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 150
@@ -160,7 +172,15 @@ jobs:
       # generated credentials, is under the home of the runner: no step uploads it.
       - name: Bring the test environment up with its fixtures
         id: environment
-        run: pnpm --color=always demo:up
+        run: |
+          if [ "${ENVIRONMENT}" = definitions ]; then
+            pnpm --color=always e2e:cluster:up:definitions
+            node e2e/scripts/local-demo.mts fixtures-static --context kind-freelens-velero-dev
+          else
+            pnpm --color=always demo:up
+          fi
+        env:
+          ENVIRONMENT: ${{ matrix.part.environment }}
 
       - name: Checkout app
         uses: actions/checkout@v7
@@ -384,7 +404,7 @@ jobs:
       # hosted runner, after the suites, whatever they found, and before the
       # environment is taken down.
       - name: Remove the fixtures and verify the environment they leave
-        if: ${{ !cancelled() && steps.environment.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.environment.outcome == 'success' && matrix.part.environment == 'demo' }}
         run: |
           node e2e/scripts/local-demo.mts fixtures-cleanup --context kind-freelens-velero-dev
           node e2e/scripts/local-demo.mts verify --context kind-freelens-velero-dev
@@ -404,7 +424,7 @@ jobs:
         if: always()
         run: node e2e/scripts/local-demo.mts down --context kind-freelens-velero-dev
 
-  # The four parts as one check, under the name of the job they divide: it
+  # The parts as one check, under the name of the job they divide: it
   # passes when every part passed. It runs whatever happened, also in a run
   # that was cancelled, so that the check is never skipped while a part did not
   # pass.

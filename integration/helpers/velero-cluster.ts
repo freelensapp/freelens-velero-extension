@@ -41,6 +41,8 @@ export const E2E_ADHERENCE_SPLIT_NAMESPACE = process.env.E2E_ADHERENCE_SPLIT_NAM
 export const E2E_ADHERENCE_SCALE_NAMESPACE = process.env.E2E_ADHERENCE_SCALE_NAMESPACE || "";
 /** The run of the fixtures, from the record of the environment: the names of its operations end with it. */
 export const E2E_FIXTURE_RUN = process.env.E2E_FIXTURE_RUN || "";
+/** Set by the runner of the views on the environment of the CRDs alone, where no controller runs. */
+const WITHOUT_CONTROLLER = process.env.E2E_WITHOUT_CONTROLLER === "1";
 
 /**
  * The namespaces a discovery finds: the ones that hold a backup storage location. The long lists and the
@@ -331,15 +333,26 @@ export function fixturesMissing(): string {
  * the suite would take that backup into its first snapshot.
  */
 export function fixturesReady(): boolean {
+  // On the environment of the CRDs alone no controller runs: its installation is static, a location and a completed
+  // backup, and nothing a server makes is looked for.
+  const controlled = !WITHOUT_CONTROLLER;
   const probes: [namespace: string, resource: string, name: string][] = [
     [E2E_NAMESPACE, "backupstoragelocations.velero.io", "default"],
-    // What the fixtures of the tabs place in the installation, by the names of the run: the two backups the
-    // server synced from the store, and the three operations it refused.
-    [E2E_NAMESPACE, "backups.velero.io", `fixture-synced-backup-${E2E_FIXTURE_RUN}`],
-    [E2E_NAMESPACE, "backups.velero.io", `fixture-synced-backup-no-log-${E2E_FIXTURE_RUN}`],
-    [E2E_NAMESPACE, "backups.velero.io", `fixture-invalid-backup-${E2E_FIXTURE_RUN}`],
-    [E2E_NAMESPACE, "restores.velero.io", `fixture-invalid-restore-${E2E_FIXTURE_RUN}`],
-    [E2E_NAMESPACE, "restores.velero.io", `fixture-orphan-restore-${E2E_FIXTURE_RUN}`],
+    ...(controlled
+      ? ([
+          // What the fixtures of the tabs place in the installation, by the names of the run: the two backups the
+          // server synced from the store, and the three operations it refused.
+          [E2E_NAMESPACE, "backups.velero.io", `fixture-synced-backup-${E2E_FIXTURE_RUN}`],
+          [E2E_NAMESPACE, "backups.velero.io", `fixture-synced-backup-no-log-${E2E_FIXTURE_RUN}`],
+          [E2E_NAMESPACE, "backups.velero.io", `fixture-invalid-backup-${E2E_FIXTURE_RUN}`],
+          [E2E_NAMESPACE, "restores.velero.io", `fixture-invalid-restore-${E2E_FIXTURE_RUN}`],
+          [E2E_NAMESPACE, "restores.velero.io", `fixture-orphan-restore-${E2E_FIXTURE_RUN}`],
+        ] as [string, string, string][])
+      : ([[E2E_NAMESPACE, "backups.velero.io", `fixture-installation-backup-${E2E_FIXTURE_RUN}`]] as [
+          string,
+          string,
+          string,
+        ][])),
     [E2E_STATIC_NAMESPACE, "backups.velero.io", "backup-completed"],
     [E2E_STATIC_NAMESPACE, "backups.velero.io", "backup-finalizingpartiallyfailed"],
     [E2E_STATIC_NAMESPACE, "restores.velero.io", "restore-completed"],
@@ -359,7 +372,9 @@ export function fixturesReady(): boolean {
     // The schedule the controller of the installation validated, by the name of the run; the two schedules of the
     // views that submitted and have no backup; and a schedule of each installation of the adherence, which are
     // created after the backups of their submissions.
-    [E2E_NAMESPACE, "schedules.velero.io", `fixture-yearly-${E2E_FIXTURE_RUN}`],
+    ...(controlled
+      ? ([[E2E_NAMESPACE, "schedules.velero.io", `fixture-yearly-${E2E_FIXTURE_RUN}`]] as [string, string, string][])
+      : []),
     [E2E_VIEWS_NAMESPACE, "schedules.velero.io", "views-submitted"],
     [E2E_VIEWS_NAMESPACE, "schedules.velero.io", "views-interval"],
     [E2E_ADHERENCE_NAMESPACE, "schedules.velero.io", "adherence-held"],
@@ -373,14 +388,23 @@ export function fixturesReady(): boolean {
   // have generated names: the seven pod volume restores of their restore, and the two repositories of one triple. In
   // the long lists, placed after their owners: the two hundred pod volume backups of their last backup.
   const labelled: [namespace: string, resource: string, selector: string, count: number][] = [
-    [E2E_NAMESPACE, "backuprepositories.velero.io", runRepositorySelector(), 1],
-    [E2E_NAMESPACE, "podvolumebackups.velero.io", `velero.io/backup-name=fixture-volume-backup-${E2E_FIXTURE_RUN}`, 1],
-    [
-      E2E_NAMESPACE,
-      "podvolumerestores.velero.io",
-      `velero.io/restore-name=fixture-volume-restore-${E2E_FIXTURE_RUN}`,
-      1,
-    ],
+    ...(controlled
+      ? ([
+          [E2E_NAMESPACE, "backuprepositories.velero.io", runRepositorySelector(), 1],
+          [
+            E2E_NAMESPACE,
+            "podvolumebackups.velero.io",
+            `velero.io/backup-name=fixture-volume-backup-${E2E_FIXTURE_RUN}`,
+            1,
+          ],
+          [
+            E2E_NAMESPACE,
+            "podvolumerestores.velero.io",
+            `velero.io/restore-name=fixture-volume-restore-${E2E_FIXTURE_RUN}`,
+            1,
+          ],
+        ] as [string, string, string, number][])
+      : []),
     [E2E_VIEWS_NAMESPACE, "podvolumerestores.velero.io", "velero.io/restore-name=restore-mapped", 7],
     [E2E_VIEWS_NAMESPACE, "backuprepositories.velero.io", "velero.io/volume-namespace=views-twice", 2],
     [E2E_SCALE_NAMESPACE, "podvolumebackups.velero.io", "velero.io/backup-name=backup-1000", 200],

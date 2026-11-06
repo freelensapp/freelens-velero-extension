@@ -458,16 +458,17 @@ test environment and of the process of this repository.
   of this machine, would give the views no offset, and they would say "not known"
   with nothing to tell why.
 - The verification of the test environment refuses an installation that holds a
-  schedule, and each part of the hosted job runs it after the cleanup of the
-  fixtures: the schedule the controller of the installation validates, a fixture
-  of the adherence, goes with that cleanup, by its identity, before it. That
-  controller sends a PATCH of the schedule at each of its looks with nothing
-  changed, once a minute (measured on 2026-10-26), which every suite would count
-  as a write: the helpers leave out of the writes the PATCH of a schedule by name,
-  no more of them than the whole minutes between the two readings of the counters
-  and two (`SCHEDULE_PATCHED_AT_EVERY_LOOK`, `writesOf`), so `writes` takes two
-  readings of `apiRequests`, which keep the moment they were asked; the version
-  and the status of the schedule in the snapshot prove that nothing changed it.
+  schedule, and each part of the hosted job on that environment runs it after the
+  cleanup of the fixtures: the schedule the controller of the installation
+  validates, a fixture of the adherence, goes with that cleanup, by its identity,
+  before it. That controller sends a PATCH of the schedule at each of its looks
+  with nothing changed, once a minute (measured on 2026-10-26), which every suite
+  would count as a write: the helpers leave out of the writes the PATCH of a
+  schedule by name, no more of them than the whole minutes between the two
+  readings of the counters and two (`SCHEDULE_PATCHED_AT_EVERY_LOOK`, `writesOf`),
+  so `writes` takes two readings of `apiRequests`, which keep the moment they were
+  asked; the version and the status of the schedule in the snapshot prove that
+  nothing changed it.
 - The live fixtures back up and restore a pod volume: the pod runs the image of
   the store, preloaded, never pulled (its shell ran the command of the volume in
   the sandbox of the probe of the images when it was checked once, on 2026-11-02;
@@ -930,13 +931,14 @@ The hosted checks run on every pull request and on main, on synthetic data only:
   in Freelens built from source at the commit of the validation target, on the
   disposable kind cluster with the CRDs of the release alone that
   `pnpm e2e:cluster:up:definitions` makes, taken down whatever happens.
-- `views-tests.yaml`: every suite of the views, the pre-review and FND-10, in four
-  parts side by side, each a job with the environment and the fixtures of
-  `pnpm demo:up` of its own and one run of the runner of `pnpm e2e:views`, in
-  Freelens built at the same commit; then in each part the cleanup of the fixtures
-  and the verification of the environment. The job `views in Freelens v2` passes
-  when the four parts passed, and a unit test checks that they name every suite
-  once.
+- `views-tests.yaml`: every suite of the views, the pre-review and FND-10, in five
+  parts side by side, each a job with an environment of its own and one run of the
+  runner of `pnpm e2e:views`, in Freelens built at the same commit: four on the
+  environment and the fixtures of `pnpm demo:up`, each then with the cleanup of
+  the fixtures and the verification of the environment, and one on the CRDs of
+  the release alone with the static fixtures, for the five suites that read no
+  controller. The job `views in Freelens v2` passes when the parts passed, and a
+  unit test checks that they name every suite once.
 - `e2e-tests.yaml`: the environment brought up, the fixtures and the transport
   proof, and the environment taken down.
 - `osv-scanner.yaml`, and `mise-lock-check.yaml` for a pull request that changes
