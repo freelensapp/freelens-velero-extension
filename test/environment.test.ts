@@ -197,6 +197,7 @@ import {
   STORAGE_ENDPOINT,
   storageConfiguration,
   storageManifests,
+  veleroDefinitionsArguments,
   veleroInstallArguments,
 } from "../e2e/scripts/local-manifests.mts";
 import {
@@ -11454,9 +11455,24 @@ describe("local storage setup contracts", () => {
     expect(words).toContain("--use-node-agent");
     expect(words).toContain("--use-volume-snapshots=false");
     expect(INSTALLER_FLAGS).toContain("--default-repo-maintain-frequency");
-    // Every flag the probe finds is one the install passes, and the one of the frequency is among them.
+    // Every flag the probe finds is one of the two installs passes, and the one of the frequency is among them.
+    const passed = [...words, ...veleroDefinitionsArguments()];
+
     for (const flag of INSTALLER_FLAGS)
-      expect(words.some((word) => word === flag || word.startsWith(`${flag}=`))).toBe(true);
+      expect([flag, passed.some((word) => word === flag || word.startsWith(`${flag}=`))]).toEqual([flag, true]);
+  });
+
+  it("installs the CRDs of the release alone with a flag the probe of the images finds first, and gives the installer no cluster", () => {
+    const words = veleroDefinitionsArguments();
+
+    expect(words).toEqual(["install", "--crds-only", "--dry-run", "--output=json"]);
+    expect(INSTALLER_FLAGS).toContain("--crds-only");
+    // Nothing of a server, a node agent, a store or a cluster: the installer prints the CRDs and reads nothing.
+    expect(
+      words.filter((word) =>
+        /^--(kubeconfig|kubecontext|namespace|provider|bucket|secret-file|image|plugins|use-node-agent)\b/.test(word),
+      ),
+    ).toEqual([]);
   });
 
   it("reads the maintenance frequency on the Deployment of the server in either form, and says to bring the environment up again without it", () => {

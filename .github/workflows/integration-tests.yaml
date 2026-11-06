@@ -128,13 +128,14 @@ jobs:
           # the cache-save post step to read.
           sudo chown -R "$(id -u):$(id -g)" .apt
 
-      # The disposable kind cluster of this repository's scripts, with Velero
-      # and the CRDs of the reviewed release, and none of the fixtures: each
-      # session of the integration tests places its own object. The state of
-      # the environment, with the generated credentials, is under the home of
-      # the runner: no step uploads it.
+      # The disposable kind cluster of this repository's scripts with the CRDs
+      # of the reviewed release alone: no Velero server, node agent or store,
+      # and none of the fixtures. Each session of the integration tests places
+      # its own object, which no controller reads: they test the views, not
+      # Velero. The state of the environment is under the home of the runner:
+      # no step uploads it.
       - name: Bring the test environment up
-        run: pnpm --color=always e2e:cluster:up
+        run: pnpm --color=always e2e:cluster:up:definitions
 
       - name: Checkout app
         uses: actions/checkout@v7
