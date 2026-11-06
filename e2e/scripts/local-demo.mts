@@ -1702,6 +1702,15 @@ function prepareFixtures(): void {
   );
   const runtime = { owner: journal.owner, kubectl, apply: applyOwned };
   const controlled = journal.mode !== "definitions";
+
+  // The installation of the CRDs alone is static only where no server of Velero was installed.
+  requireCondition(
+    controlled ||
+      !kubectl(["get", "deployments", "--namespace", DEMO_NAMESPACE, "--ignore-not-found", "-o", "name"]).includes(
+        "deployment.apps/velero",
+      ),
+    "The environment of the CRDs alone holds a server of Velero: run pnpm e2e:cluster:down",
+  );
   const snapshots = createStaticFixtures(runtime, journal.fixtureRun.id, controlled);
   // Without an installer, the installation the views find is static too, validated when the run was started.
   const installation = controlled
@@ -2646,6 +2655,11 @@ async function bringUp(): Promise<void> {
     journal.mode !== "definitions" || !journal.fixtureRun,
     "The environment of the CRDs alone holds its static fixtures: run pnpm e2e:cluster:down, then pnpm e2e:cluster:up",
   );
+  // From here the environment is on its way to the full installation, whatever stops it on the way.
+  if (journal.mode) {
+    delete journal.mode;
+    save();
+  }
   await installTools();
   execFileSync(process.execPath, [fileURLToPath(new URL("./local-images.mts", import.meta.url)), "pull"], {
     env: childEnvironment(process.env, { HOME: homedir() }),
@@ -2659,10 +2673,6 @@ async function bringUp(): Promise<void> {
   installStorage();
   prepareBucket();
   installVelero();
-  if (journal.mode) {
-    delete journal.mode;
-    save();
-  }
   if (journal.fixtureRun && journal.fixtureRun.phase !== "cleaned") {
     console.log("NOTE: fixtures are in place, so the check of a fixture-free installation was left out.");
     return;
@@ -2913,7 +2923,7 @@ function placeStaticViews(): { names: ReturnType<typeof fixtureNames> } {
   verifyTarget();
   requireCondition(
     journal.fixtureRun?.phase === "static-ready",
-    "The static fixtures are not in place: run node e2e/scripts/local-demo.mts fixtures-static on the environment of the CRDs alone",
+    `The static fixtures are not in place: run node e2e/scripts/local-demo.mts fixtures-static --context ${DEMO_CONTEXT} on the environment of the CRDs alone`,
   );
   const run = journal.fixtureRun.id;
   const runtime = fixtureRuntime();
@@ -3000,7 +3010,7 @@ function prepareDemo(): void {
 // The suites run from this repository, under its Vitest, and start the Freelens that FREELENS_APP names:
 // the package of the validation target on a machine of a developer, a build of the host from source in CI.
 // E2E_TEST_PATTERN names what is run: one name, or several separated by spaces, each a part of the names
-// of the files, as Vitest takes it. CI runs the suites of the views and FND-10 in four parts side by side, each
+// of the files, as Vitest takes it. CI runs the suites of the views and FND-10 in parts side by side, each
 // with an environment of its own and one run of this runner (.github/workflows/views-tests.yaml).
 function runViews(): void {
   const suites = (process.env.E2E_TEST_PATTERN ?? "velero-e2e").split(/\s+/).filter(Boolean);
@@ -3029,7 +3039,14 @@ function runViews(): void {
   );
   requireCondition(tarballs.length === 1, "One packed extension is expected in the repository: run pnpm pack");
   // On the environment of the CRDs alone no controller runs: the suites that read only static objects run on it.
+  // A part of the hosted job names the environment it brought up, and runs on no other.
   const withoutController = journal.mode === "definitions";
+  const expected = process.env.E2E_ENVIRONMENT ?? "";
+
+  requireCondition(
+    expected === "" || expected === (withoutController ? "definitions" : "demo"),
+    `The part runs on the environment ${expected}, and this one is ${withoutController ? "definitions" : "demo"}`,
+  );
 
   requireCondition(
     !withoutController || suites.every((suite) => WITHOUT_A_CONTROLLER.includes(suite)),
@@ -3206,6 +3223,21 @@ function runIntegration(): void {
   );
 }
 
+// The actions that install, ask or verify the server of the release, the store or the fixtures it makes.
+const SERVER_ACTIONS = [
+  "storage",
+  "bucket",
+  "velero",
+  "verify",
+  "transport-proof",
+  "fixtures",
+  "fixtures-live",
+  "fixtures-artifacts",
+  "fixtures-permissions",
+  "fixtures-cleanup",
+  "demo",
+];
+
 async function main(): Promise<void> {
   const [action, flag, context, ...extra] = process.argv.slice(2);
 
@@ -3243,6 +3275,11 @@ async function main(): Promise<void> {
 
   try {
     lock = initialize();
+    // Nothing that installs, asks or verifies a server runs on the environment of the CRDs alone.
+    requireCondition(
+      journal.mode !== "definitions" || !SERVER_ACTIONS.includes(action),
+      `The environment of the CRDs alone runs no server, which ${action} needs: run pnpm e2e:cluster:down, then pnpm e2e:cluster:up`,
+    );
     if (action === "up") await bringUp();
     else if (action === "up-definitions") await bringUpDefinitions();
     else if (action === "down") takeDown();

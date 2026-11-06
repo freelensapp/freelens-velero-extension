@@ -318,6 +318,13 @@ export function kubectlE2E(...args: string[]): { status: number; stdout: string;
  * `pnpm demo:views`, which `pnpm e2e:views` runs before the suites.
  */
 export function fixturesMissing(): string {
+  if (WITHOUT_CONTROLLER) {
+    return (
+      `The fixtures are missing from ${E2E_CLUSTER_NAME}, the environment of the CRDs alone: ` +
+      "`node e2e/scripts/local-demo.mts fixtures-static` places its static fixtures and its installation, and " +
+      "`pnpm e2e:views` the ones of the views before it runs the suites."
+    );
+  }
   return (
     `The fixtures are missing from ${E2E_CLUSTER_NAME}: \`pnpm demo:up\` brings the environment up with the ` +
     "fixtures of the phases, and `pnpm demo:views` places the ones of the views and of their tabs, which " +

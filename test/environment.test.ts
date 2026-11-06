@@ -64,6 +64,8 @@ import {
   fixtureNames,
   fixtureNamespaces,
   generatedName,
+  installationBackup,
+  installationFixtures,
   isRefused,
   LIVE_RETENTION,
   LONG_BACKUP_NAME,
@@ -167,6 +169,7 @@ import {
   assertStoppedKind,
   DEMO_CLUSTER,
   DEMO_CONTEXT,
+  DEMO_NAMESPACE,
   DEMO_NETWORK,
   type DemoIdentity,
   DOCKER_HOST,
@@ -11139,6 +11142,15 @@ describe("platform of the test environment", () => {
       ["other-views", "demo"],
       ["static-views", "definitions"],
     ]);
+    // The environment of a part is the one it names, brought up by the step of the environment, told to the runner,
+    // which runs on no other, and cleaned with the server only where there is one.
+    expect(workflow).toMatch(
+      /\n {10}if \[ "\$\{ENVIRONMENT\}" = definitions \]; then\n {12}pnpm --color=always e2e:cluster:up:definitions\n {12}node e2e\/scripts\/local-demo\.mts fixtures-static --context kind-freelens-velero-dev\n {10}else\n {12}pnpm --color=always demo:up\n {10}fi\n {8}env:\n {10}ENVIRONMENT: \$\{\{ matrix\.part\.environment \}\}\n/,
+    );
+    expect(workflow).toMatch(/\n {10}E2E_ENVIRONMENT: \$\{\{ matrix\.part\.environment \}\}\n/);
+    expect(workflow).toMatch(
+      /\n {8}if: \$\{\{ !cancelled\(\) && steps\.environment\.outcome == 'success' && matrix\.part\.environment == 'demo' \}\}\n {8}run: \|\n {10}node e2e\/scripts\/local-demo\.mts fixtures-cleanup /,
+    );
     // A part with no controller names only the suites that read none, which the runner refuses otherwise.
     expect(
       parts
@@ -11167,6 +11179,31 @@ describe("platform of the test environment", () => {
     // Every name of a part runs a file.
     expect(parts.flatMap((part) => part.suites).filter((suite) => !files.some((file) => file.includes(suite)))).toEqual(
       [],
+    );
+  });
+
+  it("gives the views without a controller an installation of their own, outside the namespaces of the run, which the suites look for by its name", () => {
+    const run = "0a1b2c3d";
+    const objects = installationFixtures("synthetic-owner", run, Date.parse("2026-11-06T20:00:00.000Z"));
+    const labels = { [OWNER_LABEL]: "synthetic-owner", [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
+
+    expect(objects.map((object) => [object.kind, object.metadata.name, object.metadata.namespace])).toEqual([
+      ["Namespace", DEMO_NAMESPACE, undefined],
+      ["BackupStorageLocation", "default", DEMO_NAMESPACE],
+      ["Backup", installationBackup(run), DEMO_NAMESPACE],
+    ]);
+    expect(objects.map((object) => object.metadata.labels)).toEqual([labels, labels, labels]);
+    // The location the installer names default, with the phase and the time of a validation together, as the
+    // release writes them; a backup completed as the completed backups of the static fixtures are.
+    expect(objects[1].spec).toMatchObject({ default: true, provider: "aws", objectStorage: { bucket: BUCKET } });
+    expect(objects[1].status).toEqual({ phase: "Available", lastValidationTime: "2026-11-06T20:00:00Z" });
+    expect(objects[2].status).toMatchObject({ phase: "Completed", completionTimestamp: "2026-11-06T20:01:00Z" });
+    // The cleanup of a run removes its namespaces and never the one of the installation.
+    expect(fixtureNamespaces(run)).not.toContain(DEMO_NAMESPACE);
+    // The suites look for the backup by the name the fixtures give it.
+    expect(installationBackup(run)).toBe(`fixture-installation-backup-${run}`);
+    expect(readFileSync(new URL("../integration/helpers/velero-cluster.ts", import.meta.url), "utf8")).toMatch(
+      /"backups\.velero\.io", `fixture-installation-backup-\$\{E2E_FIXTURE_RUN\}`\]/,
     );
   });
 
