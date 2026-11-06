@@ -2017,7 +2017,9 @@ export function readFixture(runtime: FixtureRuntime, expected: KubeResource): Ku
   return actual;
 }
 
-export function createStaticFixtures(runtime: FixtureRuntime, run: string): KubeResource[] {
+// `controlled` is whether a controller of the release runs on the cluster: where none runs, on the environment of the
+// CRDs alone, there is no scope of one to check.
+export function createStaticFixtures(runtime: FixtureRuntime, run: string, controlled = true): KubeResource[] {
   const schemas = JSON.parse(
     runtime.kubectl(["get", "customresourcedefinitions", "backups.velero.io", "restores.velero.io", "-o", "json"]),
   ) as {
@@ -2048,7 +2050,7 @@ export function createStaticFixtures(runtime: FixtureRuntime, run: string): Kube
       "Installed phase/schema contract differs from the reviewed release",
     );
   }
-  for (const name of ["deployment/velero", "daemonset/node-agent"]) {
+  for (const name of controlled ? ["deployment/velero", "daemonset/node-agent"] : []) {
     const workload = JSON.parse(
       runtime.kubectl(["get", name, "--namespace", DEMO_NAMESPACE, "-o", "json"]),
     ) as KubeResource & {
@@ -2069,6 +2071,66 @@ export function createStaticFixtures(runtime: FixtureRuntime, run: string): Kube
     );
   }
   return createWithStatus(runtime, staticFixtures(runtime.owner, run));
+}
+
+// The suites of the views that read static objects alone, and so run where no controller does: each of their cases
+// reads what the fixtures wrote, and none what a server made (velero-e2e-restricted names its two suites).
+export const WITHOUT_A_CONTROLLER = [
+  "velero-e2e-gate",
+  "velero-e2e-preferences",
+  "velero-e2e-restricted",
+  "velero-e2e-scale",
+  "velero-e2e-schedules",
+];
+
+// The installation of the environment of the CRDs alone, which no installer made and no server reads: its namespace,
+// the storage location the installer makes, with the phase and the time of a validation its server writes together,
+// and a completed backup, so that the discovery finds the installation and its lists are not empty. Where Velero
+// runs, its installer and its server make their own, and these are never placed.
+export function installationFixtures(owner: string, run: string, validated: number): KubeResource[] {
+  requireCondition(owner, "Fixture ownership is required");
+  const names = fixtureNames(run);
+  const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
+  const metadata = (name: string) => ({ name, namespace: DEMO_NAMESPACE, labels });
+
+  return [
+    { apiVersion: "v1", kind: "Namespace", metadata: { name: DEMO_NAMESPACE, labels } },
+    {
+      apiVersion: "velero.io/v1",
+      kind: "BackupStorageLocation",
+      metadata: metadata("default"),
+      spec: {
+        default: true,
+        provider: "aws",
+        objectStorage: { bucket: BUCKET },
+        config: { region: "us-east-1", s3ForcePathStyle: "true", s3Url: STORAGE_ENDPOINT },
+      },
+      status: { phase: "Available", lastValidationTime: new Date(validated).toISOString().replace(/\.\d{3}Z$/, "Z") },
+    },
+    {
+      apiVersion: "velero.io/v1",
+      kind: "Backup",
+      metadata: metadata(installationBackup(run)),
+      spec: {
+        includedNamespaces: [names.source],
+        includeClusterResources: false,
+        storageLocation: "default",
+        snapshotVolumes: false,
+        ttl: "720h0m0s",
+      },
+      status: syntheticStatus("Completed", "itemsBackedUp", validated),
+    },
+  ];
+}
+
+// The completed backup of the installation of the environment of the CRDs alone, by the name of the run.
+export function installationBackup(run: string): string {
+  return `fixture-installation-backup-${run}`;
+}
+
+// The installation of the environment of the CRDs alone, each object with its status read back as it was asked.
+export function createInstallationFixtures(runtime: FixtureRuntime, run: string, validated: number): KubeResource[] {
+  return createWithStatus(runtime, installationFixtures(runtime.owner, run, validated));
 }
 
 // An object is created without its status and gets it with a change that names its uid and its version:

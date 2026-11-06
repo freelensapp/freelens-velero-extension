@@ -35,7 +35,9 @@ import {
   awaitRequestsRemoved,
   awaitVolumeOperationsRemoved,
   clearTabFixtures,
+  createInstallationFixtures,
   createStaticFixtures,
+  createViewFixtures,
   type ExecPluginFiles,
   execPluginKubeconfig,
   FIXTURE_LABEL,
@@ -44,6 +46,7 @@ import {
   fixtureNames,
   fixtureNamespaces,
   liveBackup,
+  placeAdherenceFixtures,
   placementWords,
   placeRefusedFixtures,
   placeViewAndTabFixtures,
@@ -65,6 +68,7 @@ import {
   verifyStaticFixtures,
   viewIdentityOfAnExecPlugin,
   viewIdentityWithoutPortForward,
+  WITHOUT_A_CONTROLLER,
 } from "./local-fixtures.mts";
 import {
   assertEgressRules,
@@ -201,6 +205,9 @@ interface Journal {
   images?: Record<string, string>;
   resources: ResourceIdentity[];
   phase: string;
+  // Set by `up-definitions`: the cluster holds the CRDs of the release and no installer, server or store ran on it,
+  // so its fixtures are static and its views read no controller.
+  mode?: "definitions";
   retiredNodeIds?: string[];
   bucket?: { name: string; created: boolean };
   temporaryChecks?: (ResourceIdentity & { owner: string })[];
@@ -1693,13 +1700,30 @@ function prepareFixtures(): void {
     journal.fixtureRun.phase === "preparing",
     "Fixture run already prepared; do not replace its evidence",
   );
-  const snapshots = createStaticFixtures({ owner: journal.owner, kubectl, apply: applyOwned }, journal.fixtureRun.id);
+  const runtime = { owner: journal.owner, kubectl, apply: applyOwned };
+  const controlled = journal.mode !== "definitions";
+
+  // The installation of the CRDs alone is static only where no server of Velero was installed.
+  requireCondition(
+    controlled ||
+      !kubectl(["get", "deployments", "--namespace", DEMO_NAMESPACE, "--ignore-not-found", "-o", "name"]).includes(
+        "deployment.apps/velero",
+      ),
+    "The environment of the CRDs alone holds a server of Velero: run pnpm e2e:cluster:down",
+  );
+  const snapshots = createStaticFixtures(runtime, journal.fixtureRun.id, controlled);
+  // Without an installer, the installation the views find is static too, validated when the run was started.
+  const installation = controlled
+    ? []
+    : createInstallationFixtures(runtime, journal.fixtureRun.id, Date.parse(journal.fixtureRun.started));
 
   writeFileSync(join(STATE, "fixture-static-snapshots.json"), JSON.stringify(snapshots), { mode: 0o600 });
   journal.fixtureRun.phase = "static-ready";
   save();
   console.log(
-    `PASS: ${snapshots.length} labelled synthetic objects accepted with exact status readback; controller-isolation evidence will be checked after live operations.`,
+    controlled
+      ? `PASS: ${snapshots.length} labelled synthetic objects accepted with exact status readback; controller-isolation evidence will be checked after live operations.`
+      : `PASS: ${snapshots.length} labelled synthetic objects and an installation of ${installation.length}, the CRDs alone and no controller, accepted with exact status readback.`,
   );
 }
 
@@ -2627,6 +2651,15 @@ function stopCluster(): void {
 }
 
 async function bringUp(): Promise<void> {
+  requireCondition(
+    journal.mode !== "definitions" || !journal.fixtureRun,
+    "The environment of the CRDs alone holds its static fixtures: run pnpm e2e:cluster:down, then pnpm e2e:cluster:up",
+  );
+  // From here the environment is on its way to the full installation, whatever stops it on the way.
+  if (journal.mode) {
+    delete journal.mode;
+    save();
+  }
   await installTools();
   execFileSync(process.execPath, [fileURLToPath(new URL("./local-images.mts", import.meta.url)), "pull"], {
     env: childEnvironment(process.env, { HOME: homedir() }),
@@ -2647,14 +2680,15 @@ async function bringUp(): Promise<void> {
   await verifyEnvironment();
 }
 
-// The environment of the integration test: the cluster and the CRDs of the release, without the server, the node
-// agent and the store of `up`. An environment that holds more, brought up with `up` or `demo:up`, is refused: it
-// would keep its server, its store and its fixtures.
+// The environment of the integration test and of the views that read no controller: the cluster and the CRDs of the
+// release, without the server, the node agent and the store of `up`. An environment that holds more, brought up with
+// `up` or `demo:up`, is refused: it would keep its server, its store and its fixtures. One brought up by this action
+// may hold its static fixtures, and is brought up again as it is.
 async function bringUpDefinitions(): Promise<void> {
   requireCondition(
     !journal.bucket &&
-      !journal.fixtureRun &&
-      journal.resources.every((entry) => entry.kind === "CustomResourceDefinition"),
+      (journal.mode === "definitions" ||
+        (!journal.fixtureRun && journal.resources.every((entry) => entry.kind === "CustomResourceDefinition"))),
     "The environment holds more than the CRDs of the release: run pnpm e2e:cluster:down, then pnpm e2e:cluster:up:definitions",
   );
   await installTools();
@@ -2669,6 +2703,8 @@ async function bringUpDefinitions(): Promise<void> {
   else await setupCluster();
   installVeleroDefinitions();
   await waitForServedDefinitions();
+  journal.mode = "definitions";
+  save();
 }
 
 // What was generated for this environment stays in its files. The log is read in pieces, it grows with every run.
@@ -2881,6 +2917,26 @@ function placeViewsAndTabs(): {
   return { names, runtime, told: tabExpectations(artifacts) };
 }
 
+// The fixtures of the views and of the adherence on the environment of the CRDs alone, beside its static fixtures
+// and its installation: no store, no server, and nothing the server makes or removes is waited for.
+function placeStaticViews(): { names: ReturnType<typeof fixtureNames> } {
+  verifyTarget();
+  requireCondition(
+    journal.fixtureRun?.phase === "static-ready",
+    `The static fixtures are not in place: run node e2e/scripts/local-demo.mts fixtures-static --context ${DEMO_CONTEXT} on the environment of the CRDs alone`,
+  );
+  const run = journal.fixtureRun.id;
+  const runtime = fixtureRuntime();
+  const views = createViewFixtures(runtime, run, Date.parse(journal.fixtureRun.started), Date.now());
+  const adherence = placeAdherenceFixtures(runtime, run);
+
+  save();
+  console.log(
+    `PASS: the fixtures of the views (${views.views} objects, ${views.operations} operations, ${views.scale} backups of the long lists) and of the adherence (${adherence.states} states) placed, with no controller.`,
+  );
+  return { names: fixtureNames(run) };
+}
+
 // The kubeconfig of the identity that reads a part of one namespace, with a credential that lasts as long
 // as it is asked. It is written in the private state and nowhere else.
 function writeReaderKubeconfig(file: string, namespace: string, duration: string, identity = VIEW_READER): void {
@@ -2954,7 +3010,7 @@ function prepareDemo(): void {
 // The suites run from this repository, under its Vitest, and start the Freelens that FREELENS_APP names:
 // the package of the validation target on a machine of a developer, a build of the host from source in CI.
 // E2E_TEST_PATTERN names what is run: one name, or several separated by spaces, each a part of the names
-// of the files, as Vitest takes it. CI runs the suites of the views and FND-10 in four parts side by side, each
+// of the files, as Vitest takes it. CI runs the suites of the views and FND-10 in parts side by side, each
 // with an environment of its own and one run of this runner (.github/workflows/views-tests.yaml).
 function runViews(): void {
   const suites = (process.env.E2E_TEST_PATTERN ?? "velero-e2e").split(/\s+/).filter(Boolean);
@@ -2982,19 +3038,35 @@ function runViews(): void {
     "FREELENS_APP names an application installed in /Applications: the suites start a build made for them",
   );
   requireCondition(tarballs.length === 1, "One packed extension is expected in the repository: run pnpm pack");
+  // On the environment of the CRDs alone no controller runs: the suites that read only static objects run on it.
+  // A part of the hosted job names the environment it brought up, and runs on no other.
+  const withoutController = journal.mode === "definitions";
+  const expected = process.env.E2E_ENVIRONMENT ?? "";
+
+  requireCondition(
+    expected === "" || expected === (withoutController ? "definitions" : "demo"),
+    `The part runs on the environment ${expected}, and this one is ${withoutController ? "definitions" : "demo"}`,
+  );
+
+  requireCondition(
+    !withoutController || suites.every((suite) => WITHOUT_A_CONTROLLER.includes(suite)),
+    `On the environment of the CRDs alone the suites that read no controller run: ${WITHOUT_A_CONTROLLER.join(", ")}`,
+  );
   const artifacts = join(process.cwd(), "e2e-artifacts", pattern);
   const headless = process.platform === "linux" && !process.env.DISPLAY;
-  const placed = placeViewsAndTabs();
-  const { names } = placed;
+  const tabs = withoutController ? undefined : placeViewsAndTabs();
+  const { names } = tabs ?? placeStaticViews();
   const run = journal.fixtureRun?.id ?? "";
 
   rmSync(artifacts, { recursive: true, force: true });
   mkdirSync(artifacts, { recursive: true });
-  // Every suite expects no request to Velero when it starts: the ones the server removes are waited for.
-  awaitRequestsRemoved(placed.runtime, run, (line) => console.log(line));
-  // What the suites of the tabs expect of each artifact they load is told by the runner, and not copied
-  // from the extension: they find it beside their reports.
-  writeFileSync(join(artifacts, "tab-fixtures.json"), `${JSON.stringify(tabFacts(placed), null, 2)}\n`);
+  if (tabs) {
+    // Every suite expects no request to Velero when it starts: the ones the server removes are waited for.
+    awaitRequestsRemoved(tabs.runtime, run, (line) => console.log(line));
+    // What the suites of the tabs expect of each artifact they load is told by the runner, and not copied
+    // from the extension: they find it beside their reports.
+    writeFileSync(join(artifacts, "tab-fixtures.json"), `${JSON.stringify(tabFacts(tabs), null, 2)}\n`);
+  }
   // The identity that reads a part of the views lasts as long as the run may: its kubeconfig is in the private
   // state, and goes when the run ends. So do the identity that may not port-forward and the one whose token an
   // `exec` plugin gives, each made for the run, an account of the namespace of the installation with its role,
@@ -3061,6 +3133,8 @@ function runViews(): void {
           E2E_ADHERENCE_SCALE_NAMESPACE: names.adherenceScale,
           E2E_FIXTURE_RUN: run,
           E2E_ARTIFACTS_DIR: artifacts,
+          // The suites look for none of the objects a controller makes.
+          ...(withoutController ? { E2E_WITHOUT_CONTROLLER: "1" } : {}),
         }),
         stdio: "inherit",
         // Two hours, as long as the identities made for the run last: the suites that run last must still find
@@ -3149,6 +3223,21 @@ function runIntegration(): void {
   );
 }
 
+// The actions that install, ask or verify the server of the release, the store or the fixtures it makes.
+const SERVER_ACTIONS = [
+  "storage",
+  "bucket",
+  "velero",
+  "verify",
+  "transport-proof",
+  "fixtures",
+  "fixtures-live",
+  "fixtures-artifacts",
+  "fixtures-permissions",
+  "fixtures-cleanup",
+  "demo",
+];
+
 async function main(): Promise<void> {
   const [action, flag, context, ...extra] = process.argv.slice(2);
 
@@ -3186,6 +3275,11 @@ async function main(): Promise<void> {
 
   try {
     lock = initialize();
+    // Nothing that installs, asks or verifies a server runs on the environment of the CRDs alone.
+    requireCondition(
+      journal.mode !== "definitions" || !SERVER_ACTIONS.includes(action),
+      `The environment of the CRDs alone runs no server, which ${action} needs: run pnpm e2e:cluster:down, then pnpm e2e:cluster:up`,
+    );
     if (action === "up") await bringUp();
     else if (action === "up-definitions") await bringUpDefinitions();
     else if (action === "down") takeDown();
