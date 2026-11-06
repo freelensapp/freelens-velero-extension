@@ -131,8 +131,10 @@ export const MAINTAIN_FREQUENCY = "168h";
 export const MAINTAIN_FREQUENCY_HOURS = 168;
 const MAINTAIN_FREQUENCY_FLAG = "--default-repo-maintain-frequency";
 
-// The flags of the installer that the probe of the images finds in its help before the install passes them.
+// The flags of the installer that the probe of the images finds in its help before one of the two installs passes
+// them.
 export const INSTALLER_FLAGS = [
+  "--crds-only",
   "--dry-run",
   "--output",
   "--namespace",
@@ -168,16 +170,10 @@ export function veleroInstallArguments(): string[] {
 }
 
 // The arguments of the installer for the CRDs of the release alone, all the integration test needs: no server, no node
-// agent, no store. With `--crds-only` the installer skips the checks of a provider and a bucket and prints the CRDs.
+// agent, no store. With `--crds-only` the installer skips the checks of a provider and a bucket and prints the CRDs
+// before it builds a client: it reads no cluster, and is given no kubeconfig.
 export function veleroDefinitionsArguments(): string[] {
-  return [
-    "install",
-    "--crds-only",
-    "--dry-run",
-    "--output=json",
-    "--kubeconfig=/local-kubeconfig",
-    `--kubecontext=${DEMO_CONTEXT}`,
-  ];
+  return ["install", "--crds-only", "--dry-run", "--output=json"];
 }
 
 const DURATION_UNITS: Record<string, number> = { h: 3_600_000, m: 60_000, s: 1_000, ms: 1, us: 0.001, ns: 0.000_001 };

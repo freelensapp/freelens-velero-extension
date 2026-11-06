@@ -144,14 +144,14 @@ environment.
 ## End-To-End Tests
 
 The [scripts](../../e2e/scripts/) create a dedicated kind cluster,
-`freelens-velero-dev`, with Velero, its AWS plugin and SeaweedFS, every image an
-official release pinned by digest. The contract is
+`freelens-velero-dev`, with Velero, its AWS plugin and SeaweedFS, or with the CRDs
+of the release alone, every image an official release pinned by digest. The contract is
 [SPEC-0004](../specs/SPEC-0004-test-environment-every-platform.md).
 
 | Command | What it does |
 | --- | --- |
 | `pnpm e2e:cluster:up` | Installs the pinned kind and kubectl, pulls the images, creates the cluster, installs the storage and Velero, verifies the environment. Run again, it resumes the environment it owns |
-| `pnpm e2e:cluster:up:definitions` | Installs the pinned kind and kubectl, pulls the images, creates the cluster and installs the CRDs of the release alone: no server, node agent or store. The environment of the integration tests |
+| `pnpm e2e:cluster:up:definitions` | Installs the pinned kind and kubectl, pulls the images, creates the cluster and installs the CRDs of the release alone: no server, node agent or store. The environment of the integration tests. It refuses an environment that holds more, and leaves out the verification of `pnpm e2e:cluster:up`: the proof of the egress rules and the checks of the cleanup and of an installation free of fixtures, which the E2E workflow runs on every pull request |
 | `pnpm e2e` | Builds the extension, then runs the fixtures and the transport proof: real backups and restores of synthetic data, their artifacts fetched through the compiled main |
 | `pnpm e2e:cluster:down` | Deletes the node, the network and the state the journal owns, after the identity check. The installed binaries stay |
 | `pnpm demo:up` | Brings the environment up and leaves the fixtures in place, to look at them in Freelens |

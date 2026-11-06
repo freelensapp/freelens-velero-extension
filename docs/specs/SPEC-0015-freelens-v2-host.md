@@ -1613,7 +1613,7 @@ release alone, from its installer with `--crds-only`, and no longer the Velero s
 the node agent and the store of `pnpm e2e:cluster:up`. Each of its sessions places an
 object of its own that no controller reads, so they never needed one: without it they
 cannot come to depend on what a controller does, a run does not wait for one, and the
-same sessions can run on the CRDs of more than one release. This is the practice of
+same sessions could run on the CRDs of more than one release. This is the practice of
 the other extensions of the organization, whose integration tests apply the CRDs of a
 release and static objects with no controller, and test the views, not the controller.
 Approved by the lead maintainer on 2026-11-06, to be applied without losing quality and
@@ -1623,15 +1623,16 @@ the release for now: which of their cases move to static objects, and which stay
 job with the real controller, is decided in a later pull request.
 
 A first run on the CRDs alone failed only on the console of its first session: an API
-server of Kubernetes 1.31 or later answers 429 Too Many Requests to the reads of a kind
-whose watch cache it is still filling, as it is for each new CRD until a first client
-reads it, and where Velero runs its server has read every kind before anyone opens a
-view. Of the five reads that got the answer, all were first reads of a kind of the
-release: the storage locations of the cluster, then the backups, the schedules, the
-snapshot locations and the repositories of the namespace of the session. The
-environment now waits until the discovery and the OpenAPI of the API server name the 13
-CRDs, then lists each kind once, which kubectl retries on a 429. On 2026-11-06, on
-another machine, at the commit of the validation target, the integration test on this
+server starts serving a CRD, with the watch cache of its storage, at the first request
+for it, and from Kubernetes 1.31 it answers 429 Too Many Requests to the watches and
+the reads that need that cache while it is filled; where Velero runs, its server has
+read every kind before anyone opens a view. Of the five reads that got the answer, all
+were first reads of a kind of the release: the storage locations of the cluster, then
+the backups, the schedules, the snapshot locations and the repositories of the
+namespace of the session. The environment now waits until the discovery of the API
+server names the 13 kinds and its OpenAPI their two versions, then lists the kinds
+once, which starts each of them before a session reads one. On 2026-11-06, on another
+machine, at the commit of the validation target, the integration test on this
 environment passed, FND-10 and the five sessions with their 21 cases, with no answer
 429: the environment up in 55 s, the wait 1,993 ms of it, and the sessions in 61 s,
 where the full installation took 87 s and 63 s on the same branch, the same machine and

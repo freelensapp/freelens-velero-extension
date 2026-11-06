@@ -1162,8 +1162,6 @@ function installVeleroDefinitions(): void {
       "--cap-drop=ALL",
       "--security-opt=no-new-privileges",
       `--user=${user}:${group}`,
-      "--mount",
-      `type=bind,src=${CONFIG},dst=/local-kubeconfig,readonly`,
       "--entrypoint=/velero",
       IMAGES.velero,
       ...veleroDefinitionsArguments(),
@@ -1194,35 +1192,48 @@ function installVeleroDefinitions(): void {
 }
 
 // The environment is ready for the sessions once the API server serves every kind of the release as it does where
-// Velero runs. It publishes the discovery and the OpenAPI of new CRDs a moment after they are Established, and, from
-// Kubernetes 1.31, it answers 429 Too Many Requests to the reads of a kind whose watch cache is still being filled,
-// as each new CRD's is until a first client reads it: a session that opened a view first got those answers in its
-// console. Where Velero runs its server has read every kind; here a list of each, which kubectl retries on a 429,
-// fills the caches before a session reads one.
+// Velero runs. It publishes the discovery and the OpenAPI of new CRDs a moment after they are Established, and it
+// starts serving a kind, with the watch cache of its storage, at the first request for it: from Kubernetes 1.31 it
+// answers 429 Too Many Requests to the watches and the reads that need that cache while it is filled, and a session
+// that read a kind first got those answers in its console. Where Velero runs its server has read every kind; here,
+// once the discovery names the 13 kinds and the OpenAPI their two versions, one list of the kinds starts each of them
+// before a session reads one.
 async function waitForServedDefinitions(): Promise<void> {
   const started = Date.now();
   const versions = ["velero.io/v1", "velero.io/v2alpha1"];
+  // Each command is given a short time, so that the wait ends near its two minutes.
+  const read = (args: string[]) => kubectl(args, undefined, 20_000);
+  // What the API server answered to the last command that failed, kept for the end of the wait.
+  let reason: string[] = [];
 
   for (;;) {
-    let kinds: string[] = [];
-    let paths: string[] = [];
     let listed = false;
 
     try {
-      kinds = kubectl(["api-resources", "--api-group=velero.io", "-o", "name"]).trim().split("\n").filter(Boolean);
-      paths = Object.keys(
-        (JSON.parse(kubectl(["get", "--raw", "/openapi/v3"])) as { paths?: Record<string, unknown> }).paths ?? {},
+      const kinds = read(["api-resources", "--api-group=velero.io", "-o", "name"]).trim().split("\n").filter(Boolean);
+      const paths = Object.keys(
+        (JSON.parse(read(["get", "--raw", "/openapi/v3"])) as { paths?: Record<string, unknown> }).paths ?? {},
       );
+
       if (kinds.length === 13 && versions.every((version) => paths.includes(`apis/${version}`))) {
-        for (const kind of kinds) kubectl(["get", kind, "--all-namespaces", "-o", "name"]);
+        read(["get", kinds.join(","), "--all-namespaces", "-o", "name"]);
         listed = true;
       }
-    } catch {
-      // Not served yet: the API server may refuse a read while it publishes the CRDs or fills a cache.
+    } catch (error) {
+      // Not served yet: the API server may refuse a read while it publishes the CRDs or starts a kind. Anything else,
+      // as a target that is not the one of the journal, is said at once.
+      if (!(error instanceof Error && "reason" in error)) throw error;
+      reason = (error as { reason?: string[] }).reason ?? [];
     }
     if (listed) break;
-    requireCondition(Date.now() - started < 120_000, "The API server did not serve the 13 Velero CRDs in two minutes");
-    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    if (Date.now() - started >= 120_000) {
+      throw new Error(
+        ["The API server did not serve the 13 Velero CRDs in two minutes", ...reason.map((line) => `  ${line}`)].join(
+          "\n",
+        ),
+      );
+    }
+    await delay(2_000);
   }
   console.log(
     `PASS: the API server serves the 13 CRDs, published and listed once each, ${Date.now() - started} ms after they were Established.`,
@@ -2637,8 +2648,15 @@ async function bringUp(): Promise<void> {
 }
 
 // The environment of the integration test: the cluster and the CRDs of the release, without the server, the node
-// agent and the store of `up`.
+// agent and the store of `up`. An environment that holds more, brought up with `up` or `demo:up`, is refused: it
+// would keep its server, its store and its fixtures.
 async function bringUpDefinitions(): Promise<void> {
+  requireCondition(
+    !journal.bucket &&
+      !journal.fixtureRun &&
+      journal.resources.every((entry) => entry.kind === "CustomResourceDefinition"),
+    "The environment holds more than the CRDs of the release: run pnpm e2e:cluster:down, then pnpm e2e:cluster:up:definitions",
+  );
   await installTools();
   execFileSync(process.execPath, [fileURLToPath(new URL("./local-images.mts", import.meta.url)), "pull"], {
     env: childEnvironment(process.env, { HOME: homedir() }),

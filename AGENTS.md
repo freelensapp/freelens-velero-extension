@@ -928,7 +928,8 @@ The hosted checks run on every pull request and on main, on synthetic data only:
   measures alone.
 - `integration-tests.yaml`: FND-10 and the five sessions of the integration test,
   in Freelens built from source at the commit of the validation target, on the
-  disposable kind cluster `pnpm e2e:cluster:up` makes, taken down whatever happens.
+  disposable kind cluster with the CRDs of the release alone that
+  `pnpm e2e:cluster:up:definitions` makes, taken down whatever happens.
 - `views-tests.yaml`: every suite of the views, the pre-review and FND-10, in four
   parts side by side, each a job with the environment and the fixtures of
   `pnpm demo:up` of its own and one run of the runner of `pnpm e2e:views`, in

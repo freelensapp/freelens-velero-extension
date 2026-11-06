@@ -145,12 +145,15 @@ machine. The commands and the evidence are in
 backend in [LOCAL-STORAGE.md](docs/development/LOCAL-STORAGE.md).
 
 The views are driven in a packaged Freelens against the same environment, with
-its fixtures left in place:
+its fixtures left in place, and the integration test against the CRDs of the
+release alone:
 
 ```sh
 pnpm demo:up            # the environment with the fixtures left in place
 pnpm e2e:views          # the suites of the views, in the Freelens FREELENS_APP names
 pnpm pre-review         # both themes, the sizes of the window, the keyboard
+
+pnpm e2e:cluster:up:definitions   # the cluster with the CRDs of the release alone
 pnpm e2e:integration    # the integration test, a session for each of the five kinds
 ```
 
