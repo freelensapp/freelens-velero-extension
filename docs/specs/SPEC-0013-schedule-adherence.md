@@ -707,6 +707,15 @@ and verdict.
     Amendment of 2026-11-06: the hosted job of the views runs in four parts side
     by side, and the suite runs in the part of the other views, named
     `velero-e2e-adherence`, by the same runner: no step and no bound of its own.
+    Amendment of 2026-11-07: the suite runs in the part without a controller, on
+    the CRDs of the release alone, where the schedule of REQ-176 and ADH-17 that
+    the real controller validated is its static counterpart, Enabled with
+    `skipImmediately` written into its spec as the controller writes it
+    (`pkg/controller/schedule_controller.go:113-131` of the reviewed release), and
+    nothing submitted; the case that counts the writes finds none of a controller,
+    within the same bound, and the real schedule still submits nothing while the
+    suites run. Approved by the lead maintainer on 2026-11-06 with the direction of
+    the tests without a controller (SPEC-0015, amendments of 2026-11-06).
 
 No NEEDS CLARIFICATION marker: every decision above has a default with its reasons,
 and the ones the lead maintainer may overturn at approval are named as such.

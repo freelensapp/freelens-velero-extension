@@ -28,7 +28,7 @@ import {
   syntheticResourceList,
   syntheticResults,
   syntheticVolumeInfo,
-  type tabArtifacts,
+  tabArtifacts,
   tabExpectations,
 } from "../e2e/scripts/local-artifacts.mts";
 import { mixedExpression } from "../e2e/scripts/local-expressions.mts";
@@ -64,7 +64,6 @@ import {
   fixtureNames,
   fixtureNamespaces,
   generatedName,
-  installationBackup,
   installationFixtures,
   isRefused,
   LIVE_RETENTION,
@@ -81,6 +80,7 @@ import {
   liveVolumePod,
   liveVolumeRestore,
   MAINTENANCE_MARGIN,
+  NEVER_COLLECTED_RESOURCES,
   NEWEST_OF_THE_HISTORY,
   NOT_COUNTED,
   NOT_STARTED,
@@ -98,6 +98,7 @@ import {
   proofIdentities,
   REAL_SCHEDULE_EXPRESSION,
   REFUSALS,
+  REFUSALS_OF_THE_SERVER,
   REPOSITORY_LABELS,
   RESTORE_PHASES,
   type Recorded,
@@ -123,6 +124,7 @@ import {
   SERVER_EAST,
   SHAPE_ANNOTATION,
   SPLIT_BEFORE,
+  STORAGE_LOCATION_LABEL,
   SUBMISSION_DRIFT,
   SUBMISSIONS_AT_ONCE,
   SYNCED_RETENTION,
@@ -150,6 +152,7 @@ import {
   VOLUME_BYTES,
   VOLUME_NAME,
   VOLUME_SCRIPT,
+  validateTheLocation,
   viewFixtures,
   viewIdentityOfAnExecPlugin,
   viewIdentityWithoutPortForward,
@@ -11139,7 +11142,6 @@ describe("platform of the test environment", () => {
       ["artifacts", "demo"],
       ["pre-review", "demo"],
       ["volumes-and-server", "demo"],
-      ["other-views", "demo"],
       ["static-views", "definitions"],
     ]);
     // The environment of a part is the one it names, brought up by the step of the environment, told to the runner,
@@ -11182,29 +11184,253 @@ describe("platform of the test environment", () => {
     );
   });
 
-  it("gives the views without a controller an installation of their own, outside the namespaces of the run, which the suites look for by its name", () => {
+  it("gives the views without a controller an installation of their own, with the counterparts of what the controllers leave in the one of the demo, which the suites look for by the names of the run", () => {
     const run = "0a1b2c3d";
-    const objects = installationFixtures("synthetic-owner", run, Date.parse("2026-11-06T20:00:00.000Z"));
-    const labels = { [OWNER_LABEL]: "synthetic-owner", [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
+    const owner = "synthetic-owner";
+    const validated = Date.parse("2026-11-06T20:00:00.000Z");
+    const cluster = { gitVersion: "v1.34.11", major: "1", minor: "34" };
+    const objects = installationFixtures(owner, run, validated, cluster);
+    const names = fixtureNames(run);
+    const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
+    const byName = Object.fromEntries(objects.map((object) => [object.metadata.name, object]));
+    const completed = (object: (typeof objects)[number]) =>
+      Date.parse((object.status as { completionTimestamp: string }).completionTimestamp);
 
     expect(objects.map((object) => [object.kind, object.metadata.name, object.metadata.namespace])).toEqual([
       ["Namespace", DEMO_NAMESPACE, undefined],
       ["BackupStorageLocation", "default", DEMO_NAMESPACE],
-      ["Backup", installationBackup(run), DEMO_NAMESPACE],
+      ["Schedule", names.realSchedule, DEMO_NAMESPACE],
+      ["Backup", names.backup, DEMO_NAMESPACE],
+      ["Restore", names.restore, DEMO_NAMESPACE],
+      ["Backup", names.volumeBackup, DEMO_NAMESPACE],
+      ["Restore", names.volumeRestore, DEMO_NAMESPACE],
+      ["Backup", names.invalidBackup, DEMO_NAMESPACE],
+      ["Restore", names.invalidRestore, DEMO_NAMESPACE],
+      ["Restore", names.orphanRestore, DEMO_NAMESPACE],
+      ["Backup", names.syncedBackup, DEMO_NAMESPACE],
+      ["Backup", names.syncedBackupWithoutLog, DEMO_NAMESPACE],
     ]);
-    expect(objects.map((object) => object.metadata.labels)).toEqual([labels, labels, labels]);
-    // The location the installer names default, with the phase and the time of a validation together, as the
-    // release writes them; a backup completed as the completed backups of the static fixtures are.
-    expect(objects[1].spec).toMatchObject({ default: true, provider: "aws", objectStorage: { bucket: BUCKET } });
-    expect(objects[1].status).toEqual({ phase: "Available", lastValidationTime: "2026-11-06T20:00:00Z" });
-    expect(objects[2].status).toMatchObject({ phase: "Completed", completionTimestamp: "2026-11-06T20:01:00Z" });
-    // The cleanup of a run removes its namespaces and never the one of the installation.
-    expect(fixtureNamespaces(run)).not.toContain(DEMO_NAMESPACE);
-    // The suites look for the backup by the name the fixtures give it.
-    expect(installationBackup(run)).toBe(`fixture-installation-backup-${run}`);
-    expect(readFileSync(new URL("../integration/helpers/velero-cluster.ts", import.meta.url), "utf8")).toMatch(
-      /"backups\.velero\.io", `fixture-installation-backup-\$\{E2E_FIXTURE_RUN\}`\]/,
+    // Every counterpart is labelled synthetic: no controller made it. Every backup carries the label of its location,
+    // which the server writes into the ones it takes and into the ones it syncs, and nothing else does.
+    for (const object of objects) expect(object.metadata.labels).toMatchObject(labels);
+    expect(
+      objects
+        .map((object) => [object.kind, object.metadata.labels?.[STORAGE_LOCATION_LABEL]])
+        .filter(([, label]) => label),
+    ).toEqual(Array.from({ length: 5 }, () => ["Backup", "default"]));
+    // The location the installer names default, with the phase and the two times its server writes once a minute.
+    expect(byName.default.spec).toMatchObject({ default: true, provider: "aws", objectStorage: { bucket: BUCKET } });
+    expect(byName.default.status).toEqual({
+      phase: "Available",
+      lastValidationTime: "2026-11-06T20:00:00Z",
+      lastSyncedTime: "2026-11-06T20:00:00Z",
+    });
+    // The schedule the controller validates: Enabled, with the setting of the server written into its spec, and
+    // nothing submitted.
+    expect(byName[names.realSchedule].spec).toEqual({
+      ...(liveSchedule(owner, run).spec as Record<string, unknown>),
+      skipImmediately: false,
+    });
+    expect(byName[names.realSchedule].status).toEqual({ phase: "Enabled" });
+    // The backup the controller took, as the server prepares one: its spec with the defaults of the server and the
+    // resources it never collects, the annotations of the cluster, and its status, completed in two seconds with its
+    // thirteen items, expiring thirty days after its start.
+    const backup = byName[names.backup];
+
+    expect(backup.spec).toEqual({
+      ...(liveBackup(owner, run).spec as Record<string, unknown>),
+      excludedResources: NEVER_COLLECTED_RESOURCES,
+      csiSnapshotTimeout: "10m0s",
+      itemOperationTimeout: "4h0m0s",
+      snapshotMoveData: false,
+      volumeGroupSnapshotLabelKey: "velero.io/volume-group",
+    });
+    expect(backup.metadata.annotations).toEqual({
+      "velero.io/resource-timeout": "10m0s",
+      "velero.io/source-cluster-k8s-gitversion": "v1.34.11",
+      "velero.io/source-cluster-k8s-major-version": "1",
+      "velero.io/source-cluster-k8s-minor-version": "34",
+    });
+    expect(backup.status).toEqual({
+      phase: "Completed",
+      startTimestamp: "2026-11-06T20:00:00Z",
+      completionTimestamp: "2026-11-06T20:00:02Z",
+      expiration: "2026-12-06T20:00:00Z",
+      formatVersion: "1.1.0",
+      version: 1,
+      hookStatus: {},
+      progress: { itemsBackedUp: 13, totalItems: 13 },
+    });
+    // Its restore, as the release keeps a restore it ran: the resources it never restores after the ones excluded, the
+    // timeout of the item operations, completed with the same items and no counter of its errors.
+    expect(byName[names.restore].spec).toEqual(
+      restoreSpec("Completed", liveRestore(owner, run).spec as Record<string, unknown>),
     );
+    expect(byName[names.restore].status).toEqual({
+      phase: "Completed",
+      startTimestamp: "2026-11-06T20:00:03Z",
+      completionTimestamp: "2026-11-06T20:00:05Z",
+      hookStatus: {},
+      progress: { itemsRestored: 13, totalItems: 13 },
+    });
+    // The backup of the volume and its restore, of one item each; the backup completed after the one of the
+    // ConfigMaps, which the Overview shows as the newest completed.
+    expect(byName[names.volumeBackup].spec).toMatchObject({
+      includedResources: ["pods"],
+      excludedResources: NEVER_COLLECTED_RESOURCES,
+    });
+    expect(byName[names.volumeBackup].status).toMatchObject({
+      phase: "Completed",
+      progress: { itemsBackedUp: 1, totalItems: 1 },
+    });
+    expect(byName[names.volumeRestore].status).toMatchObject({
+      phase: "Completed",
+      progress: { itemsRestored: 1, totalItems: 1 },
+    });
+    expect(completed(byName[names.volumeBackup])).toBeGreaterThan(completed(backup));
+    // The three the server refused, with its words: the backup prepared before it was refused, with what the server
+    // writes into every backup it prepares.
+    expect(byName[names.invalidBackup].status).toEqual({
+      phase: "FailedValidation",
+      validationErrors: REFUSALS_OF_THE_SERVER.backup,
+      expiration: "2026-12-06T20:00:25Z",
+      formatVersion: "1.1.0",
+      version: 1,
+    });
+    expect(byName[names.invalidBackup].spec).toMatchObject({
+      labelSelector: expect.any(Object),
+      orLabelSelectors: expect.any(Array),
+      csiSnapshotTimeout: "10m0s",
+      excludedResources: NEVER_COLLECTED_RESOURCES,
+    });
+    expect(byName[names.invalidRestore].status).toEqual({
+      phase: "FailedValidation",
+      validationErrors: REFUSALS_OF_THE_SERVER.restore,
+    });
+    expect(byName[names.invalidRestore].spec).toMatchObject({
+      itemOperationTimeout: "4h0m0s",
+      excludedResources: expect.arrayContaining(["restores.velero.io"]),
+    });
+    expect(byName[names.orphanRestore].status).toEqual({
+      phase: "FailedValidation",
+      validationErrors: REFUSALS_OF_THE_SERVER.orphan,
+    });
+    expect(byName[names.orphanRestore].spec).toMatchObject({
+      scheduleName: names.emptySchedule,
+      itemOperationTimeout: "4h0m0s",
+    });
+    // The two the sync creates from the files the store is given, as `syncedBackups` makes them from the backup the
+    // controller took, with the label of the location the sync writes, the two structures of the spec it writes with
+    // nothing in them, and the label of a synthetic object.
+    const made = syncedBackups(
+      owner,
+      run,
+      validated,
+      backup,
+      tabExpectations(tabArtifacts({ backup: names.syncedBackup, namespace: DEMO_NAMESPACE, started: validated })),
+    );
+
+    for (const [name, like] of [
+      [names.syncedBackup, made.synced],
+      [names.syncedBackupWithoutLog, made.withoutLog],
+    ] as const) {
+      expect(byName[name]).toEqual({
+        ...like,
+        metadata: {
+          ...like.metadata,
+          labels: { ...like.metadata.labels, [FIXTURE_MODE]: "synthetic", [STORAGE_LOCATION_LABEL]: "default" },
+        },
+        spec: { ...(like.spec as Record<string, unknown>), hooks: {}, metadata: {} },
+      });
+    }
+    expect(byName[names.syncedBackup].status).toMatchObject({ phase: "PartiallyFailed", errors: 4, warnings: 2 });
+    expect(byName[names.syncedBackupWithoutLog].status).toMatchObject({ phase: "Completed" });
+    // The cleanup of a run removes its namespaces and never the one of the installation; the suites look for the
+    // counterparts by the names of the run, where no controller runs as where one does.
+    expect(fixtureNamespaces(run)).not.toContain(DEMO_NAMESPACE);
+    const helpers = readFileSync(new URL("../integration/helpers/velero-cluster.ts", import.meta.url), "utf8");
+
+    expect(helpers).toMatch(
+      /\n {4}\[E2E_NAMESPACE, "backups\.velero\.io", `fixture-synced-backup-\$\{E2E_FIXTURE_RUN\}`\],\n/,
+    );
+    expect(helpers).toMatch(
+      /\n {4}\[E2E_NAMESPACE, "schedules\.velero\.io", `fixture-yearly-\$\{E2E_FIXTURE_RUN\}`\],\n/,
+    );
+    expect(helpers).not.toContain("fixture-installation-backup");
+    // Without the time of the run or the version of the API server, no counterpart is made.
+    expect(() => installationFixtures(owner, run, Number.NaN, cluster)).toThrow(
+      "The time the run was started is required",
+    );
+    expect(() => installationFixtures(owner, run, validated, { ...cluster, gitVersion: "" })).toThrow(
+      "The version of the API server is required",
+    );
+  });
+
+  it("stands in for the server at the location of the installation, writing the two times it writes once a minute, and nothing else", () => {
+    const calls: string[][] = [];
+    const runtime = {
+      owner: "synthetic-owner",
+      kubectl: (args: string[]) => {
+        calls.push(args);
+        return "";
+      },
+      apply: () => {},
+    } as unknown as FixtureRuntime;
+
+    validateTheLocation(runtime, Date.parse("2026-11-07T10:00:00.250Z"));
+    expect(calls).toEqual([
+      [
+        "patch",
+        "backupstoragelocations.velero.io",
+        "default",
+        "--namespace",
+        DEMO_NAMESPACE,
+        "--type=merge",
+        "--patch",
+        JSON.stringify({
+          status: { lastValidationTime: "2026-11-07T10:00:00Z", lastSyncedTime: "2026-11-07T10:00:00Z" },
+        }),
+      ],
+    ]);
+    expect(() => validateTheLocation(runtime, Number.NaN)).toThrow("The time of the validation is required");
+    // The runner writes it on the environment of the CRDs alone, before the suites start and once a minute while they
+    // run, and stops with them; the guard of the suites leaves the PATCH of the locations out of the writes.
+    const runner = readFileSync(new URL("../e2e/scripts/local-demo.mts", import.meta.url), "utf8");
+
+    expect(runner).toContain("const server = withoutController ? standInForTheServer(fixtureRuntime()) : undefined;");
+    expect(runner).toMatch(/\n {2}validate\(\);\n {2}const minute = setInterval\(validate, 60_000\);\n/);
+    expect(runner).toMatch(/\n {4}\} finally \{\n {6}server\?\.stop\(\);\n {4}\}\n/);
+    expect(readFileSync(new URL("../integration/helpers/velero-guard.ts", import.meta.url), "utf8")).toContain(
+      '!(verb === "PATCH" && kind === "backupstoragelocations")',
+    );
+  });
+
+  it("runs on the CRDs alone every suite of the views that reads no controller, and FND-10, and keeps with the server the ones that read what only it makes", () => {
+    expect(WITHOUT_A_CONTROLLER).toEqual([
+      "extensions",
+      "velero-e2e-adherence",
+      "velero-e2e-gate",
+      "velero-e2e-journey",
+      "velero-e2e-locations",
+      "velero-e2e-overview",
+      "velero-e2e-preferences",
+      "velero-e2e-restores",
+      "velero-e2e-restricted",
+      "velero-e2e-scale",
+      "velero-e2e-schedules",
+    ]);
+    // A name of the list runs every file whose name it is a part of, as Vitest takes it: the one of the restricted
+    // suites runs the two of them.
+    const suites = readdirSync(new URL("../e2e/__tests__", import.meta.url)).map((name) =>
+      name.replace(/\.tests\.ts$/, ""),
+    );
+
+    expect(suites.filter((suite) => !WITHOUT_A_CONTROLLER.some((name) => suite.includes(name))).sort()).toEqual([
+      "pre-review",
+      "velero-e2e-artifacts",
+      "velero-e2e-server",
+      "velero-e2e-volumes",
+    ]);
   });
 
   it("uploads from the integration tests their screenshots, and nothing of the state", () => {

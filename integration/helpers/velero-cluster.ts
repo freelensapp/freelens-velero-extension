@@ -340,26 +340,19 @@ export function fixturesMissing(): string {
  * the suite would take that backup into its first snapshot.
  */
 export function fixturesReady(): boolean {
-  // On the environment of the CRDs alone no controller runs: its installation is static, a location and a completed
-  // backup, and nothing a server makes is looked for.
+  // On the environment of the CRDs alone no controller runs: its installation is static, with the counterparts of what
+  // the controllers leave in the one of the demo, by the same names, and nothing a server makes while it runs is
+  // looked for.
   const controlled = !WITHOUT_CONTROLLER;
   const probes: [namespace: string, resource: string, name: string][] = [
     [E2E_NAMESPACE, "backupstoragelocations.velero.io", "default"],
-    ...(controlled
-      ? ([
-          // What the fixtures of the tabs place in the installation, by the names of the run: the two backups the
-          // server synced from the store, and the three operations it refused.
-          [E2E_NAMESPACE, "backups.velero.io", `fixture-synced-backup-${E2E_FIXTURE_RUN}`],
-          [E2E_NAMESPACE, "backups.velero.io", `fixture-synced-backup-no-log-${E2E_FIXTURE_RUN}`],
-          [E2E_NAMESPACE, "backups.velero.io", `fixture-invalid-backup-${E2E_FIXTURE_RUN}`],
-          [E2E_NAMESPACE, "restores.velero.io", `fixture-invalid-restore-${E2E_FIXTURE_RUN}`],
-          [E2E_NAMESPACE, "restores.velero.io", `fixture-orphan-restore-${E2E_FIXTURE_RUN}`],
-        ] as [string, string, string][])
-      : ([[E2E_NAMESPACE, "backups.velero.io", `fixture-installation-backup-${E2E_FIXTURE_RUN}`]] as [
-          string,
-          string,
-          string,
-        ][])),
+    // What the fixtures of the tabs place in the installation, by the names of the run, or their static counterparts
+    // where no controller runs: the two backups the server synced from the store, and the three operations it refused.
+    [E2E_NAMESPACE, "backups.velero.io", `fixture-synced-backup-${E2E_FIXTURE_RUN}`],
+    [E2E_NAMESPACE, "backups.velero.io", `fixture-synced-backup-no-log-${E2E_FIXTURE_RUN}`],
+    [E2E_NAMESPACE, "backups.velero.io", `fixture-invalid-backup-${E2E_FIXTURE_RUN}`],
+    [E2E_NAMESPACE, "restores.velero.io", `fixture-invalid-restore-${E2E_FIXTURE_RUN}`],
+    [E2E_NAMESPACE, "restores.velero.io", `fixture-orphan-restore-${E2E_FIXTURE_RUN}`],
     [E2E_STATIC_NAMESPACE, "backups.velero.io", "backup-completed"],
     [E2E_STATIC_NAMESPACE, "backups.velero.io", "backup-finalizingpartiallyfailed"],
     [E2E_STATIC_NAMESPACE, "restores.velero.io", "restore-completed"],
@@ -376,12 +369,10 @@ export function fixturesReady(): boolean {
     [E2E_OVERVIEW_NAMESPACE, "schedules.velero.io", "overview-schedule-12"],
     [E2E_SCALE_NAMESPACE, "backups.velero.io", "backup-1000"],
     [E2E_SCALE_NAMESPACE, "restores.velero.io", "restore-1000"],
-    // The schedule the controller of the installation validated, by the name of the run; the two schedules of the
-    // views that submitted and have no backup; and a schedule of each installation of the adherence, which are
-    // created after the backups of their submissions.
-    ...(controlled
-      ? ([[E2E_NAMESPACE, "schedules.velero.io", `fixture-yearly-${E2E_FIXTURE_RUN}`]] as [string, string, string][])
-      : []),
+    // The schedule the controller of the installation validated, by the name of the run, or its static counterpart; the
+    // two schedules of the views that submitted and have no backup; and a schedule of each installation of the
+    // adherence, which are created after the backups of their submissions.
+    [E2E_NAMESPACE, "schedules.velero.io", `fixture-yearly-${E2E_FIXTURE_RUN}`],
     [E2E_VIEWS_NAMESPACE, "schedules.velero.io", "views-submitted"],
     [E2E_VIEWS_NAMESPACE, "schedules.velero.io", "views-interval"],
     [E2E_ADHERENCE_NAMESPACE, "schedules.velero.io", "adherence-held"],

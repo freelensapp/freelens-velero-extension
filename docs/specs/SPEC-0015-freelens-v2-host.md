@@ -1652,3 +1652,35 @@ other suites keep the server of the release until their cases that read what it 
 have static counterparts. On 2026-11-06, on another machine, the five passed there, 57
 cases of 57, in 200 s, with the environment up in 53 s and its static fixtures in 26 s.
 REQ-215 and HOST-20 are extended in place.
+
+**Amendment of 2026-11-07: the counterparts of what the controllers leave** (REQ-215,
+HOST-20). Five more suites read the installation of the demo as its controllers leave
+it: `velero-e2e-adherence`, `velero-e2e-journey`, `velero-e2e-locations`,
+`velero-e2e-overview` and `velero-e2e-restores`. On the CRDs of the release alone,
+`fixtures-static` now places in the installation the counterparts of those objects,
+by the names of the run, each written as the reviewed release leaves it, read in its
+source: the schedule its controller validates, Enabled, with `skipImmediately` written
+into its spec (`pkg/controller/schedule_controller.go:113-131`); the backup it took
+and its restore, the backup of the volume of the run and its restore, completed, with
+the defaults the server writes into the spec of a backup it prepares, the resources it
+never collects, the label of its location and the annotations of the cluster it was
+taken in (`pkg/controller/backup_controller.go:379-428`, `486` and `500-507`), and the
+spec of a restore as the release keeps it (`pkg/controller/restore_controller.go:249-251`
+and `310-312`); the backup and the two restores the server refused, with its words
+(`backup_controller.go:598`, `restore_controller.go:336`, `381` and `387`); and the two
+backups its sync creates from the files the store is given, made as the fixtures make
+them for the store, with the label of the location the sync writes and the two
+structures of the spec it writes with nothing in them
+(`pkg/controller/backup_sync_controller.go:198-214`). The server validates the storage
+location of its installation once a minute and syncs it once a minute, writing the time
+of each (`pkg/controller/backup_storage_location_controller.go:223`,
+`backup_sync_controller.go:270`, `pkg/cmd/server/config/config.go:26-27`): where no
+server runs, the runner of the views writes the two times before the suites start and
+once a minute while they run, and stops with them; the guard of the suites leaves the
+PATCH of the storage locations out of the writes, as it does where the server sends it,
+and the suites prove that nothing else of the installation was written by the versions
+of its objects. The part of the hosted job without a controller runs the ten suites
+and FND-10; the three parts with the server of the release keep the suites that read
+what only a server makes, the artifacts, the pre-review, the volumes and the server.
+The suite of the volumes, the real repository and the real pod volume operations of
+REQ-195 of SPEC-0014 stay with the server. REQ-215 and HOST-20 are extended in place.

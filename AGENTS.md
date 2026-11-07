@@ -931,14 +931,16 @@ The hosted checks run on every pull request and on main, on synthetic data only:
   in Freelens built from source at the commit of the validation target, on the
   disposable kind cluster with the CRDs of the release alone that
   `pnpm e2e:cluster:up:definitions` makes, taken down whatever happens.
-- `views-tests.yaml`: every suite of the views, the pre-review and FND-10, in five
+- `views-tests.yaml`: every suite of the views, the pre-review and FND-10, in four
   parts side by side, each a job with an environment of its own and one run of the
-  runner of `pnpm e2e:views`, in Freelens built at the same commit: four on the
-  environment and the fixtures of `pnpm demo:up`, each then with the cleanup of
-  the fixtures and the verification of the environment, and one on the CRDs of
-  the release alone with the static fixtures, for the five suites that read no
-  controller. The job `views in Freelens v2` passes when the parts passed, and a
-  unit test checks that they name every suite once.
+  runner of `pnpm e2e:views`, in Freelens built at the same commit: three on the
+  environment and the fixtures of `pnpm demo:up`, for the suites that read what
+  only a server makes (the artifacts, the pre-review, the volumes and the server),
+  each then with the cleanup of the fixtures and the verification of the
+  environment; and one on the CRDs of the release alone with the static fixtures
+  and the counterparts of what the controllers leave in the installation, for the
+  ten other suites and FND-10. The job `views in Freelens v2` passes when the parts
+  passed, and a unit test checks that they name every suite once.
 - `e2e-tests.yaml`: the environment brought up, the fixtures and the transport
   proof, and the environment taken down.
 - `osv-scanner.yaml`, and `mise-lock-check.yaml` for a pull request that changes

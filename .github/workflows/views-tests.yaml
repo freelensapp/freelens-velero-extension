@@ -36,15 +36,18 @@ jobs:
       matrix:
         part:
           # On the hosted runner, on 2026-11-06, the one job took 57 minutes;
-          # the first run of these parts took 21 minutes, its parts 20.9,
-          # 20.3, 20.5 and 18.3. The suites of each part took 853, 729, 745 and
-          # 610 seconds in the one job, which is how they were divided; the
-          # 610 again into the 380 of the suites that read the server, with
-          # FND-10, and the 230 of the five that read none. A part
-          # on `demo` runs on the environment with its fixtures, the server of
-          # the release among them; one on `definitions` on the CRDs of the
-          # release alone, with static fixtures and no controller, for the
-          # suites that read only what the fixtures wrote.
+          # the first run of its parts took 21 minutes, its parts 20.9, 20.3,
+          # 20.5 and 18.3. The suites of each part took 853, 729, 745 and 610
+          # seconds in the one job, which is how they were divided. A part on
+          # `demo` runs on the environment with its fixtures, the server of
+          # the release among them, for the suites that read what only a
+          # server makes: the files of the store, its bandwidth, a repository
+          # and a volume it backed up. The one on `definitions` runs on the
+          # CRDs of the release alone, with static fixtures and no controller,
+          # for the other suites and FND-10: they read what the fixtures wrote,
+          # the counterparts of what the controllers of the installation leave
+          # among them. The five suites that read none took 230 seconds there
+          # on 2026-11-06, the other five 375 on the environment of the demo.
           - name: artifacts
             environment: demo
             suites:
@@ -58,23 +61,20 @@ jobs:
             suites:
               - velero-e2e-volumes
               - velero-e2e-server
-          - name: other-views
-            environment: demo
-            suites:
-              - velero-e2e-adherence
-              - velero-e2e-journey
-              - velero-e2e-locations
-              - velero-e2e-overview
-              - velero-e2e-restores
-              - extensions
           - name: static-views
             environment: definitions
             suites:
+              - velero-e2e-adherence
               - velero-e2e-gate
+              - velero-e2e-journey
+              - velero-e2e-locations
+              - velero-e2e-overview
               - velero-e2e-preferences
+              - velero-e2e-restores
               - velero-e2e-restricted
               - velero-e2e-scale
               - velero-e2e-schedules
+              - extensions
 
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 150

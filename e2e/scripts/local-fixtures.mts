@@ -2073,25 +2073,171 @@ export function createStaticFixtures(runtime: FixtureRuntime, run: string, contr
   return createWithStatus(runtime, staticFixtures(runtime.owner, run));
 }
 
-// The suites of the views that read static objects alone, and so run where no controller does: each of their cases
-// reads what the fixtures wrote, and none what a server made (velero-e2e-restricted names its two suites).
+// The suites of the views and FND-10 that run where no controller does: each of their cases reads what the fixtures
+// wrote, the static counterparts of what the controllers of the installation leave among them, and none what a server
+// made while it ran (velero-e2e-restricted names its two suites). The suites of the artifacts, of the server and of the
+// volumes, and the pre-review, read what only a server makes: the files of the store, its bandwidth, a repository and a
+// volume it backed up.
 export const WITHOUT_A_CONTROLLER = [
+  "extensions",
+  "velero-e2e-adherence",
   "velero-e2e-gate",
+  "velero-e2e-journey",
+  "velero-e2e-locations",
+  "velero-e2e-overview",
   "velero-e2e-preferences",
+  "velero-e2e-restores",
   "velero-e2e-restricted",
   "velero-e2e-scale",
   "velero-e2e-schedules",
 ];
 
+// The version of the API server of the cluster, as `kubectl version` reports it: the server of the release writes it
+// into every backup it takes.
+export interface ServerVersion {
+  gitVersion: string;
+  major: string;
+  minor: string;
+}
+
+// The label the release writes into every backup it takes or syncs, with the name of its storage location
+// (`pkg/apis/velero/v1/labels_annotations.go:48` of the reviewed release).
+export const STORAGE_LOCATION_LABEL = "velero.io/storage-location";
+// What the server of the release never collects, under the excluded resources of a backup that names the resources
+// it includes (`pkg/controller/backup_controller.go:71-82` and `529-542`).
+export const NEVER_COLLECTED_RESOURCES = [
+  "volumesnapshots.snapshot.storage.k8s.io",
+  "volumesnapshotcontents.snapshot.storage.k8s.io",
+];
+// How the server of the release refuses the backup and the two restores the transport proof asks the artifacts of
+// (`pkg/controller/backup_controller.go:598`, `pkg/controller/restore_controller.go:336`, `381` and `387`).
+export const REFUSALS_OF_THE_SERVER = {
+  backup: ["encountered labelSelector as well as orLabelSelectors in backup spec, only one can be specified"],
+  restore: ["encountered labelSelector as well as orLabelSelectors in restore spec, only one can be specified"],
+  orphan: ["No backups found for schedule", "No completed backups found for schedule"],
+};
+// How long the controllers of the installation take, in seconds from the start of the run, as the environment of
+// 2026-11-06 recorded them: the backup of the ConfigMaps started at once and completed in two seconds; its restore
+// started a second later and completed in two; the backup of the volume started eleven seconds after the run and
+// completed in seven, after the backup of the ConfigMaps, which the Overview counts on; its restore started a second
+// later and completed in four; the three operations the server refused came last.
+const CONTROLLERS_TOOK = {
+  backup: [0, 2_000],
+  restore: [3_000, 2_000],
+  volumeBackup: [11_000, 7_000],
+  volumeRestore: [19_000, 4_000],
+  refused: 25_000,
+} as const;
+// The items of the backup of the ConfigMaps of the run and of its restore: the twelve payloads and the small one; the
+// backup of the volume holds its one pod, and so does its restore.
+const ITEMS_OF_THE_RUN = { configMaps: 13, volume: 1 };
+
 // The installation of the environment of the CRDs alone, which no installer made and no server reads: its namespace,
-// the storage location the installer makes, with the phase and the time of a validation its server writes together,
-// and a completed backup, so that the discovery finds the installation and its lists are not empty. Where Velero
-// runs, its installer and its server make their own, and these are never placed.
-export function installationFixtures(owner: string, run: string, validated: number): KubeResource[] {
+// the storage location the installer makes, with the phase and the two times its server writes into it once a minute,
+// of a validation and of a sync; and the static counterparts of what the controllers of the installation of
+// `pnpm demo:up` leave in it, each as the reviewed release leaves it, read in its source at the lines named: the
+// schedule its controller validates, Enabled, with `skipImmediately` written into its spec
+// (`pkg/controller/schedule_controller.go:113-131`); the backup it took and its restore, the backup of the volume of
+// the run and its restore, completed, with the defaults the server writes into the spec of a backup it prepares, the
+// resources it never collects, the label of its location and the annotations of the cluster it was taken in
+// (`pkg/controller/backup_controller.go:379-428`, `486` and `500-507`), and the spec of a restore as the release keeps
+// it (`pkg/controller/restore_controller.go:249-251` and `310-312`); the backup and the two restores it refused, with
+// its words, and what it writes into a backup before it refuses it; and the two backups its sync creates from the files
+// the store is given, made as `syncedBackups` makes them from the backup it took, with the label of their location
+// (`pkg/controller/backup_sync_controller.go:198-208`). Where Velero runs, its installer and its controllers make their
+// own, and these are never placed. `validated` is when the run was started, which the times of the objects are
+// counted from, and `cluster` the version of its API server. Each counterpart is labelled synthetic: no controller made
+// it, and the suites look for it by the name of the run.
+export function installationFixtures(
+  owner: string,
+  run: string,
+  validated: number,
+  cluster: ServerVersion,
+): KubeResource[] {
   requireCondition(owner, "Fixture ownership is required");
+  requireCondition(Number.isFinite(validated), "The time the run was started is required");
+  requireCondition(
+    /^v\d+\.\d+\.\d+/.test(cluster.gitVersion) && /^\d+$/.test(cluster.major) && /^\d+$/.test(cluster.minor),
+    "The version of the API server is required",
+  );
   const names = fixtureNames(run);
   const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
   const metadata = (name: string) => ({ name, namespace: DEMO_NAMESPACE, labels });
+  const time = (at: number) => new Date(at).toISOString().replace(/\.\d{3}Z$/, "Z");
+  const retention = Number.parseInt(LIVE_RETENTION, 10) * 3_600_000;
+  // A backup as the server leaves it after it prepared it, whether it then ran it or refused it: the spec with its
+  // defaults, the label of its location and the annotations of the cluster.
+  const prepared = (submitted: KubeResource, status: Record<string, unknown>): KubeResource => ({
+    apiVersion: "velero.io/v1",
+    kind: "Backup",
+    metadata: {
+      ...metadata(submitted.metadata.name),
+      labels: { ...labels, [STORAGE_LOCATION_LABEL]: "default" },
+      annotations: {
+        "velero.io/resource-timeout": "10m0s",
+        "velero.io/source-cluster-k8s-gitversion": cluster.gitVersion,
+        "velero.io/source-cluster-k8s-major-version": cluster.major,
+        "velero.io/source-cluster-k8s-minor-version": cluster.minor,
+      },
+    },
+    spec: {
+      ...(submitted.spec as Record<string, unknown>),
+      excludedResources: [...NEVER_COLLECTED_RESOURCES],
+      csiSnapshotTimeout: "10m0s",
+      itemOperationTimeout: "4h0m0s",
+      snapshotMoveData: false,
+      volumeGroupSnapshotLabelKey: "velero.io/volume-group",
+    },
+    status,
+  });
+  // What the server writes into the status of a backup it took, that ended with no error: the two times, the
+  // expiration counted from its start, the version of its format in two forms, the status of its hooks with nothing
+  // in it, and its progress, done.
+  const taken = ([started, lasted]: readonly [number, number], items: number) => ({
+    phase: "Completed",
+    startTimestamp: time(validated + started),
+    completionTimestamp: time(validated + started + lasted),
+    expiration: time(validated + started + retention),
+    formatVersion: "1.1.0",
+    version: 1,
+    hookStatus: {},
+    progress: { itemsBackedUp: items, totalItems: items },
+  });
+  // What it writes into the status of a restore it ran, that ended with no error.
+  const restored = ([started, lasted]: readonly [number, number], items: number) => ({
+    phase: "Completed",
+    startTimestamp: time(validated + started),
+    completionTimestamp: time(validated + started + lasted),
+    hookStatus: {},
+    progress: { itemsRestored: items, totalItems: items },
+  });
+  const restore = (submitted: KubeResource, status: Record<string, unknown>): KubeResource => ({
+    ...submitted,
+    metadata: metadata(submitted.metadata.name),
+    spec: restoreSpec(status.phase as string, submitted.spec as Record<string, unknown>),
+    status,
+  });
+  const refused = refusedFixtures(owner, run);
+  const backup = prepared(liveBackup(owner, run), taken(CONTROLLERS_TOOK.backup, ITEMS_OF_THE_RUN.configMaps));
+  const synced = syncedBackups(
+    owner,
+    run,
+    validated,
+    backup,
+    tabExpectations(tabArtifacts({ backup: names.syncedBackup, namespace: DEMO_NAMESPACE, started: validated })),
+  );
+  // The sync creates a backup from the whole of what it read, so the two parts of the spec that are structures
+  // are written with nothing in them, where the controllers that patch what they changed leave none
+  // (`pkg/apis/velero/v1/backup_types.go:31` and `128`, `pkg/controller/backup_sync_controller.go:214`, against
+  // `pkg/controller/backup_controller.go:307`).
+  const syncedByTheServer = (made: KubeResource): KubeResource => ({
+    ...made,
+    metadata: {
+      ...made.metadata,
+      labels: { ...made.metadata.labels, [FIXTURE_MODE]: "synthetic", [STORAGE_LOCATION_LABEL]: "default" },
+    },
+    spec: { ...(made.spec as Record<string, unknown>), hooks: {}, metadata: {} },
+  });
 
   return [
     { apiVersion: "v1", kind: "Namespace", metadata: { name: DEMO_NAMESPACE, labels } },
@@ -2105,32 +2251,64 @@ export function installationFixtures(owner: string, run: string, validated: numb
         objectStorage: { bucket: BUCKET },
         config: { region: "us-east-1", s3ForcePathStyle: "true", s3Url: STORAGE_ENDPOINT },
       },
-      status: { phase: "Available", lastValidationTime: new Date(validated).toISOString().replace(/\.\d{3}Z$/, "Z") },
+      status: { phase: "Available", lastValidationTime: time(validated), lastSyncedTime: time(validated) },
     },
     {
-      apiVersion: "velero.io/v1",
-      kind: "Backup",
-      metadata: metadata(installationBackup(run)),
-      spec: {
-        includedNamespaces: [names.source],
-        includeClusterResources: false,
-        storageLocation: "default",
-        snapshotVolumes: false,
-        ttl: "720h0m0s",
-      },
-      status: syntheticStatus("Completed", "itemsBackedUp", validated),
+      ...liveSchedule(owner, run),
+      metadata: metadata(names.realSchedule),
+      spec: { ...(liveSchedule(owner, run).spec as Record<string, unknown>), skipImmediately: false },
+      status: { phase: "Enabled" },
     },
+    backup,
+    restore(liveRestore(owner, run), restored(CONTROLLERS_TOOK.restore, ITEMS_OF_THE_RUN.configMaps)),
+    prepared(liveVolumeBackup(owner, run), taken(CONTROLLERS_TOOK.volumeBackup, ITEMS_OF_THE_RUN.volume)),
+    restore(liveVolumeRestore(owner, run), restored(CONTROLLERS_TOOK.volumeRestore, ITEMS_OF_THE_RUN.volume)),
+    prepared(refused.backup, {
+      phase: "FailedValidation",
+      validationErrors: [...REFUSALS_OF_THE_SERVER.backup],
+      expiration: time(validated + CONTROLLERS_TOOK.refused + retention),
+      formatVersion: "1.1.0",
+      version: 1,
+    }),
+    restore(refused.restore, { phase: "FailedValidation", validationErrors: [...REFUSALS_OF_THE_SERVER.restore] }),
+    restore(refused.orphan, { phase: "FailedValidation", validationErrors: [...REFUSALS_OF_THE_SERVER.orphan] }),
+    syncedByTheServer(synced.synced),
+    syncedByTheServer(synced.withoutLog),
   ];
 }
 
-// The completed backup of the installation of the environment of the CRDs alone, by the name of the run.
-export function installationBackup(run: string): string {
-  return `fixture-installation-backup-${run}`;
+// The installation of the environment of the CRDs alone, each object with its status read back as it was asked.
+export function createInstallationFixtures(
+  runtime: FixtureRuntime,
+  run: string,
+  validated: number,
+  cluster: ServerVersion,
+): KubeResource[] {
+  return createWithStatus(runtime, installationFixtures(runtime.owner, run, validated, cluster));
 }
 
-// The installation of the environment of the CRDs alone, each object with its status read back as it was asked.
-export function createInstallationFixtures(runtime: FixtureRuntime, run: string, validated: number): KubeResource[] {
-  return createWithStatus(runtime, installationFixtures(runtime.owner, run, validated));
+// What the server of the release writes into the storage location of its installation once a minute, and the
+// environment of the CRDs alone has no server to write: the time of a validation
+// (`pkg/controller/backup_storage_location_controller.go:223`, once a minute by default,
+// `pkg/cmd/server/config/config.go:27`) and the time of a sync (`pkg/controller/backup_sync_controller.go:270`, once a
+// minute, `config.go:26`). The runner of the views writes them before the suites start and once a minute while they
+// run, so that the location reads as one a server validates; the guard of the suites leaves the PATCH of the storage
+// locations out of the writes, as it does where the server sends it. Nothing else of the installation is written, which
+// the suites prove by the versions of its objects.
+export function validateTheLocation(runtime: FixtureRuntime, now: number): void {
+  requireCondition(Number.isFinite(now), "The time of the validation is required");
+  const at = new Date(now).toISOString().replace(/\.\d{3}Z$/, "Z");
+
+  runtime.kubectl([
+    "patch",
+    "backupstoragelocations.velero.io",
+    "default",
+    "--namespace",
+    DEMO_NAMESPACE,
+    "--type=merge",
+    "--patch",
+    JSON.stringify({ status: { lastValidationTime: at, lastSyncedTime: at } }),
+  ]);
 }
 
 // An object is created without its status and gets it with a change that names its uid and its version:

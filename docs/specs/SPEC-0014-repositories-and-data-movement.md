@@ -1467,3 +1467,13 @@ Decided while implementing, on 2026-11-04:
 - The evidence of phase B is read from the store through the filer of its own pod,
   at `127.0.0.1`, with no credentials and nothing written; the scripts of the
   environment keep asking the store only what `assertStoreRequest` allows.
+
+Amendment of 2026-11-07 (REQ-195, KIND-19): the suite of the volumes keeps the
+server of the release, the real repository and the real pod volume operations, in
+the part of the hosted job of the views with the server. The suites of the Overview
+and of the locations, which list the backup of the volume of the run and its
+restore among the operations of the installation, run on the CRDs of the release
+alone, where the static fixtures hold their counterparts, completed with their one
+item each as the server left them on 2026-11-06, and no repository and no pod volume
+operation, which the suites count on the cluster (SPEC-0015, amendment of
+2026-11-07).
