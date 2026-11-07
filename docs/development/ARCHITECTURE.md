@@ -119,13 +119,15 @@ strict peer dependencies, so that a library shared with the host outside the pee
 range of the SDK fails the install.
 
 The hosted checks are the ones of the other extensions of the organization, on
-every pull request and on main: the build, the type check, lint and Knip; Trunk;
+every pull request and on main, the end-to-end tests and the tests of the views
+also every night and, on a pull request, only for the changes that reach them: the
+build, the type check, lint and Knip; Trunk;
 the unit tests; the integration tests, FND-10 and a session for each of the five
 kinds of the template's integration test, which install the packed build in a
 Freelens built from source at the commit of the validation target, on a disposable
 kind cluster of the scripts of this repository; the end-to-end tests, which bring
 the test environment up on the runner, run the fixtures and the transport proof
-and take it down; the tests of the views, which run every suite, the pre-review
+and take it down; the tests of the views, which run the suites, the pre-review
 and FND-10 in a Freelens built from source at the same commit against the fixtures
 of that environment, the build cached by the commit and not by a version, as the
 integration tests cache it; OSV-Scanner; and, on a pull request that changes

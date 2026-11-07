@@ -1689,3 +1689,14 @@ and FND-10; the three parts with the server of the release keep the suites that 
 what only a server makes, the artifacts, the pre-review, the volumes and the server.
 The suite of the volumes, the real repository and the real pod volume operations of
 REQ-195 of SPEC-0014 stay with the server. REQ-215 and HOST-20 are extended in place.
+
+**Amendment of 2026-11-07: the parts a run of the views takes** (REQ-215, HOST-20).
+The suites of the views and FND-10 run on main, every night and on demand, every
+part of them; a pull request runs the parts its changed files reach, by the rules
+of `e2e/views-parts.json`, every part for a change to the runner, the environment,
+the main process or the toolchain and for a file no rule knows, and none for
+documents and unit tests alone. The part without a controller is divided in two by
+the times of its suites. The end to end tests run on main, every night, and on a
+pull request that changes what they run. Under the direction the lead maintainer
+approved on 2026-11-07: every suite still runs on main after each merge, and a
+change a pull request does not run a suite for meets it there.

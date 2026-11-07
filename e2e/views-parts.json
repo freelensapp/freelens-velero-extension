@@ -1,0 +1,99 @@
+{
+  "parts": [
+    {
+      "name": "artifacts",
+      "environment": "demo",
+      "suites": ["velero-e2e-artifacts"],
+      "paths": [
+        "^src/renderer/components/(artifact-|log-viewer|results-viewer|resources-viewer|volumes-viewer|workspace-tabs|write-confirmation|target-bar)",
+        "^src/renderer/pages/(backup-workspace|restore-workspace)",
+        "^src/renderer/(state|api)/",
+        "^src/renderer/navigation\\.",
+        "^src/renderer/details/(backup|restore)-details",
+        "^src/common/(artifact-|diagnostic-|allowances|ipc|frame)",
+        "^e2e/__tests__/velero-e2e-artifacts\\."
+      ]
+    },
+    {
+      "name": "pre-review",
+      "environment": "demo",
+      "suites": ["pre-review"],
+      "paths": [
+        "\\.(css|scss)$",
+        "^src/renderer/components/(views-frame|workspace|workspace-tabs|family-page|history-strip|target-bar)\\.",
+        "^e2e/__tests__/pre-review\\."
+      ]
+    },
+    {
+      "name": "volumes-and-server",
+      "environment": "demo",
+      "suites": ["velero-e2e-volumes", "velero-e2e-server"],
+      "paths": [
+        "^src/renderer/components/(volume-|views-frame|write-confirmation|target-bar)",
+        "^src/renderer/pages/(server-band|volume-|pod-volume-|repositor)",
+        "^src/renderer/(state|api)/",
+        "^src/common/(volume-|server-version|repository-view|allowances|ipc|frame)",
+        "^src/common/(discovery|views)\\.",
+        "^e2e/__tests__/velero-e2e-(volumes|server)\\."
+      ]
+    },
+    {
+      "name": "static-views-1",
+      "environment": "definitions",
+      "suites": [
+        "velero-e2e-adherence",
+        "velero-e2e-overview",
+        "velero-e2e-journey",
+        "velero-e2e-restricted",
+        "extensions"
+      ],
+      "paths": ["^src/(renderer|common)/", "^e2e/__tests__/", "^integration/__tests__/extensions\\."]
+    },
+    {
+      "name": "static-views-2",
+      "environment": "definitions",
+      "suites": [
+        "velero-e2e-schedules",
+        "velero-e2e-locations",
+        "velero-e2e-restores",
+        "velero-e2e-gate",
+        "velero-e2e-scale",
+        "velero-e2e-preferences"
+      ],
+      "paths": ["^src/(renderer|common)/", "^e2e/__tests__/", "^integration/__tests__/extensions\\."]
+    }
+  ],
+  "everyPart": [
+    "^src/main/",
+    "^e2e/scripts/",
+    "^e2e/views-parts\\.json$",
+    "^integration/helpers/",
+    "^test/tls-fixture\\.ts$",
+    "^\\.github/workflows/views-tests\\.yaml$",
+    "^package\\.json$",
+    "^pnpm-lock\\.yaml$",
+    "^pnpm-workspace\\.yaml$",
+    "^vite\\.config\\.",
+    "^vitest\\.",
+    "^build/",
+    "(^|/)tsconfig[^/]*\\.json$",
+    "^\\.nvmrc$",
+    "^mise\\.(toml|lock)$"
+  ],
+  "noPart": [
+    "\\.md$",
+    "^docs/",
+    "^LICENSE$",
+    "^\\.github/(?!workflows/views-tests\\.yaml$)",
+    "^\\.trunk/",
+    "^\\.renovaterc\\.json5?$",
+    "^\\.claude/",
+    "\\.test\\.tsx?$",
+    "^test/",
+    "^environment-tests/",
+    "^integration/(?!__tests__/extensions\\.|helpers/)",
+    "^knip\\.jsonc$",
+    "^biome\\.jsonc$",
+    "^\\.(editorconfig|gitattributes|gitignore|yamllint\\.yaml|yamlfmt\\.yaml|markdownlint\\.yaml)$"
+  ]
+}
