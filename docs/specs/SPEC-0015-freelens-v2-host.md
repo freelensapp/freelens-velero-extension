@@ -5,7 +5,7 @@
 - **Milestone / tasks:** Foundation / T0.7, T0.8
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, unchanged
 - **Reviewed main:** not relevant: the subject of this spec is the host, and it reads or changes no behavior of Velero
-- **Freelens validation target:** freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0, with `@freelensapp/extensions` 2.0.0; the host drift watch moved it to this release, and the range of versions of the SDK of D10 is work of M6
+- **Freelens validation target:** freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0, with `@freelensapp/extensions` 2.0.0; the host drift watch moved it to this release and ended on 2026-11-07: the SDK is taken by the range `^2.0.0` of D10, and the target moves with the releases of Freelens, as PROCESS says
 - **Dependencies:** [local foundation](SPEC-0001-local-foundation.md); [test environment](SPEC-0004-test-environment-every-platform.md); [the write gate](SPEC-0009-write-gate.md); [the diagnostic request and its transport](SPEC-0010-diagnostic-request-and-transport.md); [the viewers](SPEC-0011-artifact-viewers.md); for the re-verification, the specs of M1 to M3, SPEC-0002 to SPEC-0012, and [the adherence of a schedule](SPEC-0013-schedule-adherence.md) for T3.1 and T3.2
 - **Approval:** Approved by the lead maintainer on 2026-10-16, as drafted. The version and release plan, D10, was decided by the lead maintainer the same day
 
@@ -517,6 +517,12 @@ does not read `engines`: a 1.0.0 on `latest` before Freelens 2.0.0 would be
 offered to every user of Freelens 1, where it is Incompatible. A prerelease on
 `next` is installed only by those who ask for it.
 
+**At Freelens 2.0.0, on 2026-11-07.** The SDK is taken by the range `^2.0.0`,
+which resolves to 2.0.0, the version of the target. The views and the integration
+run at the commit of the tag v2.0.0 since the move of 2026-10-29, named by that
+commit, which no later move of a tag can change. The host drift watch ended: see
+the amendment of 2026-11-07 below.
+
 ### D11: The Documents And The Process
 
 **Decision.** With T0.7 the reference of compatibility becomes Freelens v2 in the
@@ -588,7 +594,7 @@ no fixture holds real data.
 | --- | --- | --- | --- |
 | HOST-01 | Packaged, and packaged once on 1.10.3 | REQ-196 | On v2: the tarball installed from the Extensions page is listed as Enabled, both entries load, and neither log of the host has an error of the extension. On Freelens 1.10.3 as released, once, recorded in the evidence: the same tarball is listed as Incompatible, with no command to enable it, and no line of the extension is logged |
 | HOST-02 | All layers, CI on main | REQ-197 | The checks of SPEC-0002 to SPEC-0012 and ADH-01 to ADH-08 and the measure of ADH-16 at the unit layer, green on v2; the guard of every suite counting on the API server what it counted on v1 |
-| HOST-03 | Build unit | REQ-198 | The build test reads the manifest: the range, the type, the entries, the files, the exact pin, the libraries of the host as devDependencies at the versions of the catalog, react-window alone in `dependencies`. An install with React one patch below the peer range of the SDK fails, seen once |
+| HOST-03 | Build unit | REQ-198 | The build test reads the manifest: the range, the type, the entries, the files, the exact pin of the SDK until 2026-11-07 and the range of D10 since, the libraries of the host as devDependencies at the versions of the catalog, react-window alone in `dependencies`. An install with React one patch below the peer range of the SDK fails, seen once |
 | HOST-04 | Build unit | REQ-199 | `dist/` holds the two entries, their source maps and `renderer.css`, and nothing else; no bare import of a library of the host and no copy of React or MobX in either bundle; no module of Node and no `require` in the renderer; `dist/main.js` loads under Node with a stand-in of the global of the host, and activates and deactivates; the environment tests fail on a module of Node in the renderer, and the lint rule on `act` in a source file, each seen failing once |
 | HOST-05 | Unit/proof/packaged | REQ-200 | On a fake client of the host: every request of the way of a download and of a server status through `forCluster` of the cluster of the request, and nothing else; the bundle with no reader of a kubeconfig, no `@kubernetes/client-node` and no `ws`, and the main process running no process but kubectl. Packaged: a download and a server status counted on the API server as on v1; the identity of the `exec` plugin downloading, with the plugin run by the proxy |
 | HOST-06 | Unit/packaged | REQ-201 | An entry that is not there and one in each state that is not connected: refused, with their words, and the fake client asked nothing; writes off when the entry goes, leaves the connected state, or changes its path or its context name. Packaged: the cluster disconnected with a load in flight, then nothing of the extension counted on its API server and the entry still disconnected after a minute |
@@ -1700,3 +1706,33 @@ the times of its suites. The end to end tests run on main, every night, and on a
 pull request that changes what they run. Under the direction the lead maintainer
 approved on 2026-11-07: every suite still runs on main after each merge, and a
 change a pull request does not run a suite for meets it there.
+
+**Amendment of 2026-11-07: the end of the host drift watch** (REQ-198, D10, D11).
+Freelens 2.0.0 was released on 2026-10-28, and the target moved to the commit of
+its tag on 2026-10-29. Under the direction the lead maintainer approved on
+2026-11-07, the watch of D11 ends: the main branch of the host and of the template
+is no longer read before every slice and every merge, and the SDK is taken by the
+range of D10, `^2.0.0`, resolved to 2.0.0. The watch opens again while a change of
+the extension API that the extension uses is coming in a release of Freelens.
+
+REQ-198 is extended in place by this amendment: since 2026-11-07 the SDK is taken
+by the range of D10, `^2.0.0`, resolved to the version of the target.
+
+Decided while implementing, on 2026-11-07:
+- The target moves with each release of Freelens in the pull request of the group
+  `Freelens dependencies` that Renovate opens for the release of the SDK: the
+  release and what it changed for the extension are read and recorded in that pull
+  request, and the header of this spec, the line of each workflow that builds
+  Freelens and the version of the SDK in the build test move in it, as PROCESS
+  says. Renovate keeps the range of the SDK and moves the lockfile, and proposes
+  no minor or patch version for `engines.freelens`, which stays `^2.0.0` as REQ-196
+  says.
+- The build test ties the release the range resolves to, which the bundles are
+  built from, to the release and the version this header names: a release of the
+  SDK that arrives alone fails the build test until this header names it, and the
+  test of the workflows then holds the line of each workflow to the commit the
+  header names.
+- The main branch of the host is read once a day for changes to the extension API,
+  its documentation and the loading of the extensions: while one that the
+  extension uses is coming in a release, it is read again before every slice and
+  every merge, and recorded, while the target stays at its release.

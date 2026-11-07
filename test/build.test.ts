@@ -43,9 +43,10 @@ const manifest: Manifest = JSON.parse(readFileSync(resolve("package.json"), "utf
 const MAIN = resolve("dist/main.js");
 const RENDERER = resolve("dist/renderer.js");
 
-// The release of the validation target of SPEC-0015, and the versions of the catalog of the host at its commit
-// (pnpm-workspace.yaml of freelensapp/freelens at b9b53e16056578c5407312eba5823a089972f6d5, lines 11 to 17, 56
-// and 120).
+// The range of the SDK, D10 of SPEC-0015; the release of the validation target of SPEC-0015, which the range
+// resolves to; and the versions of the catalog of the host at its commit (pnpm-workspace.yaml of
+// freelensapp/freelens at b9b53e16056578c5407312eba5823a089972f6d5, lines 11 to 17, 56 and 120).
+const SDK_RANGE = "^2.0.0";
 const SDK = "2.0.0";
 const HOST_LIBRARIES = {
   react: "19.3.1",
@@ -81,7 +82,7 @@ describe("the manifest", () => {
     expect(manifest.private).toBeUndefined();
   });
 
-  it("pins the SDK exactly to the version of the validation target, and takes no other package of Freelens", () => {
+  it("takes the SDK by the range of Freelens 2, resolved to the version of the validation target, and no other package of Freelens", () => {
     const all = [
       manifest.dependencies,
       manifest.devDependencies,
@@ -89,8 +90,17 @@ describe("the manifest", () => {
       manifest.optionalDependencies,
     ].flatMap((dependencies) => Object.keys(dependencies ?? {}));
 
-    expect(manifest.devDependencies?.["@freelensapp/extensions"]).toBe(SDK);
+    expect(manifest.devDependencies?.["@freelensapp/extensions"]).toBe(SDK_RANGE);
     expect(all.filter((name) => name.startsWith("@freelensapp/"))).toEqual(["@freelensapp/extensions"]);
+    // The version the range resolves to, which the bundles below were built from, is the one the header of
+    // SPEC-0015 names with the commit of the target: a release of Freelens moves the three together.
+    const header = readFileSync(resolve("docs/specs/SPEC-0015-freelens-v2-host.md"), "utf8")
+      .split("\n")
+      .find((line) => line.startsWith("- **Freelens validation target:**"));
+
+    expect(header).toContain(
+      `the commit of the tag v${SDK} of the release Freelens ${SDK}, with \`@freelensapp/extensions\` ${SDK};`,
+    );
   });
 
   it("has the libraries of the host as devDependencies at the versions of its catalog, and react-window alone in dependencies", () => {

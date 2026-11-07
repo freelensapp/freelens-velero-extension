@@ -115,29 +115,47 @@ a baseline capability.
 
 ## Host drift watch
 
-Until Freelens 2.0.0 is released, the extension is built and tested against a
+Until Freelens 2.0.0 was released, the extension was built and tested against a
 commit of the main branch of Freelens, the validation target that
-[SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md) names, and follows the
+[SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md) names, and followed the
 template of the organization, freelensapp/freelens-example-extension, which
-moves with it. Both change without a release. Before every slice and before
-every merge:
+moved with it. Before every slice and before every merge the watch read what the
+main branch of both changed, took in first a change to what the extension uses,
+moved the target with it and recorded the reading in the pull request. It moved
+the target to the commit of the tag v2.0.0 of Freelens 2.0.0, released on
+2026-10-28, and ended on 2026-11-07: the SDK is taken by the range `^2.0.0`, and
+the workflows build the host at the commit of that tag.
 
-1. Read what the main branch of freelensapp/freelens and the main branch of the
-   template changed since the commits last read: the extension API, its
-   documentation and the migration guide of the host, and the sources, the
-   build, the workflows and the configuration of the template.
-2. Take in first a change to what the extension uses: the slice goes on once
-   the change is in, with the pin of the validation target moved everywhere it
-   is written: the header of SPEC-0015; the one line of each workflow that
-   builds Freelens, which a unit test ties to that header; the SDK, pinned to
-   the nightly of that commit in `package.json` and in the build test; and every
-   document that names the commit or the nightly, which a search of the
-   repository for either finds. The move is recorded in SPEC-0015.
-3. Record the watch in the pull request: the commits read, what changed for
-   the extension, and what was taken in or why nothing was.
+Since then the target moves with the releases of Freelens, not with its main
+branch. Renovate brings a release of the SDK in the pull request of the group
+`Freelens dependencies`: the range `^2.0.0` stays, and the lockfile moves to the
+release. The same group carries the libraries and the tools that follow the main
+branch of Freelens, which the build test holds to the catalog of the commit of the
+target: a pull request of the group that brings versions of the main branch before
+a release waits for the release that brings them. `engines.freelens` stays
+`^2.0.0`, the oldest release the extension runs on: Renovate proposes only a major
+version of Freelens, which needs its own spec. Before a pull request of the group
+that brings a release is merged:
 
-The watch ends with Freelens 2.0.0: the pin of the SDK becomes a range of
-versions and the integration runs at the tag of the release.
+1. Read what the release changed in the extension API, its documentation and the
+   migration guide of the host, and what the template changed with it.
+2. Move the target to the commit of the tag of the release in the same pull
+   request, everywhere it is written: the header of SPEC-0015; the one line of
+   each workflow that builds Freelens, which a unit test ties to that header;
+   the version of the SDK in the build test, which a unit test ties to the same
+   header; and every document that names the commit or the version, which a
+   search of the repository for either finds. Take in first a change to what the
+   extension uses. The move is recorded in SPEC-0015.
+3. Record the reading in the pull request: the release, what changed for the
+   extension, and what was taken in or why nothing was.
+
+The main branch of the host is still read once a day for changes to the extension
+API, its documentation and the loading of the extensions. When one that the
+extension uses is coming in a release, the main branch is read again before every
+slice and before every merge, and the reading is recorded in each pull request,
+while the target stays at the release the extension is built for; the change is
+taken in with the release that brings it, in the pull request that moves the
+target.
 
 ## Working agreements
 
