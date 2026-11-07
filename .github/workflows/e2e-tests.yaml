@@ -7,6 +7,36 @@ on:
   pull_request:
     branches:
       - "*"
+    # The fixtures and the transport proof run the scripts of the environment
+    # and the main process built from src/main and src/common, never the
+    # renderer: a pull request that changes only the renderer, the suites of
+    # the views, the documents, the unit tests or the configuration of the
+    # linters does not run them. Any other file does, and so do every push to
+    # main and the run of every night.
+    paths:
+      - "**"
+      - "!src/renderer/**"
+      - "!e2e/__tests__/**"
+      - "!e2e/views-parts.json"
+      - "!integration/**"
+      - "!environment-tests/**"
+      - "!docs/**"
+      - "!**/*.md"
+      - "!**/*.test.ts"
+      - "!**/*.test.tsx"
+      - "!LICENSE"
+      - "!.github/**"
+      - "!.trunk/**"
+      - "!.claude/**"
+      - "!.renovaterc.json*"
+      - "!knip.jsonc"
+      - "!biome.jsonc"
+      - .github/workflows/e2e-tests.yaml
+      - .nvmrc
+  # The fixtures and the transport proof with the server of the release, every
+  # night, on main.
+  schedule:
+    - cron: 47 1 * * *
   workflow_dispatch: {}
 
 permissions:

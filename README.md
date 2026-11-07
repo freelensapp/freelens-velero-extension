@@ -130,7 +130,8 @@ with Velero, its AWS plugin and SeaweedFS as the S3 backend, every image an
 official release pinned by digest. They run real backups and restores of
 synthetic data and fetch their logs and results through the code of the main
 process. They run on Linux and on macOS with Docker Desktop, x64 and ARM64,
-and on the hosted runner for every pull request.
+and on the hosted runner on main, every night and for every pull request that
+changes what they run.
 
 ```sh
 pnpm e2e:cluster:up     # the cluster with Velero and the storage

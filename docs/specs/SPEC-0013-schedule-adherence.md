@@ -716,7 +716,9 @@ and verdict.
     within the same bound, and the real schedule still submits nothing while the
     suites run. Under the direction the lead maintainer approved on 2026-11-06, the
     tests without a controller, applied without losing quality (SPEC-0015,
-    amendments of 2026-11-06 and 2026-11-07).
+    amendments of 2026-11-06 and 2026-11-07). Later on 2026-11-07 the part without
+    a controller was divided in two by the times of its suites, and the suite runs
+    in the first, `static-views-1`.
 
 No NEEDS CLARIFICATION marker: every decision above has a default with its reasons,
 and the ones the lead maintainer may overturn at approval are named as such.
