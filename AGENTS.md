@@ -393,8 +393,9 @@ test environment and of the process of this repository.
   controller of the test environment wrote before trusting a synthetic one.
 - No controller validates a synthetic storage location. Give it a validation
   that is days old, and take the fresh one from the location the controller of
-  the test environment validates: what a suite expects must not depend on how
-  old the environment is.
+  the test environment validates, which on the CRDs of the release alone the
+  runner of the views writes once a minute, standing in for the server: what a
+  suite expects must not depend on how old the environment is.
 - A family that is asked again keeps the status of its last read, with
   `reading` beside it. Do not show a state from `loading` alone: it is the state
   of a family that was never answered.
@@ -491,7 +492,7 @@ test environment and of the process of this repository.
   would show that schedule not known, and the suite says which in one constant.
   The suite took 133 to 138 seconds alone on the machine of the runs, about four
   minutes with the build, the pack and the start of its runner, and the hosted job
-  runs it in its part of the other views, by the name `velero-e2e-adherence`. The
+  runs it in its part without a controller, by the name `velero-e2e-adherence`. The
   list of three hundred schedules ordered by a column of the host answers in 100
   to 113 ms, alike for each column and direction, and a search of it in 62 to 309
   ms, about a quarter of a second more from the key, which the host waits before
@@ -543,7 +544,12 @@ test environment and of the process of this repository.
   the whole cluster least of all: the guard of a suite counts on the API server
   the reads of the kinds of Velero, whoever sends them. A read of the requests of
   every namespace, once a minute, made beside the suites to watch them, failed
-  the guard of one.
+  the guard of one. The one exception is the runner of the views on the CRDs of
+  the release alone, which stands in for the server at the storage location of
+  the installation: once a minute a read of that location by its name and a
+  PATCH of it, which the guard leaves out as it leaves out the ones of the
+  server, and which a window that compares reads takes again, as it takes a read
+  anything else asked in the same time.
 - The sync of the reviewed release looks at a storage location once a minute, and
   passes over it until its period, a minute by default, went by since its last
   pass ended: a backup made from files given to the store comes at the first pass
@@ -931,14 +937,16 @@ The hosted checks run on every pull request and on main, on synthetic data only:
   in Freelens built from source at the commit of the validation target, on the
   disposable kind cluster with the CRDs of the release alone that
   `pnpm e2e:cluster:up:definitions` makes, taken down whatever happens.
-- `views-tests.yaml`: every suite of the views, the pre-review and FND-10, in five
+- `views-tests.yaml`: every suite of the views, the pre-review and FND-10, in four
   parts side by side, each a job with an environment of its own and one run of the
-  runner of `pnpm e2e:views`, in Freelens built at the same commit: four on the
-  environment and the fixtures of `pnpm demo:up`, each then with the cleanup of
-  the fixtures and the verification of the environment, and one on the CRDs of
-  the release alone with the static fixtures, for the five suites that read no
-  controller. The job `views in Freelens v2` passes when the parts passed, and a
-  unit test checks that they name every suite once.
+  runner of `pnpm e2e:views`, in Freelens built at the same commit: three on the
+  environment and the fixtures of `pnpm demo:up`, for the suites that read what
+  only a server makes (the artifacts, the pre-review, the volumes and the server),
+  each then with the cleanup of the fixtures and the verification of the
+  environment; and one on the CRDs of the release alone with the static fixtures
+  and the counterparts of what the controllers leave in the installation, for the
+  ten other suites and FND-10. The job `views in Freelens v2` passes when the parts
+  passed, and a unit test checks that they name every suite once.
 - `e2e-tests.yaml`: the environment brought up, the fixtures and the transport
   proof, and the environment taken down.
 - `osv-scanner.yaml`, and `mise-lock-check.yaml` for a pull request that changes

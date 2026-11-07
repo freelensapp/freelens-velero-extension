@@ -1,4 +1,4 @@
-import { execFile, execFileSync, spawnSync } from "node:child_process";
+import { execFile, execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   appendFileSync,
@@ -61,10 +61,12 @@ import {
   removeRunRepository,
   restrictedFixtures,
   runLiveFixtures,
+  type ServerVersion,
   tabFixtureFacts,
   tabRemovalWords,
   VIEW_READER,
   VIEW_READER_OF_RESTORES,
+  validateTheLocation,
   verifyStaticFixtures,
   viewIdentityOfAnExecPlugin,
   viewIdentityWithoutPortForward,
@@ -1712,10 +1714,16 @@ function prepareFixtures(): void {
     "The environment of the CRDs alone holds a server of Velero: run pnpm e2e:cluster:down",
   );
   const snapshots = createStaticFixtures(runtime, journal.fixtureRun.id, controlled);
-  // Without an installer, the installation the views find is static too, validated when the run was started.
+  // Without an installer, the installation the views find is static too, validated when the run was started, with the
+  // counterparts of what its controllers would have left in it, made for the cluster they would have run in.
   const installation = controlled
     ? []
-    : createInstallationFixtures(runtime, journal.fixtureRun.id, Date.parse(journal.fixtureRun.started));
+    : createInstallationFixtures(
+        runtime,
+        journal.fixtureRun.id,
+        Date.parse(journal.fixtureRun.started),
+        serverVersion(),
+      );
 
   writeFileSync(join(STATE, "fixture-static-snapshots.json"), JSON.stringify(snapshots), { mode: 0o600 });
   journal.fixtureRun.phase = "static-ready";
@@ -2917,6 +2925,68 @@ function placeViewsAndTabs(): {
   return { names, runtime, told: tabExpectations(artifacts) };
 }
 
+// The version of the API server of the environment, as `kubectl version` reports it: the server of the release writes
+// it into every backup it takes, and the counterparts of its backups carry the one of the cluster they are placed in.
+function serverVersion(): ServerVersion {
+  const { serverVersion: version } = JSON.parse(kubectl(["version", "-o", "json"])) as {
+    serverVersion?: { gitVersion?: string; major?: string; minor?: string };
+  };
+
+  requireCondition(
+    typeof version?.gitVersion === "string" && typeof version.major === "string" && typeof version.minor === "string",
+    "The version of the API server could not be read",
+  );
+  return { gitVersion: version.gitVersion, major: version.major, minor: version.minor };
+}
+
+// On the environment of the CRDs alone no server validates the location of the installation once a minute: the runner
+// writes into it what the server would, before the suites start and once a minute while they run, and stops when they
+// end. A write that fails is said and tried again at the next minute: the suite that reads the location says what it
+// found.
+function standInForTheServer(runtime: FixtureRuntime): { stop(): void } {
+  const validate = () => {
+    try {
+      validateTheLocation(runtime, Date.now());
+    } catch (error) {
+      console.warn(`The location of the installation could not be validated: ${(error as Error).message}`);
+    }
+  };
+
+  validate();
+  const minute = setInterval(validate, 60_000);
+
+  return { stop: () => clearInterval(minute) };
+}
+
+// The suites, in the application, with their environment, given two hours: as long as the identities made for the run
+// last, so the suites that run last must still find them. What the process of the suites ended with, or nothing when
+// it was stopped at the bound.
+function runSuites(headless: boolean, suites: string[], environment: NodeJS.ProcessEnv): Promise<number | null> {
+  return new Promise((settle, fail) => {
+    const child = spawn(
+      headless ? "xvfb-run" : "corepack",
+      // Without a display the application gets one that has room for its largest window.
+      [
+        ...(headless ? ["-a", "--server-args=-screen 0 1920x1200x24", "corepack"] : []),
+        "pnpm",
+        "test:integration",
+        ...suites,
+      ],
+      { cwd: process.cwd(), env: environment, stdio: "inherit" },
+    );
+    const bound = setTimeout(() => child.kill("SIGTERM"), 7_200_000);
+
+    child.once("error", (error) => {
+      clearTimeout(bound);
+      fail(error);
+    });
+    child.once("exit", (code, signal) => {
+      clearTimeout(bound);
+      settle(signal ? null : code);
+    });
+  });
+}
+
 // The fixtures of the views and of the adherence on the environment of the CRDs alone, beside its static fixtures
 // and its installation: no store, no server, and nothing the server makes or removes is waited for.
 function placeStaticViews(): { names: ReturnType<typeof fixtureNames> } {
@@ -3012,7 +3082,7 @@ function prepareDemo(): void {
 // E2E_TEST_PATTERN names what is run: one name, or several separated by spaces, each a part of the names
 // of the files, as Vitest takes it. CI runs the suites of the views and FND-10 in parts side by side, each
 // with an environment of its own and one run of this runner (.github/workflows/views-tests.yaml).
-function runViews(): void {
+async function runViews(): Promise<void> {
   const suites = (process.env.E2E_TEST_PATTERN ?? "velero-e2e").split(/\s+/).filter(Boolean);
   const pattern = suites.join("+");
   const named = `${suites.length === 1 ? "suite" : "suites"} ${suites.join(", ")}`;
@@ -3038,8 +3108,9 @@ function runViews(): void {
     "FREELENS_APP names an application installed in /Applications: the suites start a build made for them",
   );
   requireCondition(tarballs.length === 1, "One packed extension is expected in the repository: run pnpm pack");
-  // On the environment of the CRDs alone no controller runs: the suites that read only static objects run on it.
-  // A part of the hosted job names the environment it brought up, and runs on no other.
+  // On the environment of the CRDs alone no controller runs: the suites that read what the fixtures wrote, the
+  // counterparts of what the controllers leave among them, run on it. A part of the hosted job names the environment
+  // it brought up, and runs on no other.
   const withoutController = journal.mode === "definitions";
   const expected = process.env.E2E_ENVIRONMENT ?? "";
 
@@ -3096,52 +3167,43 @@ function runViews(): void {
     writeExecPluginKubeconfig(pluginFile, plugin, ofThePlugin[0].metadata.name, "2h");
     // The suites start the application with their environment: what they need of this environment is named
     // here, and the home is the one of the caller, where its toolchain is.
-    status = spawnSync(
-      headless ? "xvfb-run" : "corepack",
-      // Without a display the application gets one that has room for its largest window.
-      [
-        ...(headless ? ["-a", "--server-args=-screen 0 1920x1200x24", "corepack"] : []),
-        "pnpm",
-        "test:integration",
-        ...suites,
-      ],
-      {
-        cwd: process.cwd(),
-        env: childEnvironment(process.env, {
-          HOME: homedir(),
-          ...(process.env.DISPLAY ? { DISPLAY: process.env.DISPLAY } : {}),
-          DO_NOT_TRACK: "1",
-          FREELENS_APP: resolve(application),
-          EXTENSION_PATH: join(process.cwd(), tarballs[0]),
-          E2E_KUBECONFIG: CONFIG,
-          E2E_READER_KUBECONFIG: readerFile,
-          E2E_SECOND_READER_KUBECONFIG: secondFile,
-          E2E_NO_PORT_FORWARD_KUBECONFIG: forwardlessFile,
-          E2E_EXEC_PLUGIN_KUBECONFIG: pluginFile,
-          E2E_EXEC_PLUGIN_RUNS: plugin.runs,
-          E2E_KUBECTL: KUBECTL,
-          E2E_CLUSTER_NAME: DEMO_CLUSTER,
-          E2E_KUBE_CONTEXT: DEMO_CONTEXT,
-          E2E_NAMESPACE: DEMO_NAMESPACE,
-          E2E_STATIC_NAMESPACE: names.static,
-          E2E_VIEWS_NAMESPACE: names.views,
-          E2E_DEFAULTS_NAMESPACE: names.defaults,
-          E2E_OVERVIEW_NAMESPACE: names.overview,
-          E2E_SCALE_NAMESPACE: names.scale,
-          E2E_ADHERENCE_NAMESPACE: names.adherence,
-          E2E_ADHERENCE_SPLIT_NAMESPACE: names.adherenceSplit,
-          E2E_ADHERENCE_SCALE_NAMESPACE: names.adherenceScale,
-          E2E_FIXTURE_RUN: run,
-          E2E_ARTIFACTS_DIR: artifacts,
-          // The suites look for none of the objects a controller makes.
-          ...(withoutController ? { E2E_WITHOUT_CONTROLLER: "1" } : {}),
-        }),
-        stdio: "inherit",
-        // Two hours, as long as the identities made for the run last: the suites that run last must still find
-        // them.
-        timeout: 7_200_000,
-      },
-    ).status;
+    const environment = childEnvironment(process.env, {
+      HOME: homedir(),
+      ...(process.env.DISPLAY ? { DISPLAY: process.env.DISPLAY } : {}),
+      DO_NOT_TRACK: "1",
+      FREELENS_APP: resolve(application),
+      EXTENSION_PATH: join(process.cwd(), tarballs[0]),
+      E2E_KUBECONFIG: CONFIG,
+      E2E_READER_KUBECONFIG: readerFile,
+      E2E_SECOND_READER_KUBECONFIG: secondFile,
+      E2E_NO_PORT_FORWARD_KUBECONFIG: forwardlessFile,
+      E2E_EXEC_PLUGIN_KUBECONFIG: pluginFile,
+      E2E_EXEC_PLUGIN_RUNS: plugin.runs,
+      E2E_KUBECTL: KUBECTL,
+      E2E_CLUSTER_NAME: DEMO_CLUSTER,
+      E2E_KUBE_CONTEXT: DEMO_CONTEXT,
+      E2E_NAMESPACE: DEMO_NAMESPACE,
+      E2E_STATIC_NAMESPACE: names.static,
+      E2E_VIEWS_NAMESPACE: names.views,
+      E2E_DEFAULTS_NAMESPACE: names.defaults,
+      E2E_OVERVIEW_NAMESPACE: names.overview,
+      E2E_SCALE_NAMESPACE: names.scale,
+      E2E_ADHERENCE_NAMESPACE: names.adherence,
+      E2E_ADHERENCE_SPLIT_NAMESPACE: names.adherenceSplit,
+      E2E_ADHERENCE_SCALE_NAMESPACE: names.adherenceScale,
+      E2E_FIXTURE_RUN: run,
+      E2E_ARTIFACTS_DIR: artifacts,
+      // The suites look for none of the objects a controller makes while it runs.
+      ...(withoutController ? { E2E_WITHOUT_CONTROLLER: "1" } : {}),
+    });
+    // Where no server runs, the runner stands in for it at the location of the installation while the suites run.
+    const server = withoutController ? standInForTheServer(fixtureRuntime()) : undefined;
+
+    try {
+      status = await runSuites(headless, suites, environment);
+    } finally {
+      server?.stop();
+    }
   } finally {
     for (const file of [readerFile, secondFile, forwardlessFile, pluginFile, plugin.token, plugin.runs])
       rmSync(file, { force: true });
@@ -3298,7 +3360,7 @@ async function main(): Promise<void> {
     else if (action === "fixtures-cleanup") await cleanupFixtures();
     else if (action === "start") await startCluster();
     else if (action === "remove-failed-node") removeFailedNode();
-    else if (action === "views") runViews();
+    else if (action === "views") await runViews();
     else if (action === "integration") runIntegration();
     else if (action === "demo") prepareDemo();
     else stopCluster();

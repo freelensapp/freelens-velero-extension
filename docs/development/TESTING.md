@@ -229,7 +229,7 @@ commit. On a Linux without a display the runner starts them under `xvfb-run`.
 | `pnpm demo:up` | The environment with the fixtures left in place, once |
 | `pnpm demo:views` | The fixtures of the views and of their tabs, and for who looks at the demo by hand the kubeconfigs of its two readers and what each artifact of the tabs holds: see [TRY-IT.md](TRY-IT.md) |
 | `pnpm e2e:views` | Builds and packs the extension, puts the fixtures of the views and of their tabs in place, waits for the server to remove the requests to Velero it removes, tells the suites what the artifacts of the tabs hold, makes for the run the identity of the views that may not port-forward and the one whose token an `exec` plugin gives, and gives the suites the kubeconfig of the first in `E2E_NO_PORT_FORWARD_KUBECONFIG`, the one of the second in `E2E_EXEC_PLUGIN_KUBECONFIG`, and in `E2E_EXEC_PLUGIN_RUNS` the file of the private state where its plugin, [`local-exec-credential.sh`](../../e2e/scripts/local-exec-credential.sh), names the executable of the process of each of its runs, runs the suites, then removes the two identities, their kubeconfigs, the token of the plugin and that file |
-| `E2E_TEST_PATTERN=velero-e2e-journey pnpm e2e:views` | The same for one suite. The pattern is a part of the names of the files, or several separated by spaces: CI runs every suite, the pre-review and FND-10 in five parts side by side, each a job with an environment of its own: `velero-e2e-artifacts`; `pre-review`; `velero-e2e-volumes velero-e2e-server`; the other suites that read the server with `extensions`, FND-10; and, on the CRDs of the release alone, the five that read no controller. On an environment brought up with `pnpm e2e:cluster:up:definitions` and its static fixtures, `node e2e/scripts/local-demo.mts fixtures-static --context kind-freelens-velero-dev`, the runner places the fixtures of the views and of the adherence, waits for no server, and runs only those five: `velero-e2e-gate velero-e2e-preferences velero-e2e-restricted velero-e2e-scale velero-e2e-schedules` |
+| `E2E_TEST_PATTERN=velero-e2e-journey pnpm e2e:views` | The same for one suite. The pattern is a part of the names of the files, or several separated by spaces: CI runs every suite, the pre-review and FND-10 in four parts side by side, each a job with an environment of its own: `velero-e2e-artifacts`; `pre-review`; `velero-e2e-volumes velero-e2e-server`, the three on the environment of `pnpm demo:up`, for the suites that read what only a server makes; and, on the CRDs of the release alone, the ten other suites with `extensions`, FND-10. On an environment brought up with `pnpm e2e:cluster:up:definitions` and its static fixtures, `node e2e/scripts/local-demo.mts fixtures-static --context kind-freelens-velero-dev`, which place the installation with the counterparts of what the controllers leave in the one of the demo, the runner places the fixtures of the views and of the adherence, waits for no server, stands in for it at the storage location of the installation while the suites run, and runs only those suites: `velero-e2e-adherence velero-e2e-gate velero-e2e-journey velero-e2e-locations velero-e2e-overview velero-e2e-preferences velero-e2e-restores velero-e2e-restricted velero-e2e-scale velero-e2e-schedules extensions` |
 | `pnpm pre-review` | The pass before the review of a milestone |
 
 | Suite | What it proves |
@@ -419,7 +419,8 @@ up, and the suite passes on its second start. The file goes when it is read.
 | Adherence | `velero-adherence-<run>` | An installation no controller reads and nothing suggests, placed by the clock in two phases: eight schedules, awaited, overdue by a day and more with no backup of its submission, held beyond the grace by a backup in progress asked by hand, submitted at every look, its zone derived from the backup of its own submission, with no submission and the offset of that one, with its last submission a day after the placement, and one with a name of 63 characters and an expression that names its zone. See [the fixtures of the adherence](#the-fixtures-of-the-adherence) |
 | Two offsets | `velero-adherence-split-<run>` | Two schedules of five fields whose submissions were named two hours east of UTC and at UTC, the older twenty seconds before the newer, placed by the clock in two phases |
 | Budget of the adherence | `velero-adherence-scale-<run>` | Three hundred schedules of the expressions of the measure of the unit run, each with the backup of its submission named two hours east of UTC, placed by the clock in two phases, and no storage location |
-| Real schedule | `velero-demo` | One schedule the controller of the installation validates, `@every 8760h`, whose next run is a year after its creation, with the spec of the real backup as its template and no `skipImmediately`, which the controller writes. See [the fixtures of the adherence](#the-fixtures-of-the-adherence) |
+| Real schedule | `velero-demo` | One schedule the controller of the installation validates, `@every 8760h`, whose next run is a year after its creation, with the spec of the real backup as its template and no `skipImmediately`, which the controller writes; on the CRDs of the release alone its counterpart, Enabled, with `skipImmediately` written as the controller writes it. See [the fixtures of the adherence](#the-fixtures-of-the-adherence) |
+| Counterparts | `velero-demo` | On the CRDs of the release alone, what the controllers of the installation of `pnpm demo:up` leave in it, by the names of the run, each as the release leaves it: the schedule validated, the backup taken and its restore, the backup of the volume and its restore, the backup and the two restores refused, the two backups synced from the store; the storage location with the two times the runner of the views writes once a minute, standing in for the server. Placed by `fixtures-static`; see the amendment of 2026-11-07 of SPEC-0015 |
 
 They are put in place by `pnpm e2e:views`, once: a second run finds them. The
 times of the history of a schedule are counted back from when the fixtures were
@@ -455,7 +456,9 @@ order among themselves.
 No controller validates a synthetic location: what one reports is of a
 validation that is days old, whatever the age of the environment, and the views
 say that it may be out of date. The validation that is fresh is the one of the
-location of the installation, which its controller validates every minute. The
+location of the installation, which its controller validates every minute, and
+which on the CRDs of the release alone the runner of the views writes once a
+minute, standing in for the server. The
 locations of the namespace of the phases have a phase and no validation time,
 which the release writes together: they are what a view shows of a status that
 carries one without the other.
@@ -535,24 +538,30 @@ the answers 50.4 ms at the 95th percentile, the longest frame of a gesture 21.3 
 Their [workflow](../../.github/workflows/views-tests.yaml) builds Freelens from
 source at the commit of the validation target, or takes the build the cache keeps
 for that commit, and runs every suite, the pre-review and FND-10 on the hosted
-runner for every pull request, in five parts side by side: the suite of the
-artifacts; the pre-review; the suites of the volumes and of the server; the other
-suites of the views that read the server, with FND-10; and the five suites that
-read only what the fixtures wrote, on the CRDs of the release alone with no
-controller. Each part is a job that brings up an environment of its own, places
-its fixtures and runs its suites in one run of the runner of `pnpm e2e:views`,
-within two hours; then, on the environment with its fixtures, whatever the suites
-found, once the environment came up, it removes the fixtures of the tabs with the
-cleanup of the fixtures and verifies the installation they leave. A run takes about as
-long as its longest part: on 2026-11-06 the one job took 57 minutes, and the first
-run of the four parts 21, its longest part 20 minutes 56 seconds, each part about
-eight minutes of environment, placement and cleanup beside its suites. The parts
-are divided by the time of their suites in the one job: 853, 729, 745 and 610
-seconds, the 610 again into the 380 of the suites that read the server, with
-FND-10, and the 230 of the five that read none. The job `views in Freelens v2` passes when the
-parts passed, and a unit test fails if a file of the suites is in no part or in
-two, a session of the integration test in any, or a suite that reads a controller
-in the part that has none. Each part uploads the
+runner for every pull request, in four parts side by side: the suite of the
+artifacts; the pre-review; the suites of the volumes and of the server, the three
+on the environment with its fixtures and the server of the release, for what only a
+server makes, the files of the store, its bandwidth, a repository and a volume it
+backed up; and the ten other suites with FND-10, on the CRDs of the release alone
+with no controller, where the static fixtures hold the counterparts of what the
+controllers leave in the installation of the demo, each as the release leaves it,
+and the runner stands in for the server at the storage location of the
+installation, writing once a minute the two times the server writes. Each part is a
+job that brings up an environment of its own, places its fixtures and runs its
+suites in one run of the runner of `pnpm e2e:views`, within two hours; then, on
+the environment with its fixtures, whatever the suites found, once the environment
+came up, it removes the fixtures of the tabs with the cleanup of the fixtures and
+verifies the installation they leave. A run takes about as long as its longest
+part: on 2026-11-06 the one job took 57 minutes, and the first run of four parts
+21, its longest part 20 minutes 56 seconds, each part about eight minutes of
+environment, placement and cleanup beside its suites. The parts were divided by
+the time of their suites in the one job: 853, 729, 745 and 610 seconds, the 610
+again into the 375 of the five suites that read the server, 380 with FND-10, and
+the 230 of the five that read none, which the part without a controller now runs
+together. The job
+`views in Freelens v2` passes when the parts passed, and a unit test fails if a
+file of the suites is in no part or in two, a session of the integration test in
+any, or a suite that reads a controller in the part that has none. Each part uploads the
 directory of its screenshots and reports, `e2e-artifacts/`, as `views-` and the
 name of the part, and nothing else:
 the private state of the environment is elsewhere, and a test of the workflow
@@ -741,7 +750,12 @@ Nothing but the suite reads the cluster while a suite of the views runs: the gua
 of a suite counts on the API server the reads of the kinds of Velero in the whole
 cluster, whoever sends them. A read of the requests of every namespace once a
 minute, made beside the suites to watch them, failed the guard of the suite of the
-schedules.
+schedules. The one exception is the runner of the views on the CRDs of the release
+alone, which stands in for the server at the storage location of the installation:
+once a minute a read of that location by its name and a PATCH of it, which the
+guard leaves out as it leaves out the ones of the server, and which a window that
+compares reads takes again, as it takes a read anything else asked in the same
+time.
 
 Every suite starts only when the cluster holds the fixtures it needs, each probed
 by its name, the five of the tabs and the schedule the controller validated among
@@ -888,7 +902,7 @@ vitest.integration.config.ts e2e/__tests__/velero-e2e-adherence.tests.ts -t
 "what the suite of the adherence expects, computed by the rules of the
 controller"`. The suite reads the cluster only with `kubectl get` in a namespace
 and the counters of the API server, never inside a measure, and runs in the part
-of the other views of the hosted job (LM6 of SPEC-0013, and its amendment). It
+without a controller of the hosted job (LM6 of SPEC-0013, and its amendments). It
 took 137.97 and 132.81 seconds alone on the machine of the runs on 2026-10-26, 4
 minutes 11 seconds and 4 minutes 1 second with the build, the pack and the start
 of its runner, 133.85 seconds in the run of the pattern on 2026-10-27, and
