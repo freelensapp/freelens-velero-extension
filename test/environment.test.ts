@@ -11113,37 +11113,10 @@ describe("platform of the test environment", () => {
     expect(workflow).toMatch(/^permissions:\n {2}contents: read$/m);
   });
 
-  it("runs every suite of the views, the pre-review and FND-10 in one part of the job of the views, and no session of the integration test", () => {
+  it("runs each part of the job of the views on the environment it names, and passes the check only when the parts chosen passed", () => {
     const workflow = readFileSync(new URL("../.github/workflows/views-tests.yaml", import.meta.url), "utf8");
-    const matrix = workflow.slice(workflow.indexOf("\n    strategy:\n"), workflow.indexOf("\n    steps:\n"));
-    const parts: { name: string; environment?: string; suites: string[] }[] = [];
 
-    for (const line of matrix.split("\n")) {
-      const part = /^ {10}- name: ([a-z-]+)$/.exec(line)?.[1];
-      const environment = /^ {12}environment: ([a-z]+)$/.exec(line)?.[1];
-      const suite = /^ {14}- ([a-z0-9-]+)$/.exec(line)?.[1];
-      const last = parts.at(-1);
-
-      if (part) parts.push({ name: part, suites: [] });
-      if (environment && last) last.environment = environment;
-      if (suite) last?.suites.push(suite);
-    }
-    // The files Vitest runs for the integration test and the suites, by their path in the repository: a name of
-    // the pattern runs every file whose path it is a part of, as Vitest takes it.
-    const files = ["e2e/__tests__", "integration/__tests__"].flatMap((directory) =>
-      readdirSync(new URL(`../${directory}`, import.meta.url), { encoding: "utf8", recursive: true })
-        .filter((name) => name.endsWith(".tests.ts"))
-        .map((name) => `${directory}/${name}`),
-    );
-    const partsOf = (file: string) =>
-      parts.filter((part) => part.suites.some((suite) => file.includes(suite))).map((part) => part.name);
-
-    expect(parts.map((part) => [part.name, part.environment])).toEqual([
-      ["artifacts", "demo"],
-      ["pre-review", "demo"],
-      ["volumes-and-server", "demo"],
-      ["static-views", "definitions"],
-    ]);
+    // The parts and the suites of each are in e2e/views-parts.json, which test/views-plan.test.ts checks.
     // The environment of a part is the one it names, brought up by the step of the environment, told to the runner,
     // which runs on no other, and cleaned with the server only where there is one.
     expect(workflow).toMatch(
@@ -11153,34 +11126,14 @@ describe("platform of the test environment", () => {
     expect(workflow).toMatch(
       /\n {8}if: \$\{\{ !cancelled\(\) && steps\.environment\.outcome == 'success' && matrix\.part\.environment == 'demo' \}\}\n {8}run: \|\n {10}node e2e\/scripts\/local-demo\.mts fixtures-cleanup /,
     );
-    // A part with no controller names only the suites that read none, which the runner refuses otherwise.
-    expect(
-      parts
-        .filter((part) => part.environment === "definitions")
-        .flatMap((part) => part.suites.filter((suite) => !WITHOUT_A_CONTROLLER.includes(suite))),
-    ).toEqual([]);
-    // Each part names suites, few enough for the name of the directory of its reports, and runs them; and the job
-    // of the name of the check passes only when every part passed, whatever happened to the run.
-    expect(parts.filter((part) => part.suites.length === 0 || part.suites.join("+").length > 255)).toEqual([]);
     expect(workflow).toMatch(/\n {10}E2E_TEST_PATTERN: \$\{\{ join\(matrix\.part\.suites, ' '\) \}\}\n/);
+    // The job of the name of the check passes when every part the plan chose passed, or when it chose none, whatever
+    // happened to the run.
     expect(workflow).toMatch(
-      /\n {2}views:\n {4}name: views in Freelens v2\n {4}needs: test-views\n {4}if: \$\{\{ always\(\) \}\}\n/,
+      /\n {2}views:\n {4}name: views in Freelens v2\n {4}needs: \[plan, test-views\]\n {4}if: \$\{\{ always\(\) \}\}\n/,
     );
     expect(workflow).toMatch(
-      /\n {10}RESULT: \$\{\{ needs\.test-views\.result \}\}\n {8}run: \|-\n {10}echo [^\n]+\n {10}test "\$\{RESULT\}" = success\n/,
-    );
-    expect(files.length).toBeGreaterThan(16);
-    expect(Object.fromEntries(files.map((file) => [file, partsOf(file)]))).toEqual(
-      Object.fromEntries(
-        files.map((file) => [
-          file,
-          file.startsWith("e2e/") || file === "integration/__tests__/extensions.tests.ts" ? [expect.any(String)] : [],
-        ]),
-      ),
-    );
-    // Every name of a part runs a file.
-    expect(parts.flatMap((part) => part.suites).filter((suite) => !files.some((file) => file.includes(suite)))).toEqual(
-      [],
+      /\n {10}if \[ "\$\{PARTS\}" = "\[\]" \]; then\n {12}echo [^\n]+\n {12}exit 0\n {10}fi\n {10}test "\$\{RESULT\}" = success\n/,
     );
   });
 

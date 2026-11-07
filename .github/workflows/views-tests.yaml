@@ -7,6 +7,9 @@ on:
   pull_request:
     branches:
       - "*"
+  # Every part, every night, on main.
+  schedule:
+    - cron: 17 1 * * *
   workflow_dispatch: {}
 
 permissions:
@@ -19,63 +22,56 @@ env:
   freelens_ref: b9b53e16056578c5407312eba5823a089972f6d5
 
 jobs:
+  # The parts a run takes, by e2e/scripts/views-plan.mts and the rules of
+  # e2e/views-parts.json: every part on main, every night and on demand; on a
+  # pull request, the parts its changed files reach, every part for a file no
+  # rule knows, and none for documents and unit tests alone.
+  plan:
+    name: parts of the views
+
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+
+    outputs:
+      parts: ${{ steps.plan.outputs.parts }}
+
+    steps:
+      - name: Checkout plugin
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Decide the parts
+        id: plan
+        run: node e2e/scripts/views-plan.mts
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+
   # The views in Freelens built from source at the validation target, in parts
   # side by side: each part is a job with an environment of its own, the test
   # environment with its fixtures left in place or the CRDs of the release
   # alone, and a run takes as long as its longest part instead of the sum of
   # them. The application is built as the integration tests build it, and
-  # cached by the same key. A unit test checks that the parts name every suite
-  # of the views, the pre-review and FND-10, each in one part, and that a part
-  # with no controller names only suites that read none.
+  # cached by the same key. The parts are in e2e/views-parts.json, and a unit
+  # test checks that they name every suite of the views, the pre-review and
+  # FND-10, each in one part, and that a part with no controller names only
+  # suites that read none.
   test-views:
     name: views in Freelens v2 (${{ matrix.part.name }})
+    needs: plan
+    if: ${{ needs.plan.outputs.parts != '[]' }}
 
     strategy:
       # A part that fails does not stop the others: a run reports every suite.
       fail-fast: false
       matrix:
-        part:
-          # On the hosted runner, on 2026-11-06, the one job took 57 minutes;
-          # the first run of its parts took 21 minutes, its parts 20.9, 20.3,
-          # 20.5 and 18.3. The suites of each part took 853, 729, 745 and 610
-          # seconds in the one job, which is how they were divided. A part on
-          # `demo` runs on the environment with its fixtures, the server of
-          # the release among them, for the suites that read what only a
-          # server makes: the files of the store, its bandwidth, a repository
-          # and a volume it backed up. The one on `definitions` runs on the
-          # CRDs of the release alone, with static fixtures and no controller,
-          # for the other suites and FND-10: they read what the fixtures wrote,
-          # the counterparts of what the controllers of the installation leave
-          # among them. The five suites that read none took 230 seconds there
-          # on 2026-11-06, the other five 375 on the environment of the demo,
-          # 380 with FND-10.
-          - name: artifacts
-            environment: demo
-            suites:
-              - velero-e2e-artifacts
-          - name: pre-review
-            environment: demo
-            suites:
-              - pre-review
-          - name: volumes-and-server
-            environment: demo
-            suites:
-              - velero-e2e-volumes
-              - velero-e2e-server
-          - name: static-views
-            environment: definitions
-            suites:
-              - velero-e2e-adherence
-              - velero-e2e-gate
-              - velero-e2e-journey
-              - velero-e2e-locations
-              - velero-e2e-overview
-              - velero-e2e-preferences
-              - velero-e2e-restores
-              - velero-e2e-restricted
-              - velero-e2e-scale
-              - velero-e2e-schedules
-              - extensions
+        part: ${{ fromJSON(needs.plan.outputs.parts) }}
 
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 150
@@ -432,12 +428,12 @@ jobs:
         run: node e2e/scripts/local-demo.mts down --context kind-freelens-velero-dev
 
   # The parts as one check, under the name of the job they divide: it
-  # passes when every part passed. It runs whatever happened, also in a run
-  # that was cancelled, so that the check is never skipped while a part did not
-  # pass.
+  # passes when every part the plan chose passed, or when the plan chose none.
+  # It runs whatever happened, also in a run that was cancelled, so that the
+  # check is never skipped while a part did not pass.
   views:
     name: views in Freelens v2
-    needs: test-views
+    needs: [plan, test-views]
     if: ${{ always() }}
 
     runs-on: ubuntu-24.04-arm
@@ -446,7 +442,12 @@ jobs:
     steps:
       - name: Check that every part passed
         env:
+          PARTS: ${{ needs.plan.outputs.parts }}
           RESULT: ${{ needs.test-views.result }}
         run: |-
-          echo "The parts of the views: ${RESULT}"
+          echo "The parts of the views: ${PARTS:-none decided}, ${RESULT}"
+          if [ "${PARTS}" = "[]" ]; then
+            echo "No part of the views is needed for these changes."
+            exit 0
+          fi
           test "${RESULT}" = success

@@ -195,8 +195,11 @@ and the verification removes what an earlier verification left of its temporary
 check, by the label of its owner and by its uid.
 
 The [workflow](../../.github/workflows/e2e-tests.yaml) runs the three commands on
-the hosted runner for every pull request. It uploads nothing of the private
-state.
+the hosted runner on main, every night, and for every pull request that changes
+what they run: the scripts of the environment, the main process, the modules of
+common or the toolchain. A pull request that changes only the renderer, the suites
+of the views, the documents, the unit tests or the configuration of the linters
+does not run them. It uploads nothing of the private state.
 
 Renovate follows the pins. kind, its node image and kubectl move in one pull
 request, Velero and its plugin in another. The checksums of kind and kubectl are
@@ -537,16 +540,26 @@ the answers 50.4 ms at the 95th percentile, the longest frame of a gesture 21.3 
 
 Their [workflow](../../.github/workflows/views-tests.yaml) builds Freelens from
 source at the commit of the validation target, or takes the build the cache keeps
-for that commit, and runs every suite, the pre-review and FND-10 on the hosted
-runner for every pull request, in four parts side by side: the suite of the
+for that commit, and runs the suites, the pre-review and FND-10 on the hosted
+runner in five parts side by side: the suite of the
 artifacts; the pre-review; the suites of the volumes and of the server, the three
 on the environment with its fixtures and the server of the release, for what only a
 server makes, the files of the store, its bandwidth, a repository and a volume it
-backed up; and the ten other suites with FND-10, on the CRDs of the release alone
-with no controller, where the static fixtures hold the counterparts of what the
+backed up; and the ten other suites with FND-10, in two parts, on the CRDs of the
+release alone with no controller, where the static fixtures hold the counterparts of what the
 controllers leave in the installation of the demo, each as the release leaves it,
 and the runner stands in for the server at the storage location of the
-installation, writing once a minute the two times the server writes. Each part is a
+installation, writing once a minute the two times the server writes. A first job
+decides which parts a run takes, by
+[`views-plan.mts`](../../e2e/scripts/views-plan.mts) and the rules of
+[`views-parts.json`](../../e2e/views-parts.json): every part on main, every night
+and on demand; on a pull request, the parts its changed files reach. A change to
+the runner, the environment, the main process, the toolchain or the rules runs
+every part, and so does a file no rule knows; a document, a unit test, another
+workflow or the configuration of a linter runs none; a view of the renderer or a
+module of common runs the two parts without a controller, with the part of the
+artifacts or of the volumes and the server when it is one of theirs, and a style
+sheet runs the pre-review with them. Each part is a
 job that brings up an environment of its own, places its fixtures and runs its
 suites in one run of the runner of `pnpm e2e:views`, within two hours; then, on
 the environment with its fixtures, whatever the suites found, once the environment
@@ -557,11 +570,15 @@ part: on 2026-11-06 the one job took 57 minutes, and the first run of four parts
 environment, placement and cleanup beside its suites. The parts were divided by
 the time of their suites in the one job: 853, 729, 745 and 610 seconds, the 610
 again into the 375 of the five suites that read the server, 380 with FND-10, and
-the 230 of the five that read none, which the part without a controller now runs
-together. The job
-`views in Freelens v2` passes when the parts passed, and a unit test fails if a
-file of the suites is in no part or in two, a session of the integration test in
-any, or a suite that reads a controller in the part that has none. Each part uploads the
+the 230 of the five that read none, which the part without a controller ran
+together. On 2026-11-07 that part was divided again by the times of its eleven
+suites in the run of main of that day, 761 seconds in all: 317 for the adherence,
+the Overview, the journey, the two readers and FND-10, and 337 for the schedules,
+the locations, the restores, the gate, the scale and the preferences. The job
+`views in Freelens v2` passes when the parts the first job chose passed, or when it
+chose none, and a unit test fails if a file of the suites is in no part or in two, a
+session of the integration test in any, or a suite that reads a controller in a part
+that has none. Each part uploads the
 directory of its screenshots and reports, `e2e-artifacts/`, as `views-` and the
 name of the part, and nothing else:
 the private state of the environment is elsewhere, and a test of the workflow
