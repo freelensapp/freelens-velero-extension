@@ -127,9 +127,15 @@ the target to the commit of the tag v2.0.0 of Freelens 2.0.0, released on
 the workflows build the host at the commit of that tag.
 
 Since then the target moves with the releases of Freelens, not with its main
-branch. Renovate brings a release in the pull request of the Freelens
-dependencies, which bumps the SDK and `engines.freelens`. Before that pull request
-is merged:
+branch. Renovate brings a release of the SDK in the pull request of the group
+`Freelens dependencies`: the range `^2.0.0` stays, and the lockfile moves to the
+release. The same group carries the libraries and the tools that follow the main
+branch of Freelens, which the build test holds to the catalog of the commit of the
+target: a pull request of the group that brings versions of the main branch before
+a release waits for the release that brings them. `engines.freelens` stays
+`^2.0.0`, the oldest release the extension runs on: Renovate proposes only a major
+version of Freelens, which needs its own spec. Before a pull request of the group
+that brings a release is merged:
 
 1. Read what the release changed in the extension API, its documentation and the
    migration guide of the host, and what the template changed with it.
@@ -145,9 +151,11 @@ is merged:
 
 The main branch of the host is still read once a day for changes to the extension
 API, its documentation and the loading of the extensions. When one that the
-extension uses is coming in a release, the watch opens again before every slice
-and before every merge, as it ran until Freelens 2.0.0, until the target moves to
-that release.
+extension uses is coming in a release, the main branch is read again before every
+slice and before every merge, and the reading is recorded in each pull request,
+while the target stays at the release the extension is built for; the change is
+taken in with the release that brings it, in the pull request that moves the
+target.
 
 ## Working agreements
 

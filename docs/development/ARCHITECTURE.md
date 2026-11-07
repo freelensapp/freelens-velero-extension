@@ -60,9 +60,9 @@ The manifest, the toolchain and the build are the ones of the template of the
 organization since T0.7 (D6 of SPEC-0015): `engines.freelens` is `^2.0.0`, which
 Freelens 1 lists as Incompatible before any code runs; the package is an ES
 module, `"type": "module"`, with its entries `dist/main.js` and
-`dist/renderer.js` and `files` `dist/**/*`; `@freelensapp/extensions` is pinned
-exactly to the version of the validation target, 2.0.0 since the release of
-Freelens 2.0.0, until the range of versions D10 of SPEC-0015 gives it in M6.
+`dist/renderer.js` and `files` `dist/**/*`; `@freelensapp/extensions` is taken
+by the range `^2.0.0` that D10 of SPEC-0015 gives it, resolved to the version of
+the validation target, 2.0.0, the release Freelens 2.0.0.
 Biome, Knip and Trunk run through `pnpm dlx` at the exact versions the scripts
 name, as in the other extensions.
 Activation asks nothing of a cluster, in either process. Both open the store of the

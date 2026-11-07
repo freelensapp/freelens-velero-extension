@@ -98,7 +98,9 @@ describe("the manifest", () => {
       .split("\n")
       .find((line) => line.startsWith("- **Freelens validation target:**"));
 
-    expect(header).toContain(`with \`@freelensapp/extensions\` ${SDK};`);
+    expect(header).toContain(
+      `the commit of the tag v${SDK} of the release Freelens ${SDK}, with \`@freelensapp/extensions\` ${SDK};`,
+    );
   });
 
   it("has the libraries of the host as devDependencies at the versions of its catalog, and react-window alone in dependencies", () => {

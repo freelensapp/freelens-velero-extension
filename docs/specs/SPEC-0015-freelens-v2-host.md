@@ -594,7 +594,7 @@ no fixture holds real data.
 | --- | --- | --- | --- |
 | HOST-01 | Packaged, and packaged once on 1.10.3 | REQ-196 | On v2: the tarball installed from the Extensions page is listed as Enabled, both entries load, and neither log of the host has an error of the extension. On Freelens 1.10.3 as released, once, recorded in the evidence: the same tarball is listed as Incompatible, with no command to enable it, and no line of the extension is logged |
 | HOST-02 | All layers, CI on main | REQ-197 | The checks of SPEC-0002 to SPEC-0012 and ADH-01 to ADH-08 and the measure of ADH-16 at the unit layer, green on v2; the guard of every suite counting on the API server what it counted on v1 |
-| HOST-03 | Build unit | REQ-198 | The build test reads the manifest: the range, the type, the entries, the files, the exact pin, the libraries of the host as devDependencies at the versions of the catalog, react-window alone in `dependencies`. An install with React one patch below the peer range of the SDK fails, seen once |
+| HOST-03 | Build unit | REQ-198 | The build test reads the manifest: the range, the type, the entries, the files, the exact pin of the SDK until 2026-11-07 and the range of D10 since, the libraries of the host as devDependencies at the versions of the catalog, react-window alone in `dependencies`. An install with React one patch below the peer range of the SDK fails, seen once |
 | HOST-04 | Build unit | REQ-199 | `dist/` holds the two entries, their source maps and `renderer.css`, and nothing else; no bare import of a library of the host and no copy of React or MobX in either bundle; no module of Node and no `require` in the renderer; `dist/main.js` loads under Node with a stand-in of the global of the host, and activates and deactivates; the environment tests fail on a module of Node in the renderer, and the lint rule on `act` in a source file, each seen failing once |
 | HOST-05 | Unit/proof/packaged | REQ-200 | On a fake client of the host: every request of the way of a download and of a server status through `forCluster` of the cluster of the request, and nothing else; the bundle with no reader of a kubeconfig, no `@kubernetes/client-node` and no `ws`, and the main process running no process but kubectl. Packaged: a download and a server status counted on the API server as on v1; the identity of the `exec` plugin downloading, with the plugin run by the proxy |
 | HOST-06 | Unit/packaged | REQ-201 | An entry that is not there and one in each state that is not connected: refused, with their words, and the fake client asked nothing; writes off when the entry goes, leaves the connected state, or changes its path or its context name. Packaged: the cluster disconnected with a load in flight, then nothing of the extension counted on its API server and the entry still disconnected after a minute |
@@ -1704,16 +1704,24 @@ is no longer read before every slice and every merge, and the SDK is taken by th
 range of D10, `^2.0.0`, resolved to 2.0.0. The watch opens again while a change of
 the extension API that the extension uses is coming in a release of Freelens.
 
+REQ-198 is extended in place by this amendment: since 2026-11-07 the SDK is taken
+by the range of D10, `^2.0.0`, resolved to the version of the target.
+
 Decided while implementing, on 2026-11-07:
-- The target moves with each release of Freelens in the pull request of Renovate
-  that brings it, which bumps the SDK and `engines.freelens`: the release and what
-  it changed for the extension are read and recorded in that pull request, and the
-  header of this spec, the line of each workflow that builds Freelens and the
-  version of the SDK in the build test move in it, as PROCESS says.
-- The build test ties the version the range resolves to, which the bundles are
-  built from, to the version this header names with the commit of the target, as
-  the test of the workflows ties that commit: a release of the SDK that arrives
-  alone fails the build test until the target moves with it.
+- The target moves with each release of Freelens in the pull request of the group
+  `Freelens dependencies` that Renovate opens for the release of the SDK: the
+  release and what it changed for the extension are read and recorded in that pull
+  request, and the header of this spec, the line of each workflow that builds
+  Freelens and the version of the SDK in the build test move in it, as PROCESS
+  says. Renovate keeps the range of the SDK and moves the lockfile, and proposes
+  no minor or patch version for `engines.freelens`, which stays `^2.0.0` as REQ-196
+  says.
+- The build test ties the release the range resolves to, which the bundles are
+  built from, to the release and the version this header names: a release of the
+  SDK that arrives alone fails the build test until this header names it, and the
+  test of the workflows then holds the line of each workflow to the commit the
+  header names.
 - The main branch of the host is read once a day for changes to the extension API,
-  its documentation and the loading of the extensions, so that the watch opens
-  again before such a change reaches a release.
+  its documentation and the loading of the extensions: while one that the
+  extension uses is coming in a release, it is read again before every slice and
+  every merge, and recorded, while the target stays at its release.

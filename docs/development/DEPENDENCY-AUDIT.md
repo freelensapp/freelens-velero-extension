@@ -1,6 +1,6 @@
 # Dependencies
 
-Updated: 2026-10-29
+Updated: 2026-11-07
 
 What the extension ships, what it only builds with, and how both are kept
 current, on Freelens v2 since T0.7
@@ -65,7 +65,10 @@ The packed build is about 0.5 MB.
   the scripts of its root package for the tools run through `pnpm dlx`, and its
   `mise.toml` for Node and the tools of mise. A version arrives once Freelens
   took it, at that version, in one pull request, the group `Freelens
-  dependencies`, with the nightly of the SDK. React, MobX, react-window and
+  dependencies`, with a release of the SDK, whose range stays `^2.0.0` while the
+  lockfile moves; versions of the main branch of Freelens wait there for the
+  release that brings them, since the build test holds the libraries to the
+  catalog of the validation target. React, MobX, react-window and
   every other library follow the catalog. The pins of the test environment keep
   rules of their own: Velero and its plugin move together, kind, its node image
   and kubectl together, the checksums beside them by hand, and the image of the

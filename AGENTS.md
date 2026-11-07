@@ -957,12 +957,13 @@ The hosted checks run on every pull request and on main, on synthetic data only:
 The two workflows that build Freelens name the commit once, in `freelens_ref`,
 and cache the build by it and by nothing else; a unit test ties that line to the
 header of [SPEC-0015](docs/specs/SPEC-0015-freelens-v2-host.md), so the pin moves
-in both places when the target moves with a release of Freelens. A release is `npm-version.yaml`, which
-opens the pull request of the version, `tag.yaml`, which tags the version `X.Y.Z`
-or `X.Y.Z-N` once that pull request is merged, and `release.yaml`, which builds
-the tag and publishes a version with a hyphen on the npm tag `next`, released on
-GitHub as a prerelease, and any other on `latest`. The daily maintenance workflows
-and Renovate open their pull requests on branches named `automated/*`.
+in both places when the target moves with a release of Freelens. A release is
+`npm-version.yaml`, which opens the pull request of the version, `tag.yaml`, which
+tags the version `X.Y.Z` or `X.Y.Z-N` once that pull request is merged, and
+`release.yaml`, which builds the tag and publishes a version with a hyphen on the
+npm tag `next`, released on GitHub as a prerelease, and any other on `latest`. The
+daily maintenance workflows open their pull requests on branches named
+`automated/*`, and Renovate on `renovate/*`.
 
 ## Code Style
 
@@ -1036,7 +1037,7 @@ Code shared between both processes goes to `src/common/`.
 2. **Test changes** before committing
 3. **Run validation before committing:** `pnpm lint:fix && pnpm type:check && pnpm test:unit`
 4. **For Markdown and YAML:** run `pnpm trunk:fix`
-5. **Move the target with each release of Freelens**, in the pull request that brings it, and read the host drift watch again only while a change of the extension API is coming: see `docs/development/PROCESS.md`
+5. **Move the target with each release of Freelens**, in the pull request of Renovate that brings it, and read the main branch of the host before a slice and a merge only while a change of the extension API is coming: see the host drift watch in `docs/development/PROCESS.md`
 
 ## GitHub Actions (Claude Code Action) Rules
 
