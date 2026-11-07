@@ -1,13 +1,13 @@
 # SPEC-0017: The Write Actions
 
-- **Status:** Draft
+- **Status:** Approved
 - **Date:** 2026-11-07
 - **Milestone / tasks:** M5 / the ground rules of the write actions, T4.2, T4.3, T4.4, T4.5, T4.6
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`
 - **Reviewed main:** not relevant: the actions rest on the reviewed release alone, and behavior present only on the main branch of Velero is design guidance, never a baseline capability ([upstream drift watch](../development/PROCESS.md#upstream-drift-watch))
 - **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0
 - **Dependencies:** [the write gate](SPEC-0009-write-gate.md); [Backups](SPEC-0003-backup-read-only.md), [Restores](SPEC-0005-restore-read-only.md), [Schedules](SPEC-0006-schedule-read-only.md) and [locations](SPEC-0007-locations-read-only.md), read only; [the adherence of a schedule](SPEC-0013-schedule-adherence.md); [the Freelens v2 host](SPEC-0015-freelens-v2-host.md); [create a schedule](SPEC-0016-create-a-schedule.md), whose review, whose ends and whose form of the template this spec shares
-- **Approval:** Pending
+- **Approval:** Approved by the lead maintainer on 2026-11-07, with the plan of that day, which delegated the decisions of the fifth milestone to the choices this spec recommends: D1 to D15 as drafted, after two rounds of an independent review against the source of the reviewed release
 
 Governed by [AGENTS.md](../../AGENTS.md). A completed draft is not approval to
 implement.
