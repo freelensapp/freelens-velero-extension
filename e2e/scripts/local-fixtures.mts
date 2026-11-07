@@ -2104,7 +2104,7 @@ export interface ServerVersion {
 // (`pkg/apis/velero/v1/labels_annotations.go:48` of the reviewed release).
 export const STORAGE_LOCATION_LABEL = "velero.io/storage-location";
 // What the server of the release never collects, under the excluded resources of a backup that names the resources
-// it includes (`pkg/controller/backup_controller.go:71-82` and `529-542`).
+// it includes (`pkg/controller/backup_controller.go:72-84` and `529-542`).
 export const NEVER_COLLECTED_RESOURCES = [
   "volumesnapshots.snapshot.storage.k8s.io",
   "volumesnapshotcontents.snapshot.storage.k8s.io",
@@ -2116,11 +2116,12 @@ export const REFUSALS_OF_THE_SERVER = {
   restore: ["encountered labelSelector as well as orLabelSelectors in restore spec, only one can be specified"],
   orphan: ["No backups found for schedule", "No completed backups found for schedule"],
 };
-// How long the controllers of the installation take, in seconds from the start of the run, as the environment of
+// How long the controllers of the installation took, in milliseconds from the start of the run, as the environment of
 // 2026-11-06 recorded them: the backup of the ConfigMaps started at once and completed in two seconds; its restore
 // started a second later and completed in two; the backup of the volume started eleven seconds after the run and
 // completed in seven, after the backup of the ConfigMaps, which the Overview counts on; its restore started a second
-// later and completed in four; the three operations the server refused came last.
+// later and completed in four. The three operations the server refused came last, there minutes after the run and
+// here seconds after it: only the expiration of the refused backup carries that moment.
 const CONTROLLERS_TOOK = {
   backup: [0, 2_000],
   restore: [3_000, 2_000],
@@ -2156,8 +2157,9 @@ export function installationFixtures(
 ): KubeResource[] {
   requireCondition(owner, "Fixture ownership is required");
   requireCondition(Number.isFinite(validated), "The time the run was started is required");
+  // A managed cluster reports its minor version with a plus: the server of the release writes it as it is.
   requireCondition(
-    /^v\d+\.\d+\.\d+/.test(cluster.gitVersion) && /^\d+$/.test(cluster.major) && /^\d+$/.test(cluster.minor),
+    /^v\d+\.\d+\.\d+/.test(cluster.gitVersion) && /^\d+$/.test(cluster.major) && /^\d+\+?$/.test(cluster.minor),
     "The version of the API server is required",
   );
   const names = fixtureNames(run);
@@ -2226,10 +2228,10 @@ export function installationFixtures(
     backup,
     tabExpectations(tabArtifacts({ backup: names.syncedBackup, namespace: DEMO_NAMESPACE, started: validated })),
   );
-  // The sync creates a backup from the whole of what it read, so the two parts of the spec that are structures
-  // are written with nothing in them, where the controllers that patch what they changed leave none
-  // (`pkg/apis/velero/v1/backup_types.go:31` and `128`, `pkg/controller/backup_sync_controller.go:214`, against
-  // `pkg/controller/backup_controller.go:307`).
+  // The sync creates a backup from the whole of what it read, with the hooks of its spec emptied, so the two parts
+  // of the spec that are structures are written with nothing in them, where the controllers that patch what they
+  // changed leave none (`pkg/apis/velero/v1/backup_types.go:31` and `128`,
+  // `pkg/controller/backup_sync_controller.go:196` and `214`, against `pkg/controller/backup_controller.go:307`).
   const syncedByTheServer = (made: KubeResource): KubeResource => ({
     ...made,
     metadata: {

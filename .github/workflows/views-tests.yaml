@@ -47,7 +47,8 @@ jobs:
           # for the other suites and FND-10: they read what the fixtures wrote,
           # the counterparts of what the controllers of the installation leave
           # among them. The five suites that read none took 230 seconds there
-          # on 2026-11-06, the other five 375 on the environment of the demo.
+          # on 2026-11-06, the other five 375 on the environment of the demo,
+          # 380 with FND-10.
           - name: artifacts
             environment: demo
             suites:

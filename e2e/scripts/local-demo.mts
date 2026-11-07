@@ -2925,8 +2925,6 @@ function placeViewsAndTabs(): {
   return { names, runtime, told: tabExpectations(artifacts) };
 }
 
-// The fixtures of the views and of the adherence on the environment of the CRDs alone, beside its static fixtures
-// and its installation: no store, no server, and nothing the server makes or removes is waited for.
 // The version of the API server of the environment, as `kubectl version` reports it: the server of the release writes
 // it into every backup it takes, and the counterparts of its backups carry the one of the cluster they are placed in.
 function serverVersion(): ServerVersion {
@@ -2989,6 +2987,8 @@ function runSuites(headless: boolean, suites: string[], environment: NodeJS.Proc
   });
 }
 
+// The fixtures of the views and of the adherence on the environment of the CRDs alone, beside its static fixtures
+// and its installation: no store, no server, and nothing the server makes or removes is waited for.
 function placeStaticViews(): { names: ReturnType<typeof fixtureNames> } {
   verifyTarget();
   requireCondition(
@@ -3108,8 +3108,9 @@ async function runViews(): Promise<void> {
     "FREELENS_APP names an application installed in /Applications: the suites start a build made for them",
   );
   requireCondition(tarballs.length === 1, "One packed extension is expected in the repository: run pnpm pack");
-  // On the environment of the CRDs alone no controller runs: the suites that read only static objects run on it.
-  // A part of the hosted job names the environment it brought up, and runs on no other.
+  // On the environment of the CRDs alone no controller runs: the suites that read what the fixtures wrote, the
+  // counterparts of what the controllers leave among them, run on it. A part of the hosted job names the environment
+  // it brought up, and runs on no other.
   const withoutController = journal.mode === "definitions";
   const expected = process.env.E2E_ENVIRONMENT ?? "";
 

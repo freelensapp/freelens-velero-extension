@@ -8,6 +8,15 @@ import {
 } from "../integration/helpers/velero-guard";
 
 describe("the guard of the suites", () => {
+  it("leaves out the PATCH of the storage locations, which the server sends at every validation and the runner of the views sends where no server runs, and nothing else that writes", () => {
+    expect(
+      writesOf({ "PATCH backupstoragelocations resource": 3, "GET backupstoragelocations resource": 3 }, false, 0),
+    ).toEqual({});
+    expect(writesOf({ "PATCH backupstoragelocations resource": 3, "PATCH backups resource": 1 }, false, 0)).toEqual({
+      "PATCH backups resource": 1,
+    });
+  });
+
   // What the API server counted, by verb, kind and scope, as the helpers read it from its counters.
   const counts = {
     "LIST backups namespace": 4,

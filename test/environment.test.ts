@@ -11288,8 +11288,19 @@ describe("platform of the test environment", () => {
       progress: { itemsRestored: 1, totalItems: 1 },
     });
     expect(completed(byName[names.volumeBackup])).toBeGreaterThan(completed(backup));
-    // The three the server refused, with its words: the backup prepared before it was refused, with what the server
-    // writes into every backup it prepares.
+    // The three the server refused, with its words, the ones the live flow is pinned to and one more for the orphan;
+    // the backup prepared before it was refused, with what the server writes into every backup it prepares, the
+    // resources it never collects under its excluded resources, and the label of its location.
+    expect(REFUSALS_OF_THE_SERVER).toEqual({
+      backup: [REFUSALS.backup],
+      restore: [REFUSALS.restore],
+      orphan: [REFUSALS.orphan, "No completed backups found for schedule"],
+    });
+    expect(NEVER_COLLECTED_RESOURCES).toEqual([
+      "volumesnapshots.snapshot.storage.k8s.io",
+      "volumesnapshotcontents.snapshot.storage.k8s.io",
+    ]);
+    expect(STORAGE_LOCATION_LABEL).toBe("velero.io/storage-location");
     expect(byName[names.invalidBackup].status).toEqual({
       phase: "FailedValidation",
       validationErrors: REFUSALS_OF_THE_SERVER.backup,

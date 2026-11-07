@@ -419,7 +419,8 @@ up, and the suite passes on its second start. The file goes when it is read.
 | Adherence | `velero-adherence-<run>` | An installation no controller reads and nothing suggests, placed by the clock in two phases: eight schedules, awaited, overdue by a day and more with no backup of its submission, held beyond the grace by a backup in progress asked by hand, submitted at every look, its zone derived from the backup of its own submission, with no submission and the offset of that one, with its last submission a day after the placement, and one with a name of 63 characters and an expression that names its zone. See [the fixtures of the adherence](#the-fixtures-of-the-adherence) |
 | Two offsets | `velero-adherence-split-<run>` | Two schedules of five fields whose submissions were named two hours east of UTC and at UTC, the older twenty seconds before the newer, placed by the clock in two phases |
 | Budget of the adherence | `velero-adherence-scale-<run>` | Three hundred schedules of the expressions of the measure of the unit run, each with the backup of its submission named two hours east of UTC, placed by the clock in two phases, and no storage location |
-| Real schedule | `velero-demo` | One schedule the controller of the installation validates, `@every 8760h`, whose next run is a year after its creation, with the spec of the real backup as its template and no `skipImmediately`, which the controller writes. See [the fixtures of the adherence](#the-fixtures-of-the-adherence) |
+| Real schedule | `velero-demo` | One schedule the controller of the installation validates, `@every 8760h`, whose next run is a year after its creation, with the spec of the real backup as its template and no `skipImmediately`, which the controller writes; on the CRDs of the release alone its counterpart, Enabled, with `skipImmediately` written as the controller writes it. See [the fixtures of the adherence](#the-fixtures-of-the-adherence) |
+| Counterparts | `velero-demo` | On the CRDs of the release alone, what the controllers of the installation of `pnpm demo:up` leave in it, by the names of the run, each as the release leaves it: the schedule validated, the backup taken and its restore, the backup of the volume and its restore, the backup and the two restores refused, the two backups synced from the store; the storage location with the two times the runner of the views writes once a minute, standing in for the server. Placed by `fixtures-static`; see the amendment of 2026-11-07 of SPEC-0015 |
 
 They are put in place by `pnpm e2e:views`, once: a second run finds them. The
 times of the history of a schedule are counted back from when the fixtures were
@@ -455,7 +456,9 @@ order among themselves.
 No controller validates a synthetic location: what one reports is of a
 validation that is days old, whatever the age of the environment, and the views
 say that it may be out of date. The validation that is fresh is the one of the
-location of the installation, which its controller validates every minute. The
+location of the installation, which its controller validates every minute, and
+which on the CRDs of the release alone the runner of the views writes once a
+minute, standing in for the server. The
 locations of the namespace of the phases have a phase and no validation time,
 which the release writes together: they are what a view shows of a status that
 carries one without the other.
@@ -553,8 +556,9 @@ part: on 2026-11-06 the one job took 57 minutes, and the first run of four parts
 21, its longest part 20 minutes 56 seconds, each part about eight minutes of
 environment, placement and cleanup beside its suites. The parts were divided by
 the time of their suites in the one job: 853, 729, 745 and 610 seconds, the 610
-again into the 380 of the five suites that read the server and the 230 of the five
-that read none, which the part without a controller now runs together. The job
+again into the 375 of the five suites that read the server, 380 with FND-10, and
+the 230 of the five that read none, which the part without a controller now runs
+together. The job
 `views in Freelens v2` passes when the parts passed, and a unit test fails if a
 file of the suites is in no part or in two, a session of the integration test in
 any, or a suite that reads a controller in the part that has none. Each part uploads the
@@ -746,7 +750,12 @@ Nothing but the suite reads the cluster while a suite of the views runs: the gua
 of a suite counts on the API server the reads of the kinds of Velero in the whole
 cluster, whoever sends them. A read of the requests of every namespace once a
 minute, made beside the suites to watch them, failed the guard of the suite of the
-schedules.
+schedules. The one exception is the runner of the views on the CRDs of the release
+alone, which stands in for the server at the storage location of the installation:
+once a minute a read of that location by its name and a PATCH of it, which the
+guard leaves out as it leaves out the ones of the server, and which a window that
+compares reads takes again, as it takes a read anything else asked in the same
+time.
 
 Every suite starts only when the cluster holds the fixtures it needs, each probed
 by its name, the five of the tabs and the schedule the controller validated among
@@ -893,7 +902,7 @@ vitest.integration.config.ts e2e/__tests__/velero-e2e-adherence.tests.ts -t
 "what the suite of the adherence expects, computed by the rules of the
 controller"`. The suite reads the cluster only with `kubectl get` in a namespace
 and the counters of the API server, never inside a measure, and runs in the part
-of the other views of the hosted job (LM6 of SPEC-0013, and its amendment). It
+without a controller of the hosted job (LM6 of SPEC-0013, and its amendments). It
 took 137.97 and 132.81 seconds alone on the machine of the runs on 2026-10-26, 4
 minutes 11 seconds and 4 minutes 1 second with the build, the pack and the start
 of its runner, 133.85 seconds in the run of the pattern on 2026-10-27, and
