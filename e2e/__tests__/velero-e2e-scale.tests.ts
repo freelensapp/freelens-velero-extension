@@ -63,6 +63,15 @@ const POD_VOLUME_BACKUP_SEARCHES = [
   "in progress",
 ];
 
+// The lists of the two families of the operations of a volume, in the namespace of the installation.
+const PVB = "LIST podvolumebackups namespace";
+const PVR = "LIST podvolumerestores namespace";
+// How many reads of the installation each window of the reads waits for: one every fifteen seconds.
+const CYCLES = 3;
+// The backup whose band holds the most operations: the thousandth, with two hundred pod volume backups.
+const BUSIEST = "backup-1000";
+const OPERATIONS_OF_THE_BUSIEST = 200;
+
 function percentile(values: number[], fraction: number): number {
   const sorted = [...values].sort((one, other) => one - other);
 
@@ -416,6 +425,107 @@ describe("long list of backups", () => {
       expect(report.times.filter((time) => !(time.total > 0) || time.response > time.total)).toEqual([]);
       expect(report.mounted).toBeGreaterThan(0);
       expect(report.mounted).toBeLessThanOrEqual(MOUNTED);
+      expect(report.response.p95).toBeLessThan(BUDGET);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "reads the two thousand pod volume backups once at each read while their list is open, and not while the Overview is",
+    async () => {
+      // The requests the API server counted while the views read the installation `reads` times, from the end of a
+      // read to the end of the last: what the page that is shown asks at each read. On the CRDs alone no controller
+      // lists the two families, so what is counted is what the views asked.
+      const askedOver = async (reads: number) => {
+        await cluster.afterRead(frame);
+        const first = cluster.apiRequests();
+        const firstOfTheWorkloads = cluster.workloadRequests();
+
+        for (let read = 0; read < reads; read += 1) await cluster.afterRead(frame);
+        return {
+          ...cluster.counted(first, cluster.apiRequests()),
+          ...cluster.workloadReads(cluster.counted(firstOfTheWorkloads, cluster.workloadRequests())),
+        };
+      };
+      // What was read of a pod or of a Job in a namespace or by name: on the CRDs alone no server, node agent or
+      // maintenance Job runs, so what is counted there is what the views asked (SPEC-0014, REQ-190, KIND-14).
+      const workloads = (counts: Record<string, number>) =>
+        Object.fromEntries(Object.entries(counts).filter(([key]) => / (pods|jobs) /.test(key)));
+
+      await cluster.showList(frame);
+      await cluster.waitForList(frame, cluster.POD_VOLUME_BACKUPS);
+      const shown = await askedOver(CYCLES);
+
+      await cluster.openPage(frame, cluster.OVERVIEW);
+      await cluster.overview(frame);
+      // A read that was asked before the page was left may have asked them still: the window begins after it.
+      await cluster.afterRead(frame);
+      const overview = await askedOver(CYCLES);
+      const report = { cycles: CYCLES, podVolumeBackupsShown: shown, overviewShown: overview };
+
+      // The report is written before anything is asserted of it: a case that fails leaves what was counted.
+      console.log(`KIND-18 ${JSON.stringify(report)}`);
+      await cluster.writeReport("kind-18-reads-of-the-pod-volume-operations", report);
+      // One list of the two thousand at each read, however many they are, with a bound of one more for a read that
+      // ends at the edge of the window; none of the pod volume restores, which no view that is open shows.
+      expect(shown[PVB] ?? 0).toBeGreaterThanOrEqual(CYCLES);
+      expect(shown[PVB] ?? 0).toBeLessThanOrEqual(CYCLES + 1);
+      expect(shown[PVR] ?? 0).toBe(0);
+      // The Overview reads none of the families of the operations.
+      expect([overview[PVB] ?? 0, overview[PVR] ?? 0]).toEqual([0, 0]);
+      // And neither the list of the operations nor the Overview reads a pod or a Job.
+      expect([workloads(shown), workloads(overview)]).toEqual([{}, {}]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "opens the view of the backup of two hundred operations within the budget, twenty times over",
+    async () => {
+      await cluster.openPage(frame, cluster.BACKUPS);
+      await cluster.waitForBackups(frame);
+      expect(await cluster.search(frame, BUSIEST)).toEqual([BUSIEST]);
+      const workloadsBefore = cluster.workloadRequests();
+      // The first time the view asks the family of the operations, which the band waits for.
+      await cluster.openWorkspace(frame, BUSIEST);
+      const band = await cluster.volumeBand(frame, "rows");
+
+      expect(band.kind).toBe("PodVolumeBackup");
+      expect(band.count).toBe(`${OPERATIONS_OF_THE_BUSIEST} pod volume backups, from the newest`);
+      expect(band.rows).toHaveLength(10);
+      expect(band.more).toBe(true);
+      const times: number[] = [];
+
+      // Each time: a read with the view open, which keeps the family read; then the view is closed and opened again
+      // before the next read, so that what is measured is the view and its band built from what was read.
+      for (let index = 0; index < 22; index += 1) {
+        await cluster.readAgain(frame);
+        await cluster.closeWorkspace(frame);
+        const measured = await cluster.measureOpenWithBand(frame, BUSIEST);
+
+        // The first two warm what the ones after find loaded.
+        if (index >= 2) times.push(measured.response);
+      }
+      const report = {
+        operations: OPERATIONS_OF_THE_BUSIEST,
+        interactions: times.length,
+        budget: BUDGET,
+        response: {
+          p95: Math.round(percentile(times, 0.95)),
+          median: Math.round(percentile(times, 0.5)),
+          slowest: Math.round(Math.max(...times)),
+        },
+        times: times.map(Math.round),
+      };
+
+      console.log(`KIND-18 ${JSON.stringify(report)}`);
+      await cluster.writeReport("kind-18-busiest-backup-performance", report);
+      await cluster.closeWorkspace(frame);
+      await cluster.search(frame, "");
+      // The view and its band read nothing of a pod or of a Job, twenty-two times opened (KIND-14).
+      expect(cluster.workloadReads(cluster.counted(workloadsBefore, cluster.workloadRequests()))).toEqual({});
+      expect(report.interactions).toBe(20);
+      expect(times.filter((time) => !(time > 0))).toEqual([]);
       expect(report.response.p95).toBeLessThan(BUDGET);
     },
     TIMEOUT,

@@ -1500,10 +1500,22 @@ the changes made on purpose.
   reference names the backup its labels do not; the pod volume backup of the real
   backup of the volume with its phase, snapshot ID, node, volume and namespace of the
   pod as the cluster holds them, and the way to its repository and back.
+- KIND-12 (the tab of the volumes): the row of the real backup of the volume of the
+  run whose method is PodVolumeBackup leads, from its details, to the pod volume backup
+  of the installation that made it, found by the owner of the tab, the namespace of the
+  pod, the pod and the volume, which the suite reads on the cluster by the label of the
+  backup; the way back leads to the backup. The rows of the backup synced from the
+  store offer no way and say nothing absent, as before.
 - KIND-14 (no write): no way to select, edit, cancel or delete a repository or a pod
-  volume operation, by pointer or by keyboard; nothing written. The Jobs of the
-  maintenance are not counted yet: the server lists them at its own passes, which the
-  count has to tell from the views.
+  volume operation, by pointer or by keyboard; nothing written. Nothing of a pod or of
+  a Job is read, counted on the API server on the CRDs of the release alone, in the
+  suite of the long lists, where no server, node agent or maintenance Job reads
+  either: no read of a pod or of a Job in a namespace or by name while the list of the
+  two thousand pod volume backups, the Overview and the view of the backup of two
+  hundred operations are shown. Decided while implementing, on 2026-11-07: on the
+  environment with the server, the lists of the Jobs of its maintenance cannot be
+  told from the views by the counters, which carry no namespace and no client, and
+  the reader of the extension asks no path outside `/apis/velero.io/` (LOC-09).
 - KIND-16 (the readers): to the first reader the band says that the pod volume
   backups cannot be read and how many the backup has is not known, with no count; to
   the second, a pod volume restore with the restore it belongs to, and a pod volume
@@ -1516,9 +1528,17 @@ the changes made on purpose.
   restore draws.
 - KIND-18 (the long list): the two thousand pod volume backups, a hundred rows
   mounted at most, twenty interactions against the budget of 250 milliseconds at the
-  95th percentile, reported as `kind-18-volumes-performance`. T51-PR5-PENDING: the
-  workspace of the backup of 200 operations, the reads counted while the list is
-  open.
+  95th percentile, reported as `kind-18-volumes-performance`. The view of the backup
+  of two hundred operations, opened twenty times after two that warm it, each time
+  after a read with the view open, which keeps the family read: the band whole in
+  34 milliseconds at the 95th percentile, 32 at the median, reported as
+  `kind-18-busiest-backup-performance`. The reads, counted on the API server over
+  three reads of the installation: with the list of the two thousand open, three
+  lists of the pod volume backups, one at each read, and none of the pod volume
+  restores; with the Overview, none of either, reported as
+  `kind-18-reads-of-the-pod-volume-operations`. Measured on 2026-11-07 on macOS x64
+  with Docker Desktop, in Freelens 2.0.0 of the release: the list of the two thousand
+  at 159 milliseconds at the 95th percentile and 46 at the median.
 
 Amendment of 2026-11-07 (REQ-195, KIND-19): the suite of the volumes keeps the
 server of the release, the real repository and the real pod volume operations, in
