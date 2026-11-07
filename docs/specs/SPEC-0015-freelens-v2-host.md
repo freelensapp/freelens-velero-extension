@@ -5,7 +5,7 @@
 - **Milestone / tasks:** Foundation / T0.7, T0.8
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, unchanged
 - **Reviewed main:** not relevant: the subject of this spec is the host, and it reads or changes no behavior of Velero
-- **Freelens validation target:** freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0, with `@freelensapp/extensions` 2.0.0; the host drift watch moved it to this release, and the range of versions of the SDK of D10 is work of M6
+- **Freelens validation target:** freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0, with `@freelensapp/extensions` 2.0.0; the host drift watch moved it to this release and ended on 2026-11-07: the SDK is taken by the range `^2.0.0` of D10, and the target moves with the releases of Freelens, as PROCESS says
 - **Dependencies:** [local foundation](SPEC-0001-local-foundation.md); [test environment](SPEC-0004-test-environment-every-platform.md); [the write gate](SPEC-0009-write-gate.md); [the diagnostic request and its transport](SPEC-0010-diagnostic-request-and-transport.md); [the viewers](SPEC-0011-artifact-viewers.md); for the re-verification, the specs of M1 to M3, SPEC-0002 to SPEC-0012, and [the adherence of a schedule](SPEC-0013-schedule-adherence.md) for T3.1 and T3.2
 - **Approval:** Approved by the lead maintainer on 2026-10-16, as drafted. The version and release plan, D10, was decided by the lead maintainer the same day
 
@@ -150,7 +150,7 @@ which none is kept; the work of M6 at Freelens 2.0.0, which D10 names.
 | REQ-212 | The extension runs on the React 19 and the MobX 7 of the host, one copy of each. `observableRef` replaces `observable.ref`; a decorated observable field is `@observable accessor`, and no class calls `makeObservable(this)` without its annotations; a class whose instances are serialized keeps plain fields with an annotation map. An `observer` reads its props in its render, and a callback the host calls from its own derivations, `getItems` or `customizeHeader` of the list, carries the values it needs from there. A change of a preference made through MobX reaches the views | HOST-17 |
 | REQ-213 | The lines of a log and the resources viewer are windowed by react-window 2, bundled at the version of the catalog of the host, in place of the virtual list the host no longer offers. What SPEC-0011 says of the lists of lines stays: at most a hundred rows mounted, each line whole with its wrap, the search that brings its match into view, the focus on the first line after a load, and the keyboard. The budgets of REQ-147 of SPEC-0011, measured again in the packaged Freelens v2, are the acceptance | HOST-18 |
 | REQ-214 | The unit and component tests run on the stub of `@freelensapp/extensions` of the template, grown as the tests need, with Testing Library 16 on React 19. The doubles of the host are written again from the source of the host at the commit of the validation target, each component with the behavior it has there and the file and line it was read at. The tests of the frames use the addresses of v2. The build test pins the manifest of REQ-196 and REQ-198 and loads the bundles as REQ-199 says | HOST-19 |
-| REQ-215 | The suites of the views and FND-10 run in a Freelens built from source at the commit of the validation target, in CI on every pull request and on main, the build cached by that commit and not by a version. On a machine of a developer they run on the nightly application built from the same commit, its download checked against its published checksum. The integration test of the template runs beside them, with a session for each of the five kinds, on the disposable kind cluster of its job. The host facts of AGENTS.md that the suites rest on are proven again on v2, or removed | HOST-20 |
+| REQ-215 | The suites of the views and FND-10 run in a Freelens built from source at the commit of the validation target, in CI on every pull request and on main, the build cached by that commit and not by a version. On a machine of a developer they run on the nightly application built from the same commit, its download checked against its published checksum. The integration test of the template runs beside them, with a session for each of the five kinds, on the disposable kind cluster of its job, which holds the CRDs of the release alone: no Velero server, node agent or store. The suites of the views that read what the fixtures wrote, the counterparts of what the controllers leave in the installation among them, run on the CRDs of the release alone too, with static fixtures and the runner standing in for the server at the storage location; the suites that read what only a server makes on the environment with its fixtures and the server of the release. The host facts of AGENTS.md that the suites rest on are proven again on v2, or removed | HOST-20 |
 | REQ-216 | The version line is 1.0.0. Main takes a prerelease of it, `1.0.0-N`, from the pull request of the version workflow, never from a change by hand. A prerelease is tagged, published on the npm tag `next`, and released on GitHub as a prerelease. 1.0.0 is published on `latest` only after Freelens 2.0.0 is released and M6 is done, since installing by name takes the newest version that is not a prerelease, whatever its `engines`. With Freelens 2.0.0 the pin of the SDK becomes a range of versions and the integration runs at the tag v2.0.0, as work of M6 | HOST-21 |
 | REQ-217 | The documents name Freelens v2 as the reference, with T0.7: ROADMAP, with the plan of D10 in its releases, ARCHITECTURE, TESTING, the README of the project, AGENTS.md with its section of the host facts written again for v2, RECON-T0.1, DEPENDENCY-AUDIT, LOCAL-STORAGE and TRY-IT. The headers of SPEC-0013 and SPEC-0014, approved and to be implemented on v2, name the v2 target. No document but the history of the evidence names Freelens 1.10.3 as the reference | HOST-22 |
 | REQ-218 | PROCESS has a host drift watch: until Freelens 2.0.0 is released, the main branch of the host and the one of the template are read before every slice and before every merge. A change to what the extension uses is taken in before the slice goes on, with the pin of the validation target moved and recorded in this spec | HOST-23 |
@@ -517,6 +517,12 @@ does not read `engines`: a 1.0.0 on `latest` before Freelens 2.0.0 would be
 offered to every user of Freelens 1, where it is Incompatible. A prerelease on
 `next` is installed only by those who ask for it.
 
+**At Freelens 2.0.0, on 2026-11-07.** The SDK is taken by the range `^2.0.0`,
+which resolves to 2.0.0, the version of the target. The views and the integration
+run at the commit of the tag v2.0.0 since the move of 2026-10-29, named by that
+commit, which no later move of a tag can change. The host drift watch ended: see
+the amendment of 2026-11-07 below.
+
 ### D11: The Documents And The Process
 
 **Decision.** With T0.7 the reference of compatibility becomes Freelens v2 in the
@@ -588,7 +594,7 @@ no fixture holds real data.
 | --- | --- | --- | --- |
 | HOST-01 | Packaged, and packaged once on 1.10.3 | REQ-196 | On v2: the tarball installed from the Extensions page is listed as Enabled, both entries load, and neither log of the host has an error of the extension. On Freelens 1.10.3 as released, once, recorded in the evidence: the same tarball is listed as Incompatible, with no command to enable it, and no line of the extension is logged |
 | HOST-02 | All layers, CI on main | REQ-197 | The checks of SPEC-0002 to SPEC-0012 and ADH-01 to ADH-08 and the measure of ADH-16 at the unit layer, green on v2; the guard of every suite counting on the API server what it counted on v1 |
-| HOST-03 | Build unit | REQ-198 | The build test reads the manifest: the range, the type, the entries, the files, the exact pin, the libraries of the host as devDependencies at the versions of the catalog, react-window alone in `dependencies`. An install with React one patch below the peer range of the SDK fails, seen once |
+| HOST-03 | Build unit | REQ-198 | The build test reads the manifest: the range, the type, the entries, the files, the exact pin of the SDK until 2026-11-07 and the range of D10 since, the libraries of the host as devDependencies at the versions of the catalog, react-window alone in `dependencies`. An install with React one patch below the peer range of the SDK fails, seen once |
 | HOST-04 | Build unit | REQ-199 | `dist/` holds the two entries, their source maps and `renderer.css`, and nothing else; no bare import of a library of the host and no copy of React or MobX in either bundle; no module of Node and no `require` in the renderer; `dist/main.js` loads under Node with a stand-in of the global of the host, and activates and deactivates; the environment tests fail on a module of Node in the renderer, and the lint rule on `act` in a source file, each seen failing once |
 | HOST-05 | Unit/proof/packaged | REQ-200 | On a fake client of the host: every request of the way of a download and of a server status through `forCluster` of the cluster of the request, and nothing else; the bundle with no reader of a kubeconfig, no `@kubernetes/client-node` and no `ws`, and the main process running no process but kubectl. Packaged: a download and a server status counted on the API server as on v1; the identity of the `exec` plugin downloading, with the plugin run by the proxy |
 | HOST-06 | Unit/packaged | REQ-201 | An entry that is not there and one in each state that is not connected: refused, with their words, and the fake client asked nothing; writes off when the entry goes, leaves the connected state, or changes its path or its context name. Packaged: the cluster disconnected with a load in flight, then nothing of the extension counted on its API server and the entry still disconnected after a minute |
@@ -605,7 +611,7 @@ no fixture holds real data.
 | HOST-17 | Component/packaged | REQ-212 | An `observer` that follows a change of the store of the preferences; the callbacks of the list reading no props outside the render. Packaged: an allowance taken back in the target bar gone from it at once, and a namespace chosen there followed by every page |
 | HOST-18 | Component/unit measure/packaged | REQ-213 | At most a hundred rows mounted while a log scrolls, a line whole with its wrap, a match brought into view, the focus on the first line; the measure of the unit run on 500,000 lines; packaged: VIEW-10 on the log of 200,000 lines, within its budgets |
 | HOST-19 | Unit | REQ-214 | The unit run on the stub with Testing Library 16, with its files and its count; each double naming the file and line of the host it follows; the build test pinning v2 |
-| HOST-20 | CI | REQ-215 | The workflows of the views and of the integration building Freelens at the commit of the validation target, cached by that commit; the five sessions of the integration test of the template green; a local run on the nightly application recorded with its checksum |
+| HOST-20 | CI | REQ-215 | The workflows of the views and of the integration building Freelens at the commit of the validation target, cached by that commit; the five sessions of the integration test of the template green on the CRDs of the release alone, with no Velero server, node agent or store, and so the ten suites of the views that read no controller, with FND-10, on the static fixtures and the counterparts of what the controllers leave; a local run on the nightly application recorded with its checksum |
 | HOST-21 | Workflow | REQ-216 | The first prerelease after it is asked for: its tag, the npm tag `next`, the GitHub release marked as a prerelease, and `latest` untouched |
 | HOST-22 | Review | REQ-217 | A search of the documents: Freelens 1.10.3 named as the reference nowhere but in the history of the evidence |
 | HOST-23 | Review | REQ-218 | The section of PROCESS, and the watch recorded in every pull request until Freelens 2.0.0 |
@@ -1623,3 +1629,128 @@ the workspace, pnpm stopped with `ERR_PNPM_PEER_DEP_ISSUES`, an unmet peer of
 `@freelensapp/extensions` 2.0.0 for each. The packaged suites on Freelens 2.0.0, the
 views, the pre-review and the integration, run after these checks, on another machine,
 and their evidence is written here with their run.
+
+**Amendment of 2026-11-06: the integration test without a controller** (REQ-215,
+HOST-20). The integration job brings its environment up with
+`pnpm e2e:cluster:up:definitions`: the cluster with the 13 CRDs of the reviewed
+release alone, from its installer with `--crds-only`, and no longer the Velero server,
+the node agent and the store of `pnpm e2e:cluster:up`. Each of its sessions places an
+object of its own that no controller reads, so they never needed one: without it they
+cannot come to depend on what a controller does, a run does not wait for one, and the
+same sessions could run on the CRDs of more than one release. This is the practice of
+the other extensions of the organization, whose integration tests apply the CRDs of a
+release and static objects with no controller, and test the views, not the controller.
+Approved by the lead maintainer on 2026-11-06, to be applied without losing quality and
+saving time where it can be done correctly. REQ-215 and HOST-20 are rewritten in
+place, with this paragraph beside them. The suites of the views keep the controller of
+the release for now: which of their cases move to static objects, and which stay in a
+job with the real controller, is decided in a later pull request.
+
+A first run on the CRDs alone failed only on the console of its first session: an API
+server starts serving a CRD, with the watch cache of its storage, at the first request
+for it, and from Kubernetes 1.31 it answers 429 Too Many Requests to the watches and
+the reads that need that cache while it is filled; where Velero runs, its server has
+read every kind before anyone opens a view. Of the five reads that got the answer, all
+were first reads of a kind of the release: the storage locations of the cluster, then
+the backups, the schedules, the snapshot locations and the repositories of the
+namespace of the session. The environment now waits until the discovery of the API
+server names the 13 kinds and its OpenAPI their two versions, then lists the kinds
+once, which starts each of them before a session reads one. On 2026-11-06, on another
+machine, at the commit of the validation target, the integration test on this
+environment passed, FND-10 and the five sessions with their 21 cases, with no answer
+429: the environment up in 55 s, the wait 1,993 ms of it, and the sessions in 61 s,
+where the full installation took 87 s and 63 s on the same branch, the same machine and
+the same evening.
+
+**Amendment of 2026-11-06: the views that read no controller** (REQ-215, HOST-20). Five
+suites of the views read only what the fixtures wrote: `velero-e2e-gate`,
+`velero-e2e-preferences`, `velero-e2e-restricted` with the one of the restores,
+`velero-e2e-scale` and `velero-e2e-schedules`. They run in a part of the hosted job of
+their own, on the CRDs of the release alone: `fixtures-static` places there the static
+fixtures, with no scope of a controller to check, and an installation of their own, the
+storage location the installer makes, with the phase and the time of a validation its
+server writes together, and a completed backup; the runner of the views places the
+fixtures of the views and of the adherence, waits for no server, refuses every other
+suite, and tells the suites to look for none of the objects a controller makes. The
+other suites keep the server of the release until their cases that read what it makes
+have static counterparts. On 2026-11-06, on another machine, the five passed there, 57
+cases of 57, in 200 s, with the environment up in 53 s and its static fixtures in 26 s.
+REQ-215 and HOST-20 are extended in place. Superseded on 2026-11-07, below: the
+counterparts of what the controllers leave take the place of the completed backup of
+that installation, and the other suites that read no server move to the same part.
+
+**Amendment of 2026-11-07: the counterparts of what the controllers leave** (REQ-215,
+HOST-20). Five more suites read the installation of the demo as its controllers leave
+it: `velero-e2e-adherence`, `velero-e2e-journey`, `velero-e2e-locations`,
+`velero-e2e-overview` and `velero-e2e-restores`. On the CRDs of the release alone,
+`fixtures-static` now places in the installation the counterparts of those objects,
+by the names of the run, each written as the reviewed release leaves it, read in its
+source and checked against the objects the server of the release wrote on 2026-11-06
+in the environment of the demo, which the maintainers keep outside the repository and
+read again at the next bump of the release: the schedule its controller validates,
+Enabled, with `skipImmediately` written
+into its spec (`pkg/controller/schedule_controller.go:113-131`); the backup it took
+and its restore, the backup of the volume of the run and its restore, completed, with
+the defaults the server writes into the spec of a backup it prepares, the resources it
+never collects, the label of its location and the annotations of the cluster it was
+taken in (`pkg/controller/backup_controller.go:379-428`, `486` and `500-507`), and the
+spec of a restore as the release keeps it (`pkg/controller/restore_controller.go:249-251`
+and `310-312`); the backup and the two restores the server refused, with its words
+(`backup_controller.go:598`, `restore_controller.go:336`, `381` and `387`); and the two
+backups its sync creates from the files the store is given, made as the fixtures make
+them for the store, with the label of the location the sync writes and the two
+structures of the spec it writes with nothing in them
+(`pkg/controller/backup_sync_controller.go:198-214`). The server validates the storage
+location of its installation once a minute and syncs it once a minute, writing the time
+of each (`pkg/controller/backup_storage_location_controller.go:223`,
+`backup_sync_controller.go:270`, `pkg/cmd/server/config/config.go:26-27`): where no
+server runs, the runner of the views writes the two times before the suites start and
+once a minute while they run, and stops with them; the guard of the suites leaves the
+PATCH of the storage locations out of the writes, as it does where the server sends it,
+and the suites prove that nothing else of the installation was written by the versions
+of its objects. The part of the hosted job without a controller runs the ten suites
+and FND-10; the three parts with the server of the release keep the suites that read
+what only a server makes, the artifacts, the pre-review, the volumes and the server.
+The suite of the volumes, the real repository and the real pod volume operations of
+REQ-195 of SPEC-0014 stay with the server. REQ-215 and HOST-20 are extended in place.
+
+**Amendment of 2026-11-07: the parts a run of the views takes** (REQ-215, HOST-20).
+The suites of the views and FND-10 run on main, every night and on demand, every
+part of them; a pull request runs the parts its changed files reach, by the rules
+of `e2e/views-parts.json`, every part for a change to the runner, the environment,
+the main process or the toolchain and for a file no rule knows, and none for
+documents and unit tests alone. The part without a controller is divided in two by
+the times of its suites. The end to end tests run on main, every night, and on a
+pull request that changes what they run. Under the direction the lead maintainer
+approved on 2026-11-07: every suite still runs on main after each merge, and a
+change a pull request does not run a suite for meets it there.
+
+**Amendment of 2026-11-07: the end of the host drift watch** (REQ-198, D10, D11).
+Freelens 2.0.0 was released on 2026-10-28, and the target moved to the commit of
+its tag on 2026-10-29. Under the direction the lead maintainer approved on
+2026-11-07, the watch of D11 ends: the main branch of the host and of the template
+is no longer read before every slice and every merge, and the SDK is taken by the
+range of D10, `^2.0.0`, resolved to 2.0.0. The watch opens again while a change of
+the extension API that the extension uses is coming in a release of Freelens.
+
+REQ-198 is extended in place by this amendment: since 2026-11-07 the SDK is taken
+by the range of D10, `^2.0.0`, resolved to the version of the target.
+
+Decided while implementing, on 2026-11-07:
+- The target moves with each release of Freelens in the pull request of the group
+  `Freelens dependencies` that Renovate opens for the release of the SDK: the
+  release and what it changed for the extension are read and recorded in that pull
+  request, and the header of this spec, the line of each workflow that builds
+  Freelens and the version of the SDK in the build test move in it, as PROCESS
+  says. Renovate keeps the range of the SDK and moves the lockfile, and proposes
+  no minor or patch version for `engines.freelens`, which stays `^2.0.0` as REQ-196
+  says.
+- The build test ties the release the range resolves to, which the bundles are
+  built from, to the release and the version this header names: a release of the
+  SDK that arrives alone fails the build test until this header names it, and the
+  test of the workflows then holds the line of each workflow to the commit the
+  header names.
+- The main branch of the host is read once a day for changes to the extension API,
+  its documentation and the loading of the extensions: while one that the
+  extension uses is coming in a release, it is read again before every slice and
+  every merge, and recorded, while the target stays at its release.

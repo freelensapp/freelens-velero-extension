@@ -16,7 +16,9 @@ const SCHEDULE_PATCH = "PATCH schedules resource";
  * ones counted over a window of `minutes`: every request of every kind of
  * `velero.io` that is not a read. One is left out, which the installation
  * under test makes by itself: its controller writes into the status of its
- * storage location every time it validates it. So is the PATCH of a schedule
+ * storage location every time it validates it, and on the CRDs of the release
+ * alone the runner of the views writes it once a minute in its place, standing
+ * in for the server at that location. So is the PATCH of a schedule
  * by name, when `patchedAtEveryLook` says that its controller sends one at
  * every look, once a minute, but no more of them than the whole minutes of the
  * window and two: the ones above that bound, and a PATCH of a schedule of

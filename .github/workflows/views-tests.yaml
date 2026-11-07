@@ -7,6 +7,9 @@ on:
   pull_request:
     branches:
       - "*"
+  # Every part, every night, on main.
+  schedule:
+    - cron: 17 1 * * *
   workflow_dispatch: {}
 
 permissions:
@@ -19,11 +22,56 @@ env:
   freelens_ref: b9b53e16056578c5407312eba5823a089972f6d5
 
 jobs:
-  # The views in Freelens built from source at the validation target, against
-  # the test environment with its fixtures left in place. The application is
-  # built as the integration tests build it, and cached by the same key.
+  # The parts a run takes, by e2e/scripts/views-plan.mts and the rules of
+  # e2e/views-parts.json: every part on main, every night and on demand; on a
+  # pull request, the parts its changed files reach, every part for a file no
+  # rule knows, and none for documents and unit tests alone.
+  plan:
+    name: parts of the views
+
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+
+    outputs:
+      parts: ${{ steps.plan.outputs.parts }}
+
+    steps:
+      - name: Checkout plugin
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Decide the parts
+        id: plan
+        run: node e2e/scripts/views-plan.mts
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+
+  # The views in Freelens built from source at the validation target, in parts
+  # side by side: each part is a job with an environment of its own, the test
+  # environment with its fixtures left in place or the CRDs of the release
+  # alone, and a run takes as long as its longest part instead of the sum of
+  # them. The application is built as the integration tests build it, and
+  # cached by the same key. The parts are in e2e/views-parts.json, and a unit
+  # test checks that they name every suite of the views, the pre-review and
+  # FND-10, each in one part, and that a part with no controller names only
+  # suites that read none.
   test-views:
-    name: views in Freelens v2
+    name: views in Freelens v2 (${{ matrix.part.name }})
+    needs: plan
+    if: ${{ needs.plan.outputs.parts != '[]' }}
+
+    strategy:
+      # A part that fails does not stop the others: a run reports every suite.
+      fail-fast: false
+      matrix:
+        part: ${{ fromJSON(needs.plan.outputs.parts) }}
 
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 150
@@ -123,7 +171,15 @@ jobs:
       # generated credentials, is under the home of the runner: no step uploads it.
       - name: Bring the test environment up with its fixtures
         id: environment
-        run: pnpm --color=always demo:up
+        run: |
+          if [ "${ENVIRONMENT}" = definitions ]; then
+            pnpm --color=always e2e:cluster:up:definitions
+            node e2e/scripts/local-demo.mts fixtures-static --context kind-freelens-velero-dev
+          else
+            pnpm --color=always demo:up
+          fi
+        env:
+          ENVIRONMENT: ${{ matrix.part.environment }}
 
       - name: Checkout app
         uses: actions/checkout@v7
@@ -331,23 +387,27 @@ jobs:
           sudo chmod 4755 freelens/freelens/dist/linux*-unpacked/chrome-sandbox
           echo "FREELENS_APP=$(echo "$PWD"/freelens/freelens/dist/linux*-unpacked)" >> "$GITHUB_ENV"
 
-      # Every suite of the views and FND-10, in one run from this repository,
-      # as `pnpm e2e:views` runs them: the runner places the fixtures of the
-      # views and of their tabs, waits for the requests the server removes, and
-      # runs the suites one at a time under xvfb, each in a new profile of the
-      # application. A suite that fails is not run again.
-      - name: Run the suites of the views and the integration test
+      # The suites of the part, in one run from this repository, as
+      # `pnpm e2e:views` runs them: on the environment with its fixtures the
+      # runner places the fixtures of the views and of their tabs and waits for
+      # the requests the server removes; on the CRDs alone it places the static
+      # ones and waits for nothing. It runs the suites one at a time under xvfb,
+      # each in a new profile of the application, on the environment the part
+      # names and no other. A suite that fails is not run again.
+      - name: Run the suites of the part
         run: node e2e/scripts/local-demo.mts views --context kind-freelens-velero-dev
         env:
-          E2E_TEST_PATTERN: velero-e2e pre-review extensions
+          E2E_TEST_PATTERN: ${{ join(matrix.part.suites, ' ') }}
+          E2E_ENVIRONMENT: ${{ matrix.part.environment }}
 
-      # The cleanup of the fixtures of the tabs, which has the server delete the
-      # backups it synced from the store and removes the namespaces of the run,
-      # then the readiness of the installation it leaves: proven here on the
-      # hosted runner, after the suites, whatever they found, and before the
-      # environment is taken down.
+      # On the environment with its fixtures, the cleanup of the fixtures of the
+      # tabs, which has the server delete the backups it synced from the store
+      # and removes the namespaces of the run, then the readiness of the
+      # installation it leaves: proven here on the hosted runner, after the
+      # suites, whatever they found, and before the environment is taken down.
+      # The CRDs alone have no server to ask: they go with the environment.
       - name: Remove the fixtures and verify the environment they leave
-        if: ${{ !cancelled() && steps.environment.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.environment.outcome == 'success' && matrix.part.environment == 'demo' }}
         run: |
           node e2e/scripts/local-demo.mts fixtures-cleanup --context kind-freelens-velero-dev
           node e2e/scripts/local-demo.mts verify --context kind-freelens-velero-dev
@@ -358,7 +418,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: views
+          name: views-${{ matrix.part.name }}
           path: e2e-artifacts/
           if-no-files-found: ignore
           retention-days: 14
@@ -366,3 +426,31 @@ jobs:
       - name: Take the test environment down
         if: always()
         run: node e2e/scripts/local-demo.mts down --context kind-freelens-velero-dev
+
+  # The parts as one check, under the name of the job they divide: it
+  # passes when the plan passed and every part it chose passed, or when it
+  # chose none.
+  # It runs whatever happened, also in a run that was cancelled, so that the
+  # check is never skipped while a part did not pass.
+  views:
+    name: views in Freelens v2
+    needs: [plan, test-views]
+    if: ${{ always() }}
+
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 5
+
+    steps:
+      - name: Check that every part passed
+        env:
+          PLAN: ${{ needs.plan.result }}
+          PARTS: ${{ needs.plan.outputs.parts }}
+          RESULT: ${{ needs.test-views.result }}
+        run: |-
+          echo "The plan: ${PLAN}; the parts of the views: ${PARTS:-none decided}, ${RESULT}"
+          test "${PLAN}" = success
+          if [ "${PARTS}" = "[]" ]; then
+            echo "No part of the views is needed for these changes."
+            exit 0
+          fi
+          test "${RESULT}" = success

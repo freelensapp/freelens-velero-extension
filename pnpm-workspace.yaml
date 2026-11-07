@@ -6,8 +6,8 @@ allowBuilds:
 engineStrict: true
 
 # pnpm holds back any version younger than minimumReleaseAge (1 day by
-# default). @freelensapp/extensions is pinned exactly to a nightly that is
-# often published on the day it is adopted.
+# default). @freelensapp/extensions is taken at the release of the validation
+# target, which the target may move to on the day it is published.
 minimumReleaseAgeExclude:
   - '@freelensapp/extensions'
 

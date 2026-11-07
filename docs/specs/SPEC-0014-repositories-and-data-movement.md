@@ -1519,3 +1519,13 @@ the changes made on purpose.
   95th percentile, reported as `kind-18-volumes-performance`. T51-PR5-PENDING: the
   workspace of the backup of 200 operations, the reads counted while the list is
   open.
+
+Amendment of 2026-11-07 (REQ-195, KIND-19): the suite of the volumes keeps the
+server of the release, the real repository and the real pod volume operations, in
+the part of the hosted job of the views with the server. The suites of the Overview
+and of the locations, which list the backup of the volume of the run and its
+restore among the operations of the installation, run on the CRDs of the release
+alone, where the static fixtures hold their counterparts, completed with their one
+item each as the server left them on 2026-11-06, and no repository and no pod volume
+operation, which the suites count on the cluster (SPEC-0015, amendment of
+2026-11-07).

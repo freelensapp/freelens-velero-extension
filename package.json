@@ -49,6 +49,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "e2e": "pnpm build && node e2e/scripts/local-demo.mts fixtures --context kind-freelens-velero-dev && node e2e/scripts/local-demo.mts transport-proof --context kind-freelens-velero-dev",
     "e2e:cluster:up": "node e2e/scripts/local-demo.mts up --context kind-freelens-velero-dev",
+    "e2e:cluster:up:definitions": "node e2e/scripts/local-demo.mts up-definitions --context kind-freelens-velero-dev",
     "e2e:cluster:down": "node e2e/scripts/local-demo.mts down --context kind-freelens-velero-dev",
     "demo:up": "pnpm e2e:cluster:up && node e2e/scripts/local-demo.mts fixtures-static --context kind-freelens-velero-dev && node e2e/scripts/local-demo.mts fixtures-live --context kind-freelens-velero-dev",
     "demo:views": "node e2e/scripts/local-demo.mts demo --context kind-freelens-velero-dev",
@@ -81,7 +82,7 @@
     "react-window": "2.3.4"
   },
   "devDependencies": {
-    "@freelensapp/extensions": "2.0.0",
+    "@freelensapp/extensions": "^2.0.0",
     "@testing-library/dom": "10.4.2",
     "@testing-library/react": "16.3.3",
     "@types/node": "24.19.2",
