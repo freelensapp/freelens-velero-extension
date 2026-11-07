@@ -151,7 +151,7 @@ of the release alone, every image an official release pinned by digest. The cont
 | Command | What it does |
 | --- | --- |
 | `pnpm e2e:cluster:up` | Installs the pinned kind and kubectl, pulls the images, creates the cluster, installs the storage and Velero, verifies the environment. Run again, it resumes the environment it owns |
-| `pnpm e2e:cluster:up:definitions` | Installs the pinned kind and kubectl, pulls the images, creates the cluster and installs the CRDs of the release alone: no server, node agent or store. The environment of the integration tests and, with `node e2e/scripts/local-demo.mts fixtures-static --context kind-freelens-velero-dev`, of the suites of the views that read no controller. It refuses an environment that holds more than the CRDs and the static fixtures it made, and leaves out the verification of `pnpm e2e:cluster:up`: the proof of the egress rules and the checks of the cleanup and of an installation free of fixtures, which the E2E workflow runs on every pull request. On its environment, the actions that install, ask or verify a server refuse to run |
+| `pnpm e2e:cluster:up:definitions` | Installs the pinned kind and kubectl, pulls the images, creates the cluster and installs the CRDs of the release alone: no server, node agent or store. The environment of the integration tests and, with `node e2e/scripts/local-demo.mts fixtures-static --context kind-freelens-velero-dev`, of the suites of the views that read no controller. It refuses an environment that holds more than the CRDs and the static fixtures it made, and leaves out the verification of `pnpm e2e:cluster:up`: the proof of the egress rules and the checks of the cleanup and of an installation free of fixtures, which the E2E workflow runs on main, every night and on a pull request that changes what it runs. On its environment, the actions that install, ask or verify a server refuse to run |
 | `pnpm e2e` | Builds the extension, then runs the fixtures and the transport proof: real backups and restores of synthetic data, their artifacts fetched through the compiled main |
 | `pnpm e2e:cluster:down` | Deletes the node, the network and the state the journal owns, after the identity check. The installed binaries stay |
 | `pnpm demo:up` | Brings the environment up and leaves the fixtures in place, to look at them in Freelens |
@@ -232,7 +232,7 @@ commit. On a Linux without a display the runner starts them under `xvfb-run`.
 | `pnpm demo:up` | The environment with the fixtures left in place, once |
 | `pnpm demo:views` | The fixtures of the views and of their tabs, and for who looks at the demo by hand the kubeconfigs of its two readers and what each artifact of the tabs holds: see [TRY-IT.md](TRY-IT.md) |
 | `pnpm e2e:views` | Builds and packs the extension, puts the fixtures of the views and of their tabs in place, waits for the server to remove the requests to Velero it removes, tells the suites what the artifacts of the tabs hold, makes for the run the identity of the views that may not port-forward and the one whose token an `exec` plugin gives, and gives the suites the kubeconfig of the first in `E2E_NO_PORT_FORWARD_KUBECONFIG`, the one of the second in `E2E_EXEC_PLUGIN_KUBECONFIG`, and in `E2E_EXEC_PLUGIN_RUNS` the file of the private state where its plugin, [`local-exec-credential.sh`](../../e2e/scripts/local-exec-credential.sh), names the executable of the process of each of its runs, runs the suites, then removes the two identities, their kubeconfigs, the token of the plugin and that file |
-| `E2E_TEST_PATTERN=velero-e2e-journey pnpm e2e:views` | The same for one suite. The pattern is a part of the names of the files, or several separated by spaces: CI runs every suite, the pre-review and FND-10 in four parts side by side, each a job with an environment of its own: `velero-e2e-artifacts`; `pre-review`; `velero-e2e-volumes velero-e2e-server`, the three on the environment of `pnpm demo:up`, for the suites that read what only a server makes; and, on the CRDs of the release alone, the ten other suites with `extensions`, FND-10. On an environment brought up with `pnpm e2e:cluster:up:definitions` and its static fixtures, `node e2e/scripts/local-demo.mts fixtures-static --context kind-freelens-velero-dev`, which place the installation with the counterparts of what the controllers leave in the one of the demo, the runner places the fixtures of the views and of the adherence, waits for no server, stands in for it at the storage location of the installation while the suites run, and runs only those suites: `velero-e2e-adherence velero-e2e-gate velero-e2e-journey velero-e2e-locations velero-e2e-overview velero-e2e-preferences velero-e2e-restores velero-e2e-restricted velero-e2e-scale velero-e2e-schedules extensions` |
+| `E2E_TEST_PATTERN=velero-e2e-journey pnpm e2e:views` | The same for one suite. The pattern is a part of the names of the files, or several separated by spaces: CI runs the suites, the pre-review and FND-10 in five parts side by side, each a job with an environment of its own: `velero-e2e-artifacts`; `pre-review`; `velero-e2e-volumes velero-e2e-server`, the three on the environment of `pnpm demo:up`, for the suites that read what only a server makes; and, on the CRDs of the release alone, the ten other suites with `extensions`, FND-10, in two parts. Every part runs on main, every night and on demand, and a pull request runs the parts its changed files reach, by the rules of [`views-parts.json`](../../e2e/views-parts.json). On an environment brought up with `pnpm e2e:cluster:up:definitions` and its static fixtures, `node e2e/scripts/local-demo.mts fixtures-static --context kind-freelens-velero-dev`, which place the installation with the counterparts of what the controllers leave in the one of the demo, the runner places the fixtures of the views and of the adherence, waits for no server, stands in for it at the storage location of the installation while the suites run, and runs only those suites: `velero-e2e-adherence velero-e2e-gate velero-e2e-journey velero-e2e-locations velero-e2e-overview velero-e2e-preferences velero-e2e-restores velero-e2e-restricted velero-e2e-scale velero-e2e-schedules extensions` |
 | `pnpm pre-review` | The pass before the review of a milestone |
 
 | Suite | What it proves |
@@ -558,8 +558,12 @@ the runner, the environment, the main process, the toolchain or the rules runs
 every part, and so does a file no rule knows; a document, a unit test, another
 workflow or the configuration of a linter runs none; a view of the renderer or a
 module of common runs the two parts without a controller, with the part of the
-artifacts or of the volumes and the server when it is one of theirs, and a style
-sheet runs the pre-review with them. Each part is a
+artifacts or of the volumes and the server when it is one of theirs or one of the
+state, the reads, the way between the processes or the frame those parts rest on;
+a style sheet or a component of the frame of the views runs the pre-review with
+them. The pre-review, which alone drives the keyboard and both themes over every
+view, runs on such a pull request, on main after every merge and every night: a
+change to the structure of one view meets it in the run of main after its merge. Each part is a
 job that brings up an environment of its own, places its fixtures and runs its
 suites in one run of the runner of `pnpm e2e:views`, within two hours; then, on
 the environment with its fixtures, whatever the suites found, once the environment
@@ -572,9 +576,10 @@ the time of their suites in the one job: 853, 729, 745 and 610 seconds, the 610
 again into the 375 of the five suites that read the server, 380 with FND-10, and
 the 230 of the five that read none, which the part without a controller ran
 together. On 2026-11-07 that part was divided again by the times of its eleven
-suites in the run of main of that day, 761 seconds in all: 317 for the adherence,
+suites in the run of main of that day: 317 seconds of suites for the adherence,
 the Overview, the journey, the two readers and FND-10, and 337 for the schedules,
-the locations, the restores, the gate, the scale and the preferences. The job
+the locations, the restores, the gate, the scale and the preferences, of the 761 of
+the step that placed the fixtures and ran them. The job
 `views in Freelens v2` passes when the parts the first job chose passed, or when it
 chose none, and a unit test fails if a file of the suites is in no part or in two, a
 session of the integration test in any, or a suite that reads a controller in a part

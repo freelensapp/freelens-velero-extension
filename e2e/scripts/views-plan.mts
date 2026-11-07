@@ -58,14 +58,21 @@ export function matrixOf(definition: ViewsParts, names: string[]) {
 }
 
 // In the job: the event comes from GITHUB_EVENT_NAME and, for a pull request, the changed files from git, between the
-// base the workflow fetched and the head; the matrix goes to GITHUB_OUTPUT as `parts`, with a line for the log.
+// base the workflow fetched and the head, a renamed file by its old path and its new one; the matrix goes to
+// GITHUB_OUTPUT as `parts`, with a line for the log.
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const definition = readViewsParts();
   const event = process.env.GITHUB_EVENT_NAME ?? "";
   const base = process.env.BASE_SHA ?? "";
+
+  // Without the base, git would read the range as HEAD...HEAD and list nothing, and no part would run.
+  if (event === "pull_request" && base === "") {
+    console.error("The plan of a pull request needs BASE_SHA, the commit of its base.");
+    process.exit(1);
+  }
   const changed =
     event === "pull_request"
-      ? execFileSync("git", ["diff", "--name-only", `${base}...HEAD`], { encoding: "utf8" })
+      ? execFileSync("git", ["diff", "--name-only", "--no-renames", `${base}...HEAD`], { encoding: "utf8" })
           .split("\n")
           .filter(Boolean)
       : undefined;

@@ -927,7 +927,9 @@ file is saved. What the package bundles is in
 
 ## Workflows
 
-The hosted checks run on every pull request and on main, on synthetic data only:
+The hosted checks run on main and on every pull request, on synthetic data only;
+the views and the end to end tests also every night, and on a pull request only
+for the changes that reach them:
 
 - `check.yaml`: the build, the type check of the nine programs, lint and Knip.
 - `trunk-check.yaml`: Trunk on every file.

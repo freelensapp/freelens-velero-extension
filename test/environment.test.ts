@@ -11133,7 +11133,7 @@ describe("platform of the test environment", () => {
       /\n {2}views:\n {4}name: views in Freelens v2\n {4}needs: \[plan, test-views\]\n {4}if: \$\{\{ always\(\) \}\}\n/,
     );
     expect(workflow).toMatch(
-      /\n {10}if \[ "\$\{PARTS\}" = "\[\]" \]; then\n {12}echo [^\n]+\n {12}exit 0\n {10}fi\n {10}test "\$\{RESULT\}" = success\n/,
+      /\n {10}test "\$\{PLAN\}" = success\n {10}if \[ "\$\{PARTS\}" = "\[\]" \]; then\n {12}echo [^\n]+\n {12}exit 0\n {10}fi\n {10}test "\$\{RESULT\}" = success\n/,
     );
   });
 

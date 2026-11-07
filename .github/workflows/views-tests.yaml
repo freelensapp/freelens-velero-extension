@@ -428,7 +428,8 @@ jobs:
         run: node e2e/scripts/local-demo.mts down --context kind-freelens-velero-dev
 
   # The parts as one check, under the name of the job they divide: it
-  # passes when every part the plan chose passed, or when the plan chose none.
+  # passes when the plan passed and every part it chose passed, or when it
+  # chose none.
   # It runs whatever happened, also in a run that was cancelled, so that the
   # check is never skipped while a part did not pass.
   views:
@@ -442,10 +443,12 @@ jobs:
     steps:
       - name: Check that every part passed
         env:
+          PLAN: ${{ needs.plan.result }}
           PARTS: ${{ needs.plan.outputs.parts }}
           RESULT: ${{ needs.test-views.result }}
         run: |-
-          echo "The parts of the views: ${PARTS:-none decided}, ${RESULT}"
+          echo "The plan: ${PLAN}; the parts of the views: ${PARTS:-none decided}, ${RESULT}"
+          test "${PLAN}" = success
           if [ "${PARTS}" = "[]" ]; then
             echo "No part of the views is needed for these changes."
             exit 0

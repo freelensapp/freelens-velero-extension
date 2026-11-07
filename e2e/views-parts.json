@@ -5,8 +5,11 @@
       "environment": "demo",
       "suites": ["velero-e2e-artifacts"],
       "paths": [
-        "^src/renderer/components/(artifact-|log-viewer|results-viewer|resources-viewer|volumes-viewer|workspace-tabs|write-confirmation|target-bar|allowances)",
-        "^src/renderer/pages/(operation-|backup-workspace|restore-workspace)",
+        "^src/renderer/components/(artifact-|log-viewer|results-viewer|resources-viewer|volumes-viewer|workspace-tabs|write-confirmation|target-bar)",
+        "^src/renderer/pages/(backup-workspace|restore-workspace)",
+        "^src/renderer/(state|api)/",
+        "^src/renderer/navigation\\.",
+        "^src/renderer/details/(backup|restore)-details",
         "^src/common/(artifact-|diagnostic-|allowances|ipc|frame)",
         "^e2e/__tests__/velero-e2e-artifacts\\."
       ]
@@ -15,16 +18,22 @@
       "name": "pre-review",
       "environment": "demo",
       "suites": ["pre-review"],
-      "paths": ["\\.(css|scss)$", "^e2e/__tests__/pre-review\\."]
+      "paths": [
+        "\\.(css|scss)$",
+        "^src/renderer/components/(views-frame|workspace|workspace-tabs|family-page|history-strip|target-bar)\\.",
+        "^e2e/__tests__/pre-review\\."
+      ]
     },
     {
       "name": "volumes-and-server",
       "environment": "demo",
       "suites": ["velero-e2e-volumes", "velero-e2e-server"],
       "paths": [
-        "^src/renderer/components/volume-",
+        "^src/renderer/components/(volume-|views-frame|write-confirmation|target-bar)",
         "^src/renderer/pages/(server-band|volume-|pod-volume-|repositor)",
-        "^src/common/(volume-|server-version|repository-view)",
+        "^src/renderer/(state|api)/",
+        "^src/common/(volume-|server-version|repository-view|allowances|ipc|frame)",
+        "^src/common/(discovery|views)\\.",
         "^e2e/__tests__/velero-e2e-(volumes|server)\\."
       ]
     },
@@ -59,6 +68,7 @@
     "^e2e/scripts/",
     "^e2e/views-parts\\.json$",
     "^integration/helpers/",
+    "^test/tls-fixture\\.ts$",
     "^\\.github/workflows/views-tests\\.yaml$",
     "^package\\.json$",
     "^pnpm-lock\\.yaml$",
@@ -66,7 +76,7 @@
     "^vite\\.config\\.",
     "^vitest\\.",
     "^build/",
-    "^tsconfig",
+    "(^|/)tsconfig[^/]*\\.json$",
     "^\\.nvmrc$",
     "^mise\\.(toml|lock)$"
   ],
