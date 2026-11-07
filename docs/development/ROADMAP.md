@@ -14,9 +14,11 @@ the end of each milestone.
 The compatibility reference is Freelens v2, at the validation target of
 [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md): the release Freelens 2.0.0,
 built from freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, its
-tag v2.0.0, with `@freelensapp/extensions` 2.0.0 pinned exactly. The target moved
-with the [host drift watch](PROCESS.md#host-drift-watch) until Freelens 2.0.0 was
-released; the row of M6 below makes the pin of the SDK a range of versions.
+tag v2.0.0, with `@freelensapp/extensions` taken by the range `^2.0.0` and
+resolved to 2.0.0. The target moved with the
+[host drift watch](PROCESS.md#host-drift-watch) until Freelens 2.0.0 was released;
+the watch ended on 2026-11-07, with the row of M6 below, and the target moves with
+the releases of Freelens.
 Velero is v1.18.4 with the AWS plugin v1.14.4 (see [RECON-T0.1.md](RECON-T0.1.md)).
 v1.0.0 ships for Freelens v2 and not for Freelens 1, which lists the package as
 Incompatible and runs none of it. The checks of M1 to M3 and of T3.1 and T3.2
@@ -247,7 +249,7 @@ deletion of backups, no way around the confirmation.
 | Visual and accessibility pass on both themes and on narrow and large windows | T6.2 | | Planned |
 | Installation, permissions, safety, compatibility and troubleshooting documentation, screenshots, demonstration video, release notes | T6.3 | | Planned |
 | Tarball, checksums and software bill of materials from the release workflow | T6.4 | | Planned |
-| With Freelens 2.0.0: the pin of the SDK a range of versions, the integration at the tag v2.0.0, the host drift watch ended | | [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#d10-the-version-and-the-release) | Planned |
+| With Freelens 2.0.0: the pin of the SDK a range of versions, the integration at the tag v2.0.0, the host drift watch ended | | [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#d10-the-version-and-the-release) | Done |
 | Release through the organization's flow, on the lead maintainer's go | T6.5 | | Planned |
 
 ## Deferred after v1.0.0

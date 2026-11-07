@@ -44,9 +44,9 @@ The packed build is about 0.5 MB.
 
 ## Development Graph
 
-- The host SDK, `@freelensapp/extensions`, is pinned exactly to the version of the
-  validation target, 2.0.0, the release Freelens 2.0.0, until the range of versions
-  that D10 of SPEC-0015 gives it in M6. Its declarations are in the package itself.
+- The host SDK, `@freelensapp/extensions`, is taken by the range `^2.0.0` that D10
+  of SPEC-0015 gives it, resolved to the version of the validation target, 2.0.0,
+  the release Freelens 2.0.0. Its declarations are in the package itself.
 - `react`, `react-dom` 19.3.1, `mobx` 7.0.6, `mobx-react` 10.0.2, their
   declarations and `electron` 44.10.0, for its types, are devDependencies at the
   versions of the catalog of the host: the build reads the names they export and

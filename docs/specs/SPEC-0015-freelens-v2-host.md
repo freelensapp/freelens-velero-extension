@@ -5,7 +5,7 @@
 - **Milestone / tasks:** Foundation / T0.7, T0.8
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, unchanged
 - **Reviewed main:** not relevant: the subject of this spec is the host, and it reads or changes no behavior of Velero
-- **Freelens validation target:** freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0, with `@freelensapp/extensions` 2.0.0; the host drift watch moved it to this release, and the range of versions of the SDK of D10 is work of M6
+- **Freelens validation target:** freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0, with `@freelensapp/extensions` 2.0.0; the host drift watch moved it to this release and ended on 2026-11-07: the SDK is taken by the range `^2.0.0` of D10, and the target moves with the releases of Freelens, as PROCESS says
 - **Dependencies:** [local foundation](SPEC-0001-local-foundation.md); [test environment](SPEC-0004-test-environment-every-platform.md); [the write gate](SPEC-0009-write-gate.md); [the diagnostic request and its transport](SPEC-0010-diagnostic-request-and-transport.md); [the viewers](SPEC-0011-artifact-viewers.md); for the re-verification, the specs of M1 to M3, SPEC-0002 to SPEC-0012, and [the adherence of a schedule](SPEC-0013-schedule-adherence.md) for T3.1 and T3.2
 - **Approval:** Approved by the lead maintainer on 2026-10-16, as drafted. The version and release plan, D10, was decided by the lead maintainer the same day
 
@@ -516,6 +516,12 @@ its tag, `@freelensapp/velero-extension@next`, or by its version.
 does not read `engines`: a 1.0.0 on `latest` before Freelens 2.0.0 would be
 offered to every user of Freelens 1, where it is Incompatible. A prerelease on
 `next` is installed only by those who ask for it.
+
+**At Freelens 2.0.0, on 2026-11-07.** The SDK is taken by the range `^2.0.0`,
+which resolves to 2.0.0, the version of the target. The views and the integration
+run at the commit of the tag v2.0.0 since the move of 2026-10-29, named by that
+commit, which no later move of a tag can change. The host drift watch ended: see
+the amendment of 2026-11-07 below.
 
 ### D11: The Documents And The Process
 
@@ -1689,3 +1695,25 @@ and FND-10; the three parts with the server of the release keep the suites that 
 what only a server makes, the artifacts, the pre-review, the volumes and the server.
 The suite of the volumes, the real repository and the real pod volume operations of
 REQ-195 of SPEC-0014 stay with the server. REQ-215 and HOST-20 are extended in place.
+
+**Amendment of 2026-11-07: the end of the host drift watch** (REQ-198, D10, D11).
+Freelens 2.0.0 was released on 2026-10-28, and the target moved to the commit of
+its tag on 2026-10-29. Under the direction the lead maintainer approved on
+2026-11-07, the watch of D11 ends: the main branch of the host and of the template
+is no longer read before every slice and every merge, and the SDK is taken by the
+range of D10, `^2.0.0`, resolved to 2.0.0. The watch opens again while a change of
+the extension API that the extension uses is coming in a release of Freelens.
+
+Decided while implementing, on 2026-11-07:
+- The target moves with each release of Freelens in the pull request of Renovate
+  that brings it, which bumps the SDK and `engines.freelens`: the release and what
+  it changed for the extension are read and recorded in that pull request, and the
+  header of this spec, the line of each workflow that builds Freelens and the
+  version of the SDK in the build test move in it, as PROCESS says.
+- The build test ties the version the range resolves to, which the bundles are
+  built from, to the version this header names with the commit of the target, as
+  the test of the workflows ties that commit: a release of the SDK that arrives
+  alone fails the build test until the target moves with it.
+- The main branch of the host is read once a day for changes to the extension API,
+  its documentation and the loading of the extensions, so that the watch opens
+  again before such a change reaches a release.

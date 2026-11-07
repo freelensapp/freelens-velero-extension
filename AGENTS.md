@@ -65,12 +65,12 @@ reviewed. Scope and progress toward v1.0.0 are in `docs/development/ROADMAP.md`.
   [SPEC-0015](docs/specs/SPEC-0015-freelens-v2-host.md): Freelens v2 at
   freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the
   tag v2.0.0 of the release Freelens 2.0.0, with the SDK `@freelensapp/extensions`
-  2.0.0 pinned exactly, the version the tests build against.
-  `engines.freelens` is `^2.0.0`. Until Freelens 2.0.0 is released the target moves
-  with the [host drift watch](docs/development/PROCESS.md#host-drift-watch), read
-  before every slice and before every merge; then the pin of the SDK becomes a
-  range. Another major version of Freelens needs its own spec and its own
-  verification.
+  taken by the range `^2.0.0` and resolved to 2.0.0, the version the tests build
+  against. `engines.freelens` is `^2.0.0`. The target moved with the
+  [host drift watch](docs/development/PROCESS.md#host-drift-watch) until Freelens
+  2.0.0 was released; since the watch ended it moves with each release of
+  Freelens, in the pull request that brings the release. Another major version of
+  Freelens needs its own spec and its own verification.
 - Optimize for an excellent operational UI: truthful status, fast diagnosis,
   efficient navigation, and safe actions, integrated with Freelens.
 - Do not mention individuals or include comparisons with other software in any
@@ -93,8 +93,9 @@ This repository is developed spec-first. Before implementing anything, read:
 
 - `docs/development/PROCESS.md`: the spec-driven workflow (spec before code,
   docs updated in the same PR, manual-testing escalation to the lead maintainer,
-  milestone review gate, the upstream drift watch of Velero and the host drift
-  watch of Freelens and of the template).
+  milestone review gate, the upstream drift watch of Velero, and the host drift
+  watch, ended with Freelens 2.0.0, with the move of the target at each release
+  of Freelens).
 - `docs/development/ROADMAP.md`: scope and progress toward v1.0.0. It is the
   single source of truth for both.
 - `docs/development/ARCHITECTURE.md`: process ownership, target identity, the
@@ -910,7 +911,8 @@ must not be mapped.
 The libraries of the host are devDependencies at the versions of the catalog of
 the host, React and its DOM 19.3.1, MobX 7.0.6, the bindings 10.0.2, with their
 types, and `electron` 44.10.0 for its types alone; `@freelensapp/extensions` is
-pinned exactly to the version of the validation target. pnpm runs with
+taken by the range `^2.0.0`, resolved to the version of the validation target,
+which the build test ties to the header of SPEC-0015. pnpm runs with
 `strictPeerDependencies`: a library shared with the host outside the peer range of
 the SDK fails the install.
 
@@ -955,7 +957,7 @@ The hosted checks run on every pull request and on main, on synthetic data only:
 The two workflows that build Freelens name the commit once, in `freelens_ref`,
 and cache the build by it and by nothing else; a unit test ties that line to the
 header of [SPEC-0015](docs/specs/SPEC-0015-freelens-v2-host.md), so the pin moves
-in both places with the host drift watch. A release is `npm-version.yaml`, which
+in both places when the target moves with a release of Freelens. A release is `npm-version.yaml`, which
 opens the pull request of the version, `tag.yaml`, which tags the version `X.Y.Z`
 or `X.Y.Z-N` once that pull request is merged, and `release.yaml`, which builds
 the tag and publishes a version with a hyphen on the npm tag `next`, released on
@@ -1034,7 +1036,7 @@ Code shared between both processes goes to `src/common/`.
 2. **Test changes** before committing
 3. **Run validation before committing:** `pnpm lint:fix && pnpm type:check && pnpm test:unit`
 4. **For Markdown and YAML:** run `pnpm trunk:fix`
-5. **Read the host drift watch** before a slice and before a merge, until Freelens 2.0.0 is released: see `docs/development/PROCESS.md`
+5. **Move the target with each release of Freelens**, in the pull request that brings it, and read the host drift watch again only while a change of the extension API is coming: see `docs/development/PROCESS.md`
 
 ## GitHub Actions (Claude Code Action) Rules
 

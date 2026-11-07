@@ -82,7 +82,7 @@
     "react-window": "2.3.4"
   },
   "devDependencies": {
-    "@freelensapp/extensions": "2.0.0",
+    "@freelensapp/extensions": "^2.0.0",
     "@testing-library/dom": "10.4.2",
     "@testing-library/react": "16.3.3",
     "@types/node": "24.19.2",
