@@ -4,7 +4,7 @@ import { WITHOUT_A_CONTROLLER } from "../e2e/scripts/local-fixtures.mts";
 import { matrixOf, partsToRun, readViewsParts } from "../e2e/scripts/views-plan.mts";
 
 const definition = readViewsParts();
-const every = ["artifacts", "pre-review", "volumes-and-server", "static-views-1", "static-views-2"];
+const every = ["artifacts", "pre-review", "volumes-and-server", "static-views-1", "static-views-2", "actions"];
 const statics = ["static-views-1", "static-views-2"];
 
 describe("the parts of the views a run takes", () => {
@@ -78,7 +78,10 @@ describe("the parts of the views a run takes", () => {
     // What only those suites see: the loads of the tabs, the answers of the server, the tab in the address, the reads
     // a view asks for on demand, the confirmation of a write.
     for (const file of ["src/renderer/state/installation.ts", "src/renderer/api/ipc.ts", "src/common/ipc.ts"]) {
-      expect([file, partsToRun(definition, [file])]).toEqual([file, ["artifacts", "volumes-and-server", ...statics]]);
+      expect([file, partsToRun(definition, [file])]).toEqual([
+        file,
+        ["artifacts", "volumes-and-server", ...statics, "actions"],
+      ]);
     }
     expect(partsToRun(definition, ["src/renderer/navigation.ts"])).toEqual(["artifacts", ...statics]);
     expect(partsToRun(definition, ["src/renderer/details/backup-details.tsx"])).toEqual(["artifacts", ...statics]);
@@ -89,7 +92,20 @@ describe("the parts of the views a run takes", () => {
       ...statics,
     ]);
     expect(partsToRun(definition, ["src/renderer/components/target-bar.tsx"])).toEqual(every);
-    expect(partsToRun(definition, ["src/renderer/components/workspace.tsx"])).toEqual(["pre-review", ...statics]);
+    expect(partsToRun(definition, ["src/renderer/components/workspace.tsx"])).toEqual([
+      "pre-review",
+      ...statics,
+      "actions",
+    ]);
+    // What the actions are made of, which the suite of the actions proves on the CRDs alone.
+    for (const file of [
+      "src/renderer/pages/backup-now-workspace.tsx",
+      "src/renderer/pages/schedule-workspace.tsx",
+      "src/common/backup-from-schedule.ts",
+      "e2e/__tests__/velero-e2e-actions.tests.ts",
+    ]) {
+      expect([file, partsToRun(definition, [file])]).toEqual([file, [...statics, "actions"]]);
+    }
   });
 
   it("runs the part of a suite that changed, and every part for a file no rule knows", () => {
@@ -124,6 +140,7 @@ describe("the parts of the views a run takes", () => {
       ["volumes-and-server", "demo"],
       ["static-views-1", "definitions"],
       ["static-views-2", "definitions"],
+      ["actions", "definitions"],
     ]);
     expect(
       definition.parts

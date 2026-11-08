@@ -3449,6 +3449,47 @@ function requestsOfTheExtension(namespace: string, kind: RequestKind): number {
 }
 
 /**
+ * Removes a backup a suite of the actions created, by its name and its UID, in a namespace of the fixtures on the
+ * environment of the CRDs alone, where no controller holds it: a backup of that name with another UID is not the one
+ * the suite created, and is left as it is. Nothing is said of one that is already gone.
+ */
+export function removeCreatedBackup(namespace: string, name: string, uid: string): void {
+  if (namespace === "" || !SYNTHETIC_NAMESPACES.includes(namespace)) {
+    throw new Error(`The suites remove the backups of a namespace of the fixtures, and "${namespace}" is not one`);
+  }
+  const found = kubectlE2E(
+    "get",
+    "backups.velero.io",
+    name,
+    "--namespace",
+    namespace,
+    "-o",
+    "jsonpath={.metadata.uid}",
+  );
+
+  if (found.status !== 0) return;
+  if (found.stdout !== uid) throw new Error(`The backup ${name} is not the one the suite created`);
+  const { status, stderr } = spawnSync(
+    required("E2E_KUBECTL"),
+    [
+      "--kubeconfig",
+      kubeconfigPath(),
+      "--context",
+      E2E_KUBE_CONTEXT,
+      "delete",
+      "backups.velero.io",
+      name,
+      "--namespace",
+      namespace,
+      "--wait=true",
+    ],
+    { encoding: "utf8", timeout: KUBECTL_TIMEOUT },
+  );
+
+  if (status !== 0) throw new Error(`The backup ${name} could not be removed: ${(stderr ?? "").trim()}`);
+}
+
+/**
  * Removes what a suite left in a namespace no server looks at: the requests of
  * one kind that carry the label of the extension, the ServerStatusRequests
  * unless another is named, and nothing else, and answers how many they were.
