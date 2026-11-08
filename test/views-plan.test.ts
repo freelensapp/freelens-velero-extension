@@ -49,7 +49,7 @@ describe("the parts of the views a run takes", () => {
   });
 
   it("runs the parts a view of the renderer or a module of common reaches, and the static views with them", () => {
-    expect(partsToRun(definition, ["src/renderer/pages/schedules-page.tsx"])).toEqual(statics);
+    expect(partsToRun(definition, ["src/renderer/pages/schedules-page.tsx"])).toEqual([...statics, "actions"]);
     expect(partsToRun(definition, ["src/common/schedule-adherence.ts"])).toEqual(statics);
     expect(partsToRun(definition, ["src/renderer/components/log-viewer.tsx"])).toEqual(["artifacts", ...statics]);
     expect(partsToRun(definition, ["src/common/artifact-log.ts"])).toEqual(["artifacts", ...statics]);
@@ -83,7 +83,7 @@ describe("the parts of the views a run takes", () => {
         ["artifacts", "volumes-and-server", ...statics, "actions"],
       ]);
     }
-    expect(partsToRun(definition, ["src/renderer/navigation.ts"])).toEqual(["artifacts", ...statics]);
+    expect(partsToRun(definition, ["src/renderer/navigation.ts"])).toEqual(["artifacts", ...statics, "actions"]);
     expect(partsToRun(definition, ["src/renderer/details/backup-details.tsx"])).toEqual(["artifacts", ...statics]);
     expect(partsToRun(definition, ["src/common/discovery.ts"])).toEqual(["volumes-and-server", ...statics]);
     expect(partsToRun(definition, ["src/renderer/components/views-frame.tsx"])).toEqual([
@@ -97,15 +97,29 @@ describe("the parts of the views a run takes", () => {
       ...statics,
       "actions",
     ]);
-    // What the actions are made of, which the suite of the actions proves on the CRDs alone.
+    // What the actions are made of, which the suite of the actions proves on the CRDs alone: the workspace, the view
+    // and the list it is asked from, the view that mounts it, its words and the ones of an end kept, and the history
+    // that lists the backup it created.
     for (const file of [
       "src/renderer/pages/backup-now-workspace.tsx",
       "src/renderer/pages/schedule-workspace.tsx",
+      "src/renderer/pages/open-view.tsx",
       "src/common/backup-from-schedule.ts",
+      "src/common/backup-now-words.ts",
+      "src/common/kept-end-words.ts",
+      "src/common/schedule-history.ts",
       "e2e/__tests__/velero-e2e-actions.tests.ts",
     ]) {
       expect([file, partsToRun(definition, [file])]).toEqual([file, [...statics, "actions"]]);
     }
+    // The views of a page, which the reads of the suites with a server name as well.
+    expect(partsToRun(definition, ["src/common/views.ts"])).toEqual(["volumes-and-server", ...statics, "actions"]);
+    expect(partsToRun(definition, ["src/renderer/components/write-confirmation.tsx"])).toEqual([
+      "artifacts",
+      "volumes-and-server",
+      ...statics,
+      "actions",
+    ]);
   });
 
   it("runs the part of a suite that changed, and every part for a file no rule knows", () => {

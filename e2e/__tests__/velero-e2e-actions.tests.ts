@@ -60,8 +60,11 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
   let kubeconfig = "";
   const errors = velero.createErrorCollector();
   let before: cluster.ClusterSnapshot;
-  // What the suite created, to remove it.
-  const created: { namespace: string; name: string; uid: string }[] = [];
+  // What the suite created, to remove it: each backup by its name from the moment it is asked, and by its UID once
+  // the suite read it. One whose creation the view did not say, created all the same, is removed by its name when it
+  // was created since the suite began, a minute before it for the clocks.
+  const created: { namespace: string; name: string; uid?: string }[] = [];
+  let began = 0;
 
   const writesOn = async () => {
     await frame.click("[data-testid=velero-writes-on]");
@@ -88,6 +91,7 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
       throw new Error(cluster.fixturesMissing());
     }
     before = cluster.clusterSnapshot();
+    began = Date.now() - 60_000;
     errors.start();
 
     // The kubeconfig is in the profile before the install is asked, for each start of the application.
@@ -103,12 +107,19 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
   }, TIMEOUT);
 
   afterAll(async () => {
-    try {
-      for (const backup of created) cluster.removeCreatedBackup(backup.namespace, backup.name, backup.uid);
-    } finally {
-      if (started) errors.stop(started.window);
-      await started?.cleanup();
+    const left: string[] = [];
+
+    // Each backup the suite created is removed, whatever became of the others.
+    for (const backup of created) {
+      try {
+        cluster.removeCreatedBackup(backup.namespace, backup.name, backup.uid, began);
+      } catch (error) {
+        left.push(String(error));
+      }
     }
+    if (started) errors.stop(started.window);
+    await started?.cleanup();
+    if (left.length > 0) throw new Error(left.join("; "));
   }, TIMEOUT);
 
   it(
@@ -175,30 +186,38 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
       await frame.click(part("ask"));
       await frame.waitForSelector(part("review"), { timeout: 30_000 });
       const text = String(await frame.locator(part("text")).textContent());
+      const asked: (typeof created)[number] = { namespace: cluster.E2E_VIEWS_NAMESPACE, name };
 
+      // Known before it is asked: a backup created whose result the view does not say is removed all the same.
+      created.push(asked);
       await frame.click(part("create"));
       // Read every second for thirty seconds: no controller writes a phase here.
       await frame.waitForSelector(part("result"), { timeout: 90_000 });
       const backup = read<BackupRead>("backups.velero.io", name, cluster.E2E_VIEWS_NAMESPACE);
 
-      created.push({ namespace: cluster.E2E_VIEWS_NAMESPACE, name, uid: backup.metadata.uid });
+      asked.uid = backup.metadata.uid;
       expect(await cluster.wordsOf(frame, part("phase"))).toBe(BACKUP_NOW_VIEW_WORDS.unread);
       // One POST of a Backup, and no other write of any kind of Velero. The result read the backup every second.
-      const { "GET 200": _reads, ...asked } = cluster.counted(codes, cluster.requestCodes("backups"));
+      const { "GET 200": _reads, ...codesOfWrites } = cluster.counted(codes, cluster.requestCodes("backups"));
 
-      expect(asked).toEqual({ "POST 201": 1 });
+      expect(codesOfWrites).toEqual({ "POST 201": 1 });
       const written = writesSince(earlier);
 
       expect([Object.keys(written).length, Object.values(written)]).toEqual([1, [1]]);
       expect(Object.keys(written)[0]).toMatch(/^POST backups /);
-      // Every field of the text, with the same value in the object.
+      // Every field of the text, with the same value in the object, and no other field in its metadata but the ones
+      // the API server writes of every object.
       const sent = JSON.parse(text) as BackupRead;
+      const {
+        uid: _uid,
+        resourceVersion: _version,
+        creationTimestamp: _created,
+        generation: _generation,
+        managedFields: _fields,
+        ...metadata
+      } = backup.metadata as Record<string, unknown>;
 
-      expect(backup.metadata.name).toBe(sent.metadata.name);
-      expect(backup.metadata.namespace).toBe(sent.metadata.namespace);
-      expect(backup.metadata.labels).toEqual(sent.metadata.labels);
-      expect(backup.metadata.annotations).toEqual(sent.metadata.annotations);
-      expect(backup.metadata.ownerReferences).toEqual(sent.metadata.ownerReferences);
+      expect(metadata).toEqual(sent.metadata);
       expect(backup.spec).toEqual(sent.spec);
       expect(backup.status?.phase).toBeUndefined();
       // The way to the backup takes the place of the workspace: its way back is the schedule.
@@ -223,28 +242,39 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
   );
 
   it(
-    "says that a name already taken is taken, leads to the backup that has it, and proposes the name of the next second",
+    "says that a name already taken is taken, leads to the backup that has it, and proposes a name of the time it failed",
     async () => {
       const [backup] = created;
       const codes = cluster.requestCodes("backups");
+      // The time in UTC to the second, as the names the form proposes end with it.
+      const second = (instant: number) => new Date(instant).toISOString().slice(0, 19).replace(/[-:T]/g, "");
 
       await frame.click("[data-testid=velero-schedule-back-up-now]");
       await frame.waitForSelector("[data-testid=velero-backup-now-workspace]", { timeout: 30_000 });
       await frame.locator(FIELD).first().fill(backup.name);
       await frame.click(part("ask"));
       await frame.waitForSelector(part("review"), { timeout: 30_000 });
+      const asked = Date.now();
+
       await frame.click(part("create"));
       await frame.waitForSelector(part("failure"), { timeout: 60_000 });
+      const failed = Date.now();
+
       expect(await frame.locator(part("failure")).getAttribute("data-code")).toBe("conflict");
       expect(await cluster.wordsOf(frame, part("failure-text"))).toBe(BACKUP_NOW_WORDS.exists(backup.name));
+      // A name of the time the creation failed, to the second, or of the next second: the one of the next second when
+      // the name taken is the one of that second is proven at the unit layer.
       const proposed = await nameInField();
 
       expect(proposed).toMatch(new RegExp(`^${SCHEDULE}-\\d{14}$`));
-      expect(proposed).not.toBe(backup.name);
+      expect([proposed >= `${SCHEDULE}-${second(asked)}`, proposed <= `${SCHEDULE}-${second(failed + 1000)}`]).toEqual([
+        true,
+        true,
+      ]);
       expect(await frame.locator(`[data-testid="velero-open-backup-${backup.name}"]`).count()).toBe(1);
-      const { "GET 200": _reads, ...asked } = cluster.counted(codes, cluster.requestCodes("backups"));
+      const { "GET 200": _reads, ...codesOfWrites } = cluster.counted(codes, cluster.requestCodes("backups"));
 
-      expect(asked).toEqual({ "POST 409": 1 });
+      expect(codesOfWrites).toEqual({ "POST 409": 1 });
       // The backup that has the name is as it was.
       expect(read<BackupRead>("backups.velero.io", backup.name, cluster.E2E_VIEWS_NAMESPACE).metadata.uid).toBe(
         backup.uid,
@@ -320,7 +350,11 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
   it(
     "leaves the objects of Velero as they were once its backup is removed",
     async () => {
-      for (const backup of created.splice(0)) cluster.removeCreatedBackup(backup.namespace, backup.name, backup.uid);
+      // Each one is let go once it was removed: one whose removal failed is tried again after the suite.
+      for (const backup of [...created]) {
+        cluster.removeCreatedBackup(backup.namespace, backup.name, backup.uid, began);
+        created.splice(created.indexOf(backup), 1);
+      }
       const after = cluster.clusterSnapshot();
 
       expect(after.versions).toEqual(before.versions);

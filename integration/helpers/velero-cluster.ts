@@ -3449,26 +3449,28 @@ function requestsOfTheExtension(namespace: string, kind: RequestKind): number {
 }
 
 /**
- * Removes a backup a suite of the actions created, by its name and its UID, in a namespace of the fixtures on the
- * environment of the CRDs alone, where no controller holds it: a backup of that name with another UID is not the one
- * the suite created, and is left as it is. Nothing is said of one that is already gone.
+ * Removes a backup a suite of the actions created, in a namespace of the fixtures on the environment of the CRDs
+ * alone, where no controller holds it: by its name and the UID the suite read of it, or, when the suite could not read
+ * it, by its name, when it was created since the suite began. The deletion carries the UID as its precondition: a
+ * backup of that name that is not the one the suite created is left as it is, and said. Nothing is said of one that is
+ * already gone; a read that fails for another reason is said.
  */
-export function removeCreatedBackup(namespace: string, name: string, uid: string): void {
+export function removeCreatedBackup(namespace: string, name: string, uid: string | undefined, since: number): void {
   if (namespace === "" || !SYNTHETIC_NAMESPACES.includes(namespace)) {
     throw new Error(`The suites remove the backups of a namespace of the fixtures, and "${namespace}" is not one`);
   }
-  const found = kubectlE2E(
-    "get",
-    "backups.velero.io",
-    name,
-    "--namespace",
-    namespace,
-    "-o",
-    "jsonpath={.metadata.uid}",
-  );
+  const found = kubectlE2E("get", "backups.velero.io", name, "--namespace", namespace, "-o", "json");
 
-  if (found.status !== 0) return;
-  if (found.stdout !== uid) throw new Error(`The backup ${name} is not the one the suite created`);
+  if (found.status !== 0) {
+    if (/\(NotFound\)/.test(found.stderr)) return;
+    throw new Error(`The backup ${name} could not be read before its removal: ${found.stderr.trim()}`);
+  }
+  const metadata = (JSON.parse(found.stdout) as { metadata: { uid: string; creationTimestamp?: string } }).metadata;
+  const created = Date.parse(metadata.creationTimestamp ?? "");
+
+  if (uid !== undefined ? metadata.uid !== uid : !(created >= since)) {
+    throw new Error(`The backup ${name} is not the one the suite created`);
+  }
   const { status, stderr } = spawnSync(
     required("E2E_KUBECTL"),
     [
@@ -3477,13 +3479,16 @@ export function removeCreatedBackup(namespace: string, name: string, uid: string
       "--context",
       E2E_KUBE_CONTEXT,
       "delete",
-      "backups.velero.io",
-      name,
-      "--namespace",
-      namespace,
-      "--wait=true",
+      "--raw",
+      `/apis/velero.io/v1/namespaces/${namespace}/backups/${name}`,
+      "-f",
+      "-",
     ],
-    { encoding: "utf8", timeout: KUBECTL_TIMEOUT },
+    {
+      encoding: "utf8",
+      timeout: KUBECTL_TIMEOUT,
+      input: JSON.stringify({ apiVersion: "v1", kind: "DeleteOptions", preconditions: { uid: metadata.uid } }),
+    },
   );
 
   if (status !== 0) throw new Error(`The backup ${name} could not be removed: ${(stderr ?? "").trim()}`);
@@ -3493,9 +3498,10 @@ export function removeCreatedBackup(namespace: string, name: string, uid: string
  * Removes what a suite left in a namespace no server looks at: the requests of
  * one kind that carry the label of the extension, the ServerStatusRequests
  * unless another is named, and nothing else, and answers how many they were.
- * It is the one write of the suites, of what one of them asked the extension
- * to create, in the disposable cluster of the test environment. The namespace
- * of the installation is refused: there the server removes its requests itself.
+ * It and the removal of a backup a suite of the actions created are the writes
+ * of the suites, of what one of them asked the extension to create, in the
+ * disposable cluster of the test environment. The namespace of the
+ * installation is refused: there the server removes its requests itself.
  */
 export function removeRequestsOfTheExtension(namespace: string, kind: RequestKind = "ServerStatusRequest"): number {
   if (namespace === "" || !SYNTHETIC_NAMESPACES.includes(namespace)) {

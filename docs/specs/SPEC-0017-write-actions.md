@@ -927,12 +927,15 @@ release. The evidence, by check:
   nothing, Enter asking no review; a review left by Escape or by its command writes
   nothing; a review confirmed is exactly one POST of a Backup, answered 201, and no other
   write of any kind of Velero, with every field of the text the review showed the same in
-  the object read; the reader of a part, as a second entry of the catalog, is shown the
+  the object read, and no other field in its metadata but the ones the API server writes
+  of every object; the reader of a part, as a second entry of the catalog, is shown the
   review and refused at the creation, with the words of what it may not do, writes left
   on and nothing written; once the suite removed the backup it created, the objects of
   Velero are as they were.
 - NOW-04: a name already taken is a POST answered 409, said with the words of the main
-  process, with the way to the backup that has it and the name of the next second.
+  process, with the way to the backup that has it and a name proposed of the time the
+  creation failed, to the second; the name of the next second, when the name taken is
+  the one of that second, is proven at the unit layer, by the second pull request.
 - NOW-05: the result says that Velero has not read the backup after thirty seconds of
   reads, since no controller runs; the way to its view takes the place of the workspace;
   the history of the schedule lists it at the next read. The risk to the offset of
@@ -952,8 +955,12 @@ release. The evidence, by check:
   of the run through the procedures of the compiled main process, as a frame does, with
   the server of the release running: the backup ends Completed, carries the labels of the
   text of its confirmation and of the schedule, and is deleted through a
-  DeleteBackupRequest the server processes; a backup the proof created is removed whatever
-  ended it ([`local-backup-now-proof.mts`](../../e2e/scripts/local-backup-now-proof.mts)).
+  DeleteBackupRequest the server processes. The schedule is placed for the run, once the
+  controller validated it, and the cleanup of the run removes it. A backup the proof
+  created is waited for until it ended, since the release deletes no backup in progress,
+  and then deleted; one it could not remove is named in its failure, and the cleanup of
+  the run refuses to end while it is there
+  ([`local-backup-now-proof.mts`](../../e2e/scripts/local-backup-now-proof.mts)).
 
 Decided while implementing, on 2026-11-08:
 
@@ -965,4 +972,5 @@ Decided while implementing, on 2026-11-08:
 - The suite removes the backup it created by its name and its UID, with the one helper
   that deletes a backup on the CRDs alone, where no controller holds it.
 
-With this pull request T4.2 is done.
+With this pull request the work of T4.2 is complete: its row of the roadmap moves to
+Done after the merge, with the follow-up that PROCESS.md asks for.
