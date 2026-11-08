@@ -39,6 +39,10 @@ const part = (id: string) => `[data-testid=velero-backup-now-${id}]`;
 // identifier, or the input in it.
 const create = (id: string) => `[data-testid=velero-backup-create-${id}]`;
 const formField = (id: string) => `${create(id)} input, input${create(id)}`;
+// A choice of the form: the host gives the identifier to its input, and the class Select to the element around it,
+// and its options carry the identifier with -options.
+const choiceOf = (id: string) => `.Select:has(#velero-backup-create-${id})`;
+const optionsOf = (id: string) => `.velero-backup-create-${id}-options .Select__option`;
 // The field of the name: the host gives its own element the identifier, or the input in it.
 const FIELD = `${part("field")} input, input${part("field")}`;
 
@@ -309,7 +313,7 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
       // Writes are on from the cases before: off here, on again in the next case.
       await frame.click("[data-testid=velero-writes-off]");
       await frame.waitForSelector("[data-testid=velero-writes][data-writes=off]", { timeout: 60_000 });
-      expect(await cluster.wordsOf(frame, "#velero-backup-create-storageLocation .Select__single-value")).toBe(
+      expect(await cluster.wordsOf(frame, `${choiceOf("storageLocation")} .Select__single-value`)).toBe(
         "views-available, marked default",
       );
       for (const [location, words] of [
@@ -352,9 +356,9 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
       await frame.click(create("includedNamespaces-default"));
       await frame.locator(formField("excludedResources")).first().fill("secrets");
       await frame.locator(formField("ttl")).first().fill("72h");
-      await frame.click("#velero-backup-create-volumeSnapshotLocations-aws .Select__control");
+      await frame.click(`${choiceOf("volumeSnapshotLocations-aws")} .Select__control`);
       await frame
-        .locator(".Select__option")
+        .locator(optionsOf("volumeSnapshotLocations-aws"))
         .filter({ hasText: /^views-snapshots$/ })
         .first()
         .click();
