@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { deleteRequestOf, deleteRequestText } from "../common/delete-request";
 import { CHANNELS, readKeptEnds } from "../common/ipc";
-import { BACKUP_DELETE_WORDS, runBackupDelete } from "./backup-delete";
+import { BACKUP_DELETE_WORDS, LOOK_AFTER, runBackupDelete } from "./backup-delete";
 import { DiagnosticError } from "./diagnostic-transport";
 import { registerHandlers } from "./ipc";
 import { WriteGate } from "./write-gate";
@@ -51,6 +51,8 @@ interface State {
   create?: (text: string) => Promise<DiagnosticObject>;
   now: number;
   generated: number;
+  // A jump of the clock at the next wait, as if the wait had lasted longer.
+  jump?: number;
 }
 
 // The steps of the deletion controller of the release (backup_deletion_controller.go).
@@ -164,7 +166,8 @@ function fixture() {
     pollMs: 5,
     now: () => state.now,
     sleep: async (milliseconds: number) => {
-      state.now += milliseconds;
+      state.now += milliseconds + (state.jump ?? 0);
+      state.jump = undefined;
     },
   });
   const call = (channel: string, payload: unknown, event = FRAME_A) => {
@@ -365,6 +368,25 @@ describe("the run of the deletion of a backup", () => {
       ok: true,
       value: { end: "refused", request: expect.any(String), phase: "Completed", errors: REFUSAL },
     });
+    // A new request for a backup whose deletion failed before, refused at the location: the backup keeps its phase,
+    // Deleting, and nothing was tried.
+    expect(await runOf([velero.refuses], "Deleting")).toEqual({
+      ok: true,
+      value: { end: "refused", request: expect.any(String), phase: "Deleting", errors: REFUSAL },
+    });
+    // A backup that went before Velero looked at the request: refused, and nothing said of a phase.
+    expect(
+      await runOf([
+        (inner) => {
+          inner.backup = undefined;
+          for (const request of inner.requests.values())
+            request.status = { phase: "Processed", errors: ["backup deletion failed: backup not found"] };
+        },
+      ]),
+    ).toEqual({
+      ok: true,
+      value: { end: "refused", request: expect.any(String), errors: ["backup deletion failed: backup not found"] },
+    });
     // Processed with errors and the backup Deleting: a deletion that failed on the way, each error as written.
     expect(await runOf([velero.starts, velero.fails])).toEqual({
       ok: true,
@@ -381,6 +403,53 @@ describe("the run of the deletion of a backup", () => {
     });
     // A backup with no phase, deleted before it starts.
     expect(await runOf([velero.completes], "")).toMatchObject({ ok: true, value: { end: "completed" } });
+    // Another request under the name of this one, of another UID, is not this one: this one is gone.
+    expect(
+      await runOf([
+        (inner) => {
+          for (const request of inner.requests.values()) request.metadata.uid = "another-uid";
+        },
+      ]),
+    ).toMatchObject({ ok: true, value: { end: "replaced", phase: "Completed" } });
+  });
+
+  it("ends a read that does not answer with the thirty seconds, and the look after a lost answer with its own bound", async () => {
+    const { enable, run, token, state, adapter, requestOf } = fixture();
+    const hanging = (_kind: string, _namespace: string, _name: string, signal?: AbortSignal) =>
+      new Promise<DiagnosticObject>((_resolve, reject) => {
+        signal?.addEventListener("abort", () => reject(new DiagnosticError("cancelled")), { once: true });
+      });
+
+    await enable();
+    const confirmed = await token();
+    // The first wait lasts all but the last second of the thirty: the read that hangs then ends with them.
+    state.jump = 28_000;
+    adapter.read.mockImplementation(async (kind, namespace, name, signal) =>
+      kind === "DeleteBackupRequest"
+        ? hanging(kind, namespace, name, signal)
+        : structuredClone(state.backup as DiagnosticObject),
+    );
+    expect(await run(confirmed)).toEqual({ ok: true, value: { end: "unread", request: expect.any(String) } });
+    // The look after a lost answer ends at its own bound.
+    const bound = LOOK_AFTER.forMs;
+
+    LOOK_AFTER.forMs = 5;
+    try {
+      adapter.deleteRequestsOf.mockImplementation((_namespace, _backup, signal) =>
+        hanging("DeleteBackupRequest", "", "", signal),
+      );
+      state.create = async (text) => {
+        state.requests.set(requestOf(text).metadata.name, requestOf(text));
+        throw new DiagnosticError("submission-unknown");
+      };
+      expect(await run(await token())).toMatchObject({
+        ok: false,
+        code: "submission-unknown",
+        text: BACKUP_DELETE_WORDS.unknown("nightly"),
+      });
+    } finally {
+      LOOK_AFTER.forMs = bound;
+    }
   });
 
   it("reads every second for thirty seconds at most, and stops at an end", async () => {
@@ -613,46 +682,87 @@ describe("the run of the deletion of a backup", () => {
     expect(adapter.createDeleteBackupRequest).not.toHaveBeenCalled();
   });
 
-  it("says each end of the creation with its code, its stage and its safety, and keeps the ends of what was sent", async () => {
+  it("says each end of the creation with its code, its stage, its safety and its words, and keeps the ends of what was sent and only them", async () => {
     const { enable, run, token, state, ends } = fixture();
 
     await enable();
-    const answered = new Map<string, string>();
+    const kept = new Map<string, string>();
 
-    for (const [error, code, text] of [
+    for (const [error, code, retry, text, sent] of [
       // A 409 is the generated name meeting the name of a request that is there: nothing was created.
-      [new DiagnosticError("conflict"), "conflict", BACKUP_DELETE_WORDS.exists],
-      [new DiagnosticError("forbidden"), "forbidden", BACKUP_DELETE_WORDS.forbiddenCreate("velero")],
-      [new DiagnosticError("validation", undefined, "refused"), "validation", BACKUP_DELETE_WORDS.rejected],
-      [new DiagnosticError("not-found"), "not-found", BACKUP_DELETE_WORDS.notServed("velero")],
-      [new DiagnosticError("request-failed"), "request-failed", BACKUP_DELETE_WORDS.declined],
+      [new DiagnosticError("conflict"), "conflict", false, BACKUP_DELETE_WORDS.exists, true],
+      [new DiagnosticError("forbidden"), "forbidden", false, BACKUP_DELETE_WORDS.forbiddenCreate("velero"), true],
+      [
+        new DiagnosticError("forbidden", undefined, "credential"),
+        "request-failed",
+        true,
+        BACKUP_DELETE_WORDS.credential,
+        true,
+      ],
+      [
+        new DiagnosticError("validation", undefined, "refused"),
+        "validation",
+        false,
+        BACKUP_DELETE_WORDS.rejected,
+        true,
+      ],
+      [new DiagnosticError("not-found"), "not-found", false, BACKUP_DELETE_WORDS.notServed("velero"), true],
+      [new DiagnosticError("request-failed"), "request-failed", false, BACKUP_DELETE_WORDS.declined, true],
+      // The cluster changed once it answered: the request may have been created.
+      [
+        new DiagnosticError("target-changed", undefined, "answered"),
+        "submission-unknown",
+        false,
+        BACKUP_DELETE_WORDS.changedAfter("nightly"),
+        true,
+      ],
+      [new Error("synthetic"), "request-failed", false, BACKUP_DELETE_WORDS.failed, true],
+      // What was not sent is not kept: a text the adapter refused, a cluster that changed before, one it could not reach.
+      [new DiagnosticError("validation"), "validation", false, BACKUP_DELETE_WORDS.unsent, false],
+      [new DiagnosticError("target-changed"), "target-changed", false, BACKUP_DELETE_WORDS.changed, false],
+      [
+        new DiagnosticError("transport-unreachable"),
+        "transport-unreachable",
+        true,
+        BACKUP_DELETE_WORDS.unreachable,
+        false,
+      ],
     ] as const) {
       const request = randomUUID();
 
       state.create = async () => {
         throw error;
       };
-      expect(await run(await token(), "nightly", request)).toMatchObject({
-        ok: false,
-        code,
-        stage: "creation",
-        text,
-      });
-      answered.set(request, code);
-    }
-    // What was not sent is not kept: a text the adapter refused, and a cluster it could not reach.
-    for (const [error, code, retry] of [
-      [new DiagnosticError("validation"), "validation", false],
-      [new DiagnosticError("transport-unreachable"), "transport-unreachable", true],
-    ] as const) {
-      state.create = async () => {
-        throw error;
-      };
-      expect(await run(await token())).toMatchObject({ ok: false, code, retry });
+      expect(await run(await token(), "nightly", request)).toEqual({ ok: false, code, stage: "creation", retry, text });
+      if (sent) kept.set(request, code);
     }
     expect(
       new Map((await ends()).map((end) => [end.request, end.outcome.created ? "created" : end.outcome.code])),
-    ).toEqual(answered);
+    ).toEqual(kept);
+  });
+
+  it("says each end of the read of the backup at the run with its safety, and sends nothing", async () => {
+    const { enable, run, token, state, adapter } = fixture();
+
+    await enable();
+    for (const [error, code, retry, text] of [
+      [new DiagnosticError("deadline"), "deadline", true, BACKUP_DELETE_WORDS.slow],
+      [new DiagnosticError("transport-unreachable"), "transport-unreachable", true, BACKUP_DELETE_WORDS.unreachable],
+      [new DiagnosticError("forbidden"), "forbidden", false, BACKUP_DELETE_WORDS.forbiddenRead("velero")],
+      [
+        new DiagnosticError("forbidden", undefined, "credential"),
+        "request-failed",
+        true,
+        BACKUP_DELETE_WORDS.credential,
+      ],
+    ] as const) {
+      const confirmed = await token();
+
+      state.backupError = error;
+      expect(await run(confirmed)).toEqual({ ok: false, code, stage: "read", retry, text });
+      state.backupError = undefined;
+    }
+    expect(adapter.createDeleteBackupRequest).not.toHaveBeenCalled();
   });
 
   it("takes no answer of the creation that is not the request of this backup", async () => {
@@ -724,6 +834,11 @@ describe("the run of the deletion of a backup", () => {
       retry: false,
       text: BACKUP_DELETE_WORDS.notDone("nightly"),
     });
+    // One stamped half a minute before the confirmation, by a clock of the server behind this one, is found.
+    expect(await runOf(true, [velero.waits, velero.completes], () => state.now - 30_000)).toEqual({
+      ok: true,
+      value: { end: "completed", found: true },
+    });
     // One made a minute and more before the confirmation is of another deletion.
     expect(await runOf(true, [], () => state.now - 61_000)).toMatchObject({
       ok: false,
@@ -761,7 +876,7 @@ describe("the run of the deletion of a backup", () => {
     };
     expect(await run(await token())).toMatchObject({ ok: false, text: BACKUP_DELETE_WORDS.unknown("nightly") });
     state.backupError = undefined;
-    expect(adapter.createDeleteBackupRequest).toHaveBeenCalledTimes(10);
+    expect(adapter.createDeleteBackupRequest).toHaveBeenCalledTimes(11);
   });
 
   it("ends as not known, never as cancelled, a creation dropped on this side once it was sent, and looks for it with reads the write that stopped does not end", async () => {
@@ -803,6 +918,15 @@ describe("the run of the deletion of a backup", () => {
     };
     state.steps = [velero.completes];
     await run(await token(), "nightly", lost);
+    const unread = randomUUID();
+
+    state.backup = backupOf("Completed");
+    state.requests.clear();
+    state.create = undefined;
+    state.requestError = new DiagnosticError("forbidden");
+    state.steps = [velero.starts];
+    await run(await token(), "nightly", unread);
+    state.requestError = undefined;
     expect(await ends()).toEqual([
       {
         request,
@@ -820,6 +944,15 @@ describe("the run of the deletion of a backup", () => {
         context: "kind-a",
         name: "nightly",
         outcome: { created: true, deletion: "completed", found: true },
+        at: expect.any(Number),
+      },
+      {
+        request: unread,
+        kind: "delete-backup",
+        namespace: "velero",
+        context: "kind-a",
+        name: "nightly",
+        outcome: { created: true, deletion: "in-progress", requestsUnread: true },
         at: expect.any(Number),
       },
     ]);

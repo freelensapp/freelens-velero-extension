@@ -6,7 +6,7 @@
 // together is an end (REQ-282). A creation whose answer is not known is never sent again: the requests of the backup are
 // read by its labels, with the backup (REQ-250). Nothing here deletes an object: the adapter has no DELETE (REQ-284).
 
-import { deleteRequestOf, deleteRequestText, readDeleteRequest } from "../common/delete-request";
+import { BACKUP_UID_LABEL, deleteRequestOf, deleteRequestText, readDeleteRequest } from "../common/delete-request";
 import {
   type Answer,
   type BackupDeleted,
@@ -35,8 +35,13 @@ export const IN_PROGRESS = [
   "FinalizingPartiallyFailed",
 ] as const;
 
-// How long the look for the request after an answer that was lost may last, each read.
-const LOOK_MS = 10_000;
+// How long the look for the request after an answer that was lost may last at most, within the thirty seconds of the
+// reads after the creation.
+export const LOOK_AFTER = { forMs: 10_000 };
+
+// The one error of a refusal of the release, written before Velero changes anything of the backup
+// (backup_deletion_controller.go L631-L637): a request it refused deleted nothing.
+const REFUSAL = "backup deletion failed: ";
 
 export const BACKUP_DELETE_WORDS = {
   notADeletion:
@@ -46,7 +51,7 @@ export const BACKUP_DELETE_WORDS = {
   backupChanged:
     "The backup changed since the view read it: another one has its name now. Go back to the view, which reads it again.",
   inProgress: (backup: string, phase: string) =>
-    `The backup ${backup} is ${phase} now, and Velero refuses to delete a backup that has not ended: nothing was sent. Go back to the view, which reads it again.`,
+    `The backup ${backup} is ${phase} now: Velero refuses to delete a backup in progress, waiting for its plugins or finalizing, and nothing was sent. Go back to the view, which reads it again.`,
   reviewChanged:
     "The request the run would send is not the one the review showed: nothing was sent. Ask for a new review.",
   backupGone: (backup: string) => `The backup ${backup} is not there any more: nothing was sent.`,
@@ -78,7 +83,7 @@ export const BACKUP_DELETE_WORDS = {
   // The answers of a look for the request by the labels of its backup, after a creation whose answer is not known
   // (REQ-250).
   notDone: (backup: string) =>
-    `The API server did not answer the creation, and no request to delete the backup ${backup} made since the confirmation is there as far as the read shows, while the backup is. It is not sent again by itself: asking again is a new review.`,
+    `The API server did not answer the creation, and no request to delete the backup ${backup} made since a minute before the confirmation is there as far as the read shows, while the backup is. It is not sent again by itself: asking again is a new review.`,
   unknown: (backup: string) =>
     `The API server did not answer the creation, and the requests of the backup ${backup} could not be read: a request may have been created. It is not sent again by itself: the view of the backup says whether Velero deletes it.`,
   failed: "The deletion could not be asked: nothing is known to have been created.",
@@ -197,9 +202,10 @@ export async function confirmBackupDelete(
   return confirmed.ok ? { ok: true, value: { ...confirmed.value, text } } : confirmed;
 }
 
-// A request as the reads after its creation take it: its name, its phase and its errors.
+// A request as the reads after its creation take it: its name and its UID, its phase and its errors.
 interface RequestRead {
   name: string;
+  uid: string;
   phase?: string;
   errors?: unknown;
 }
@@ -209,6 +215,7 @@ function requestOf(item: DiagnosticObject): RequestRead {
 
   return {
     name: item.metadata.name,
+    uid: item.metadata.uid,
     ...(phase ? { phase } : {}),
     ...(item.status && "errors" in item.status ? { errors: item.status.errors } : {}),
   };
@@ -219,7 +226,8 @@ function createdAt(item: DiagnosticObject): number {
 }
 
 // The requests of the backup by the labels that name it, created since a minute before the confirmation, the newest
-// first: this request, or another one asked for the same backup since (REQ-250).
+// first: this request, or another one of the same backup, asked by someone else or by the collector of the expired
+// backups (REQ-250).
 async function requestsSince(
   adapter: DiagnosticKubernetes,
   namespace: string,
@@ -247,7 +255,7 @@ async function show(
   adapter: DiagnosticKubernetes,
   namespace: string,
   backup: { name: string; uid: string },
-  named: string | undefined,
+  named: { name: string; uid: string } | undefined,
   confirmedAt: number,
   requestsUnread: boolean,
   signal: AbortSignal,
@@ -257,8 +265,12 @@ async function show(
 
   if (!unread) {
     try {
-      if (named) request = requestOf(await adapter.read("DeleteBackupRequest", namespace, named, signal));
-      else {
+      if (named) {
+        const read = requestOf(await adapter.read("DeleteBackupRequest", namespace, named.name, signal));
+
+        // Another request of the name is not the one created: this one is gone (REQ-248).
+        request = read.uid === named.uid ? read : undefined;
+      } else {
         const newest = (await requestsSince(adapter, namespace, backup, confirmedAt, signal))[0];
 
         request = newest ? requestOf(newest) : undefined;
@@ -282,19 +294,26 @@ async function show(
 }
 
 // What the request and the backup show together (REQ-282): gone with the backup, a deletion Velero completed, since it
-// deletes its requests when nothing failed; gone with the backup there, a request a later one replaced; Processed with
-// errors, a deletion that failed on the way when the backup is Deleting, and one Velero refused otherwise; InProgress, a
-// deletion Velero is at; no phase, a request Velero has not read. A request Processed with no error is one whose backup
-// Velero deleted, and is said so only once the read shows the backup gone. With the requests not read, the backup alone
-// says: gone, deleted; Deleting, a deletion Velero is at, or one that failed; else, one Velero has not started.
+// deletes its requests when nothing failed; gone with the backup there, a request that another one of the same backup,
+// which Velero started after it, replaced; Processed with the one error of a refusal, which Velero writes before it
+// changes anything of the backup, a deletion it refused, the backup in the phase it had, Deleting included for a backup
+// whose deletion failed before; Processed with other errors, a deletion that failed on the way, the backup Deleting;
+// InProgress, a deletion Velero is at; no phase, a request Velero has not read. A request Processed with no error is one
+// whose backup Velero deleted, and is said so only once the read shows the backup gone. With the requests not read, the
+// backup alone says: gone, deleted; Deleting, a deletion Velero is at, or one that failed; else, one Velero has not
+// started, or refused.
 function endShown(shown: Shown): DeletionEnd {
   const gone = shown.backup === null;
 
   if (shown.requestsUnread) return gone ? "completed" : shown.backup === "Deleting" ? "in-progress" : "unread";
   if (!shown.request) return gone ? "completed" : "replaced";
   if (shown.request.phase === "Processed") {
-    if (Array.isArray(shown.request.errors) && shown.request.errors.length > 0)
-      return shown.backup === "Deleting" ? "failed" : "refused";
+    const errors = shown.request.errors;
+
+    if (Array.isArray(errors) && errors.length > 0)
+      return errors.length === 1 && typeof errors[0] === "string" && errors[0].startsWith(REFUSAL)
+        ? "refused"
+        : "failed";
     return gone ? "completed" : "in-progress";
   }
   return shown.request.phase === "InProgress" ? "in-progress" : "unread";
@@ -315,22 +334,22 @@ function deletedOf(shown: Shown, end: DeletionEnd, named: string | undefined): B
   };
 }
 
-// The reads after the creation (REQ-282): the request by its name, or by the labels of its backup after an answer that
-// was lost, and the backup with it, every second for thirty seconds at most, a read that hangs included, until what they
-// show is an end. A read that fails ends the reads with what the last one showed.
+// The reads after the creation (REQ-282): the request by its name and its UID, or by the labels of its backup after an
+// answer that was lost, and the backup with it, every second until the end of the thirty seconds, a read that hangs
+// included, until what they show is an end. A read that fails ends the reads with what the last one showed.
 async function readAfter(
   dependencies: CreationDependencies,
   adapter: DiagnosticKubernetes,
   namespace: string,
   backup: { name: string; uid: string },
-  start: { named?: string; shown: BackupDeleted; requestsUnread: boolean },
+  start: { named?: { name: string; uid: string }; shown: BackupDeleted; requestsUnread: boolean },
   confirmedAt: number,
+  until: number,
   signal: AbortSignal,
   write: Write,
 ): Promise<BackupDeleted> {
   let last = start.shown;
   let unread = start.requestsUnread;
-  const until = dependencies.now() + READ_AFTER.forMs;
 
   write.status = { step: "waiting for Velero" };
   while (!FINAL.includes(last.end) && !signal.aborted && until - dependencies.now() >= READ_AFTER.everyMs) {
@@ -350,7 +369,7 @@ async function readAfter(
       break;
     }
     unread = shown.requestsUnread;
-    last = deletedOf(shown, endShown(shown), start.named);
+    last = deletedOf(shown, endShown(shown), start.named?.name);
   }
   return last;
 }
@@ -430,6 +449,8 @@ export async function runBackupDelete(
       // labels, with reads of their own, which the frame that went does not stop; nothing is sent again.
       if (error instanceof DiagnosticError && (error.code === "submission-unknown" || error.code === "cancelled")) {
         write.status = { step: "looking for the request" };
+        // The look and the reads after it share the thirty seconds of the reads after a creation.
+        const until = dependencies.now() + READ_AFTER.forMs;
         let shown: Shown;
 
         try {
@@ -440,7 +461,7 @@ export async function runBackupDelete(
             undefined,
             confirmedAt,
             false,
-            AbortSignal.timeout(LOOK_MS),
+            AbortSignal.timeout(Math.max(Math.min(LOOK_AFTER.forMs, until - dependencies.now()), 1)),
           );
         } catch {
           return ended(failure("submission-unknown", "creation", false, BACKUP_DELETE_WORDS.unknown(target.name)));
@@ -458,6 +479,7 @@ export async function runBackupDelete(
           backup,
           { shown: deletedOf(shown, endShown(shown), undefined), requestsUnread: shown.requestsUnread },
           confirmedAt,
+          until,
           new AbortController().signal,
           write,
         );
@@ -470,16 +492,17 @@ export async function runBackupDelete(
     }
     const labels = created.metadata.labels ?? {};
 
-    // An answer that is not the request of this backup is not taken.
+    // An answer that is not the request of this backup, in this namespace, is not taken.
     if (
       created.kind !== "DeleteBackupRequest" ||
       !created.metadata.name ||
       !created.metadata.uid ||
+      created.metadata.namespace !== request.namespace ||
       created.spec?.backupName !== target.name ||
-      labels["velero.io/backup-uid"] !== target.uid
+      labels[BACKUP_UID_LABEL] !== target.uid
     )
       return ended(failure("submission-unknown", "creation", false, BACKUP_DELETE_WORDS.strange(target.name)));
-    const named = created.metadata.name;
+    const named = { name: created.metadata.name, uid: created.metadata.uid };
 
     return ended({
       ok: true,
@@ -489,8 +512,9 @@ export async function runBackupDelete(
         request.namespace,
         backup,
         // The request as it was created: Velero has not read it yet.
-        { named, shown: { end: "unread", request: named }, requestsUnread: false },
+        { named, shown: { end: "unread", request: named.name }, requestsUnread: false },
         confirmedAt,
+        dependencies.now() + READ_AFTER.forMs,
         signal,
         write,
       ),

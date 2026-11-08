@@ -925,7 +925,18 @@ describe("the ends kept for a cluster, between the processes", () => {
       outcome: { created: false, code: "conflict", text: "A request has the name the API server generated." },
     };
 
-    expect(readKeptEnds([deleted, found, refused])).toEqual([deleted, found, refused]);
+    const unread = {
+      ...deleted,
+      request: randomUUID(),
+      outcome: { created: true, deletion: "in-progress", requestsUnread: true },
+    };
+
+    expect(readKeptEnds([deleted, found, refused, unread])).toEqual([deleted, found, refused, unread]);
+    // The mark of the requests not read is of a deletion alone, and is true or not there.
+    expect(
+      readKeptEnds([{ ...unread, outcome: { created: true, deletion: "unread", requestsUnread: false } }]),
+    ).toEqual([]);
+    expect(readKeptEnds([{ ...end, outcome: { created: true, phase: "New", requestsUnread: true } }])).toEqual([]);
     for (const outcome of [
       { created: true },
       { created: true, deletion: "deleted" },

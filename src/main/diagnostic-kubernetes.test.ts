@@ -901,6 +901,9 @@ describe("the create-only adapter, through the client of the host", () => {
       "velero.io/backup-name=mislabelled,velero.io/backup-uid=mislabelled-uid": [
         request("mislabelled-abcde", "velero", labels("mislabelled", "another-uid")),
       ],
+      "velero.io/backup-name=misnamed,velero.io/backup-uid=misnamed-uid": [
+        request("misnamed-abcde", "velero", labels("another", "misnamed-uid")),
+      ],
       "velero.io/backup-name=shapeless,velero.io/backup-uid=shapeless-uid": "not-a-list",
     };
     const { api, host, signal } = fixture((asked) => {
@@ -925,7 +928,7 @@ describe("the create-only adapter, through the client of the host", () => {
       (await api.deleteRequestsOf("velero", { name: long, uid: "long-uid" }, signal)).map((item) => item.metadata.name),
     ).toEqual(["long-abcde"]);
     expect(await api.deleteRequestsOf("velero", of("empty"), signal)).toEqual([]);
-    for (const name of ["elsewhere", "mislabelled", "shapeless"])
+    for (const name of ["elsewhere", "mislabelled", "misnamed", "shapeless"])
       await expect(api.deleteRequestsOf("velero", of(name), signal)).rejects.toMatchObject({
         code: "request-failed",
       });

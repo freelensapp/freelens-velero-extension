@@ -62,7 +62,8 @@ async function proveCreation<Checked>(
 ): Promise<Checked & { phase: string; removed: boolean }> {
   const main = await compiledDiagnostics();
   const host = await startProofHost(context.kubeconfig, DEMO_CONTEXT, context.shell);
-  // The requests of the proof carry the labels of the environment, which knows them as its own.
+  // The requests the proof makes with a generated name carry the labels of the environment, which knows them as its
+  // own; its DeleteBackupRequest is the one of the deletion of the extension, with the labels of its backup alone.
   const api = proofAdapter(main, proofEntry(context.owner, context.kubeconfig), host, context.assertCurrent, {
     "app.kubernetes.io/managed-by": "freelens-velero-extension",
     [OWNER_LABEL]: context.owner,

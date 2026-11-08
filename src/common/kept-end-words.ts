@@ -7,11 +7,21 @@ import type { DeletionEnd, KeptEnd } from "./ipc";
 // says that the backup was deleted before the read shows it gone.
 const DELETION_WORDS: Record<DeletionEnd, string> = {
   completed: "the backup is not there any more: Velero deleted it, with the request.",
-  replaced: "the request is not there any more, and the backup is: a later request for the same backup replaced it.",
-  refused: "Velero refused the request, and the backup keeps its phase.",
+  replaced:
+    "the request is not there any more, and the backup is: another request for the same backup, which Velero started after this one, replaced it.",
+  refused: "Velero refused the request, and deleted nothing.",
   failed: "a step of the deletion failed: the backup stays Deleting, and a new request tries again.",
   unread: "Velero had not started the deletion when it was last read.",
   "in-progress": "Velero was at the deletion when it was last read: the view of the backup says how it goes.",
+};
+
+// What the backup alone showed, when the identity may not read the requests to delete a backup (REQ-282).
+const UNREAD_WORDS: Record<"completed" | "in-progress" | "unread", string> = {
+  completed: "the backup is not there any more: Velero deleted it. The requests of the backup could not be read.",
+  "in-progress":
+    "the backup was Deleting when it was last read: Velero is deleting it, or a deletion of it failed. The requests of the backup could not be read.",
+  unread:
+    "the backup kept its phase when it was last read: Velero has not started the deletion, or refused it. The requests of the backup could not be read.",
 };
 
 export function keptEndWords(end: KeptEnd): string {
@@ -19,11 +29,21 @@ export function keptEndWords(end: KeptEnd): string {
     const what = `The deletion of the backup ${end.name}, in ${end.namespace} (context ${end.context}),`;
 
     if (!end.outcome.created) return `${what} ended while no view of it was open: ${end.outcome.text}`;
+    const deletion = end.outcome.deletion ?? "unread";
+    const unread = end.outcome.requestsUnread === true;
+    // After an answer that was lost, what was read is of a request of the backup made since a minute before the
+    // confirmation, this one or another, or of the backup alone when the requests could not be read (REQ-250).
     const found = end.outcome.found
-      ? ", as the requests of the backup show, read after the answer of its creation was lost"
+      ? unread
+        ? ", as the backup shows, read after the answer of its creation was lost"
+        : ", as a request of the backup made since a minute before the confirmation shows, this one or another, read after the answer of its creation was lost"
       : "";
+    const words =
+      unread && (deletion === "completed" || deletion === "in-progress" || deletion === "unread")
+        ? UNREAD_WORDS[deletion]
+        : DELETION_WORDS[deletion];
 
-    return `${what} was asked while no view of it was open${found}: ${DELETION_WORDS[end.outcome.deletion ?? "unread"]}`;
+    return `${what} was asked while no view of it was open${found}: ${words}`;
   }
   if (end.kind === "schedule-pause" || end.kind === "schedule-resume") {
     const pause = end.kind === "schedule-pause";

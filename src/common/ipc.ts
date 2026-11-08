@@ -354,9 +354,10 @@ export function carriedErrors(errors: unknown): { errors?: string[]; errorsLeft?
 // How a write whose request was sent ended: the backup created, with the phase Velero wrote and whether it was found
 // by its name after an answer that was lost; or the code and the words of the failure.
 // What a write did: for a creation, the object created; for a pause and a resume, the patch applied, with nothing
-// more, since the kind says which.
+// more, since the kind says which; for a deletion, what the reads after its request showed, and whether the requests
+// could be read.
 export type KeptOutcome =
-  | { created: true; phase?: string; found?: true; paused?: true; deletion?: DeletionEnd }
+  | { created: true; phase?: string; found?: true; paused?: true; deletion?: DeletionEnd; requestsUnread?: true }
   | { created: false; code: FailureCode; text: string };
 
 // The end of a write whose request was sent, kept for its cluster until a frame of that cluster has shown it, or the
@@ -1149,17 +1150,19 @@ export function readBackupDeleted(value: unknown): BackupDeleted | undefined {
 function readKeptOutcome(value: unknown): KeptOutcome | undefined {
   if (!isRecord(value) || typeof value.created !== "boolean") return;
   if (value.created) {
-    if (!hasKeys(value, ["created"], ["phase", "found", "paused", "deletion"])) return;
+    if (!hasKeys(value, ["created"], ["phase", "found", "paused", "deletion", "requestsUnread"])) return;
     if ("phase" in value && !isText(value.phase, PHASE_BOUND)) return;
     if ("found" in value && value.found !== true) return;
     if ("paused" in value && value.paused !== true) return;
     if ("deletion" in value && !(DELETION_ENDS as readonly unknown[]).includes(value.deletion)) return;
+    if ("requestsUnread" in value && value.requestsUnread !== true) return;
     return {
       created: true,
       ...(typeof value.phase === "string" ? { phase: value.phase } : {}),
       ...(value.found === true ? { found: true } : {}),
       ...(value.paused === true ? { paused: true } : {}),
       ...("deletion" in value ? { deletion: value.deletion as DeletionEnd } : {}),
+      ...(value.requestsUnread === true ? { requestsUnread: true } : {}),
     };
   }
   if (
@@ -1215,6 +1218,7 @@ export function readKeptEnds(value: unknown): KeptEnd[] | undefined {
     // The request of a deletion is created whatever comes of it: what the reads after it showed is said, and nothing of a
     // creation; an end of another kind says no deletion.
     if (outcome.created && (item.kind === "delete-backup") !== "deletion" in outcome) continue;
+    if (outcome.created && item.kind !== "delete-backup" && "requestsUnread" in outcome) continue;
     if (item.kind === "delete-backup" && outcome.created && ("phase" in outcome || "paused" in outcome)) continue;
     ends.delete(item.request);
     ends.set(item.request, {

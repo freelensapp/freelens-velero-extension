@@ -290,7 +290,12 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
       : request.kind === "schedule-pause" || request.kind === "schedule-resume"
         ? { created: true, ...("found" in end.value && end.value.found ? { found: true } : {}) }
         : "end" in end.value
-          ? { created: true, deletion: end.value.end, ...(end.value.found ? { found: true } : {}) }
+          ? {
+              created: true,
+              deletion: end.value.end,
+              ...(end.value.found ? { found: true } : {}),
+              ...(end.value.requestsUnread ? { requestsUnread: true } : {}),
+            }
           : {
               created: true,
               ...("phase" in end.value && end.value.phase ? { phase: end.value.phase } : {}),
