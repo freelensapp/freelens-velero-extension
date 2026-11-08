@@ -9,6 +9,12 @@ export interface HostNamespace {
   excluded: boolean;
 }
 
+// Whether the store of the host has loaded the namespaces of the cluster: before it has, its list says nothing of what
+// the cluster holds.
+export function hostNamespacesKnown(): boolean {
+  return Renderer.K8sApi.namespaceStore.isLoaded === true;
+}
+
 // The namespaces the host lists for its own views of the cluster, as its store holds them (SPEC-0016, the form): the
 // extension reads them and asks the host nothing, so that its reader gains no path. A host that lists none yet says
 // none.

@@ -114,6 +114,8 @@ export interface WorkspaceProps {
   // Where the way back leads, in words.
   back: string;
   onBack: () => void;
+  // The commands of the object, on the line of its name: what is read under the name keeps its room.
+  commands?: ReactNode;
   children?: ReactNode;
 }
 
@@ -124,7 +126,7 @@ const TEXT_FIELD =
 // What every view of one object has around it: its name, the way back, and Escape that takes it from
 // wherever the focus is, a text field apart: there the key is of what was typed, as it is in the search
 // field of the host, and the view is never left from inside one.
-export function Workspace({ kind, name, title, uid, deleting, back, onBack, children }: WorkspaceProps) {
+export function Workspace({ kind, name, title, uid, deleting, back, onBack, commands, children }: WorkspaceProps) {
   const way = React.useRef<HTMLButtonElement>(null);
   const view = `${kind}/${name}`;
   const [opened, setOpened] = React.useState<{ view: string; uid?: string }>({ view, uid });
@@ -164,6 +166,7 @@ export function Workspace({ kind, name, title, uid, deleting, back, onBack, chil
         <span className={styles.title} id={`velero-${kind}-title`} data-testid={`velero-${kind}-name`}>
           {title ?? name}
         </span>
+        {commands}
       </div>
       {replaced ? (
         <p role="status" className={`${styles.notice} ${styles.noticeWarning}`} data-testid={`velero-${kind}-replaced`}>

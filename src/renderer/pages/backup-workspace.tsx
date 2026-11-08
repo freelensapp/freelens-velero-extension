@@ -1,3 +1,4 @@
+import { Renderer } from "@freelensapp/extensions";
 import { observer } from "mobx-react";
 import React from "react";
 import { backupView } from "../../common/backup-view";
@@ -12,6 +13,8 @@ import {
 } from "../../common/operation-text";
 import { isStale } from "../../common/read-state";
 import { backupReferences } from "../../common/references";
+import { restoreBackupOf } from "../../common/restore-candidates";
+import { backupOffered } from "../../common/restore-create-words";
 import { stageStrip } from "../../common/stages";
 import { ArtifactPanel } from "../components/artifact-panel";
 import { Phase, Signal, time } from "../components/status";
@@ -19,10 +22,45 @@ import styles from "../components/views.module.css";
 import { VolumeBand } from "../components/volume-band";
 import { Fact, NotShown, Restores, Stale, Target, Workspace } from "../components/workspace";
 import { panelId, tabId, WorkspaceTabs } from "../components/workspace-tabs";
-import { openTab, showTab } from "../navigation";
+import { openTab, openView, showTab } from "../navigation";
 
 import type { BackupResource } from "../../common/types";
 import type { Installation } from "../state/installation";
+
+const {
+  Component: { Button, Icon },
+} = Renderer;
+
+// The commands of a backup (SPEC-0017, REQ-252), on the line of its name, where they take no room from its tabs: each
+// opens the workspace of its action over this view, which is as it was when the workspace closes, with writes on or
+// off. A restore is offered of a backup that ended well, and the command says why it is not for another (REQ-267).
+function BackupCommands({ installation, backup }: { installation: Installation; backup: BackupResource }) {
+  const offered = backupOffered(backup.status?.phase);
+  const name = backup.metadata.name;
+
+  return (
+    <div className={styles.commands} data-testid="velero-backup-commands">
+      <Button
+        plain
+        data-testid="velero-backup-restore"
+        disabled={!offered.offered || !backup.metadata.uid}
+        aria-describedby={offered.words ? "velero-backup-restore-note" : undefined}
+        onClick={() => {
+          installation.restoreCreate.start({ kind: "backup", name }, restoreBackupOf(backup));
+          openView({ kind: "restore-backup", name });
+        }}
+      >
+        <Icon material="restore" small aria-hidden />
+        Restore
+      </Button>
+      {offered.words ? (
+        <span id="velero-backup-restore-note" className={styles.factNote} data-testid="velero-backup-restore-note">
+          {offered.words}
+        </span>
+      ) : null}
+    </div>
+  );
+}
 
 function names(value: unknown, none: string): string {
   return Array.isArray(value) && value.length ? value.join(", ") : none;
@@ -83,7 +121,14 @@ export const BackupWorkspace = observer(({ installation, name, now, back, onBack
   const tab = openTab();
 
   return (
-    <Workspace kind="backup" name={view.name} uid={view.uid} back={back} onBack={onBack}>
+    <Workspace
+      kind="backup"
+      name={view.name}
+      uid={view.uid}
+      back={back}
+      onBack={onBack}
+      commands={<BackupCommands installation={installation} backup={backup} />}
+    >
       <div className={styles.tabStrip}>
         <WorkspaceTabs kind="backup" current={tab} onChange={showTab} />
       </div>

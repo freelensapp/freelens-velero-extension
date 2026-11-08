@@ -85,8 +85,8 @@ function describedBy(id: string, problems?: string[]): string {
 
 // A text field of the items of a list. What is typed stays as it is typed while it reads as the items of the field; a
 // change from elsewhere, a form started anew or emptied, writes the items again. The notes it is described by are the
-// ones of its field.
-function ItemsField({
+// ones of its field. The form of a restore takes it as well.
+export function ItemsField({
   id,
   label,
   items,
@@ -141,20 +141,20 @@ function ItemsField({
 
 // What the operator chose of a list of namespaces by a checkbox, and what was typed, kept apart while the field is
 // edited: a name the host lists, typed as the beginning of a pattern, is not taken for its checkbox.
-interface NamespaceParts {
+export interface NamespaceParts {
   checked: string[];
   typed: string[];
 }
 
-function partsOf(items: string[], listed: Set<string>): NamespaceParts {
+export function partsOf(items: string[], listed: Set<string>): NamespaceParts {
   return { checked: items.filter((item) => listed.has(item)), typed: items.filter((item) => !listed.has(item)) };
 }
 
-function mergedOf(parts: NamespaceParts): string[] {
+export function mergedOf(parts: NamespaceParts): string[] {
   return [...new Set([...parts.checked, ...parts.typed])];
 }
 
-function sameItems(one: string[], other: string[]): boolean {
+export function sameItems(one: string[], other: string[]): boolean {
   return [...new Set(one)].sort().join(",") === [...new Set(other)].sort().join(",");
 }
 
@@ -347,7 +347,8 @@ function selectorsOf(mode: SelectorMode, words: string): { one?: string; several
 
 // The selectors: none, one, or any of several. What is typed stays as it is typed while it reads as the selectors of
 // the template, a space at its end among it; a change from elsewhere, a form started anew or emptied, writes it again.
-const SelectorField = observer(
+// The form of a restore takes it, with its own fields in the place of the template.
+export const SelectorField = observer(
   ({ state, id, disabled, onSubmit }: { state: TemplateState; id: string; disabled: boolean; onSubmit?(): void }) => {
     const one = state.template.labelSelector;
     const several = state.template.orLabelSelectors;

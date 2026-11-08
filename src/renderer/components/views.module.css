@@ -1165,13 +1165,16 @@
   margin: 8px 0;
 }
 
-/* The commands of a view of one object, under its name: the actions that open their workspace over it. */
+/* The commands of an object, on the line of its name, at its end: what is read under the name, the tabs of an
+   operation and their lists, keeps its room. On a line too short for them they go under the name, and their words
+   under them. */
 .commands {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin: 0 0 16px;
+  min-width: 0;
+  margin-left: auto;
 }
 
 /* The field of the name of a backup asked from a schedule, with its rule and what is wrong with it under it. */
@@ -1209,6 +1212,8 @@
 .reviewMeaning {
   margin: 4px 0 0;
   padding-left: 18px;
+  /* A name of a namespace or of a restore is one long word: it breaks where the room ends. */
+  overflow-wrap: anywhere;
 }
 
 .reviewMeaningPart {
@@ -2304,6 +2309,29 @@
   align-items: center;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+/* A pair of the mapping of the namespaces of a restore: the namespace of the backup and the one it is restored into,
+   side by side where the room holds them, one under the other where it does not. */
+.mappingPair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 4px 0;
+}
+
+.mappingInput {
+  flex: 1 1 12ch;
+  min-width: 0;
+  max-width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--borderColor);
+  border-radius: 4px;
+  background: var(--inputControlBackground);
+  color: var(--textColorPrimary);
+  font: inherit;
 }
 
 /* A flag of a schedule of the form: its checkbox and label, and its note under them, flag under flag. */

@@ -9,6 +9,8 @@ import { durationText, signalText } from "../../common/operation-text";
 import { operationTimeText } from "../../common/operation-time";
 import { isStale } from "../../common/read-state";
 import { scheduleRestores, templateReferences } from "../../common/references";
+import { restoreBackupOf, scheduleCandidates } from "../../common/restore-candidates";
+import { RESTORE_CREATE_VIEW_WORDS } from "../../common/restore-create-words";
 import { countsText, holdsSubmissions, scheduleHistory } from "../../common/schedule-history";
 import { NOTES, ownedText, pausedText, scheduleView, zoneText } from "../../common/schedule-view";
 import { AdherenceBand } from "../components/adherence";
@@ -208,12 +210,25 @@ function Template({ references, location }: { references: TemplateReferences; lo
   );
 }
 
-// The commands of a schedule (SPEC-0017, REQ-252): each opens the workspace of its action over this view, which is as
-// it was when the workspace closes. They are there with writes on or off: the form of an action can be filled with
-// writes off, and its review asks for them. A schedule whose name is longer than a label takes is asked for no backup
-// (REQ-255).
+// The commands of a schedule (SPEC-0017, REQ-252), on the line of its name: each opens the workspace of its action over
+// this view, which is as it was when the workspace closes. They are there with writes on or off: the form of an action
+// can be filled with writes off, and its review asks for them. A schedule whose name is longer than a label takes is
+// asked for no backup (REQ-255).
 function ScheduleCommands({ installation, name, uid }: { installation: Installation; name: string; uid?: string }) {
   const refused = scheduleRefused(name);
+  // A restore is offered of the backups of the schedule that ended well, the newest Completed first (REQ-265, REQ-267).
+  const backups = installation.read("backups");
+  const { chosen } = scheduleCandidates(backups.items as BackupResource[], name);
+  // Why Restore is not offered, as the read of the backups says: none that ended well, or none read.
+  const none = chosen
+    ? undefined
+    : backups.status === "ready" || backups.lastSuccess !== undefined
+      ? RESTORE_CREATE_VIEW_WORDS.noBackup(name)
+      : backups.status === "forbidden"
+        ? RESTORE_CREATE_VIEW_WORDS.backupsForbidden
+        : backups.status === "idle" || backups.status === "loading"
+          ? RESTORE_CREATE_VIEW_WORDS.backupsReading
+          : RESTORE_CREATE_VIEW_WORDS.backupsFailed;
 
   return (
     <div className={styles.commands} data-testid="velero-schedule-commands">
@@ -234,6 +249,25 @@ function ScheduleCommands({ installation, name, uid }: { installation: Installat
       {refused ? (
         <span id="velero-schedule-back-up-now-refused" className={styles.factNote}>
           {refused}
+        </span>
+      ) : null}
+      <Button
+        plain
+        data-testid="velero-schedule-restore"
+        disabled={!chosen}
+        aria-describedby={none ? "velero-schedule-restore-none" : undefined}
+        onClick={() => {
+          if (!chosen) return;
+          installation.restoreCreate.start({ kind: "schedule", name }, restoreBackupOf(chosen));
+          openView({ kind: "restore-schedule", name });
+        }}
+      >
+        <Icon material="restore" small aria-hidden />
+        Restore
+      </Button>
+      {none ? (
+        <span id="velero-schedule-restore-none" className={styles.factNote} data-testid="velero-schedule-restore-none">
+          {none}
         </span>
       ) : null}
     </div>
@@ -283,8 +317,14 @@ export const ScheduleWorkspace = observer(({ installation, name, now, back, onBa
   const newest = history.state === "listed" ? history.items[0] : undefined;
 
   return (
-    <Workspace kind="schedule" name={view.name} uid={view.uid} back={back} onBack={onBack}>
-      <ScheduleCommands installation={installation} name={view.name} uid={view.uid} />
+    <Workspace
+      kind="schedule"
+      name={view.name}
+      uid={view.uid}
+      back={back}
+      onBack={onBack}
+      commands={<ScheduleCommands installation={installation} name={view.name} uid={view.uid} />}
+    >
       <div className={styles.band} data-testid="velero-schedule-status">
         <Fact name="Validation">
           <ValidationMark state={view.state} />

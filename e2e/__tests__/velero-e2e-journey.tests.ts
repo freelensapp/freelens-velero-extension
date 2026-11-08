@@ -400,8 +400,9 @@ describe("views of the first milestone", () => {
         "The status reports 1 error and 0 warnings",
       );
       // The workspace opens at the first of its five tabs, the summary, which only reads: the way to the
-      // location of the backup, beside the way back of the workspace, and no field. What Velero wrote of the
-      // backup is asked for by a command of another tab, and nothing edits or deletes.
+      // location of the backup, beside the way back of the workspace and Restore, which a backup that has not
+      // ended is not offered, and no field. What Velero wrote of the backup is asked for by a command of another
+      // tab, and nothing edits or deletes.
       const tabs = await artifacts.tabsOf(frame, "backup");
       const buttons = async (selector: string) =>
         (await frame.locator(`${selector} button`).allInnerTexts()).map((text) => text.replace(/\s+/g, " ").trim());
@@ -411,8 +412,11 @@ describe("views of the first milestone", () => {
       expect(await buttons(`[data-testid=${artifacts.PARTS.shown("backup")}]`)).toEqual(["fixture-unavailable"]);
       expect(await buttons("[data-testid=velero-backup-workspace]")).toEqual([
         "arrow_back Backups",
+        "restore Restore",
         "fixture-unavailable",
       ]);
+      expect(await frame.locator("[data-testid=velero-backup-restore]").isDisabled()).toBe(true);
+      expect(await frame.locator("[data-testid=velero-backup-restore-note]").count()).toBe(1);
       expect(
         await frame.locator("[data-testid=velero-backup-workspace]").locator("a, input, select, textarea").count(),
       ).toBe(0);
@@ -522,13 +526,14 @@ describe("views of the first milestone", () => {
       expect(restores.state).toBe("listed");
       expect(restores.text).toContain("restore-of-daily-completed (Completed)");
       expect(restores.text).toContain("restore-of-daily-partiallyfailed (Partially failed)");
-      // The schedule, the locations and each restore are ways to their views.
+      // Restore, then the schedule, the locations and each restore, which are ways to their views.
       expect(
         (await frame.locator("[data-testid=velero-backup-workspace] button").allInnerTexts()).map((text) =>
           text.replace(/\s+/g, " ").trim(),
         ),
       ).toEqual([
         "arrow_back Backups",
+        "restore Restore",
         "views-daily",
         "views-available",
         "views-snapshots",
