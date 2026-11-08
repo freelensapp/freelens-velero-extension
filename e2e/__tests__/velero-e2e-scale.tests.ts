@@ -6,7 +6,11 @@
 // The long lists: a thousand synthetic backups and a thousand synthetic
 // restores in a namespace that holds no storage location. How many rows are
 // mounted, how long a list takes to answer, and what it keeps of its state
-// when an object is opened and closed.
+// when an object is opened and closed. Since the fifth pull request of T5.1,
+// the two thousand pod volume backups of the same namespace, the view of the
+// backup of two hundred of them, the reads of their families counted on the
+// API server, and nothing of a pod or of a Job read, with the control that
+// the counters see such a read.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as cluster from "../../integration/helpers/velero-cluster";
@@ -392,7 +396,8 @@ describe("long list of backups", () => {
 
       expect(mounted.length).toBeGreaterThan(0);
       expect(mounted.length).toBeLessThanOrEqual(MOUNTED);
-      // No record is hidden: the two hundred of the thousandth backup are found by the search, a part of them mounted.
+      // No record is hidden: the search finds the operations of the thousandth backup, and only them, a part of them
+      // mounted.
       const found = await cluster.search(frame, "backup-1000", of);
 
       expect(found.length).toBeGreaterThan(0);
@@ -426,6 +431,28 @@ describe("long list of backups", () => {
       expect(report.mounted).toBeGreaterThan(0);
       expect(report.mounted).toBeLessThanOrEqual(MOUNTED);
       expect(report.response.p95).toBeLessThan(BUDGET);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "counts on the API server a list of the pods and one of the Jobs of a namespace, which the cases after it count none of",
+    async () => {
+      // The control of the counters the cases of KIND-14 read: a list of each kind in a namespace, made by `kubectl`
+      // between two readings, is counted as a read in a namespace, as a read of the views would be. A count of none
+      // after it is one the counters could have seen.
+      const before = cluster.workloadRequests();
+
+      for (const kind of ["pods", "jobs"]) {
+        expect([kind, cluster.kubectlE2E("get", kind, "--namespace", "kube-system", "-o", "name").status]).toEqual([
+          kind,
+          0,
+        ]);
+      }
+      const read = cluster.workloadReads(cluster.counted(before, cluster.workloadRequests()));
+
+      expect(read["LIST pods namespace"] ?? 0).toBeGreaterThanOrEqual(1);
+      expect(read["LIST jobs namespace"] ?? 0).toBeGreaterThanOrEqual(1);
     },
     TIMEOUT,
   );
@@ -495,6 +522,8 @@ describe("long list of backups", () => {
       expect(band.rows).toHaveLength(10);
       expect(band.more).toBe(true);
       const times: number[] = [];
+      const listsBefore = cluster.apiRequests();
+      const began = Date.now();
 
       // Each time: a read with the view open, which keeps the family read; then the view is closed and opened again
       // before the next read, so that what is measured is the view and its band built from what was read.
@@ -506,6 +535,11 @@ describe("long list of backups", () => {
         // The first two warm what the ones after find loaded.
         if (index >= 2) times.push(measured.response);
       }
+      // The family was read at each read and at no opening: one list of the pod volume backups for each of the
+      // twenty-two reads asked, and for each read of the views every fifteen seconds that fell in the loop, with one
+      // more for a read at its edge. An opening that asked the family again would add twenty-two.
+      const lists = cluster.counted(listsBefore, cluster.apiRequests())[PVB] ?? 0;
+      const periodic = Math.ceil((Date.now() - began) / 15_000);
       const report = {
         operations: OPERATIONS_OF_THE_BUSIEST,
         interactions: times.length,
@@ -518,15 +552,17 @@ describe("long list of backups", () => {
         times: times.map(Math.round),
       };
 
-      console.log(`KIND-18 ${JSON.stringify(report)}`);
-      await cluster.writeReport("kind-18-busiest-backup-performance", report);
+      console.log(`KIND-18 ${JSON.stringify({ ...report, lists, periodic })}`);
+      await cluster.writeReport("kind-18-busiest-backup-performance", { ...report, lists, periodic });
       await cluster.closeWorkspace(frame);
       await cluster.search(frame, "");
-      // The view and its band read nothing of a pod or of a Job, twenty-two times opened (KIND-14).
-      expect(cluster.workloadReads(cluster.counted(workloadsBefore, cluster.workloadRequests()))).toEqual({});
       expect(report.interactions).toBe(20);
       expect(times.filter((time) => !(time > 0))).toEqual([]);
       expect(report.response.p95).toBeLessThan(BUDGET);
+      expect(lists).toBeGreaterThanOrEqual(22);
+      expect(lists).toBeLessThanOrEqual(22 + periodic + 1);
+      // The view and its band read nothing of a pod or of a Job, twenty-two times opened (KIND-14).
+      expect(cluster.workloadReads(cluster.counted(workloadsBefore, cluster.workloadRequests()))).toEqual({});
     },
     TIMEOUT,
   );

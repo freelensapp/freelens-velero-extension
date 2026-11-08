@@ -1319,6 +1319,16 @@ describe("pre-review of the views", () => {
       await cluster.waitForList(frame, cluster.REPOSITORIES);
       await cluster.openWorkspace(frame, "views-workloads-views-available-kopia", cluster.REPOSITORIES);
       await frame.waitForSelector("[data-testid=velero-backup-repository-maintenances]", { timeout: 60_000 });
+      // What used it, once each kind of the operations is read: none of its parts is being read when it is looked at.
+      await frame.waitForFunction(
+        () => {
+          const used = document.querySelector("[data-testid=velero-used-by]");
+
+          return used !== null && used.querySelector("[data-state=loading], [data-state=not-read]") === null;
+        },
+        undefined,
+        { timeout: 60_000 },
+      );
       await everyLayout("backup-repository-workspace", undefined, cluster.REPOSITORIES);
       expect(found("backup-repository-workspace")).toEqual({});
       await cluster.closeWorkspace(frame);
@@ -1373,7 +1383,7 @@ describe("pre-review of the views", () => {
       // A way of a row, which Enter follows to the view of its operation; Escape comes back to the view of the backup
       // with the focus on its way back, as from any view opened over another (the restore and its backup above).
       // That the band shows its first ten rows again there, so that the row that was opened may not be among them,
-      // is for the review (the plan asked for the focus back on the row).
+      // is for the review of the milestone: the focus is on the way back, as from any view.
       await cluster.tabTo(frame, (focus) => focus.startsWith("velero-open-pod-volume-backup-"), 40);
       const way = (await cluster.focused(frame)).replace(/^velero-open-pod-volume-backup-/, "");
 

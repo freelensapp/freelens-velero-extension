@@ -159,7 +159,7 @@ export function newestMaintenanceFailed(repository: RepositoryObject): boolean {
   return recent.at(-1)?.result === "Failed";
 }
 
-/** A duration as the views write it: its two largest units that are not zero, from days to seconds. */
+/** A duration as the views write it: its first unit that is not zero and the one after it, a zero dropped. */
 function durationText(milliseconds: number): string {
   const seconds = Math.floor(milliseconds / 1000);
   const parts: [number, string][] = [

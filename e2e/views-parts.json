@@ -11,6 +11,7 @@
         "^src/renderer/navigation\\.",
         "^src/renderer/details/(backup|restore)-details",
         "^src/common/(artifact-|diagnostic-|allowances|ipc|frame)",
+        "^src/common/volume-(band|index|references)\\.",
         "^e2e/__tests__/velero-e2e-artifacts\\."
       ]
     },
@@ -31,6 +32,7 @@
       "paths": [
         "^src/renderer/components/(volume-|views-frame|write-confirmation|target-bar)",
         "^src/renderer/pages/(server-band|volume-|pod-volume-|repositor)",
+        "^src/renderer/details/(repository|volume-operation)-details\\.",
         "^src/renderer/(state|api)/",
         "^src/common/(volume-|server-version|repository-view|allowances|ipc|frame)",
         "^src/common/(discovery|views)\\.",

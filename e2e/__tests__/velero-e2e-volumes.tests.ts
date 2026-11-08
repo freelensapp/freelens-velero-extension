@@ -11,8 +11,11 @@
 // proves the lists of the three kinds with what they say of a namespace that holds none, the repository of the
 // installation as the cluster holds it, and the reads of the pod volume operations, which the views ask only while
 // a view that shows them is open, counted on the API server: their lists, and the view of a backup and of a
-// restore, whose band shows the operations of its own kind. The suite reads the application and the cluster, and
-// writes to neither.
+// restore, whose band shows the operations of its own kind. Since the fifth pull request of T5.1 it proves them on
+// the fixtures and on the real operations as well: the view of each phase, the band of the backup in progress, the
+// details of the host and their way to the view, the real repository, pod volume backup and pod volume restore
+// against what the cluster holds of them, and no way to write, in the lists and in the views. The suite reads the
+// application and the cluster, and writes to neither.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as cluster from "../../integration/helpers/velero-cluster";
@@ -122,7 +125,7 @@ describe("views of the backup repositories and of the pod volume operations", ()
     async () => {
       // The repository the server made for the volume of the run, read by the suite on the cluster by the three
       // labels the release writes into it, never by its name, which the release says it may change.
-      const made = cluster.labelledObjects<{ metadata: { name: string }; status?: { phase?: string } }>(
+      const made = cluster.labelledObjects<volumes.RepositoryObject>(
         "backuprepositories",
         cluster.runRepositorySelector(),
       );
@@ -146,6 +149,19 @@ describe("views of the backup repositories and of the pod volume operations", ()
         { timeout: 60_000 },
       );
       expect(await cluster.mounted(frame, cluster.REPOSITORIES)).toEqual([made[0].metadata.name]);
+      // Its cells against what the cluster holds of it, and its last maintenance, the time the server wrote when it
+      // made it ready, how long ago by the clock of the machine when the row was read (KIND-07).
+      expect(made[0].status?.lastMaintenanceTime).toBeTruthy();
+      const readFrom = Date.now() - volumes.VIEW_CLOCK_LAG;
+      const cells = await cluster.expectCells(
+        cluster.REPOSITORIES,
+        frame,
+        made[0].metadata.name,
+        volumes.repositoryCells(made[0]),
+      );
+      const expected = volumes.maintainedTexts(made[0], readFrom, Date.now());
+
+      expect(expected.includes(cells.maintained) ? cells.maintained : expected).toEqual(cells.maintained);
       expect(await cluster.notices(frame, [])).toEqual({});
       expect(await cluster.layoutProblems(frame, cluster.REPOSITORIES)).toEqual([]);
       await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
@@ -452,9 +468,17 @@ describe("views of the backup repositories and of the pod volume operations", ()
         const details = await cluster.hostDetails(frame, name, ...texts, cluster.E2E_VIEWS_NAMESPACE);
 
         expect([kind, details.includes("Velero")]).toEqual([kind, true]);
-        expect([kind, await frame.locator(`[data-testid=velero-${kind}-details-link]`).count()]).toEqual([kind, 1]);
+        const link = frame.locator(`[data-testid=velero-${kind}-details-link]`);
+
+        expect([kind, await link.count()]).toEqual([kind, 1]);
         await cluster.captureScreenshot(frame, `dark-${kind}-host-details`);
-        await cluster.closeDetails(frame);
+        // The way of the section opens the view of the operation in the page of the extension: the drawer is gone
+        // with the address that named the object.
+        await link.click();
+        await frame.waitForSelector(`[data-testid=velero-${kind}-workspace]`, { timeout: 60_000 });
+        expect([kind, (await cluster.shownView(frame))?.name]).toEqual([kind, name]);
+        expect([kind, await cluster.hostDetailsGone(frame)]).toEqual([kind, { drawer: false, address: false }]);
+        await cluster.closeWorkspace(frame);
       }
     },
     TIMEOUT,
@@ -546,6 +570,49 @@ describe("views of the backup repositories and of the pod volume operations", ()
   );
 
   it(
+    "shows the pod volume restore of the real restore of the volume as the cluster holds it",
+    async () => {
+      // What the node agent wrote when it restored the volume of the run, read by the suite on the cluster by the
+      // label of the restore, never by its name, which the release makes (KIND-19).
+      const restore = `fixture-volume-restore-${cluster.E2E_FIXTURE_RUN}`;
+      const operations = cluster.labelledObjects<{
+        metadata: { name: string };
+        spec?: { volume?: string; snapshotID?: string; sourceNamespace?: string; pod?: { namespace?: string } };
+        status?: { phase?: string; node?: string };
+      }>("podvolumerestores", `velero.io/restore-name=${restore}`);
+
+      expect(operations.map(({ status }) => status?.phase)).toEqual(["Completed"]);
+      const [operation] = operations;
+
+      expect([operation.spec?.snapshotID, operation.status?.node].every(Boolean)).toBe(true);
+      await cluster.openPage(frame, cluster.RESTORES);
+      await cluster.selectInstallation(frame, cluster.E2E_NAMESPACE);
+      await cluster.waitForList(frame, cluster.RESTORES);
+      await cluster.openWorkspace(frame, restore, cluster.RESTORES);
+      expect((await cluster.volumeBand(frame, "rows")).rows).toEqual([operation.metadata.name]);
+      // The row of the band is the way to the view of the pod volume restore.
+      await frame.locator(`[data-testid="velero-open-pod-volume-restore-${operation.metadata.name}"]`).click();
+      const view = frame.locator("[data-testid=velero-pod-volume-restore-workspace]");
+
+      await view.waitFor({ state: "visible", timeout: 60_000 });
+      expect((await cluster.shownView(frame))?.name).toBe(operation.metadata.name);
+      expect(await volumes.factOf(view, "Phase")).toMatch(/^Completed\b/);
+      expect(await volumes.factOf(view, "Snapshot ID")).toBe(operation.spec?.snapshotID);
+      expect(await volumes.factOf(view, "Node")).toBe(operation.status?.node);
+      expect(await volumes.factOf(view, "Volume")).toBe(operation.spec?.volume);
+      expect(await volumes.factOf(view, "Pod namespace")).toBe(operation.spec?.pod?.namespace);
+      expect(await volumes.factOf(view, "Source namespace")).toBe(operation.spec?.sourceNamespace);
+      await cluster.captureScreenshot(frame, "dark-pod-volume-restore-of-the-volume");
+      await cluster.closeWorkspace(frame);
+      expect((await cluster.shownView(frame))?.name).toBe(restore);
+      await cluster.closeWorkspace(frame);
+      expect(await cluster.shownView(frame)).toBeUndefined();
+      await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "offers no way to select, edit, cancel or delete a pod volume backup or a pod volume restore, by pointer or by keyboard",
     async () => {
       // What must not happen is waited for, for longer than the host takes to open a menu, and is expected not to
@@ -585,6 +652,19 @@ describe("views of the backup repositories and of the pod volume operations", ()
           expect([of.id, key, await cluster.shownView(frame)]).toEqual([of.id, key, undefined]);
         }
         expect([of.id, await list.locator(".TableRow.selected, .TableRow.checked").count()]).toEqual([of.id, 0]);
+        // Its view holds no control that writes: every button is the way back or a way to another view, and it has
+        // no field (REQ-190).
+        await cluster.openWorkspace(frame, name, of);
+        const workspace = frame.locator(`[data-testid=velero-${of.kind}-workspace]`);
+        const buttons = await workspace
+          .locator("button")
+          .evaluateAll((found) =>
+            found.map((button) => button.getAttribute("data-testid") ?? button.textContent ?? ""),
+          );
+
+        expect([of.id, buttons.filter((id) => !/^velero-(back|open-)/.test(id))]).toEqual([of.id, []]);
+        expect([of.id, await workspace.locator("input, select, textarea").count()]).toEqual([of.id, 0]);
+        await cluster.closeWorkspace(frame);
       }
     },
     TIMEOUT,

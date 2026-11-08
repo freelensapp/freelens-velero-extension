@@ -2817,15 +2817,17 @@ describe("the log, the results, the resources and the volumes of an operation", 
       // of a pod, backed up by the one pod volume backup the cluster holds for it, which the suite reads by the
       // label of the backup, never by its name, which the release makes (SPEC-0014, REQ-188, KIND-12).
       const backup = `fixture-volume-backup-${RUN}`;
-      const operations = cluster.labelledObjects<{
-        metadata: { name: string };
-        spec?: { pod?: { namespace?: string; name?: string }; volume?: string };
-      }>("podvolumebackups", `velero.io/backup-name=${backup}`);
+      const operations = cluster.labelledObjects<{ metadata: { name: string } }>(
+        "podvolumebackups",
+        `velero.io/backup-name=${backup}`,
+      );
 
       expect(operations).toHaveLength(1);
       const [operation] = operations;
 
       await stay("backup", "volumes", backup);
+      // The load is a write: the gate is on for it, as for every load of the suite.
+      await writesOn();
       await loadOf("backup", "volumes", backup);
       const volumes = await artifacts.volumesShown(frame, "backup");
       // The one row the file of the volumes holds of a pod volume backup: the volume of the pod the backup took.
@@ -4195,7 +4197,7 @@ describe("the log, the results, the resources and the volumes of an operation", 
         await frame.waitForSelector("[data-testid=velero-writes][data-writes=off]", { timeout: 60_000 });
       }
       expect(await cluster.writesState(frame)).toBe("off");
-      // Last, what says that every case before this one gave its gesture: eighteen loads that end with their
+      // Last, what says that every case before this one gave its gesture: nineteen loads that end with their
       // text, three that end as a file the store does not have, one that ends at the port-forward, one whose
       // cluster is disconnected while it runs, and two that are cancelled, each a request of its own but for
       // the first cancelled one, which created one or none. A case that failed before its gesture is found

@@ -327,21 +327,14 @@ describe("the backup repositories of the views", () => {
 
       expect(await link.count()).toBe(1);
       await cluster.captureScreenshot(frame, "dark-backup-repository-host-details");
-      // The way of the section opens the view of the repository in the page of the extension.
+      // The way of the section opens the view of the repository in the page of the extension: the drawer is gone
+      // with the address that named the object, as the way of the section of every kind leaves it.
       await link.click();
       await frame.waitForSelector("[data-testid=velero-backup-repository-workspace]", { timeout: 60_000 });
       expect((await cluster.shownView(frame))?.name).toBe(name);
-      // The host may close its details once the address leaves them, and the Escape that closes them may close the
-      // view as well (a run on 2026-11-05 lost the view after it): the details are closed only if they are still
-      // shown, and the view by its way back only if it is still there. Whether the details stay over the view after
-      // the way is to be looked at in the review (risk 7 of the plan).
-      await frame
-        .locator(".Drawer.KubeObjectDetails")
-        .first()
-        .waitFor({ state: "hidden", timeout: 10_000 })
-        .catch(() => undefined);
-      if ((await cluster.hostDetailsShown(frame)).drawer) await cluster.closeDetails(frame);
-      if (await cluster.shownView(frame)) await cluster.closeWorkspace(frame);
+      expect(await cluster.hostDetailsGone(frame)).toEqual({ drawer: false, address: false });
+      await cluster.closeWorkspace(frame);
+      expect(await cluster.shownView(frame)).toBeUndefined();
     },
     TIMEOUT,
   );
@@ -424,6 +417,17 @@ describe("the backup repositories of the views", () => {
         expect([key, await cluster.shownView(frame)]).toEqual([key, undefined]);
       }
       expect(await list.locator(".TableRow.selected, .TableRow.checked").count()).toBe(0);
+      // Its view holds no control that writes: every button is the way back or a way to another view, and it has no
+      // field (REQ-190).
+      await cluster.openWorkspace(frame, name, REPOSITORIES);
+      const workspace = frame.locator("[data-testid=velero-backup-repository-workspace]");
+      const buttons = await workspace
+        .locator("button")
+        .evaluateAll((found) => found.map((button) => button.getAttribute("data-testid") ?? button.textContent ?? ""));
+
+      expect(buttons.filter((id) => !/^velero-(back|open-|used-by-more)/.test(id))).toEqual([]);
+      expect(await workspace.locator("input, select, textarea").count()).toBe(0);
+      await cluster.closeWorkspace(frame);
       // The same click on the list the host shows of the same objects opens its menu: what is looked for above is
       // what the host shows when it offers to edit and to delete.
       await cluster.navigate(frame, "/crd/velero.io/backuprepositories");

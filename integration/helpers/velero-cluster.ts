@@ -635,14 +635,14 @@ export function apiRequests(): Record<string, number> {
   return counts;
 }
 
+/** What `workloadReadsOf` keeps of the counters of the pods and of the Jobs: their reads in a namespace or by name. */
+export const workloadReads = workloadReadsOf;
+
 /**
  * The counters of the pods and of the Jobs in the metrics of the API server, by verb, kind and scope, as `countsOf`
  * keys the kinds of Velero: what reads a maintenance Job of a repository or a pod of the node agent, or anything else
  * of the two, whoever asks (SPEC-0014, REQ-190).
  */
-/** What `workloadReadsOf` keeps of the counters of the pods and of the Jobs: their reads in a namespace or by name. */
-export const workloadReads = workloadReadsOf;
-
 export function workloadRequests(): Record<string, number> {
   const { status, stdout, stderr } = kubectlE2E("get", "--raw", "/metrics");
 
