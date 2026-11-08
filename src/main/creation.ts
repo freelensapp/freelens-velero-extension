@@ -7,6 +7,7 @@
 import {
   type Answer,
   type BackupCreated,
+  type BackupDeleted,
   failure,
   PHASE_BOUND,
   type RestoreCreated,
@@ -26,8 +27,9 @@ export const CREATION_MARGIN = 60_000;
 
 // What a creation answers once the object was created.
 export type Created = BackupCreated | ScheduleCreated | RestoreCreated;
-// What a write of an action answers once it was done: an object created, or a schedule paused or resumed.
-export type Done = Created | ScheduleChanged;
+// What a write of an action answers once it was done: an object created, a schedule paused or resumed, or the request
+// to delete a backup created, with what the reads after it showed.
+export type Done = Created | ScheduleChanged | BackupDeleted;
 
 // What the main process gives the procedures of the writes that create.
 export interface CreationDependencies {

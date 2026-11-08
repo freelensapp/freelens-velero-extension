@@ -47,6 +47,7 @@ export const WRITE_KINDS = [
   "restore",
   "schedule-pause",
   "schedule-resume",
+  "delete-backup",
 ] as const;
 export type WriteKind = (typeof WRITE_KINDS)[number];
 
@@ -306,6 +307,28 @@ export interface RestoreCreated {
   found?: true;
 }
 
+// What the reads after the creation of a DeleteBackupRequest showed of the request and of its backup together
+// (SPEC-0017, REQ-282): the request gone with the backup, a deletion Velero completed; the request gone and the backup
+// there, a request a later one for the same backup replaced; Processed with the error of a refusal and the backup in the
+// phase it had, a deletion Velero refused; Processed with errors and the backup Deleting, a deletion that failed on the
+// way; no phase, a request Velero has not read; InProgress, a deletion Velero is at.
+export const DELETION_ENDS = ["completed", "replaced", "refused", "failed", "unread", "in-progress"] as const;
+export type DeletionEnd = (typeof DELETION_ENDS)[number];
+
+// What a deletion of a backup is once its request was created: the request by the name the API server gave it, the
+// end the last reads showed, the phase of the backup when it is there, the errors of the request as Velero wrote them,
+// within the bounds of the contract; that the request was looked for by the labels of its backup after an answer that
+// was lost (REQ-250); and that the requests could not be read, and the backup alone was.
+export interface BackupDeleted {
+  request?: string;
+  end: DeletionEnd;
+  phase?: string;
+  errors?: string[];
+  errorsLeft?: number;
+  found?: true;
+  requestsUnread?: true;
+}
+
 // The errors of a validation an answer carries: a few, each as written, within a total that leaves the answer within
 // its bound; the others are counted, and read in the view of the backup, or of the schedule.
 export const ERRORS_BOUND = { items: 16, item: 4096, total: 32_768 } as const;
@@ -331,9 +354,10 @@ export function carriedErrors(errors: unknown): { errors?: string[]; errorsLeft?
 // How a write whose request was sent ended: the backup created, with the phase Velero wrote and whether it was found
 // by its name after an answer that was lost; or the code and the words of the failure.
 // What a write did: for a creation, the object created; for a pause and a resume, the patch applied, with nothing
-// more, since the kind says which.
+// more, since the kind says which; for a deletion, what the reads after its request showed, and whether the requests
+// could be read.
 export type KeptOutcome =
-  | { created: true; phase?: string; found?: true; paused?: true }
+  | { created: true; phase?: string; found?: true; paused?: true; deletion?: DeletionEnd; requestsUnread?: true }
   | { created: false; code: FailureCode; text: string };
 
 // The end of a write whose request was sent, kept for its cluster until a frame of that cluster has shown it, or the
@@ -341,7 +365,14 @@ export type KeptOutcome =
 export interface KeptEnd {
   // The identifier of the request of the write.
   request: string;
-  kind: "backup-from-schedule" | "backup" | "schedule" | "restore" | "schedule-pause" | "schedule-resume";
+  kind:
+    | "backup-from-schedule"
+    | "backup"
+    | "schedule"
+    | "restore"
+    | "schedule-pause"
+    | "schedule-resume"
+    | "delete-backup";
   namespace: string;
   // The context of the entry of the cluster in the catalog of the host.
   context: string;
@@ -685,10 +716,13 @@ function readWriteParameters(value: unknown, run: boolean): WriteConfirmRequest 
   const newSchedule = value.kind === "schedule";
   const ofRestore = value.kind === "restore";
   // A pause and a resume are of a schedule, and a resume carries, at the confirmation, the expression its review read
-  // and the value of `skipImmediately` chosen.
+  // and the value of `skipImmediately` chosen. A deletion is of a backup, and carries nothing else.
   const ofPatch = value.kind === "schedule-pause" || value.kind === "schedule-resume";
+  const ofDelete = value.kind === "delete-backup";
 
-  if ((value.kind === "DownloadRequest" || ofSchedule || ofRestore || ofPatch) !== "target" in value) return;
+  if ((value.kind === "DownloadRequest" || ofSchedule || ofRestore || ofPatch || ofDelete) !== "target" in value)
+    return;
+  if (ofDelete && (value.target as WriteTarget | undefined)?.kind !== "Backup") return;
   if (!run && (value.kind === "schedule-resume") !== "resume" in value) return;
   const resume = "resume" in value ? readResume(value.resume) : undefined;
 
@@ -803,8 +837,8 @@ export function readWriteRunRequest(value: unknown): WriteRunRequest | undefined
   );
 
   if (!confirm || !isUuid(value.token) || !isUuid(value.request)) return;
-  // A restore runs with the name of its backup as it was typed, and no other write carries one.
-  if ((confirm.kind === "restore") !== "typed" in value) return;
+  // A restore and a deletion run with the name of their backup as it was typed, and no other write carries one.
+  if ((confirm.kind === "restore" || confirm.kind === "delete-backup") !== "typed" in value) return;
   if ("typed" in value && (typeof value.typed !== "string" || value.typed.length > 253)) return;
   return {
     ...confirm,
@@ -1080,18 +1114,55 @@ export function readRestoreCreated(value: unknown): RestoreCreated | undefined {
   };
 }
 
+// What a deletion is once its request was created, as the main process answers it.
+export function readBackupDeleted(value: unknown): BackupDeleted | undefined {
+  if (
+    !isRecord(value) ||
+    !hasKeys(value, ["end"], ["request", "phase", "errors", "errorsLeft", "found", "requestsUnread"]) ||
+    !(DELETION_ENDS as readonly unknown[]).includes(value.end)
+  )
+    return;
+  if ("request" in value && !isName(value.request)) return;
+  if ("phase" in value && !isText(value.phase, PHASE_BOUND)) return;
+  if (
+    "errors" in value &&
+    (!Array.isArray(value.errors) ||
+      value.errors.length === 0 ||
+      value.errors.length > ERRORS_BOUND.items ||
+      !value.errors.every((error) => isText(error, ERRORS_BOUND.item)) ||
+      (value.errors as string[]).reduce((total, error) => total + error.length, 0) > ERRORS_BOUND.total)
+  )
+    return;
+  if ("errorsLeft" in value && (!Number.isSafeInteger(value.errorsLeft) || (value.errorsLeft as number) < 1)) return;
+  if ("found" in value && value.found !== true) return;
+  if ("requestsUnread" in value && value.requestsUnread !== true) return;
+  return {
+    end: value.end as DeletionEnd,
+    ...(typeof value.request === "string" ? { request: value.request } : {}),
+    ...(typeof value.phase === "string" ? { phase: value.phase } : {}),
+    ...(Array.isArray(value.errors) ? { errors: [...(value.errors as string[])] } : {}),
+    ...(typeof value.errorsLeft === "number" ? { errorsLeft: value.errorsLeft } : {}),
+    ...(value.found === true ? { found: true } : {}),
+    ...(value.requestsUnread === true ? { requestsUnread: true } : {}),
+  };
+}
+
 function readKeptOutcome(value: unknown): KeptOutcome | undefined {
   if (!isRecord(value) || typeof value.created !== "boolean") return;
   if (value.created) {
-    if (!hasKeys(value, ["created"], ["phase", "found", "paused"])) return;
+    if (!hasKeys(value, ["created"], ["phase", "found", "paused", "deletion", "requestsUnread"])) return;
     if ("phase" in value && !isText(value.phase, PHASE_BOUND)) return;
     if ("found" in value && value.found !== true) return;
     if ("paused" in value && value.paused !== true) return;
+    if ("deletion" in value && !(DELETION_ENDS as readonly unknown[]).includes(value.deletion)) return;
+    if ("requestsUnread" in value && value.requestsUnread !== true) return;
     return {
       created: true,
       ...(typeof value.phase === "string" ? { phase: value.phase } : {}),
       ...(value.found === true ? { found: true } : {}),
       ...(value.paused === true ? { paused: true } : {}),
+      ...("deletion" in value ? { deletion: value.deletion as DeletionEnd } : {}),
+      ...(value.requestsUnread === true ? { requestsUnread: true } : {}),
     };
   }
   if (
@@ -1119,7 +1190,8 @@ export function readKeptEnds(value: unknown): KeptEnd[] | undefined {
         item.kind !== "schedule" &&
         item.kind !== "restore" &&
         item.kind !== "schedule-pause" &&
-        item.kind !== "schedule-resume") ||
+        item.kind !== "schedule-resume" &&
+        item.kind !== "delete-backup") ||
       // A backup asked from a schedule names it, and one of the form names none; a restore names its backup.
       (item.kind === "backup-from-schedule") !== "schedule" in item ||
       ("schedule" in item && !isName(item.schedule)) ||
@@ -1143,6 +1215,11 @@ export function readKeptEnds(value: unknown): KeptEnd[] | undefined {
       ("phase" in outcome || "paused" in outcome)
     )
       continue;
+    // The request of a deletion is created whatever comes of it: what the reads after it showed is said, and nothing of a
+    // creation; an end of another kind says no deletion.
+    if (outcome.created && (item.kind === "delete-backup") !== "deletion" in outcome) continue;
+    if (outcome.created && item.kind !== "delete-backup" && "requestsUnread" in outcome) continue;
+    if (item.kind === "delete-backup" && outcome.created && ("phase" in outcome || "paused" in outcome)) continue;
     ends.delete(item.request);
     ends.set(item.request, {
       request: item.request,

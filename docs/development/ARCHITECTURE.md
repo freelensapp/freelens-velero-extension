@@ -820,7 +820,12 @@ never the strategic merge patch of the host: the text is exactly the patch of a 
 a test of the UID and an add of `spec.paused`, or of a resume, the tests of the UID,
 of `spec.paused` and of the expression, a replace of `spec.paused` and an add of
 `spec.skipImmediately`, or nothing leaves. A patch whose answer is lost is not known,
-as a creation is.
+as a creation is. Since the first pull request of T4.6 it creates the
+DeleteBackupRequest of one backup with the text the review showed, byte for byte, the
+text exactly the one `velero backup delete` makes, its name generated from the prefix of
+the backup, or nothing leaves, and lists the requests of a backup by the labels of its
+name and of its UID; it creates a request with a generated name otherwise only for the
+ServerStatusRequest of the view of the server, and deletes nothing.
 
 A creation that got no answer, from a fetch that failed, the deadline, an answer
 that cannot be read or is too large, or a 5xx, is an unknown submission, never an
@@ -933,8 +938,13 @@ backup the operator typed is the one of the review; since the first pull request
 T4.5 the pause and the resume of a Schedule, a JSON patch whose tests are the check of
 what the review read, the schedule read once after it and checked against what the
 patch wrote, after a 422 to say whether it changed since the review, and after an
-answer that was lost to say what it holds of the patch; each action of SPEC-0017 adds
-its kind with its slice. The creations share one course in the main process,
+answer that was lost to say what it holds of the patch; since the first pull request
+of T4.6 the DeleteBackupRequest of one backup, whose confirmation and run read the
+backup by its name and its UID, and run only when the name the operator typed is the
+one of the review, followed by the reads of the request and of the backup together,
+and after an answer that was lost by the requests of the backup, by its labels; each
+action of SPEC-0017 adds its kind with its slice. The creations share one course in
+the main process,
 [`creation.ts`](../../src/main/creation.ts): the POST of the text kept, the reads
 after it until Velero writes a phase, and, when the answer is not known, the look for
 the object by its name, with the rule and the words of each kind.

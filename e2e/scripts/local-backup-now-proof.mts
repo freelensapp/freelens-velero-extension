@@ -62,7 +62,8 @@ async function proveCreation<Checked>(
 ): Promise<Checked & { phase: string; removed: boolean }> {
   const main = await compiledDiagnostics();
   const host = await startProofHost(context.kubeconfig, DEMO_CONTEXT, context.shell);
-  // The requests of the proof carry the labels of the environment, which knows them as its own.
+  // The requests the proof makes with a generated name carry the labels of the environment, which knows them as its
+  // own; its DeleteBackupRequest is the one of the deletion of the extension, with the labels of its backup alone.
   const api = proofAdapter(main, proofEntry(context.owner, context.kubeconfig), host, context.assertCurrent, {
     "app.kubernetes.io/managed-by": "freelens-velero-extension",
     [OWNER_LABEL]: context.owner,
@@ -97,7 +98,12 @@ async function proveCreation<Checked>(
     return read;
   };
   const remove = async (backup: { name: string; uid: string }) => {
-    await api.createGenerated("DeleteBackupRequest", DEMO_NAMESPACE, "proof-delete-", controller.signal, backup);
+    // The request as the deletion of the extension writes it, which the server processes once the backup ended.
+    await api.createDeleteBackupRequest(
+      DEMO_NAMESPACE,
+      main.deleteRequestText(main.deleteRequestOf(DEMO_NAMESPACE, backup)),
+      controller.signal,
+    );
     for (const until = Date.now() + ENDS_WITHIN; Date.now() < until; await delay(2000)) {
       if ((await readBackup(backup.name)) === undefined) return true;
     }

@@ -319,11 +319,18 @@ export const TargetBar = observer(({ installation }: { installation: Installatio
   );
 });
 
-// What an end kept for the cluster is of: a schedule, created, paused or resumed, a restore or a backup, which its view
-// shows.
+// What an end kept for the cluster is of: a schedule, created, paused or resumed, a restore or a backup, created or
+// deleted, which its view shows.
 function objectOf(end: KeptEnd): "schedule" | "restore" | "backup" {
   if (end.kind === "schedule-pause" || end.kind === "schedule-resume") return "schedule";
   return end.kind === "schedule" || end.kind === "restore" ? end.kind : "backup";
+}
+
+// Whether the object of an end has a view to lead to: one created or changed in the installation that is shown, and not
+// a backup whose deletion the reads showed completed, which is gone.
+function viewed(end: KeptEnd, namespace: string | undefined): boolean {
+  if (!end.outcome.created || namespace !== end.namespace) return false;
+  return !(end.kind === "delete-backup" && end.outcome.deletion === "completed");
 }
 
 // The ends of the writes of this cluster whose request was sent and that no view showed, wherever the operator is in
@@ -351,7 +358,7 @@ const KeptEnds = observer(({ installation }: { installation: Installation }) => 
           >
             <span>{keptEndWords(end)}</span>
             <span className={styles.muted}>at {new Date(end.at).toLocaleTimeString()}</span>
-            {end.outcome.created && installation.namespace === end.namespace ? (
+            {viewed(end, installation.namespace) ? (
               <ViewLink target={{ kind: objectOf(end), name: end.name }}>
                 Open the {objectOf(end)} {end.name}
               </ViewLink>

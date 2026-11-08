@@ -4,6 +4,7 @@ import {
   ARTIFACT_TARGETS,
   artifactKind,
   carriedErrors,
+  DELETION_ENDS,
   downloadRequestName,
   ERRORS_BOUND,
   FAILURE_TEXT_BOUND,
@@ -20,6 +21,7 @@ import {
   readArtifactSaved,
   readArtifactValue,
   readBackupCreated,
+  readBackupDeleted,
   readGateDisableRequest,
   readGateEnableRequest,
   readGateState,
@@ -726,6 +728,81 @@ describe("a schedule of the form created, between the processes", () => {
   });
 });
 
+describe("the deletion of a backup, between the processes", () => {
+  it("reads a confirmation and a run of the deletion of one backup, the run with the name of the backup as it was typed, and nothing else", () => {
+    const of = { cluster, namespace: "velero", kind: "delete-backup", target };
+    const token = randomUUID();
+    const request = randomUUID();
+
+    expect(readWriteConfirmRequest(of)).toEqual(of);
+    expect(readWriteRunRequest({ ...of, typed: "nightly", token, request })).toEqual({
+      ...of,
+      typed: "nightly",
+      token,
+      request,
+    });
+    // A name typed that is not the one of the backup is read: the main process refuses it with its words.
+    expect(readWriteRunRequest({ ...of, typed: "weekly", token, request })).toMatchObject({ typed: "weekly" });
+    for (const value of [
+      { cluster, namespace: "velero", kind: "delete-backup" },
+      { ...of, target: { ...target, kind: "Schedule" } },
+      { ...of, target: { ...target, kind: "Restore" } },
+      { ...of, backup: "nightly" },
+      { ...of, restore: "nightly-1" },
+      { ...of, schedule: "nightly" },
+      { ...of, artifact: "BackupLog" },
+      { ...of, resume: { expression: "0 3 * * *", skipImmediately: true } },
+      { ...of, typed: "nightly" },
+    ])
+      expect([value, readWriteConfirmRequest(value)]).toEqual([value, undefined]);
+    for (const value of [
+      { ...of, token, request },
+      { ...of, typed: 7, token, request },
+      { ...of, typed: "a".repeat(254), token, request },
+      { ...of, typed: "nightly", text: "{}", token, request },
+      { ...of, target: { ...target, kind: "Schedule" }, typed: "nightly", token, request },
+    ])
+      expect([value, readWriteRunRequest(value)]).toEqual([value, undefined]);
+  });
+
+  it("reads what the reads after the request showed: the end, the request, the phase of the backup, the errors as written, whether it was found and whether the requests were read", () => {
+    expect(DELETION_ENDS).toEqual(["completed", "replaced", "refused", "failed", "unread", "in-progress"]);
+    for (const end of DELETION_ENDS) expect(readBackupDeleted({ end })).toEqual({ end });
+    const refused = {
+      end: "refused",
+      request: "nightly-abcde",
+      phase: "Completed",
+      errors: ["backup deletion failed: backup storage location default is ReadOnly"],
+      errorsLeft: 2,
+    };
+
+    expect(readBackupDeleted(refused)).toEqual(refused);
+    expect(readBackupDeleted({ end: "completed", found: true, requestsUnread: true })).toEqual({
+      end: "completed",
+      found: true,
+      requestsUnread: true,
+    });
+    for (const value of [
+      {},
+      { end: "deleted" },
+      { end: "completed", request: "Nightly" },
+      { end: "completed", request: "" },
+      { end: "refused", phase: "P".repeat(65) },
+      { end: "refused", errors: [] },
+      { end: "refused", errors: "one" },
+      { end: "refused", errors: Array.from({ length: 17 }, () => "e") },
+      { end: "refused", errors: ["e".repeat(4097)] },
+      { end: "refused", errors: Array.from({ length: 9 }, () => "e".repeat(4096)) },
+      { end: "refused", errorsLeft: 0 },
+      { end: "refused", errorsLeft: 1.5 },
+      { end: "completed", found: false },
+      { end: "completed", requestsUnread: "yes" },
+      { end: "completed", name: "nightly" },
+    ])
+      expect([value, readBackupDeleted(value)]).toEqual([value, undefined]);
+  });
+});
+
 describe("the errors of a validation an answer carries", () => {
   it("carries them in order, each whole, until one does not fit, and counts the others", () => {
     expect(carriedErrors(undefined)).toEqual({});
@@ -830,6 +907,47 @@ describe("the ends kept for a cluster, between the processes", () => {
     expect(readKeptEnds([{ ...paused, outcome: { created: true, phase: "Enabled" } }])).toEqual([]);
     expect(readKeptEnds([{ ...paused, outcome: { created: true, paused: true } }])).toEqual([]);
     expect(readKeptEnds([{ ...paused, schedule: "nightly" }])).toEqual([]);
+  });
+
+  it("reads the end of a deletion, with what the reads after its request showed, and of no other shape", () => {
+    const { schedule: _schedule, ...base } = end;
+    const deleted = {
+      ...base,
+      request: randomUUID(),
+      kind: "delete-backup",
+      name: "nightly",
+      outcome: { created: true, deletion: "completed" },
+    };
+    const found = { ...deleted, request: randomUUID(), outcome: { created: true, deletion: "refused", found: true } };
+    const refused = {
+      ...deleted,
+      request: randomUUID(),
+      outcome: { created: false, code: "conflict", text: "A request has the name the API server generated." },
+    };
+
+    const unread = {
+      ...deleted,
+      request: randomUUID(),
+      outcome: { created: true, deletion: "in-progress", requestsUnread: true },
+    };
+
+    expect(readKeptEnds([deleted, found, refused, unread])).toEqual([deleted, found, refused, unread]);
+    // The mark of the requests not read is of a deletion alone, and is true or not there.
+    expect(
+      readKeptEnds([{ ...unread, outcome: { created: true, deletion: "unread", requestsUnread: false } }]),
+    ).toEqual([]);
+    expect(readKeptEnds([{ ...end, outcome: { created: true, phase: "New", requestsUnread: true } }])).toEqual([]);
+    for (const outcome of [
+      { created: true },
+      { created: true, deletion: "deleted" },
+      { created: true, deletion: "completed", phase: "Completed" },
+      { created: true, deletion: "completed", paused: true },
+    ])
+      expect(readKeptEnds([{ ...deleted, outcome }])).toEqual([]);
+    // A deletion names its backup by its name, and no schedule or backup beside it; no other kind says a deletion.
+    expect(readKeptEnds([{ ...deleted, schedule: "nightly" }])).toEqual([]);
+    expect(readKeptEnds([{ ...deleted, backup: "nightly" }])).toEqual([]);
+    expect(readKeptEnds([{ ...end, outcome: { created: true, deletion: "completed" } }])).toEqual([]);
   });
 
   it("reads the end of a schedule of the form, which names no schedule it was asked from", () => {
