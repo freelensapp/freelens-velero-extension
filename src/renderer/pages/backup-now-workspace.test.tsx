@@ -659,6 +659,29 @@ describe("back up now, from the view of a schedule", () => {
     );
   });
 
+  it("leads to a restore the target bar says, as a restore", async () => {
+    const main = mainProcess();
+
+    main.kept.push({
+      request: "00000000-0000-4000-8000-0000000000d1",
+      kind: "restore",
+      namespace: A,
+      context: "kind-local-demo",
+      name: "nightly-20261108120000",
+      backup: "nightly",
+      outcome: { created: true, phase: "InProgress" },
+      at: NOW,
+    });
+    mount(main);
+    await screen.findByTestId("velero-kept-ends");
+    expect(screen.getByTestId("velero-open-restore-nightly-20261108120000").textContent).toBe(
+      "Open the restore nightly-20261108120000",
+    );
+    expect(screen.getByTestId("velero-kept-end-dismiss").getAttribute("aria-label")).toBe(
+      "Dismiss what is said of the restore nightly-20261108120000",
+    );
+  });
+
   it("says no end again above a form once the operator dismissed it in the target bar", async () => {
     const main = mainProcess();
     const { installation } = mount(main);

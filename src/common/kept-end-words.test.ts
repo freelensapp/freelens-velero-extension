@@ -46,6 +46,22 @@ describe("what the target bar says of an end no view showed", () => {
     );
   });
 
+  it("says a restore with the backup it is of", () => {
+    const { schedule: _schedule, ...restore } = {
+      ...end,
+      kind: "restore" as const,
+      name: "nightly-20261108120000",
+      backup: "nightly",
+    };
+
+    expect(keptEndWords({ ...restore, outcome: { created: true, phase: "InProgress" } })).toBe(
+      "The restore nightly-20261108120000 of the backup nightly, in velero (context kind-demo), was created while no view of it was open. Velero wrote its phase: InProgress.",
+    );
+    expect(keptEndWords({ ...restore, outcome: { created: false, code: "conflict", text: "Taken." } })).toBe(
+      "The restore nightly-20261108120000 of the backup nightly, in velero (context kind-demo), ended while no view of it was open: Taken.",
+    );
+  });
+
   it("says a backup of the form as one asked with the form", () => {
     const { schedule: _schedule, ...form } = { ...end, kind: "backup" as const, name: "shop-by-hand" };
 

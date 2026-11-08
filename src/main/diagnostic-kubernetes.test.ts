@@ -112,6 +112,7 @@ describe("the create-only adapter, through the client of the host", () => {
       "createBackup",
       "createDownload",
       "createGenerated",
+      "createRestore",
       "createSchedule",
       "list",
       "path",
@@ -688,6 +689,75 @@ describe("the create-only adapter, through the client of the host", () => {
     ])
       expect(refused(body)).toThrow("validation");
     expect(host.requests).toHaveLength(1);
+  });
+
+  it("creates the restore of a text as it is, byte for byte, and sends nothing of a text that is not a restore of a backup of the namespace", async () => {
+    const { api, host, signal } = fixture();
+    const restore = {
+      apiVersion: "velero.io/v1",
+      kind: "Restore",
+      metadata: { name: "nightly-20261108120000", namespace: "velero" },
+      spec: { backupName: "nightly", existingResourcePolicy: "none" },
+    };
+    const text = JSON.stringify(restore, null, 2);
+
+    await api.createRestore("velero", text, signal);
+    expect(host.requests.map((item) => [item.method, item.path, item.text])).toEqual([
+      ["POST", `${API}/restores`, text],
+    ]);
+    const refused = (body: Record<string, unknown> | string) => () =>
+      api.createRestore("velero", typeof body === "string" ? body : JSON.stringify(body), signal);
+
+    for (const body of [
+      "not json",
+      { ...restore, kind: "Backup" },
+      { ...restore, apiVersion: "velero.io/v2alpha1" },
+      { ...restore, metadata: { name: "nightly-1", namespace: "elsewhere" } },
+      { ...restore, metadata: { generateName: "nightly-", namespace: "velero" } },
+      { ...restore, metadata: { name: "nightly-1", namespace: "velero", labels: { app: "web" } } },
+      { ...restore, metadata: { name: "Nightly", namespace: "velero" } },
+      { ...restore, metadata: { name: "a".repeat(217), namespace: "velero" } },
+      // A restore names its backup, and never a schedule.
+      { ...restore, spec: { existingResourcePolicy: "none" } },
+      { ...restore, spec: { backupName: "", existingResourcePolicy: "none" } },
+      { ...restore, spec: { backupName: "nightly", scheduleName: "nightly" } },
+      { ...restore, spec: undefined },
+      { ...restore, status: { phase: "Completed" } },
+      { ...restore, extra: 1 },
+      // Only the fields the form offers, and a policy for the resources that exist the form offers (REQ-273).
+      ...[
+        "hooks",
+        "resourcePolicy",
+        "resourceModifier",
+        "itemOperationTimeout",
+        "uploaderConfig",
+        "preserveNodePorts",
+      ].map((field) => ({ ...restore, spec: { ...restore.spec, [field]: {} } })),
+      { ...restore, spec: { ...restore.spec, existingResourcePolicy: "replace" } },
+      { ...restore, spec: { backupName: "nightly" } },
+    ])
+      expect(refused(body)).toThrow("validation");
+    expect(host.requests).toHaveLength(1);
+    // Every field the form offers, and the other policy.
+    const whole = {
+      ...restore,
+      spec: {
+        backupName: "nightly",
+        includedNamespaces: ["shop"],
+        excludedNamespaces: ["web-test"],
+        includedResources: ["configmaps"],
+        excludedResources: ["secrets"],
+        namespaceMapping: { shop: "shop-2" },
+        labelSelector: { matchLabels: { app: "web" } },
+        orLabelSelectors: [{ matchLabels: { tier: "db" } }],
+        restorePVs: false,
+        includeClusterResources: false,
+        existingResourcePolicy: "update",
+      },
+    };
+
+    await api.createRestore("velero", JSON.stringify(whole), signal);
+    expect(host.requests).toHaveLength(2);
   });
 
   it("creates a request for one of the eight artifacts, and sends nothing for any other target", async () => {

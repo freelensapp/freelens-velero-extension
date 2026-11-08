@@ -17,6 +17,7 @@ import { X509Certificate } from "node:crypto";
 import { backupNameProblem } from "../common/backup-from-schedule";
 import { type ArtifactTarget, DIAGNOSTIC_REQUEST_LABEL, isArtifactTarget } from "../common/ipc";
 import { labelOf } from "../common/name-label";
+import { EXISTING_RESOURCE_POLICIES, RESTORE_SPEC_KEYS, restoreNameProblem } from "../common/restore-form";
 import { scheduleNameProblem } from "../common/schedule-form";
 import { type CatalogEntry, refusalOf, sameEntry } from "./catalog";
 import { DiagnosticError } from "./diagnostic-transport";
@@ -488,6 +489,38 @@ export class DiagnosticKubernetes {
       throw new DiagnosticError("validation");
     if (scheduleNameProblem(body.metadata.name) !== undefined) throw new DiagnosticError("validation");
     return this.send("POST", this.path("Schedule", namespace), signal, { text });
+  }
+
+  // The Restore of the form, sent as the text the review showed, byte for byte (SPEC-0017, REQ-266, REQ-273): a text
+  // that is not a Restore of this namespace, with its name and its namespace alone and a spec that names a backup, has
+  // only the fields the form offers and a policy for the resources that exist the form offers, is refused before
+  // anything leaves.
+  createRestore(namespace: string, text: string, signal: AbortSignal): Promise<DiagnosticObject> {
+    let body: unknown;
+
+    try {
+      body = JSON.parse(text);
+    } catch {
+      throw new DiagnosticError("validation");
+    }
+    if (
+      !isRecord(body) ||
+      Object.keys(body).sort().join() !== OBJECT_KEYS ||
+      body.apiVersion !== "velero.io/v1" ||
+      body.kind !== "Restore" ||
+      !isRecord(body.metadata) ||
+      Object.keys(body.metadata).sort().join() !== "name,namespace" ||
+      body.metadata.namespace !== namespace ||
+      typeof body.metadata.name !== "string" ||
+      !isRecord(body.spec) ||
+      typeof body.spec.backupName !== "string" ||
+      body.spec.backupName === "" ||
+      !Object.keys(body.spec).every((key) => (RESTORE_SPEC_KEYS as readonly string[]).includes(key)) ||
+      !(EXISTING_RESOURCE_POLICIES as readonly unknown[]).includes(body.spec.existingResourcePolicy)
+    )
+      throw new DiagnosticError("validation");
+    if (restoreNameProblem(body.metadata.name) !== undefined) throw new DiagnosticError("validation");
+    return this.send("POST", this.path("Restore", namespace), signal, { text });
   }
 
   createGenerated(

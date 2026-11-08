@@ -11,6 +11,7 @@ import {
   type Answer,
   type BackupCreated,
   failure,
+  saidProblems,
   textWithinBound,
   type WriteConfirmAnswer,
   type WriteConfirmRequest,
@@ -25,7 +26,7 @@ import type { Write } from "./write-gate";
 
 export const BACKUP_CREATE_WORDS = {
   notAForm: "A backup of the form is asked with its name and its template, of no other object.",
-  refused: (problems: string[]) => `The template is refused, and nothing was sent: ${problems.join(" ")}`,
+  refused: (problems: readonly string[]) => saidProblems("The template is refused, and nothing was sent: ", problems),
   unbuilt: "The backup could not be written from the template: nothing was sent.",
   tooLarge: (characters: number) =>
     `The backup of this template is written in ${characters} characters, more than a review carries: nothing was confirmed.`,

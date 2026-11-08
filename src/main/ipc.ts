@@ -17,7 +17,6 @@ import {
   type ArtifactSaved,
   type ArtifactTarget,
   type ArtifactValue,
-  type BackupCreated,
   CHANNELS,
   type Failure,
   failure,
@@ -36,7 +35,6 @@ import {
   readWriteRunRequest,
   readWriteShownRequest,
   readWriteStatusRequest,
-  type ScheduleCreated,
   type ServerStatusValue,
   savedFileName,
   type WriteRunRequest,
@@ -52,11 +50,14 @@ import { type DiagnosticOptions, runDownload } from "./diagnostic-service";
 import { DiagnosticError } from "./diagnostic-transport";
 import { KubectlTunnels, type Spawn, type TunnelHost } from "./diagnostic-tunnel";
 import { KeptEnds } from "./kept-ends";
+import { confirmRestoreCreate, runRestoreCreate } from "./restore-create";
 import { confirmScheduleCreate, runScheduleCreate } from "./schedule-create";
 import { readServerStatus, serverStatusFailure } from "./server-status";
 import { signatureOf, WriteGate } from "./write-gate";
 
 import type { IpcMainInvokeEvent } from "electron";
+
+import type { Created } from "./creation";
 
 // What a handler reads of the event the host gives it, with the types Electron gives them: the frame that
 // sent the request, by its address, and the identifiers of its process and of the frame, which tell the
@@ -253,20 +254,22 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
   // The ends of the writes whose request was sent, for their cluster (SPEC-0017, REQ-250).
   const kept = new KeptEnds();
   // What a kept end says: what to look for, in which namespace of which context, and how it ended.
-  const keptEnd = (
-    request: WriteRunRequest,
-    end: Answer<BackupCreated | ScheduleCreated>,
-    context: string,
-  ): KeptEnd => ({
+  const keptEnd = (request: WriteRunRequest, end: Answer<Created>, context: string): KeptEnd => ({
     request: request.request,
-    kind: request.kind === "schedule" ? "schedule" : request.kind === "backup" ? "backup" : "backup-from-schedule",
+    kind:
+      request.kind === "schedule" || request.kind === "backup" || request.kind === "restore"
+        ? request.kind
+        : "backup-from-schedule",
     namespace: request.namespace,
     // The context of the entry the request was sent to, which the adapter was made for: not the one the catalog may
     // have now.
     context: context || request.cluster,
-    name: String(request.kind === "schedule" ? request.schedule : request.backup),
-    // A backup asked from a schedule names it; a backup or a schedule of the form names none.
+    name: String(
+      request.kind === "schedule" ? request.schedule : request.kind === "restore" ? request.restore : request.backup,
+    ),
+    // A backup asked from a schedule names it, and a restore its backup; a backup or a schedule of the form names none.
     ...(request.kind === "backup-from-schedule" ? { schedule: request.target?.name ?? "" } : {}),
+    ...(request.kind === "restore" ? { backup: request.target?.name ?? "" } : {}),
     outcome: end.ok
       ? {
           created: true,
@@ -281,7 +284,7 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
   const actions = {
     gate,
     now: () => dependencies.now?.() ?? Date.now(),
-    keep: (request: WriteRunRequest, end: Answer<BackupCreated | ScheduleCreated>, context: string) =>
+    keep: (request: WriteRunRequest, end: Answer<Created>, context: string) =>
       kept.keep(request.cluster, keptEnd(request, end, context)),
     sleep:
       dependencies.sleep ??
@@ -301,7 +304,12 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
   };
 
   procedure(CHANNELS.writeConfirm, readWriteConfirmRequest, async (sender, request, still) => {
-    if (request.kind !== "backup-from-schedule" && request.kind !== "backup" && request.kind !== "schedule")
+    if (
+      request.kind !== "backup-from-schedule" &&
+      request.kind !== "backup" &&
+      request.kind !== "schedule" &&
+      request.kind !== "restore"
+    )
       return gate.confirm(
         sender.key,
         request.cluster,
@@ -311,13 +319,15 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
         request.artifact,
       );
     // What the object depends on is read for the review while the frame that asks it is there: the schedule a backup
-    // is asked from, or the locations the template names.
+    // is asked from, the locations the template names, or the backup a restore is of.
     const controller = new AbortController();
     const watching = watchFrame(still, controller);
 
     try {
       if (request.kind === "schedule")
         return await confirmScheduleCreate(actions, sender.key, request, controller.signal);
+      if (request.kind === "restore")
+        return await confirmRestoreCreate(actions, sender.key, request, controller.signal);
       return request.kind === "backup"
         ? await confirmBackupCreate(actions, sender.key, request, controller.signal)
         : await confirmBackupNow(actions, sender.key, request, controller.signal);
@@ -509,25 +519,35 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
     }
   };
 
-  // The creations that run, of a backup asked from a schedule or with the form, or of a schedule of the form, by their
-  // cluster and the identifier of their request: the same request of the same frame, sent again while it runs, joins it
-  // and creates nothing (SPEC-0017, REQ-249; SPEC-0016, REQ-239).
-  const backupsNow = new Map<
-    string,
-    { fingerprint: string; promise: Promise<Answer<BackupCreated>> | Promise<Answer<ScheduleCreated>> }
-  >();
+  // The creations that run, of a backup asked from a schedule or with the form, of a schedule of the form, or of a
+  // restore, by their cluster and the identifier of their request: the same request of the same frame, sent again while
+  // it runs, joins it and creates nothing (SPEC-0017, REQ-249; SPEC-0016, REQ-239).
+  const backupsNow = new Map<string, { fingerprint: string; promise: Promise<Answer<Created>> }>();
 
-  procedure<WriteRunRequest, ServerStatusValue | ArtifactValue | BackupCreated | ScheduleCreated>(
+  procedure<WriteRunRequest, ServerStatusValue | ArtifactValue | Created>(
     CHANNELS.writeRun,
     readWriteRunRequest,
     (sender, request, still) => {
       if (request.kind === "ServerStatusRequest") return serverStatus(sender, request, still);
-      if (request.kind === "backup-from-schedule" || request.kind === "backup" || request.kind === "schedule") {
+      if (
+        request.kind === "backup-from-schedule" ||
+        request.kind === "backup" ||
+        request.kind === "schedule" ||
+        request.kind === "restore"
+      ) {
         const key = `${request.cluster}/${request.request}`;
         const fingerprint = JSON.stringify([
           sender.key,
-          signatureOf(request.namespace, request.kind, request.target, undefined, request.backup ?? request.schedule),
+          signatureOf(
+            request.namespace,
+            request.kind,
+            request.target,
+            undefined,
+            request.backup ?? request.schedule ?? request.restore,
+          ),
           request.token,
+          // The name typed of a restore is a part of what is run.
+          request.typed ?? null,
         ]);
         const running = backupsNow.get(key);
 
@@ -535,9 +555,15 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
           return running.fingerprint === fingerprint
             ? running.promise
             : failure("forbidden", "request", false, "No write of this frame has this identifier.");
-        const run =
-          request.kind === "schedule" ? runScheduleCreate : request.kind === "backup" ? runBackupCreate : runBackupNow;
-        const promise = run(
+        const run: typeof runBackupNow | typeof runScheduleCreate | typeof runRestoreCreate =
+          request.kind === "schedule"
+            ? runScheduleCreate
+            : request.kind === "restore"
+              ? runRestoreCreate
+              : request.kind === "backup"
+                ? runBackupCreate
+                : runBackupNow;
+        const promise: Promise<Answer<Created>> = run(
           actions,
           sender.key,
           request,

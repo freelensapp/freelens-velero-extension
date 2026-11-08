@@ -422,13 +422,17 @@ of that body beside the token and its expiry, written once by the main process, 
 the run of that write carries the token and the identifier of the request, and
 nothing of the body: the main process sends the text it kept with the token. A
 confirmation is for its kind, its namespace, its target and, for a backup asked from
-a schedule or of the form, the name of the backup, and its token runs for nothing
-else. The first
+a schedule or of the form, the name of the backup, and for a restore the name of the
+restore, and its token runs for nothing else. The first
 kind of a body is `backup-from-schedule`, with the first pull request of T4.2, and
 the second `backup`, the backup of the form, with the first pull request of T4.3: its
 confirmation carries the name of the backup and the fields of its template, and its
-run the name alone; the rest of this spec is read with the amendment, and is not
-changed by it. The text
+run the name alone. The kind `restore` comes with the first pull request of T4.4: its
+confirmation carries the backup by its name and its UID, the name of the restore and
+the fields of its form, and its run the backup, the name of the restore and the name
+of the backup as the operator typed it, which the main process compares before the
+token is taken; the rest of this spec is read with the amendment, and is not changed
+by it. The text
 travels in the answer of the confirmation, within the bound of a request: one the
 answer cannot carry is not confirmed, and no token is given for it.
 

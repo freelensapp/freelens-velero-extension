@@ -6,6 +6,13 @@
 import { type AllowanceFor, readAllowanceFor } from "./allowances";
 import { backupNameProblem, scheduleRefused } from "./backup-from-schedule";
 import { type BackupTemplate, BOOLEAN_FIELDS, DURATION_FIELDS, LIST_FIELDS, TEMPLATE_BOUNDS } from "./backup-template";
+import {
+  CLUSTER_RESOURCES,
+  EXISTING_RESOURCE_POLICIES,
+  MAPPING_BOUND,
+  type RestoreForm,
+  restoreNameProblem,
+} from "./restore-form";
 import { EXPRESSION_BOUND, type ScheduleWrapper, scheduleNameProblem } from "./schedule-form";
 
 import type { DiagnosticCode } from "./diagnostic-code";
@@ -36,6 +43,7 @@ export const WRITE_KINDS = [
   "backup-from-schedule",
   "backup",
   "schedule",
+  "restore",
 ] as const;
 export type WriteKind = (typeof WRITE_KINDS)[number];
 
@@ -206,6 +214,11 @@ export interface WriteConfirmRequest {
   // The expression and the three flags of the schedule of the form (SPEC-0016, REQ-223), at the confirmation only, as
   // the template.
   wrapper?: ScheduleWrapper;
+  // The name of the restore of the form, whose backup is the target (SPEC-0017, REQ-265), a part of what is confirmed.
+  restore?: string;
+  // The fields of the form of a restore (SPEC-0017, REQ-268 to REQ-270), at the confirmation only: the body is built of
+  // them, and the run carries none of them.
+  restoreForm?: RestoreForm;
 }
 export interface WriteConfirmAnswer {
   token: string;
@@ -222,6 +235,10 @@ export interface WriteRunRequest {
   artifact?: ArtifactTarget;
   backup?: string;
   schedule?: string;
+  restore?: string;
+  // The name of the backup as the operator typed it, the second gesture of a restore (SPEC-0017, REQ-271): the main
+  // process runs nothing for another name.
+  typed?: string;
   token: string;
   request: string;
 }
@@ -258,6 +275,19 @@ export interface ScheduleCreated {
   found?: true;
 }
 
+// What a restore of the form is once it was created: its name and its UID, and what Velero wrote of it within the reads
+// after the creation (SPEC-0017, REQ-272): its phase, and the errors of a validation as written, within the bounds of
+// the contract; and that it was found by its name after an answer that was lost (REQ-250).
+export interface RestoreCreated {
+  name: string;
+  uid: string;
+  phase?: string;
+  errors?: string[];
+  // How many errors Velero wrote beyond the ones carried, which the view of the restore shows.
+  errorsLeft?: number;
+  found?: true;
+}
+
 // The errors of a validation an answer carries: a few, each as written, within a total that leaves the answer within
 // its bound; the others are counted, and read in the view of the backup, or of the schedule.
 export const ERRORS_BOUND = { items: 16, item: 4096, total: 32_768 } as const;
@@ -291,7 +321,7 @@ export type KeptOutcome =
 export interface KeptEnd {
   // The identifier of the request of the write.
   request: string;
-  kind: "backup-from-schedule" | "backup" | "schedule";
+  kind: "backup-from-schedule" | "backup" | "schedule" | "restore";
   namespace: string;
   // The context of the entry of the cluster in the catalog of the host.
   context: string;
@@ -299,6 +329,8 @@ export interface KeptEnd {
   // for a backup asked from one.
   name: string;
   schedule?: string;
+  // The backup a restore is of.
+  backup?: string;
   outcome: KeptOutcome;
   // When it ended, by the clock of the main process.
   at: number;
@@ -399,6 +431,9 @@ function isName(value: unknown): value is string {
 function isUuid(value: unknown): value is string {
   return typeof value === "string" && UUID.test(value);
 }
+
+// The characters of the text of a failure, and of the end of a write, the views take.
+export const FAILURE_TEXT_BOUND = 1024;
 
 function isText(value: unknown, bound = 256): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= bound;
@@ -508,6 +543,74 @@ function readTemplate(value: unknown): BackupTemplate | undefined {
   return template as BackupTemplate;
 }
 
+// The fields of the form of a restore as the contract carries them (SPEC-0017, REQ-273): each one it knows, of its type
+// and within the bounds of the form, the policy for the resources that exist always, and none it does not know, the
+// hooks, the resource modifier and the resource policy among them. What the restore controller refuses of them is not
+// read here: the main process says it, with its words, before it builds a body.
+function readRestoreForm(value: unknown): RestoreForm | undefined {
+  const lists = ["includedNamespaces", "excludedNamespaces", "includedResources", "excludedResources"] as const;
+  const known = [
+    ...lists,
+    "namespaceMapping",
+    "clusterResources",
+    "labelSelector",
+    "orLabelSelectors",
+    "restorePVs",
+    "existingResourcePolicy",
+  ];
+
+  if (!isRecord(value) || !hasKeys(value, ["existingResourcePolicy"], known)) return;
+  if (!(EXISTING_RESOURCE_POLICIES as readonly unknown[]).includes(value.existingResourcePolicy)) return;
+  const form: Record<string, unknown> = { existingResourcePolicy: value.existingResourcePolicy };
+
+  for (const field of lists) {
+    if (!(field in value)) continue;
+    const items = value[field];
+
+    if (!Array.isArray(items) || items.length > TEMPLATE_BOUNDS.items) return;
+    if (!items.every((item) => isText(item, TEMPLATE_BOUNDS.item))) return;
+    form[field] = [...items];
+  }
+  if ("namespaceMapping" in value) {
+    const pairs = value.namespaceMapping;
+
+    if (!Array.isArray(pairs) || pairs.length > MAPPING_BOUND) return;
+    if (
+      !pairs.every(
+        (pair) =>
+          Array.isArray(pair) &&
+          pair.length === 2 &&
+          typeof pair[0] === "string" &&
+          typeof pair[1] === "string" &&
+          pair[0].length <= TEMPLATE_BOUNDS.item &&
+          pair[1].length <= TEMPLATE_BOUNDS.item,
+      )
+    )
+      return;
+    form.namespaceMapping = pairs.map(([source, target]) => [source, target]);
+  }
+  if ("clusterResources" in value) {
+    if (!(CLUSTER_RESOURCES as readonly unknown[]).includes(value.clusterResources)) return;
+    form.clusterResources = value.clusterResources;
+  }
+  if ("labelSelector" in value) {
+    if (!isText(value.labelSelector, TEMPLATE_BOUNDS.selector)) return;
+    form.labelSelector = value.labelSelector;
+  }
+  if ("orLabelSelectors" in value) {
+    const selectors = value.orLabelSelectors;
+
+    if (!Array.isArray(selectors) || selectors.length > TEMPLATE_BOUNDS.selectors) return;
+    if (!selectors.every((selector) => isText(selector, TEMPLATE_BOUNDS.selector))) return;
+    form.orLabelSelectors = [...selectors];
+  }
+  if ("restorePVs" in value) {
+    if (typeof value.restorePVs !== "boolean") return;
+    form.restorePVs = value.restorePVs;
+  }
+  return form as unknown as RestoreForm;
+}
+
 export function readWriteConfirmRequest(value: unknown): WriteConfirmRequest | undefined {
   return readWriteParameters(value, false);
 }
@@ -546,7 +649,7 @@ function readWriteParameters(value: unknown, run: boolean): WriteConfirmRequest 
     !hasKeys(
       value,
       ["cluster", "namespace", "kind"],
-      ["target", "artifact", "backup", "template", "schedule", "wrapper"],
+      ["target", "artifact", "backup", "template", "schedule", "wrapper", "restore", "restoreForm"],
     )
   )
     return;
@@ -555,12 +658,21 @@ function readWriteParameters(value: unknown, run: boolean): WriteConfirmRequest 
   // A DownloadRequest is of a backup or of a restore, and for one artifact of it; a backup asked from a schedule
   // is of the schedule, with the name of the backup; a backup of the form is of no object, with its name and, at the
   // confirmation, its template; a schedule of the form is of none, with its name and, at the confirmation, its wrapper
-  // and its template; a ServerStatusRequest is of none.
+  // and its template; a restore is of a backup, with its name and, at the confirmation, its form; a
+  // ServerStatusRequest is of none.
   const ofSchedule = value.kind === "backup-from-schedule";
   const ofForm = value.kind === "backup";
   const newSchedule = value.kind === "schedule";
+  const ofRestore = value.kind === "restore";
 
-  if ((value.kind === "DownloadRequest" || ofSchedule) !== "target" in value) return;
+  if ((value.kind === "DownloadRequest" || ofSchedule || ofRestore) !== "target" in value) return;
+  if (ofRestore !== "restore" in value) return;
+  if (!run && ofRestore !== "restoreForm" in value) return;
+  if (ofRestore && (value.target as WriteTarget | undefined)?.kind !== "Backup") return;
+  if (ofRestore && (typeof value.restore !== "string" || restoreNameProblem(value.restore) !== undefined)) return;
+  const restoreForm = "restoreForm" in value ? readRestoreForm(value.restoreForm) : undefined;
+
+  if ("restoreForm" in value && !restoreForm) return;
   if ((value.kind === "DownloadRequest") !== "artifact" in value) return;
   if ((ofSchedule || ofForm) !== "backup" in value) return;
   if (newSchedule !== "schedule" in value) return;
@@ -594,6 +706,8 @@ function readWriteParameters(value: unknown, run: boolean): WriteConfirmRequest 
     ...(template ? { template } : {}),
     ...(typeof value.schedule === "string" ? { schedule: value.schedule } : {}),
     ...(wrapper ? { wrapper } : {}),
+    ...(typeof value.restore === "string" ? { restore: value.restore } : {}),
+    ...(restoreForm ? { restoreForm } : {}),
   };
 }
 
@@ -601,7 +715,11 @@ export function readWriteRunRequest(value: unknown): WriteRunRequest | undefined
   if (
     !withinBound(value) ||
     !isRecord(value) ||
-    !hasKeys(value, ["cluster", "namespace", "kind", "token", "request"], ["target", "artifact", "backup", "schedule"])
+    !hasKeys(
+      value,
+      ["cluster", "namespace", "kind", "token", "request"],
+      ["target", "artifact", "backup", "schedule", "restore", "typed"],
+    )
   )
     return;
   // What is run is what was confirmed, with the token of its confirmation and the identifier of the request.
@@ -614,12 +732,21 @@ export function readWriteRunRequest(value: unknown): WriteRunRequest | undefined
       ...("artifact" in value ? { artifact: value.artifact } : {}),
       ...("backup" in value ? { backup: value.backup } : {}),
       ...("schedule" in value ? { schedule: value.schedule } : {}),
+      ...("restore" in value ? { restore: value.restore } : {}),
     },
     true,
   );
 
   if (!confirm || !isUuid(value.token) || !isUuid(value.request)) return;
-  return { ...confirm, token: value.token, request: value.request };
+  // A restore runs with the name of its backup as it was typed, and no other write carries one.
+  if ((confirm.kind === "restore") !== "typed" in value) return;
+  if ("typed" in value && (typeof value.typed !== "string" || value.typed.length > 253)) return;
+  return {
+    ...confirm,
+    ...(typeof value.typed === "string" ? { typed: value.typed } : {}),
+    token: value.token,
+    request: value.request,
+  };
 }
 
 export function readWriteStatusRequest(value: unknown): WriteStatusRequest | undefined {
@@ -715,7 +842,7 @@ export function readAnswer<Value>(
     !isText(value.code, 64) ||
     !isText(value.stage, 64) ||
     typeof value.retry !== "boolean" ||
-    !isText(value.text, 1024)
+    !isText(value.text, FAILURE_TEXT_BOUND)
   )
     return broken;
   const read: Failure = {
@@ -858,6 +985,36 @@ export function readScheduleCreated(value: unknown): ScheduleCreated | undefined
   };
 }
 
+export function readRestoreCreated(value: unknown): RestoreCreated | undefined {
+  if (
+    !isRecord(value) ||
+    !hasKeys(value, ["name", "uid"], ["phase", "errors", "errorsLeft", "found"]) ||
+    !isName(value.name) ||
+    !isText(value.uid)
+  )
+    return;
+  if ("phase" in value && !isText(value.phase, PHASE_BOUND)) return;
+  if (
+    "errors" in value &&
+    (!Array.isArray(value.errors) ||
+      value.errors.length === 0 ||
+      value.errors.length > ERRORS_BOUND.items ||
+      !value.errors.every((error) => isText(error, ERRORS_BOUND.item)) ||
+      (value.errors as string[]).reduce((total, error) => total + error.length, 0) > ERRORS_BOUND.total)
+  )
+    return;
+  if ("errorsLeft" in value && (!Number.isSafeInteger(value.errorsLeft) || (value.errorsLeft as number) < 1)) return;
+  if ("found" in value && value.found !== true) return;
+  return {
+    name: value.name,
+    uid: value.uid,
+    ...(typeof value.phase === "string" ? { phase: value.phase } : {}),
+    ...(Array.isArray(value.errors) ? { errors: [...(value.errors as string[])] } : {}),
+    ...(typeof value.errorsLeft === "number" ? { errorsLeft: value.errorsLeft } : {}),
+    ...(value.found === true ? { found: true } : {}),
+  };
+}
+
 function readKeptOutcome(value: unknown): KeptOutcome | undefined {
   if (!isRecord(value) || typeof value.created !== "boolean") return;
   if (value.created) {
@@ -872,7 +1029,12 @@ function readKeptOutcome(value: unknown): KeptOutcome | undefined {
       ...(value.paused === true ? { paused: true } : {}),
     };
   }
-  if (!hasKeys(value, ["created", "code", "text"]) || !isText(value.code, 64) || !isText(value.text, 1024)) return;
+  if (
+    !hasKeys(value, ["created", "code", "text"]) ||
+    !isText(value.code, 64) ||
+    !isText(value.text, FAILURE_TEXT_BOUND)
+  )
+    return;
   return { created: false, code: value.code as FailureCode, text: value.text };
 }
 
@@ -885,12 +1047,17 @@ export function readKeptEnds(value: unknown): KeptEnd[] | undefined {
   for (const item of value) {
     if (
       !isRecord(item) ||
-      !hasKeys(item, ["request", "kind", "namespace", "context", "name", "outcome", "at"], ["schedule"]) ||
+      !hasKeys(item, ["request", "kind", "namespace", "context", "name", "outcome", "at"], ["schedule", "backup"]) ||
       !isUuid(item.request) ||
-      (item.kind !== "backup-from-schedule" && item.kind !== "backup" && item.kind !== "schedule") ||
-      // A backup asked from a schedule names it, and one of the form names none.
+      (item.kind !== "backup-from-schedule" &&
+        item.kind !== "backup" &&
+        item.kind !== "schedule" &&
+        item.kind !== "restore") ||
+      // A backup asked from a schedule names it, and one of the form names none; a restore names its backup.
       (item.kind === "backup-from-schedule") !== "schedule" in item ||
       ("schedule" in item && !isName(item.schedule)) ||
+      (item.kind === "restore") !== "backup" in item ||
+      ("backup" in item && !isName(item.backup)) ||
       !isNamespace(item.namespace) ||
       !isText(item.context) ||
       !isName(item.name) ||
@@ -909,6 +1076,7 @@ export function readKeptEnds(value: unknown): KeptEnd[] | undefined {
       context: item.context,
       name: item.name,
       ...(typeof item.schedule === "string" ? { schedule: item.schedule } : {}),
+      ...(typeof item.backup === "string" ? { backup: item.backup } : {}),
       outcome,
       at: item.at,
     });
@@ -977,4 +1145,32 @@ export function readServerStatusValue(value: unknown): ServerStatusValue | undef
 // A failure, with the words of its code where the caller has none of its own.
 export function failure(code: FailureCode, stage: string, retry: boolean, text: string): Failure {
   return { ok: false, code, stage, retry, text };
+}
+
+export const PROBLEMS_WORDS = {
+  more: (count: number) => `And ${count} more.`,
+  unsaid: (count: number) =>
+    count === 1 ? "A problem too long to be said here." : `${count} problems too long to be said here.`,
+};
+
+// Problems said after the words that lead them, each a sentence that ends with its full stop, as many as the text of a
+// failure carries, in their order, and how many more there are: a longer text is not one the views take, and would say
+// nothing at all.
+export function saidProblems(lead: string, problems: readonly string[]): string {
+  const room = FAILURE_TEXT_BOUND - lead.length - ` ${PROBLEMS_WORDS.more(problems.length)}`.length;
+  const said: string[] = [];
+  let length = 0;
+
+  for (const problem of problems) {
+    const sentence = /[.!?]$/.test(problem) ? problem : `${problem}.`;
+    const added = (said.length > 0 ? 1 : 0) + sentence.length;
+
+    if (length + added > room) continue;
+    said.push(sentence);
+    length += added;
+  }
+  const unsaid = problems.length - said.length;
+
+  if (said.length === 0) return `${lead}${PROBLEMS_WORDS.unsaid(unsaid)}`;
+  return `${lead}${said.join(" ")}${unsaid > 0 ? ` ${PROBLEMS_WORDS.more(unsaid)}` : ""}`;
 }

@@ -9,6 +9,7 @@ import {
   type BackupCreated,
   failure,
   PHASE_BOUND,
+  type RestoreCreated,
   type ScheduleCreated,
   type WriteRunRequest,
 } from "../common/ipc";
@@ -23,7 +24,7 @@ export const READ_AFTER = { everyMs: 1000, forMs: 30_000 };
 export const CREATION_MARGIN = 60_000;
 
 // What a creation answers once the object was created.
-export type Created = BackupCreated | ScheduleCreated;
+export type Created = BackupCreated | ScheduleCreated | RestoreCreated;
 
 // What the main process gives the procedures of the writes that create.
 export interface CreationDependencies {
@@ -39,7 +40,7 @@ export interface CreationDependencies {
 // What differs from one kind to another: what is created and how, the words of its ends, what tells it from another
 // object of its name, and what its answer says.
 export interface Creation<Value extends Created> {
-  kind: "Backup" | "Schedule";
+  kind: "Backup" | "Schedule" | "Restore";
   // The word the steps of the write say it with.
   noun: string;
   // The name the text gives it.

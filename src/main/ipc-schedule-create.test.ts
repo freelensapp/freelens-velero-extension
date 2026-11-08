@@ -174,6 +174,15 @@ function textOf(wrapper: ScheduleWrapper = WRAPPER, template: BackupTemplate = T
   return scheduleBodyText(body);
 }
 
+describe("the words of a template of a schedule refused", () => {
+  it("says each problem as a sentence, in a text the views take", () => {
+    expect(SCHEDULE_CREATE_WORDS.refused(["excludes list cannot contain '*'", "The name is taken."])).toBe(
+      "The template is refused, and nothing was sent: excludes list cannot contain '*'. The name is taken.",
+    );
+    expect(SCHEDULE_CREATE_WORDS.refused(Array(40).fill("x".repeat(60))).length).toBeLessThanOrEqual(1024);
+  });
+});
+
 describe("the confirmation of a schedule of the form", () => {
   it("is refused with writes off, and reads nothing", async () => {
     const { confirm, adapter } = fixture();
