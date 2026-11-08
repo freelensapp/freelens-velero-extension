@@ -117,15 +117,16 @@ describe("views of the data uploads and of the data downloads", () => {
         await cluster.openPage(frame, of);
         await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
         await cluster.waitForList(frame, of);
-        expect([of.id, [...(await cluster.mounted(frame, of))].sort()]).toEqual([
-          of.id,
-          items.map(({ metadata }) => metadata.name).sort(),
-        ]);
+        // The list says it shows each of them; it mounts the rows that are in view, so each is found by its name.
+        await frame.waitForSelector(`[data-testid=velero-${of.id}] >> text="${items.length} items"`, {
+          timeout: 60_000,
+        });
         for (const item of items) {
           const owner =
             item.metadata.labels?.[of === cluster.DATA_UPLOADS ? "velero.io/backup-name" : "velero.io/restore-name"];
           const mover = item.spec?.datamover;
 
+          expect([of.id, await cluster.search(frame, item.metadata.name, of)]).toEqual([of.id, [item.metadata.name]]);
           await cluster.expectCells(of, frame, item.metadata.name, {
             phase: PHASE_LABELS[item.status?.phase ?? ""],
             operation: String(owner),
@@ -135,6 +136,7 @@ describe("views of the data uploads and of the data downloads", () => {
             uploader: !mover ? "Built-in" : mover === "velero" ? mover : `${mover}, ${volumes.NOT_WRITTEN_MARK}`,
           });
         }
+        await cluster.search(frame, "", of);
         expect([of.id, await cluster.notices(frame, [])]).toEqual([of.id, {}]);
         expect([of.id, await cluster.layoutProblems(frame, of)]).toEqual([of.id, []]);
         await cluster.captureScreenshot(frame, `dark-${of.id}`);
