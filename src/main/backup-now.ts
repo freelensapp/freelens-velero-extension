@@ -8,6 +8,7 @@ import { backupFromSchedule, bodyText, scheduleRefused } from "../common/backup-
 import {
   type Answer,
   type BackupCreated,
+  ERRORS_BOUND,
   failure,
   PHASE_BOUND,
   textWithinBound,
@@ -93,6 +94,24 @@ function phaseOf(object: DiagnosticObject): string | undefined {
   const phase = (object as { status?: { phase?: unknown } }).status?.phase;
 
   return typeof phase === "string" && phase && phase.length <= PHASE_BOUND ? phase : undefined;
+}
+
+// Where a backup is in the queue of the server, and the errors of the validation Velero refused it with, as written:
+// what the contract cannot carry is read in the view of the backup.
+function detailsOf(object: DiagnosticObject): { position?: number; errors?: string[] } {
+  const status = (object as { status?: { queuePosition?: unknown; validationErrors?: unknown } }).status;
+  const position = status?.queuePosition;
+  const errors = status?.validationErrors;
+  const carried =
+    Array.isArray(errors) &&
+    errors.length > 0 &&
+    errors.length <= ERRORS_BOUND.items &&
+    errors.every((error) => typeof error === "string" && error.length > 0 && error.length <= ERRORS_BOUND.item);
+
+  return {
+    ...(Number.isSafeInteger(position) && (position as number) >= 1 ? { position: position as number } : {}),
+    ...(carried ? { errors: [...(errors as string[])] } : {}),
+  };
 }
 
 // The end of a read or of the creation, in the words of this write, with whether asking again is safe: it is where
@@ -208,6 +227,7 @@ async function readAfter(
   const name = created.metadata.name;
   const uid = created.metadata.uid;
   let phase = phaseOf(created);
+  let last = created;
   const until = dependencies.now() + READ_AFTER.forMs;
 
   write.status = { step: "waiting for Velero" };
@@ -220,12 +240,16 @@ async function readAfter(
 
       // Another backup of that name is not the one created: nothing more is read of it.
       if (read.metadata.uid !== uid) break;
+      last = read;
       phase = phaseOf(read);
     } catch {
       break;
     }
   }
-  return { ok: true, value: { name, uid, ...(phase ? { phase } : {}), ...(found ? { found: true } : {}) } };
+  return {
+    ok: true,
+    value: { name, uid, ...(phase ? { phase } : {}), ...detailsOf(last), ...(found ? { found: true } : {}) },
+  };
 }
 
 // The labels the text gives the backup, which a backup found by its name carries when it is the one created: none for a

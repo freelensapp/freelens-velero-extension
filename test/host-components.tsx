@@ -396,12 +396,14 @@ interface Option {
 // `Select` (packages/core/src/renderer/components/select/select.tsx lines 127 to 280), the select of react-select
 // of the host, drawn as the select of the document: the same choice by the value of an option, the option given
 // to what it was given for a change, its words while nothing is chosen, and the identifier of its field, which
-// the host takes from `id` and from nothing else (lines 218, 246 and 247), with the classes of its theme. The
-// menu of react-select, its search and its keys are not drawn.
+// the host takes from `id` and from nothing else (lines 218, 246 and 247), with the classes of its theme. A choice
+// that can be taken back, `isClearable`, is the option of its words, which gives nothing for a change, as the cross
+// of react-select does. The menu of react-select, its search and its keys are not drawn.
 function Select({ options, value, onChange, placeholder, isDisabled, id, themeName, className, ...rest }: Passed) {
   const {
     inputId: _taken,
     isMulti,
+    isClearable: _clearable,
     menuClass: _menuClass,
     menuPortalTarget: _portal,
     menuPlacement: _placement,

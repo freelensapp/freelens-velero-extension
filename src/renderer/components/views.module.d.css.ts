@@ -181,5 +181,9 @@ declare const classNames: {
   readonly volumeDetailTitle: "volumeDetailTitle";
   readonly volumeFields: "volumeFields";
   readonly volumeFieldName: "volumeFieldName";
+  readonly templateForm: "templateForm";
+  readonly templateField: "templateField";
+  readonly templateChoices: "templateChoices";
+  readonly templateChoice: "templateChoice";
 };
 export = classNames;

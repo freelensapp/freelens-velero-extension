@@ -264,6 +264,62 @@ describe("the run of a backup of the form", () => {
     expect(locationReads()).toHaveLength(4);
   });
 
+  it("answers where the backup is in the queue, and each error of a validation, as Velero wrote them", async () => {
+    const { enable, confirm, run, state } = fixture();
+
+    await enable();
+    state.create = async (text) => {
+      const body = JSON.parse(text) as DiagnosticObject;
+      const created = {
+        ...body,
+        metadata: { ...body.metadata, uid: "backup-uid", creationTimestamp: new Date(state.now).toISOString() },
+        status: { phase: "Queued", queuePosition: 3 },
+      } as DiagnosticObject;
+
+      state.backups.set(body.metadata.name, created);
+      return structuredClone(created);
+    };
+    expect(await run(String((await confirm()).value?.token))).toEqual({
+      ok: true,
+      value: { name: NAME, uid: "backup-uid", phase: "Queued", position: 3 },
+    });
+    state.backups.clear();
+    const errors = ["Invalid included/excluded namespace lists: excludes list cannot contain '*'"];
+
+    state.create = async (text) => {
+      const body = JSON.parse(text) as DiagnosticObject;
+      const created = {
+        ...body,
+        metadata: { ...body.metadata, uid: "backup-uid", creationTimestamp: new Date(state.now).toISOString() },
+        status: { phase: "FailedValidation", validationErrors: errors },
+      } as DiagnosticObject;
+
+      state.backups.set(body.metadata.name, created);
+      return structuredClone(created);
+    };
+    expect(await run(String((await confirm()).value?.token))).toEqual({
+      ok: true,
+      value: { name: NAME, uid: "backup-uid", phase: "FailedValidation", errors },
+    });
+    // Errors beyond what the contract carries are read in the view of the backup.
+    state.backups.clear();
+    state.create = async (text) => {
+      const body = JSON.parse(text) as DiagnosticObject;
+      const created = {
+        ...body,
+        metadata: { ...body.metadata, uid: "backup-uid", creationTimestamp: new Date(state.now).toISOString() },
+        status: { phase: "FailedValidation", validationErrors: ["e".repeat(4097)] },
+      } as DiagnosticObject;
+
+      state.backups.set(body.metadata.name, created);
+      return structuredClone(created);
+    };
+    expect(await run(String((await confirm()).value?.token))).toEqual({
+      ok: true,
+      value: { name: NAME, uid: "backup-uid", phase: "FailedValidation" },
+    });
+  });
+
   it("sends nothing when a location went since the review", async () => {
     const { enable, confirm, run, adapter, state } = fixture();
 

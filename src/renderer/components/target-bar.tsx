@@ -46,7 +46,7 @@ export function writesDialogWords(
   return {
     first: `Turn writes on for the installation ${namespace} of the cluster ${cluster} (context ${context})?`,
     second:
-      "Until they are turned off, or another installation is selected, the extension may create in that namespace the requests the views ask for on purpose: a DownloadRequest for the log, the results, the resources or the volumes of an operation, a ServerStatusRequest for the version of the server, and a Backup from a schedule, asked from the view of the schedule. Each one is confirmed where it is asked for. Nothing else is written.",
+      "Until they are turned off, or another installation is selected, the extension may create in that namespace the requests the views ask for on purpose: a DownloadRequest for the log, the results, the resources or the volumes of an operation, a ServerStatusRequest for the version of the server, a Backup from a schedule, asked from the view of the schedule, and a Backup of the form, asked from the list of the Backups. Each one is confirmed where it is asked for. Nothing else is written.",
   };
 }
 

@@ -998,3 +998,66 @@ Decided while implementing, on 2026-11-08:
   installation, as REQ-236 of SPEC-0016 says.
 - The fields of the template are checked by the same functions in both processes, in
   `src/common/backup-template.ts`, which the creation of a schedule (T4.7) shares.
+
+T4.3, the second of its pull requests, on 2026-11-08: the workspace of the backup of
+the form, with the form of the template that the creation of a schedule will share.
+The evidence, by check:
+
+- CRBAK-01, the component part: Create backup in the header of the list of the
+  Backups, which opens the workspace over the list, named in the address, with writes
+  off and on; the name the operator's, none proposed, Escape in its field taking back
+  what was typed; the storage locations offered with the default first and chosen
+  first, and the ones Velero refuses every backup for, ReadOnly or not reported
+  Available, shown with the reason and not offered; one snapshot location for each
+  provider, or none; the namespaces the host lists as checkboxes and the patterns
+  typed; what the release refuses of a field, with its words, tied to the field, and
+  an included namespace the host lists with the label that excludes it, each holding
+  the review back; a duration said as Go writes it
+  (`src/renderer/pages/backup-create-workspace.test.tsx`).
+- CRBAK-03, the component part: a name among the backups the installation read is
+  said before the review; a 409 keeps the name, with the way to the backup that has
+  it.
+- CRBAK-04: the review, its text as it came beside what it means, read whole: the
+  validation at the start, the queue, the storage location and its access mode, the
+  time to live set or the one of the server, each field set and each field not set
+  with what the release does, a namespace typed that the host does not list, one that
+  may be labelled after the review, and the resource filters beside a global volume
+  policy (`src/common/backup-create-words.test.ts`).
+- CRBAK-05: the result, the phase Velero wrote in words, Queued with its place in the
+  queue and FailedValidation with each error, which the run answers since this pull
+  request within the bounds of the contract, sixteen errors of 4,096 characters at
+  most, the others read in the view of the backup; what Velero writes into the spec
+  at the start; the way to the view of the backup (`src/main/ipc-backup-create.test.ts`,
+  `src/common/ipc.test.ts`).
+- ACT-03, ACT-09, in the views: the review asked with the name and the fields set
+  only; a field changed drops it; a token that expired asked again, and a new text
+  shown in place of the old one, nothing sent; the end shown said to the main process;
+  what was typed dropped with the installation; the dialog of the gate names the
+  backup of the form (`src/renderer/state/backup-create.test.ts`,
+  `src/renderer/components/writes.test.tsx`).
+
+Each new case was seen failing on a change made on purpose, eighteen in all: an empty
+list written, the review asked past what the workspace holds it back for, the place
+in the queue not said, a name read not said, a ReadOnly location offered, the default
+not chosen, the command of the list gone, the label that excludes a namespace not
+read, the warning of a global policy said always, the place in the queue and the
+errors beyond their bounds carried or not carried, a place of zero read, the way to
+the backup of a conflict gone, the template kept when the installation changed, Escape
+in the name taking back nothing, every namespace said as not listed, a text that is
+not a backup of the form taken, and a token that expired not asked again.
+
+Decided while implementing, on 2026-11-08:
+
+- The workspace of the backup of the form is named in the address as
+  `backup-create/new`, over the list of the Backups, whose header holds its command
+  beside the count of the host.
+- The namespaces the host lists are read from its store, `namespaceStore`, which the
+  frame of the cluster holds for its own views: the extension asks the host nothing
+  more. The patterns and the names the host does not list are typed beside them,
+  separated by commas, as the lists of the resources are.
+- Any of several selectors are typed separated by ` or `, as the command line of the
+  release takes them.
+- The storage locations Velero refuses every backup for are shown under the choice,
+  with the reason, and are not among its options.
+- The place in the queue and the errors of a validation travel in the answer of the run
+  within bounds of their own; more, or longer, are read in the view of the backup.

@@ -314,3 +314,22 @@ against the budget of 250 ms, 31 ms at the median and 89 ms the slowest, and 328
 at the 95th percentile from the key or the click, which counts the 250 ms the search
 of the host waits. The deviations recorded above hold on v2 as they are; v2 brings
 no other.
+
+### 2026-11-08: The Command Of The List (T4.3 Of SPEC-0017)
+
+As the table of the amendments of
+[SPEC-0017](SPEC-0017-write-actions.md#the-amendments-the-slices-bring) says,
+approved with it, the second pull request of T4.3 restates the evidence of one check,
+and the rest of this spec is read with it:
+
+| Check | Restated |
+| --- | --- |
+| The evidence of BACK-09 | The list of the Backups has Create backup in its header, which opens the workspace of SPEC-0017 and writes nothing by itself, and no other command: no selection, no menu of a row and nothing that removes |
+
+With T4.3 the header of the list has Create backup, beside the count of the host:
+the command opens the workspace of the backup of the form over the list, named in the
+address, and writes nothing by itself. It is proven at the component layer, with
+writes off and on, in
+[`backup-create-workspace.test.tsx`](../../src/renderer/pages/backup-create-workspace.test.tsx)
+and [`list-derivations.test.tsx`](../../src/renderer/components/list-derivations.test.tsx);
+the packaged suites of the action come with the third pull request of T4.3.

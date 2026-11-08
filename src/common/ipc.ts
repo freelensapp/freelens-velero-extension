@@ -219,10 +219,18 @@ export interface BackupCreated {
   name: string;
   uid: string;
   phase?: string;
+  // Where it is in the queue of the server while it is Queued, and the errors of a validation Velero refused it with,
+  // as written, when they are within the bounds of the contract (SPEC-0017, REQ-264).
+  position?: number;
+  errors?: string[];
   // The answer of the creation was lost, and the backup was found by its name as the review wrote it (SPEC-0017,
   // REQ-250): what the reads found is said.
   found?: true;
 }
+
+// The errors of a validation an answer carries: a few, each as written; more, or longer, are read in the view of the
+// backup.
+export const ERRORS_BOUND = { items: 16, item: 4096 } as const;
 // How a write whose request was sent ended: the backup created, with the phase Velero wrote and whether it was found
 // by its name after an answer that was lost; or the code and the words of the failure.
 export type KeptOutcome =
@@ -700,17 +708,28 @@ export function readWriteConfirmAnswer(value: unknown): WriteConfirmAnswer | und
 export function readBackupCreated(value: unknown): BackupCreated | undefined {
   if (
     !isRecord(value) ||
-    !hasKeys(value, ["name", "uid"], ["phase", "found"]) ||
+    !hasKeys(value, ["name", "uid"], ["phase", "position", "errors", "found"]) ||
     !isName(value.name) ||
     !isText(value.uid)
   )
     return;
   if ("phase" in value && !isText(value.phase, PHASE_BOUND)) return;
+  if ("position" in value && (!Number.isSafeInteger(value.position) || (value.position as number) < 1)) return;
+  if (
+    "errors" in value &&
+    (!Array.isArray(value.errors) ||
+      value.errors.length === 0 ||
+      value.errors.length > ERRORS_BOUND.items ||
+      !value.errors.every((error) => isText(error, ERRORS_BOUND.item)))
+  )
+    return;
   if ("found" in value && value.found !== true) return;
   return {
     name: value.name,
     uid: value.uid,
     ...(typeof value.phase === "string" ? { phase: value.phase } : {}),
+    ...(typeof value.position === "number" ? { position: value.position } : {}),
+    ...(Array.isArray(value.errors) ? { errors: [...(value.errors as string[])] } : {}),
     ...(value.found === true ? { found: true } : {}),
   };
 }

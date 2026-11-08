@@ -4,7 +4,9 @@ import { countsText, durationText, progressText, signalText } from "../../common
 import { Backup } from "../api/kinds";
 import { FamilyPage } from "../components/family-page";
 import { Phase, Signal, time } from "../components/status";
+import { openView } from "../navigation";
 import { currentInstallation } from "../state/context";
+import { CREATE_VIEW_NAME } from "./backup-create-workspace";
 import { OpenView } from "./open-view";
 
 import type { BackupView } from "../../common/backup-view";
@@ -13,7 +15,7 @@ import type { ListDefinition } from "../components/family-page";
 import type { Installation } from "../state/installation";
 
 const {
-  Component: { KubeObjectAge, WithTooltip },
+  Component: { Button, Icon, KubeObjectAge, WithTooltip },
 } = Renderer;
 
 export const BACKUPS: ListDefinition<BackupView> = {
@@ -52,6 +54,17 @@ export const BACKUPS: ListDefinition<BackupView> = {
     <WithTooltip key="storage">{row.storage ?? "Not reported"}</WithTooltip>,
     <KubeObjectAge key="age" object={item} />,
   ],
+  // Create backup, the one command of the list: it opens the form, which writes nothing by itself.
+  command: (
+    <Button
+      primary
+      data-testid="velero-backups-create"
+      onClick={() => openView({ kind: "backup-create", name: CREATE_VIEW_NAME })}
+    >
+      <Icon material="add" small aria-hidden />
+      Create backup
+    </Button>
+  ),
 };
 
 // The Backups of the selected installation: the list and, over it, the view of what is open.

@@ -398,6 +398,30 @@ describe("the answers of a write of a body", () => {
   });
 });
 
+describe("the place in the queue and the errors of a backup created, between the processes", () => {
+  it("reads the place of a backup in the queue and the errors of its validation, within their bounds", () => {
+    const created = { name: "shop", uid: "u", phase: "Queued", position: 2 };
+
+    expect(readBackupCreated(created)).toEqual(created);
+    expect(
+      readBackupCreated({ ...created, phase: "FailedValidation", position: undefined, errors: ["e"] }),
+    ).toBeUndefined();
+    const failed = { name: "shop", uid: "u", phase: "FailedValidation", errors: ["one", "two"] };
+
+    expect(readBackupCreated(failed)).toEqual(failed);
+    for (const value of [
+      { ...created, position: 0 },
+      { ...created, position: 1.5 },
+      { ...failed, errors: [] },
+      { ...failed, errors: [""] },
+      { ...failed, errors: ["e".repeat(4097)] },
+      { ...failed, errors: Array.from({ length: 17 }, () => "e") },
+    ]) {
+      expect(readBackupCreated(value)).toBeUndefined();
+    }
+  });
+});
+
 describe("the ends kept for a cluster, between the processes", () => {
   const end = {
     request: randomUUID(),

@@ -19,6 +19,8 @@ import { Installation } from "../state/installation";
 
 import type { Renderer } from "@freelensapp/extensions";
 
+import type React from "react";
+
 import type { Answer, Family } from "../../common/discovery";
 
 const DISCOVERY = "/apis/velero.io/v1";
@@ -102,7 +104,12 @@ describe("what the list gives the host", () => {
     });
 
     expect(seen).toEqual([["nightly-1 1", "nightly-2 1"]]);
-    expect(headers).toEqual(["2 items"]);
+    // The count of the host, and beside it the one command of the list.
+    const [info] = headers as React.ReactElement<{ children: React.ReactElement<Record<string, unknown>>[] }>[];
+
+    expect(headers).toHaveLength(1);
+    expect(info.props.children[0]).toBe("2 items");
+    expect(info.props.children[1].props["data-testid"]).toBe("velero-backups-create");
     table[path("backups", A)] = list(backup("nightly-1", "Completed"), backup("nightly-2", "Completed", "2"));
     await act(async () => {
       await installation.refresh();

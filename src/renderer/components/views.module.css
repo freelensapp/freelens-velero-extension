@@ -2246,3 +2246,43 @@
   font-size: 12px;
   overflow-wrap: anywhere;
 }
+
+/* The form of the template of a backup: its fields one under the other, in a column of a width that reads, each with
+   its label, what Velero does when it is not set and what is wrong with it. */
+.templateForm {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 720px;
+  margin: 12px 0;
+}
+
+.templateField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* The namespaces the host lists, as many side by side as the room holds, in a part that scrolls when they are many. */
+.templateChoices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+  gap: 4px 16px;
+  max-height: 168px;
+  margin: 0;
+  padding: 4px 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.templateChoice {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
