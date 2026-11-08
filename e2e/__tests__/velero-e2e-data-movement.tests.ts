@@ -106,11 +106,7 @@ describe("views of the data uploads and of the data downloads", () => {
     "lists the data uploads and the data downloads of the views, each with what the cluster holds of it",
     async () => {
       for (const [of, items, source] of [
-        [
-          cluster.DATA_UPLOADS,
-          uploads(),
-          (item: Movement) => `${item.spec?.sourceNamespace}/${item.spec?.sourcePVC}`,
-        ],
+        [cluster.DATA_UPLOADS, uploads(), (item: Movement) => `${item.spec?.sourceNamespace}/${item.spec?.sourcePVC}`],
         [
           cluster.DATA_DOWNLOADS,
           downloads(),
@@ -126,7 +122,8 @@ describe("views of the data uploads and of the data downloads", () => {
           items.map(({ metadata }) => metadata.name).sort(),
         ]);
         for (const item of items) {
-          const owner = item.metadata.labels?.[of === cluster.DATA_UPLOADS ? "velero.io/backup-name" : "velero.io/restore-name"];
+          const owner =
+            item.metadata.labels?.[of === cluster.DATA_UPLOADS ? "velero.io/backup-name" : "velero.io/restore-name"];
           const mover = item.spec?.datamover;
 
           await cluster.expectCells(of, frame, item.metadata.name, {
@@ -161,10 +158,13 @@ describe("views of the data uploads and of the data downloads", () => {
       await cluster.waitForList(frame, cluster.DATA_UPLOADS);
       for (const [phase, name] of ofEach) {
         await cluster.openWorkspace(frame, name, cluster.DATA_UPLOADS);
-        const view = frame.locator("[data-testid=velero-data-upload-workspace]");
-        const status = view.locator("[data-testid=velero-data-upload-status]");
+        const status = frame.locator(
+          "[data-testid=velero-data-upload-workspace] [data-testid=velero-data-upload-status]",
+        );
 
-        expect([phase, await volumes.factOf(status, "Phase")]).toEqual([
+        // The sentence of the phase is the note of its fact, under its label.
+        await status.waitFor({ state: "visible", timeout: 60_000 });
+        expect([phase, (await status.innerText()).replace(/\s+/g, " ")]).toEqual([
           phase,
           expect.stringContaining(volumes.DATA_UPLOAD_PHASE_SENTENCES[phase]),
         ]);
@@ -194,7 +194,8 @@ describe("views of the data uploads and of the data downloads", () => {
       expect((await cluster.volumeBand(frame, "rows")).kind).toBe("PodVolumeBackup");
       await frame.locator(`${half("DataUpload")} [data-testid=velero-volume-more]`).click();
       await frame.waitForFunction(
-        ({ selector, count }) => document.querySelectorAll(`${selector} [data-testid=velero-volume-rows] tbody tr`).length === count,
+        ({ selector, count }) =>
+          document.querySelectorAll(`${selector} [data-testid=velero-volume-rows] tbody tr`).length === count,
         { selector: half("DataUpload"), count: own.length },
         { timeout: 60_000 },
       );
@@ -276,9 +277,9 @@ describe("views of the data uploads and of the data downloads", () => {
         "views-mover",
       );
       expect(await view.locator("[data-testid=velero-volume-settings] [data-written=unknown]").count()).toBe(1);
-      expect(await volumes.factOf(view.locator("[data-testid=velero-data-upload-status]"), "Phase")).toContain(
-        volumes.DATA_UPLOAD_PHASE_SENTENCES.New,
-      );
+      expect(
+        (await view.locator("[data-testid=velero-data-upload-status]").innerText()).replace(/\s+/g, " "),
+      ).toContain(volumes.DATA_UPLOAD_PHASE_SENTENCES.New);
       await cluster.closeWorkspace(frame);
     },
     TIMEOUT,
@@ -339,9 +340,12 @@ describe("views of the data uploads and of the data downloads", () => {
 
       expect([within(windows.uploads[DU]), windows.uploads[DD] ?? 0]).toEqual([true, 0]);
       expect([within(windows.downloads[DD]), windows.downloads[DU] ?? 0]).toEqual([true, 0]);
-      expect([windows.overview[DU] ?? 0, windows.overview[DD] ?? 0, windows.overview[PVB] ?? 0, windows.overview[PVR] ?? 0]).toEqual([
-        0, 0, 0, 0,
-      ]);
+      expect([
+        windows.overview[DU] ?? 0,
+        windows.overview[DD] ?? 0,
+        windows.overview[PVB] ?? 0,
+        windows.overview[PVR] ?? 0,
+      ]).toEqual([0, 0, 0, 0]);
       expect([within(windows.backup[DU]), within(windows.backup[PVB]), windows.backup[DD] ?? 0]).toEqual([
         true,
         true,
@@ -390,7 +394,9 @@ describe("views of the data uploads and of the data downloads", () => {
         const workspace = frame.locator(`[data-testid=velero-${of.kind}-workspace]`);
         const buttons = await workspace
           .locator("button")
-          .evaluateAll((found) => found.map((button) => button.getAttribute("data-testid") ?? button.textContent ?? ""));
+          .evaluateAll((found) =>
+            found.map((button) => button.getAttribute("data-testid") ?? button.textContent ?? ""),
+          );
 
         expect([of.id, buttons.filter((id) => !/^velero-(back|open-)/.test(id))]).toEqual([of.id, []]);
         expect([of.id, await workspace.locator("input, select, textarea").count()]).toEqual([of.id, 0]);
@@ -404,11 +410,14 @@ describe("views of the data uploads and of the data downloads", () => {
     "leaves the objects of Velero as they were, writes nothing, and asks Velero for nothing",
     async () => {
       const after = cluster.clusterSnapshot();
+      const requests = cluster.apiRequests();
 
       expect(after.versions).toEqual(before.versions);
       expect(after.installed).toEqual(before.installed);
+      expect(before.requests).toBe(0);
       expect(after.requests).toBe(0);
-      expect(cluster.writes(counted, cluster.apiRequests())).toEqual({});
+      expect(cluster.writes(counted, requests)).toEqual({});
+      expect(errors.errors()).toEqual([]);
     },
     TIMEOUT,
   );

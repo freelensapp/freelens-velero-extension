@@ -3,11 +3,13 @@
  * Licensed under MIT License. See LICENSE in root directory for more information.
  */
 
-// What the sessions of the integration test share: one session for each of the eight kinds the extension
+// What the sessions of the integration test share: one session for each of the ten kinds the extension
 // shows, as the integration test of the template has one for each version of its kind. Five are the kinds of
 // the first milestones, Backup, Restore, Schedule, BackupStorageLocation and VolumeSnapshotLocation; three are
 // the kinds of SPEC-0014 under `velero.io/v1`, BackupRepository, PodVolumeBackup and PodVolumeRestore, whose
-// sessions the amendment of SPEC-0015 of 2026-10-27 left to the last pull request of T5.1. A session puts one
+// sessions the amendment of SPEC-0015 of 2026-10-27 left to the last pull request of T5.1; two are the kinds of
+// the data movement under `velero.io/v2alpha1`, DataUpload and DataDownload, whose sessions came with their
+// fixtures in the second pull request of T5.2. A session puts one
 // object of its kind in a namespace of its own on the cluster of the test environment, and removes the
 // namespace with the object when it ends. The namespace is not the one of a server of Velero, so no
 // controller reads the object: the cache of the server holds its own namespace only, and the node agent
@@ -44,7 +46,9 @@ export interface KindSession {
     | "VolumeSnapshotLocation"
     | "BackupRepository"
     | "PodVolumeBackup"
-    | "PodVolumeRestore";
+    | "PodVolumeRestore"
+    | "DataUpload"
+    | "DataDownload";
   /** Its plural, by which the API and the list of the host name it. */
   resource: string;
   /** The list of the extension that shows it. */
@@ -72,7 +76,7 @@ const SESSION_POD = {
   uid: "integration-pod-uid",
 };
 
-/** The eight sessions, by the list of the extension each one opens. */
+/** The ten sessions, by the list of the extension each one opens. */
 export const SESSIONS = {
   backups: session("Backup", "backups", cluster.BACKUPS, {
     includedNamespaces: ["integration-source"],
@@ -125,7 +129,29 @@ export const SESSIONS = {
     snapshotID: "integration-snapshot",
     sourceNamespace: SESSION_POD.namespace,
   }),
+  // The data movement of a claim of the namespace of the source, which no node agent takes: none reads the namespace
+  // of the session.
+  dataUploads: session("DataUpload", "datauploads", cluster.DATA_UPLOADS, {
+    snapshotType: "CSI",
+    csiSnapshot: { volumeSnapshot: "integration-snapshot", storageClass: "integration-storage" },
+    sourcePVC: "integration-claim",
+    backupStorageLocation: "integration-location",
+    sourceNamespace: SESSION_POD.namespace,
+    operationTimeout: "10m0s",
+  }),
+  dataDownloads: session("DataDownload", "datadownloads", cluster.DATA_DOWNLOADS, {
+    targetVolume: { pvc: "integration-claim", pv: "", namespace: "integration-restored" },
+    backupStorageLocation: "integration-location",
+    snapshotID: "integration-snapshot",
+    sourceNamespace: SESSION_POD.namespace,
+    operationTimeout: "10m0s",
+  }),
 } satisfies Record<string, KindSession>;
+
+// The version of the group a kind is served under: the data movement under the second.
+function versionOf(of: KindSession): string {
+  return of.kind === "DataUpload" || of.kind === "DataDownload" ? "velero.io/v2alpha1" : "velero.io/v1";
+}
 
 function required(name: string): string {
   const value = process.env[name];
@@ -178,7 +204,7 @@ export function placeObject(of: KindSession): void {
       items: [
         { apiVersion: "v1", kind: "Namespace", metadata: { name: of.namespace, labels } },
         {
-          apiVersion: "velero.io/v1",
+          apiVersion: versionOf(of),
           kind: of.kind,
           metadata: { name: of.name, namespace: of.namespace, labels },
           spec: of.spec,
@@ -228,7 +254,7 @@ export async function openList(frame: Frame, of: KindSession): Promise<Locator> 
 
 /** The address of the object, as the host names it in the address of its details and in its menu. */
 function selfLink(of: KindSession): string {
-  return `/apis/velero.io/v1/namespaces/${of.namespace}/${of.resource}/${of.name}`;
+  return `/apis/${versionOf(of)}/namespaces/${of.namespace}/${of.resource}/${of.name}`;
 }
 
 /**

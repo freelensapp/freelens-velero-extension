@@ -47,6 +47,7 @@
         "velero-e2e-overview",
         "velero-e2e-journey",
         "velero-e2e-restricted",
+        "velero-e2e-data-movement",
         "extensions"
       ],
       "paths": ["^src/(renderer|common)/", "^e2e/__tests__/", "^integration/__tests__/extensions\\."]

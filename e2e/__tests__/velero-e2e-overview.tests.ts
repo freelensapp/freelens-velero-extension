@@ -27,10 +27,10 @@ const KINDS = [
   "volumesnapshotlocations",
   "backuprepositories",
 ];
-// The six are the ones read at every read of an installation, and the two of the pod volume operations are read only
-// by a view that shows them: the Overview holds neither.
+// The six are the ones read at every read of an installation, and the four of the pod volume operations and of the
+// data movement are read only by a view that shows them: the Overview holds none.
 const READ_ALWAYS = KINDS;
-const ON_DEMAND = ["podvolumebackups", "podvolumerestores"];
+const ON_DEMAND = ["podvolumebackups", "podvolumerestores", "datauploads", "datadownloads"];
 const BUDGET = 250;
 // How long what must not happen is waited for.
 const NOTHING = 1500;

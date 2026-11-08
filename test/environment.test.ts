@@ -11495,6 +11495,7 @@ describe("platform of the test environment", () => {
     expect(WITHOUT_A_CONTROLLER).toEqual([
       "extensions",
       "velero-e2e-adherence",
+      "velero-e2e-data-movement",
       "velero-e2e-gate",
       "velero-e2e-journey",
       "velero-e2e-locations",

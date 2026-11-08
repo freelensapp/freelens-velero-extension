@@ -22,6 +22,7 @@ const SCHEDULED = "views-daily-20260901030000";
 const MAPPED = "restore-mapped";
 // The list of the pod volume restores of a namespace, which a restore asks for the band of its volumes.
 const PVR = "LIST podvolumerestores namespace";
+const DD = "LIST datadownloads namespace";
 // What the band of a restore of the installation of the views says: it holds no pod volume restore of any.
 const NO_POD_VOLUME_RESTORE = "This restore has no pod volume restore among the ones the installation holds.";
 // The volumes of the seven pod volume restores the views place for the mapped restore. The band orders them by the
@@ -257,9 +258,9 @@ describe("views of the restores", () => {
         "Waiting for plugin operations",
         "1 error",
       );
-      // Opening a restore asks the cluster for one thing: the pod volume restores of the installation, for the band
-      // of its volumes, once and at once, which the views read only while a view that shows them is open. What else
-      // it shows was read with the installation. It is opened in the time between two reads of the installation,
+      // Opening a restore asks the cluster for two things: the pod volume restores and the data downloads of the
+      // installation, for the two halves of the band of its volumes, once each and at once, which the views read only
+      // while a view that shows them is open. What else it shows was read with the installation. It is opened in the time between two reads of the installation,
       // with the counters of the API server read before and after; a view that closes lets the family go at the
       // read after, so the restore asks it again each time it is opened.
       expect(
@@ -268,9 +269,9 @@ describe("views of the restores", () => {
           () => cluster.openWorkspace(frame, MAPPED, RESTORES),
           () => cluster.closeWorkspace(frame),
           3,
-          { [PVR]: 1 },
+          { [PVR]: 1, [DD]: 1 },
         ),
-      ).toEqual({ [PVR]: 1 });
+      ).toEqual({ [PVR]: 1, [DD]: 1 });
       const workspace = frame.locator("[data-testid=velero-restore-workspace]");
       const status = text(await workspace.locator("[data-testid=velero-restore-status]").innerText());
 
@@ -342,14 +343,23 @@ describe("views of the restores", () => {
 
       expect(tabs.tabs.map(({ title }) => title)).toEqual(artifacts.TABS.map(({ title }) => title));
       expect([tabs.open, tabs.selected]).toEqual(["summary", [artifacts.PARTS.tab("restore", "summary")]]);
-      // The band of the volumes shows the seven pod volume restores the views place for the restore, before the
-      // references, each row a way named by its volume.
+      // The band of the volumes shows the seven pod volume restores the views place for the restore, then the data
+      // downloads, before the references, each row a way named by its volume or by its claim; the downloads read by
+      // the suite on the cluster by the label of the restore.
+      const downloads = cluster.labelledObjects<{
+        spec?: { targetVolume?: { pvc?: string; namespace?: string } };
+        status?: { node?: string };
+      }>("datadownloads", `velero.io/restore-name=${MAPPED}`, cluster.E2E_VIEWS_NAMESPACE);
+      const claims = downloads.map(({ spec }) => `${spec?.targetVolume?.namespace}/${spec?.targetVolume?.pvc}`).sort();
       const ways = (
         await workspace.locator(`[data-testid=${artifacts.PARTS.shown("restore")}] button`).allInnerTexts()
       ).map(text);
+      const operations = VOLUMES_OF_MAPPED.length + claims.length;
 
+      expect(claims.length).toBeGreaterThan(0);
       expect([...ways.slice(0, VOLUMES_OF_MAPPED.length)].sort()).toEqual(VOLUMES_OF_MAPPED);
-      expect(ways.slice(VOLUMES_OF_MAPPED.length)).toEqual([SCHEDULED, "views-daily", "views-available"]);
+      expect([...ways.slice(VOLUMES_OF_MAPPED.length, operations)].sort()).toEqual(claims);
+      expect(ways.slice(operations)).toEqual([SCHEDULED, "views-daily", "views-available"]);
       const band = await cluster.volumeBand(frame, "rows");
 
       expect(band).toMatchObject({
@@ -360,10 +370,16 @@ describe("views of the restores", () => {
       });
       expect(band.rows).toHaveLength(VOLUMES_OF_MAPPED.length);
       expect((await workspace.locator("button").allInnerTexts()).map(text)).toEqual(["arrow_back Restores", ...ways]);
-      // The links of the host are the ones of the rows of the band, to their pods and to the nodes they name, and
-      // nothing is a field.
-      expect(await workspace.locator("[data-testid=velero-volume-band] a").count()).toBe(LINKS_OF_MAPPED);
-      expect(await workspace.locator("a").count()).toBe(LINKS_OF_MAPPED);
+      // The links of the host are the ones of the rows of the band, to their pods and to the nodes they name: the
+      // ones of the pod volume restores, and the node of each data download its node agent prepared; nothing is a
+      // field.
+      const nodes = downloads.filter(({ status }) => status?.node).length;
+
+      expect(await workspace.locator("[data-testid=velero-volume-half][data-kind=PodVolumeRestore] a").count()).toBe(
+        LINKS_OF_MAPPED,
+      );
+      expect(await workspace.locator("[data-testid=velero-volume-band] a").count()).toBe(LINKS_OF_MAPPED + nodes);
+      expect(await workspace.locator("a").count()).toBe(LINKS_OF_MAPPED + nodes);
       expect(await workspace.locator("input, select, textarea").count()).toBe(0);
       expect(await cluster.notices(frame, [])).toEqual({});
       expect(await cluster.layoutProblems(frame, RESTORES)).toEqual([]);

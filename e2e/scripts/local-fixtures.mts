@@ -1400,7 +1400,12 @@ export function viewOperationFixtures(
       acceptedTimestamp: at(45),
       message: "timeout on preparing data upload",
     }),
-    uploadOf(inProgress, { phase: "Canceled", ...node("views-node-1"), startTimestamp: at(5), completionTimestamp: at(5) }),
+    uploadOf(inProgress, {
+      phase: "Canceled",
+      ...node("views-node-1"),
+      startTimestamp: at(5),
+      completionTimestamp: at(5),
+    }),
     // A data mover of its own, which the node agent leaves alone: it waits for that data mover.
     uploadOf(inProgress, undefined, { mover: "views-mover" }),
     uploadOf(long, {
@@ -1439,10 +1444,18 @@ export function viewOperationFixtures(
     ),
     downloadOf(
       mapped,
-      { phase: "Failed", completionTimestamp: at(7), message: "error to expose the snapshot\nthe target claim is not bound" },
+      {
+        phase: "Failed",
+        completionTimestamp: at(7),
+        message: "error to expose the snapshot\nthe target claim is not bound",
+      },
       uploaded,
     ),
-    downloadOf(mapped, { phase: "Canceled", ...node("views-node-1"), startTimestamp: at(5), completionTimestamp: at(5) }, uploaded),
+    downloadOf(
+      mapped,
+      { phase: "Canceled", ...node("views-node-1"), startTimestamp: at(5), completionTimestamp: at(5) },
+      uploaded,
+    ),
     // A snapshot no data upload of the installation names: the data upload went with its backup.
     downloadOf(mapped, { phase: "Failed", message: "timeout on preparing data download" }, snapshot(1001)),
   ];
@@ -1692,7 +1705,10 @@ export function scaleFixtures(
       });
     }
     if (index >= SCALE_OWNERS_OF_TWO - SCALE_DATA_UPLOADS && index < SCALE_OWNERS_OF_TWO) {
-      requireCondition(uid, `The backup ${backup} of ${names.scale} that owns a data upload of the long lists is not there`);
+      requireCondition(
+        uid,
+        `The backup ${backup} of ${names.scale} that owns a data upload of the long lists is not there`,
+      );
       const time = first + index * step + 120_000;
       const second = (offset: number) => new Date(time + offset * 1000).toISOString().replace(".000Z", "Z");
       const phase = SCALE_OPERATION_PHASES[dataUploads.length % SCALE_OPERATION_PHASES.length];
@@ -2368,6 +2384,7 @@ export function createStaticFixtures(runtime: FixtureRuntime, run: string, contr
 export const WITHOUT_A_CONTROLLER = [
   "extensions",
   "velero-e2e-adherence",
+  "velero-e2e-data-movement",
   "velero-e2e-gate",
   "velero-e2e-journey",
   "velero-e2e-locations",
