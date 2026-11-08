@@ -112,6 +112,7 @@ describe("the create-only adapter, through the client of the host", () => {
       "createBackup",
       "createDownload",
       "createGenerated",
+      "createSchedule",
       "list",
       "path",
       "read",
@@ -644,6 +645,46 @@ describe("the create-only adapter, through the client of the host", () => {
       { ...backup, metadata: { name: "a..b", namespace: "velero" } },
       { ...backup, metadata: { name: "a-.b", namespace: "velero" } },
       { ...backup, status: { phase: "Completed" } },
+      { ...backup, spec: {}, status: { phase: "Completed" } },
+      // A backup with no spec, and one with a key the kind does not have.
+      backup,
+      { ...backup, spec: {}, extra: 1 },
+    ])
+      expect(refused(body)).toThrow("validation");
+    expect(host.requests).toHaveLength(1);
+  });
+
+  it("creates the schedule of a text as it is, byte for byte, and sends nothing of a text that is not a schedule of the namespace, of its name and its namespace alone", async () => {
+    const { api, host, signal } = fixture();
+    const schedule = {
+      apiVersion: "velero.io/v1",
+      kind: "Schedule",
+      metadata: { name: "nightly", namespace: "velero" },
+      spec: { schedule: "0 3 * * *", template: { storageLocation: "default" } },
+    };
+    const text = JSON.stringify(schedule, null, 2);
+
+    await api.createSchedule("velero", text, signal);
+    expect(host.requests.map((item) => [item.method, item.path, item.text])).toEqual([
+      ["POST", `${API}/schedules`, text],
+    ]);
+    const refused = (body: Record<string, unknown> | string) => () =>
+      api.createSchedule("velero", typeof body === "string" ? body : JSON.stringify(body), signal);
+
+    for (const body of [
+      "not json",
+      { ...schedule, kind: "Backup" },
+      { ...schedule, apiVersion: "velero.io/v2alpha1" },
+      { ...schedule, metadata: { name: "nightly", namespace: "elsewhere" } },
+      { ...schedule, metadata: { generateName: "nightly-", namespace: "velero" } },
+      { ...schedule, metadata: { name: "nightly", namespace: "velero", labels: { app: "web" } } },
+      { ...schedule, metadata: { name: "nightly", namespace: "velero", annotations: { note: "x" } } },
+      { ...schedule, metadata: { name: "Nightly", namespace: "velero" } },
+      // A name every backup of the schedule cannot carry in its label.
+      { ...schedule, metadata: { name: "a".repeat(64), namespace: "velero" } },
+      { ...schedule, spec: undefined },
+      { ...schedule, status: { phase: "Enabled" } },
+      { ...schedule, extra: 1 },
     ])
       expect(refused(body)).toThrow("validation");
     expect(host.requests).toHaveLength(1);

@@ -23,6 +23,7 @@ import {
   readGateState,
   readGateStateRequest,
   readKeptEnds,
+  readScheduleCreated,
   readServerStatusValue,
   readWriteCancelRequest,
   readWriteConfirmAnswer,
@@ -187,6 +188,62 @@ describe("the requests between the processes", () => {
 
     expect(readWriteRunRequest(run)).toEqual(run);
     expect(readWriteRunRequest({ ...run, template })).toBeUndefined();
+  });
+
+  it("reads a confirmation of a schedule of the form: its name, its wrapper and its template, of no object", () => {
+    const wrapper = {
+      expression: "0 3 * * *",
+      paused: false,
+      skipImmediately: true,
+      useOwnerReferencesInBackup: false,
+    };
+    const template = { includedNamespaces: ["shop"], storageLocation: "default" };
+    const form = { cluster, namespace: "velero", kind: "schedule", schedule: "nightly-shop", wrapper, template };
+
+    expect(readWriteConfirmRequest(form)).toEqual(form);
+    // What the main process refuses of an expression is said with its words, not refused here.
+    for (const expression of ["", "@none", "61 * * * *", "0 3 * *\t*"])
+      expect(readWriteConfirmRequest({ ...form, wrapper: { ...wrapper, expression } })).toMatchObject({
+        wrapper: { expression },
+      });
+    expect(readWriteConfirmRequest({ ...form, schedule: "a".repeat(63) })).toMatchObject({ schedule: "a".repeat(63) });
+    for (const [what, value] of [
+      ["no wrapper", { cluster, namespace: "velero", kind: "schedule", schedule: "nightly-shop", template }],
+      ["no template", { cluster, namespace: "velero", kind: "schedule", schedule: "nightly-shop", wrapper }],
+      ["no name", { cluster, namespace: "velero", kind: "schedule", wrapper, template }],
+      ["a name of 64 characters", { ...form, schedule: "a".repeat(64) }],
+      ["a name the API server refuses", { ...form, schedule: "Nightly" }],
+      ["the name of a backup", { ...form, backup: "nightly-shop" }],
+      ["a target", { ...form, target: { kind: "Schedule", name: "daily", uid: "u" } }],
+      ["a flag that is not set", { ...form, wrapper: { ...wrapper, paused: undefined } }],
+      ["a flag that is not a boolean", { ...form, wrapper: { ...wrapper, useOwnerReferencesInBackup: "false" } }],
+      ["an expression that is not text", { ...form, wrapper: { ...wrapper, expression: 3 } }],
+      ["an expression beyond what is carried", { ...form, wrapper: { ...wrapper, expression: "x".repeat(4097) } }],
+      ["a field of the wrapper it does not know", { ...form, wrapper: { ...wrapper, labels: {} } }],
+      ["a field of the template it does not know", { ...form, template: { ...template, hooks: {} } }],
+      [
+        "a wrapper of a backup of the form",
+        { cluster, namespace: "velero", kind: "backup", backup: "shop", wrapper, template },
+      ],
+      ["a wrapper of another kind", { cluster, namespace: "velero", kind: "ServerStatusRequest", wrapper }],
+    ] as const) {
+      expect([what, readWriteConfirmRequest(value)]).toEqual([what, undefined]);
+    }
+    // The run carries the name, and none of the wrapper or of the template, which the text kept with the token is made
+    // of.
+    const run = {
+      cluster,
+      namespace: "velero",
+      kind: "schedule",
+      schedule: "nightly-shop",
+      token: randomUUID(),
+      request: randomUUID(),
+    };
+
+    expect(readWriteRunRequest(run)).toEqual(run);
+    expect(readWriteRunRequest({ ...run, wrapper })).toBeUndefined();
+    expect(readWriteRunRequest({ ...run, template })).toBeUndefined();
+    expect(readWriteRunRequest({ ...run, schedule: undefined })).toBeUndefined();
   });
 
   it("takes the eight artifacts the extension shows, each of the kind of its target, and no other target of the API", () => {
@@ -400,6 +457,42 @@ describe("the answers of a write of a body", () => {
   });
 });
 
+describe("a schedule of the form created, between the processes", () => {
+  it("reads its name, its UID, the phase and the errors Velero wrote, whether it is paused, and whether it was found", () => {
+    expect(readScheduleCreated({ name: "nightly", uid: "u" })).toEqual({ name: "nightly", uid: "u" });
+    const failed = { name: "nightly", uid: "u", phase: "FailedValidation", errors: ["one", "two"] };
+
+    expect(readScheduleCreated(failed)).toEqual(failed);
+    expect(readScheduleCreated({ name: "nightly", uid: "u", paused: true, found: true })).toEqual({
+      name: "nightly",
+      uid: "u",
+      paused: true,
+      found: true,
+    });
+    for (const value of [
+      { name: "Nightly", uid: "u" },
+      { name: "nightly", uid: "" },
+      { name: "nightly", uid: "u", phase: "P".repeat(65) },
+      { name: "nightly", uid: "u", errors: [] },
+      { name: "nightly", uid: "u", errors: Array.from({ length: 17 }, () => "e") },
+      { name: "nightly", uid: "u", errors: ["e".repeat(4097)] },
+      { name: "nightly", uid: "u", paused: false },
+      { name: "nightly", uid: "u", found: "yes" },
+      { name: "nightly", uid: "u", position: 1 },
+      { name: "nightly", uid: "u", errors: Array.from({ length: 9 }, () => "e".repeat(4096)) },
+      { name: "nightly", uid: "u", errorsLeft: 0 },
+    ]) {
+      expect([value, readScheduleCreated(value)]).toEqual([value, undefined]);
+    }
+    expect(readScheduleCreated({ name: "nightly", uid: "u", phase: "FailedValidation", errorsLeft: 2 })).toEqual({
+      name: "nightly",
+      uid: "u",
+      phase: "FailedValidation",
+      errorsLeft: 2,
+    });
+  });
+});
+
 describe("the errors of a validation an answer carries", () => {
   it("carries them in order, each whole, until one does not fit, and counts the others", () => {
     expect(carriedErrors(undefined)).toEqual({});
@@ -480,6 +573,13 @@ describe("the ends kept for a cluster, between the processes", () => {
     expect(readWriteEndsRequest({ cluster })).toEqual({ cluster });
     expect(readWriteShownRequest({ cluster, request: end.request })).toEqual({ cluster, request: end.request });
     expect(readWriteShownRequest({ cluster, request: "not-a-uuid" })).toBeUndefined();
+  });
+
+  it("reads the end of a schedule of the form, which names no schedule it was asked from", () => {
+    const { schedule: _schedule, ...created } = { ...end, kind: "schedule", name: "nightly-shop" };
+
+    expect(readKeptEnds([created])).toEqual([created]);
+    expect(readKeptEnds([{ ...created, schedule: "daily" }])).toEqual([]);
   });
 
   it("reads the end of a backup of the form, which names no schedule", () => {

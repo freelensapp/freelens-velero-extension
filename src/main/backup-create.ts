@@ -16,9 +16,10 @@ import {
   type WriteConfirmRequest,
   type WriteRunRequest,
 } from "../common/ipc";
-import { type BackupNowDependencies, createKept } from "./backup-now";
+import { createBackupKept } from "./backup-now";
 import { DiagnosticError } from "./diagnostic-transport";
 
+import type { CreationDependencies } from "./creation";
 import type { DiagnosticKubernetes, DiagnosticObject } from "./diagnostic-kubernetes";
 import type { Write } from "./write-gate";
 
@@ -42,7 +43,7 @@ export const BACKUP_CREATE_WORDS = {
   cancelled: "The write was cancelled: nothing was sent.",
   slow: "The API server did not answer the read of a location in time: nothing was sent. Asking again is safe.",
   unreachable: "The API server could not be reached: nothing was sent. Asking again is safe.",
-  failed: "The locations of the backup could not be read: nothing was sent.",
+  failed: "The locations the template names could not be read: nothing was sent.",
 };
 
 // A location the template names, as the words say it.
@@ -76,8 +77,8 @@ function readEnd(error: unknown, location: string, namespace: string): Answer<ne
 
 // The storage location and each snapshot location named, read in the namespace of the installation: one that is not
 // there ends the write before anything is sent, and so do two snapshot locations of one provider, which the release
-// refuses (SPEC-0016, REQ-224; SPEC-0017, the contract).
-async function readLocations(
+// refuses (SPEC-0016, REQ-224; SPEC-0017, the contract). The write of a schedule of the form reads them the same way.
+export async function readLocations(
   adapter: DiagnosticKubernetes,
   namespace: string,
   storage: string,
@@ -113,7 +114,7 @@ async function readLocations(
 // The confirmation: the template is one the release takes, the gate is open for the namespace, the locations it names
 // are there, and the backup is written as the text that the review shows and the run sends.
 export async function confirmBackupCreate(
-  dependencies: BackupNowDependencies,
+  dependencies: CreationDependencies,
   sender: string,
   request: WriteConfirmRequest,
   signal: AbortSignal,
@@ -152,7 +153,7 @@ export async function confirmBackupCreate(
     request.kind,
     undefined,
     undefined,
-    { backup, text },
+    { name: backup, text },
   );
 
   return confirmed.ok ? { ok: true, value: { ...confirmed.value, text } } : confirmed;
@@ -162,7 +163,7 @@ export async function confirmBackupCreate(
 // there, the text sent byte for byte, and the reads after the creation. The caller watches the frame and ends the
 // write.
 export async function runBackupCreate(
-  dependencies: BackupNowDependencies,
+  dependencies: CreationDependencies,
   sender: string,
   request: WriteRunRequest,
   watch: (write: Write) => () => void,
@@ -203,7 +204,7 @@ export async function runBackupCreate(
     );
 
     if (!read.ok) return read;
-    return await createKept(dependencies, adapter, request, text, confirmedAt, write, still);
+    return await createBackupKept(dependencies, adapter, request, text, confirmedAt, write, still);
   } finally {
     stop();
     dependencies.gate.finish(request.cluster, request.request);

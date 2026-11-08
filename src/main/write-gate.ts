@@ -75,28 +75,29 @@ export const WRITES_BOUND = 16;
 const NOT_CONNECTED = () => failure("target-changed", "catalog", false, CLUSTER_WORDS.disconnected);
 
 // What a confirmation is for: the namespace, the kind of the write, its target and, for a DownloadRequest,
-// the artifact, for a backup asked from a schedule the name of the backup. A token confirmed for the log of a
-// backup does not run for its results, and one confirmed for a name does not create another.
+// the artifact, for a write that creates an object of a name the operator gives the name of that object, a backup or a
+// schedule. A token confirmed for the log of a backup does not run for its results, and one confirmed for a name does
+// not create another.
 export function signatureOf(
   namespace: string,
   kind: WriteKind,
   target: WriteTarget | undefined,
   artifact?: ArtifactTarget,
-  backup?: string,
+  name?: string,
 ): string {
   return JSON.stringify([
     namespace,
     kind,
     target ? [target.kind, target.name, target.uid] : null,
     artifact ?? null,
-    ...(backup === undefined ? [] : [backup]),
+    ...(name === undefined ? [] : [name]),
   ]);
 }
 
-// What a confirmation keeps beside its signature: the name of the backup it is for, and the text of the body the
+// What a confirmation keeps beside its signature: the name of the object it creates, and the text of the body the
 // review showed, which the run sends.
 export interface Confirmed {
-  backup?: string;
+  name?: string;
   text?: string;
 }
 
@@ -292,7 +293,7 @@ export class WriteGate<Adapter extends GateAdapter> {
 
     gate.confirmations.set(token, {
       sender,
-      signature: signatureOf(namespace, kind, target, artifact, confirmed.backup),
+      signature: signatureOf(namespace, kind, target, artifact, confirmed.name),
       expires,
       at: this.now(),
       ...(confirmed.text === undefined ? {} : { text: confirmed.text }),
@@ -337,7 +338,7 @@ export class WriteGate<Adapter extends GateAdapter> {
     token: string,
     request: string,
     artifact?: ArtifactTarget,
-    backup?: string,
+    name?: string,
   ): { ok: true; value: { adapter: Adapter; write: Write; text?: string; confirmedAt: number } } | Failure {
     const gate = this.gateOf(cluster);
 
@@ -350,7 +351,7 @@ export class WriteGate<Adapter extends GateAdapter> {
     if (
       !held ||
       held.sender !== sender ||
-      held.signature !== signatureOf(namespace, kind, target, artifact, backup) ||
+      held.signature !== signatureOf(namespace, kind, target, artifact, name) ||
       held.expires <= this.now()
     )
       return failure(

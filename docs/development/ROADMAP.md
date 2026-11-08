@@ -219,7 +219,7 @@ the accuracy of the adherence signal, including its uncertainty states.
 | Ground rules of the write actions | | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | Approved |
 | Backup now from a schedule | T4.2 | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | Done |
 | Create backup form, followed by a review of the exact request | T4.3 | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | In PR |
-| Create schedule form, followed by a review of the exact request | T4.7 | [SPEC-0016](../specs/SPEC-0016-create-a-schedule.md) | Approved |
+| Create schedule form, followed by a review of the exact request | T4.7 | [SPEC-0016](../specs/SPEC-0016-create-a-schedule.md) | In PR |
 | Restore from backup or schedule, with namespace mappings and existing-resource policy | T4.4 | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | Approved |
 | Pause and resume of a schedule, with explicit `skipImmediately` behavior | T4.5 | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | Approved |
 | Delete one backup through `DeleteBackupRequest`, with double confirmation | T4.6 | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | Approved |
