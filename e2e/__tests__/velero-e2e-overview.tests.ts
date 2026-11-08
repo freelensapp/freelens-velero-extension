@@ -308,8 +308,8 @@ describe("overview of an installation", () => {
         [DISCOVERY]: (counted[DISCOVERY] ?? 0) + 1,
       });
       expect(await cluster.layoutProblems(frame, OVERVIEW)).toEqual([]);
-      // The installation is chosen: its six families are read, in its namespace, none of the pod volume operations,
-      // and nothing of the whole cluster is asked again.
+      // The installation is chosen: its six families are read, in its namespace, none of the pod volume operations
+      // and of the data movement, and nothing of the whole cluster is asked again.
       await frame.click(`[data-testid="velero-choice-${cluster.E2E_OVERVIEW_NAMESPACE}"]`);
       await cluster.overview(frame);
       await frame.waitForTimeout(1500);

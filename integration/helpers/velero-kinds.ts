@@ -13,8 +13,9 @@
 // object of its kind in a namespace of its own on the cluster of the test environment, and removes the
 // namespace with the object when it ends. The namespace is not the one of a server of Velero, so no
 // controller reads the object: the cache of the server holds its own namespace only, and the node agent
-// selects the pod volume operations of its namespace by a field (v1.18.4, pkg/cmd/server/server.go:272-276,
-// pkg/cmd/cli/nodeagent/server.go:183-193). The object stays as it was written. The session needs neither
+// selects the pod volume operations and the data movement of its namespace by a field (v1.18.4,
+// pkg/cmd/server/server.go:272-276,
+// pkg/cmd/cli/nodeagent/server.go:183-199). The object stays as it was written. The session needs neither
 // the fixtures of the views nor another file having run, and it writes nothing but its namespace and its
 // object.
 //
@@ -35,7 +36,7 @@ export const SESSION_LABEL = "freelensapp.io/velero-integration-session";
 const ELEMENT_TIMEOUT = 60 * 1000;
 const KUBECTL_TIMEOUT = 5 * 60 * 1000;
 
-/** One of the eight sessions: the kind, how the extension and the host show it, and the object of the session. */
+/** One of the ten sessions: the kind, how the extension and the host show it, and the object of the session. */
 export interface KindSession {
   /** The kind, as the API names it. */
   kind:

@@ -220,7 +220,7 @@ export const BACKUP_PHASE_SENTENCES: Record<string, string> = {
   Canceling: "The cancellation was asked: the data path is being stopped.",
   Completed: "The data path ended.",
   Failed:
-    "The operation failed: the message says why. A start equal to the completion is one the failure wrote; no time at all is one the preparing timeout wrote.",
+    "The operation failed: the message says why. A start equal to the completion is one the failure wrote; no start and no completion is one the preparing timeout wrote.",
   Canceled:
     "The operation was canceled: neither a success nor a failure. The release cancels one when its backup or restore times out, when the server or the node agent restarts, or when its pod cannot run.",
 };

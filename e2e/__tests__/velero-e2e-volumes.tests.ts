@@ -32,7 +32,7 @@ const LISTS: [cluster.ListOf, string][] = [
 ];
 const PVB = "LIST podvolumebackups namespace";
 // The half of the band of the pod volume operations, the first: the second is of the data movement.
-const PODS = "[data-testid=velero-volume-band] [data-testid=velero-volume-half]:first-of-type";
+const PODS = "[data-testid=velero-volume-band] [data-testid=velero-volume-half][data-kind=PodVolumeBackup]";
 const PVR = "LIST podvolumerestores namespace";
 // How many reads of the installation each window of the reads waits for: one every fifteen seconds.
 const CYCLES = 3;

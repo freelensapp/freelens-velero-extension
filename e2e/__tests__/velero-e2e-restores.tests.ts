@@ -30,10 +30,10 @@ const NO_POD_VOLUME_RESTORE = "This restore has no pod volume restore among the 
 // run makes: what is compared here is which they are, the order is the one of the tests of the band.
 const VOLUMES_OF_MAPPED = ["data-16", "data-17", "data-18", "data-19", "data-20", "data-21", "data-22"];
 // The links of the host the band draws for them, `LinkToPod` and `LinkToNode`, each a link whenever it is given a
-// name, and a namespace for a pod (AGENTS.md, the host facts): the pod of each of the seven, and the node of the four
-// a node agent accepted, Accepted, InProgress, Completed and Canceled. The New one, the one that failed before it was
-// accepted and the one of the legacy controller of restic name no node.
-const LINKS_OF_MAPPED = VOLUMES_OF_MAPPED.length + 4;
+// name, and a namespace for a pod (AGENTS.md, the host facts): the pod of each of the seven, and the node of the five
+// a node agent accepted, Accepted, InProgress, Completed, Canceled and the one its preparing timeout failed. The New
+// one and the one of the legacy controller of restic name no node.
+const LINKS_OF_MAPPED = VOLUMES_OF_MAPPED.length + 5;
 const text = (value: string) => value.replace(/\s+/g, " ").trim();
 // How long what must not happen is waited for: longer than the frame the host opens a menu in.
 const NOTHING = 1500;

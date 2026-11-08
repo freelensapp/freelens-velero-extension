@@ -15,6 +15,7 @@ import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { captureWindowScreenshot, EXTENSION_NAME } from "./velero-extension";
 import {
+  countedAs,
   installedVersion,
   operationListsOf,
   realScheduleSubmission,
@@ -22,6 +23,8 @@ import {
   workloadReadsOf,
   writesOf,
 } from "./velero-guard";
+
+export { countedAs };
 
 import type { Frame, Locator, Page, Request } from "playwright";
 
@@ -422,7 +425,10 @@ export function fixturesReady(): boolean {
       : []),
     [E2E_VIEWS_NAMESPACE, "podvolumerestores.velero.io", "velero.io/restore-name=restore-mapped", 7],
     [E2E_VIEWS_NAMESPACE, "backuprepositories.velero.io", "velero.io/volume-namespace=views-twice", 2],
+    [E2E_VIEWS_NAMESPACE, "datauploads.velero.io", "velero.io/backup-name=backup-inprogress", 12],
+    [E2E_VIEWS_NAMESPACE, "datadownloads.velero.io", "velero.io/restore-name=restore-mapped", 8],
     [E2E_SCALE_NAMESPACE, "podvolumebackups.velero.io", "velero.io/backup-name=backup-1000", 200],
+    [E2E_SCALE_NAMESPACE, "datauploads.velero.io", `freelensapp.io/velero-fixture-run=${E2E_FIXTURE_RUN}`, 200],
   ];
 
   // A run is eight hexadecimal characters: without one, no name of the run is probed.
@@ -699,7 +705,7 @@ export function clusterReads(counts: Record<string, number>): Record<string, num
 }
 
 /**
- * The lists and the reads by name of the eight families, in a namespace, of one
+ * The lists and the reads by name of the ten families, in a namespace, of one
  * object or of the whole cluster, among the ones counted, and their watches in
  * a namespace or of one object. It is what a view would ask to read again what
  * it shows. The watches of the whole cluster are left out: the control plane
@@ -2585,6 +2591,20 @@ export async function selectHostNamespace(frame: Frame, namespace: string): Prom
 export async function hostDetails(frame: Frame, name: string, ...texts: string[]): Promise<string> {
   await frame.locator(".TableRow", { hasText: name }).first().locator(".TableCell", { hasText: name }).first().click();
 
+  return detailsText(frame, name, texts);
+}
+
+/**
+ * The details of the host of an object opened by its address, as a link of the host opens them, and their text once
+ * it holds every text given: a list of the host mounts the rows in view, and the object is not looked for there.
+ */
+export async function hostDetailsAt(frame: Frame, selfLink: string, ...texts: string[]): Promise<string> {
+  await showHostDetails(frame, selfLink);
+
+  return detailsText(frame, selfLink.slice(selfLink.lastIndexOf("/") + 1), texts);
+}
+
+async function detailsText(frame: Frame, name: string, texts: string[]): Promise<string> {
   const drawer = frame.locator(".Drawer.KubeObjectDetails");
 
   await drawer.waitFor({ state: "visible", timeout: ELEMENT_TIMEOUT });
@@ -2831,25 +2851,6 @@ export async function veleroRequestsDuring(page: Page, step: () => Promise<void>
     page.off("request", listener);
   }
   return seen;
-}
-
-/**
- * What the API server counts of a request the window sent to the API of Velero, in its words: the verb, the
- * kind and the scope, as `apiRequests()` gives them, under either version of the group, as the API server counts
- * a kind of the group whatever its version. The read of a version itself, which says what it serves, is of no kind,
- * and is counted as none of them.
- */
-export function countedAs(request: SeenRequest): string | undefined {
-  const address = new URL(request.url);
-  const path = /\/apis\/velero\.io\/(?:v1|v2alpha1)\/(.+)$/.exec(address.pathname)?.[1];
-
-  if (!path) return undefined;
-  const parts = path.split("/");
-  const namespaced = parts[0] === "namespaces";
-  const [kind, name] = namespaced ? parts.slice(2) : parts;
-  const verb = address.searchParams.get("watch") ? "WATCH" : name ? "GET" : "LIST";
-
-  return `${verb} ${kind} ${name ? "resource" : namespaced ? "namespace" : "cluster"}`;
 }
 
 /** The kinds of Velero the Custom Resources of the host list in their tree, under the group of `velero.io`. */

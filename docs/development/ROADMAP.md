@@ -78,7 +78,7 @@ ConfigMaps and the transport run in Node. It is not a claim about the full
 product, about the recovery of persistent volumes or about all the eight
 artifact formats.
 
-The integration test, FND-10 and a session for each of the eight kinds,
+The integration test, FND-10 and a session for each of the ten kinds,
 installs the packed build in a Freelens built from source at the commit of the
 validation target, on every pull request and on main; the suites of the views
 run in the same build.

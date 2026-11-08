@@ -988,7 +988,7 @@ describe("pre-review of the views", () => {
       expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
       // From the way back the keyboard goes through the five tabs of the workspace, each one a stop as the
       // tabs of the host are, then the band of its volumes, whose rows, the seven pod volume restores of the
-      // restore, each hold a way to the operation and a link to its pod, four of them a link to the node a node
+      // restore, each hold a way to the operation and a link to its pod, five of them a link to the node a node
       // agent accepted them on, and the data downloads of the restore, each a way, with a link to the node of the
       // ones a node agent prepared; then it reaches the way to the backup.
       const downloads = cluster.labelledObjects<{ status?: { node?: string } }>(
@@ -1003,8 +1003,10 @@ describe("pre-review of the views", () => {
         .locator("[data-testid=velero-volume-band] a, [data-testid=velero-volume-band] button")
         .count();
 
-      expect(stops).toBe(7 + 7 + 4 + downloads.length + downloads.filter(({ status }) => status?.node).length);
-      expect(await cluster.tabTo(frame, (focus) => focus.startsWith("velero-open-backup-"), 40)).toBe(6 + stops);
+      expect(stops).toBe(7 + 7 + 5 + downloads.length + downloads.filter(({ status }) => status?.node).length);
+      expect(await cluster.tabTo(frame, (focus) => focus.startsWith("velero-open-backup-"), 6 + stops + 2)).toBe(
+        6 + stops,
+      );
       await started.window.keyboard.press("Enter");
       await frame.waitForSelector("[data-testid=velero-backup-workspace]", { timeout: 60_000 });
       expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");

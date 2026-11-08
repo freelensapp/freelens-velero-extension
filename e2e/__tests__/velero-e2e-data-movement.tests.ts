@@ -159,6 +159,8 @@ describe("views of the data uploads and of the data downloads", () => {
       await cluster.openPage(frame, cluster.DATA_UPLOADS);
       await cluster.waitForList(frame, cluster.DATA_UPLOADS);
       for (const [phase, name] of ofEach) {
+        // The list mounts the rows in view: the row is found by a search of its name.
+        await cluster.search(frame, name, cluster.DATA_UPLOADS);
         await cluster.openWorkspace(frame, name, cluster.DATA_UPLOADS);
         const status = frame.locator(
           "[data-testid=velero-data-upload-workspace] [data-testid=velero-data-upload-status]",
@@ -172,6 +174,7 @@ describe("views of the data uploads and of the data downloads", () => {
         ]);
         await cluster.closeWorkspace(frame);
       }
+      await cluster.search(frame, "", cluster.DATA_UPLOADS);
     },
     TIMEOUT,
   );
@@ -201,6 +204,13 @@ describe("views of the data uploads and of the data downloads", () => {
         { selector: half("DataUpload"), count: own.length },
         { timeout: 60_000 },
       );
+      // Each row is a way to the view of its data upload.
+      for (const { metadata } of own) {
+        expect([
+          metadata.name,
+          await frame.locator(`${half("DataUpload")} [data-testid="velero-open-data-upload-${metadata.name}"]`).count(),
+        ]).toEqual([metadata.name, 1]);
+      }
       const [first] = band.rows;
 
       await frame.locator(`${half("DataUpload")} [data-testid="velero-open-data-upload-${first}"]`).click();
@@ -272,6 +282,7 @@ describe("views of the data uploads and of the data downloads", () => {
       expect(Boolean(own)).toBe(true);
       await cluster.openPage(frame, cluster.DATA_UPLOADS);
       await cluster.waitForList(frame, cluster.DATA_UPLOADS);
+      await cluster.search(frame, String(own?.metadata.name), cluster.DATA_UPLOADS);
       await cluster.openWorkspace(frame, String(own?.metadata.name), cluster.DATA_UPLOADS);
       const view = frame.locator("[data-testid=velero-data-upload-workspace]");
 
@@ -283,6 +294,7 @@ describe("views of the data uploads and of the data downloads", () => {
         (await view.locator("[data-testid=velero-data-upload-status]").innerText()).replace(/\s+/g, " "),
       ).toContain(volumes.DATA_UPLOAD_PHASE_SENTENCES.New);
       await cluster.closeWorkspace(frame);
+      await cluster.search(frame, "", cluster.DATA_UPLOADS);
     },
     TIMEOUT,
   );
@@ -290,16 +302,26 @@ describe("views of the data uploads and of the data downloads", () => {
   it(
     "gives the details of the host of a data upload and of a data download the reading of their views, and a way to each",
     async () => {
-      const [upload] = uploads().filter(({ status }) => status?.phase === "InProgress");
+      const [upload] = uploads().filter(
+        ({ metadata, status }) =>
+          metadata.labels?.["velero.io/backup-name"] === BACKUP && status?.phase === "InProgress",
+      );
       const [download] = downloads().filter(({ status }) => status?.phase === "Completed");
 
       for (const [resource, kind, name, texts] of [
         ["datauploads", "data-upload", upload.metadata.name, ["In progress", BACKUP]],
         ["datadownloads", "data-download", download.metadata.name, ["Completed", RESTORE]],
       ] as const) {
+        // The list of the host mounts the rows in view: the details are opened by the address of the object, as a
+        // link of the host opens them.
         await cluster.navigate(frame, `/crd/velero.io/${resource}`);
         await cluster.selectHostNamespace(frame, cluster.E2E_VIEWS_NAMESPACE);
-        const details = await cluster.hostDetails(frame, name, ...texts, cluster.E2E_VIEWS_NAMESPACE);
+        const details = await cluster.hostDetailsAt(
+          frame,
+          `/apis/velero.io/v2alpha1/namespaces/${cluster.E2E_VIEWS_NAMESPACE}/${resource}/${name}`,
+          ...texts,
+          cluster.E2E_VIEWS_NAMESPACE,
+        );
         const link = frame.locator(`[data-testid=velero-${kind}-details-link]`);
 
         expect([kind, details.includes("Velero")]).toEqual([kind, true]);
@@ -336,6 +358,12 @@ describe("views of the data uploads and of the data downloads", () => {
       await cluster.volumeBand(frame, "rows", "DataUpload");
       windows.backup = await askedOver(CYCLES);
       await cluster.closeWorkspace(frame);
+      await cluster.openPage(frame, cluster.RESTORES);
+      await cluster.waitForList(frame, cluster.RESTORES);
+      await cluster.openWorkspace(frame, RESTORE, cluster.RESTORES);
+      await cluster.volumeBand(frame, "rows", "DataDownload");
+      windows.restore = await askedOver(CYCLES);
+      await cluster.closeWorkspace(frame);
       report.windows = windows;
       await cluster.writeReport(REPORT, report);
       const within = (count: number | undefined) => (count ?? 0) >= CYCLES && (count ?? 0) <= CYCLES + 1;
@@ -348,11 +376,19 @@ describe("views of the data uploads and of the data downloads", () => {
         windows.overview[PVB] ?? 0,
         windows.overview[PVR] ?? 0,
       ]).toEqual([0, 0, 0, 0]);
-      expect([within(windows.backup[DU]), within(windows.backup[PVB]), windows.backup[DD] ?? 0]).toEqual([
-        true,
-        true,
-        0,
-      ]);
+      // A backup reads its two families of the operations and not the ones of a restore, and the converse.
+      expect([
+        within(windows.backup[DU]),
+        within(windows.backup[PVB]),
+        windows.backup[DD] ?? 0,
+        windows.backup[PVR] ?? 0,
+      ]).toEqual([true, true, 0, 0]);
+      expect([
+        within(windows.restore[DD]),
+        within(windows.restore[PVR]),
+        windows.restore[DU] ?? 0,
+        windows.restore[PVB] ?? 0,
+      ]).toEqual([true, true, 0, 0]);
     },
     TIMEOUT,
   );

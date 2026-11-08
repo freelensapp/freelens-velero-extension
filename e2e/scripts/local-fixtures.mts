@@ -1000,9 +1000,10 @@ export function generatedName(run: string, owner: string, index: number): string
   return `${owner}-${[...digest.subarray(0, 5)].map((byte) => characters[byte % characters.length]).join("")}`;
 }
 
-// The path a pod volume backup that completed reports, of the shape the release writes: a slash and the UID of the
-// pod volume backup, which its node agent mounts the volume at (seen on 2026-11-02 with v1.18.4). The UID of a
-// synthetic one is the cluster's, given when it is created: its path is a UID made of the run and its key instead.
+// The path a pod volume backup or a data upload that completed reports, of the shape the release writes: a slash and
+// the UID of the operation, which its pod mounts the volume at (seen on 2026-11-02 with v1.18.4 for a pod volume
+// backup; for a data upload, `MakePodPVCAttachment` of its exposer). The UID of a synthetic one is the cluster's,
+// given when it is created: its path is a UID made of the run and its key instead.
 export function volumePath(run: string, key: string): string {
   const hex = createHash("sha256").update(`${run}/path/${key}`).digest("hex");
 
@@ -1015,10 +1016,11 @@ export const VIEW_ELSEWHERE = "views-elsewhere";
 // The UID the label of a pod volume backup carries when it was written for an earlier backup of the same name.
 export const EARLIER_BACKUP_UID = "00000000-0000-4000-8000-0000000000e1";
 
-// The pod volume operations and the repositories of the views. Each operation is owned by a backup or a restore
-// of the views that is there, given with the UID the cluster gave it: its owner reference names that UID with
-// `controller: true`, and its labels the name and the UID of its owner, as the release writes them. Every status
-// is one the release writes in that phase; no node agent reads the namespace, and nothing they name exists. The
+// The pod volume operations, the data movement and the repositories of the views. Each operation is owned by a
+// backup or a restore of the views that is there, given with the UID the cluster gave it: its owner reference names
+// that UID with `controller: true`, and its labels the name and the UID of its owner, as the release writes them.
+// Every status is one the release writes in that phase, but New, which the CRDs admit and the release reads as no
+// phase; no node agent reads the namespace, and nothing they name exists. The
 // repositories carry the three labels the release writes: the operations name the triples of the first two, and
 // one names a triple of none. Their times are counted back from the start, by the hour, as the ones of the views.
 export function viewOperationFixtures(
@@ -1053,6 +1055,11 @@ export function viewOperationFixtures(
   const snapshot = (index: number) =>
     createHash("sha256").update(`${run}/snapshot/${index}`).digest("hex").slice(0, 32);
   let made = 0;
+  // The node agent writes Canceling only for an operation whose cancellation was asked, by `spec.cancel`: by its
+  // owner at its timeout, by the server or the node agent when it starts, or by a deletion; and Canceled after it,
+  // or with a message of its own for one whose volume it could not expose, which no fixture is.
+  const cancelOf = (status: Record<string, unknown> | undefined) =>
+    status?.phase === "Canceling" || status?.phase === "Canceled" ? { cancel: true } : {};
   const backupOf = (
     of: { name: string; uid: string },
     status: Record<string, unknown> | undefined,
@@ -1086,6 +1093,7 @@ export function viewOperationFixtures(
         backupStorageLocation: "views-available",
         repoIdentifier: "",
         uploaderType: more.uploaderType ?? "kopia",
+        ...cancelOf(status),
       },
       ...(status ? { status } : {}),
     };
@@ -1125,6 +1133,7 @@ export function viewOperationFixtures(
         snapshotID: snapshot(index),
         sourceNamespace: VIEW_WORKLOADS,
         snapshotSize: 64 * MEBIBYTE,
+        ...cancelOf(status),
       },
       status,
     };
@@ -1248,7 +1257,13 @@ export function viewOperationFixtures(
       completionTimestamp: at(6),
       progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 64 * MEBIBYTE },
     }),
-    restoreOf(mapped, { phase: "Failed", message: "timeout on preparing PVR" }),
+    // The preparing timeout fires on one accepted only, and keeps its acceptance.
+    restoreOf(mapped, {
+      phase: "Failed",
+      acceptedTimestamp: at(45),
+      node: "views-node-1",
+      message: "timeout on preparing PVR",
+    }),
     restoreOf(mapped, {
       phase: "Canceled",
       acceptedTimestamp: at(9),
@@ -1270,7 +1285,7 @@ export function viewOperationFixtures(
   const uploadOf = (
     of: { name: string; uid: string },
     status: Record<string, unknown> | undefined,
-    more: { mover?: string; snapshotType?: string } = {},
+    more: { mover?: string } = {},
   ): KubeResource => {
     const index = made++;
     const claim = `views-claim-${index}`;
@@ -1291,7 +1306,7 @@ export function viewOperationFixtures(
         ownerReferences: reference("Backup", of),
       },
       spec: {
-        snapshotType: more.snapshotType ?? "CSI",
+        snapshotType: "CSI",
         csiSnapshot: {
           volumeSnapshot: `velero-${claim}-${snapshot(index).slice(0, 5)}`,
           storageClass: "views-standard",
@@ -1303,6 +1318,7 @@ export function viewOperationFixtures(
         backupStorageLocation: "views-available",
         sourceNamespace: VIEW_WORKLOADS,
         operationTimeout: "10m0s",
+        ...cancelOf(status),
       },
       ...(status ? { status } : {}),
     };
@@ -1336,6 +1352,7 @@ export function viewOperationFixtures(
         operationTimeout: "10m0s",
         nodeOS: "linux",
         snapshotSize: 64 * MEBIBYTE,
+        ...cancelOf(status),
       },
       ...(status ? { status } : {}),
     };
@@ -1372,7 +1389,7 @@ export function viewOperationFixtures(
       acceptedTimestamp: at(9),
       startTimestamp: at(8),
       completionTimestamp: at(6),
-      path: `/host_pods${volumePath(run, "views-moved")}/mount`,
+      path: volumePath(run, "views-moved"),
       snapshotID: uploaded,
       progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 64 * MEBIBYTE },
       incrementalBytes: 4 * MEBIBYTE,
@@ -1384,6 +1401,7 @@ export function viewOperationFixtures(
       acceptedTimestamp: at(9),
       startTimestamp: at(8),
       completionTimestamp: at(8),
+      path: volumePath(run, "views-empty"),
       message: "volume was empty so no data was upload",
     }),
     uploadOf(inProgress, {
@@ -1403,6 +1421,7 @@ export function viewOperationFixtures(
     uploadOf(inProgress, {
       phase: "Canceled",
       ...node("views-node-1"),
+      acceptedTimestamp: at(9),
       startTimestamp: at(5),
       completionTimestamp: at(5),
     }),
@@ -1446,6 +1465,8 @@ export function viewOperationFixtures(
       mapped,
       {
         phase: "Failed",
+        acceptedByNode: "views-node-1",
+        acceptedTimestamp: at(9),
         completionTimestamp: at(7),
         message: "error to expose the snapshot\nthe target claim is not bound",
       },
@@ -1453,11 +1474,26 @@ export function viewOperationFixtures(
     ),
     downloadOf(
       mapped,
-      { phase: "Canceled", ...node("views-node-1"), startTimestamp: at(5), completionTimestamp: at(5) },
+      {
+        phase: "Canceled",
+        ...node("views-node-1"),
+        acceptedTimestamp: at(9),
+        startTimestamp: at(5),
+        completionTimestamp: at(5),
+      },
       uploaded,
     ),
     // A snapshot no data upload of the installation names: the data upload went with its backup.
-    downloadOf(mapped, { phase: "Failed", message: "timeout on preparing data download" }, snapshot(1001)),
+    downloadOf(
+      mapped,
+      {
+        phase: "Failed",
+        acceptedByNode: "views-node-1",
+        acceptedTimestamp: at(45),
+        message: "timeout on preparing data download",
+      },
+      snapshot(1001),
+    ),
   ];
   const repository = (
     volumeNamespace: string,
@@ -1700,6 +1736,8 @@ export function scaleFixtures(
           backupStorageLocation: `scale-location-${(index % 3) + 1}`,
           repoIdentifier: "",
           uploaderType: "kopia",
+          // Canceling and Canceled are written only for one whose cancellation was asked.
+          ...(phase === "Canceling" || phase === "Canceled" ? { cancel: true } : {}),
         },
         status: statuses[phase],
       });
@@ -1744,7 +1782,7 @@ export function scaleFixtures(
           acceptedTimestamp: second(0),
           startTimestamp: second(1),
           completionTimestamp: second(2),
-          path: `/host_pods${volumePath(run, name)}/mount`,
+          path: volumePath(run, name),
           snapshotID: createHash("sha256").update(`${run}/scale/${name}`).digest("hex").slice(0, 32),
           progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 64 * MEBIBYTE },
         },
@@ -1789,6 +1827,7 @@ export function scaleFixtures(
           backupStorageLocation: `scale-location-${(index % 3) + 1}`,
           sourceNamespace: names.source,
           operationTimeout: "10m0s",
+          ...(phase === "Canceling" || phase === "Canceled" ? { cancel: true } : {}),
         },
         status: statuses[phase],
       });
@@ -3058,6 +3097,7 @@ export function createViewFixtures(
   scale: number;
   restores: number;
   scaleOperations: number;
+  scaleDataUploads: number;
   again: string[];
 } {
   const names = fixtureNames(run);
@@ -3104,6 +3144,7 @@ export function createViewFixtures(
     scale: SCALE_BACKUPS,
     restores: scale.count - SCALE_BACKUPS - SCALE_OPERATIONS - SCALE_DATA_UPLOADS,
     scaleOperations: SCALE_OPERATIONS,
+    scaleDataUploads: SCALE_DATA_UPLOADS,
     again: [...(overview.again ? [names.overview] : []), ...(scale.again ? [names.scale] : [])],
   };
 }
@@ -4602,7 +4643,7 @@ export function placementWords(
   const again = [...views.again, ...adherence.again];
 
   return [
-    `PASS: ${views.views} objects of the views in ${names.views} and ${names.defaults}, ${views.overview} of the Overview in ${names.overview}, and ${views.scale} backups, ${views.restores} restores and ${views.scaleOperations} pod volume backups of the long lists in ${names.scale}, are in place, outside the reach of the controllers.`,
+    `PASS: ${views.views} objects of the views in ${names.views} and ${names.defaults}, ${views.overview} of the Overview in ${names.overview}, and ${views.scale} backups, ${views.restores} restores, ${views.scaleOperations} pod volume backups and ${views.scaleDataUploads} data uploads of the long lists in ${names.scale}, are in place, outside the reach of the controllers.`,
     `PASS: ${adherence.states} objects of the adherence in ${names.adherence}, ${adherence.split} in ${names.adherenceSplit} and ${adherence.budget} in ${names.adherenceScale}, the backups of their submissions named by the clock of their placement, are in place, outside the reach of the controllers.`,
     ...(again.length
       ? [`NOTE: the fixtures that are placed by the clock were put in place again in ${listed(again)}.`]

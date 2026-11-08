@@ -2534,6 +2534,7 @@ describe("foundation fixture boundaries", () => {
       restores: SCALE_RESTORES,
       // Two thousand pod volume backups of the long lists.
       scaleOperations: SCALE_OPERATIONS,
+      scaleDataUploads: SCALE_DATA_UPLOADS,
       // What is placed by the clock was not there: it was put in place, not again, and nothing was removed.
       again: [],
     });
@@ -2587,6 +2588,7 @@ describe("foundation fixture boundaries", () => {
       scale: SCALE_BACKUPS,
       restores: SCALE_RESTORES,
       scaleOperations: SCALE_OPERATIONS,
+      scaleDataUploads: SCALE_DATA_UPLOADS,
     });
     // The backups and the restores first, then the pod volume backups and the data uploads, each naming the UID the
     // cluster gave its backup, in its owner reference and in its label, with the digest of the others.
@@ -2828,6 +2830,8 @@ describe("foundation fixture boundaries", () => {
     );
     expect(status(downloads[5])).toEqual({
       phase: "Failed",
+      acceptedByNode: "views-node-1",
+      acceptedTimestamp: status(downloads[5]).acceptedTimestamp,
       completionTimestamp: status(downloads[5]).completionTimestamp,
       message: "error to expose the snapshot\nthe target claim is not bound",
     });
@@ -2858,7 +2862,13 @@ describe("foundation fixture boundaries", () => {
     expect(status(backups[11]).startTimestamp).toBe(status(backups[11]).completionTimestamp);
     expect((backups[12].spec as { uploaderType?: string }).uploaderType).toBe("");
     expect(status(restores[1])).toMatchObject({ node: "views-node-1" });
-    expect(status(restores[4])).toEqual({ phase: "Failed", message: "timeout on preparing PVR" });
+    // The preparing timeout keeps the acceptance it fired on, and writes no start and no completion.
+    expect(status(restores[4])).toEqual({
+      phase: "Failed",
+      acceptedTimestamp: status(restores[4]).acceptedTimestamp,
+      node: "views-node-1",
+      message: "timeout on preparing PVR",
+    });
     expect((restores[6].spec as { uploaderType?: string }).uploaderType).toBe("restic");
     expect(status(restores[6]).node).toBeUndefined();
     // Every time is before the start of the run, counted from its hour.
@@ -6008,7 +6018,8 @@ describe("foundation fixture boundaries", () => {
     const views = (placement: typeof placed) =>
       `PASS: ${placement.views.views} objects of the views in ${names.views} and ${names.defaults}, ` +
       `${placement.views.overview} of the Overview in ${names.overview}, and ${SCALE_BACKUPS} backups, ` +
-      `${SCALE_RESTORES} restores and ${SCALE_OPERATIONS} pod volume backups of the long lists in ${names.scale}, ` +
+      `${SCALE_RESTORES} restores, ${SCALE_OPERATIONS} pod volume backups and ${SCALE_DATA_UPLOADS} data uploads ` +
+      `of the long lists in ${names.scale}, ` +
       "are in place, outside the reach of the controllers.";
     const created =
       `the server created ${names.syncedBackup} and ${names.syncedBackupWithoutLog} from them as they were ` +
@@ -10053,6 +10064,67 @@ describe("foundation fixture boundaries", () => {
     );
     // The same moment gives the same objects.
     expect(scaleFixtures("synthetic-owner", run, placed).operations).toEqual(operations);
+  });
+
+  it("gives every operation of the views and of the long lists the fields its CRD of the release requires, and a status its node agent writes", () => {
+    const placed = Date.parse("2026-10-27T09:00:00Z");
+    const { operations, dataUploads } = scaleFixtures("synthetic-owner", run, placed);
+    const all = [
+      ...viewOperationFixtures("synthetic-owner", run, placed, viewOwners(run)).filter(
+        (item) => item.kind !== "BackupRepository",
+      ),
+      ...operations,
+      ...dataUploads,
+    ];
+    // The required fields of the specs, as the CRDs of v1.18.4 list them.
+    const REQUIRED: Record<string, string[]> = {
+      PodVolumeBackup: ["backupStorageLocation", "node", "pod", "repoIdentifier", "volume"],
+      PodVolumeRestore: ["backupStorageLocation", "pod", "repoIdentifier", "snapshotID", "sourceNamespace", "volume"],
+      DataUpload: ["backupStorageLocation", "operationTimeout", "snapshotType", "sourceNamespace", "sourcePVC"],
+      DataDownload: ["backupStorageLocation", "operationTimeout", "snapshotID", "sourceNamespace", "targetVolume"],
+    };
+    const wrong: string[] = [];
+
+    expect(new Set(all.map(({ kind }) => kind))).toEqual(new Set(Object.keys(REQUIRED)));
+    for (const item of all) {
+      const spec = (item.spec ?? {}) as Record<string, unknown>;
+      const status = (item.status ?? {}) as Record<string, unknown>;
+      const name = `${item.kind} ${item.metadata.name}`;
+      const required = [
+        ...REQUIRED[item.kind],
+        ...(item.kind === "DataUpload" ? ["csiSnapshot.storageClass", "csiSnapshot.volumeSnapshot"] : []),
+        ...(item.kind === "DataDownload" ? ["targetVolume.namespace", "targetVolume.pv", "targetVolume.pvc"] : []),
+      ];
+
+      for (const field of required) {
+        const [first, second] = field.split(".");
+        const value = second ? (spec[first] as Record<string, unknown> | undefined)?.[second] : spec[first];
+
+        if (value === undefined || value === null) wrong.push(`${name}: no ${field}`);
+      }
+      // The node agent writes the node that accepted and the time it did together.
+      if ((status.acceptedByNode === undefined) !== (status.acceptedTimestamp === undefined)) {
+        if (item.kind.startsWith("Data")) wrong.push(`${name}: acceptedByNode and acceptedTimestamp apart`);
+      }
+      // The node of the data path of a data movement is written after it was accepted.
+      if (item.kind.startsWith("Data") && status.node !== undefined && status.acceptedByNode === undefined) {
+        wrong.push(`${name}: a node and no acceptance`);
+      }
+      // The preparing timeout fires on an operation accepted only.
+      if (String(status.message ?? "").startsWith("timeout on preparing") && status.acceptedTimestamp === undefined) {
+        wrong.push(`${name}: a preparing timeout and no acceptance`);
+      }
+      // Canceling is written only for an operation whose cancellation was asked, and so is Canceled with no
+      // message: the release marks Canceled, with a message of its own, one whose volume it could not expose.
+      const asked = status.phase === "Canceling" || (status.phase === "Canceled" && !status.message);
+
+      if (asked && spec.cancel !== true) wrong.push(`${name}: ${String(status.phase)} and no cancellation asked`);
+      // A data upload that completed names its path, as a pod volume backup does.
+      if (status.phase === "Completed" && item.kind === "DataUpload" && typeof status.path !== "string") {
+        wrong.push(`${name}: completed with no path`);
+      }
+    }
+    expect(wrong).toEqual([]);
   });
 
   it("makes the data uploads of the long lists, one of each of two hundred backups that hold pod volume backups, in the phases in turn", () => {
