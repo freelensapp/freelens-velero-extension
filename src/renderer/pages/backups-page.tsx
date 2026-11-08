@@ -54,12 +54,16 @@ export const BACKUPS: ListDefinition<BackupView> = {
     <WithTooltip key="storage">{row.storage ?? "Not reported"}</WithTooltip>,
     <KubeObjectAge key="age" object={item} />,
   ],
-  // Create backup, the one command of the list: it opens the form, which writes nothing by itself.
-  command: (
+  // Create backup, the one command of the list: it opens the form, which writes nothing by itself, a new one once the
+  // backup of the form before was created.
+  command: (installation) => (
     <Button
       primary
       data-testid="velero-backups-create"
-      onClick={() => openView({ kind: "backup-create", name: CREATE_VIEW_NAME })}
+      onClick={() => {
+        installation.backupCreate.start();
+        openView({ kind: "backup-create", name: CREATE_VIEW_NAME });
+      }}
     >
       <Icon material="add" small aria-hidden />
       Create backup

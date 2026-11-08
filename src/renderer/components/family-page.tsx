@@ -54,7 +54,7 @@ export interface ListDefinition<View extends { name: string }> {
   notes?(installation: Installation, now: number): string[];
   // The command of the header of the list, when the kind has one: the workspace of an action it opens over the list
   // (SPEC-0017, REQ-252), there with writes on or off.
-  command?: ReactNode;
+  command?(installation: Installation): ReactNode;
 }
 
 export { useNow } from "./views-frame";
@@ -135,7 +135,7 @@ function FamilyListView<View extends { name: string }>({ definition, installatio
           info: (
             <>
               {hasItems(read) ? info : <span data-testid={`velero-${id}-not-counted`}>{LIST_WORDS.notCounted}</span>}
-              {definition.command}
+              {definition.command?.(installation)}
             </>
           ),
           filters: <></>,

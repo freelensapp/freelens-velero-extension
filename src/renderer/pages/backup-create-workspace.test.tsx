@@ -441,6 +441,39 @@ describe("create backup, from the list of the Backups", () => {
     expect(screen.getByTestId("velero-open-backup-taken")).toBeTruthy();
   });
 
+  it("gives a new form from the command once the backup was created, and the form as it was left before", async () => {
+    const { main } = mount();
+
+    await createBackup();
+    await writesOn();
+    type(field(), "shop-by-hand");
+    type(screen.getByTestId(`${ID}-ttl`), "1h");
+    // Left and asked again before the creation: the form as it was.
+    act(() => closeViews());
+    await createBackup();
+    expect([field().value, (screen.getByTestId(`${ID}-ttl`) as HTMLInputElement).value]).toEqual([
+      "shop-by-hand",
+      "1h",
+    ]);
+    press("ask");
+    await waitFor(() => expect(main.confirms).toHaveLength(1));
+    await main.confirm(textOf("shop-by-hand", { storageLocation: "default", ttl: "1h" }));
+    await waitFor(() => expect(maybe("review")).toBeTruthy());
+    press("create");
+    await waitFor(() => expect(main.runs).toHaveLength(1));
+    await main.run({ ok: true, value: { name: "shop-by-hand", uid: "u", phase: "New" } });
+    await waitFor(() => expect(maybe("result")).toBeTruthy());
+    // Asked again once it was created: a new form, the default location chosen first again.
+    act(() => closeViews());
+    await createBackup();
+    expect([maybe("result"), field().value, (screen.getByTestId(`${ID}-ttl`) as HTMLInputElement).value]).toEqual([
+      null,
+      "",
+      "",
+    ]);
+    expect(field().disabled).toBe(false);
+  });
+
   it("takes back what was typed in the name with Escape, and the workspace stays", async () => {
     mount();
     await createBackup();

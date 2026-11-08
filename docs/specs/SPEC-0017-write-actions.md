@@ -1042,7 +1042,8 @@ The evidence, by check:
   provider, or none; the namespaces the host lists as checkboxes and the patterns
   typed; what the release refuses of a field, with its words, tied to the field, and
   an included namespace the host lists with the label that excludes it, each holding
-  the review back; a duration said as Go writes it
+  the review back; a duration said as Go writes it; the command, which gives a new form
+  once the backup of the form before was created, and the form as it was left before
   (`src/renderer/pages/backup-create-workspace.test.tsx`).
 - CRBAK-03, the component part: a name among the backups the installation read is
   said before the review; a 409 keeps the name, with the way to the backup that has
@@ -1062,10 +1063,11 @@ The evidence, by check:
 - ACT-03, ACT-09, in the views: the review asked with the name and the fields set
   only; a field changed drops it; a token that expired asked again, and a new text
   shown in place of the old one, nothing sent; the end shown said to the main process;
-  what was typed dropped with the installation
+  what was typed dropped with the installation; the command, which starts a new form
+  after a creation only, and leaves a backup being created to go on
   (`src/renderer/state/backup-create.test.ts`).
 
-Each new case was seen failing on a change made on purpose, eighteen in all: an empty
+Each new case was seen failing on a change made on purpose, twenty-two in all: an empty
 list written, the review asked past what the workspace holds it back for, the place
 in the queue not said, a name read not said, a ReadOnly location offered, the default
 not chosen, the command of the list gone, the label that excludes a namespace not
@@ -1073,7 +1075,11 @@ read, the warning of a global policy said always, the place in the queue and the
 errors beyond their bounds carried or not carried, a place of zero read, the way to
 the backup of a conflict gone, the template kept when the installation changed, Escape
 in the name taking back nothing, every namespace said as not listed, a text that is
-not a backup of the form taken, and a token that expired not asked again.
+not a backup of the form taken, a token that expired not asked again; and, for the
+command that the packaged suite of the third pull request found giving the result of
+the backup before and no form, the command that starts nothing, a form being filled
+started anew, a backup being created dropped, and the fields of the backup before kept
+in the new form.
 
 Decided while implementing, on 2026-11-08:
 
@@ -1090,3 +1096,9 @@ Decided while implementing, on 2026-11-08:
   with the reason, and are not among its options.
 - The place in the queue and the errors of a validation travel in the answer of the run
   within bounds of their own; more, or longer, are read in the view of the backup.
+- The command of the list gives a new form once the backup of the form before was
+  created, as the command of Back up now gives one: the name and every field empty, the
+  default location chosen first again. A form being filled, or whose backup was not
+  created, is shown as it was left, and a backup being created goes on. An end no view
+  showed is not lost with the form: the main process keeps it for the target bar
+  (REQ-250).
