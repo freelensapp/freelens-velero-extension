@@ -397,4 +397,7 @@ other views and the marks of the line, in
 [`schedules-page.test.tsx`](../../src/renderer/pages/schedules-page.test.tsx), and by
 the workspace of the action, with writes off and on, in
 [`schedule-patch-workspace.test.tsx`](../../src/renderer/pages/schedule-patch-workspace.test.tsx);
-the packaged suites of the action come with the third pull request of T4.5.
+the packaged suites of the action came with the third pull request of T4.5: the suite of
+the actions,
+[`velero-e2e-actions.tests.ts`](../../e2e/__tests__/velero-e2e-actions.tests.ts), and
+the views of the workspace in the pre-review.

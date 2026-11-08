@@ -615,8 +615,8 @@ needs a decision before the approval, and each has its first step in its slice.
   known answers a failed test with 422, as it answers a body it refuses. The design
   reads the Schedule after any 422 to a patch, so the end is right either way; the
   slice of T4.5 establishes the answer first, on the test environment, and records
-  it. The source answers it, and the third pull request of T4.5 proves it on the
-  test environment: the API server of Kubernetes 1.34.11, the version of the test
+  it. The source answers it, and the third pull request of T4.5 proved it on the test
+  environment, end to end: the API server of Kubernetes 1.34.11, the version of the test
   clusters, answers every error of the application of a JSON patch, a failed test
   among them, with 422, and a patch it cannot decode with 400
   ([`patch.go`](https://github.com/kubernetes/kubernetes/blob/v1.34.11/staging/src/k8s.io/apiserver/pkg/endpoints/handlers/patch.go#L403-L415)).
@@ -629,7 +629,9 @@ needs a decision before the approval, and each has its first step in its slice.
 - **The verbs of the identities of the test environment (REQ-254).** The restricted
   identity of the suites reads the views and may not write. The slice of each
   action establishes that it lacks the verb its action needs, `create` on the kind
-  or `patch` on the schedules, and the suites prove the refusal with it.
+  or `patch` on the schedules, and the suites prove the refusal with it. The reader
+  of a part reads the schedules and has no other verb: the third pull request of
+  T4.5 proves its refusal at the patch.
 
 ## Evidence And Deviations
 
@@ -1931,6 +1933,84 @@ medium weight and others, all applied:
   a read, the words of an action not offered, a patch of another schedule, the focus
   while asking, and the namespace of the review, and the evidence said more than the
   cases proved: all written, and the thirteen changes above seen failing.
+
+T4.5, the third and last of its pull requests, on 2026-11-08: the proof in the packaged
+application, in the pre-review and end to end. The evidence, by check:
+
+- PAUSE-04, the packaged part
+  ([`velero-e2e-actions.tests.ts`](../../e2e/__tests__/velero-e2e-actions.tests.ts)), on
+  the CRDs of the release alone, where no controller runs: Pause in the view of the
+  schedule of the form, which is not paused, over the view and named in the address,
+  which with writes off writes nothing; its pause, exactly one PATCH of the Schedule
+  answered 200, the text of its review, and no other write of any kind of Velero, every
+  PATCH of a schedule counted, since no controller patches one there, and the PATCH of
+  the storage location that the runner sends in place of the server left out, as the
+  guard of the suites leaves it out; the schedule read paused with nothing else of it
+  changed, and the way to its view, which offers Resume at its read; its resume with
+  skip immediately proposed as the schedule carries it, one PATCH, the text of its
+  review, the schedule read resumed with skip immediately as written, and the words that
+  Velero has not read it; the reader of a part refused at the patch with the words that
+  it may not patch schedules there, writes left on and the schedule as it was. 25 cases.
+- PAUSE-04 and REQ-276, end to end
+  ([`local-schedule-proof.mts`](../../e2e/scripts/local-schedule-proof.mts), called by
+  the transport proof of `pnpm e2e`), the procedures of the compiled main process called
+  as a frame calls them, with the controller of the release running: two schedules of
+  every three minutes, created clear of an instant and paused at once, submit no backup
+  through an instant and a look of the controller after it; resumed then, the one with
+  skip immediately false submits one backup at once, which ends and is deleted by the
+  server, and the one with skip immediately true submits none, and is read with skip
+  immediately set back to false and a last skip of its resume; a resume whose schedule
+  changed between its review and its run is refused by the test of its expression, which
+  the API server answers with 422, counted once by its metrics, and the run says as a
+  conflict, the schedule as it was changed by a JSON patch that tests its UID; the
+  instant the schedules pass paused is fixed before they are created, and the proof says
+  so when they are paused too close to it.
+- ACT-10 ([`pre-review.tests.ts`](../../e2e/__tests__/pre-review.tests.ts)): Pause and
+  Resume, each its form and its review, in both themes, at 1440 by 900, at 900 by 650
+  and at twice the zoom, with nothing over something else, wider than its room or cut,
+  62 views in all, the beginning of the form and of the review brought into sight for
+  the picture; and a pause and a resume asked with the keyboard alone, from the command
+  on the line of the name of the schedule, the choice by its checkbox, Enter to the
+  review, which has the focus, Escape back to the command that asks again, Escape back
+  to the view, whose way back has the focus, and Escape back to the row of the schedule,
+  with nothing sent. 49 cases.
+- The parts of the views ([`views-plan.test.ts`](../../test/views-plan.test.ts)): the
+  workspace, the patch, its words and the adherence they say a resume with run the suite
+  of the actions.
+
+Decided while implementing, on 2026-11-08:
+
+- The packaged suite counts every write of the schedules for a pause and a resume: on
+  the CRDs alone no controller patches a schedule, and the PATCH of the extension is not
+  left out with the ones of a controller; the PATCH of the storage location that the
+  runner sends once a minute is, as the guard of the suites leaves it out.
+- The 422 of a test that failed is proven end to end, counted by the metrics of the API
+  server, where the proof may change a schedule it created between a review and its run;
+  the kubectl of the packaged suites changes nothing but what they remove of their own.
+- The schedules of the proof run every three minutes, are created clear of an instant,
+  fixed before they are created, and paused at once, and are resumed a look of the
+  controller after the next instant, well before the instant after it.
+
+The independent review of this pull request, read-only, found one blocker and a point of
+medium weight, with others; all were applied:
+
+- The writes of the packaged suite counted the PATCH of the storage location that the
+  runner sends once a minute on the CRDs alone, which would have failed about one run in
+  three: they leave it out now, as the guard of the suites does, and count every PATCH
+  of a schedule.
+- The proof said the 422 of a failed test proven while it read the end of the run alone,
+  which a 409 would have ended the same way: the metrics of the API server count the 422
+  now, once.
+- The instant the schedules pass paused was read after their creations, which could have
+  moved it to the next one: it is fixed before, and the proof says so when the pauses
+  end too close to it.
+- The keyboard journey did not look at the focus once the workspace and the view were
+  left, and the pictures of the forms and of the reviews did not bring them into sight
+  at the small sizes: both do now, as for the other actions.
+- The expression of the schedule of the stale resume was changed by its name alone, and
+  is changed now by a JSON patch that tests its UID; a case said only the creation where
+  it proves the patch as well; and the case of Pause did not say that it takes writes
+  on.
 
 T4.6, the first of its pull requests, on 2026-11-08: the deletion of one backup in the
 main process, in the contract and in the adapter, with no surface of the renderer yet.
