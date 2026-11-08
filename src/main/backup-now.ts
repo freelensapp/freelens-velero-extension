@@ -228,11 +228,16 @@ async function readAfter(
   return { ok: true, value: { name, uid, ...(phase ? { phase } : {}), ...(found ? { found: true } : {}) } };
 }
 
-// The labels the text gives the backup, which a backup found by its name carries when it is the one created.
+// The labels the text gives the backup, which a backup found by its name carries when it is the one created: none for a
+// backup of the form, which has no label. Nothing when the text cannot be read.
 function labelsOf(text: string): Record<string, string> | undefined {
   try {
-    const labels = (JSON.parse(text) as { metadata?: { labels?: unknown } }).metadata?.labels;
+    const metadata = (JSON.parse(text) as { metadata?: unknown }).metadata;
 
+    if (!metadata || typeof metadata !== "object") return undefined;
+    const labels = (metadata as { labels?: unknown }).labels;
+
+    if (labels === undefined) return {};
     return labels && typeof labels === "object" ? (labels as Record<string, string>) : undefined;
   } catch {
     return undefined;
@@ -241,7 +246,8 @@ function labelsOf(text: string): Record<string, string> | undefined {
 
 // A creation whose answer is not known: the backup is read by its name, and is the one created when its creation is
 // not earlier than a minute before the confirmation and it carries every label of the text, the label of the schedule
-// among them; the label of the storage location is the one Velero adds (SPEC-0017, REQ-250).
+// among them for a backup asked from one; the label of the storage location is the one Velero adds (SPEC-0017,
+// REQ-250).
 async function reconcile(
   dependencies: BackupNowDependencies,
   adapter: DiagnosticKubernetes,
@@ -266,7 +272,8 @@ async function reconcile(
   const created = Date.parse(String((found.metadata as { creationTimestamp?: unknown }).creationTimestamp));
   const labels = labelsOf(text);
   const carried = found.metadata.labels ?? {};
-  // The labels of the text hold the label of the schedule, which the builder always writes.
+  // The labels of the text of a backup asked from a schedule hold the label of the schedule, which the builder always
+  // writes.
   const ours =
     Number.isFinite(created) &&
     created >= confirmedAt - CREATION_MARGIN &&
@@ -324,42 +331,60 @@ export async function runBackupNow(
     // What would be sent now is what the review showed, or nothing is sent.
     if (!text || !again || bodyText(again) !== text)
       return failure("conflict", "read", false, BACKUP_NOW_WORDS.reviewChanged);
-    // A frame that went, or a write stopped, before anything was sent leaves nothing to look for: the frame is
-    // looked at here, and not only at the tick of its watch.
-    if (signal.aborted) return failure("cancelled", "creation", true, BACKUP_NOW_WORDS.cancelled);
-    if (!still()) return failure("forbidden", "frame", false, BACKUP_NOW_WORDS.frameGone);
-    write.status = { step: "creating the backup" };
-    // Every end of a request that was sent is kept for the cluster, and is answered to the frame that asked when it is
-    // still there: it says it showed the end, or the target bar of the cluster shows it.
-    const ended = (end: Answer<BackupCreated>): Answer<BackupCreated> => {
-      // What keeps the end does not end the run otherwise.
-      try {
-        dependencies.keep?.(request, end, adapter.binding?.contextName ?? "");
-      } catch {
-        /* the end is answered all the same */
-      }
-      return still() ? end : failure("forbidden", "frame", false, BACKUP_NOW_WORDS.frameGoneAfter);
-    };
-    let created: DiagnosticObject;
-
-    try {
-      created = await adapter.createBackup(request.namespace, text, signal);
-    } catch (error) {
-      // No answer, or one dropped on this side once the request had left: the backup may be there. It is looked for,
-      // with reads of their own, which the frame that went does not stop.
-      if (error instanceof DiagnosticError && (error.code === "submission-unknown" || error.code === "cancelled"))
-        return ended(
-          await reconcile(dependencies, adapter, request, text, confirmedAt, new AbortController().signal, write),
-        );
-      const end = endOf(error, "creation", request.namespace, backup);
-
-      return sent(error) ? ended(end) : end;
-    }
-    if (created.metadata.name !== backup || !created.metadata.uid)
-      return ended(failure("submission-unknown", "creation", false, BACKUP_NOW_WORDS.unknown(backup)));
-    return ended(await readAfter(dependencies, adapter, request.namespace, created, signal, write, false));
+    return await createKept(dependencies, adapter, request, text, confirmedAt, write, still);
   } finally {
     stop();
     dependencies.gate.finish(request.cluster, request.request);
   }
+}
+
+// The creation of a backup whose text the confirmation kept, once what it depends on was read again: from a schedule
+// or from the form, the same POST of that text, the same reads after it, and, when its answer is not known, the same
+// look for the backup by its name (SPEC-0017, REQ-248 to REQ-250). Every end of a request that was sent is kept.
+export async function createKept(
+  dependencies: BackupNowDependencies,
+  adapter: DiagnosticKubernetes,
+  request: WriteRunRequest,
+  text: string,
+  confirmedAt: number,
+  write: Write,
+  still: () => boolean,
+): Promise<Answer<BackupCreated>> {
+  const backup = String(request.backup);
+  const signal = write.controller.signal;
+
+  // A frame that went, or a write stopped, before anything was sent leaves nothing to look for: the frame is looked at
+  // here, and not only at the tick of its watch.
+  if (signal.aborted) return failure("cancelled", "creation", true, BACKUP_NOW_WORDS.cancelled);
+  if (!still()) return failure("forbidden", "frame", false, BACKUP_NOW_WORDS.frameGone);
+  write.status = { step: "creating the backup" };
+  // Every end of a request that was sent is kept for the cluster, and is answered to the frame that asked when it is
+  // still there: it says it showed the end, or the target bar of the cluster shows it.
+  const ended = (end: Answer<BackupCreated>): Answer<BackupCreated> => {
+    // What keeps the end does not end the run otherwise.
+    try {
+      dependencies.keep?.(request, end, adapter.binding?.contextName ?? "");
+    } catch {
+      /* the end is answered all the same */
+    }
+    return still() ? end : failure("forbidden", "frame", false, BACKUP_NOW_WORDS.frameGoneAfter);
+  };
+  let created: DiagnosticObject;
+
+  try {
+    created = await adapter.createBackup(request.namespace, text, signal);
+  } catch (error) {
+    // No answer, or one dropped on this side once the request had left: the backup may be there. It is looked for,
+    // with reads of their own, which the frame that went does not stop.
+    if (error instanceof DiagnosticError && (error.code === "submission-unknown" || error.code === "cancelled"))
+      return ended(
+        await reconcile(dependencies, adapter, request, text, confirmedAt, new AbortController().signal, write),
+      );
+    const end = endOf(error, "creation", request.namespace, backup);
+
+    return sent(error) ? ended(end) : end;
+  }
+  if (created.metadata.name !== backup || !created.metadata.uid)
+    return ended(failure("submission-unknown", "creation", false, BACKUP_NOW_WORDS.unknown(backup)));
+  return ended(await readAfter(dependencies, adapter, request.namespace, created, signal, write, false));
 }

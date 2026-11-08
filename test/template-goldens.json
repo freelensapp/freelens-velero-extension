@@ -1,0 +1,661 @@
+{
+  "about": "What time.ParseDuration and Duration.String of Go 1.26, and labels.Parse and metav1.ParseToLabelSelector of k8s.io/apimachinery v0.33.12, the version Velero v1.18.4 builds with, made of each input, run in a container of golang:1.26 on 2026-11-08 (SPEC-0017, CRBAK-01). A selector carries the error of labels.Parse as parseError, and the selector or the error of metav1.ParseToLabelSelector.",
+  "durations": [
+    {
+      "text": "720h",
+      "nanoseconds": "2592000000000000",
+      "printed": "720h0m0s"
+    },
+    {
+      "text": "720h0m0s",
+      "nanoseconds": "2592000000000000",
+      "printed": "720h0m0s"
+    },
+    {
+      "text": "1h30m",
+      "nanoseconds": "5400000000000",
+      "printed": "1h30m0s"
+    },
+    {
+      "text": "1.5h",
+      "nanoseconds": "5400000000000",
+      "printed": "1h30m0s"
+    },
+    {
+      "text": "90s",
+      "nanoseconds": "90000000000",
+      "printed": "1m30s"
+    },
+    {
+      "text": "90m",
+      "nanoseconds": "5400000000000",
+      "printed": "1h30m0s"
+    },
+    {
+      "text": "300ms",
+      "nanoseconds": "300000000",
+      "printed": "300ms"
+    },
+    {
+      "text": "1.5s",
+      "nanoseconds": "1500000000",
+      "printed": "1.5s"
+    },
+    {
+      "text": "0.5s",
+      "nanoseconds": "500000000",
+      "printed": "500ms"
+    },
+    {
+      "text": "2h45m30.25s",
+      "nanoseconds": "9930250000000",
+      "printed": "2h45m30.25s"
+    },
+    {
+      "text": "1000ms",
+      "nanoseconds": "1000000000",
+      "printed": "1s"
+    },
+    {
+      "text": "1500us",
+      "nanoseconds": "1500000",
+      "printed": "1.5ms"
+    },
+    {
+      "text": "1500µs",
+      "nanoseconds": "1500000",
+      "printed": "1.5ms"
+    },
+    {
+      "text": "1500μs",
+      "nanoseconds": "1500000",
+      "printed": "1.5ms"
+    },
+    {
+      "text": "999ns",
+      "nanoseconds": "999",
+      "printed": "999ns"
+    },
+    {
+      "text": "1ns",
+      "nanoseconds": "1",
+      "printed": "1ns"
+    },
+    {
+      "text": "0",
+      "nanoseconds": "0",
+      "printed": "0s"
+    },
+    {
+      "text": "+0",
+      "nanoseconds": "0",
+      "printed": "0s"
+    },
+    {
+      "text": "-0",
+      "nanoseconds": "0",
+      "printed": "0s"
+    },
+    {
+      "text": "0s",
+      "nanoseconds": "0",
+      "printed": "0s"
+    },
+    {
+      "text": "0h",
+      "nanoseconds": "0",
+      "printed": "0s"
+    },
+    {
+      "text": "-1h",
+      "nanoseconds": "-3600000000000",
+      "printed": "-1h0m0s"
+    },
+    {
+      "text": "+2h",
+      "nanoseconds": "7200000000000",
+      "printed": "2h0m0s"
+    },
+    {
+      "text": "1h2m3s4ms5us6ns",
+      "nanoseconds": "3723004005006",
+      "printed": "1h2m3.004005006s"
+    },
+    {
+      "text": "1.0000000001s",
+      "nanoseconds": "1000000000",
+      "printed": "1s"
+    },
+    {
+      "text": "0.000000001s",
+      "nanoseconds": "1",
+      "printed": "1ns"
+    },
+    {
+      "text": "0.0000000005s",
+      "nanoseconds": "0",
+      "printed": "0s"
+    },
+    {
+      "text": ".5s",
+      "nanoseconds": "500000000",
+      "printed": "500ms"
+    },
+    {
+      "text": "5.s",
+      "nanoseconds": "5000000000",
+      "printed": "5s"
+    },
+    {
+      "text": "1.123456789123h",
+      "nanoseconds": "4044444440842",
+      "printed": "1h7m24.444440842s"
+    },
+    {
+      "text": "2562047h47m16.854775807s",
+      "nanoseconds": "9223372036854775807",
+      "printed": "2562047h47m16.854775807s"
+    },
+    {
+      "text": "2562047h47m16.854775808s",
+      "error": "time: invalid duration \"2562047h47m16.854775808s\""
+    },
+    {
+      "text": "9223372036854775807ns",
+      "nanoseconds": "9223372036854775807",
+      "printed": "2562047h47m16.854775807s"
+    },
+    {
+      "text": "9223372036854775808ns",
+      "error": "time: invalid duration \"9223372036854775808ns\""
+    },
+    {
+      "text": "-9223372036854775808ns",
+      "nanoseconds": "-9223372036854775808",
+      "printed": "-2562047h47m16.854775808s"
+    },
+    {
+      "text": "100000000000000000000ns",
+      "error": "time: invalid duration \"100000000000000000000ns\""
+    },
+    {
+      "text": "",
+      "error": "time: invalid duration \"\""
+    },
+    {
+      "text": "1",
+      "error": "time: missing unit in duration \"1\""
+    },
+    {
+      "text": "h",
+      "error": "time: invalid duration \"h\""
+    },
+    {
+      "text": "1d",
+      "error": "time: unknown unit \"d\" in duration \"1d\""
+    },
+    {
+      "text": "1 h",
+      "error": "time: unknown unit \" h\" in duration \"1 h\""
+    },
+    {
+      "text": " 1h",
+      "error": "time: invalid duration \" 1h\""
+    },
+    {
+      "text": "1h ",
+      "error": "time: unknown unit \"h \" in duration \"1h \""
+    },
+    {
+      "text": "1H",
+      "error": "time: unknown unit \"H\" in duration \"1H\""
+    },
+    {
+      "text": "1hh",
+      "error": "time: unknown unit \"hh\" in duration \"1hh\""
+    },
+    {
+      "text": ".s",
+      "error": "time: invalid duration \".s\""
+    },
+    {
+      "text": "-.5h",
+      "nanoseconds": "-1800000000000",
+      "printed": "-30m0s"
+    },
+    {
+      "text": "1.5.5s",
+      "error": "time: missing unit in duration \"1.5.5s\""
+    },
+    {
+      "text": "3600s",
+      "nanoseconds": "3600000000000",
+      "printed": "1h0m0s"
+    },
+    {
+      "text": "86400s",
+      "nanoseconds": "86400000000000",
+      "printed": "24h0m0s"
+    },
+    {
+      "text": "876000h",
+      "nanoseconds": "3153600000000000000",
+      "printed": "876000h0m0s"
+    }
+  ],
+  "selectors": [
+    {
+      "text": "app=web",
+      "selector": {
+        "matchLabels": {
+          "app": "web"
+        }
+      }
+    },
+    {
+      "text": "app==web",
+      "selector": {
+        "matchLabels": {
+          "app": "web"
+        }
+      }
+    },
+    {
+      "text": "app!=web",
+      "error": "\"!=\" is not a valid label selector operator"
+    },
+    {
+      "text": "app",
+      "selector": {
+        "matchExpressions": [
+          {
+            "key": "app",
+            "operator": "Exists"
+          }
+        ]
+      }
+    },
+    {
+      "text": "!app",
+      "selector": {
+        "matchExpressions": [
+          {
+            "key": "app",
+            "operator": "DoesNotExist"
+          }
+        ]
+      }
+    },
+    {
+      "text": "app in (web,api)",
+      "selector": {
+        "matchExpressions": [
+          {
+            "key": "app",
+            "operator": "In",
+            "values": ["api", "web"]
+          }
+        ]
+      }
+    },
+    {
+      "text": "app notin (web,api)",
+      "selector": {
+        "matchExpressions": [
+          {
+            "key": "app",
+            "operator": "NotIn",
+            "values": ["api", "web"]
+          }
+        ]
+      }
+    },
+    {
+      "text": "app in (web)",
+      "selector": {
+        "matchExpressions": [
+          {
+            "key": "app",
+            "operator": "In",
+            "values": ["web"]
+          }
+        ]
+      }
+    },
+    {
+      "text": "app in ()",
+      "selector": {
+        "matchExpressions": [
+          {
+            "key": "app",
+            "operator": "In",
+            "values": [""]
+          }
+        ]
+      }
+    },
+    {
+      "text": "app in (,)",
+      "selector": {
+        "matchExpressions": [
+          {
+            "key": "app",
+            "operator": "In",
+            "values": [""]
+          }
+        ]
+      }
+    },
+    {
+      "text": "app in (web,,api)",
+      "selector": {
+        "matchExpressions": [
+          {
+            "key": "app",
+            "operator": "In",
+            "values": ["", "api", "web"]
+          }
+        ]
+      }
+    },
+    {
+      "text": "app in (,web)",
+      "selector": {
+        "matchExpressions": [
+          {
+            "key": "app",
+            "operator": "In",
+            "values": ["", "web"]
+          }
+        ]
+      }
+    },
+    {
+      "text": "app in (web,)",
+      "selector": {
+        "matchExpressions": [
+          {
+            "key": "app",
+            "operator": "In",
+            "values": ["", "web"]
+          }
+        ]
+      }
+    },
+    {
+      "text": "tier=front,app=web",
+      "selector": {
+        "matchLabels": {
+          "app": "web",
+          "tier": "front"
+        }
+      }
+    },
+    {
+      "text": "app=web,app=web",
+      "selector": {
+        "matchLabels": {
+          "app": "web"
+        }
+      }
+    },
+    {
+      "text": "app=web,app=api",
+      "selector": {
+        "matchLabels": {
+          "app": "api"
+        }
+      }
+    },
+    {
+      "text": "b=1,a=2",
+      "selector": {
+        "matchLabels": {
+          "a": "2",
+          "b": "1"
+        }
+      }
+    },
+    {
+      "text": "z in (b,a),a notin (d,c)",
+      "selector": {
+        "matchExpressions": [
+          {
+            "key": "a",
+            "operator": "NotIn",
+            "values": ["c", "d"]
+          },
+          {
+            "key": "z",
+            "operator": "In",
+            "values": ["a", "b"]
+          }
+        ]
+      }
+    },
+    {
+      "text": "example.com/app=web",
+      "selector": {
+        "matchLabels": {
+          "example.com/app": "web"
+        }
+      }
+    },
+    {
+      "text": "example.com/app in (a.b, c_d)",
+      "selector": {
+        "matchExpressions": [
+          {
+            "key": "example.com/app",
+            "operator": "In",
+            "values": ["a.b", "c_d"]
+          }
+        ]
+      }
+    },
+    {
+      "text": "app=",
+      "selector": {
+        "matchLabels": {
+          "app": ""
+        }
+      }
+    },
+    {
+      "text": "app=,b",
+      "selector": {
+        "matchLabels": {
+          "app": ""
+        },
+        "matchExpressions": [
+          {
+            "key": "b",
+            "operator": "Exists"
+          }
+        ]
+      }
+    },
+    {
+      "text": "x in (in, notin)",
+      "selector": {
+        "matchExpressions": [
+          {
+            "key": "x",
+            "operator": "In",
+            "values": ["in", "notin"]
+          }
+        ]
+      }
+    },
+    {
+      "text": "app = web",
+      "selector": {
+        "matchLabels": {
+          "app": "web"
+        }
+      }
+    },
+    {
+      "text": " app in ( web , api ) ",
+      "selector": {
+        "matchExpressions": [
+          {
+            "key": "app",
+            "operator": "In",
+            "values": ["api", "web"]
+          }
+        ]
+      }
+    },
+    {
+      "text": "app>1",
+      "error": "\"gt\" isn't supported in label selectors"
+    },
+    {
+      "text": "app<1",
+      "error": "\"lt\" isn't supported in label selectors"
+    },
+    {
+      "text": "app>a",
+      "parseError": "unable to parse requirement: values[0]: Invalid value: \"a\": for 'Gt', 'Lt' operators, the value must be an integer",
+      "error": "couldn't parse the selector string \"app>a\": unable to parse requirement: values[0]: Invalid value: \"a\": for 'Gt', 'Lt' operators, the value must be an integer"
+    },
+    {
+      "text": "!app=web",
+      "parseError": "found '=', expected: ',' or 'end of string'",
+      "error": "couldn't parse the selector string \"!app=web\": found '=', expected: ',' or 'end of string'"
+    },
+    {
+      "text": "!app,b",
+      "selector": {
+        "matchExpressions": [
+          {
+            "key": "app",
+            "operator": "DoesNotExist"
+          },
+          {
+            "key": "b",
+            "operator": "Exists"
+          }
+        ]
+      }
+    },
+    {
+      "text": "!app in (a)",
+      "parseError": "found 'in', expected: ',' or 'end of string'",
+      "error": "couldn't parse the selector string \"!app in (a)\": found 'in', expected: ',' or 'end of string'"
+    },
+    {
+      "text": "app=web,",
+      "parseError": "found '', expected: identifier after ','",
+      "error": "couldn't parse the selector string \"app=web,\": found '', expected: identifier after ','"
+    },
+    {
+      "text": ",app",
+      "parseError": "found ',', expected: !, identifier, or 'end of string'",
+      "error": "couldn't parse the selector string \",app\": found ',', expected: !, identifier, or 'end of string'"
+    },
+    {
+      "text": "app in web",
+      "parseError": "unable to parse requirement: found 'web' expected: '('",
+      "error": "couldn't parse the selector string \"app in web\": unable to parse requirement: found 'web' expected: '('"
+    },
+    {
+      "text": "app in (web",
+      "parseError": "unable to parse requirement: found '', expected: ',' or ')'",
+      "error": "couldn't parse the selector string \"app in (web\": unable to parse requirement: found '', expected: ',' or ')'"
+    },
+    {
+      "text": "app in web)",
+      "parseError": "unable to parse requirement: found 'web' expected: '('",
+      "error": "couldn't parse the selector string \"app in web)\": unable to parse requirement: found 'web' expected: '('"
+    },
+    {
+      "text": "app notin",
+      "parseError": "unable to parse requirement: found '' expected: '('",
+      "error": "couldn't parse the selector string \"app notin\": unable to parse requirement: found '' expected: '('"
+    },
+    {
+      "text": "=web",
+      "parseError": "found '=', expected: !, identifier, or 'end of string'",
+      "error": "couldn't parse the selector string \"=web\": found '=', expected: !, identifier, or 'end of string'"
+    },
+    {
+      "text": "app=web=x",
+      "parseError": "found '=', expected: ',' or 'end of string'",
+      "error": "couldn't parse the selector string \"app=web=x\": found '=', expected: ',' or 'end of string'"
+    },
+    {
+      "text": "App=Web",
+      "selector": {
+        "matchLabels": {
+          "App": "Web"
+        }
+      }
+    },
+    {
+      "text": "app=Web_1.2-3",
+      "selector": {
+        "matchLabels": {
+          "app": "Web_1.2-3"
+        }
+      }
+    },
+    {
+      "text": "app=-web",
+      "parseError": "unable to parse requirement: values[0][app]: Invalid value: \"-web\": a valid label must be an empty string or consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character (e.g. 'MyValue',  or 'my_value',  or '12345', regex used for validation is '(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?')",
+      "error": "couldn't parse the selector string \"app=-web\": unable to parse requirement: values[0][app]: Invalid value: \"-web\": a valid label must be an empty string or consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character (e.g. 'MyValue',  or 'my_value',  or '12345', regex used for validation is '(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?')"
+    },
+    {
+      "text": "app=web-",
+      "parseError": "unable to parse requirement: values[0][app]: Invalid value: \"web-\": a valid label must be an empty string or consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character (e.g. 'MyValue',  or 'my_value',  or '12345', regex used for validation is '(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?')",
+      "error": "couldn't parse the selector string \"app=web-\": unable to parse requirement: values[0][app]: Invalid value: \"web-\": a valid label must be an empty string or consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character (e.g. 'MyValue',  or 'my_value',  or '12345', regex used for validation is '(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?')"
+    },
+    {
+      "text": "a/b/c=x",
+      "parseError": "unable to parse requirement: <nil>: Invalid value: \"a/b/c\": a qualified name must consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character (e.g. 'MyName',  or 'my.name',  or '123-abc', regex used for validation is '([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]') with an optional DNS subdomain prefix and '/' (e.g. 'example.com/MyName')",
+      "error": "couldn't parse the selector string \"a/b/c=x\": unable to parse requirement: <nil>: Invalid value: \"a/b/c\": a qualified name must consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character (e.g. 'MyName',  or 'my.name',  or '123-abc', regex used for validation is '([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]') with an optional DNS subdomain prefix and '/' (e.g. 'example.com/MyName')"
+    },
+    {
+      "text": "/app=x",
+      "parseError": "unable to parse requirement: <nil>: Invalid value: \"/app\": prefix part must be non-empty",
+      "error": "couldn't parse the selector string \"/app=x\": unable to parse requirement: <nil>: Invalid value: \"/app\": prefix part must be non-empty"
+    },
+    {
+      "text": "Example.com/app=x",
+      "parseError": "unable to parse requirement: <nil>: Invalid value: \"Example.com/app\": prefix part a lowercase RFC 1123 subdomain must consist of lower case alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character (e.g. 'example.com', regex used for validation is '[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*')",
+      "error": "couldn't parse the selector string \"Example.com/app=x\": unable to parse requirement: <nil>: Invalid value: \"Example.com/app\": prefix part a lowercase RFC 1123 subdomain must consist of lower case alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character (e.g. 'example.com', regex used for validation is '[a-z0-9]([-a-z0-9]*[a-z0-9])?(\\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*')"
+    },
+    {
+      "text": "example.com/=x",
+      "parseError": "unable to parse requirement: <nil>: Invalid value: \"example.com/\": name part must be non-empty; name part must consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character (e.g. 'MyName',  or 'my.name',  or '123-abc', regex used for validation is '([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]')",
+      "error": "couldn't parse the selector string \"example.com/=x\": unable to parse requirement: <nil>: Invalid value: \"example.com/\": name part must be non-empty; name part must consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character (e.g. 'MyName',  or 'my.name',  or '123-abc', regex used for validation is '([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9]')"
+    },
+    {
+      "text": "app=a(b",
+      "parseError": "found '(', expected: ',' or 'end of string'",
+      "error": "couldn't parse the selector string \"app=a(b\": found '(', expected: ',' or 'end of string'"
+    },
+    {
+      "text": "app==",
+      "selector": {
+        "matchLabels": {
+          "app": ""
+        }
+      }
+    },
+    {
+      "text": "app!==web",
+      "parseError": "unable to parse requirement: found '=', expected: identifier",
+      "error": "couldn't parse the selector string \"app!==web\": unable to parse requirement: found '=', expected: identifier"
+    },
+    {
+      "text": "",
+      "selector": {}
+    },
+    {
+      "text": "   ",
+      "selector": {}
+    }
+  ]
+}

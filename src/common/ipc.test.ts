@@ -134,6 +134,59 @@ describe("the requests between the processes", () => {
     expect(readWriteRunRequest({ ...run, text: "{}" })).toBeUndefined();
   });
 
+  it("reads a confirmation of a backup of the form: its name and the fields of its template, of no object", () => {
+    const template = {
+      includedNamespaces: ["shop", "shop-*"],
+      excludedResources: ["secrets"],
+      includeClusterResources: false,
+      labelSelector: "app=web",
+      storageLocation: "default",
+      volumeSnapshotLocations: ["aws"],
+      snapshotVolumes: true,
+      ttl: "720h",
+    };
+    const form = { cluster, namespace: "velero", kind: "backup", backup: "shop-by-hand", template };
+
+    expect(readWriteConfirmRequest(form)).toEqual(form);
+    expect(readWriteConfirmRequest({ ...form, template: {} })).toEqual({ ...form, template: {} });
+    // What the release refuses of a template is said by the main process with its words, not refused here.
+    expect(readWriteConfirmRequest({ ...form, template: { excludedNamespaces: ["*"] } })).toMatchObject({
+      template: { excludedNamespaces: ["*"] },
+    });
+    for (const [what, value] of [
+      ["no template", { cluster, namespace: "velero", kind: "backup", backup: "shop-by-hand" }],
+      ["no name", { cluster, namespace: "velero", kind: "backup", template }],
+      ["a name the API server refuses", { ...form, backup: "Shop" }],
+      ["a target", { ...form, target: { kind: "Schedule", name: "daily", uid: "u" } }],
+      ["an artifact", { ...form, artifact: "BackupLog" }],
+      ["a field of the template it does not know", { ...form, template: { ...template, hooks: {} } }],
+      ["a list that is not one", { ...form, template: { includedNamespaces: "shop" } }],
+      ["an empty item", { ...form, template: { includedNamespaces: [""] } }],
+      ["an item too long", { ...form, template: { includedResources: ["r".repeat(254)] } }],
+      ["too many items", { ...form, template: { includedNamespaces: Array.from({ length: 65 }, (_, i) => `n${i}`) } }],
+      ["a boolean that is not one", { ...form, template: { snapshotVolumes: "true" } }],
+      ["a duration that is not text", { ...form, template: { ttl: 720 } }],
+      ["a duration too long", { ...form, template: { ttl: "1".repeat(65) } }],
+      ["a selector too long", { ...form, template: { labelSelector: "a".repeat(1025) } }],
+      ["too many selectors", { ...form, template: { orLabelSelectors: Array.from({ length: 17 }, () => "a") } }],
+      ["a template of another kind", { cluster, namespace: "velero", kind: "ServerStatusRequest", template }],
+    ] as const) {
+      expect([what, readWriteConfirmRequest(value)]).toEqual([what, undefined]);
+    }
+    // The run carries the name, and none of the template, which the text kept with the token is made of.
+    const run = {
+      cluster,
+      namespace: "velero",
+      kind: "backup",
+      backup: "shop-by-hand",
+      token: randomUUID(),
+      request: randomUUID(),
+    };
+
+    expect(readWriteRunRequest(run)).toEqual(run);
+    expect(readWriteRunRequest({ ...run, template })).toBeUndefined();
+  });
+
   it("takes the eight artifacts the extension shows, each of the kind of its target, and no other target of the API", () => {
     const of = (artifact: unknown, kind: string) => ({
       cluster,
@@ -372,6 +425,17 @@ describe("the ends kept for a cluster, between the processes", () => {
     expect(readWriteEndsRequest({ cluster })).toEqual({ cluster });
     expect(readWriteShownRequest({ cluster, request: end.request })).toEqual({ cluster, request: end.request });
     expect(readWriteShownRequest({ cluster, request: "not-a-uuid" })).toBeUndefined();
+  });
+
+  it("reads the end of a backup of the form, which names no schedule", () => {
+    const { schedule: _schedule, ...form } = { ...end, kind: "backup" };
+
+    expect(readKeptEnds([form])).toEqual([form]);
+    // A backup of the form names no schedule, and one asked from a schedule names its own.
+    expect(readKeptEnds([{ ...form, schedule: "daily" }])).toEqual([]);
+    const { schedule: _none, ...unnamed } = end;
+
+    expect(readKeptEnds([unnamed])).toEqual([]);
   });
 
   it.each([

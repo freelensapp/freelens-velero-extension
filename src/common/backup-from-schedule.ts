@@ -186,8 +186,8 @@ function ordered(value: Json): Json {
 }
 
 // The text of a body as it is sent, written once: two spaces of indentation and the keys in a fixed order, so that
-// the same body is always the same text, byte for byte.
-export function bodyText(body: BackupFromSchedule): string {
+// the same body is always the same text, byte for byte. A backup of the form is written the same way.
+export function bodyText(body: object): string {
   return JSON.stringify(ordered(body as unknown as Json), null, 2);
 }
 
