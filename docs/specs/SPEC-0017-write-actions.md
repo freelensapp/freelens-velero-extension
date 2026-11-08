@@ -2175,3 +2175,68 @@ the backup; a request of another UID under the name taken; an answer of another
 namespace taken; the mark of the requests not read dropped from the end kept, or taken
 for another kind; the words of an end with the requests not read, or found, said as if
 they were read; and the way to the view of a backup whose deletion completed.
+
+T4.6, the second of its pull requests, on 2026-11-08: the workspace of the deletion of
+one backup, with the command of the view of a backup. The evidence, by check:
+
+- DELETE-01 and DELETE-07, the component part
+  ([`backup-delete-workspace.test.tsx`](../../src/renderer/pages/backup-delete-workspace.test.tsx)):
+  Delete backup in the view of a backup, beside Restore on the line of its name, for a
+  backup Completed, Deleting, New and with no phase, each with the words of its phase
+  where it has some, and disabled for one InProgress or Finalizing, with the words why;
+  no row of the list offers a deletion; the command opens the workspace of the deletion
+  of that backup over the view, named in the address, which with writes off asks
+  nothing; the workspace opened by the address for a backup in progress, or for one the
+  installation did not read, says why and asks nothing
+  ([`backup-delete-words.test.ts`](../../src/common/backup-delete-words.test.ts) for
+  every phase of the release).
+- DELETE-03 and DELETE-06
+  ([`backup-delete-words.test.ts`](../../src/common/backup-delete-words.test.ts)): the
+  review says the one request and that no DELETE of the Backup is sent, what Velero
+  deletes in its order, what it deletes only when nothing failed and the restores it
+  deletes even after a failure, the location of the backup with what Velero refuses and,
+  when the views read it ReadOnly, not Available or not there, that Velero would refuse
+  it, the other requests of the backup Velero deletes first, one or more, the other
+  installations that sync the location, and that it cannot be undone; the phase of a
+  backup Deleting or not started after the request.
+- DELETE-04 and DELETE-05, the component part
+  ([`backup-delete-workspace.test.tsx`](../../src/renderer/pages/backup-delete-workspace.test.tsx),
+  [`backup-delete.test.ts`](../../src/renderer/state/backup-delete.test.ts)): the review
+  asked of the main process with the backup alone, shown with the text as it came beside
+  what it means, and taken only when the text is exactly the request of this backup in
+  this namespace; Delete backup disabled until the name is typed exactly, Escape in the
+  field takes it back, Enter deletes only once it is typed, and the run carries the name
+  as it was typed; each of the six ends with the errors as Velero wrote them, the
+  requests not read and an end found after a lost answer, with the way to the view of
+  the backup but after a deletion completed; a failure kept in sight with the way to the
+  view of the backup for an end not known; a review left by Escape and by its command
+  with the focus on the command that asks again, dropped when writes go off and with the
+  workspace; an expired token asked again once, and run only for the same text; the
+  client of the confirmation and of the run, with what each carries
+  ([`gate.test.ts`](../../src/renderer/state/gate.test.ts)).
+- REQ-283, the main part
+  ([`ipc-backup-delete.test.ts`](../../src/main/ipc-backup-delete.test.ts),
+  [`ipc.test.ts`](../../src/common/ipc.test.ts)): the confirmation answers how many
+  other requests of the backup it read by its labels, none counted of another backup,
+  and nothing when they cannot be read; the contract reads a count and nothing else.
+
+{MUTATIONS}
+
+Decided while implementing, on 2026-11-08:
+
+- The workspace of the deletion is named in the address as `backup-delete/<backup>`, on
+  the page of the Backups, and Delete backup stands after Restore on the line of the
+  name of the backup.
+- The confirmation lists the requests of the backup by its labels and answers how many
+  there are, which the review says as REQ-283 asks; a list that does not answer says
+  nothing of them, and the review is confirmed all the same.
+- The review says the state of the location of the backup as the views read it when
+  Velero would refuse the request, beside what REQ-280 asks it to say of the location.
+- The result leads to the view of the backup, but after a deletion completed, whose
+  backup is gone.
+- An expired token is asked again once, and the run goes on only with the text of the
+  review: the request is written from the namespace and the backup alone, so a renewal
+  of the same backup has the same text, and another text is not shown in place of the
+  review.
+- The phases of a backup Velero refuses to delete are one list, which the command of the
+  views and the main process read.

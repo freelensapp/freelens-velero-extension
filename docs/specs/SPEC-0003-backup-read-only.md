@@ -360,3 +360,27 @@ the packaged suites of the action came with the third pull request of T4.4: the 
 the actions,
 [`velero-e2e-actions.tests.ts`](../../e2e/__tests__/velero-e2e-actions.tests.ts), and
 the views of the workspace in the pre-review.
+
+### 2026-11-08: Delete Backup In The Workspace Of A Backup (T4.6 Of SPEC-0017)
+
+As the table of the amendments of
+[SPEC-0017](SPEC-0017-write-actions.md#the-amendments-the-slices-bring) says, approved
+with it, the second pull request of T4.6 restates one more requirement and its check,
+and the rest of this spec is read with it and with the restatement of REQ-030 and
+BACK-07 above:
+
+| Requirement and check | Restated |
+| --- | --- |
+| REQ-032, BACK-09 | No generic edit or delete and no bulk deletion on a surface of a Backup; the one deletion is Delete backup, of one backup, through a DeleteBackupRequest, in the workspace of that backup |
+
+With T4.6 the workspace of a backup has Delete backup beside Restore, on the line of its
+name: the command opens the workspace of the deletion of that backup over the view,
+named in the address as `backup-delete/<backup>`, and writes nothing by itself. It is
+disabled for a backup in progress, waiting for its plugins or finalizing, which Velero
+refuses to delete, with the words of why; it is enabled for a backup Deleting, with the
+words that Velero is deleting it or that a deletion of it failed, which a new request
+tries again, and for one with no phase, New, Queued or ReadyToStart, with the words that
+Velero deletes it before it starts it. No row of the list, no menu and no selection
+offers a deletion. It is proven at the component layer, with writes off and on, in
+[`backup-delete-workspace.test.tsx`](../../src/renderer/pages/backup-delete-workspace.test.tsx);
+the packaged suites of the action come with the third pull request of T4.6.

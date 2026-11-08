@@ -670,6 +670,20 @@ describe("the answers of a write of a body", () => {
     ).toMatchObject({ ok: true, value: { text: largest } });
   });
 
+  it("reads how many other requests to delete a backup the confirmation found, a count and nothing else", () => {
+    const token = randomUUID();
+
+    expect(readWriteConfirmAnswer({ token, expires: 1, text: "{}", others: 0 })).toEqual({
+      token,
+      expires: 1,
+      text: "{}",
+      others: 0,
+    });
+    expect(readWriteConfirmAnswer({ token, expires: 1, others: 3 })).toEqual({ token, expires: 1, others: 3 });
+    for (const others of [-1, 1.5, "2", null, Number.MAX_SAFE_INTEGER + 1])
+      expect(readWriteConfirmAnswer({ token, expires: 1, others })).toBeUndefined();
+  });
+
   it("reads the backup a schedule was asked for: its name, its UID, and the phase Velero wrote when it wrote one", () => {
     expect(readBackupCreated({ name: "daily-20261108034105", uid: "u-1" })).toEqual({
       name: "daily-20261108034105",

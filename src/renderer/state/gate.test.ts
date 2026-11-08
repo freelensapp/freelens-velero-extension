@@ -454,6 +454,52 @@ describe("the frame of a cluster", () => {
     ]);
   });
 
+  it("asks the main process for the review and the run of the deletion of a backup, with what each carries, which the contract reads whole", async () => {
+    resetIpc();
+    const asked: [string, unknown][] = [];
+    const token = "00000000-0000-4000-8000-000000000001";
+    const text = '{"kind":"DeleteBackupRequest","spec":{"backupName":"nightly"}}';
+
+    ipcHandlers.set(CHANNELS.writeConfirm, (_frame, request) => {
+      asked.push([CHANNELS.writeConfirm, request]);
+      return { ok: true, value: { token, expires: 1, text, others: 2 } };
+    });
+    ipcHandlers.set(CHANNELS.writeRun, (_frame, request) => {
+      asked.push([CHANNELS.writeRun, request]);
+      return { ok: true, value: { end: "refused", phase: "Completed", errors: ["refused"] } };
+    });
+    const ipc = VeleroIpcRenderer.createInstance(anExtension("renderer") as never);
+    const target = { kind: "Backup" as const, name: "nightly", uid: "backup-uid" };
+
+    expect(await ipc.confirmBackupDelete("synthetic-cluster", "velero", target)).toEqual({
+      ok: true,
+      value: { token, expires: 1, text, others: 2 },
+    });
+    expect(
+      await ipc.runBackupDelete("synthetic-cluster", "velero", target, "nightly", token, "request-identifier"),
+    ).toEqual({ ok: true, value: { end: "refused", phase: "Completed", errors: ["refused"] } });
+    expect(asked).toEqual([
+      [CHANNELS.writeConfirm, { cluster: "synthetic-cluster", namespace: "velero", kind: "delete-backup", target }],
+      [
+        CHANNELS.writeRun,
+        {
+          cluster: "synthetic-cluster",
+          namespace: "velero",
+          kind: "delete-backup",
+          target,
+          typed: "nightly",
+          token,
+          request: "request-identifier",
+        },
+      ],
+    ]);
+    // An answer of a deletion that is not one the contract reads is not taken.
+    ipcHandlers.set(CHANNELS.writeRun, () => ({ ok: true, value: { end: "deleted" } }));
+    expect(
+      await ipc.runBackupDelete("synthetic-cluster", "velero", target, "nightly", token, "request-identifier"),
+    ).toMatchObject({ ok: false });
+  });
+
   it("asks the main process for the review and the run of a restore, with what each carries, which the contract reads whole", async () => {
     resetIpc();
     const asked: [string, unknown][] = [];

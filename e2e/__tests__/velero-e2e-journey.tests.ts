@@ -400,9 +400,9 @@ describe("views of the first milestone", () => {
         "The status reports 1 error and 0 warnings",
       );
       // The workspace opens at the first of its five tabs, the summary, which only reads: the way to the
-      // location of the backup, beside the way back of the workspace and Restore, which a backup that has not
-      // ended is not offered, and no field. What Velero wrote of the backup is asked for by a command of another
-      // tab, and nothing edits or deletes.
+      // location of the backup, beside the way back of the workspace, Restore, which a backup that has not ended
+      // is not offered, and Delete backup, which opens the workspace of the deletion of this backup alone, and no
+      // field. What Velero wrote of the backup is asked for by a command of another tab, and nothing edits.
       const tabs = await artifacts.tabsOf(frame, "backup");
       const buttons = async (selector: string) =>
         (await frame.locator(`${selector} button`).allInnerTexts()).map((text) => text.replace(/\s+/g, " ").trim());
@@ -413,6 +413,7 @@ describe("views of the first milestone", () => {
       expect(await buttons("[data-testid=velero-backup-workspace]")).toEqual([
         "arrow_back Backups",
         "restore Restore",
+        "delete Delete backup",
         "fixture-unavailable",
       ]);
       expect(await frame.locator("[data-testid=velero-backup-restore]").isDisabled()).toBe(true);
@@ -526,7 +527,7 @@ describe("views of the first milestone", () => {
       expect(restores.state).toBe("listed");
       expect(restores.text).toContain("restore-of-daily-completed (Completed)");
       expect(restores.text).toContain("restore-of-daily-partiallyfailed (Partially failed)");
-      // Restore, then the schedule, the locations and each restore, which are ways to their views.
+      // Restore and Delete backup, then the schedule, the locations and each restore, which are ways to their views.
       expect(
         (await frame.locator("[data-testid=velero-backup-workspace] button").allInnerTexts()).map((text) =>
           text.replace(/\s+/g, " ").trim(),
@@ -534,6 +535,7 @@ describe("views of the first milestone", () => {
       ).toEqual([
         "arrow_back Backups",
         "restore Restore",
+        "delete Delete backup",
         "views-daily",
         "views-available",
         "views-snapshots",

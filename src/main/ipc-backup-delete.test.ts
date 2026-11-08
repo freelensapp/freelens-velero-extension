@@ -193,7 +193,17 @@ function fixture() {
   const confirm = (target = BACKUP) => call(CHANNELS.writeConfirm, { ...of, target });
   const run = (token: string, typed = BACKUP.name, request = randomUUID(), target = BACKUP) =>
     call(CHANNELS.writeRun, { ...of, target, typed, token, request });
-  const token = async () => String((await confirm()).value?.token);
+  // A token of a confirmation, which reads the other requests of the backup without a step of the controller: the
+  // steps of a case are of its run.
+  const token = async () => {
+    const steps = state.steps;
+
+    state.steps = [];
+    const confirmed = String((await confirm()).value?.token);
+
+    state.steps = steps;
+    return confirmed;
+  };
   const backupReads = () => adapter.read.mock.calls.filter(([kind]) => kind === "Backup");
   const ends = async () => readKeptEnds((await call(CHANNELS.writeEnds, { cluster: "cluster-a" })).value) ?? [];
 
@@ -229,6 +239,24 @@ describe("the confirmation of the deletion of a backup", () => {
     });
     expect(backupReads()).toHaveLength(1);
     expect(adapter.createDeleteBackupRequest).not.toHaveBeenCalled();
+  });
+
+  it("says how many other requests to delete the backup are there, which Velero deletes before it starts this one, and nothing when they cannot be read", async () => {
+    const { enable, confirm, state, requestOf } = fixture();
+
+    await enable();
+    expect((await confirm()).value?.others).toBe(0);
+    const older = requestOf(TEXT, "velero", state.now - 3_600_000);
+    const another = requestOf(deleteRequestText(deleteRequestOf("velero", { name: "weekly", uid: "weekly-uid" })));
+
+    state.requests.set(older.metadata.name, older);
+    state.requests.set(another.metadata.name, another);
+    expect((await confirm()).value?.others).toBe(1);
+    state.listError = new DiagnosticError("forbidden");
+    const answer = await confirm();
+
+    expect(answer.ok).toBe(true);
+    expect(Object.keys(answer.value ?? {}).sort()).toEqual(["expires", "text", "token"]);
   });
 
   it("takes a backup of every phase Velero deletes, and is a conflict for one in progress or of another UID", async () => {
@@ -334,10 +362,10 @@ describe("the run of the deletion of a backup", () => {
     expect(await run(confirmed)).toEqual({ ok: true, value: { end: "completed", request: "nightly-xxxx1" } });
     expect(adapter.createDeleteBackupRequest).toHaveBeenCalledOnce();
     expect(adapter.createDeleteBackupRequest.mock.calls[0]?.slice(0, 2)).toEqual(["velero", TEXT]);
-    // Read at the confirmation and at the run, then with the request at each of its four reads; the requests are read
-    // by the name the API server gave this one, and never listed.
+    // Read at the confirmation and at the run, then with the request at each of its four reads; the requests are listed
+    // once, at the confirmation, for the other ones, and the run reads its request by the name the API server gave it.
     expect(backupReads()).toHaveLength(6);
-    expect(adapter.deleteRequestsOf).not.toHaveBeenCalled();
+    expect(adapter.deleteRequestsOf).toHaveBeenCalledOnce();
   });
 
   it("says each of the six ends the request and the backup show together, and never the backup deleted before the read shows it gone", async () => {
@@ -431,7 +459,9 @@ describe("the run of the deletion of a backup", () => {
         : structuredClone(state.backup as DiagnosticObject),
     );
     expect(await run(confirmed)).toEqual({ ok: true, value: { end: "unread", request: expect.any(String) } });
-    // The look after a lost answer ends at its own bound.
+    // The look after a lost answer ends at its own bound: the confirmation, which reads the other requests of the
+    // backup, is asked before the requests hang.
+    const second = await token();
     const bound = LOOK_AFTER.forMs;
 
     LOOK_AFTER.forMs = 5;
@@ -441,7 +471,7 @@ describe("the run of the deletion of a backup", () => {
         state.requests.set(requestOf(text).metadata.name, requestOf(text));
         throw new DiagnosticError("submission-unknown");
       };
-      expect(await run(await token())).toMatchObject({
+      expect(await run(second)).toMatchObject({
         ok: false,
         code: "submission-unknown",
         text: BACKUP_DELETE_WORDS.unknown("nightly"),

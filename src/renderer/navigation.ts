@@ -51,6 +51,7 @@ export const PAGES: Record<ViewKind, string> = {
   "restore-schedule": SCHEDULES_PAGE_ID,
   "schedule-pause": SCHEDULES_PAGE_ID,
   "schedule-resume": SCHEDULES_PAGE_ID,
+  "backup-delete": BACKUPS_PAGE_ID,
 };
 
 // The views that are open travel in the address, by their kind and their name, in the order they were
