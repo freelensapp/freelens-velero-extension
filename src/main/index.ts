@@ -5,6 +5,7 @@ import { hostDialog, saveThroughDialog } from "./artifact-save";
 import { catalogEntries, hostDependencies } from "./host";
 import { VeleroIpc } from "./ipc";
 
+export { expressionRefused } from "../common/schedule-form";
 export { DiagnosticKubernetes } from "./diagnostic-kubernetes";
 export { DiagnosticError, downloadArtifact } from "./diagnostic-transport";
 export { KubectlTunnels } from "./diagnostic-tunnel";

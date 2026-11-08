@@ -15,6 +15,7 @@ import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { captureWindowScreenshot, EXTENSION_NAME } from "./velero-extension";
 import {
+  codeWritesOf,
   countedAs,
   installedVersion,
   operationListsOf,
@@ -3316,6 +3317,7 @@ export function serverStatusRequests(namespace: string): ServerStatusRequestObje
  * watches its requests, and lists them again when a watch ends.
  */
 export function requestCodes(resource: string): Record<string, number> {
+  const asked = Date.now();
   const { status, stdout, stderr } = kubectlE2E("get", "--raw", "/metrics");
 
   if (status !== 0) throw new Error(`The counters of the API server could not be read: ${stderr}`);
@@ -3330,8 +3332,31 @@ export function requestCodes(resource: string): Record<string, number> {
 
     counts[key] = (counts[key] ?? 0) + Number(line.slice(line.lastIndexOf(" ") + 1));
   }
-
+  READ_AT.set(counts, asked);
   return counts;
+}
+
+/**
+ * The codes of the requests of a kind that change something, between two
+ * readings of `requestCodes`: the reads left out, and for the schedules the
+ * PATCH its controller sends a schedule at every look, within the bound of the
+ * minutes between the readings, as `writes` leaves it out
+ * (`SCHEDULE_PATCHED_AT_EVERY_LOOK`).
+ */
+export function requestWrites(
+  resource: string,
+  before: Record<string, number>,
+  after: Record<string, number>,
+): Record<string, number> {
+  const from = READ_AT.get(before);
+  const to = READ_AT.get(after);
+
+  if (from === undefined || to === undefined) {
+    throw new Error(
+      "The codes are counted between two readings of requestCodes, which keep the moment they were asked",
+    );
+  }
+  return codeWritesOf(resource, counted(before, after), SCHEDULE_PATCHED_AT_EVERY_LOOK, (to - from) / 60_000);
 }
 
 /**
@@ -3456,20 +3481,37 @@ function requestsOfTheExtension(namespace: string, kind: RequestKind): number {
  * already gone; a read that fails for another reason is said.
  */
 export function removeCreatedBackup(namespace: string, name: string, uid: string | undefined, since: number): void {
+  removeCreated("backups", namespace, name, uid, since);
+}
+
+/** Removes a schedule a suite of the actions created, the same way as a backup. */
+export function removeCreatedSchedule(namespace: string, name: string, uid: string | undefined, since: number): void {
+  removeCreated("schedules", namespace, name, uid, since);
+}
+
+function removeCreated(
+  resource: "backups" | "schedules",
+  namespace: string,
+  name: string,
+  uid: string | undefined,
+  since: number,
+): void {
+  const noun = resource === "backups" ? "backup" : "schedule";
+
   if (namespace === "" || !SYNTHETIC_NAMESPACES.includes(namespace)) {
-    throw new Error(`The suites remove the backups of a namespace of the fixtures, and "${namespace}" is not one`);
+    throw new Error(`The suites remove the ${resource} of a namespace of the fixtures, and "${namespace}" is not one`);
   }
-  const found = kubectlE2E("get", "backups.velero.io", name, "--namespace", namespace, "-o", "json");
+  const found = kubectlE2E("get", `${resource}.velero.io`, name, "--namespace", namespace, "-o", "json");
 
   if (found.status !== 0) {
     if (/\(NotFound\)/.test(found.stderr)) return;
-    throw new Error(`The backup ${name} could not be read before its removal: ${found.stderr.trim()}`);
+    throw new Error(`The ${noun} ${name} could not be read before its removal: ${found.stderr.trim()}`);
   }
   const metadata = (JSON.parse(found.stdout) as { metadata: { uid: string; creationTimestamp?: string } }).metadata;
   const created = Date.parse(metadata.creationTimestamp ?? "");
 
   if (uid !== undefined ? metadata.uid !== uid : !(created >= since)) {
-    throw new Error(`The backup ${name} is not the one the suite created`);
+    throw new Error(`The ${noun} ${name} is not the one the suite created`);
   }
   const { status, stderr } = spawnSync(
     required("E2E_KUBECTL"),
@@ -3480,7 +3522,7 @@ export function removeCreatedBackup(namespace: string, name: string, uid: string
       E2E_KUBE_CONTEXT,
       "delete",
       "--raw",
-      `/apis/velero.io/v1/namespaces/${namespace}/backups/${name}`,
+      `/apis/velero.io/v1/namespaces/${namespace}/${resource}/${name}`,
       "-f",
       "-",
     ],
@@ -3491,7 +3533,7 @@ export function removeCreatedBackup(namespace: string, name: string, uid: string
     },
   );
 
-  if (status !== 0) throw new Error(`The backup ${name} could not be removed: ${(stderr ?? "").trim()}`);
+  if (status !== 0) throw new Error(`The ${noun} ${name} could not be removed: ${(stderr ?? "").trim()}`);
 }
 
 /**

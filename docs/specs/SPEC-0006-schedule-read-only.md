@@ -360,7 +360,10 @@ the command opens the workspace of the schedule of the form over the list, named
 the address, and writes nothing by itself. It is proven at the component layer, with
 writes off and on, in
 [`schedule-create-workspace.test.tsx`](../../src/renderer/pages/schedule-create-workspace.test.tsx);
-the packaged suites of the action come with the third pull request of T4.7.
+the packaged suites of the action came with the third pull request of T4.7: the
+suite of the actions,
+[`velero-e2e-actions.tests.ts`](../../e2e/__tests__/velero-e2e-actions.tests.ts), and
+the views of the workspace in the pre-review.
 
 ### 2026-11-08: Restore In The Workspace Of A Schedule (T4.4 Of SPEC-0017)
 

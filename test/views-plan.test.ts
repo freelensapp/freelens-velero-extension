@@ -50,7 +50,8 @@ describe("the parts of the views a run takes", () => {
 
   it("runs the parts a view of the renderer or a module of common reaches, and the static views with them", () => {
     expect(partsToRun(definition, ["src/renderer/pages/schedules-page.tsx"])).toEqual([...statics, "actions"]);
-    expect(partsToRun(definition, ["src/common/schedule-adherence.ts"])).toEqual(statics);
+    // The parser of the expressions, which the form of a schedule and its review read as well.
+    expect(partsToRun(definition, ["src/common/schedule-adherence.ts"])).toEqual([...statics, "actions"]);
     expect(partsToRun(definition, ["src/renderer/components/log-viewer.tsx"])).toEqual(["artifacts", ...statics]);
     expect(partsToRun(definition, ["src/common/artifact-log.ts"])).toEqual(["artifacts", ...statics]);
     expect(partsToRun(definition, ["src/renderer/pages/server-band.tsx"])).toEqual(["volumes-and-server", ...statics]);

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  codeWritesOf,
   countedAs,
   installedVersion,
   OPERATION_KINDS,
@@ -11,6 +12,18 @@ import {
 } from "../integration/helpers/velero-guard";
 
 describe("the guard of the suites", () => {
+  it("counts the codes of the writes of a kind, the reads left out, and the PATCH of a schedule above the looks of its controller alone", () => {
+    const codes = { "GET 200": 4, "POST 201": 1, "PATCH 200": 3, "POST 409": 1 };
+
+    expect(codeWritesOf("backups", codes, true, 0.5)).toEqual({ "POST 201": 1, "PATCH 200": 3, "POST 409": 1 });
+    expect(codeWritesOf("schedules", codes, false, 0.5)).toEqual({ "POST 201": 1, "PATCH 200": 3, "POST 409": 1 });
+    // Its controller patches the real schedule at every look: the whole minutes of the window and two are left out.
+    expect(codeWritesOf("schedules", codes, true, 0.5)).toEqual({ "POST 201": 1, "PATCH 200": 1, "POST 409": 1 });
+    expect(codeWritesOf("schedules", codes, true, 1.2)).toEqual({ "POST 201": 1, "POST 409": 1 });
+    expect(codeWritesOf("schedules", { "PATCH 404": 1 }, true, 5)).toEqual({ "PATCH 404": 1 });
+    for (const minutes of [-1, Number.NaN]) expect(() => codeWritesOf("schedules", codes, true, minutes)).toThrow();
+  });
+
   it("leaves out the PATCH of the storage locations, which the server sends at every validation and the runner of the views sends where no server runs, and nothing else that writes", () => {
     expect(
       writesOf({ "PATCH backupstoragelocations resource": 3, "GET backupstoragelocations resource": 3 }, false, 0),
