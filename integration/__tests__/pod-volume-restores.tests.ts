@@ -3,7 +3,7 @@
  * Licensed under MIT License. See LICENSE in root directory for more information.
  */
 
-// The session of the Pod Volume Restores, one of the eight of the integration test, as the template has one
+// The session of the Pod Volume Restores, one of the ten of the integration test, as the template has one
 // for each version of its kind: a pod volume restore of its own, in a namespace of its own on the cluster of
 // the test environment, which the page of the pod volume restores lists, the details of the host show with
 // the section of the extension, and the host gives a menu of its commands, to which the extension adds no

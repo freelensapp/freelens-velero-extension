@@ -75,7 +75,7 @@ describe.each(["PodVolumeBackup", "PodVolumeRestore", "DataUpload", "DataDownloa
       expect(said("Canceling")).toContain("being stopped");
       expect(said("Completed")).toBe("The data path ended.");
       expect(said("Failed")).toContain("A start equal to the completion is one the failure wrote");
-      expect(said("Failed")).toContain("no time at all is one the preparing timeout wrote");
+      expect(said("Failed")).toContain("no start and no completion is one the preparing timeout wrote");
       expect(said("Canceled")).toContain("neither a success nor a failure");
       expect(said("Paused")).toContain("shown as written");
     });

@@ -220,7 +220,19 @@ export const BACKUP_PHASE_SENTENCES: Record<string, string> = {
   Canceling: "The cancellation was asked: the data path is being stopped.",
   Completed: "The data path ended.",
   Failed:
-    "The operation failed: the message says why. A start equal to the completion is one the failure wrote; no time at all is one the preparing timeout wrote.",
+    "The operation failed: the message says why. A start equal to the completion is one the failure wrote; no start and no completion is one the preparing timeout wrote.",
   Canceled:
     "The operation was canceled: neither a success nor a failure. The release cancels one when its backup or restore times out, when the server or the node agent restarts, or when its pod cannot run.",
+};
+
+/** What the mark of a value the reviewed release does not write says to who does not see it, after the value. */
+export const NOT_WRITTEN_MARK = "a value the reviewed release does not write";
+
+/**
+ * What the view of a data upload says of each phase the release writes, as the module of the words writes it: one
+ * with no phase is said as New, waiting for any node agent of the installation.
+ */
+export const DATA_UPLOAD_PHASE_SENTENCES: Record<string, string> = {
+  ...BACKUP_PHASE_SENTENCES,
+  New: "It waits for any node agent of the installation to accept it. Whether one runs is not read by the extension, and waiting is not a failure.",
 };

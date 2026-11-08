@@ -37,10 +37,10 @@ const OPENED = "backup-finalizingpartiallyfailed";
 const RESTORES = cluster.RESTORES;
 const RESTORED = "restore-mapped";
 const LONG_RESTORE = cluster.LONG_RESTORE_NAME;
-// The views that are checked, each in both themes at every size: eight of the tabs, then the thirty-eight
-// of the pages, four of them of the adherence of the schedules and six of the backup repositories and of the pod
-// volume operations.
-const VIEWS = 46;
+// The views that are checked, each in both themes at every size: eight of the tabs, then the forty-two
+// of the pages, four of them of the adherence of the schedules and ten of the backup repositories, of the pod
+// volume operations and of the data movement.
+const VIEWS = 50;
 const OVERVIEW = cluster.OVERVIEW;
 const SCHEDULES = cluster.SCHEDULES;
 const SCHEDULED = "views-history";
@@ -988,15 +988,25 @@ describe("pre-review of the views", () => {
       expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
       // From the way back the keyboard goes through the five tabs of the workspace, each one a stop as the
       // tabs of the host are, then the band of its volumes, whose rows, the seven pod volume restores of the
-      // restore, each hold a way to the operation and a link to its pod, four of them a link to the node a node
-      // agent accepted them on, and then reaches the way to the backup: eighteen stops in the band.
+      // restore, each hold a way to the operation and a link to its pod, five of them a link to the node a node
+      // agent accepted them on, and the data downloads of the restore, each a way, with a link to the node of the
+      // ones a node agent prepared; then it reaches the way to the backup.
+      const downloads = cluster.labelledObjects<{ status?: { node?: string } }>(
+        "datadownloads",
+        `velero.io/restore-name=${RESTORED}`,
+        cluster.E2E_VIEWS_NAMESPACE,
+      );
+
       expect((await cluster.volumeBand(frame, "rows")).rows).toHaveLength(7);
+      expect((await cluster.volumeBand(frame, "rows", "DataDownload")).rows).toHaveLength(downloads.length);
       const stops = await frame
         .locator("[data-testid=velero-volume-band] a, [data-testid=velero-volume-band] button")
         .count();
 
-      expect(stops).toBe(7 + 7 + 4);
-      expect(await cluster.tabTo(frame, (focus) => focus.startsWith("velero-open-backup-"), 40)).toBe(6 + stops);
+      expect(stops).toBe(7 + 7 + 5 + downloads.length + downloads.filter(({ status }) => status?.node).length);
+      expect(await cluster.tabTo(frame, (focus) => focus.startsWith("velero-open-backup-"), 6 + stops + 2)).toBe(
+        6 + stops,
+      );
       await started.window.keyboard.press("Enter");
       await frame.waitForSelector("[data-testid=velero-backup-workspace]", { timeout: 60_000 });
       expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
@@ -1023,10 +1033,11 @@ describe("pre-review of the views", () => {
     async () => {
       await cluster.showList(frame);
       await cluster.openWorkspace(frame, RESTORED, RESTORES);
-      // The summary holds the band of the volumes, with the seven pod volume restores the views place for the restore
-      // in its rows, and the pictures are taken once it shows them: the room of its rows at 900 by 650 and at twice
-      // the zoom is seen in the pictures of the band.
+      // The summary holds the band of the volumes, with the seven pod volume restores and the eight data downloads the
+      // views place for the restore in the rows of its two halves, and the pictures are taken once it shows them: the
+      // room of its rows at 900 by 650 and at twice the zoom is seen in the pictures of the band.
       expect((await cluster.volumeBand(frame, "rows")).state).toBe("rows");
+      expect((await cluster.volumeBand(frame, "rows", "DataDownload")).state).toBe("rows");
       await everyLayout("restore-workspace", undefined, RESTORES);
       await everyLayout(
         "restore-workspace-volumes",
@@ -1292,12 +1303,14 @@ describe("pre-review of the views", () => {
   );
 
   it(
-    "shows the lists of the backup repositories, the pod volume backups and the pod volume restores in both themes, at every size",
+    "shows the lists of the backup repositories, the pod volume backups, the pod volume restores, the data uploads and the data downloads in both themes, at every size",
     async () => {
       for (const [view, list] of [
         ["backup-repositories", cluster.REPOSITORIES],
         ["pod-volume-backups", cluster.POD_VOLUME_BACKUPS],
         ["pod-volume-restores", cluster.POD_VOLUME_RESTORES],
+        ["data-uploads", cluster.DATA_UPLOADS],
+        ["data-downloads", cluster.DATA_DOWNLOADS],
       ] as const) {
         await cluster.showList(frame);
         await cluster.openPage(frame, list);
@@ -1339,7 +1352,21 @@ describe("pre-review of the views", () => {
       await cluster.waitForList(frame, cluster.BACKUPS);
       await cluster.openWorkspace(frame, "backup-inprogress", cluster.BACKUPS);
       await cluster.volumeBand(frame, "rows");
-      await frame.locator("[data-testid=velero-volume-more]").click();
+      await cluster.volumeBand(frame, "rows", "DataUpload");
+      // Each half shows ten rows and the command that shows ten more, which shows the rest: the twelve data uploads of
+      // the backup, beside its pod volume backups.
+      for (const kind of ["PodVolumeBackup", "DataUpload"]) {
+        await frame
+          .locator(`[data-testid=velero-volume-half][data-kind=${kind}] [data-testid=velero-volume-more]`)
+          .click();
+        await frame.waitForSelector(
+          `[data-testid=velero-volume-half][data-kind=${kind}] [data-testid=velero-volume-more]`,
+          {
+            state: "detached",
+            timeout: 60_000,
+          },
+        );
+      }
       await everyLayout("backup-inprogress-band", () => band.scrollIntoViewIfNeeded());
       expect(found("backup-inprogress-band")).toEqual({});
       // Its pod volume backup that failed with a message of several lines, read on the cluster by the label of the
@@ -1364,6 +1391,66 @@ describe("pre-review of the views", () => {
   );
 
   it(
+    "shows a data upload that failed with a message of several lines and a data download with the way to the data upload of its snapshot, in both themes, at every size",
+    async () => {
+      // The data upload of the backup in progress that failed with a message of several lines, read on the cluster by
+      // the label of the backup, opened from its row in the second half of the band.
+      const [failed] = cluster
+        .labelledObjects<{ metadata: { name: string }; status?: { phase?: string; message?: string } }>(
+          "datauploads",
+          "velero.io/backup-name=backup-inprogress",
+          cluster.E2E_VIEWS_NAMESPACE,
+        )
+        .filter(({ status }) => status?.phase === "Failed" && (status.message ?? "").includes("\n"));
+
+      expect(failed).toBeDefined();
+      await cluster.showList(frame);
+      await cluster.openPage(frame, cluster.BACKUPS);
+      await cluster.waitForList(frame, cluster.BACKUPS);
+      await cluster.openWorkspace(frame, "backup-inprogress", cluster.BACKUPS);
+      await cluster.volumeBand(frame, "rows", "DataUpload");
+      const way = frame.locator(`[data-testid="velero-open-data-upload-${failed.metadata.name}"]`);
+
+      if (!(await way.count())) {
+        await frame
+          .locator("[data-testid=velero-volume-half][data-kind=DataUpload] [data-testid=velero-volume-more]")
+          .click();
+      }
+      await way.click();
+      await frame.waitForSelector("[data-testid=velero-data-upload-workspace]", { timeout: 60_000 });
+      await everyLayout("data-upload-workspace");
+      expect(found("data-upload-workspace")).toEqual({});
+      await cluster.closeWorkspace(frame);
+      await cluster.closeWorkspace(frame);
+      // The data download of the mapped restore that completed, whose snapshot a data upload of the installation
+      // names, opened from its row in the second half of the band of the restore.
+      const [completed] = cluster
+        .labelledObjects<{ metadata: { name: string }; status?: { phase?: string } }>(
+          "datadownloads",
+          `velero.io/restore-name=${RESTORED}`,
+          cluster.E2E_VIEWS_NAMESPACE,
+        )
+        .filter(({ status }) => status?.phase === "Completed");
+
+      expect(completed).toBeDefined();
+      await cluster.openPage(frame, RESTORES);
+      await cluster.waitForList(frame, RESTORES);
+      await cluster.openWorkspace(frame, RESTORED, RESTORES);
+      await cluster.volumeBand(frame, "rows", "DataDownload");
+      await frame.locator(`[data-testid="velero-open-data-download-${completed.metadata.name}"]`).click();
+      await frame.waitForSelector(
+        "[data-testid=velero-data-download-workspace] [data-testid^=velero-open-data-upload-]",
+        { timeout: 60_000 },
+      );
+      await everyLayout("data-download-workspace", undefined, RESTORES);
+      expect(found("data-download-workspace")).toEqual({});
+      await cluster.closeWorkspace(frame);
+      await cluster.closeWorkspace(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "reads the band of the backup in progress with the keyboard alone: ten more, a row, its view, and Escape back to the backup and to its row",
     async () => {
       await cluster.showList(frame);
@@ -1376,7 +1463,10 @@ describe("pre-review of the views", () => {
       await cluster.tabTo(frame, (focus) => focus === "velero-volume-more", 80);
       await started.window.keyboard.press("Enter");
       await frame.waitForFunction(
-        () => document.querySelectorAll("[data-testid=velero-volume-rows] tbody tr").length > 10,
+        () =>
+          document.querySelectorAll(
+            "[data-testid=velero-volume-half][data-kind=PodVolumeBackup] [data-testid=velero-volume-rows] tbody tr",
+          ).length > 10,
         undefined,
         { timeout: 60_000 },
       );

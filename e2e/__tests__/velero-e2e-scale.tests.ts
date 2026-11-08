@@ -10,7 +10,9 @@
 // the two thousand pod volume backups of the same namespace, the view of the
 // backup of two hundred of them, the reads of their families counted on the
 // API server, and nothing of a pod or of a Job read, with the control that
-// the counters see such a read.
+// the counters see such a read. Since the second pull request of T5.2, the two
+// hundred data uploads of the same namespace, their list measured as the one of
+// the pod volume backups, and the reads of their family counted.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as cluster from "../../integration/helpers/velero-cluster";
@@ -67,9 +69,28 @@ const POD_VOLUME_BACKUP_SEARCHES = [
   "in progress",
 ];
 
-// The lists of the two families of the operations of a volume, in the namespace of the installation.
+// The data uploads of the long list: one for each of the two hundred backups before the nine hundred and first, in
+// the phases in turn, each named by its backup and a suffix the run makes.
+const DATA_UPLOADS = 200;
+// The same for the data uploads: by their phases and by the backups they belong to.
+const DATA_UPLOAD_SEARCHES = [
+  "failed",
+  "backup-07",
+  "completed",
+  "backup-0801",
+  "accepted",
+  "backup-08",
+  "canceled",
+  "prepared",
+  "backup-0900",
+  "in progress",
+];
+
+// The lists of the four families of the operations of a volume, in the namespace of the installation.
 const PVB = "LIST podvolumebackups namespace";
 const PVR = "LIST podvolumerestores namespace";
+const DU = "LIST datauploads namespace";
+const DD = "LIST datadownloads namespace";
 // How many reads of the installation each window of the reads waits for: one every fifteen seconds.
 const CYCLES = 3;
 // The backup whose band holds the most operations: the thousandth, with two hundred pod volume backups.
@@ -436,6 +457,37 @@ describe("long list of backups", () => {
   );
 
   it(
+    "shows all the two hundred data uploads of the namespace, and answers a search and a selection within the budget, twenty times over",
+    async () => {
+      const of = cluster.DATA_UPLOADS;
+
+      await cluster.showList(frame);
+      await cluster.openPage(frame, of);
+      await cluster.waitForList(frame, of);
+      expect((await cluster.target(frame)).namespace).toBe(`${cluster.E2E_SCALE_NAMESPACE} (configured)`);
+      await frame.waitForSelector(`[data-testid=velero-data-uploads] >> text="${DATA_UPLOADS} items"`, {
+        timeout: 60_000,
+      });
+      expect((await cluster.mounted(frame, of)).length).toBeLessThanOrEqual(MOUNTED);
+      const { objects, ...measured } = await measureList(frame, of, DATA_UPLOAD_SEARCHES);
+      const report = { dataUploads: objects, ...measured };
+
+      // The report is written before anything is asserted of it: a case that fails leaves what was measured.
+      console.log(`KIND-18 ${JSON.stringify(report)}`);
+      await cluster.writeReport("kind-18-data-movement-performance", report);
+      expect(objects).toBe(DATA_UPLOADS);
+      expect(report.interactions).toBe(20);
+      expect(new Set(report.times.map((time) => time.interaction)).size).toBe(20);
+      expect(report.times.filter((time) => !(time.total > 0) || time.response > time.total)).toEqual([]);
+      expect(report.mounted).toBeGreaterThan(0);
+      expect(report.mounted).toBeLessThanOrEqual(MOUNTED);
+      expect(report.response.p95).toBeLessThan(BUDGET);
+      await cluster.captureScreenshot(frame, "dark-data-uploads-two-hundred");
+    },
+    TIMEOUT,
+  );
+
+  it(
     "counts on the API server a list of the pods and one of the Jobs of a namespace, which the cases after it count none of",
     async () => {
       // The control of the counters the cases of KIND-14 read: a list of each kind in a namespace, made by `kubectl`
@@ -458,7 +510,7 @@ describe("long list of backups", () => {
   );
 
   it(
-    "reads the two thousand pod volume backups once at each read while their list is open, and not while the Overview is",
+    "reads the two thousand pod volume backups and the two hundred data uploads once at each read while their list is open, and not while the Overview is",
     async () => {
       // The requests the API server counted while the views read the installation `reads` times, from the end of a
       // read to the end of the last: what the page that is shown asks at each read. On the CRDs alone no controller
@@ -480,15 +532,25 @@ describe("long list of backups", () => {
         Object.fromEntries(Object.entries(counts).filter(([key]) => / (pods|jobs) /.test(key)));
 
       await cluster.showList(frame);
+      await cluster.openPage(frame, cluster.POD_VOLUME_BACKUPS);
       await cluster.waitForList(frame, cluster.POD_VOLUME_BACKUPS);
       const shown = await askedOver(CYCLES);
+
+      await cluster.openPage(frame, cluster.DATA_UPLOADS);
+      await cluster.waitForList(frame, cluster.DATA_UPLOADS);
+      const uploads = await askedOver(CYCLES);
 
       await cluster.openPage(frame, cluster.OVERVIEW);
       await cluster.overview(frame);
       // A read that was asked before the page was left may have asked them still: the window begins after it.
       await cluster.afterRead(frame);
       const overview = await askedOver(CYCLES);
-      const report = { cycles: CYCLES, podVolumeBackupsShown: shown, overviewShown: overview };
+      const report = {
+        cycles: CYCLES,
+        podVolumeBackupsShown: shown,
+        dataUploadsShown: uploads,
+        overviewShown: overview,
+      };
 
       // The report is written before anything is asserted of it: a case that fails leaves what was counted.
       console.log(`KIND-18 ${JSON.stringify(report)}`);
@@ -497,11 +559,15 @@ describe("long list of backups", () => {
       // ends at the edge of the window; none of the pod volume restores, which no view that is open shows.
       expect(shown[PVB] ?? 0).toBeGreaterThanOrEqual(CYCLES);
       expect(shown[PVB] ?? 0).toBeLessThanOrEqual(CYCLES + 1);
-      expect(shown[PVR] ?? 0).toBe(0);
-      // The Overview reads none of the families of the operations.
-      expect([overview[PVB] ?? 0, overview[PVR] ?? 0]).toEqual([0, 0]);
-      // And neither the list of the operations nor the Overview reads a pod or a Job.
-      expect([workloads(shown), workloads(overview)]).toEqual([{}, {}]);
+      expect([shown[PVR] ?? 0, shown[DU] ?? 0, shown[DD] ?? 0]).toEqual([0, 0, 0]);
+      // The same of the two hundred data uploads while their list is open, under the second version of the group.
+      expect(uploads[DU] ?? 0).toBeGreaterThanOrEqual(CYCLES);
+      expect(uploads[DU] ?? 0).toBeLessThanOrEqual(CYCLES + 1);
+      expect([uploads[PVB] ?? 0, uploads[PVR] ?? 0, uploads[DD] ?? 0]).toEqual([0, 0, 0]);
+      // The Overview reads none of the four families of the operations.
+      expect([overview[PVB] ?? 0, overview[PVR] ?? 0, overview[DU] ?? 0, overview[DD] ?? 0]).toEqual([0, 0, 0, 0]);
+      // And neither the lists of the operations nor the Overview reads a pod or a Job.
+      expect([workloads(shown), workloads(uploads), workloads(overview)]).toEqual([{}, {}, {}]);
     },
     TIMEOUT,
   );

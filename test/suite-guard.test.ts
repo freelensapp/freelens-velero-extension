@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  countedAs,
   installedVersion,
   OPERATION_KINDS,
   operationListsOf,
@@ -217,5 +218,23 @@ describe("the guard of the suites", () => {
     // What a view would ask: the reads in a namespace or by name; the lists and the watches of the whole cluster,
     // which the control plane and the host keep, are left out.
     expect(workloadReadsOf(counts)).toEqual({ "LIST pods namespace": 2, "GET jobs resource": 1 });
+  });
+
+  it("counts a request of the window as the API server does, under either version of the group, and the read of a version as none", () => {
+    const at = (path: string) => countedAs({ url: `https://renderer.example:60835/api-kube${path}` });
+
+    expect(at("/apis/velero.io/v1/namespaces/velero/backups")).toBe("LIST backups namespace");
+    expect(at("/apis/velero.io/v2alpha1/namespaces/velero/datauploads")).toBe("LIST datauploads namespace");
+    expect(at("/apis/velero.io/v2alpha1/namespaces/velero/datadownloads")).toBe("LIST datadownloads namespace");
+    expect(at("/apis/velero.io/v1/namespaces/velero/backups/nightly")).toBe("GET backups resource");
+    expect(at("/apis/velero.io/v1/backupstoragelocations")).toBe("LIST backupstoragelocations cluster");
+    expect(at("/apis/velero.io/v2alpha1/namespaces/velero/datauploads?watch=1&resourceVersion=7")).toBe(
+      "WATCH datauploads namespace",
+    );
+    expect([at("/apis/velero.io/v1"), at("/apis/velero.io/v2alpha1"), at("/api/v1/namespaces/velero/pods")]).toEqual([
+      undefined,
+      undefined,
+      undefined,
+    ]);
   });
 });

@@ -31,6 +31,8 @@ const LISTS: [cluster.ListOf, string][] = [
   [cluster.POD_VOLUME_RESTORES, "pod volume restore"],
 ];
 const PVB = "LIST podvolumebackups namespace";
+// The half of the band of the pod volume operations, the first: the second is of the data movement.
+const PODS = "[data-testid=velero-volume-band] [data-testid=velero-volume-half][data-kind=PodVolumeBackup]";
 const PVR = "LIST podvolumerestores namespace";
 // How many reads of the installation each window of the reads waits for: one every fifteen seconds.
 const CYCLES = 3;
@@ -309,7 +311,7 @@ describe("views of the backup repositories and of the pod volume operations", ()
 
         await cluster.volumeBand(frame, "rows");
         // The band shows ten rows at first: the command shows the others.
-        if (!(await way.count())) await frame.locator("[data-testid=velero-volume-more]").click();
+        if (!(await way.count())) await frame.locator(`${PODS} [data-testid=velero-volume-more]`).click();
         await way.click();
         const view = frame.locator("[data-testid=velero-pod-volume-backup-workspace]");
 
@@ -357,10 +359,11 @@ describe("views of the backup repositories and of the pod volume operations", ()
       expect([...first.groups].sort()).toEqual([...counts.entries()].sort());
       expect(first.rows).toHaveLength(10);
       expect(first.more).toBe(true);
-      await frame.locator("[data-testid=velero-volume-more]").click();
+      await frame.locator(`${PODS} [data-testid=velero-volume-more]`).click();
       await frame.waitForFunction(
-        (shown) => document.querySelectorAll("[data-testid=velero-volume-rows] tbody tr").length === shown,
-        own.length,
+        ({ half, shown }) =>
+          document.querySelectorAll(`${half} [data-testid=velero-volume-rows] tbody tr`).length === shown,
+        { half: PODS, shown: own.length },
         { timeout: 60_000 },
       );
       const all = await cluster.volumeBand(frame, "rows");
@@ -374,7 +377,7 @@ describe("views of the backup repositories and of the pod volume operations", ()
 
         // The view of the backup, shown again, shows ten rows of the band: the command shows the others.
         await cluster.volumeBand(frame, "rows");
-        if (!(await way.count())) await frame.locator("[data-testid=velero-volume-more]").click();
+        if (!(await way.count())) await frame.locator(`${PODS} [data-testid=velero-volume-more]`).click();
         await way.click();
         await frame.waitForSelector("[data-testid=velero-pod-volume-backup-workspace]", { timeout: 60_000 });
         expect((await cluster.shownView(frame))?.name).toBe(name);

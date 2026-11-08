@@ -27,10 +27,10 @@ const KINDS = [
   "volumesnapshotlocations",
   "backuprepositories",
 ];
-// The six are the ones read at every read of an installation, and the two of the pod volume operations are read only
-// by a view that shows them: the Overview holds neither.
+// The six are the ones read at every read of an installation, and the four of the pod volume operations and of the
+// data movement are read only by a view that shows them: the Overview holds none.
 const READ_ALWAYS = KINDS;
-const ON_DEMAND = ["podvolumebackups", "podvolumerestores"];
+const ON_DEMAND = ["podvolumebackups", "podvolumerestores", "datauploads", "datadownloads"];
 const BUDGET = 250;
 // How long what must not happen is waited for.
 const NOTHING = 1500;
@@ -308,8 +308,8 @@ describe("overview of an installation", () => {
         [DISCOVERY]: (counted[DISCOVERY] ?? 0) + 1,
       });
       expect(await cluster.layoutProblems(frame, OVERVIEW)).toEqual([]);
-      // The installation is chosen: its six families are read, in its namespace, none of the pod volume operations,
-      // and nothing of the whole cluster is asked again.
+      // The installation is chosen: its six families are read, in its namespace, none of the pod volume operations
+      // and of the data movement, and nothing of the whole cluster is asked again.
       await frame.click(`[data-testid="velero-choice-${cluster.E2E_OVERVIEW_NAMESPACE}"]`);
       await cluster.overview(frame);
       await frame.waitForTimeout(1500);

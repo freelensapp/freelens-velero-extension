@@ -71,6 +71,10 @@ export const SCALE_RESTORES = 1000;
 export const SCALE_OWNERS_OF_TWO = 900;
 export const SCALE_OPERATIONS_OF_THE_LAST = 200;
 export const SCALE_OPERATIONS = 2 * SCALE_OWNERS_OF_TWO + SCALE_OPERATIONS_OF_THE_LAST;
+// The data uploads of the long lists: one of each of the two hundred backups before the ones that hold no operation,
+// which hold two pod volume backups each, in the phases of the pod volume backups in turn (SPEC-0014, REQ-194). The
+// backups between them and the last one hold none, and the last one its two hundred pod volume backups alone.
+export const SCALE_DATA_UPLOADS = 200;
 // The phases the pod volume backups of the long lists are in, in turn: each one the release writes, and never
 // none, which the placement by the clock refuses.
 export const SCALE_OPERATION_PHASES = [
@@ -996,9 +1000,10 @@ export function generatedName(run: string, owner: string, index: number): string
   return `${owner}-${[...digest.subarray(0, 5)].map((byte) => characters[byte % characters.length]).join("")}`;
 }
 
-// The path a pod volume backup that completed reports, of the shape the release writes: a slash and the UID of the
-// pod volume backup, which its node agent mounts the volume at (seen on 2026-11-02 with v1.18.4). The UID of a
-// synthetic one is the cluster's, given when it is created: its path is a UID made of the run and its key instead.
+// The path a pod volume backup or a data upload that completed reports, of the shape the release writes: a slash and
+// the UID of the operation, which its pod mounts the volume at (seen on 2026-11-02 with v1.18.4 for a pod volume
+// backup; for a data upload, `MakePodPVCAttachment` of its exposer). The UID of a synthetic one is the cluster's,
+// given when it is created: its path is a UID made of the run and its key instead.
 export function volumePath(run: string, key: string): string {
   const hex = createHash("sha256").update(`${run}/path/${key}`).digest("hex");
 
@@ -1011,10 +1016,11 @@ export const VIEW_ELSEWHERE = "views-elsewhere";
 // The UID the label of a pod volume backup carries when it was written for an earlier backup of the same name.
 export const EARLIER_BACKUP_UID = "00000000-0000-4000-8000-0000000000e1";
 
-// The pod volume operations and the repositories of the views. Each operation is owned by a backup or a restore
-// of the views that is there, given with the UID the cluster gave it: its owner reference names that UID with
-// `controller: true`, and its labels the name and the UID of its owner, as the release writes them. Every status
-// is one the release writes in that phase; no node agent reads the namespace, and nothing they name exists. The
+// The pod volume operations, the data movement and the repositories of the views. Each operation is owned by a
+// backup or a restore of the views that is there, given with the UID the cluster gave it: its owner reference names
+// that UID with `controller: true`, and its labels the name and the UID of its owner, as the release writes them.
+// Every status is one the release writes in that phase, but New, which the CRDs admit and the release reads as no
+// phase; no node agent reads the namespace, and nothing they name exists. The
 // repositories carry the three labels the release writes: the operations name the triples of the first two, and
 // one names a triple of none. Their times are counted back from the start, by the hour, as the ones of the views.
 export function viewOperationFixtures(
@@ -1049,6 +1055,11 @@ export function viewOperationFixtures(
   const snapshot = (index: number) =>
     createHash("sha256").update(`${run}/snapshot/${index}`).digest("hex").slice(0, 32);
   let made = 0;
+  // The node agent writes Canceling only for an operation whose cancellation was asked, by `spec.cancel`: by its
+  // owner at its timeout, by the server or the node agent when it starts, or by a deletion; and Canceled after it,
+  // or with a message of its own for one whose volume it could not expose, which no fixture is.
+  const cancelOf = (status: Record<string, unknown> | undefined) =>
+    status?.phase === "Canceling" || status?.phase === "Canceled" ? { cancel: true } : {};
   const backupOf = (
     of: { name: string; uid: string },
     status: Record<string, unknown> | undefined,
@@ -1082,6 +1093,7 @@ export function viewOperationFixtures(
         backupStorageLocation: "views-available",
         repoIdentifier: "",
         uploaderType: more.uploaderType ?? "kopia",
+        ...cancelOf(status),
       },
       ...(status ? { status } : {}),
     };
@@ -1121,6 +1133,7 @@ export function viewOperationFixtures(
         snapshotID: snapshot(index),
         sourceNamespace: VIEW_WORKLOADS,
         snapshotSize: 64 * MEBIBYTE,
+        ...cancelOf(status),
       },
       status,
     };
@@ -1244,7 +1257,13 @@ export function viewOperationFixtures(
       completionTimestamp: at(6),
       progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 64 * MEBIBYTE },
     }),
-    restoreOf(mapped, { phase: "Failed", message: "timeout on preparing PVR" }),
+    // The preparing timeout fires on one accepted only, and keeps its acceptance.
+    restoreOf(mapped, {
+      phase: "Failed",
+      acceptedTimestamp: at(45),
+      node: "views-node-1",
+      message: "timeout on preparing PVR",
+    }),
     restoreOf(mapped, {
       phase: "Canceled",
       acceptedTimestamp: at(9),
@@ -1254,6 +1273,227 @@ export function viewOperationFixtures(
     }),
     // The legacy controller of the uploader restic writes the start and the completion, and no node.
     restoreOf(mapped, { phase: "Completed", startTimestamp: at(8), completionTimestamp: at(6) }, "restic"),
+  ];
+  // The data movement of the views, served under the second version of the group: the data uploads of the backup in
+  // progress and of the backup of a long name, and the data downloads of the mapped restore, in every phase the
+  // release writes, with what the node agent writes in each (SPEC-0014, what the release does). Each carries the
+  // labels the CSI plugin writes: the name and the UID of its owner, the operation ID, `du-` or `dd-` before the UID
+  // of the owner and the one of the claim, and the UID of the claim of an upload. Their claims, snapshots and nodes
+  // are names: nothing of them exists.
+  const operationId = (prefix: "du" | "dd", of: { uid: string }, index: number) =>
+    `${prefix}-${of.uid.slice(0, 8)}.views-pvc-uid-${index}`;
+  const uploadOf = (
+    of: { name: string; uid: string },
+    status: Record<string, unknown> | undefined,
+    more: { mover?: string } = {},
+  ): KubeResource => {
+    const index = made++;
+    const claim = `views-claim-${index}`;
+
+    return {
+      apiVersion: "velero.io/v2alpha1",
+      kind: "DataUpload",
+      metadata: {
+        name: generatedName(run, of.name, index),
+        namespace: names.views,
+        labels: {
+          ...labels,
+          "velero.io/backup-name": of.name,
+          "velero.io/backup-uid": of.uid,
+          "velero.io/pvc-uid": `views-pvc-uid-${index}`,
+          "velero.io/async-operation-id": operationId("du", of, index),
+        },
+        ownerReferences: reference("Backup", of),
+      },
+      spec: {
+        snapshotType: "CSI",
+        csiSnapshot: {
+          volumeSnapshot: `velero-${claim}-${snapshot(index).slice(0, 5)}`,
+          storageClass: "views-standard",
+          snapshotClass: "views-snapshot-class",
+          driver: "views.csi.example",
+        },
+        sourcePVC: claim,
+        ...(more.mover === undefined ? {} : { datamover: more.mover }),
+        backupStorageLocation: "views-available",
+        sourceNamespace: VIEW_WORKLOADS,
+        operationTimeout: "10m0s",
+        ...cancelOf(status),
+      },
+      ...(status ? { status } : {}),
+    };
+  };
+  const downloadOf = (
+    of: { name: string; uid: string },
+    status: Record<string, unknown> | undefined,
+    restored: string,
+  ): KubeResource => {
+    const index = made++;
+
+    return {
+      apiVersion: "velero.io/v2alpha1",
+      kind: "DataDownload",
+      metadata: {
+        name: generatedName(run, of.name, index),
+        namespace: names.views,
+        labels: {
+          ...labels,
+          "velero.io/restore-name": of.name,
+          "velero.io/restore-uid": of.uid,
+          "velero.io/async-operation-id": operationId("dd", of, index),
+        },
+        ownerReferences: reference("Restore", of),
+      },
+      spec: {
+        targetVolume: { pvc: `views-claim-${index}`, pv: "", namespace: `${VIEW_WORKLOADS}-restored` },
+        backupStorageLocation: "views-available",
+        snapshotID: restored,
+        sourceNamespace: VIEW_WORKLOADS,
+        operationTimeout: "10m0s",
+        nodeOS: "linux",
+        snapshotSize: 64 * MEBIBYTE,
+        ...cancelOf(status),
+      },
+      ...(status ? { status } : {}),
+    };
+  };
+  const uploaded = snapshot(1000);
+  const node = (moved: string, accepted = "views-node-1") => ({ node: moved, acceptedByNode: accepted });
+  const movement = [
+    uploadOf(inProgress, undefined),
+    uploadOf(inProgress, { phase: "New" }),
+    uploadOf(inProgress, { phase: "Accepted", acceptedByNode: "views-node-1", acceptedTimestamp: at(9) }),
+    // Prepared by the node agent of the node the pod that reaches the snapshot was placed on, not the one that
+    // accepted it.
+    uploadOf(inProgress, { phase: "Prepared", ...node("views-node-2"), acceptedTimestamp: at(9) }),
+    uploadOf(inProgress, {
+      phase: "InProgress",
+      ...node("views-node-2"),
+      nodeOS: "linux",
+      acceptedTimestamp: at(9),
+      startTimestamp: at(8),
+      progress: { totalBytes: 512 * MEBIBYTE, bytesDone: 128 * MEBIBYTE },
+    }),
+    uploadOf(inProgress, {
+      phase: "Canceling",
+      ...node("views-node-1"),
+      nodeOS: "linux",
+      acceptedTimestamp: at(9),
+      startTimestamp: at(8),
+      progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 8 * MEBIBYTE },
+    }),
+    uploadOf(inProgress, {
+      phase: "Completed",
+      ...node("views-node-1"),
+      nodeOS: "linux",
+      acceptedTimestamp: at(9),
+      startTimestamp: at(8),
+      completionTimestamp: at(6),
+      path: volumePath(run, "views-moved"),
+      snapshotID: uploaded,
+      progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 64 * MEBIBYTE },
+      incrementalBytes: 4 * MEBIBYTE,
+    }),
+    uploadOf(inProgress, {
+      phase: "Completed",
+      ...node("views-node-1"),
+      nodeOS: "linux",
+      acceptedTimestamp: at(9),
+      startTimestamp: at(8),
+      completionTimestamp: at(8),
+      path: volumePath(run, "views-empty"),
+      message: "volume was empty so no data was upload",
+    }),
+    uploadOf(inProgress, {
+      phase: "Failed",
+      ...node("views-node-1"),
+      acceptedTimestamp: at(9),
+      startTimestamp: at(7),
+      completionTimestamp: at(7),
+      message: "data path failed: error to run kopia\nunable to read the snapshot\nthe volume was not ready",
+    }),
+    uploadOf(inProgress, {
+      phase: "Failed",
+      acceptedByNode: "views-node-1",
+      acceptedTimestamp: at(45),
+      message: "timeout on preparing data upload",
+    }),
+    uploadOf(inProgress, {
+      phase: "Canceled",
+      ...node("views-node-1"),
+      acceptedTimestamp: at(9),
+      startTimestamp: at(5),
+      completionTimestamp: at(5),
+    }),
+    // A data mover of its own, which the node agent leaves alone: it waits for that data mover.
+    uploadOf(inProgress, undefined, { mover: "views-mover" }),
+    uploadOf(long, {
+      phase: "InProgress",
+      ...node("views-node-1"),
+      nodeOS: "linux",
+      acceptedTimestamp: at(3),
+      startTimestamp: at(2),
+      progress: { totalBytes: 10 * MEBIBYTE, bytesDone: 5 * MEBIBYTE },
+    }),
+    downloadOf(mapped, { phase: "New" }, uploaded),
+    downloadOf(mapped, { phase: "Accepted", acceptedByNode: "views-node-1", acceptedTimestamp: at(9) }, uploaded),
+    downloadOf(mapped, { phase: "Prepared", ...node("views-node-2"), acceptedTimestamp: at(9) }, uploaded),
+    downloadOf(
+      mapped,
+      {
+        phase: "InProgress",
+        ...node("views-node-2"),
+        acceptedTimestamp: at(9),
+        startTimestamp: at(8),
+        progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 32 * MEBIBYTE },
+      },
+      uploaded,
+    ),
+    downloadOf(
+      mapped,
+      {
+        phase: "Completed",
+        ...node("views-node-1"),
+        acceptedTimestamp: at(9),
+        startTimestamp: at(8),
+        completionTimestamp: at(6),
+        progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 64 * MEBIBYTE },
+      },
+      uploaded,
+    ),
+    downloadOf(
+      mapped,
+      {
+        phase: "Failed",
+        acceptedByNode: "views-node-1",
+        acceptedTimestamp: at(9),
+        completionTimestamp: at(7),
+        message: "error to expose the snapshot\nthe target claim is not bound",
+      },
+      uploaded,
+    ),
+    downloadOf(
+      mapped,
+      {
+        phase: "Canceled",
+        ...node("views-node-1"),
+        acceptedTimestamp: at(9),
+        startTimestamp: at(5),
+        completionTimestamp: at(5),
+      },
+      uploaded,
+    ),
+    // A snapshot no data upload of the installation names: the data upload went with its backup.
+    downloadOf(
+      mapped,
+      {
+        phase: "Failed",
+        acceptedByNode: "views-node-1",
+        acceptedTimestamp: at(45),
+        message: "timeout on preparing data download",
+      },
+      snapshot(1001),
+    ),
   ];
   const repository = (
     volumeNamespace: string,
@@ -1325,7 +1565,7 @@ export function viewOperationFixtures(
     repository(LONG_NAMESPACE.slice(0, 41), "kopia", ready),
     repository(`${LONG_NAMESPACE}1`, "kopia", ready, { location: LONG_LOCATION_NAME }),
   ];
-  const all = [...operations, ...repositories];
+  const all = [...operations, ...movement, ...repositories];
 
   requireCondition(
     new Set(all.map((item) => `${item.kind}/${item.metadata.name}`)).size === all.length,
@@ -1394,7 +1634,13 @@ export function scaleFixtures(
   run: string,
   placed = Date.parse("2026-09-01T00:00:00Z"),
   owners?: Record<string, string>,
-): { namespace: KubeResource; backups: KubeResource[]; restores: KubeResource[]; operations: KubeResource[] } {
+): {
+  namespace: KubeResource;
+  backups: KubeResource[];
+  restores: KubeResource[];
+  operations: KubeResource[];
+  dataUploads: KubeResource[];
+} {
   requireCondition(owner, "Fixture ownership is required");
   const names = fixtureNames(run);
   const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "synthetic" };
@@ -1404,6 +1650,7 @@ export function scaleFixtures(
   const at = placedAt(placed);
   const MEBIBYTE = 1024 * 1024;
   const operations: KubeResource[] = [];
+  const dataUploads: KubeResource[] = [];
   const taken = new Set<string>();
 
   for (let index = 0; index < SCALE_BACKUPS; index += 1) {
@@ -1489,6 +1736,98 @@ export function scaleFixtures(
           backupStorageLocation: `scale-location-${(index % 3) + 1}`,
           repoIdentifier: "",
           uploaderType: "kopia",
+          // Canceling and Canceled are written only for one whose cancellation was asked.
+          ...(phase === "Canceling" || phase === "Canceled" ? { cancel: true } : {}),
+        },
+        status: statuses[phase],
+      });
+    }
+    if (index >= SCALE_OWNERS_OF_TWO - SCALE_DATA_UPLOADS && index < SCALE_OWNERS_OF_TWO) {
+      requireCondition(
+        uid,
+        `The backup ${backup} of ${names.scale} that owns a data upload of the long lists is not there`,
+      );
+      const time = first + index * step + 120_000;
+      const second = (offset: number) => new Date(time + offset * 1000).toISOString().replace(".000Z", "Z");
+      const phase = SCALE_OPERATION_PHASES[dataUploads.length % SCALE_OPERATION_PHASES.length];
+      let name = generatedName(run, backup, 1_000_000);
+
+      for (let draw = 1; taken.has(name); draw += 1) name = generatedName(run, backup, 1_000_000 + draw);
+      taken.add(name);
+      const moved = { node: "scale-node-1", acceptedByNode: "scale-node-1" };
+      const statuses: Record<(typeof SCALE_OPERATION_PHASES)[number], Record<string, unknown>> = {
+        New: { phase },
+        Accepted: { phase, acceptedByNode: "scale-node-1", acceptedTimestamp: second(0) },
+        Prepared: { phase, ...moved, acceptedTimestamp: second(0) },
+        InProgress: {
+          phase,
+          ...moved,
+          nodeOS: "linux",
+          acceptedTimestamp: second(0),
+          startTimestamp: second(1),
+          progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 16 * MEBIBYTE },
+        },
+        Canceling: {
+          phase,
+          ...moved,
+          nodeOS: "linux",
+          acceptedTimestamp: second(0),
+          startTimestamp: second(1),
+          progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 32 * MEBIBYTE },
+        },
+        Completed: {
+          phase,
+          ...moved,
+          nodeOS: "linux",
+          acceptedTimestamp: second(0),
+          startTimestamp: second(1),
+          completionTimestamp: second(2),
+          path: volumePath(run, name),
+          snapshotID: createHash("sha256").update(`${run}/scale/${name}`).digest("hex").slice(0, 32),
+          progress: { totalBytes: 64 * MEBIBYTE, bytesDone: 64 * MEBIBYTE },
+        },
+        Failed: {
+          phase,
+          ...moved,
+          acceptedTimestamp: second(0),
+          startTimestamp: second(1),
+          completionTimestamp: second(2),
+          message: "data path failed: the snapshot could not be read",
+        },
+        Canceled: { phase, startTimestamp: second(1), completionTimestamp: second(1) },
+      };
+
+      dataUploads.push({
+        apiVersion: "velero.io/v2alpha1",
+        kind: "DataUpload",
+        metadata: {
+          name,
+          namespace: names.scale,
+          labels: {
+            ...labels,
+            "velero.io/backup-name": backup,
+            "velero.io/backup-uid": String(uid),
+            "velero.io/pvc-uid": `scale-pvc-uid-${index + 1}`,
+            "velero.io/async-operation-id": `du-${String(uid).slice(0, 8)}.scale-pvc-uid-${index + 1}`,
+          },
+          ownerReferences: [
+            { apiVersion: "velero.io/v1", kind: "Backup", name: backup, uid: String(uid), controller: true },
+          ],
+          ...at,
+        },
+        spec: {
+          snapshotType: "CSI",
+          csiSnapshot: {
+            volumeSnapshot: `velero-scale-claim-${index + 1}`,
+            storageClass: "scale-standard",
+            snapshotClass: "scale-snapshot-class",
+            driver: "scale.csi.example",
+          },
+          sourcePVC: `scale-claim-${index + 1}`,
+          backupStorageLocation: `scale-location-${(index % 3) + 1}`,
+          sourceNamespace: names.source,
+          operationTimeout: "10m0s",
+          ...(phase === "Canceling" || phase === "Canceled" ? { cancel: true } : {}),
         },
         status: statuses[phase],
       });
@@ -1529,6 +1868,7 @@ export function scaleFixtures(
       ),
     })),
     operations,
+    dataUploads,
   };
 }
 
@@ -2083,6 +2423,7 @@ export function createStaticFixtures(runtime: FixtureRuntime, run: string, contr
 export const WITHOUT_A_CONTROLLER = [
   "extensions",
   "velero-e2e-adherence",
+  "velero-e2e-data-movement",
   "velero-e2e-gate",
   "velero-e2e-journey",
   "velero-e2e-locations",
@@ -2499,7 +2840,10 @@ export function placeByTheClock(
       ) as { items: (KubeResource & { status?: { phase?: string } })[] }
     ).items;
   // What is removed first, and read until it is gone, before the rest.
-  const dependents = placement === "owners" ? kinds.filter((kind) => kind === "podvolumebackup.velero.io") : [];
+  const dependents =
+    placement === "owners"
+      ? kinds.filter((kind) => kind === "podvolumebackup.velero.io" || kind === "dataupload.velero.io")
+      : [];
   const times = (items: KubeResource[]) =>
     items.map((item) => Date.parse(item.metadata.annotations?.[PLACED_ANNOTATION] ?? ""));
   const before = listed();
@@ -2608,7 +2952,7 @@ function createAfterOwners(
   make: (placed: number, submissions?: Submissions, owners?: Record<string, string>) => KubeResource[],
   create: (items: KubeResource[]) => void,
 ): void {
-  const isOperation = (resource: KubeResource) => resource.kind === "PodVolumeBackup";
+  const isOperation = (resource: KubeResource) => resource.kind === "PodVolumeBackup" || resource.kind === "DataUpload";
 
   create(fixtures.filter((resource) => !isOperation(resource)));
   const owners = Object.fromEntries(
@@ -2753,6 +3097,7 @@ export function createViewFixtures(
   scale: number;
   restores: number;
   scaleOperations: number;
+  scaleDataUploads: number;
   again: string[];
 } {
   const names = fixtureNames(run);
@@ -2787,7 +3132,7 @@ export function createViewFixtures(
     (placed, _submissions, owners) => {
       const made = scaleFixtures(runtime.owner, run, placed, owners);
 
-      return [...made.backups, ...made.restores, ...made.operations];
+      return [...made.backups, ...made.restores, ...made.operations, ...made.dataUploads];
     },
     "owners",
   );
@@ -2797,8 +3142,9 @@ export function createViewFixtures(
     operations: operations.length,
     overview: overview.count,
     scale: SCALE_BACKUPS,
-    restores: scale.count - SCALE_BACKUPS - SCALE_OPERATIONS,
+    restores: scale.count - SCALE_BACKUPS - SCALE_OPERATIONS - SCALE_DATA_UPLOADS,
     scaleOperations: SCALE_OPERATIONS,
+    scaleDataUploads: SCALE_DATA_UPLOADS,
     again: [...(overview.again ? [names.overview] : []), ...(scale.again ? [names.scale] : [])],
   };
 }
@@ -4297,7 +4643,7 @@ export function placementWords(
   const again = [...views.again, ...adherence.again];
 
   return [
-    `PASS: ${views.views} objects of the views in ${names.views} and ${names.defaults}, ${views.overview} of the Overview in ${names.overview}, and ${views.scale} backups, ${views.restores} restores and ${views.scaleOperations} pod volume backups of the long lists in ${names.scale}, are in place, outside the reach of the controllers.`,
+    `PASS: ${views.views} objects of the views in ${names.views} and ${names.defaults}, ${views.overview} of the Overview in ${names.overview}, and ${views.scale} backups, ${views.restores} restores, ${views.scaleOperations} pod volume backups and ${views.scaleDataUploads} data uploads of the long lists in ${names.scale}, are in place, outside the reach of the controllers.`,
     `PASS: ${adherence.states} objects of the adherence in ${names.adherence}, ${adherence.split} in ${names.adherenceSplit} and ${adherence.budget} in ${names.adherenceScale}, the backups of their submissions named by the clock of their placement, are in place, outside the reach of the controllers.`,
     ...(again.length
       ? [`NOTE: the fixtures that are placed by the clock were put in place again in ${listed(again)}.`]
