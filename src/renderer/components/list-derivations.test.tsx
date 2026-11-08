@@ -19,6 +19,8 @@ import { Installation } from "../state/installation";
 
 import type { Renderer } from "@freelensapp/extensions";
 
+import type React from "react";
+
 import type { Answer, Family } from "../../common/discovery";
 
 const DISCOVERY = "/apis/velero.io/v1";
@@ -98,11 +100,19 @@ describe("what the list gives the host", () => {
     // is read there, or mobx-react would throw in the render of the host.
     const stop = autorun(() => {
       seen.push(getItems().map((item) => `${item.getName()} ${item.metadata.resourceVersion}`));
-      headers.push(customizeHeader({ info: "2 items" }).info);
+      headers.push(customizeHeader({ info: "2 items" }));
     });
 
     expect(seen).toEqual([["nightly-1 1", "nightly-2 1"]]);
-    expect(headers).toEqual(["2 items"]);
+    // The count of the host in its panel alone, and after it, in the place of the filters of the host, the one command
+    // of the list.
+    const [header] = headers as { info: unknown; filters: React.ReactElement<{ children: React.ReactElement }> }[];
+
+    expect(headers).toHaveLength(1);
+    expect(header.info).toBe("2 items");
+    expect((header.filters.props.children.props as Record<string, unknown>)["data-testid"]).toBe(
+      "velero-backups-create",
+    );
     table[path("backups", A)] = list(backup("nightly-1", "Completed"), backup("nightly-2", "Completed", "2"));
     await act(async () => {
       await installation.refresh();

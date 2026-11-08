@@ -1,3 +1,4 @@
+import { BackupCreateWorkspace } from "./backup-create-workspace";
 import { BackupNowWorkspace } from "./backup-now-workspace";
 import { BackupWorkspace } from "./backup-workspace";
 import { RepositoryWorkspace } from "./repository-workspace";
@@ -33,6 +34,8 @@ export function OpenView({ target, ...props }: OpenViewProps) {
       return <VolumeOperationWorkspace volume="DataDownload" name={target.name} {...props} />;
     case "backup-now":
       return <BackupNowWorkspace name={target.name} {...props} />;
+    case "backup-create":
+      return <BackupCreateWorkspace {...props} />;
     default:
       return <BackupWorkspace name={target.name} {...props} />;
   }

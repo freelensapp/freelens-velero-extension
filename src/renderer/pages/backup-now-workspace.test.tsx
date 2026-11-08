@@ -21,7 +21,14 @@ import type {
   KeptEnd,
   WriteConfirmAnswer,
 } from "../../common/ipc";
-import type { ArtifactClient, BackupNowClient, GateClient, KeptEndsClient, WriteClient } from "../api/ipc";
+import type {
+  ArtifactClient,
+  BackupCreateClient,
+  BackupNowClient,
+  GateClient,
+  KeptEndsClient,
+  WriteClient,
+} from "../api/ipc";
 
 const DISCOVERY = "/apis/velero.io/v1";
 const LOCATIONS = "/apis/velero.io/v1/backupstoragelocations";
@@ -130,9 +137,12 @@ function mainProcess() {
       return { ok: true, value: null };
     },
   };
-  const actions: BackupNowClient = {
+  // A backup of the form is not asked here.
+  const actions: BackupNowClient & BackupCreateClient = {
     confirmBackupNow: (...args) => new Promise((answer) => confirms.push({ args, answer })),
     runBackupNow: (...args) => new Promise((answer) => runs.push({ args, answer })),
+    confirmBackupCreate: async () => NOTHING,
+    runBackupCreate: async () => NOTHING,
   };
   const settle = async <Value,>(
     held: { answer: (answer: IpcAnswer<Value>) => void } | undefined,

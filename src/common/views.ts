@@ -18,6 +18,7 @@ export const VIEW_KINDS = [
   "data-upload",
   "data-download",
   "backup-now",
+  "backup-create",
 ] as const;
 export type ViewKind = (typeof VIEW_KINDS)[number];
 
@@ -128,6 +129,15 @@ export const VIEWS: Record<
     title: "Back up now",
     noun: "schedule",
     plural: "schedules",
+  },
+  // The workspace of a backup of the form is of no object: it is opened over the list of the Backups, and reads the
+  // locations it offers and the backups whose names it says are taken.
+  "backup-create": {
+    family: "backups",
+    reads: BACKUPS_AND_LOCATIONS,
+    title: "Create backup",
+    noun: "backup",
+    plural: "backups",
   },
 };
 

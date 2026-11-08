@@ -24,6 +24,7 @@ declare const classNames: {
   readonly choiceOrigin: "choiceOrigin";
   readonly form: "form";
   readonly formField: "formField";
+  readonly preLine: "preLine";
   readonly formError: "formError";
   readonly namespaces: "namespaces";
   readonly named: "named";
@@ -181,5 +182,9 @@ declare const classNames: {
   readonly volumeDetailTitle: "volumeDetailTitle";
   readonly volumeFields: "volumeFields";
   readonly volumeFieldName: "volumeFieldName";
+  readonly templateForm: "templateForm";
+  readonly templateField: "templateField";
+  readonly templateChoices: "templateChoices";
+  readonly templateChoice: "templateChoice";
 };
 export = classNames;

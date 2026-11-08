@@ -1085,3 +1085,115 @@ Decided while implementing, on 2026-11-08:
   backup that needs more is asked from the command line.
 - The fields of the template are checked by the same functions in both processes, in
   `src/common/backup-template.ts`, which the creation of a schedule (T4.7) shares.
+
+T4.3, the second of its pull requests, on 2026-11-08: the workspace of the backup of
+the form, with the form of the template that the creation of a schedule will share.
+The evidence, by check:
+
+- CRBAK-01, the component part: Create backup in the header of the list of the
+  Backups, which opens the workspace over the list, named in the address, with writes
+  off and on; the name the operator's, none proposed, Escape in its field taking back
+  what was typed; the storage locations offered with the default first and chosen
+  first, and the ones Velero refuses every backup for, ReadOnly or not reported
+  Available, shown with the reason and not offered; one snapshot location for each
+  provider, or none; the namespaces the host lists as checkboxes and the patterns
+  typed; what the release refuses of a field, with its words, tied to the field, and
+  an included namespace the host lists with the label that excludes it, each holding
+  the review back; a duration said as Go writes it; the command, after the count of
+  the host, whose panel says the count alone, which gives a new form once the backup of
+  the form before was created, and the form as it was left before
+  (`src/renderer/pages/backup-create-workspace.test.tsx`).
+- CRBAK-03, the component part: a name among the backups the installation read is
+  said before the review; a 409 keeps the name, with the way to the backup that has
+  it.
+- CRBAK-04: the review, its text as it came beside what it means, read whole: the
+  validation at the start, the queue, the storage location and its access mode, the
+  time to live set or the one of the server, each field set and each field not set
+  with what the release does, a namespace typed that the host does not list, one that
+  may be labelled after the review, and the resource filters beside a global volume
+  policy (`src/common/backup-create-words.test.ts`).
+- CRBAK-05: the result, the phase Velero wrote in words, Queued with its place in the
+  queue and FailedValidation with each error, which the run answers since this pull
+  request within the bounds of the contract, sixteen errors of 4,096 characters at
+  most, the others read in the view of the backup; what Velero writes into the spec
+  at the start; the way to the view of the backup (`src/main/ipc-backup-create.test.ts`,
+  `src/common/ipc.test.ts`).
+- ACT-03, ACT-09, in the views: the review asked with the name and the fields set
+  only; a field changed drops it; a token that expired asked again, and a new text
+  shown in place of the old one, nothing sent; the end shown said to the main process;
+  what was typed dropped with the installation; the command, which starts a new form
+  after a creation only, and leaves a backup being created to go on
+  (`src/renderer/state/backup-create.test.ts`).
+
+Each new case was seen failing on a change made on purpose, twenty-three in all: an empty
+list written, the review asked past what the workspace holds it back for, the place
+in the queue not said, a name read not said, a ReadOnly location offered, the default
+not chosen, the command of the list gone, the label that excludes a namespace not
+read, the warning of a global policy said always, the place in the queue and the
+errors beyond their bounds carried or not carried, a place of zero read, the way to
+the backup of a conflict gone, the template kept when the installation changed, Escape
+in the name taking back nothing, every namespace said as not listed, a text that is
+not a backup of the form taken, a token that expired not asked again; and, for the
+command that the packaged suite of the third pull request found giving the result of
+the backup before and no form, the command that starts nothing, a form being filled
+started anew, a backup being created dropped, and the fields of the backup before kept
+in the new form; and, for the command that the suites of the views of the hosted runner
+found in the panel of the count, where they read the count, the command put back
+there.
+
+The independent review of the pull request found one blocker and seven points, all
+applied. The label selector, which its field wrote again from the template at each
+key, took no space: the field keeps what is typed, as the field of the items does.
+The namespaces typed are kept apart from the ones chosen by a checkbox while they are
+typed, so that a name the host lists, typed as the beginning of a pattern, is not taken
+for its checkbox. A provider with several snapshot locations and none chosen is warned
+of, as REQ-236 of SPEC-0016 says. A storage location chosen that cannot be chosen any
+more, refused or gone since, holds the review back, said at its field. The notes of a
+choice are tied to a group around it, since the select of the host gives its field
+notes of its own and takes none, as the double of the host now does too, and no
+description names an element that is not there; what holds the review back is said at
+the field it is of, and why the review waits beside its command. Snapshot locations
+that cannot be read are said as not known, never as none, and a read of the storage
+locations that did not answer in the words of what it is. The words of ReadyToStart,
+of a backup Velero had not read when the reads ended, of a review that took the place
+of another, of the whole rule of the name, of the snapshots of CSI that Velero adds to
+the excluded resources, and of what each choice set does, are the ones the source of
+the release and the code back; the access mode of a location is said when it is
+written. The errors of a validation are carried in order within a total that keeps
+the answer within its bound, and the others are counted, which the result says. The
+state of an end shown that nothing read is gone. New cases cover a selector and
+namespaces typed key by key, Escape and Enter in the typed fields, the descriptions,
+the reads denied, the location that cannot be chosen any more, one snapshot location
+for each provider, the fields disabled and the focus at each step, the review with its
+context, and the races of the answers that come after the step moved on; twenty-six
+changes of what the review asked were seen failing.
+
+Decided while implementing, on 2026-11-08:
+
+- The workspace of the backup of the form is named in the address as
+  `backup-create/new`, over the list of the Backups, whose header holds its command
+  after the count of the host, in the place of the filters of the host, which the
+  views do not offer: the panel of the count says the count alone, as the suites of
+  the views read it.
+- The namespaces the host lists are read from its store, `namespaceStore`, which the
+  frame of the cluster holds for its own views: the extension asks the host nothing
+  more. The patterns and the names the host does not list are typed beside them,
+  separated by commas, as the lists of the resources are.
+- Any of several selectors are typed separated by ` or `, as the command line of the
+  release takes them.
+- The storage locations Velero refuses every backup for are shown under the choice,
+  with the reason, and are not among its options.
+- The place in the queue and the errors of a validation travel in the answer of the run
+  within bounds of their own; more, or longer, are read in the view of the backup.
+- The command of the list gives a new form once the backup of the form before was
+  created, as the command of Back up now gives one: the name and every field empty, the
+  default location chosen first again. A form being filled, or whose backup was not
+  created, is shown as it was left, and a backup being created goes on. An end no view
+  showed is not lost with the form: the main process keeps it for the target bar
+  (REQ-250).
+- Enter in a field that is typed asks for the review, as Enter in the name does, and
+  the focus stays there. After a failure the focus goes to the command that asks
+  again, and the failure, an alert, is said to who does not see as it appears.
+- Create backup is in the header of the list, which a list that cannot be read does
+  not show: a backup of the form is asked where the backups of the installation are
+  read, so that a name already taken can be said.

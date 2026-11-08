@@ -32,6 +32,7 @@ import {
 } from "../../common/ipc";
 
 import type { AllowanceFor } from "../../common/allowances";
+import type { BackupTemplate } from "../../common/backup-template";
 
 // What the views ask of the gate, in the words of the contract.
 export interface GateClient {
@@ -105,6 +106,25 @@ export interface BackupNowClient {
   ): Promise<Answer<BackupCreated>>;
 }
 
+// What the views ask of the main process for a backup of the form (SPEC-0017, T4.3): the confirmation, which carries
+// the name and the fields of the template and answers the text of the backup with its token, and the run, which
+// carries the name alone and sends that text.
+export interface BackupCreateClient {
+  confirmBackupCreate(
+    cluster: string,
+    namespace: string,
+    backup: string,
+    template: BackupTemplate,
+  ): Promise<Answer<WriteConfirmAnswer>>;
+  runBackupCreate(
+    cluster: string,
+    namespace: string,
+    backup: string,
+    token: string,
+    request: string,
+  ): Promise<Answer<BackupCreated>>;
+}
+
 // What the views ask of what the operator allows the downloads to do: to keep it, and to take it back.
 export interface AllowanceClient {
   allow(cluster: string, allowed: AllowanceFor): Promise<Answer<null>>;
@@ -115,7 +135,14 @@ const NO_ANSWER = failure("request-failed", "way", true, "The main process did n
 
 export class VeleroIpcRenderer
   extends Renderer.Ipc
-  implements GateClient, WriteClient, ArtifactClient, AllowanceClient, BackupNowClient, KeptEndsClient
+  implements
+    GateClient,
+    WriteClient,
+    ArtifactClient,
+    AllowanceClient,
+    BackupNowClient,
+    BackupCreateClient,
+    KeptEndsClient
 {
   // `bounded` says that the reader of the value bounds it itself: it is so for the page of a text, which
   // is larger than every other answer.
@@ -267,6 +294,33 @@ export class VeleroIpcRenderer
         token,
         request,
       },
+      readBackupCreated,
+    );
+  }
+
+  confirmBackupCreate(
+    cluster: string,
+    namespace: string,
+    backup: string,
+    template: BackupTemplate,
+  ): Promise<Answer<WriteConfirmAnswer>> {
+    return this.ask(
+      CHANNELS.writeConfirm,
+      { cluster, namespace, kind: "backup", backup, template },
+      readWriteConfirmAnswer,
+    );
+  }
+
+  runBackupCreate(
+    cluster: string,
+    namespace: string,
+    backup: string,
+    token: string,
+    request: string,
+  ): Promise<Answer<BackupCreated>> {
+    return this.ask(
+      CHANNELS.writeRun,
+      { cluster, namespace, kind: "backup", backup, token, request },
       readBackupCreated,
     );
   }

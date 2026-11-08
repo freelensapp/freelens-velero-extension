@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   ARTIFACT_TARGETS,
   artifactKind,
+  carriedErrors,
   downloadRequestName,
+  ERRORS_BOUND,
   KEPT_ENDS_BOUND,
   PAGE_BOUND,
   REQUEST_BOUND,
@@ -394,6 +396,59 @@ describe("the answers of a write of a body", () => {
       { name: "b", uid: "u", found: "yes" },
     ]) {
       expect([value, readBackupCreated(value)]).toEqual([value, undefined]);
+    }
+  });
+});
+
+describe("the errors of a validation an answer carries", () => {
+  it("carries them in order, each whole, until one does not fit, and counts the others", () => {
+    expect(carriedErrors(undefined)).toEqual({});
+    expect(carriedErrors(["one", "two"])).toEqual({ errors: ["one", "two"] });
+    expect(carriedErrors(["e".repeat(4097), "two"])).toEqual({ errorsLeft: 2 });
+    const many = Array.from({ length: 20 }, (_, at) => `error ${at}`);
+
+    expect(carriedErrors(many)).toEqual({ errors: many.slice(0, 16), errorsLeft: 4 });
+    const long = Array.from({ length: 16 }, () => "e".repeat(4096));
+
+    expect(carriedErrors(long)).toEqual({ errors: long.slice(0, 8), errorsLeft: 8 });
+    expect(ERRORS_BOUND.total).toBe(32_768);
+  });
+
+  it("reads no answer whose errors are beyond their total, and counts the others it says", () => {
+    const long = Array.from({ length: 9 }, () => "e".repeat(4096));
+
+    expect(readBackupCreated({ name: "b", uid: "u", phase: "FailedValidation", errors: long })).toBeUndefined();
+    expect(readBackupCreated({ name: "b", uid: "u", phase: "FailedValidation", errorsLeft: 3 })).toEqual({
+      name: "b",
+      uid: "u",
+      phase: "FailedValidation",
+      errorsLeft: 3,
+    });
+    expect(readBackupCreated({ name: "b", uid: "u", errorsLeft: 0 })).toBeUndefined();
+    expect(readBackupCreated({ name: "b", uid: "u", errorsLeft: 1.5 })).toBeUndefined();
+  });
+});
+
+describe("the place in the queue and the errors of a backup created, between the processes", () => {
+  it("reads the place of a backup in the queue and the errors of its validation, within their bounds", () => {
+    const created = { name: "shop", uid: "u", phase: "Queued", position: 2 };
+
+    expect(readBackupCreated(created)).toEqual(created);
+    expect(
+      readBackupCreated({ ...created, phase: "FailedValidation", position: undefined, errors: ["e"] }),
+    ).toBeUndefined();
+    const failed = { name: "shop", uid: "u", phase: "FailedValidation", errors: ["one", "two"] };
+
+    expect(readBackupCreated(failed)).toEqual(failed);
+    for (const value of [
+      { ...created, position: 0 },
+      { ...created, position: 1.5 },
+      { ...failed, errors: [] },
+      { ...failed, errors: [""] },
+      { ...failed, errors: ["e".repeat(4097)] },
+      { ...failed, errors: Array.from({ length: 17 }, () => "e") },
+    ]) {
+      expect(readBackupCreated(value)).toBeUndefined();
     }
   });
 });

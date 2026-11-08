@@ -10,7 +10,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { reaction, toJS } from "mobx";
+import { observable, reaction, toJS } from "mobx";
 import { addressChanges, addressPath, addressSearch, createPageParam, navigate, resetAddress } from "./host-address";
 import { hostComponents } from "./host-components";
 
@@ -792,6 +792,19 @@ export const Main = namespace("Main", {
   Ipc: IpcMainStub,
 } satisfies Exported<typeof Sdk.Main>);
 
+// `namespaceStore` of the host (packages/core/src/renderer/components/namespaces/store.ts at the validation target): the
+// namespaces the frame of the cluster lists, each an object of the host with its name and its labels, which a test
+// gives. The store is the host's: the extension reads its items and asks it nothing.
+export const hostNamespaces = observable.array<{ name: string; labels?: Record<string, string> }>([], { deep: false });
+const namespaceStore = {
+  get items() {
+    return hostNamespaces.map((namespace) => ({
+      getName: () => namespace.name,
+      metadata: { name: namespace.name, labels: namespace.labels ?? {} },
+    }));
+  },
+};
+
 export const Renderer = namespace("Renderer", {
   LensExtension: RendererExtensionStub,
   K8s: blockedNamespace("Renderer.K8s"),
@@ -809,6 +822,7 @@ export const Renderer = namespace("Renderer", {
     apiManager,
     detailsFor,
     menuItemFor,
+    namespaceStore,
   } satisfies Exported<typeof Sdk.Renderer.K8sApi>),
   Component: namespace("Renderer.Component", hostComponents),
   // `createPageParam` and `navigate` of the host (packages/core/src/extensions/renderer-api/navigation.ts lines 55
