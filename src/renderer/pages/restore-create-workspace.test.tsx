@@ -31,6 +31,7 @@ import type {
   KeptEndsClient,
   RestoreCreateClient,
   ScheduleCreateClient,
+  SchedulePatchClient,
   WriteClient,
 } from "../api/ipc";
 
@@ -156,13 +157,19 @@ function mainProcess() {
       return { ok: true, value: null };
     },
   };
-  const actions: BackupNowClient & BackupCreateClient & ScheduleCreateClient & RestoreCreateClient = {
+  const actions: BackupNowClient &
+    BackupCreateClient &
+    ScheduleCreateClient &
+    RestoreCreateClient &
+    SchedulePatchClient = {
     confirmBackupNow: async () => NOTHING,
     runBackupNow: async () => NOTHING,
     confirmBackupCreate: async () => NOTHING,
     runBackupCreate: async () => NOTHING,
     confirmScheduleCreate: async () => NOTHING,
     runScheduleCreate: async () => NOTHING,
+    confirmSchedulePatch: async () => NOTHING,
+    runSchedulePatch: async () => NOTHING,
     confirmRestoreCreate: (...args) => new Promise((answer) => confirms.push({ args, answer })),
     runRestoreCreate: (...args) => new Promise((answer) => runs.push({ args, answer })),
   };

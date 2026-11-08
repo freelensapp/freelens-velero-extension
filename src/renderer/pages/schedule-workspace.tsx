@@ -12,6 +12,7 @@ import { scheduleRestores, templateReferences } from "../../common/references";
 import { restoreBackupOf, scheduleCandidates } from "../../common/restore-candidates";
 import { RESTORE_CREATE_VIEW_WORDS } from "../../common/restore-create-words";
 import { countsText, holdsSubmissions, scheduleHistory } from "../../common/schedule-history";
+import { SCHEDULE_PATCH_VIEW_WORDS } from "../../common/schedule-patch-words";
 import { NOTES, ownedText, pausedText, scheduleView, zoneText } from "../../common/schedule-view";
 import { AdherenceBand } from "../components/adherence";
 import { HistoryStrip } from "../components/history-strip";
@@ -213,9 +214,17 @@ function Template({ references, location }: { references: TemplateReferences; lo
 // The commands of a schedule (SPEC-0017, REQ-252), on the line of its name: each opens the workspace of its action over
 // this view, which is as it was when the workspace closes. They are there with writes on or off: the form of an action
 // can be filled with writes off, and its review asks for them. A schedule whose name is longer than a label takes is
-// asked for no backup (REQ-255).
-function ScheduleCommands({ installation, name, uid }: { installation: Installation; name: string; uid?: string }) {
+// asked for no backup (REQ-255). Pause is offered of a schedule that is not paused, and Resume of one that is, never
+// both, with the state of the schedule the view read (REQ-274).
+function ScheduleCommands({ installation, schedule }: { installation: Installation; schedule: ScheduleResource }) {
+  const name = schedule.metadata.name;
+  const uid = schedule.metadata.uid;
   const refused = scheduleRefused(name);
+  const toggle = schedule.spec?.paused === true ? "schedule-resume" : "schedule-pause";
+  const expression =
+    typeof schedule.spec?.schedule === "string" && schedule.spec.schedule ? schedule.spec.schedule : undefined;
+  // A resume tests the expression the view read: a schedule that reports none cannot be resumed from here.
+  const unresumable = toggle === "schedule-resume" && !expression;
   // A restore is offered of the backups of the schedule that ended well, the newest Completed first (REQ-265, REQ-267).
   const backups = installation.read("backups");
   const { chosen } = scheduleCandidates(backups.items as BackupResource[], name);
@@ -249,6 +258,33 @@ function ScheduleCommands({ installation, name, uid }: { installation: Installat
       {refused ? (
         <span id="velero-schedule-back-up-now-refused" className={styles.factNote}>
           {refused}
+        </span>
+      ) : null}
+      <Button
+        plain
+        data-testid={toggle === "schedule-pause" ? "velero-schedule-pause" : "velero-schedule-resume"}
+        disabled={!uid || unresumable}
+        aria-describedby={unresumable ? "velero-schedule-resume-refused" : undefined}
+        onClick={() => {
+          if (!uid) return;
+          installation.pauseResume.start(
+            toggle,
+            { name, uid, ...(expression ? { expression } : {}) },
+            schedule.spec?.skipImmediately,
+          );
+          openView({ kind: toggle, name });
+        }}
+      >
+        <Icon material={toggle === "schedule-pause" ? "pause" : "play_arrow"} small aria-hidden />
+        {toggle === "schedule-pause" ? "Pause" : "Resume"}
+      </Button>
+      {unresumable ? (
+        <span
+          id="velero-schedule-resume-refused"
+          className={styles.factNote}
+          data-testid="velero-schedule-resume-refused"
+        >
+          {SCHEDULE_PATCH_VIEW_WORDS.noExpression(name)}
         </span>
       ) : null}
       <Button
@@ -323,7 +359,7 @@ export const ScheduleWorkspace = observer(({ installation, name, now, back, onBa
       uid={view.uid}
       back={back}
       onBack={onBack}
-      commands={<ScheduleCommands installation={installation} name={view.name} uid={view.uid} />}
+      commands={<ScheduleCommands installation={installation} schedule={schedule} />}
     >
       <div className={styles.band} data-testid="velero-schedule-status">
         <Fact name="Validation">

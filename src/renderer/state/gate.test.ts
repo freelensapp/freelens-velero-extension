@@ -529,6 +529,77 @@ describe("the frame of a cluster", () => {
     });
   });
 
+  it("asks the main process for the review and the run of a pause and of a resume, with what each carries, which the contract reads whole", async () => {
+    resetIpc();
+    const asked: [string, unknown][] = [];
+    const token = "00000000-0000-4000-8000-000000000001";
+    const text = '[{"op":"test","path":"/metadata/uid","value":"nightly-uid"}]';
+
+    ipcHandlers.set(CHANNELS.writeConfirm, (_frame, request) => {
+      asked.push([CHANNELS.writeConfirm, request]);
+      return { ok: true, value: { token, expires: 1, text } };
+    });
+    ipcHandlers.set(CHANNELS.writeRun, (_frame, request) => {
+      asked.push([CHANNELS.writeRun, request]);
+      return { ok: true, value: { name: "nightly", uid: "nightly-uid", paused: false, skipImmediately: true } };
+    });
+    const ipc = VeleroIpcRenderer.createInstance(anExtension("renderer") as never);
+    const schedule = { name: "nightly", uid: "nightly-uid" };
+    const target = { kind: "Schedule" as const, ...schedule };
+    const resume = { expression: "0 3 * * *", skipImmediately: true };
+
+    expect(await ipc.confirmSchedulePatch("synthetic-cluster", "velero", "schedule-pause", schedule)).toEqual({
+      ok: true,
+      value: { token, expires: 1, text },
+    });
+    await ipc.confirmSchedulePatch("synthetic-cluster", "velero", "schedule-resume", schedule, resume);
+    expect(
+      await ipc.runSchedulePatch(
+        "synthetic-cluster",
+        "velero",
+        "schedule-resume",
+        schedule,
+        token,
+        "request-identifier",
+      ),
+    ).toEqual({ ok: true, value: { name: "nightly", uid: "nightly-uid", paused: false, skipImmediately: true } });
+    expect(asked).toEqual([
+      [CHANNELS.writeConfirm, { cluster: "synthetic-cluster", namespace: "velero", kind: "schedule-pause", target }],
+      [
+        CHANNELS.writeConfirm,
+        { cluster: "synthetic-cluster", namespace: "velero", kind: "schedule-resume", target, resume },
+      ],
+      [
+        CHANNELS.writeRun,
+        {
+          cluster: "synthetic-cluster",
+          namespace: "velero",
+          kind: "schedule-resume",
+          target,
+          token,
+          request: "request-identifier",
+        },
+      ],
+    ]);
+    // What the views send is what the main process reads: the resume with the confirmation alone.
+    for (const [, request] of asked.slice(0, 2)) expect(readWriteConfirmRequest(request)).toEqual(request);
+    expect(
+      readWriteRunRequest({ ...(asked[2][1] as object), request: "00000000-0000-4000-8000-000000000002" }),
+    ).toEqual({ ...(asked[2][1] as object), request: "00000000-0000-4000-8000-000000000002" });
+    // An answer that is not what a schedule is after its patch is a failure of the way, never a value.
+    ipcHandlers.set(CHANNELS.writeRun, () => ({ ok: true, value: { name: "nightly", uid: "nightly-uid" } }));
+    expect(
+      await ipc.runSchedulePatch(
+        "synthetic-cluster",
+        "velero",
+        "schedule-pause",
+        schedule,
+        token,
+        "request-identifier",
+      ),
+    ).toMatchObject({ ok: false });
+  });
+
   it("asks the main process for the ends of its cluster and says which one it showed, through the way of the context", async () => {
     resetIpc();
     const asked: [string, unknown][] = [];

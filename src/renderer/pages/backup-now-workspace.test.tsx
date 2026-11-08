@@ -29,6 +29,7 @@ import type {
   KeptEndsClient,
   RestoreCreateClient,
   ScheduleCreateClient,
+  SchedulePatchClient,
   WriteClient,
 } from "../api/ipc";
 
@@ -140,7 +141,11 @@ function mainProcess() {
     },
   };
   // A backup of the form is not asked here.
-  const actions: BackupNowClient & BackupCreateClient & ScheduleCreateClient & RestoreCreateClient = {
+  const actions: BackupNowClient &
+    BackupCreateClient &
+    ScheduleCreateClient &
+    RestoreCreateClient &
+    SchedulePatchClient = {
     confirmRestoreCreate: async () => NOTHING,
     runRestoreCreate: async () => NOTHING,
     confirmBackupNow: (...args) => new Promise((answer) => confirms.push({ args, answer })),
@@ -149,6 +154,8 @@ function mainProcess() {
     runBackupCreate: async () => NOTHING,
     confirmScheduleCreate: async () => NOTHING,
     runScheduleCreate: async () => NOTHING,
+    confirmSchedulePatch: async () => NOTHING,
+    runSchedulePatch: async () => NOTHING,
   };
   const settle = async <Value,>(
     held: { answer: (answer: IpcAnswer<Value>) => void } | undefined,

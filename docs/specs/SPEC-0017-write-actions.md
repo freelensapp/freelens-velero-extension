@@ -1806,3 +1806,128 @@ of its own hold. What it found was applied:
   passes on an absent field: no one test passes on both forms of a schedule not paused,
   which is the reason now. A type nothing used was removed, the words of the identity
   name the velero command line, and a line of ARCHITECTURE was too long.
+
+T4.5, the second of its pull requests, on 2026-11-08: the workspace of the pause and of
+the resume, with the commands of the view of a schedule. The evidence, by check:
+
+- PAUSE-01, the component part
+  ([`schedule-patch-workspace.test.tsx`](../../src/renderer/pages/schedule-patch-workspace.test.tsx)):
+  Pause in the workspace of a schedule that is not paused and Resume in the one of a
+  schedule that is, never both, on the line of its name between Back up now and Restore
+  ([`schedules-page.test.tsx`](../../src/renderer/pages/schedules-page.test.tsx)); each
+  opens the workspace of its action over the view, named in the address, which fills its
+  form with writes off and asks its review with writes on, and its way back is the view
+  of the schedule; a pause offers no choice; Resume of a schedule that reports no
+  expression disabled, with the words why; the workspace opened by the address for a
+  schedule the action is not for, a pause or a resume, or for a resume with no
+  expression, says why and asks nothing; a patch of another schedule being sent said,
+  and the form given once it ended.
+- PAUSE-02, the part of the views
+  ([`schedule-patch.test.ts`](../../src/renderer/state/schedule-patch.test.ts)): skip
+  immediately proposed as the schedule carries it, true when it is true and false
+  otherwise, a word true among the others; the form kept for the same action, schedule
+  and expression, and a new one for another; the confirmation asked with what each
+  action tests and writes; a text that is not the patch asked, of another action,
+  schedule, expression or choice, or no patch, confirmed by nothing; a change of the
+  choice drops the review and its token; the run with the token of its review and the
+  identifier of the run; a token that expired asked again once, the same text sent,
+  another one shown as a new review; nothing taken for a step that was left, or of an
+  installation that changed during a run or its renewal; the ends told to the main
+  process, but one whose answer did not come back. In the workspace, the choice with its
+  note and what the schedule carries, and the words of the setting of the server for
+  none.
+- PAUSE-03
+  ([`schedule-patch-words.test.ts`](../../src/common/schedule-patch-words.test.ts)):
+  with a clock of the test, the words of a pause, with a backup of the schedule that
+  reports no phase; of a resume after an instant passed, submitted at once or skipped,
+  and before it, with and without skip immediately, each with where Velero counts from,
+  the last submission or a last skip later than it; with one backup or two that hold the
+  schedule, the run that is due after them or skipped, and with the backups not read,
+  which it says; of an interval, counted from the last backup, from the resume, or from
+  a submission that waits for a backup; counted by the clock of the cluster when it is
+  ahead of this machine; in a zone the expression names, with the hour it repeats, the
+  runs the ones of the parser of SPEC-0013; with the zone of the server not known, said
+  of the runs as well, an expression this version cannot read, which says nothing of a
+  skip, one with no instant or none within five years, where a skip skips nothing, one
+  the server refused, a schedule Velero never read, a phase this version does not know,
+  and nothing read; what the choice writes in place of what the schedule carries; the
+  words of writes off of each action; and what the result says.
+- PAUSE-04, the component part: while the main process is asked, the words that say so
+  have the focus; the review shows the text of the main process as it came, beside what
+  it means, with the context and the namespace, and is left by its command or Escape,
+  with the workspace that closes, with writes that go off, and with an installation that
+  changes; the patch is sent with the token of its review; the result says the schedule
+  paused, or resumed with what skip immediately holds, and read so after an answer that
+  was lost, with the way to the view of the schedule, and stays when the views read the
+  schedule since; a review answered with another patch is refused; a patch whose answer
+  is not known is said in the words of the main process, with the way to its view, in
+  sight with the focus and told shown when the views read the schedule since as the
+  action is not for.
+
+Each new case was seen failing on a change made on purpose, fifty-one in all: the choice
+proposed from any value, kept for another expression, action or schedule, or not changed
+by the drop; a review asked with writes off or for a resume with no expression; a text
+of another action, schedule, expression or choice confirmed; a token that expired sent,
+another text sent; a run that failed said with nothing left, a late answer taken for a
+step that was left or dropped; an end told or not told against its stage; a review kept
+when the choice, the workspace or the writes went; the words of a pause without the
+backup that runs, of a resume computed with the other choice, with no backup at once, no
+hold, five instants after one, no hour that repeats, no interval, a refusal said as not
+known, the choice said the other way, and no runs at all; Pause or Resume offered
+whatever the schedule, the choice the schedule carries not given; a pause shown with the
+meaning of a resume; the found words, Escape, the focus of the review, the words of an
+answer not known, and the end told; and the client without the resume or reading any
+answer. A state of an end that no view read was removed. After the independent review,
+the fifty-one were made again on its code, four of them written anew where the review
+changed it, and thirteen more, each seen failing: the notes of the hold dropped, the
+anchor not said after a run that is due or held, the skip said of an expression this
+version cannot read, a schedule never read said as not known, the clock of this machine,
+one backup said for two, the instant of an interval after a hold, the runs not said not
+known, the words of an action not offered in place of a patch being sent, Resume enabled
+with no expression, the words of writes off of a resume said of a pause, and a renewal
+taken for an installation that changed.
+
+Decided while implementing, on 2026-11-08:
+
+- The workspace of a pause and of a resume is named in the address as
+  `schedule-pause/<schedule>` and `schedule-resume/<schedule>`, on the page of the
+  Schedules.
+- Pause or Resume stands between Back up now and Restore, as the restatement of SCHED-11
+  orders them.
+- What a resume does is computed as the adherence of SPEC-0013 computes it for a paused
+  schedule, with skip immediately false, by the clock of the cluster, and the choice is
+  said over it with where Velero counts from and what the computation notes: the same
+  anchor, zone and instants as the view of the schedule. The runs after the resume begin
+  with the backup of a run that is due, at once or once the backups that hold the
+  schedule ended.
+- An interval says its first run after the resume alone, since each one is counted from
+  the submission before it, and none after a hold, whose submission has no time known.
+- A schedule Velero never read is said as REQ-230 of SPEC-0016 says a schedule created
+  paused: a run is due at once when an instant of the expression passed since the
+  creation, unless skip immediately is true.
+- The review takes the place of the form: the choice is made again once the review is
+  left, and a change of it drops a review.
+- The workspace opened by the address for a schedule the action is not for, or for a
+  resume of a schedule that reports no expression, says why and offers no review, under
+  the words of a failure when a run failed; Resume of a schedule that reports no
+  expression is disabled in its view, with the words why.
+
+The independent review of this pull request, read-only, found no blocker, two points of
+medium weight and others, all applied:
+
+- The review of a resume of an expression with no instant said that skip immediately
+  skips the first look: the next run counted from a skip is the zero time as well, and
+  Velero submits at that look; it says so now, and says nothing of a skip for an
+  expression this version cannot read.
+- A run that failed was hidden by the words of an action not offered once the views read
+  the schedule since, and told shown all the same: the failure stays in sight above
+  them, with the focus.
+- The words of the review named the UID; the hold notes of the computation, where the
+  anchor counts from, the runs not known, two backups that hold the schedule, an
+  interval after a hold, a schedule never read, the clock of the cluster, a time of a
+  skip as the views write a time, the words of writes off of a pause, and Resume with no
+  expression were said otherwise or not at all: each is as above.
+- Cases were missing for the installation that changes, a late renewal, the result after
+  a read, the words of an action not offered, a patch of another schedule, the focus
+  while asking, and the namespace of the review, and the evidence said more than the
+  cases proved: all written, and the thirteen changes above seen failing.

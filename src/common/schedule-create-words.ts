@@ -141,8 +141,8 @@ export function withZonePlaceholder(expression: string): string {
 }
 
 // The words of the zone the runs are said in, and of what the server must know of it; why the offset of the server is
-// not derived, in words that go on a sentence, when it is not.
-function zoneWords(zone: ReviewZone, expression: string, why: string): string {
+// not derived, in words that go on a sentence, when it is not. The review of a resume says them as well.
+export function zoneWords(zone: ReviewZone, expression: string, why: string): string {
   switch (zone.of) {
     case "named":
       return `The runs are in the zone ${zone.zone.of === "named" ? zone.zone.name : ""}, which the expression names. The server of the official image of the release knows the zones by their names; a server built otherwise must know this one, which the extension does not read.`;

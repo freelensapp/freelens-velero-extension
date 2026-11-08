@@ -922,7 +922,7 @@ describe("views of the schedules", () => {
   );
 
   it(
-    "offers no way to select, edit, delete, pause or run a schedule, by pointer or by keyboard, and Back up now writes nothing by itself",
+    "offers no way to select, edit, delete or run a schedule, by pointer or by keyboard, and Back up now and Pause write nothing by themselves",
     async () => {
       const list = frame.locator("[data-testid=velero-schedules]");
 
@@ -975,11 +975,12 @@ describe("views of the schedules", () => {
           ),
         );
 
-      // The way back, Back up now, Restore, the ways to the other views and the marks of the line: nothing that
-      // writes by itself (SCHED-11 as SPEC-0017 restates it).
+      // The way back, Back up now, Pause, which a schedule that is not paused is offered, Restore, the ways to the
+      // other views and the marks of the line: nothing that writes by itself (SCHED-11 as SPEC-0017 restates it).
       expect(controls.filter((control) => control !== "mark" && !control.startsWith("velero-open-"))).toEqual([
         "velero-back",
         "velero-schedule-back-up-now",
+        "velero-schedule-pause",
         "velero-schedule-restore",
       ]);
       expect(await frame.locator("[data-testid=velero-schedule-workspace]").innerText()).not.toMatch(
@@ -989,6 +990,12 @@ describe("views of the schedules", () => {
       await frame.click("[data-testid=velero-schedule-back-up-now]");
       await frame.waitForSelector("[data-testid=velero-backup-now-workspace]", { timeout: 30_000 });
       expect(await frame.locator("[data-testid=velero-backup-now-review]").count()).toBe(0);
+      await cluster.closeWorkspace(frame);
+      await frame.waitForSelector("[data-testid=velero-schedule-workspace]", { timeout: 30_000 });
+      // Pause opens its workspace over the view, and writes nothing: no review without writes on.
+      await frame.click("[data-testid=velero-schedule-pause]");
+      await frame.waitForSelector("[data-testid=velero-schedule-pause-workspace]", { timeout: 30_000 });
+      expect(await frame.locator("[data-testid=velero-schedule-patch-review]").count()).toBe(0);
       await cluster.closeWorkspace(frame);
       await frame.waitForSelector("[data-testid=velero-schedule-workspace]", { timeout: 30_000 });
       await cluster.closeWorkspace(frame);
