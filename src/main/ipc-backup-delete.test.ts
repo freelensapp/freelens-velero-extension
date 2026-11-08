@@ -578,7 +578,9 @@ describe("the run of the deletion of a backup", () => {
         {
           gate,
           now: () => state.now,
-          sleep: async () => undefined,
+          sleep: async (milliseconds) => {
+            state.now += milliseconds;
+          },
         },
         "frame",
         {
@@ -844,7 +846,14 @@ describe("what the deletion of a backup checks before and after its creation", (
     });
     expect(
       await runBackupDelete(
-        { gate, now: () => state.now, sleep: async () => undefined, keep: (_request, end) => kept.push(end) },
+        {
+          gate,
+          now: () => state.now,
+          sleep: async (milliseconds) => {
+            state.now += milliseconds;
+          },
+          keep: (_request, end) => kept.push(end),
+        },
         "frame",
         {
           cluster: "cluster-a",

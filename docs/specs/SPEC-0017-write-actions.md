@@ -1990,7 +1990,34 @@ The evidence, by check:
   never the backup deleted before a read showed it gone
   ([`kept-end-words.test.ts`](../../src/common/kept-end-words.test.ts)).
 
-{MUTATIONS}
+Each new case was seen failing on a change made on purpose, fifty-nine in all: the check
+of a phase in progress left out, and Finalizing out of the phases Velero refuses; the
+check of the UID of the backup left out; the name typed not compared; the text kept with
+the token taken of another namespace, of another backup or of another UID; the read of
+the backup at the run not looked at, a write cancelled or a frame gone before the
+creation sent to; a dropped answer not looked for, and looked for with the signal of the
+write; requests that cannot be read with the backup there, and none with the backup
+there, said otherwise; an answer of another kind, of no UID, of another backup or of
+another UID of a backup taken; each of the six ends swapped for another or merged with
+it, a request Processed with no error said completed while the backup is there, an end
+that is final read again and one that is not taken for final; a request made before the
+minute of the margin taken, the oldest followed, a credential taken for a read the
+identity may not make, a read that failed taken for a request gone, another backup of
+the name taken for the one of the request; the look after a lost answer read on with the
+signal of the write, and said with no mark that it was found; the errors, the phase of
+the backup and the mark of the requests not read left out of the answer; an end that was
+not sent kept; the label of the name not cut, the prefix of the generated name without
+its hyphen, a text read back by its content rather than its bytes, a request of no
+backup, of no UID or of no namespace read back; the adapter with no check of the
+namespace of the text, of the name of its backup or of the UID of the selector, taking a
+request of another namespace or of another UID, creating a DeleteBackupRequest with a
+generated name, and listing by the name uncut; the contract taking a deletion of another
+target or with no name typed, an end kept of a deletion with no end or with a phase, an
+end that is not one, and a mark of the requests not read that is not true; the end kept
+with no mark that it was found, the confirmation of a deletion through the gate alone, a
+deletion kept as a backup asked from a schedule; and the words of the target bar of a
+refusal and of every end. A check of the bound of the text, which the names the contract
+bounds never reach, was removed.
 
 Decided while implementing, on 2026-11-08:
 
