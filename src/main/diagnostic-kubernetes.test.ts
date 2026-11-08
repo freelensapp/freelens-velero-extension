@@ -109,6 +109,7 @@ describe("the create-only adapter, through the client of the host", () => {
       "assertCurrent",
       "certificate",
       "constructor",
+      "createBackup",
       "createDownload",
       "createGenerated",
       "list",
@@ -262,6 +263,20 @@ describe("the create-only adapter, through the client of the host", () => {
       verdict: undefined,
     });
     expect(value.host.requests).toHaveLength(1);
+    // A creation the cluster answered is said apart: it may have been made.
+    value.catalog.entry = ENTRY;
+    const text = JSON.stringify({
+      apiVersion: "velero.io/v1",
+      kind: "Backup",
+      metadata: { name: "daily-1", namespace: "velero" },
+      spec: {},
+    });
+
+    await expect(value.api.createBackup("velero", text, value.signal)).rejects.toMatchObject({
+      code: "target-changed",
+      verdict: "answered",
+    });
+    expect(value.host.requests.map((item) => item.method)).toEqual(["GET", "POST"]);
   });
 
   it("reads every answer by its status, which the client gives whatever it is", async () => {
@@ -292,8 +307,13 @@ describe("the create-only adapter, through the client of the host", () => {
       ],
       [404, expect.objectContaining({ code: "not-found" }), expect.objectContaining({ code: "not-found" })],
       [409, expect.objectContaining({ code: "conflict" }), expect.objectContaining({ code: "conflict" })],
-      // A creation the server refused for its content was not made; one it failed may have been.
-      [422, expect.objectContaining({ code: "request-failed" }), expect.objectContaining({ code: "request-failed" })],
+      // A creation the server refused for its content was not made, which is said as such; one it failed may have
+      // been.
+      [
+        422,
+        expect.objectContaining({ code: "validation", verdict: "refused" }),
+        expect.objectContaining({ code: "validation", verdict: "refused" }),
+      ],
       [
         500,
         expect.objectContaining({ code: "request-failed" }),
@@ -339,13 +359,13 @@ describe("the create-only adapter, through the client of the host", () => {
       [403, "forbidden"],
       [404, "not-found"],
       [409, "conflict"],
-      [422, "request-failed"],
+      [422, "validation"],
       [500, "submission-unknown"],
     ]);
     expect(parsedGets.map(([code, error]) => [code, rejectionOf(error, false).code])).toEqual([
       [404, "not-found"],
       [409, "conflict"],
-      [422, "request-failed"],
+      [422, "validation"],
       [500, "request-failed"],
     ]);
     // The error of a fetch that got no answer: a read did not reach the server, a creation may have.
@@ -582,6 +602,40 @@ describe("the create-only adapter, through the client of the host", () => {
     expect(generated.metadata.name).toBe("status-generated");
     expect(host.requests.map((item) => item.method)).toEqual(["POST", "POST", "POST"]);
     expect(host.requests[2].body).toMatchObject({ metadata: { generateName: "status-" }, spec: {} });
+  });
+
+  it("creates the backup of a text as it is, byte for byte, and sends nothing of a text that is not a backup of the namespace", async () => {
+    const { api, host, signal } = fixture();
+    const text = JSON.stringify(
+      { apiVersion: "velero.io/v1", kind: "Backup", metadata: { name: "daily-1", namespace: "velero" }, spec: {} },
+      null,
+      2,
+    );
+
+    await api.createBackup("velero", text, signal);
+    expect(host.requests.map((item) => [item.method, item.path, item.text])).toEqual([
+      ["POST", `${API}/backups`, text],
+    ]);
+    const refused = (body: Record<string, unknown> | string) => () =>
+      api.createBackup("velero", typeof body === "string" ? body : JSON.stringify(body), signal);
+    const backup = { apiVersion: "velero.io/v1", kind: "Backup", metadata: { name: "daily-1", namespace: "velero" } };
+
+    for (const body of [
+      "not json",
+      { ...backup, kind: "Restore" },
+      { ...backup, apiVersion: "velero.io/v2alpha1" },
+      { ...backup, metadata: { name: "daily-1", namespace: "elsewhere" } },
+      { ...backup, metadata: { generateName: "daily-", namespace: "velero" } },
+      { ...backup, metadata: { name: "daily-1", namespace: "velero", generateName: "daily-" } },
+      { ...backup, metadata: { name: "Daily", namespace: "velero" } },
+      { ...backup, metadata: { name: "a".repeat(217), namespace: "velero" } },
+      // A name the form of the backup refuses: no "." next to another "." or to a "-".
+      { ...backup, metadata: { name: "a..b", namespace: "velero" } },
+      { ...backup, metadata: { name: "a-.b", namespace: "velero" } },
+      { ...backup, status: { phase: "Completed" } },
+    ])
+      expect(refused(body)).toThrow("validation");
+    expect(host.requests).toHaveLength(1);
   });
 
   it("creates a request for one of the eight artifacts, and sends nothing for any other target", async () => {

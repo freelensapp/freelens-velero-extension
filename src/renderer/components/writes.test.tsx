@@ -137,6 +137,8 @@ describe("the writes in the target bar", () => {
     expect(words.first).toContain("kind-local-demo");
     expect(words.second).toContain("DownloadRequest");
     expect(words.second).toContain("ServerStatusRequest");
+    // The actions name themselves as each one lands (SPEC-0017, REQ-245).
+    expect(words.second).toContain("a Backup from a schedule, asked from the view of the schedule");
     // Nothing is on before the dialog is answered.
     expect(installation.writes).toEqual({ on: false });
     await act(async () => {

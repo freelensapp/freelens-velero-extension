@@ -173,8 +173,9 @@ Turn writes on for the installation velero-demo of the cluster local-demo
 Until they are turned off, or another installation is selected, the extension
 may create in that namespace the requests the views ask for on purpose: a
 DownloadRequest for the log, the results, the resources or the volumes of an
-operation, and a ServerStatusRequest for the version of the server. Each one is
-confirmed where it is asked for. Nothing else is written.
+operation, a ServerStatusRequest for the version of the server, and a Backup from
+a schedule, asked from the view of the schedule. Each one is confirmed where it is
+asked for. Nothing else is written.
 ```
 
 These identifiers are synthetic. The tab of an artifact and the band of the
@@ -411,3 +412,18 @@ green on the nightly of the validation target on 2026-10-17, as the
 records: writes turned on, the text arrived, one creation was counted on the API
 server, no kubectl was left, and the plugin ran under the proxy of Freelens alone,
 never under the extension or the kubectl of the tunnel.
+
+### 2026-11-08: The Text Of A Body (T4.2 Of SPEC-0017)
+
+As the table of the amendments of
+[SPEC-0017](SPEC-0017-write-actions.md#the-amendments-the-slices-bring) says, approved
+with it: `write.confirm` answers, for a write whose body the review shows, the text
+of that body beside the token and its expiry, written once by the main process, and
+the run of that write carries the token and the identifier of the request, and
+nothing of the body: the main process sends the text it kept with the token. A
+confirmation is for its kind, its namespace, its target and, for a backup asked from
+a schedule, the name of the backup, and its token runs for nothing else. The first
+kind of a body is `backup-from-schedule`, with the first pull request of T4.2; the
+rest of this spec is read with the amendment, and is not changed by it. The text
+travels in the answer of the confirmation, within the bound of a request: one the
+answer cannot carry is not confirmed, and no token is given for it.

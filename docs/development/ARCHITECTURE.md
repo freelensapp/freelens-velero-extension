@@ -806,6 +806,14 @@ refuses one that is not there, not connected, or whose kubeconfig path or contex
 name changed since writes were turned on, before anything is sent; it reads the
 entry again once the cluster answered, and drops the answer of a cluster that
 changed meanwhile. It validates exact namespace/name plus UID presence on reads.
+Since the first pull request of T4.2 of
+[SPEC-0017](../specs/SPEC-0017-write-actions.md) it reads a Schedule and creates a
+Backup asked from it, from the text the review showed, sent byte for byte, which it
+refuses before anything leaves when the text is not a Backup of the namespace with
+a name the form of the backup takes; a 422 of the API server is a refusal of the
+content, said as validation, for every write, and told from what the adapter
+refuses to send by itself. A creation the cluster answered while its entry changed
+is said apart, since it may have been made.
 
 A creation that got no answer, from a fetch that failed, the deadline, an answer
 that cannot be read or is too large, or a 5xx, is an unknown submission, never an
@@ -897,8 +905,10 @@ read before every request of the adapter, and its state is watched by a reaction
 on the catalog of the host. The proxy of Freelens authenticates as the connection
 of the host does, credential plugins included: the extension runs no plugin and
 refuses no kind of authentication, and what the identity may not do is what the
-cluster refuses. A ServerStatusRequest and a DownloadRequest are the two writes the
-gate lets through.
+cluster refuses. The writes the gate lets through are a ServerStatusRequest, a
+DownloadRequest and, since the first pull request of T4.2 of
+[SPEC-0017](../specs/SPEC-0017-write-actions.md), a Backup asked from a schedule;
+each action of SPEC-0017 adds its kind with its slice.
 
 The trust model of Freelens v2 (D5 of SPEC-0015), which the binding lives in: the
 boundary of v2 is between the extensions and the application, not between

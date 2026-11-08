@@ -762,6 +762,15 @@ describe("the procedures of a DownloadRequest", () => {
       retry: false,
       text: "The cluster refused the creation of a DownloadRequest: the identity needs the verb create on downloadrequests of the namespace.",
     });
+    // A 422: the API server refused the request as written, which is not a name the adapter could not send.
+    adapter.createDownload.mockRejectedValueOnce(new DiagnosticError("validation", undefined, "refused"));
+    await expect(run(await confirm(), randomUUID())).resolves.toEqual({
+      ok: false,
+      code: "validation",
+      stage: "creation",
+      retry: false,
+      text: "The cluster refused the request as written. No request was created.",
+    });
     state.phase = "New";
     const waited = randomUUID();
 

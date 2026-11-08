@@ -54,7 +54,8 @@ interface ClusterGate<Adapter> {
   owner?: GateOwner;
   connection?: Connection;
   adapter?: Adapter;
-  confirmations: Map<string, { sender: string; signature: string; expires: number }>;
+  // A token with its frame, what it confirms, its expiry, and the text of the body it was confirmed for.
+  confirmations: Map<string, { sender: string; signature: string; expires: number; text?: string; at: number }>;
   writes: Map<string, Write>;
 }
 
@@ -74,14 +75,29 @@ export const WRITES_BOUND = 16;
 const NOT_CONNECTED = () => failure("target-changed", "catalog", false, CLUSTER_WORDS.disconnected);
 
 // What a confirmation is for: the namespace, the kind of the write, its target and, for a DownloadRequest,
-// the artifact. A token confirmed for the log of a backup does not run for its results.
+// the artifact, for a backup asked from a schedule the name of the backup. A token confirmed for the log of a
+// backup does not run for its results, and one confirmed for a name does not create another.
 export function signatureOf(
   namespace: string,
   kind: WriteKind,
   target: WriteTarget | undefined,
   artifact?: ArtifactTarget,
+  backup?: string,
 ): string {
-  return JSON.stringify([namespace, kind, target ? [target.kind, target.name, target.uid] : null, artifact ?? null]);
+  return JSON.stringify([
+    namespace,
+    kind,
+    target ? [target.kind, target.name, target.uid] : null,
+    artifact ?? null,
+    ...(backup === undefined ? [] : [backup]),
+  ]);
+}
+
+// What a confirmation keeps beside its signature: the name of the backup it is for, and the text of the body the
+// review showed, which the run sends.
+export interface Confirmed {
+  backup?: string;
+  text?: string;
 }
 
 export class WriteGate<Adapter extends GateAdapter> {
@@ -237,6 +253,16 @@ export class WriteGate<Adapter extends GateAdapter> {
     if (gate.namespace) for (const listener of this.listeners) listener(cluster);
   }
 
+  // The adapter of a cluster whose writes are on for the namespace, for what a confirmation reads first.
+  opened(cluster: string, namespace: string): { ok: true; value: Adapter } | Failure {
+    const gate = this.gateOf(cluster);
+
+    if ("ok" in gate) return gate;
+    const refused = this.open(gate, namespace);
+
+    return refused ?? { ok: true, value: gate.adapter as Adapter };
+  }
+
   // A confirmation for one exact target, and one artifact of it, for the frame that asks it.
   confirm(
     sender: string,
@@ -245,6 +271,7 @@ export class WriteGate<Adapter extends GateAdapter> {
     kind: WriteKind,
     target: WriteTarget | undefined,
     artifact?: ArtifactTarget,
+    confirmed: Confirmed = {},
   ): { ok: true; value: { token: string; expires: number } } | Failure {
     const gate = this.gateOf(cluster);
 
@@ -263,7 +290,13 @@ export class WriteGate<Adapter extends GateAdapter> {
     const token = randomUUID();
     const expires = this.now() + TOKEN_LIFETIME;
 
-    gate.confirmations.set(token, { sender, signature: signatureOf(namespace, kind, target, artifact), expires });
+    gate.confirmations.set(token, {
+      sender,
+      signature: signatureOf(namespace, kind, target, artifact, confirmed.backup),
+      expires,
+      at: this.now(),
+      ...(confirmed.text === undefined ? {} : { text: confirmed.text }),
+    });
     return { ok: true, value: { token, expires } };
   }
 
@@ -304,7 +337,8 @@ export class WriteGate<Adapter extends GateAdapter> {
     token: string,
     request: string,
     artifact?: ArtifactTarget,
-  ): { ok: true; value: { adapter: Adapter; write: Write } } | Failure {
+    backup?: string,
+  ): { ok: true; value: { adapter: Adapter; write: Write; text?: string; confirmedAt: number } } | Failure {
     const gate = this.gateOf(cluster);
 
     if ("ok" in gate) return gate;
@@ -316,7 +350,7 @@ export class WriteGate<Adapter extends GateAdapter> {
     if (
       !held ||
       held.sender !== sender ||
-      held.signature !== signatureOf(namespace, kind, target, artifact) ||
+      held.signature !== signatureOf(namespace, kind, target, artifact, backup) ||
       held.expires <= this.now()
     )
       return failure(
@@ -339,7 +373,15 @@ export class WriteGate<Adapter extends GateAdapter> {
     };
 
     gate.writes.set(request, write);
-    return { ok: true, value: { adapter: gate.adapter as Adapter, write } };
+    return {
+      ok: true,
+      value: {
+        adapter: gate.adapter as Adapter,
+        write,
+        confirmedAt: held.at,
+        ...(held.text === undefined ? {} : { text: held.text }),
+      },
+    };
   }
 
   // A write ended: it stays known for its status, and is forgotten among the last ones.

@@ -308,6 +308,10 @@ describe("the words of a DownloadRequest that did not end with its file", () => 
     expect(downloadFailure("validation", "creation", context).text).toBe(
       "The request could not be written for the cluster: a name is not one that can be sent. No request was created.",
     );
+    // The API server refused the request as written: it is not the adapter that could not send a name.
+    expect(downloadFailure("validation", "creation", { ...context, verdict: "refused" }).text).toBe(
+      "The cluster refused the request as written. No request was created.",
+    );
     expect(downloadFailure("validation", "certificate", context).text).toContain(
       "What the storage location says of its certificate is not something the extension can use",
     );
