@@ -326,7 +326,7 @@ and the rest of this spec is read with it:
 | --- | --- |
 | The evidence of BACK-09 | The list of the Backups has Create backup in its header, which opens the workspace of SPEC-0017 and writes nothing by itself, and no other command: no selection, no menu of a row and nothing that removes |
 
-With T4.3 the header of the list has Create backup, beside the count of the host:
+With T4.3 the header of the list has Create backup, after the count of the host:
 the command opens the workspace of the backup of the form over the list, named in the
 address, and writes nothing by itself. It is proven at the component layer, with
 writes off and on, in

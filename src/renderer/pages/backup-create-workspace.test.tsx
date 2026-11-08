@@ -239,6 +239,12 @@ afterEach(() => {
 describe("create backup, from the list of the Backups", () => {
   it("opens the form over the list, named in the address, from the one command of the list, with writes off", async () => {
     mount();
+    await screen.findByTestId("velero-backups-create");
+    // The command is after the count of the host, whose panel says the count alone.
+    const panel = document.querySelector("[data-testid=velero-backups] .info-panel");
+
+    await waitFor(() => expect(panel?.textContent).toMatch(/^\d+ items?$/));
+    expect(panel?.contains(screen.getByTestId("velero-backups-create"))).toBe(false);
     await createBackup();
     expect(openViews()).toEqual([{ kind: "backup-create", name: "new" }]);
     expect(screen.getByTestId(`${ID}-name`).textContent).toBe("Create backup");
