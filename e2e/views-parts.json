@@ -74,7 +74,7 @@
         "^src/renderer/(state|api)/",
         "^src/renderer/navigation\\.",
         "^src/renderer/components/(target-bar|workspace\\.|write-confirmation|backup-template-form|template-choices|family-page|artifact-viewer|views-frame)",
-        "^src/common/(backup-from-schedule|backup-now-words|backup-create-words|backup-form|backup-template|label-selector|go-duration|kept-end-words|ipc|location-view|schedule-history|schedule-create-words|schedule-form|views)\\.",
+        "^src/common/(backup-from-schedule|backup-now-words|backup-create-words|backup-form|backup-template|label-selector|go-duration|kept-end-words|ipc|location-view|schedule-adherence|schedule-history|schedule-create-words|schedule-form|views)\\.",
         "^e2e/__tests__/velero-e2e-actions\\."
       ]
     }

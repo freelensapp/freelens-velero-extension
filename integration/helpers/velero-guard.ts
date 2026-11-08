@@ -59,6 +59,32 @@ export function writesOf(
 }
 
 /**
+ * The codes of the requests of one kind that change something, from what was
+ * counted between two readings by verb and code (`POST 201`): the reads left
+ * out, and for the schedules the PATCH its controller sends at every look,
+ * within the bound of the whole minutes of the window and two, as `writesOf`
+ * leaves it out.
+ */
+export function codeWritesOf(
+  resource: string,
+  counts: Record<string, number>,
+  patchedAtEveryLook: boolean,
+  minutes: number,
+): Record<string, number> {
+  if (!Number.isFinite(minutes) || minutes < 0) {
+    throw new Error(`The writes are counted over a window of minutes, and ${minutes} is not one`);
+  }
+  const looks = resource === "schedules" && patchedAtEveryLook ? Math.floor(minutes) + 2 : 0;
+
+  return Object.fromEntries(
+    Object.entries(counts)
+      .filter(([key]) => !key.startsWith("GET "))
+      .map(([key, count]) => [key, key === "PATCH 200" ? Math.max(0, count - looks) : count] as const)
+      .filter(([, count]) => count > 0),
+  );
+}
+
+/**
  * What the snapshot of a suite holds of an object of the namespace of the
  * installation beside its identity, which a write of the suite would change:
  * the version and the status of a schedule, the one the controller validated,

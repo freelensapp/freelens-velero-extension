@@ -37,10 +37,10 @@ const OPENED = "backup-finalizingpartiallyfailed";
 const RESTORES = cluster.RESTORES;
 const RESTORED = "restore-mapped";
 const LONG_RESTORE = cluster.LONG_RESTORE_NAME;
-// The views that are checked, each in both themes at every size: eight of the tabs, then the forty-six
-// of the pages, four of them of the adherence of the schedules, ten of the backup repositories, of the pod
-// volume operations and of the data movement, two of Back up now and two of Create backup.
-const VIEWS = 54;
+// The views that are checked, each in both themes at every size: eight of the tabs, then the forty-eight of the
+// pages, four of them of the adherence of the schedules, ten of the backup repositories, of the pod volume operations
+// and of the data movement, two of Back up now, two of Create backup and two of Create schedule.
+const VIEWS = 56;
 const OVERVIEW = cluster.OVERVIEW;
 const SCHEDULES = cluster.SCHEDULES;
 const SCHEDULED = "views-history";
@@ -71,6 +71,11 @@ const NAME_FIELD = `${backUpNow("field")} input, input${backUpNow("field")}`;
 // The parts of the workspace of the backup of the form, and its field of the name.
 const createBackup = (id: string) => `[data-testid=velero-backup-create-${id}]`;
 const CREATE_FIELD = `${createBackup("field")} input, input${createBackup("field")}`;
+const createSchedule = (id: string) => `[data-testid=velero-schedule-create-${id}]`;
+const SCHEDULE_FIELD = `${createSchedule("field")} input, input${createSchedule("field")}`;
+// An expression of 200 characters the parser takes: a zone, each of the first forty-eight minutes, and a few hours.
+const LONG_EXPRESSION = `CRON_TZ=America/Argentina/ComodRivadavia ${Array.from({ length: 48 }, (_, at) => at).join(",")} 13-15 1-7,15-21 * MON-FRI`;
+const SCHEDULE_EXPRESSION = `${createSchedule("expression")} input, input${createSchedule("expression")}`;
 // A tab of the view that is shown: the operation the view is of, and the tab.
 interface Tab {
   kind: artifacts.Operation;
@@ -2004,6 +2009,116 @@ describe("pre-review of the views", () => {
       await cluster.showList(frame);
       expect(found("backup-create-form")).toEqual({});
       expect(found("backup-create-review")).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "asks a schedule of the form with the keyboard alone: the command of the list, the name and Escape in it, the expression, a flag, the review and Escape back to the form, and the way back to the list",
+    async () => {
+      const keyboard = started.window.keyboard;
+      const named = () => frame.locator(SCHEDULE_FIELD).first().inputValue();
+      const inField = (id: string) =>
+        frame.evaluate(
+          (testid) => document.activeElement?.closest(`[data-testid=${testid}]`) != null,
+          `velero-schedule-create-${id}`,
+        );
+
+      await cluster.showList(frame);
+      await cluster.openPage(frame, SCHEDULES);
+      await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+      await cluster.waitForList(frame, SCHEDULES);
+      if ((await cluster.writesState(frame)) !== "on") await cluster.turnWritesOn(frame);
+      await frame.locator("[data-testid=velero-refresh]").focus();
+      await cluster.tabTo(frame, (focus) => focus === "velero-schedules-create", 40);
+      await keyboard.press("Enter");
+      await frame.waitForSelector(createSchedule("workspace"), { timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      // The field of the name after the way back. Escape in it takes back what was typed, and the view stays.
+      for (let presses = 0; presses < 6 && !(await inField("field")); presses += 1) await keyboard.press("Tab");
+      expect(await inField("field")).toBe(true);
+      await keyboard.type("views-by-hand", { delay: 20 });
+      await keyboard.press("Escape");
+      expect([await named(), await frame.locator(createSchedule("workspace")).count()]).toEqual(["", 1]);
+      await keyboard.type("views-by-hand", { delay: 20 });
+      // The expression, next, and a flag by its checkbox.
+      await keyboard.press("Tab");
+      expect(await inField("expression")).toBe(true);
+      await keyboard.type("CRON_TZ=Europe/Rome 0 3 * * *", { delay: 10 });
+      await cluster.tabTo(frame, (focus) => focus === "velero-schedule-create-skipImmediately", 20);
+      await keyboard.press("Space");
+      expect(await frame.locator(createSchedule("skipImmediately")).isChecked()).toBe(true);
+      // Back to the expression: Enter asks for the review, which has the focus; Escape leaves it, and the focus is on
+      // the command that asks again, the form as it was.
+      for (let presses = 0; presses < 10 && !(await inField("expression")); presses += 1)
+        await keyboard.press("Shift+Tab");
+      expect(await inField("expression")).toBe(true);
+      await keyboard.press("Enter");
+      await frame.waitForSelector(createSchedule("review"), { timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-schedule-create-review")).toBe("velero-schedule-create-review");
+      await keyboard.press("Escape");
+      await frame.waitForSelector(createSchedule("review"), { state: "detached", timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-schedule-create-ask")).toBe("velero-schedule-create-ask");
+      expect(await named()).toBe("views-by-hand");
+      // Escape outside a field leaves the view for the list.
+      await keyboard.press("Escape");
+      await frame.waitForSelector(createSchedule("workspace"), { state: "detached", timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-schedules-create")).toBe("velero-schedules-create");
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows Create schedule, its form and its review, in both themes, at every size",
+    async () => {
+      const top = () =>
+        frame.evaluate(() => {
+          const page = document.querySelector<HTMLElement>("[data-testid=velero-schedules-page]");
+
+          if (page) page.scrollTop = 0;
+        });
+      const inSight = (selector: string) => async () =>
+        frame
+          .locator(selector)
+          .first()
+          .evaluate((part) => {
+            part.scrollIntoView({ block: "start" });
+            let room = { top: 0, bottom: window.innerHeight };
+
+            for (let holder = part.parentElement; holder; holder = holder.parentElement) {
+              if (!["auto", "scroll"].includes(getComputedStyle(holder).overflowY)) continue;
+              const box = holder.getBoundingClientRect();
+
+              room = { top: Math.max(room.top, box.top), bottom: Math.min(room.bottom, box.bottom) };
+            }
+            const box = part.getBoundingClientRect();
+
+            return box.top >= room.top - 1 && box.top + 40 <= room.bottom
+              ? []
+              : [
+                  `${part.getAttribute("data-testid") ?? part.tagName.toLowerCase()} is not begun in sight: ` +
+                    `${Math.round(box.top)} to ${Math.round(box.bottom)} in a room of ${Math.round(room.top)} to ${Math.round(room.bottom)}`,
+                ];
+          });
+
+      await cluster.showList(frame);
+      await cluster.openPage(frame, SCHEDULES);
+      if ((await cluster.writesState(frame)) !== "on") await cluster.turnWritesOn(frame);
+      await frame.click("[data-testid=velero-schedules-create]");
+      await frame.waitForSelector(createSchedule("workspace"), { timeout: 30_000 });
+      // The longest name a schedule may have, and an expression of 200 characters.
+      expect(LONG_EXPRESSION).toHaveLength(200);
+      await frame.locator(SCHEDULE_FIELD).first().fill("a".repeat(63));
+      await frame.locator(SCHEDULE_EXPRESSION).first().fill(LONG_EXPRESSION);
+      await everyLayout("schedule-create-form", top, SCHEDULES, undefined, inSight(SCHEDULE_FIELD));
+      await frame.click(createSchedule("ask"));
+      await frame.waitForSelector(createSchedule("review"), { timeout: 30_000 });
+      await everyLayout("schedule-create-review", top, SCHEDULES, undefined, inSight(createSchedule("review")));
+      await frame.click(createSchedule("back"));
+      await frame.waitForSelector(createSchedule("review"), { state: "detached", timeout: 30_000 });
+      await cluster.showList(frame);
+      expect(found("schedule-create-form")).toEqual({});
+      expect(found("schedule-create-review")).toEqual({});
     },
     TIMEOUT,
   );
