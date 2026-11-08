@@ -30,6 +30,7 @@ import type {
   BackupNowClient,
   GateClient,
   KeptEndsClient,
+  ScheduleCreateClient,
   WriteClient,
 } from "../api/ipc";
 
@@ -140,11 +141,13 @@ function mainProcess() {
       return { ok: true, value: null };
     },
   };
-  const actions: BackupNowClient & BackupCreateClient = {
+  const actions: BackupNowClient & BackupCreateClient & ScheduleCreateClient = {
     confirmBackupNow: async () => NOTHING,
     runBackupNow: async () => NOTHING,
     confirmBackupCreate: (...args) => new Promise((answer) => confirms.push({ args, answer })),
     runBackupCreate: (...args) => new Promise((answer) => runs.push({ args, answer })),
+    confirmScheduleCreate: async () => NOTHING,
+    runScheduleCreate: async () => NOTHING,
   };
   const settle = async <Value,>(
     held: { answer: (answer: IpcAnswer<Value>) => void } | undefined,

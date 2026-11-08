@@ -55,6 +55,7 @@ declare const classNames: {
   readonly references: "references";
   readonly muted: "muted";
   readonly list: "list";
+  readonly listWithCommand: "listWithCommand";
   readonly rowLink: "rowLink";
   readonly link: "link";
   readonly messageLines: "messageLines";
@@ -186,5 +187,7 @@ declare const classNames: {
   readonly templateField: "templateField";
   readonly templateChoices: "templateChoices";
   readonly templateChoice: "templateChoice";
+  readonly flagChoice: "flagChoice";
+  readonly flagNote: "flagNote";
 };
 export = classNames;

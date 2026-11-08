@@ -547,6 +547,20 @@
   }
 }
 
+/* A head that holds the command of its list is wider by it: its search goes under the others in a room a little
+   wider, so that a command as long as Create schedule leaves the page as wide as its room. */
+@container (max-width: 640px) {
+  .listWithCommand :global(.header) {
+    flex-wrap: wrap;
+  }
+
+  .listWithCommand :global(.header .Input.SearchInput) {
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
 /* In a narrow room the columns that say where and when give their room to the ones that say what: the
    name, the phase, the failure and the progress stay. What is not shown is in the workspace of the object.
    The installation is the first to go: it is the same in every row, and the target bar says it. */
@@ -2290,4 +2304,17 @@
   align-items: center;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+/* A flag of a schedule of the form: its checkbox and label, and its note under them, flag under flag. */
+.flagChoice {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 4px 0;
+}
+
+.flagNote {
+  margin: 0;
 }

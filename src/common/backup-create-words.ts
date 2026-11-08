@@ -73,9 +73,12 @@ export const TEMPLATE_FIELD_WORDS: Record<
   },
 };
 
-// The fields of REQ-237 of SPEC-0016, which this version does not offer.
+// The fields of REQ-237 of SPEC-0016, which this version does not offer, for a backup of the form and for the backups of
+// a schedule of the form.
 export const NOT_OFFERED =
   "This version does not offer the hooks, the ordered resources, the resource policy, the uploader configuration, the labels and the annotations of the backup, the scoped resource filters, the label of a volume group snapshot and the data mover: a backup that needs one is asked from the command line.";
+export const NOT_OFFERED_OF_A_SCHEDULE =
+  "This version does not offer the hooks, the ordered resources, the resource policy, the uploader configuration, the labels and the annotations of its backups, the scoped resource filters, the label of a volume group snapshot and the data mover: a schedule that needs one is created from the command line.";
 
 // What the workspace says, by its parts.
 export const BACKUP_CREATE_VIEW_WORDS = {
@@ -187,6 +190,7 @@ export function fieldWords(field: TemplateField, value: unknown): string {
 export function providerWarnings(
   chosen: readonly string[],
   locations: readonly { name: string; provider: string }[],
+  refused = "the backup",
 ): MeaningPart[] {
   const providers = [...new Set(locations.map((location) => location.provider))].sort();
 
@@ -197,7 +201,7 @@ export function providerWarnings(
       ? [
           {
             id: `provider-${provider}`,
-            words: `The provider ${provider} has ${ofProvider.length} snapshot locations and none is chosen: Velero then needs a default of the server for that provider, which the extension does not read, and refuses the backup without one.`,
+            words: `The provider ${provider} has ${ofProvider.length} snapshot locations and none is chosen: Velero then needs a default of the server for that provider, which the extension does not read, and refuses ${refused} without one.`,
           },
         ]
       : [];

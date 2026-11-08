@@ -141,6 +141,29 @@ describe("what the release refuses of a template, with its words", () => {
     expect(templateProblems(large)).toEqual({
       includedResources: [TEMPLATE_WORDS.tooLarge(JSON.stringify(large).length)],
     });
+    // The template of a schedule says the schedule, which is created from the command line.
+    expect(templateProblems(large, "schedule")).toEqual({
+      includedResources: [TEMPLATE_WORDS.tooLarge(JSON.stringify(large).length, "schedule")],
+    });
+    expect(
+      templateProblems(
+        { ...LOCATED, includedResources: many(257), excludedResources: ["r".repeat(254)], ttl: `${"0s".repeat(32)}1h` },
+        "schedule",
+      ),
+    ).toEqual({
+      includedResources: [TEMPLATE_WORDS.tooMany(256, "schedule")],
+      excludedResources: [TEMPLATE_WORDS.tooLong(253, "schedule")],
+      ttl: [TEMPLATE_WORDS.tooLong(64, "schedule")],
+    });
+    expect([
+      TEMPLATE_WORDS.tooMany(256, "schedule"),
+      TEMPLATE_WORDS.tooLong(253, "schedule"),
+      TEMPLATE_WORDS.tooLarge(70_000, "schedule"),
+    ]).toEqual([
+      "The form takes 256 at most here: a schedule that needs more is created from the command line.",
+      "An item longer than 253 characters is not one the form takes: a schedule that needs it is created from the command line.",
+      "The fields of the form are written in 70000 characters, more than the main process is asked with: a schedule this large is created from the command line.",
+    ]);
   });
 });
 

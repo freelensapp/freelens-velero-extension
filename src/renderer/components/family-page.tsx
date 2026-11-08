@@ -121,7 +121,7 @@ function FamilyListView<View extends { name: string }>({ definition, installatio
       ))}
       <KubeObjectListLayout
         tableId={tableId}
-        className={styles.list}
+        className={definition.command ? `${styles.list} ${styles.listWithCommand}` : styles.list}
         data-testid={`velero-${id}`}
         store={store}
         getItems={() => store.items}

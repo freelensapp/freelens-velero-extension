@@ -19,6 +19,7 @@ export const VIEW_KINDS = [
   "data-download",
   "backup-now",
   "backup-create",
+  "schedule-create",
 ] as const;
 export type ViewKind = (typeof VIEW_KINDS)[number];
 
@@ -138,6 +139,16 @@ export const VIEWS: Record<
     title: "Create backup",
     noun: "backup",
     plural: "backups",
+  },
+  // The workspace of a schedule of the form is of no object: it is opened over the list of the Schedules, and reads the
+  // locations it offers, the schedules whose names it says are taken, and the backups the offset of the server is
+  // derived from.
+  "schedule-create": {
+    family: "schedules",
+    reads: BACKUPS_AND_LOCATIONS,
+    title: "Create schedule",
+    noun: "schedule",
+    plural: "schedules",
   },
 };
 

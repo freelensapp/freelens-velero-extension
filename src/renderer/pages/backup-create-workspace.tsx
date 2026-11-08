@@ -1,25 +1,17 @@
 import { Renderer } from "@freelensapp/extensions";
 import { observer } from "mobx-react";
 import React from "react";
-import {
-  BACKUP_CREATE_VIEW_WORDS,
-  backupCreateMeaning,
-  locationsReadWords,
-  phaseWords,
-} from "../../common/backup-create-words";
+import { BACKUP_CREATE_VIEW_WORDS, backupCreateMeaning, phaseWords } from "../../common/backup-create-words";
 import { readFormBody } from "../../common/backup-form";
-import { accessMode, availabilityState } from "../../common/location-view";
-import { hostNamespaces } from "../api/host-namespaces";
 import { escapeOfField } from "../components/artifact-viewer";
 import { BackupTemplateForm } from "../components/backup-template-form";
+import { useTemplateChoices } from "../components/template-choices";
 import styles from "../components/views.module.css";
 import { focusFirst } from "../components/views-frame";
 import { Fact, ViewLink, Workspace } from "../components/workspace";
 import { replaceView } from "../navigation";
 
-import type { TemplateField } from "../../common/backup-template";
-import type { BackupResource, BackupStorageLocationResource, VolumeSnapshotLocationResource } from "../../common/types";
-import type { LocationChoice, TemplateChoices } from "../components/backup-template-form";
+import type { BackupResource } from "../../common/types";
 import type { Installation } from "../state/installation";
 
 const {
@@ -30,25 +22,6 @@ const ID = "velero-backup-create";
 
 // The name the address gives the workspace of the creation, which is of no object.
 export const CREATE_VIEW_NAME = "new";
-
-// The storage locations of the installation as the form offers them: the default marked, and the reason the release
-// refuses every backup sent to one that is not reported Available or whose access mode is ReadOnly (SPEC-0016,
-// REQ-236). The default comes first.
-function locationChoices(locations: BackupStorageLocationResource[]): LocationChoice[] {
-  return locations
-    .map((location) => {
-      const name = location.metadata.name;
-      const refused =
-        availabilityState(location.status?.phase).availability !== "available"
-          ? BACKUP_CREATE_VIEW_WORDS.unavailable(name)
-          : accessMode(location).mode === "ReadOnly"
-            ? BACKUP_CREATE_VIEW_WORDS.readOnly(name)
-            : undefined;
-
-      return { name, isDefault: location.spec?.default === true, ...(refused ? { refused } : {}) };
-    })
-    .sort((one, other) => Number(other.isDefault) - Number(one.isDefault) || (one.name < other.name ? -1 : 1));
-}
 
 export interface BackupCreateWorkspaceProps {
   installation: Installation;
@@ -72,28 +45,14 @@ export const BackupCreateWorkspace = observer(({ installation, back, onBack }: B
     gesture.current = true;
     act();
   };
-  const locationsRead = installation.read("storageLocations");
-  const snapshotsRead = installation.read("snapshotLocations");
   const backupsRead = installation.read("backups");
-  const namespaces = hostNamespaces();
-  const locations = locationChoices(locationsRead.items as BackupStorageLocationResource[]);
-  const snapshotLocations = (snapshotsRead.items as VolumeSnapshotLocationResource[]).map((location) => ({
-    name: location.metadata.name,
-    provider: String((location.spec as { provider?: unknown } | undefined)?.provider ?? ""),
-  }));
+  const { choices, blockers, snapshotLocations, listed, accessMode } = useTemplateChoices(installation, state);
   const busy =
     step.state === "asking"
       ? BACKUP_CREATE_VIEW_WORDS.asking
       : step.state === "running"
         ? BACKUP_CREATE_VIEW_WORDS.running(step.name)
         : "";
-
-  // The storage location is chosen first as the default, when it can be chosen.
-  const first = locations.find((location) => !location.refused);
-
-  React.useEffect(() => {
-    if (state.template.storageLocation === undefined && first?.isDefault) state.set("storageLocation", first.name);
-  }, [state, first]);
 
   // An end the workspace shows is seen: it is not said again elsewhere.
   const ended = step.state === "created" || step.state === "failed";
@@ -126,38 +85,6 @@ export const BackupCreateWorkspace = observer(({ installation, back, onBack }: B
 
   const nameProblem = state.nameProblem;
   const taken = (backupsRead.items as BackupResource[]).some((backup) => backup.metadata.name === state.name);
-  // What the form says is wrong of what the cluster holds, at the field it is of, which holds the review back with the
-  // rest: an included namespace the host lists with the label that excludes it; and a storage location that cannot be
-  // chosen, none, not read, or the one chosen, which is refused or gone since.
-  const chosen = state.template.storageLocation;
-  const chosenLocation = locations.find((location) => location.name === chosen);
-  const fieldBlockers: Partial<Record<TemplateField, string[]>> = {
-    includedNamespaces: (state.template.includedNamespaces ?? [])
-      .filter((included) => namespaces.some((listed) => listed.name === included && listed.excluded))
-      .map(BACKUP_CREATE_VIEW_WORDS.labelledExcluded),
-    storageLocation:
-      locationsRead.status !== "ready"
-        ? [locationsReadWords(locationsRead.status, "storage")]
-        : !first
-          ? [BACKUP_CREATE_VIEW_WORDS.noLocation]
-          : chosen === undefined
-            ? []
-            : !chosenLocation
-              ? [BACKUP_CREATE_VIEW_WORDS.chosenGone(chosen)]
-              : chosenLocation.refused
-                ? [BACKUP_CREATE_VIEW_WORDS.chosenRefused(chosenLocation.refused)]
-                : [],
-  };
-  const blockers = Object.values(fieldBlockers).flat();
-  const choices: TemplateChoices = {
-    locations,
-    snapshotLocations,
-    ...(snapshotsRead.status === "ready"
-      ? {}
-      : { snapshotLocationsUnknown: locationsReadWords(snapshotsRead.status, "snapshot") }),
-    namespaces,
-    blockers: fieldBlockers,
-  };
   const refusedTemplate = Object.keys(state.problems).length > 0;
   const holdBack = Boolean(nameProblem) || refusedTemplate || blockers.length > 0;
   const noWay = !gate && installation.gateFailure !== undefined && !installation.gateUnknown;
@@ -179,17 +106,8 @@ export const BackupCreateWorkspace = observer(({ installation, back, onBack }: B
             replaced={step.replaced === true}
             cluster={cluster}
             context={context}
-            accessMode={(() => {
-              const location = (locationsRead.items as BackupStorageLocationResource[]).find(
-                (item) => item.metadata.name === state.template.storageLocation,
-              );
-              const access = location ? accessMode(location) : undefined;
-
-              // An access mode that is not written is said as nothing: Velero refuses a backup for it only when it is
-              // ReadOnly.
-              return access && access.mode !== "not-set" ? access.label : undefined;
-            })()}
-            listed={namespaces.map((listed) => listed.name)}
+            accessMode={accessMode}
+            listed={listed}
             snapshotLocations={snapshotLocations}
             onCreate={by(() => void state.create())}
             onBack={by(() => state.leave())}

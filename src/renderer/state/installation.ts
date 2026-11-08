@@ -20,6 +20,7 @@ import { readWindow } from "../../common/window";
 import { ArtifactLoads } from "./artifact-loads";
 import { BackupCreate } from "./backup-create";
 import { BackupNow } from "./backup-now";
+import { ScheduleCreate } from "./schedule-create";
 import { ServerStatus } from "./server-status";
 
 import type { Allowance, AllowanceFor } from "../../common/allowances";
@@ -59,6 +60,7 @@ import type {
   BackupNowClient,
   GateClient,
   KeptEndsClient,
+  ScheduleCreateClient,
   WriteClient,
 } from "../api/ipc";
 
@@ -99,7 +101,7 @@ export interface InstallationDependencies {
   // an artifact it downloaded.
   writer?: WriteClient & ArtifactClient;
   // The writes of the actions of Velero, through the same way.
-  actions?: BackupNowClient & BackupCreateClient;
+  actions?: BackupNowClient & BackupCreateClient & ScheduleCreateClient;
   // The ends of the writes the main process keeps for the cluster, through the same way.
   keptEnds?: KeptEndsClient;
   // What keeps, in the main process, what the operator allowed the downloads to do.
@@ -159,6 +161,8 @@ export class Installation {
   readonly backupNow: BackupNow;
   // A backup of the form, from the list of the Backups.
   readonly backupCreate: BackupCreate;
+  // A schedule of the form, from the list of the Schedules.
+  readonly scheduleCreate: ScheduleCreate;
   // The ends of the writes of this cluster whose request was sent and that no view showed, as the main process keeps
   // them (SPEC-0017, REQ-250): the target bar says them wherever the operator is in the cluster.
   ends: KeptEnd[] = [];
@@ -213,6 +217,16 @@ export class Installation {
       shown: (request) => this.told(request),
     });
     this.backupCreate = new BackupCreate({
+      client: dependencies.actions,
+      cluster: () => this.cluster.id,
+      namespace: () => this.namespace,
+      writesOn: () => this.writes.on,
+      now: dependencies.now,
+      requestId,
+      refused: () => void this.openGate(),
+      shown: (request) => this.told(request),
+    });
+    this.scheduleCreate = new ScheduleCreate({
       client: dependencies.actions,
       cluster: () => this.cluster.id,
       namespace: () => this.namespace,
@@ -334,6 +348,7 @@ export class Installation {
         this.artifacts.leave();
         this.backupNow.leave();
         this.backupCreate.leave();
+        this.scheduleCreate.leave();
       }
     });
   }
@@ -583,6 +598,7 @@ export class Installation {
     this.artifacts.drop();
     this.backupNow.drop();
     this.backupCreate.drop();
+    this.scheduleCreate.drop();
   }
 
   // What is kept is changed from what the store holds now, and not from what this installation read of
@@ -618,6 +634,7 @@ export class Installation {
     this.artifacts.drop();
     this.backupNow.drop();
     this.backupCreate.drop();
+    this.scheduleCreate.drop();
     this.dropWrites(left);
   }
 

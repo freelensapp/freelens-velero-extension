@@ -112,6 +112,10 @@ describe("the parts of the views a run takes", () => {
       "src/common/go-duration.ts",
       "src/renderer/pages/backups-page.tsx",
       "src/common/location-view.ts",
+      "src/renderer/pages/schedule-create-workspace.tsx",
+      "src/renderer/components/template-choices.ts",
+      "src/common/schedule-create-words.ts",
+      "src/common/schedule-form.ts",
       "e2e/__tests__/velero-e2e-actions.tests.ts",
     ]) {
       expect([file, partsToRun(definition, [file])]).toEqual([file, [...statics, "actions"]]);
