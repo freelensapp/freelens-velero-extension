@@ -339,36 +339,37 @@ the views that are open hold, shows a failed read as such, with what was read be
 and when, and stops when the last view closes. The watch comes with the spec that
 needs what it gives.
 
-The families of an installation are one union of ten
-([the families](../../src/common/discovery.ts)): six read at every read, and the
-pod volume backups, the pod volume restores, the data uploads and the data downloads,
-read only while a view that shows them is open ([SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md),
-REQ-178): an installation may hold thousands of them, and a view that does not show
-them does not pay for them. What a view needs of those is said by a holder, in one
-call that replaces what it needed before, and the call answers the function that
-lets it go. The frame of a page is a holder: it needs what its page and every view of
-the way that is open over it read of the families on demand, since the list stays
-under the views and the way back leads to each of them, and calls again when the way
-changes, so that a way that changes never lets go of a family a view still on it
-needs. A backup, a pod volume backup opened from its band and the storage location
-of that operation keep the pod volume backups between them, and the way back draws
-the operation and the band from what was read, with no view that waits for its
-family again; the address names every view of the way as open, so a family is read
-while a view that needs it is open, at one list of it at each read while the way is,
-as decided while implementing, on 2026-10-29. A family needed and never read
-is asked at once, alone, in the generation, through the same guarded read; then at
-every read while it is held. A family no holder needs is not asked at the read after
-it was let go, and what was read of it goes then: a view opened again within a read
-finds it still read, and no timer is added. A new generation keeps the holders and
-empties the reads, and an answer of a family no holder needs any more is not taken.
-The views of a backup and of a restore hold their families of the operations, the pod
+The families of an installation are one union of ten ([the
+families](../../src/common/discovery.ts)): six read at every read, and the pod
+volume backups, the pod volume restores, the data uploads and the data downloads,
+read only while a view that shows them is open
+([SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md), REQ-178): an
+installation may hold thousands of them, and a view that does not show them does not
+pay for them. What a view needs of those is said by a holder, in one call that
+replaces what it needed before, and the call answers the function that lets it go.
+The frame of a page is a holder: it needs what its page and every view of the way
+that is open over it read of the families on demand, since the list stays under the
+views and the way back leads to each of them, and calls again when the way changes,
+so that a way that changes never lets go of a family a view still on it needs. A
+backup, a pod volume backup opened from its band and the storage location of that
+operation keep the pod volume backups between them, and the way back draws the
+operation and the band from what was read, with no view that waits for its family
+again; the address names every view of the way as open, so a family is read while a
+view that needs it is open, at one list of it at each read while the way is, as
+decided while implementing, on 2026-10-29. A family needed and never read is asked
+at once, alone, in the generation, through the same guarded read; then at every read
+while it is held. A family no holder needs is not asked at the read after it was let
+go, and what was read of it goes then: a view opened again within a read finds it
+still read, and no timer is added. A new generation keeps the holders and empties
+the reads, and an answer of a family no holder needs any more is not taken. The
+views of a backup and of a restore hold their families of the operations, the pod
 volume backups and the data uploads of a backup and the pod volume restores and the
 data downloads of a restore, which the two halves of the band of their summary show,
 and the view of a repository holds the four, for what used it, since the second pull
 request of T5.1 and the first of T5.2; the view of a data download holds the data
-uploads, for the one whose snapshot it restores; the Overview, the lists of the other kinds and
-the views of a schedule and of a location hold none; the sections of the details of
-the host hold none and ask nothing.
+uploads, for the one whose snapshot it restores; the Overview, the lists of the
+other kinds and the views of a schedule and of a location hold none; the sections of
+the details of the host hold none and ask nothing.
 
 What is [known of a family](../../src/common/read-state.ts) is what the last read
 that ended said of it. A family that is asked again keeps that, and is marked as
@@ -444,11 +445,11 @@ host opens the page of the kind with the view in its address. The views that are
 open are of the installation they were opened in: they close when another one is
 selected.
 
-A reference to an object is a way to its view only when the object was found and
-its kind has a view: a reference to a kind that has none yet is a name with what
-is known of its target. The kinds that have a view are the ones of the
-[list](../../src/common/views.ts) the address is checked against. What each of
-them needs of the renderer is beside what uses it: its
+A reference to an object is a way to its view only when the object was found and its
+kind has a view: a reference to a kind that has none yet is a name with what is
+known of its target. The kinds that have a view are the ones of the
+[list](../../src/common/views.ts) the address is checked against. What each of them
+needs of the renderer is beside what uses it: its
 [page](../../src/renderer/navigation.ts), its
 [component](../../src/renderer/pages/open-view.tsx) and the
 [references](../../src/renderer/components/workspace.tsx) that lead to it. Since
@@ -458,17 +459,19 @@ and `data-download`; a reference to a kind of the volumes that is found leads to
 view as the others do. Each view reads the families it shows, and the notices over
 it are of those alone, as decided while implementing, on 2026-10-26: a schedule the
 backups, the restores, the schedules and the two locations; a backup and a restore
-those, and since the second pull request of T5.1 their own family of the
-operations, the pod volume backups of a backup and the pod volume restores of a
+those, and since the second pull request of T5.1 their own family of the operations,
+the pod volume backups of a backup and the pod volume restores of a restore, and
+since the first of T5.2 the data uploads of a backup and the data downloads of a
 restore, which the frame holds for the band of their summary; a repository the
-repositories and the storage locations, and since that pull request the two families
-of the pod volume operations and the backups and the restores, which what used it
-counts and leads to, as decided while implementing, on 2026-10-29, and the two
-families of the data movement since the first pull request of T5.2; an operation its
-own family, which the frame holds, the family of its owner, the storage locations
-and the repositories, and a data download the data uploads as well. The pod and the node of an operation are the links of the host
-to their details (`LinkToPod`, `LinkToNode`), which read nothing and leave the host
-to read the object when its drawer opens.
+repositories and the storage locations, and since the second pull request of T5.1
+the two families of the pod volume operations and the backups and the restores,
+which what used it counts and leads to, as decided while implementing, on
+2026-10-29, and the two families of the data movement since the first pull request
+of T5.2; an operation its own family, which the frame holds, the family of its
+owner, the storage locations and the repositories, and a data download the data
+uploads as well. The pod and the node of an operation are the links of the host to
+their details (`LinkToPod`, `LinkToNode`), which read nothing and leave the host to
+read the object when its drawer opens.
 
 ### The Time Of An Operation And The History Of A Schedule
 

@@ -67,6 +67,10 @@ describe("the parts of the views a run takes", () => {
     ]) {
       expect([file, partsToRun(definition, [file])]).toEqual([file, ["volumes-and-server", ...statics]]);
     }
+    // The pages of the data movement, whose lists are the ones of the volume operations.
+    for (const file of ["src/renderer/pages/data-uploads-page.tsx", "src/renderer/pages/data-downloads-page.tsx"]) {
+      expect([file, partsToRun(definition, [file])]).toEqual([file, ["volumes-and-server", ...statics]]);
+    }
     expect(partsToRun(definition, ["src/renderer/components/views.module.css"])).toEqual(["pre-review", ...statics]);
   });
 

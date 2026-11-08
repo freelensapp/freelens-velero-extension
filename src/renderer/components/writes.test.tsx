@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { observer } from "mobx-react";
 import React from "react";
 import { afterEach, describe, expect, it } from "vitest";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { confirmDialogs } from "../../../test/host-components";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { CONNECTION_REASON_NAMES } from "../../common/ipc";
@@ -30,7 +31,7 @@ function path(family: Family, namespace: string): string {
 }
 
 const answers: Record<string, Answer> = {
-  [DISCOVERY]: { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } },
+  [DISCOVERY]: { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } },
   [LOCATIONS]: list(object("default", "velero-a"), object("default", "velero-b")),
   ...Object.fromEntries(
     ["velero-a", "velero-b"].flatMap((namespace) => [

@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   backup,
   before,
+  dataDownload,
+  dataUpload,
   MINUTE,
+  moved,
   NOW,
   ownedBy,
   podVolumeBackup,
@@ -12,8 +15,8 @@ import {
 } from "../../test/volume-builders";
 import { timeText } from "./operation-text";
 import { bytesProgress } from "./progress";
-import { mapEntries, unknownFields, VOLUME_SORTING, volumeSearch, volumeView } from "./volume-view";
-import { bytesText, bytesTip, incrementalText, NOT_REPORTED, POD_NOT_NAMED } from "./volume-words";
+import { claimSource, mapEntries, unknownFields, VOLUME_SORTING, volumeSearch, volumeView } from "./volume-view";
+import { bytesText, bytesTip, CLAIM_NOT_NAMED, incrementalText, NOT_REPORTED, POD_NOT_NAMED } from "./volume-words";
 
 const MiB = 1_048_576;
 
@@ -82,6 +85,79 @@ describe("the incremental size and the snapshot size", () => {
 
     expect(view.incremental).toBeUndefined();
     expect(view.snapshotSize).toEqual({ value: MiB });
+  });
+
+  it("is the incremental size of a data upload and the snapshot size of a data download, as each carries it", () => {
+    const reads = { backups: read([]), restores: read([]) };
+    const upload = volumeView(
+      "DataUpload",
+      dataUpload("nightly-d4m8s", { phase: "Completed", incrementalBytes: MiB }),
+      NOW,
+      reads,
+    );
+    const download = volumeView("DataDownload", dataDownload("monday-r2t6v", { phase: "Completed" }), NOW, reads);
+
+    expect([upload.incremental, upload.snapshotSize]).toEqual([{ value: MiB }, undefined]);
+    expect([download.incremental, download.snapshotSize]).toEqual([undefined, { value: 2 * MiB }]);
+  });
+});
+
+describe("the view of a data movement", () => {
+  const nightly = backup("nightly", "InProgress", { uid: "backup-nightly-1" });
+  const monday = restore("monday", "InProgress", { uid: "restore-monday-1" });
+  const reads = { backups: read([nightly]), restores: read([monday]) };
+
+  it("shows the claim with its namespace, the claim alone with none, and says a claim that is not named", () => {
+    expect(claimSource("DataUpload", dataUpload("x", undefined))).toBe("shop/orders-0");
+    expect(claimSource("DataUpload", dataUpload("x", undefined, { spec: { sourceNamespace: "" } }))).toBe("orders-0");
+    expect(claimSource("DataUpload", dataUpload("x", undefined, { spec: { sourcePVC: "" } }))).toBe(CLAIM_NOT_NAMED);
+    expect(claimSource("DataDownload", dataDownload("x", undefined))).toBe("shop-restored/orders-0");
+    expect(
+      claimSource(
+        "DataDownload",
+        dataDownload("x", undefined, { spec: { targetVolume: { pvc: "", pv: "", namespace: "shop" } } }),
+      ),
+    ).toBe(CLAIM_NOT_NAMED);
+    expect(volumeView("DataDownload", dataDownload("x", undefined), NOW, reads).source).toBe("shop-restored/orders-0");
+  });
+
+  it("has no pod and no volume, the node of its data path, and the node agent that accepted it when it is another", () => {
+    const view = volumeView(
+      "DataUpload",
+      dataUpload(
+        "nightly-d4m8s",
+        { phase: "InProgress", node: "worker-2", acceptedByNode: "worker-1" },
+        moved("Backup", nightly, "du-a"),
+      ),
+      NOW,
+      reads,
+    );
+
+    expect([view.pod, view.volume, view.node, view.acceptedBy]).toEqual([{}, undefined, "worker-2", "worker-1"]);
+    expect(view.owner.reference).toMatchObject({ kind: "Backup", name: "nightly", state: "resolved" });
+    expect(
+      volumeView(
+        "DataDownload",
+        dataDownload("x", { phase: "Prepared", node: "worker-3", acceptedByNode: "worker-3" }),
+        NOW,
+        reads,
+      ).acceptedBy,
+    ).toBeUndefined();
+  });
+
+  it("says the data mover built-in when it is not set, velero as written, and another marked as not known", () => {
+    const mover = (datamover: string | undefined) =>
+      volumeView("DataUpload", dataUpload("x", undefined, { spec: { datamover } }), NOW, reads).mover;
+
+    expect([mover(undefined), mover(""), mover("velero"), mover("own-mover")]).toEqual([
+      { text: "Built-in", known: true },
+      { text: "Built-in", known: true },
+      { text: "velero", known: true },
+      { text: "own-mover", known: false },
+    ]);
+    expect(
+      volumeView("DataUpload", dataUpload("x", undefined, { spec: { datamover: "own-mover" } }), NOW, reads).uploader,
+    ).toBe("own-mover");
   });
 });
 

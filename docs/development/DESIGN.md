@@ -221,14 +221,16 @@ commands open the explicit Velero operation, not an unrestricted YAML editor.
   by the phase of the backup or the restore, then a half for each kind of them, each
   under its title and with the state of its own read: its pod volume backups or pod
   volume restores, then its data uploads or data downloads, counted by phase, in the
-  groups and the order of `backup describe` or of `restore describe`, with the mark
-  and the label of each phase, and their rows from the newest, ten at a time with a
+  groups and the order of `backup describe` or of `restore describe`, which the data
+  movement of each follows too, with the mark and the label of each phase, and their
+  rows from the newest, ten at a time with a
   command that shows ten more and gives the focus to the first it added. A row of a
   pod volume operation is the volume, a way to the view of the operation that
   returns to the backup or the restore, the pod and the node as the links of the
   host, the phase with its mark and the message of Velero in its tip, and the bytes
-  done of the total; a row of a data movement is its claim, the way, with no pod. The band says nothing of the items of the
-  operation, whose progress keeps its fact and its note. What was not read is not
+  done of the total; a row of a data movement is its claim, the way, with no pod. The
+  band says nothing of the items of the operation, whose progress keeps its fact and
+  its note. What was not read is not
   known and is never none: the band says once that the family is being read, that
   it cannot be read with no count, that the cluster does not serve it, or that its
   rows were read before, and when; it says that the backup has none among the ones
@@ -237,9 +239,8 @@ commands open the explicit Velero operation, not an unrestricted YAML editor.
   newest of them and the backups or the restores they belong to, ten at a time, each
   a way when it is found; a kind not read is named, with why, a kind of an earlier
   read says so in place, with its rows or with none, and that no operation of the
-  installation used it is said only when every kind was read now and none names it.
-  The data movement joins both with the second slice of the spec, the first pull
-  request of T5.2.
+  installation used it is said only when every kind was read now and none names it,
+  the four kinds of the pod volume operations and of the data movement.
 - Logs use bounded rendering, search and clear loading/error/cancel states. Results
   group warnings/errors without losing namespace/resource context. Resource and
   volume views show completeness and filters rather than unbounded JSON blobs.

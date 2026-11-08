@@ -12,8 +12,10 @@ import type { Reader } from "../state/installation";
 
 // What the views read is of the kinds of Velero, and of nothing else: the discovery of the group, a kind
 // in the whole cluster, a kind in one namespace. A Secret a location names is a name, and no path leads
-// to it: what is not written as one of the three is not asked, in whatever way it is written.
-const OF_VELERO = /^\/apis\/velero\.io\/v1(\/namespaces\/[a-z0-9]([-a-z0-9]*[a-z0-9])?)?(\/[a-z]+)?$/;
+// to it: what is not written as one of the three is not asked, in whatever way it is written. A kind of the second
+// version is not asked under the first, and the namespaces are no kind of the group (SPEC-0014, REQ-177).
+const OF_VELERO =
+  /^\/apis\/velero\.io\/v1(\/namespaces\/[a-z0-9]([-a-z0-9]*[a-z0-9])?)?(\/(?!(namespaces|datauploads|datadownloads)$)[a-z]+)?$/;
 
 // The second version of the group is asked for the two kinds it serves and for nothing else: its discovery, and
 // the data uploads or the data downloads of one namespace (SPEC-0014, REQ-177).

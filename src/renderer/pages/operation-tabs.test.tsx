@@ -2,6 +2,7 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { addressChanges, addressSearch, Renderer } from "../../../test/freelens-extensions";
 import { confirmDialogs, listProps } from "../../../test/host-components";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
@@ -92,7 +93,7 @@ const tuesday = object(
 
 function answers(more: Record<string, Answer> = {}): Record<string, Answer> {
   return {
-    [DISCOVERY]: { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } },
+    [DISCOVERY]: { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } },
     [LOCATIONS]: list({ metadata: { name: "default", namespace: A } }, { metadata: { name: "default", namespace: B } }),
     [path("backups", A)]: list(nightly(), stopped),
     [path("restores", A)]: list(monday()),

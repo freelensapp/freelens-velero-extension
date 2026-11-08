@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  builtInMover,
   LIFECYCLE_RANK,
   maintenanceResult,
   phaseRank,
@@ -8,6 +9,8 @@ import {
   unwrittenResult,
   VOLUME_PHASES,
   volumeOperationState,
+  writtenNodeOS,
+  writtenSnapshotType,
   writtenType,
 } from "./volume-phases";
 import { axesText, NODE_AGENT_WORDS, phaseSentence, volumePhaseText } from "./volume-words";
@@ -15,7 +18,8 @@ import { axesText, NODE_AGENT_WORDS, phaseSentence, volumePhaseText } from "./vo
 import type { VolumeKind } from "./volume-phases";
 
 // The phases of the operations of the volumes on their two axes and the outcome, as SPEC-0014 tables them (the
-// phases, lines 270 to 280), for each of the two kinds of the file system backup.
+// phases, lines 270 to 280), for each of the four kinds of the operations: the release writes the same phases of the
+// pod volume operations and of the data movement.
 const TABLE: [unknown, string, string, string, boolean, string][] = [
   // phase, lifecycle, execution, outcome, cancellation asked, label
   [undefined, "in-flight", "not-started", "none", false, "No phase yet"],
@@ -33,63 +37,73 @@ const TABLE: [unknown, string, string, string, boolean, string][] = [
   ["PartiallyFailed", "unknown", "unknown", "unknown", false, "Unknown"],
 ];
 
-describe.each(["PodVolumeBackup", "PodVolumeRestore"] as VolumeKind[])("the phase of a %s", (kind) => {
-  it.each(TABLE)("%s is %s, %s, %s", (phase, lifecycle, execution, outcome, cancelAsked, label) => {
-    const state = volumeOperationState(kind, phase);
+describe.each(["PodVolumeBackup", "PodVolumeRestore", "DataUpload", "DataDownload"] as VolumeKind[])(
+  "the phase of a %s",
+  (kind) => {
+    it.each(TABLE)("%s is %s, %s, %s", (phase, lifecycle, execution, outcome, cancelAsked, label) => {
+      const state = volumeOperationState(kind, phase);
 
-    expect(state).toEqual({
-      kind,
-      ...(phase ? { reported: phase } : {}),
-      recognized: lifecycle !== "unknown",
-      lifecycle,
-      execution,
-      outcome,
-      cancelAsked,
-      label,
+      expect(state).toEqual({
+        kind,
+        ...(phase ? { reported: phase } : {}),
+        recognized: lifecycle !== "unknown",
+        lifecycle,
+        execution,
+        outcome,
+        cancelAsked,
+        label,
+      });
     });
-  });
 
-  it("keeps a phase the release does not write as its text, with the mark of what is not known", () => {
-    expect(volumePhaseText(volumeOperationState(kind, "Paused"))).toBe("Unknown: Paused");
-    expect(volumePhaseText(volumeOperationState(kind, 3))).toBe("Unknown: 3");
-    expect(volumePhaseText(volumeOperationState(kind, "InProgress"))).toBe("In progress");
-  });
+    it("keeps a phase the release does not write as its text, with the mark of what is not known", () => {
+      expect(volumePhaseText(volumeOperationState(kind, "Paused"))).toBe("Unknown: Paused");
+      expect(volumePhaseText(volumeOperationState(kind, 3))).toBe("Unknown: 3");
+      expect(volumePhaseText(volumeOperationState(kind, "InProgress"))).toBe("In progress");
+    });
 
-  it("says of each phase what the release does in it, a phase not reported being no failure", () => {
-    const said = (phase: unknown) => phaseSentence(volumeOperationState(kind, phase));
+    it("says of each phase what the release does in it, a phase not reported being no failure", () => {
+      const said = (phase: unknown) => phaseSentence(volumeOperationState(kind, phase));
 
-    expect(said(undefined)).toBe(NODE_AGENT_WORDS[kind]);
-    expect(said("New")).toBe(NODE_AGENT_WORDS[kind]);
-    expect(NODE_AGENT_WORDS[kind]).toContain("waiting is not a failure");
-    expect(NODE_AGENT_WORDS[kind]).toContain("not read by the extension");
-    expect(said("Accepted")).toContain("preparing timeout");
-    expect(said("Accepted")).toContain("a pod is being made to reach the volume");
-    expect(said("Prepared")).toContain("about to start the data path");
-    expect(said("InProgress")).toContain("moving the bytes");
-    expect(said("Canceling")).toContain("being stopped");
-    expect(said("Completed")).toBe("The data path ended.");
-    expect(said("Failed")).toContain("A start equal to the completion is one the failure wrote");
-    expect(said("Failed")).toContain("no time at all is one the preparing timeout wrote");
-    expect(said("Canceled")).toContain("neither a success nor a failure");
-    expect(said("Paused")).toContain("shown as written");
-  });
+      expect(said(undefined)).toBe(NODE_AGENT_WORDS[kind]);
+      expect(said("New")).toBe(NODE_AGENT_WORDS[kind]);
+      expect(NODE_AGENT_WORDS[kind]).toContain("waiting is not a failure");
+      expect(NODE_AGENT_WORDS[kind]).toContain("not read by the extension");
+      expect(said("Accepted")).toContain("preparing timeout");
+      expect(said("Accepted")).toContain("a pod is being made to reach the volume");
+      expect(said("Prepared")).toContain("about to start the data path");
+      expect(said("InProgress")).toContain("moving the bytes");
+      expect(said("Canceling")).toContain("being stopped");
+      expect(said("Completed")).toBe("The data path ended.");
+      expect(said("Failed")).toContain("A start equal to the completion is one the failure wrote");
+      expect(said("Failed")).toContain("no time at all is one the preparing timeout wrote");
+      expect(said("Canceled")).toContain("neither a success nor a failure");
+      expect(said("Paused")).toContain("shown as written");
+    });
 
-  it("says the axes in words, a cancellation as neither a success nor a failure", () => {
-    expect(axesText(volumeOperationState(kind, "Canceled"))).toBe(
-      "Finished, ran or not started, as its times say, canceled, which is neither a success nor a failure",
-    );
-    expect(axesText(volumeOperationState(kind, "Canceling"))).toBe("In flight, running, cancellation asked");
-    expect(axesText(volumeOperationState(kind, "Failed"))).toBe(
-      "Finished, ran or not started, as its times say, failed",
-    );
-    expect(axesText(volumeOperationState(kind, undefined))).toBe("In flight, not started, no outcome yet");
-  });
-});
+    it("says the axes in words, a cancellation as neither a success nor a failure", () => {
+      expect(axesText(volumeOperationState(kind, "Canceled"))).toBe(
+        "Finished, ran or not started, as its times say, canceled, which is neither a success nor a failure",
+      );
+      expect(axesText(volumeOperationState(kind, "Canceling"))).toBe("In flight, running, cancellation asked");
+      expect(axesText(volumeOperationState(kind, "Failed"))).toBe(
+        "Finished, ran or not started, as its times say, failed",
+      );
+      expect(axesText(volumeOperationState(kind, undefined))).toBe("In flight, not started, no outcome yet");
+    });
+  },
+);
 
 describe("the words for an operation that waits for a node agent", () => {
   it("name the node of the pod for a backup, and the init container of the restored pod for a restore", () => {
     expect(NODE_AGENT_WORDS.PodVolumeBackup).toContain("the node agent of the node of its pod");
     expect(NODE_AGENT_WORDS.PodVolumeRestore).toContain("the init container restore-wait");
+  });
+
+  it("name any node agent of the installation for a data movement, which any of them may accept", () => {
+    for (const kind of ["DataUpload", "DataDownload"] as const) {
+      expect(NODE_AGENT_WORDS[kind]).toContain("any node agent of the installation");
+      expect(NODE_AGENT_WORDS[kind]).not.toContain("of its pod");
+    }
   });
 });
 
@@ -157,6 +171,30 @@ describe("a value the reviewed release does not write", () => {
       true,
       true,
       false,
+      false,
+      false,
+    ]);
+  });
+
+  it("is a data mover but the built-in one, empty or velero, and one that is not set is the built-in one", () => {
+    expect([undefined, "", "velero", "views-mover", "Velero", " velero"].map(builtInMover)).toEqual([
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+    ]);
+  });
+
+  it("is a snapshot type but CSI, and a node OS but auto, linux and windows, neither when it is not set", () => {
+    expect([undefined, "", "CSI", "Clone", "csi"].map(writtenSnapshotType)).toEqual([true, true, true, false, false]);
+    expect([undefined, "", "auto", "linux", "windows", "darwin", "Linux"].map(writtenNodeOS)).toEqual([
+      true,
+      true,
+      true,
+      true,
+      true,
       false,
       false,
     ]);

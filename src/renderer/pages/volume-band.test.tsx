@@ -172,7 +172,7 @@ describe("the band of the volume operations of a backup", () => {
         .map((heading) => heading.textContent),
     ).toEqual(["Volumes", "Pod Volume Backups", "Data Uploads"]);
     expect(within(section()).getByTestId("velero-volume-sentence").textContent).toBe(
-      "The pod volume backups run while the backup is InProgress: it waits for all of them, and at its own timeout asks the ones that have not ended to cancel. Its data uploads run while it waits for its plugin operations.",
+      "The pod volume backups run while the backup is InProgress: it waits for all of them, and at its own timeout asks the ones that have not ended to cancel. Its data uploads are made as the CSI plugin snapshots each claim, and it waits for them in its plugin operations.",
     );
     expect(within(band()).getByTestId("velero-volume-count").textContent).toBe(
       "23 pod volume backups, from the newest",
@@ -369,7 +369,7 @@ describe("the band of the volume operations of a restore", () => {
 
     expect(band().getAttribute("data-kind")).toBe("PodVolumeRestore");
     expect(within(section()).getByTestId("velero-volume-sentence").textContent).toBe(
-      "The node agent of the node of each restored pod takes its pod volume restore when the init container restore-wait of that pod runs. Its data downloads run while it waits for its plugin operations.",
+      "The node agent of the node of each restored pod takes its pod volume restore when the init container restore-wait of that pod runs. Its data downloads are made as the CSI plugin restores each claim, and it waits for them in its plugin operations.",
     );
     expect(groups(band())).toEqual([
       ["Completed", "Completed: 1"],

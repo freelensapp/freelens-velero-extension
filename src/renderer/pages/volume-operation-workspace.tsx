@@ -372,7 +372,14 @@ export const VolumeOperationWorkspace = observer(
             )}
           </Fact>
           <Fact name="Storage location">{location ? <Target reference={location} /> : NOT_REPORTED}</Fact>
-          <Fact name="Repository" note={VOLUME_WORDS.repositoryNote}>
+          <Fact
+            name="Repository"
+            note={
+              volume === "DataUpload" || volume === "DataDownload"
+                ? VOLUME_WORDS.repositoryNote.moved
+                : VOLUME_WORDS.repositoryNote.pod
+            }
+          >
             <Repository repository={repository} />
           </Fact>
         </div>

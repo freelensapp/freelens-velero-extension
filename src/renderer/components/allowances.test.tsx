@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { observer } from "mobx-react";
 import React from "react";
 import { afterEach, describe, expect, it } from "vitest";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { withoutAllowance } from "../../common/allowances";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { Installation } from "../state/installation";
@@ -23,7 +24,7 @@ function list(...items: unknown[]): Answer {
 }
 
 const answers: Record<string, Answer> = {
-  [DISCOVERY]: { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } },
+  [DISCOVERY]: { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } },
   [LOCATIONS]: list({ metadata: { name: "default", namespace: "velero-a", uid: "location-uid" } }),
   ...Object.fromEntries(
     (Object.keys(RESOURCES) as Family[]).map((family) => [

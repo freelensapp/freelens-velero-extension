@@ -1,6 +1,7 @@
 import { isObservable } from "mobx";
 import { describe, expect, it, vi } from "vitest";
 import { HOUR, scheduleObject, submissionOf } from "../../../test/adherence-builders";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { emptyPreferences, FAMILIES, heldPreferences, RESOURCES, versionOf } from "../../common/discovery";
 import { PATHS } from "../../common/paths";
 import { Installation } from "./installation";
@@ -949,9 +950,7 @@ describe("the families read on demand", () => {
       [DISCOVERY]: {
         status: 200,
         body: {
-          resources: Object.values(RESOURCES)
-            .filter((name) => name !== "podvolumebackups")
-            .map((name) => ({ name })),
+          resources: FIRST_VERSION_RESOURCES.filter((name) => name !== "podvolumebackups").map((name) => ({ name })),
         },
       },
     });

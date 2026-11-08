@@ -8,7 +8,7 @@ import { act, cleanup, render, screen } from "@testing-library/react";
 import { reaction, runInAction } from "mobx";
 import { observer } from "mobx-react";
 import { afterEach, describe, expect, it } from "vitest";
-import { RESOURCES } from "../../common/discovery";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { PreferencesStore } from "../../common/preferences-store";
 import { Installation } from "../state/installation";
 
@@ -53,7 +53,7 @@ describe("the store of the preferences, read by the views", () => {
     const store = new PreferencesStore();
     const located = (namespace: string) => ({ metadata: { name: "default", namespace } });
     const answers: Record<string, Answer> = {
-      "/apis/velero.io/v1": { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } },
+      "/apis/velero.io/v1": { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } },
       "/apis/velero.io/v1/backupstoragelocations": { status: 200, body: { items: [located("a"), located("b")] } },
     };
     const installation = new Installation({

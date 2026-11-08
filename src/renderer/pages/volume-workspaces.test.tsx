@@ -2,6 +2,7 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { hostObject } from "../../../test/freelens-extensions";
 import { drawerValue } from "../../../test/host-components";
 import {
@@ -183,7 +184,7 @@ const restored = podVolumeRestore(
 
 function answers(more: Answers = {}): Answers {
   return {
-    [DISCOVERY]: { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } },
+    [DISCOVERY]: { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } },
     [LOCATIONS]: list(location("default")),
     [path("backups")]: list(nightly, weekly),
     [path("restores")]: list(monday),
@@ -469,6 +470,7 @@ describe("the view of a pod volume operation", () => {
     expect(value(belongs, "Backup")).toBe("nightly (In progress)");
     expect(value(belongs, "Storage location")).toBe("default");
     expect(value(belongs, "Repository")).toBe("shop-default-kopia");
+    expect(note(belongs, "Repository")).toBe(VOLUME_WORDS.repositoryNote.pod);
     const of = within(workspace).getByTestId("velero-volume-of");
     const pod = within(of).getByText("cart-0").closest("a") as HTMLAnchorElement;
     const node = within(of).getByText("worker-1").closest("a") as HTMLAnchorElement;
