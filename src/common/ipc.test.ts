@@ -14,6 +14,7 @@ import {
   readArtifactReleaseRequest,
   readArtifactSaved,
   readArtifactValue,
+  readBackupCreated,
   readGateDisableRequest,
   readGateEnableRequest,
   readGateState,
@@ -26,6 +27,7 @@ import {
   readWriteStatus,
   readWriteStatusRequest,
   savedFileName,
+  TEXT_BOUND,
 } from "./ipc";
 
 const cluster = "86a008d2588de4178aa2ac8a245ac1f4";
@@ -77,6 +79,48 @@ describe("the requests between the processes", () => {
     expect(readWriteConfirmRequest({ ...download, target: { ...target, uid: "" } })).toBeUndefined();
     expect(readWriteConfirmRequest({ ...download, target: { ...target, name: "Not A Name" } })).toBeUndefined();
     expect(readWriteConfirmRequest({ ...download, target: { ...target, more: 1 } })).toBeUndefined();
+  });
+
+  it("reads a confirmation of a backup asked from a schedule: of the schedule by its name and UID, with the name of the backup", () => {
+    const schedule = { kind: "Schedule", name: "daily", uid: "5b0c2f6e-uid" };
+    const now = {
+      cluster,
+      namespace: "velero",
+      kind: "backup-from-schedule",
+      target: schedule,
+      backup: "daily-20261108034105",
+    };
+
+    expect(readWriteConfirmRequest(now)).toEqual(now);
+    // The name of the backup is a part of what is confirmed, and one the API server takes.
+    for (const backup of ["", "Daily", "daily_1", "a".repeat(217), 7]) {
+      expect([backup, readWriteConfirmRequest({ ...now, backup })]).toEqual([backup, undefined]);
+    }
+    expect(readWriteConfirmRequest({ ...now, backup: "a".repeat(216) })).toMatchObject({ backup: "a".repeat(216) });
+    // Of a schedule only, with no artifact, and no name of a backup for another kind.
+    expect(
+      readWriteConfirmRequest({ cluster, namespace: "velero", kind: "backup-from-schedule", backup: "b" }),
+    ).toBeUndefined();
+    expect(readWriteConfirmRequest({ ...now, target })).toBeUndefined();
+    expect(readWriteConfirmRequest({ ...now, artifact: "BackupLog" })).toBeUndefined();
+    expect(
+      readWriteConfirmRequest({
+        cluster,
+        namespace: "velero",
+        kind: "DownloadRequest",
+        target: schedule,
+        artifact: "BackupLog",
+      }),
+    ).toBeUndefined();
+    expect(
+      readWriteConfirmRequest({ cluster, namespace: "velero", kind: "ServerStatusRequest", backup: "b" }),
+    ).toBeUndefined();
+    // The run carries what was confirmed, with its token and its identifier, and nothing of the body.
+    const run = { ...now, token: randomUUID(), request: randomUUID() };
+
+    expect(readWriteRunRequest(run)).toEqual(run);
+    expect(readWriteRunRequest({ ...run, backup: "Daily" })).toBeUndefined();
+    expect(readWriteRunRequest({ ...run, text: "{}" })).toBeUndefined();
   });
 
   it("takes the eight artifacts the extension shows, each of the kind of its target, and no other target of the API", () => {
@@ -243,6 +287,39 @@ describe("the requests between the processes", () => {
     );
 
     expect(readGateStateRequest(unreadable)).toBeUndefined();
+  });
+});
+
+describe("the answers of a write of a body", () => {
+  it("reads the text of the body beside the token, within the bound of a request, and none when there is none", () => {
+    const token = randomUUID();
+
+    expect(readWriteConfirmAnswer({ token, expires: 1, text: "{}" })).toEqual({ token, expires: 1, text: "{}" });
+    expect(readWriteConfirmAnswer({ token, expires: 1 })).toEqual({ token, expires: 1 });
+    for (const text of ["", 7, "x".repeat(TEXT_BOUND + 1)]) {
+      expect([String(text).length, readWriteConfirmAnswer({ token, expires: 1, text })]).toEqual([
+        String(text).length,
+        undefined,
+      ]);
+    }
+    expect(readWriteConfirmAnswer({ token, expires: 1, text: "x".repeat(TEXT_BOUND) })?.text).toHaveLength(TEXT_BOUND);
+  });
+
+  it("reads the backup a schedule was asked for: its name, its UID, and the phase Velero wrote when it wrote one", () => {
+    expect(readBackupCreated({ name: "daily-20261108034105", uid: "u-1" })).toEqual({
+      name: "daily-20261108034105",
+      uid: "u-1",
+    });
+    expect(readBackupCreated({ name: "b", uid: "u-1", phase: "New" })).toEqual({ name: "b", uid: "u-1", phase: "New" });
+    for (const value of [
+      { name: "Not A Name", uid: "u" },
+      { name: "b", uid: "" },
+      { name: "b", uid: "u", phase: "" },
+      { name: "b", uid: "u", phase: 1 },
+      { name: "b", uid: "u", spec: {} },
+    ]) {
+      expect([value, readBackupCreated(value)]).toEqual([value, undefined]);
+    }
   });
 });
 

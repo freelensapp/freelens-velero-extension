@@ -22,6 +22,8 @@ export interface HostRequest {
   query?: Record<string, unknown>;
   headers: Record<string, string>;
   body?: unknown;
+  // The body as it was sent, before it is read: what a write of a text sends byte for byte.
+  text?: string;
   signal?: AbortSignal | null;
 }
 
@@ -189,7 +191,7 @@ export function fakeHostClient(reply: (request: HostRequest) => HostReply | Prom
       ...(params?.query ? { query: { ...params.query } } : {}),
       headers: { ...init?.headers },
       ...(init?.body !== undefined
-        ? { body: JSON.parse(init.body) }
+        ? { body: JSON.parse(init.body), text: init.body }
         : params?.data !== undefined
           ? { body: params.data }
           : {}),

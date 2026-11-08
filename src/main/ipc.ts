@@ -15,6 +15,7 @@ import {
   type ArtifactSaved,
   type ArtifactTarget,
   type ArtifactValue,
+  type BackupCreated,
   CHANNELS,
   type Failure,
   failure,
@@ -36,6 +37,7 @@ import {
   type WriteTarget,
 } from "../common/ipc";
 import { ArtifactHolder } from "./artifact-holder";
+import { confirmBackupNow, runBackupNow } from "./backup-now";
 import { type CatalogEntry, refusalOf } from "./catalog";
 import { DiagnosticKubernetes, type HostClient } from "./diagnostic-kubernetes";
 import { resolveRoute } from "./diagnostic-route";
@@ -125,6 +127,8 @@ export interface HandlersDependencies {
   // nothing of a text that is not to be saved any more.
   save?(suggested: { name: string; title: string }, content: Buffer, still: () => boolean): Promise<boolean>;
   now?(): number;
+  // What waits between the reads of an action, when a test gives its own.
+  sleep?(milliseconds: number, signal: AbortSignal): Promise<void>;
 }
 
 // The words of how a download ended, from what was raised: the code and the step of a failure of the way,
@@ -237,9 +241,47 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
     return answer;
   });
   procedure(CHANNELS.gateDisable, readGateDisableRequest, (_sender, request) => gate.disable(request.cluster));
-  procedure(CHANNELS.writeConfirm, readWriteConfirmRequest, (sender, request) =>
-    gate.confirm(sender.key, request.cluster, request.namespace, request.kind, request.target, request.artifact),
-  );
+  // The writes of the actions of SPEC-0017 read the cluster before they confirm, and wait between their reads.
+  const actions = {
+    gate,
+    now: () => dependencies.now?.() ?? Date.now(),
+    sleep:
+      dependencies.sleep ??
+      ((milliseconds: number, signal: AbortSignal) =>
+        new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(resolve, milliseconds);
+
+          signal.addEventListener(
+            "abort",
+            () => {
+              clearTimeout(timer);
+              reject(new DiagnosticError("cancelled"));
+            },
+            { once: true },
+          );
+        })),
+  };
+
+  procedure(CHANNELS.writeConfirm, readWriteConfirmRequest, async (sender, request, still) => {
+    if (request.kind !== "backup-from-schedule")
+      return gate.confirm(
+        sender.key,
+        request.cluster,
+        request.namespace,
+        request.kind,
+        request.target,
+        request.artifact,
+      );
+    // The schedule is read for the review while the frame that asks it is there.
+    const controller = new AbortController();
+    const watching = watchFrame(still, controller);
+
+    try {
+      return await confirmBackupNow(actions, sender.key, request, controller.signal);
+    } finally {
+      clearInterval(watching);
+    }
+  });
   procedure(CHANNELS.writeStatus, readWriteStatusRequest, (sender, request) =>
     gate.status(sender.key, request.cluster, request.request),
   );
@@ -415,11 +457,37 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
     }
   };
 
-  procedure<WriteRunRequest, ServerStatusValue | ArtifactValue>(
+  // The backups asked from a schedule that run, by their cluster and the identifier of their request: the same
+  // request of the same frame, sent again while it runs, joins it and creates nothing (SPEC-0017, REQ-249).
+  const backupsNow = new Map<string, { fingerprint: string; promise: Promise<Answer<BackupCreated>> }>();
+
+  procedure<WriteRunRequest, ServerStatusValue | ArtifactValue | BackupCreated>(
     CHANNELS.writeRun,
     readWriteRunRequest,
     (sender, request, still) => {
       if (request.kind === "ServerStatusRequest") return serverStatus(sender, request, still);
+      if (request.kind === "backup-from-schedule") {
+        const key = `${request.cluster}/${request.request}`;
+        const fingerprint = JSON.stringify([
+          sender.key,
+          signatureOf(request.namespace, request.kind, request.target, undefined, request.backup),
+          request.token,
+        ]);
+        const running = backupsNow.get(key);
+
+        if (running)
+          return running.fingerprint === fingerprint
+            ? running.promise
+            : failure("forbidden", "request", false, "No write of this frame has this identifier.");
+        const promise = runBackupNow(actions, sender.key, request, (write) => {
+          const watching = watchFrame(still, write.controller);
+
+          return () => clearInterval(watching);
+        }).finally(() => backupsNow.delete(key));
+
+        backupsNow.set(key, { fingerprint, promise });
+        return promise;
+      }
       const key = `${request.cluster}/${request.request}`;
       const fingerprint = JSON.stringify([
         sender.key,

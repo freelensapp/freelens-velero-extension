@@ -4,6 +4,7 @@
 // file is in any of them: a failure is a code, a stage, whether it is safe to try again and words.
 
 import { type AllowanceFor, readAllowanceFor } from "./allowances";
+import { backupNameProblem } from "./backup-from-schedule";
 
 import type { DiagnosticCode } from "./diagnostic-code";
 
@@ -23,7 +24,9 @@ export const CHANNELS = {
   allowanceRevoke: "allowance.revoke",
 } as const;
 
-export const WRITE_KINDS = ["DownloadRequest", "ServerStatusRequest"] as const;
+// The writes of the extension: the two requests of the tabs and of the band of the server, and the actions of
+// SPEC-0017, each named by what it does, as they land.
+export const WRITE_KINDS = ["DownloadRequest", "ServerStatusRequest", "backup-from-schedule"] as const;
 export type WriteKind = (typeof WRITE_KINDS)[number];
 
 // The artifacts of an operation a DownloadRequest is created for: eight of the fourteen kinds of target
@@ -170,7 +173,7 @@ export interface GateDisableRequest {
 
 // The target of a write that is of one object, for the kinds that have one.
 export interface WriteTarget {
-  kind: "Backup" | "Restore";
+  kind: "Backup" | "Restore" | "Schedule";
   name: string;
   uid: string;
 }
@@ -182,10 +185,15 @@ export interface WriteConfirmRequest {
   // What the kind of the write needs beside its target: the artifact a DownloadRequest is for. It is a
   // part of what is confirmed: a confirmation of the log of a backup is not one of its results.
   artifact?: ArtifactTarget;
+  // The name of the backup a schedule is asked for by hand (SPEC-0017, REQ-255), a part of what is confirmed.
+  backup?: string;
 }
 export interface WriteConfirmAnswer {
   token: string;
   expires: number;
+  // The text the main process will send, written once, for a write whose body the review shows (SPEC-0017,
+  // REQ-246): the run sends it byte for byte, and carries nothing of it.
+  text?: string;
 }
 export interface WriteRunRequest {
   cluster: string;
@@ -193,8 +201,17 @@ export interface WriteRunRequest {
   kind: WriteKind;
   target?: WriteTarget;
   artifact?: ArtifactTarget;
+  backup?: string;
   token: string;
   request: string;
+}
+
+// What a backup asked from a schedule is once it was created: its name and its UID, and the phase Velero wrote,
+// when it wrote one within the reads after the creation (SPEC-0017, REQ-248).
+export interface BackupCreated {
+  name: string;
+  uid: string;
+  phase?: string;
 }
 export interface WriteStatusRequest {
   cluster: string;
@@ -297,7 +314,7 @@ function isTarget(value: unknown): value is WriteTarget {
   return (
     isRecord(value) &&
     hasKeys(value, ["kind", "name", "uid"]) &&
-    (value.kind === "Backup" || value.kind === "Restore") &&
+    (value.kind === "Backup" || value.kind === "Restore" || value.kind === "Schedule") &&
     isName(value.name) &&
     isText(value.uid)
   );
@@ -345,15 +362,20 @@ export function readWriteConfirmRequest(value: unknown): WriteConfirmRequest | u
   if (
     !withinBound(value) ||
     !isRecord(value) ||
-    !hasKeys(value, ["cluster", "namespace", "kind"], ["target", "artifact"])
+    !hasKeys(value, ["cluster", "namespace", "kind"], ["target", "artifact", "backup"])
   )
     return;
   if (!isCluster(value.cluster) || !isNamespace(value.namespace) || !isWriteKind(value.kind)) return;
   if ("target" in value && !isTarget(value.target)) return;
-  // A DownloadRequest is of a backup or of a restore, and for one artifact of it; a ServerStatusRequest
-  // is of none.
-  if ((value.kind === "DownloadRequest") !== "target" in value) return;
+  // A DownloadRequest is of a backup or of a restore, and for one artifact of it; a backup asked from a schedule
+  // is of the schedule, with the name of the backup; a ServerStatusRequest is of none.
+  const ofSchedule = value.kind === "backup-from-schedule";
+
+  if ((value.kind === "DownloadRequest" || ofSchedule) !== "target" in value) return;
   if ((value.kind === "DownloadRequest") !== "artifact" in value) return;
+  if (ofSchedule !== "backup" in value) return;
+  if ("target" in value && ((value.target as WriteTarget).kind === "Schedule") !== ofSchedule) return;
+  if (ofSchedule && (typeof value.backup !== "string" || backupNameProblem(value.backup) !== undefined)) return;
   // One of the eight artifacts, and of the kind of its target: the log of a restore is not asked of a
   // backup. The contents of a backup, and every other target of the API, are refused here.
   if ("artifact" in value) {
@@ -366,6 +388,7 @@ export function readWriteConfirmRequest(value: unknown): WriteConfirmRequest | u
     kind: value.kind,
     ...(value.target ? { target: { ...(value.target as WriteTarget) } } : {}),
     ...(isArtifactTarget(value.artifact) ? { artifact: value.artifact } : {}),
+    ...(typeof value.backup === "string" ? { backup: value.backup } : {}),
   };
 }
 
@@ -373,7 +396,7 @@ export function readWriteRunRequest(value: unknown): WriteRunRequest | undefined
   if (
     !withinBound(value) ||
     !isRecord(value) ||
-    !hasKeys(value, ["cluster", "namespace", "kind", "token", "request"], ["target", "artifact"])
+    !hasKeys(value, ["cluster", "namespace", "kind", "token", "request"], ["target", "artifact", "backup"])
   )
     return;
   // What is run is what was confirmed, with the token of its confirmation and the identifier of the request.
@@ -383,6 +406,7 @@ export function readWriteRunRequest(value: unknown): WriteRunRequest | undefined
     kind: value.kind,
     ...("target" in value ? { target: value.target } : {}),
     ...("artifact" in value ? { artifact: value.artifact } : {}),
+    ...("backup" in value ? { backup: value.backup } : {}),
   });
 
   if (!confirm || !isUuid(value.token) || !isUuid(value.request)) return;
@@ -539,10 +563,29 @@ export function readConnection(value: unknown): Connection | undefined {
   return { supported: false, reason: value.reason as ConnectionReason };
 }
 
+// The text of a body is the size of a request at most.
+export const TEXT_BOUND = 1_048_576;
+
 export function readWriteConfirmAnswer(value: unknown): WriteConfirmAnswer | undefined {
-  if (!isRecord(value) || !hasKeys(value, ["token", "expires"]) || !isUuid(value.token)) return;
+  if (!isRecord(value) || !hasKeys(value, ["token", "expires"], ["text"]) || !isUuid(value.token)) return;
   if (typeof value.expires !== "number" || !Number.isFinite(value.expires)) return;
-  return { token: value.token, expires: value.expires };
+  if ("text" in value && (typeof value.text !== "string" || !value.text || value.text.length > TEXT_BOUND)) return;
+  return {
+    token: value.token,
+    expires: value.expires,
+    ...(typeof value.text === "string" ? { text: value.text } : {}),
+  };
+}
+
+export function readBackupCreated(value: unknown): BackupCreated | undefined {
+  if (!isRecord(value) || !hasKeys(value, ["name", "uid"], ["phase"]) || !isName(value.name) || !isText(value.uid))
+    return;
+  if ("phase" in value && !isText(value.phase, 64)) return;
+  return {
+    name: value.name,
+    uid: value.uid,
+    ...(typeof value.phase === "string" ? { phase: value.phase } : {}),
+  };
 }
 
 export function readWriteStatus(value: unknown): WriteStatus | undefined {
