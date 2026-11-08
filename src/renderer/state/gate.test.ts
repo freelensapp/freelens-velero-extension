@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { anExtension, ipcHandlers, resetIpc, Main as StubMain } from "../../../test/freelens-extensions";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
-import { CHANNELS } from "../../common/ipc";
+import { CHANNELS, readWriteConfirmRequest, readWriteRunRequest } from "../../common/ipc";
 import { VeleroIpcRenderer } from "../api/ipc";
 import { currentInstallation } from "./context";
 import { Installation } from "./installation";
@@ -452,6 +452,81 @@ describe("the frame of a cluster", () => {
         },
       ],
     ]);
+  });
+
+  it("asks the main process for the review and the run of a restore, with what each carries, which the contract reads whole", async () => {
+    resetIpc();
+    const asked: [string, unknown][] = [];
+    const token = "00000000-0000-4000-8000-000000000001";
+    const text = '{"kind":"Restore","metadata":{},"spec":{"backupName":"nightly"}}';
+
+    ipcHandlers.set(CHANNELS.writeConfirm, (_frame, request) => {
+      asked.push([CHANNELS.writeConfirm, request]);
+      return { ok: true, value: { token, expires: 1, text } };
+    });
+    ipcHandlers.set(CHANNELS.writeRun, (_frame, request) => {
+      asked.push([CHANNELS.writeRun, request]);
+      return { ok: true, value: { name: "nightly-1", uid: "restore-uid", phase: "InProgress" } };
+    });
+    const ipc = VeleroIpcRenderer.createInstance(anExtension("renderer") as never);
+    const target = { kind: "Backup" as const, name: "nightly", uid: "backup-uid" };
+    const form = {
+      includedNamespaces: ["shop"],
+      namespaceMapping: [["shop", "shop-2"]] as [string, string][],
+      clusterResources: "none" as const,
+      restorePVs: false,
+      existingResourcePolicy: "update" as const,
+    };
+
+    expect(await ipc.confirmRestoreCreate("synthetic-cluster", "velero", target, "nightly-1", form)).toEqual({
+      ok: true,
+      value: { token, expires: 1, text },
+    });
+    expect(
+      await ipc.runRestoreCreate(
+        "synthetic-cluster",
+        "velero",
+        target,
+        "nightly-1",
+        "nightly",
+        token,
+        "request-identifier",
+      ),
+    ).toEqual({ ok: true, value: { name: "nightly-1", uid: "restore-uid", phase: "InProgress" } });
+    expect(asked).toEqual([
+      [
+        CHANNELS.writeConfirm,
+        {
+          cluster: "synthetic-cluster",
+          namespace: "velero",
+          kind: "restore",
+          target,
+          restore: "nightly-1",
+          restoreForm: form,
+        },
+      ],
+      [
+        CHANNELS.writeRun,
+        {
+          cluster: "synthetic-cluster",
+          namespace: "velero",
+          kind: "restore",
+          target,
+          restore: "nightly-1",
+          typed: "nightly",
+          token,
+          request: "request-identifier",
+        },
+      ],
+    ]);
+    // What the views send is what the main process reads, the form and the name typed among it.
+    expect(readWriteConfirmRequest(asked[0][1])).toEqual(asked[0][1]);
+    expect(
+      readWriteRunRequest({ ...(asked[1][1] as object), request: "00000000-0000-4000-8000-000000000002" }),
+    ).toEqual({
+      ...(asked[1][1] as object),
+      request: "00000000-0000-4000-8000-000000000002",
+    });
   });
 
   it("asks the main process for the ends of its cluster and says which one it showed, through the way of the context", async () => {

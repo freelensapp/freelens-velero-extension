@@ -1458,3 +1458,140 @@ was applied:
 The review of the second pull request found as well that a mapping of a namespace the
 lists of the restore leave out was taken and said as restored, while Velero skips that
 namespace: the form refuses it now.
+
+T4.4, the second of its pull requests, on 2026-11-08: the workspace of the restore,
+with the commands of the views it is asked from. The evidence, by check:
+
+- RESTORE-01, the component part
+  ([`restore-create-workspace.test.tsx`](../../src/renderer/pages/restore-create-workspace.test.tsx)):
+  Restore in the workspace of a backup, on the line of its name, and in the workspace
+  of a schedule, beside Back up now on the line of its name; each opens the workspace
+  of the restore over the view, named in the address, with writes off and on, and
+  closing it leaves the view as it was. The name is proposed from the backup and the time in UTC, edited, refused with
+  capitals, said taken when a restore of the installation has it, proposed again for
+  another backup until the operator types one, and given back by Escape in its field
+  ([`restore-create.test.ts`](../../src/renderer/state/restore-create.test.ts)). A form
+  of the same source takes the backup its command offers again: one created again
+  under its name, by its UID, and a newer one of a schedule; and one whose backup went
+  takes the newest that is left. The backups of a schedule are listed the newest
+  first, twenty-four at most with the one chosen, and the older ones counted.
+- RESTORE-03, the component and domain parts: a backup Completed offered, one
+  PartiallyFailed offered with the words that some of its items may be missing, and one
+  in every other phase not offered, with the words of why, in the workspace of the
+  backup and in the workspace of the restore opened from the address, which holds the
+  review back; from a schedule its backups Completed and PartiallyFailed, the newest by
+  its start first and the newest Completed chosen, a Failed one left out, and a
+  schedule with none said to have no backup to restore
+  ([`restore-create-words.test.ts`](../../src/common/restore-create-words.test.ts)). The
+  form and the view of a schedule say why there is no backup as the read of the
+  backups says it: not read yet, refused to the identity, failed, or read without it.
+- RESTORE-04, the component part: the namespaces the spec of the backup names offered
+  as checkboxes, its patterns not, and the others typed, a name typed key by key kept
+  as it is typed with a name the backup names among it, and the checkbox apart; a
+  pair of the mapping added, a source the backup excludes refused with the words of
+  the form, and a pair taken back; each field of a pair named by its place, tied to
+  the problems of the mapping and marked when its pair is wrong, Escape in it taking
+  back what was typed, the focus on the pair added, and after a removal on the pair
+  that took its place or on the command that adds one; the targets the host lists
+  offered as a choice of the field, and said not known before its store loaded them.
+- RESTORE-05 and RESTORE-06: the words of the review read whole, the backup and its
+  storage location, each mapping with whether the host lists its target, the
+  namespaces restored by their names, the three choices of the cluster-scoped
+  resources, the volumes set and not set, both policies with the ServiceAccounts and
+  the namespaces never changed, what Velero never restores, the status, its labels,
+  what it writes into the spec when it starts, what is not known, the fields not
+  offered and the warnings, on a machine fourteen hours east of UTC; the way from the
+  review to the tab of the resources of the backup.
+- RESTORE-07: Create restore disabled until the name of the backup is typed as it is
+  written, enabled then, disabled again for any other text and by Escape, which takes
+  back what was typed; Enter in the field creates only once the name is typed; the
+  run carries the name typed, as the contract reads it
+  ([`gate.test.ts`](../../src/renderer/state/gate.test.ts)); a new review asks for it
+  again.
+- RESTORE-08, the component part: the result says the phase Velero wrote, each error
+  as written, and leads to the view of the restore, which takes the place of the
+  workspace; a conflict keeps what was typed, with the way to the restore that has the
+  name; an end that is not known leads to the restore of its name.
+- RESTORE-09, the component part: the form says under its fields what this version
+  does not offer, and that the release takes its defaults for them.
+- ACT-03 and ACT-06, the component part: a change of the name, of a field or of the
+  backup drops the review, and so do writes turned off and the workspace that closes;
+  Escape on the review and its command leave it, the focus on the command that asks
+  again; an expired token is asked again for the same text, with the same form, the
+  run taking the token answered then, and another text takes the place of the review;
+  a renewal with no text a review can show is refused; nothing is created with writes
+  off, and nothing changes while a restore is being created; a failure keeps the form,
+  and an end that is not known is not told to the main process as shown; the gate not
+  known is said, with the way to the target bar.
+
+Each new case was seen failing on a change made on purpose, twenty-two in all: the
+name typed not compared at the run or by the command, the name not proposed again for
+another backup, the review kept for another backup, the policy left out when emptied, a
+form of the same source started anew, the renewed token not taken and another text
+taken for the same, the name typed kept for a new review, a name typed taken for the
+proposed one, what the workspace holds the review back for not held, a backup not
+offered let through, a refused form let through, the command that creates enabled with
+no name typed, a backup read late not chosen, another backup of the schedule not
+chosen, a pattern said as a namespace, the words of a backup PartiallyFailed dropped,
+the newest Completed not chosen first, the backups not ordered, Restore enabled for a
+backup in progress, and for a schedule with no backup to restore. After the independent
+review, twenty-seven more, each seen failing but one: what is typed among the namespaces
+taken back from the list at each key, or the typed field read from the list; the
+backup a command offers again not taken, the proposal not given back, the name taken
+from the clock when no backup is chosen, the proposal given back while a restore is
+created; the backup that went not replaced; each state of the read of the backups said
+as another, in the form and in the view of a schedule; a field of a mapping not named
+by its place, a wrong pair not marked, Escape in it not taken, the focus not moved
+after an addition or a removal, a field not tied to the problems; the namespaces the
+host lists taken as known before its store loaded them; the way to the resources of
+the backup leading to its summary, the end not known leading nowhere; the backups of a
+schedule not bounded, the older ones not tied to the group, the notes not tied to it;
+and the words of a restore of no volume and of the pods and the jobs Velero skips. The
+one that cannot fail there, the name of a target broken where the room ends, is proven
+by the pre-review.
+
+Decided while implementing, on 2026-11-08:
+
+- The workspace of a restore is named in the address as `restore-backup/<backup>` over
+  the view of a backup, and as `restore-schedule/<schedule>` over the view of a
+  schedule, on the page of each.
+- The backups of a schedule are offered as choices, the newest by its start first,
+  each with its phase; the backup of the view of a backup is said, with its phase.
+- The targets of a mapping are typed in a field that offers the namespaces the host
+  lists, and the sources in one that offers the namespaces the backup names.
+- The name of the backup is typed in the review, under the text, and Enter in it
+  creates the restore once it is the name as it is written.
+- Escape in the field of the name gives the proposal back, as in Back up now.
+- A form of the same source takes the backup its command or its view offers now.
+- The backups of a schedule are listed twenty-four at most, the newest, with the one
+  chosen when it is older, and the older ones counted: one of them is restored from
+  its own view.
+- The review leads to the tab of the resources of the backup, in one change of the
+  address.
+- The commands of a backup and of a schedule are on the line of its name, at its end:
+  under the name, a line of commands took the room of the tabs of a backup, and the
+  views of the packaged application found the log and the resources at 1440 by 900
+  taller than the room they are read in.
+
+The independent review of this pull request, read-only, found three blockers, and
+points to fix or to follow; all were applied:
+
+- A name typed among the namespaces of the backup was taken back from the list at
+  each key, so that typing a name that begins with one the backup names ticked it and
+  lost what was typed: what is typed is kept apart from what is checked, as in the
+  form of the template.
+- The words of a restore of no volume said that a claim gets a volume of its storage
+  class: the release restores a volume of a snapshot of its provider as the backup
+  holds it, naming its disk, and binds its claim to it; only a claim of a CSI snapshot
+  gets a new empty volume. The words say it now, and the pods and the jobs Velero
+  skips are the ones that ended, by their phase and their time of completion.
+- A form of the same source kept a backup that had been created again under its name,
+  a newer backup of a schedule, or one that went: it takes the one the view offers.
+- The states of the read of the backups were all said as not read yet: each is said.
+- The keyboard and the labels of the mapping, the notes of the group of the backup,
+  the proposal of the name, the way to the resources of the backup and to the restore
+  of an end not known, the bound of the backups of a schedule, the namespaces of the
+  host before they are known, and the cases of the client, of the state and of the
+  workspace the probe of the review found missing.
+- The review of the first pull request found that a mapping of a namespace the lists
+  of the restore leave out was taken; the form refuses it now.

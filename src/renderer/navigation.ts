@@ -47,6 +47,8 @@ export const PAGES: Record<ViewKind, string> = {
   "backup-now": SCHEDULES_PAGE_ID,
   "backup-create": BACKUPS_PAGE_ID,
   "schedule-create": SCHEDULES_PAGE_ID,
+  "restore-backup": BACKUPS_PAGE_ID,
+  "restore-schedule": SCHEDULES_PAGE_ID,
 };
 
 // The views that are open travel in the address, by their kind and their name, in the order they were
@@ -121,6 +123,11 @@ function showViews(path: ViewTarget[]): void {
 // Opens a view from the one that is shown, or from the list.
 export function openView(target: ViewTarget): void {
   showViews(openedFrom(openViews(), target));
+}
+
+// Opens a view at a tab of it, from the one that is shown, in one change of the address.
+export function openViewAt(target: ViewTarget, shown: WorkspaceTab): void {
+  show(openedFrom(openViews(), target), readTab(shown));
 }
 
 // The view that is shown gives its place to another, whose way back leads where the first one was opened from.

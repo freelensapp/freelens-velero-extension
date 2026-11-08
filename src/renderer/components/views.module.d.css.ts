@@ -187,6 +187,8 @@ declare const classNames: {
   readonly templateField: "templateField";
   readonly templateChoices: "templateChoices";
   readonly templateChoice: "templateChoice";
+  readonly mappingPair: "mappingPair";
+  readonly mappingInput: "mappingInput";
   readonly flagChoice: "flagChoice";
   readonly flagNote: "flagNote";
 };
