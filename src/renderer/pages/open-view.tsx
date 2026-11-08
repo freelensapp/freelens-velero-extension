@@ -2,6 +2,7 @@ import { BackupCreateWorkspace } from "./backup-create-workspace";
 import { BackupNowWorkspace } from "./backup-now-workspace";
 import { BackupWorkspace } from "./backup-workspace";
 import { RepositoryWorkspace } from "./repository-workspace";
+import { RestoreCreateWorkspace } from "./restore-create-workspace";
 import { RestoreWorkspace } from "./restore-workspace";
 import { ScheduleCreateWorkspace } from "./schedule-create-workspace";
 import { ScheduleWorkspace } from "./schedule-workspace";
@@ -39,6 +40,10 @@ export function OpenView({ target, ...props }: OpenViewProps) {
       return <BackupCreateWorkspace {...props} />;
     case "schedule-create":
       return <ScheduleCreateWorkspace {...props} />;
+    case "restore-backup":
+      return <RestoreCreateWorkspace from={{ kind: "backup", name: target.name }} {...props} />;
+    case "restore-schedule":
+      return <RestoreCreateWorkspace from={{ kind: "schedule", name: target.name }} {...props} />;
     default:
       return <BackupWorkspace name={target.name} {...props} />;
   }

@@ -165,6 +165,8 @@ describe("what the extension registers", () => {
       ["backup-now", "schedules"],
       ["backup-create", "backups"],
       ["schedule-create", "schedules"],
+      ["restore-backup", "backups"],
+      ["restore-schedule", "schedules"],
     ]);
     for (const menu of menus) expect(pages).toContain(menu.target.pageId);
     expect(

@@ -796,7 +796,13 @@ export const Main = namespace("Main", {
 // namespaces the frame of the cluster lists, each an object of the host with its name and its labels, which a test
 // gives. The store is the host's: the extension reads its items and asks it nothing.
 export const hostNamespaces = observable.array<{ name: string; labels?: Record<string, string> }>([], { deep: false });
+// Whether the store loaded the namespaces, `isLoaded` of its item store: a test that gives no namespace says when the
+// store has not loaded them.
+export const hostNamespacesLoaded = observable.box(true);
 const namespaceStore = {
+  get isLoaded() {
+    return hostNamespacesLoaded.get();
+  },
   get items() {
     return hostNamespaces.map((namespace) => ({
       getName: () => namespace.name,

@@ -14,6 +14,7 @@ import {
   failure,
   type GateState,
   type KeptEnd,
+  type RestoreCreated,
   readAnswer,
   readArtifactPage,
   readArtifactSaved,
@@ -21,6 +22,7 @@ import {
   readBackupCreated,
   readGateState,
   readKeptEnds,
+  readRestoreCreated,
   readScheduleCreated,
   readServerStatusValue,
   readWriteConfirmAnswer,
@@ -35,6 +37,7 @@ import {
 
 import type { AllowanceFor } from "../../common/allowances";
 import type { BackupTemplate } from "../../common/backup-template";
+import type { RestoreForm } from "../../common/restore-form";
 import type { ScheduleWrapper } from "../../common/schedule-form";
 
 // What the views ask of the gate, in the words of the contract.
@@ -148,6 +151,27 @@ export interface ScheduleCreateClient {
   ): Promise<Answer<ScheduleCreated>>;
 }
 
+// What the views ask of the main process for a restore of a backup (SPEC-0017, REQ-265 to REQ-273): the review of the
+// restore of the form, and its run with the name of the backup as the operator typed it.
+export interface RestoreCreateClient {
+  confirmRestoreCreate(
+    cluster: string,
+    namespace: string,
+    backup: WriteTarget,
+    restore: string,
+    form: RestoreForm,
+  ): Promise<Answer<WriteConfirmAnswer>>;
+  runRestoreCreate(
+    cluster: string,
+    namespace: string,
+    backup: WriteTarget,
+    restore: string,
+    typed: string,
+    token: string,
+    request: string,
+  ): Promise<Answer<RestoreCreated>>;
+}
+
 // What the views ask of what the operator allows the downloads to do: to keep it, and to take it back.
 export interface AllowanceClient {
   allow(cluster: string, allowed: AllowanceFor): Promise<Answer<null>>;
@@ -166,6 +190,7 @@ export class VeleroIpcRenderer
     BackupNowClient,
     BackupCreateClient,
     ScheduleCreateClient,
+    RestoreCreateClient,
     KeptEndsClient
 {
   // `bounded` says that the reader of the value bounds it itself: it is so for the page of a text, which
@@ -374,6 +399,36 @@ export class VeleroIpcRenderer
       CHANNELS.writeRun,
       { cluster, namespace, kind: "schedule", schedule, token, request },
       readScheduleCreated,
+    );
+  }
+
+  confirmRestoreCreate(
+    cluster: string,
+    namespace: string,
+    backup: WriteTarget,
+    restore: string,
+    form: RestoreForm,
+  ): Promise<Answer<WriteConfirmAnswer>> {
+    return this.ask(
+      CHANNELS.writeConfirm,
+      { cluster, namespace, kind: "restore", target: backup, restore, restoreForm: form },
+      readWriteConfirmAnswer,
+    );
+  }
+
+  runRestoreCreate(
+    cluster: string,
+    namespace: string,
+    backup: WriteTarget,
+    restore: string,
+    typed: string,
+    token: string,
+    request: string,
+  ): Promise<Answer<RestoreCreated>> {
+    return this.ask(
+      CHANNELS.writeRun,
+      { cluster, namespace, kind: "restore", target: backup, restore, typed, token, request },
+      readRestoreCreated,
     );
   }
 

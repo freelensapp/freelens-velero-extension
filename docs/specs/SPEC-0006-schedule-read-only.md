@@ -361,3 +361,18 @@ the address, and writes nothing by itself. It is proven at the component layer, 
 writes off and on, in
 [`schedule-create-workspace.test.tsx`](../../src/renderer/pages/schedule-create-workspace.test.tsx);
 the packaged suites of the action come with the third pull request of T4.7.
+
+### 2026-11-08: Restore In The Workspace Of A Schedule (T4.4 Of SPEC-0017)
+
+With T4.4 the workspace of a schedule has Restore beside Back up now, as the
+restatement of REQ-074 and SCHED-11 above says: the command opens the workspace of the
+restore over the view, named in the address, with the backups of the schedule
+Completed or PartiallyFailed and the newest Completed by its start chosen first, and
+writes nothing by itself; for a schedule with none among the backups the installation
+read, it is disabled, with the words that the schedule has no backup to restore.
+SCHED-11 is proven at the component layer by the view of a schedule whose controls are
+the way back, Back up now and Restore, the ways to the other views and the marks of
+the line, in [`schedules-page.test.tsx`](../../src/renderer/pages/schedules-page.test.tsx),
+and by the workspace of the restore, with writes off and on, in
+[`restore-create-workspace.test.tsx`](../../src/renderer/pages/restore-create-workspace.test.tsx);
+the packaged suites of the action come with the third pull request of T4.4.

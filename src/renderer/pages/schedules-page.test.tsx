@@ -1087,7 +1087,7 @@ describe("workspace of a schedule", () => {
     expect(installation.read("schedules").items).toHaveLength(1);
   });
 
-  it("writes nothing by itself: the way back, Back up now, which opens its workspace, the ways to other views and the marks of the line", async () => {
+  it("writes nothing by itself: the way back, Back up now and Restore, which open their workspaces, the ways to other views and the marks of the line", async () => {
     mount(answers(), chosen(A));
     const workspace = await open("nightly");
     const controls = [...workspace.querySelectorAll("button, a, input, select, textarea")].map(
@@ -1097,6 +1097,7 @@ describe("workspace of a schedule", () => {
     expect(controls.filter((control) => !control.startsWith("mark ") && !control.startsWith("velero-open-"))).toEqual([
       "velero-back",
       "velero-schedule-back-up-now",
+      "velero-schedule-restore",
     ]);
     expect(workspace.textContent).not.toMatch(/\b(delete|edit|remove|pause now|resume|run now|trigger)\b/i);
   });

@@ -20,6 +20,8 @@ export const VIEW_KINDS = [
   "backup-now",
   "backup-create",
   "schedule-create",
+  "restore-backup",
+  "restore-schedule",
 ] as const;
 export type ViewKind = (typeof VIEW_KINDS)[number];
 
@@ -147,6 +149,22 @@ export const VIEWS: Record<
     family: "schedules",
     reads: BACKUPS_AND_LOCATIONS,
     title: "Create schedule",
+    noun: "schedule",
+    plural: "schedules",
+  },
+  // The workspace of a restore is of the backup it is asked from, by its name, or of the schedule whose backups it
+  // offers: it reads the backups, the restores whose names it says are taken, and the storage locations.
+  "restore-backup": {
+    family: "backups",
+    reads: BACKUPS_AND_LOCATIONS,
+    title: "Restore",
+    noun: "backup",
+    plural: "backups",
+  },
+  "restore-schedule": {
+    family: "schedules",
+    reads: BACKUPS_AND_LOCATIONS,
+    title: "Restore",
     noun: "schedule",
     plural: "schedules",
   },
