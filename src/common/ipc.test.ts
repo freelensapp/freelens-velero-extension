@@ -163,7 +163,7 @@ describe("the requests between the processes", () => {
       ["a list that is not one", { ...form, template: { includedNamespaces: "shop" } }],
       ["an empty item", { ...form, template: { includedNamespaces: [""] } }],
       ["an item too long", { ...form, template: { includedResources: ["r".repeat(254)] } }],
-      ["too many items", { ...form, template: { includedNamespaces: Array.from({ length: 65 }, (_, i) => `n${i}`) } }],
+      ["too many items", { ...form, template: { includedResources: Array.from({ length: 257 }, (_, i) => `n${i}`) } }],
       ["a boolean that is not one", { ...form, template: { snapshotVolumes: "true" } }],
       ["a duration that is not text", { ...form, template: { ttl: 720 } }],
       ["a duration too long", { ...form, template: { ttl: "1".repeat(65) } }],
