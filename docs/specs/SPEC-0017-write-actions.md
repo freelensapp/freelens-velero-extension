@@ -938,10 +938,16 @@ release. The evidence, by check:
   the history of the schedule lists it at the next read. The risk to the offset of
   SPEC-0013 is proven at the unit layer, by the second pull request: no suite can create
   a backup within the minute of a submission the fixtures wrote before it.
-- ACT-10: the form and the review with the longest name a schedule may have, in both
-  themes, at 1440 by 900, at 900 by 650 and at twice the zoom, with nothing over something
-  else, wider than its room or cut, twelve reviews and nothing written; the screenshots
-  are among the reports of the part.
+- ACT-10, in the pre-review,
+  [`pre-review.tests.ts`](../../e2e/__tests__/pre-review.tests.ts): the form and the
+  review with the longest name a schedule may have, in both themes, at 1440 by 900, at
+  900 by 650 and at twice the zoom, with nothing over something else, wider than its room
+  or cut; at twice the zoom the target bar and the view are taller than the window, so the
+  page is looked at from its top, as the tabs are, and the field of the name, or the
+  beginning of the review, is in sight once brought there. With the keyboard alone, from
+  the row of the schedule: its command, the name and Escape in it, which gives back the
+  name proposed, Enter to the review, which has the focus, Escape back to the command that
+  asks again, and the way back to the schedule and to its row; nothing is created.
 - ACT-11, end to end: the transport proof of `pnpm e2e` asks a backup of the real schedule
   of the run through the procedures of the compiled main process, as a frame does, with
   the server of the release running: the backup ends Completed, carries the labels of the

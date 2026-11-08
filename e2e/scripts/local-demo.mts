@@ -2412,7 +2412,7 @@ async function runTransportProof(): Promise<void> {
     });
     writeFileSync(join(STATE, "transport-proof.json"), JSON.stringify(report), { mode: 0o600 });
     console.log(
-      "PASS: compiled main found its route and downloaded 16 real artifacts through direct HTTPS, once the private address was allowed, and HTTP/HTTPS Kubernetes tunnels, with inline/referenced CA and negative signature/Host/CA checks; the store had no log for a backup and a restore that failed their validation, and no request was created for a restore without a backup; three identities were refused, at the creation, at the Service and the certificate, and at the port-forward, and the one with the documented permissions downloaded.",
+      "PASS: compiled main found its route and downloaded 16 real artifacts through direct HTTPS, once the private address was allowed, and HTTP/HTTPS Kubernetes tunnels, with inline/referenced CA and negative signature/Host/CA checks; the store had no log for a backup and a restore that failed their validation, and no request was created for a restore without a backup; three identities were refused, at the creation, at the Service and the certificate, and at the port-forward, and the one with the documented permissions downloaded; Back up now asked a backup of the real schedule through the compiled main process, which the server Completed with the labels of its text and deleted through a DeleteBackupRequest.",
     );
   } finally {
     // The location goes back once the store serves again, as above.

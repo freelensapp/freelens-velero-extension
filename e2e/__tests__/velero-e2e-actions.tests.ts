@@ -7,9 +7,9 @@
 // (REQ-254, ACT-11): Back up now from the view of a schedule (T4.2). With writes off the command writes nothing; a
 // review that is not confirmed, nothing; a confirmed one, exactly one POST of a Backup, whose every field is the one of
 // the text the review showed, and no other write. The backup stays without a phase, as the result says, and the view
-// of the schedule lists it at its next read (NOW-05). A name already taken is a conflict (NOW-04). The workspace in both
-// themes, at every size and at twice the zoom, with the longest name a schedule may have (ACT-10). What the suite
-// created it removes, and the objects of Velero are as they were.
+// of the schedule lists it at its next read (NOW-05). A name already taken is a conflict (NOW-04). The reader of a part
+// is refused at the creation. What the suite created it removes, and the objects of Velero are as they were. The
+// workspace in both themes, at every size and with the keyboard alone, is in the pre-review (ACT-10).
 
 import { readFile, writeFile } from "node:fs/promises";
 import * as path from "node:path";
@@ -24,15 +24,8 @@ import type { Frame } from "playwright";
 
 const TIMEOUT = 15 * 60 * 1000;
 const SCHEDULES = cluster.SCHEDULES;
-// The schedule with a history in the installation of the views, and the one with the longest name a label takes.
+// The schedule with a history in the installation of the views.
 const SCHEDULE = "views-history";
-const LONG = "schedule-with-a-name-as-long-as-the-value-of-a-label-is-allowed";
-const THEMES: velero.ColorTheme[] = ["Dark", "Light"];
-const SIZES = [
-  { name: "1440x900", width: 1440, height: 900, zoom: 1 },
-  { name: "900x650", width: 900, height: 650, zoom: 1 },
-  { name: "1440x900-zoom-200", width: 1440, height: 900, zoom: 2 },
-];
 // How long what must not happen is waited for.
 const NOTHING = 1500;
 // The context of the reader of a part, as a second entry of the catalog.
@@ -78,10 +71,9 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
     await dialog.locator("[data-testid=confirm]").click();
     await frame.waitForSelector("[data-testid=velero-writes][data-writes=on]", { timeout: 60_000 });
   };
-  // The installations of the adherence hold no storage location: the operator names them, and the others are chosen.
-  const backUpNow = async (namespace: string, schedule: string, choose = cluster.selectInstallation) => {
+  const backUpNow = async (namespace: string, schedule: string) => {
     await cluster.openPage(frame, SCHEDULES);
-    await choose(frame, namespace);
+    await cluster.selectInstallation(frame, namespace);
     await cluster.waitForList(frame, SCHEDULES);
     await cluster.openWorkspace(frame, schedule, SCHEDULES);
     await frame.click("[data-testid=velero-schedule-back-up-now]");
@@ -114,10 +106,7 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
     try {
       for (const backup of created) cluster.removeCreatedBackup(backup.namespace, backup.name, backup.uid);
     } finally {
-      if (started) {
-        errors.stop(started.window);
-        await velero.setZoom(started.app, 1).catch(() => undefined);
-      }
+      if (started) errors.stop(started.window);
       await started?.cleanup();
     }
   }, TIMEOUT);
@@ -324,54 +313,6 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
         await velero.navigateToCatalog(running.app);
         frame = await cluster.openClusterFromCatalog(running.window, kubeconfig);
       }
-    },
-    TIMEOUT,
-  );
-
-  it(
-    "shows the form and the review in both themes, at every size and at twice the zoom, with the longest name of a schedule",
-    async () => {
-      if (!started) throw new Error("The application is not running");
-      const problems: Record<string, string[]> = {};
-      const screenshots: string[] = [];
-      const earlier = cluster.apiRequests();
-
-      await backUpNow(cluster.E2E_ADHERENCE_NAMESPACE, LONG, cluster.configureInstallation);
-      await writesOn();
-      for (const theme of THEMES) {
-        await velero.setColorTheme(started.app, started.window, theme);
-        for (const size of SIZES) {
-          const expected = {
-            theme: theme.toLowerCase(),
-            width: Math.round(size.width / size.zoom),
-            height: Math.round(size.height / size.zoom),
-          };
-
-          await velero.setWindowSize(started.app, size.width, size.height);
-          await velero.setZoom(started.app, size.zoom);
-          expect([size.name, await cluster.appliedLike(frame, expected)]).toEqual([size.name, expected]);
-          await frame.waitForTimeout(1000);
-          const name = `${theme.toLowerCase()}-${size.name}-backup-now`;
-
-          problems[`${name}-form`] = await cluster.layoutProblems(frame, SCHEDULES);
-          screenshots.push(await cluster.requiredScreenshot(frame, `${name}-form`, size.zoom));
-          await frame.click(part("ask"));
-          await frame.waitForSelector(part("review"), { timeout: 30_000 });
-          problems[`${name}-review`] = await cluster.layoutProblems(frame, SCHEDULES);
-          screenshots.push(await cluster.requiredScreenshot(frame, `${name}-review`, size.zoom));
-          await frame.click(part("back"));
-          await frame.waitForSelector(part("review"), { state: "detached", timeout: 30_000 });
-        }
-      }
-      await velero.setZoom(started.app, 1);
-      await velero.setWindowSize(started.app, 1440, 900);
-      await velero.setColorTheme(started.app, started.window, "Dark");
-      await cluster.writeReport("backup-now-layout", problems);
-      expect(Object.fromEntries(Object.entries(problems).filter(([, found]) => found.length > 0))).toEqual({});
-      expect(new Set(screenshots).size).toBe(THEMES.length * SIZES.length * 2);
-      // Twelve reviews asked, none confirmed: nothing written.
-      expect(writesSince(earlier)).toEqual({});
-      await cluster.closeWorkspace(frame);
     },
     TIMEOUT,
   );
