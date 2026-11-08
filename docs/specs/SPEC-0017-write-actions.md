@@ -1160,3 +1160,60 @@ Decided while implementing, on 2026-11-08:
   created, is shown as it was left, and a backup being created goes on. An end no view
   showed is not lost with the form: the main process keeps it for the target bar
   (REQ-250).
+
+T4.3, the third and last of its pull requests, on 2026-11-08: the proof in the packaged
+application, on the CRDs of the release alone, and end to end with the server of the
+release. The evidence, by check:
+
+- CRBAK-01, in the packaged application, in the suite of the actions,
+  [`velero-e2e-actions.tests.ts`](../../e2e/__tests__/velero-e2e-actions.tests.ts): Create
+  backup in the header of the list of the Backups opens the workspace; the storage
+  locations a backup can go to are offered, the default chosen first, and the ones Velero
+  refuses every backup for, ReadOnly or not reported Available, are said with the reason;
+  the namespaces the host lists are offered; with writes off Enter asks no review and
+  nothing is written.
+- CRBAK-04, CRBAK-05 and ACT-11, on the CRDs alone: the review shows the text the builder
+  makes of the fields set, and a review left by Escape writes nothing; a review confirmed
+  is exactly one POST of a Backup, answered 201, and no other write of any kind of
+  Velero, every field of the text the same in the object read, no label and no
+  annotation, and no other field in its metadata but the ones the API server writes of
+  every object; the result says that Velero has not read the backup, since no controller
+  runs, and the way to its view takes the place of the workspace, whose way back is the
+  list.
+- CRBAK-03: a name the installation read is said before the review, and the creation is
+  a POST answered 409 that keeps the name, and the backup that has it as it was, with the
+  way to it.
+- ACT-11: the reader of a part, as a second entry of the catalog, is refused at the
+  creation of a backup of the form as well, with the words of what it may not do, writes
+  left on and nothing written.
+- ACT-10, in the pre-review,
+  [`pre-review.tests.ts`](../../e2e/__tests__/pre-review.tests.ts): Create backup, its
+  form and its review, in both themes, at 1440 by 900, at 900 by 650 and at twice the
+  zoom, with nothing over something else, wider than its room or cut, the page looked at
+  from its top and the field of the name, or the beginning of the review, in sight once
+  brought there. With the keyboard alone, from the command of the list: the name and
+  Escape in it, a namespace the host lists by its checkbox, Enter to the review, which has
+  the focus, Escape back to the command that asks again, and the way back to the list and
+  to its command; nothing is created.
+- ACT-11 and CRBAK-05, end to end: the transport proof of `pnpm e2e` asks a backup of the
+  form of the ConfigMaps of the run, to the storage location of the installation, through
+  the procedures of the compiled main process, as a frame does, with the server of the
+  release running: the backup ends Completed, its text carries only its name and its
+  namespace, the fields of the text that Velero keeps as they were sent are the same in
+  the spec the server keeps, and it is deleted through a DeleteBackupRequest the server
+  processes ([`local-backup-now-proof.mts`](../../e2e/scripts/local-backup-now-proof.mts)).
+
+The suite of the actions found the command of the list giving the result of the backup
+before, every field disabled, once a backup was created: the second pull request was
+corrected before its merge, and the case of the conflict asks its form from that command.
+
+Decided while implementing, on 2026-11-08:
+
+- The cases of Create backup join the suite of the actions and its part of the views,
+  whose paths now take the files of the form, of its words and of its builder.
+- The end to end proofs of a creation share one procedure, which waits for the backup to
+  end, checks it, deletes it through the server, and removes a backup it left whatever
+  ended the proof; each creation says only how it is asked and what is checked of it.
+
+With this pull request the work of T4.3 is complete: its row of the roadmap moves to Done
+after the merge, with the follow-up that PROCESS.md asks for.
