@@ -362,6 +362,14 @@ covers; the pull request that introduces this spec leaves SPEC-0006 as it is:
 The surface of the Schedules in DESIGN.md, a native table and a read-only workspace,
 is reworded with the same pull request.
 
+The restatement of SCHED-11 above is replaced by the one of the table of the
+amendments of [SPEC-0017](SPEC-0017-write-actions.md#the-amendments-the-slices-bring),
+approved with it, which T4.2 brought first into
+[the amendments of SPEC-0006](SPEC-0006-schedule-read-only.md#amendments) on 2026-11-08, with
+Back up now in the workspace of a schedule; T4.5 and T4.4 extend it, and T4.7
+completes it with Create schedule. The surface of the Schedules in DESIGN.md was
+reworded with T4.2.
+
 ### The States Of The Workspace
 
 | State | What the workspace does |

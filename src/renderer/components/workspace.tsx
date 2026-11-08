@@ -103,6 +103,9 @@ export function Restores({ restores }: { restores: RelatedRestores }) {
 export interface WorkspaceProps {
   kind: ViewKind;
   name: string;
+  // What the view is called, when it is not the name of its object: the workspace of an action is named by the
+  // action, and the way back names the object.
+  title?: string;
   // Of the object that is shown, when it was found: what tells it from one created later with its name.
   uid?: string;
   // The object is a restore with a time of deletion: Velero holds it until it has removed what it keeps
@@ -121,7 +124,7 @@ const TEXT_FIELD =
 // What every view of one object has around it: its name, the way back, and Escape that takes it from
 // wherever the focus is, a text field apart: there the key is of what was typed, as it is in the search
 // field of the host, and the view is never left from inside one.
-export function Workspace({ kind, name, uid, deleting, back, onBack, children }: WorkspaceProps) {
+export function Workspace({ kind, name, title, uid, deleting, back, onBack, children }: WorkspaceProps) {
   const way = React.useRef<HTMLButtonElement>(null);
   const view = `${kind}/${name}`;
   const [opened, setOpened] = React.useState<{ view: string; uid?: string }>({ view, uid });
@@ -159,7 +162,7 @@ export function Workspace({ kind, name, uid, deleting, back, onBack, children }:
           {back}
         </button>
         <span className={styles.title} id={`velero-${kind}-title`} data-testid={`velero-${kind}-name`}>
-          {name}
+          {title ?? name}
         </span>
       </div>
       {replaced ? (

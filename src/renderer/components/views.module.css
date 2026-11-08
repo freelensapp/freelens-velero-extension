@@ -1146,6 +1146,73 @@
   margin: 8px 0;
 }
 
+/* The commands of a view of one object, under its name: the actions that open their workspace over it. */
+.commands {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+/* The field of the name of a backup asked from a schedule, with its rule and what is wrong with it under it. */
+.backupName {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 640px;
+  margin: 12px 0 8px;
+}
+
+/* The review of an action: what it means beside the text it sends, side by side where the room is there for both,
+   one under the other where it is not. */
+.review {
+  container-type: inline-size;
+}
+
+.reviewColumns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px 24px;
+  margin: 12px 0;
+}
+
+@container (min-width: 1000px) {
+  .reviewColumns {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+.reviewPart {
+  min-width: 0;
+}
+
+.reviewMeaning {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+.reviewMeaningPart {
+  margin-top: 6px;
+}
+
+.reviewText {
+  max-height: 480px;
+  margin: 4px 0 0;
+  padding: 8px 12px;
+  overflow: auto;
+  border: 1px solid var(--borderFaintColor);
+  background: var(--layoutTabsBackground);
+  font-family: var(--font-monospace);
+  font-size: 12px;
+  white-space: pre;
+}
+
+.reviewText:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 /* What the band of the server gives the focus to when a command went: the words that say what it is
    doing, and the version the server answered. */
 .serverFocus:focus {

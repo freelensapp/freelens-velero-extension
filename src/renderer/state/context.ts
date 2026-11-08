@@ -50,6 +50,7 @@ export function currentInstallation(): Installation {
       storage: storage(),
       gate,
       writer: gate,
+      actions: gate,
       allowances: gate,
     });
 

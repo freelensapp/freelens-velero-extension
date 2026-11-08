@@ -65,6 +65,10 @@ export interface ServerOffset {
   // The newest submission whose backup gives another offset: the zone of the server changed its offset
   // between the two, which a rule of daylight saving time does, and the newest stands.
   changed?: { minutes: number; schedule: string; backup: string; submission: number };
+  // Another backup of the schedule named as a submission and created within the same minute of it, as a backup asked
+  // by hand then is: the command line names one in UTC, and the offset may be read in the name of that one
+  // (SPEC-0017, the restatement of REQ-162).
+  shared?: string;
 }
 
 // The wall clock that fourteen digits name, yyyymmddhhmmss, read as UTC; nothing when they name none, as a
@@ -93,8 +97,9 @@ function wallOfDigits(digits: string): number | undefined {
 // namespace, its name of fourteen digits and its creation within a minute of the submission (REQ-162). The
 // difference is rounded to the nearest quarter of an hour; a remainder of a minute or more, or an offset no
 // zone in use has, is a name that is not the controller's, and gives nothing. A backup asked by hand is named
-// in UTC by the command line (cli/backup/create.go L374-L375): one created in the same minute as a submission
-// is taken as the controller's, and gives an offset of zero, which the spec accepts.
+// in UTC by the command line (cli/backup/create.go L374-L375), and by Back up now as the command line names it: one
+// created in the same minute as a submission may be taken as the controller's, and give an offset of zero, a risk the
+// offset carries, with the other backup, for the words to name it.
 function offsetOf(schedule: ScheduleResource, backups: BackupResource[]): ServerOffset | undefined {
   const found = submissionBackup(schedule, backups);
 
@@ -116,6 +121,7 @@ function offsetOf(schedule: ScheduleResource, backups: BackupResource[]): Server
     backup: found.backup.metadata.name,
     submission,
     created,
+    ...(found.shared ? { shared: found.shared.metadata.name } : {}),
   };
 }
 
@@ -159,7 +165,8 @@ function sameOffset(one: ServerOffset, other: ServerOffset): boolean {
     one.created === other.created &&
     one.changed?.minutes === other.changed?.minutes &&
     one.changed?.backup === other.changed?.backup &&
-    one.changed?.submission === other.changed?.submission
+    one.changed?.submission === other.changed?.submission &&
+    one.shared === other.shared
   );
 }
 
@@ -556,6 +563,8 @@ export const SIGNAL_WORDS = {
   otherSchedule: (name: string) => `the schedule ${name}`,
   changed: (offset: string, backup: string, of: string, moment: string) =>
     `The offset was ${offset} when the server submitted the backup ${backup} of ${of}, at ${moment}: it changed between the two submissions, and the newest stands.`,
+  shared: (backup: string, other: string) =>
+    `The backup ${other} of the same schedule was created within the same minute as ${backup}, as a backup asked by hand then is: the command line names one with the time in UTC, so the offset may have been read in the name of the wrong one.`,
   holdNotKnown: (reason: string) =>
     `Whether a backup of the schedule holds the submissions is not known, since ${reason}.`,
   schedulesStale: (ago: string, since: string) => `Computed from the schedules as they were read ${ago} ago: ${since}.`,
@@ -779,6 +788,7 @@ function derivedNotes(zone: ZoneOf, schedule: string): string[] {
       whose(offset, schedule),
       momentText(zone.zone, offset.submission),
     ),
+    ...(offset.shared ? [SIGNAL_WORDS.shared(offset.backup, offset.shared)] : []),
     ...(changed
       ? [
           SIGNAL_WORDS.changed(

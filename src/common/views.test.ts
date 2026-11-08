@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { closed, DEPTH, decodeView, decodeViews, encodeView, openedFrom, sameView, VIEW_KINDS, VIEWS } from "./views";
+import {
+  closed,
+  DEPTH,
+  decodeView,
+  decodeViews,
+  encodeView,
+  openedFrom,
+  replaced,
+  sameView,
+  VIEW_KINDS,
+  VIEWS,
+} from "./views";
 
 import type { ViewTarget } from "./views";
 
@@ -55,6 +66,19 @@ describe("views in the address of a page", () => {
 });
 
 describe("way between the views", () => {
+  it("gives the place of the workspace of an action to the view of what it created", () => {
+    const schedule: ViewTarget = { kind: "schedule", name: "nightly" };
+    const now: ViewTarget = { kind: "backup-now", name: "nightly" };
+    const created = backup("nightly-20261108043000");
+
+    expect(replaced([schedule, now], created)).toEqual([schedule, created]);
+    expect(closed(replaced([schedule, now], created))).toEqual([schedule]);
+    // A backup that is on the way already is gone back to.
+    expect(replaced([created, schedule, now], created)).toEqual([created]);
+    expect(VIEWS["backup-now"].family).toBe("schedules");
+    expect(VIEWS["backup-now"].reads).toEqual(VIEWS.schedule.reads);
+  });
+
   it("opens a view over the one that is shown, and goes back to it", () => {
     const first = openedFrom([], backup("nightly-1"));
     const second = openedFrom(first, restore("restore-1"));

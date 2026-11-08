@@ -1,6 +1,7 @@
 import { Renderer } from "@freelensapp/extensions";
 import { observer } from "mobx-react";
 import React from "react";
+import { scheduleRefused } from "../../common/backup-from-schedule";
 import { backupScope } from "../../common/backup-scope";
 import { manyDefaultsText } from "../../common/location-view";
 import { shownWords } from "../../common/operation-line";
@@ -26,7 +27,7 @@ import type { BackupResource, ScheduleResource } from "../../common/types";
 import type { Installation } from "../state/installation";
 
 const {
-  Component: { Icon },
+  Component: { Button, Icon },
 } = Renderer;
 
 const VALIDATION_ICONS: Record<Validation, string> = {
@@ -207,6 +208,38 @@ function Template({ references, location }: { references: TemplateReferences; lo
   );
 }
 
+// The commands of a schedule (SPEC-0017, REQ-252): each opens the workspace of its action over this view, which is as
+// it was when the workspace closes. They are there with writes on or off: the form of an action can be filled with
+// writes off, and its review asks for them. A schedule whose name is longer than a label takes is asked for no backup
+// (REQ-255).
+function ScheduleCommands({ installation, name, uid }: { installation: Installation; name: string; uid?: string }) {
+  const refused = scheduleRefused(name);
+
+  return (
+    <div className={styles.commands} data-testid="velero-schedule-commands">
+      <Button
+        plain
+        data-testid="velero-schedule-back-up-now"
+        disabled={Boolean(refused) || !uid}
+        aria-describedby={refused ? "velero-schedule-back-up-now-refused" : undefined}
+        onClick={() => {
+          if (!uid) return;
+          installation.backupNow.start({ name, uid });
+          openView({ kind: "backup-now", name });
+        }}
+      >
+        <Icon material="backup" small aria-hidden />
+        Back up now
+      </Button>
+      {refused ? (
+        <span id="velero-schedule-back-up-now-refused" className={styles.factNote}>
+          {refused}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 export interface ScheduleWorkspaceProps {
   installation: Installation;
   name: string;
@@ -251,6 +284,7 @@ export const ScheduleWorkspace = observer(({ installation, name, now, back, onBa
 
   return (
     <Workspace kind="schedule" name={view.name} uid={view.uid} back={back} onBack={onBack}>
+      <ScheduleCommands installation={installation} name={view.name} uid={view.uid} />
       <div className={styles.band} data-testid="velero-schedule-status">
         <Fact name="Validation">
           <ValidationMark state={view.state} />

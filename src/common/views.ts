@@ -17,6 +17,7 @@ export const VIEW_KINDS = [
   "pod-volume-restore",
   "data-upload",
   "data-download",
+  "backup-now",
 ] as const;
 export type ViewKind = (typeof VIEW_KINDS)[number];
 
@@ -119,6 +120,15 @@ export const VIEWS: Record<
     noun: "data download",
     plural: "data downloads",
   },
+  // The workspace of a backup asked from a schedule by hand is of the schedule, by its name: it reads what the view of
+  // the schedule reads, and says of the schedule what a view says of what it shows.
+  "backup-now": {
+    family: "schedules",
+    reads: BACKUPS_AND_LOCATIONS,
+    title: "Back up now",
+    noun: "schedule",
+    plural: "schedules",
+  },
 };
 
 // How many views the address keeps: a path longer than this loses where it started from.
@@ -174,4 +184,10 @@ export function openedFrom(path: ViewTarget[], target: ViewTarget): ViewTarget[]
 // The path after the way back is taken.
 export function closed(path: ViewTarget[]): ViewTarget[] {
   return path.slice(0, -1);
+}
+
+// The path after the view that is shown gives its place to another: the workspace of an action to the view of what
+// it created, whose way back leads where the workspace was opened from.
+export function replaced(path: ViewTarget[], target: ViewTarget): ViewTarget[] {
+  return openedFrom(closed(path), target);
 }

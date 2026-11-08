@@ -46,7 +46,7 @@ replaced. Changing it clears write confirmation and isolates all subsequent data
 | --- | --- | --- |
 | Backup/Restore lists | Native sortable, searchable, virtualized tables | Fast scanning and familiar selection/navigation |
 | Backup/Restore operation | Dedicated full-width workspace with summary and diagnostic tabs | Enough room for scope, progress, structured failures and logs |
-| Schedule/BSL/VSL | Native table and a read-only workspace of the extension, shorter than the one of an operation | The details of the host carry the edit and the delete of the host; one way in and one way back for every kind |
+| Schedule/BSL/VSL | Native table and a workspace of the extension, shorter than the one of an operation; the workspace of a schedule offers the commands of SPEC-0017 under its name, Back up now first, each opening the workspace of its action over the view | The details of the host carry the edit and the delete of the host; one way in and one way back for every kind; an action is reviewed where it is asked |
 | Overview | Unframed summary bands and compact recent-operation history | Show attention items and ongoing work without a decorative dashboard; the panels of the backup coverage are deferred after v1.0.0 |
 | Recovery form | Guided source -> scope -> policy -> review flow | Keep consequential choices explicit and reviewable |
 
