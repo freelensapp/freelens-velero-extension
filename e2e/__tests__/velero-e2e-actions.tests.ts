@@ -509,7 +509,8 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
   it(
     "opens Create schedule over the list, named in the address, leaves the list as it was when it closes, and drops a review when writes go off before the creation, which creates nothing",
     async () => {
-      await writesOn();
+      // Writes are on, as the case before left them.
+      await frame.waitForSelector("[data-testid=velero-writes][data-writes=on]", { timeout: 60_000 });
       await cluster.showList(frame);
       await cluster.openPage(frame, SCHEDULES);
       await cluster.waitForList(frame, SCHEDULES);
