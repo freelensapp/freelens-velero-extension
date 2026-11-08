@@ -107,6 +107,10 @@ describe("a duration as Go reads it and prints it", () => {
     "1.5.5s",
     "9223372036854775808ns",
     "100000000000000000000ns",
+    // A unit is one of the table: a name an object inherits is not one.
+    "1constructor",
+    "1toString",
+    "1__proto__",
   ])("refuses %j, as Go does", (text) => {
     expect(goDurationNanoseconds(text)).toBeUndefined();
   });

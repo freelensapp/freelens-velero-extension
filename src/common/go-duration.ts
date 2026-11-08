@@ -122,7 +122,8 @@ export function goDurationNanoseconds(text: string): bigint | undefined {
 
     if (unit === "") return undefined;
     rest = rest.slice(unit.length);
-    const nanoseconds = NANOSECONDS[unit];
+    // A unit is one of the table, and nothing an object inherits.
+    const nanoseconds = Object.hasOwn(NANOSECONDS, unit) ? NANOSECONDS[unit] : undefined;
 
     if (nanoseconds === undefined || value > LIMIT / nanoseconds) return undefined;
     value *= nanoseconds;
