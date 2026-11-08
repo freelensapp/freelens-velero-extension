@@ -379,4 +379,7 @@ back, Back up now and Restore, the ways to the other views and the marks of the 
 in [`schedules-page.test.tsx`](../../src/renderer/pages/schedules-page.test.tsx), and
 by the workspace of the restore, with writes off and on, in
 [`restore-create-workspace.test.tsx`](../../src/renderer/pages/restore-create-workspace.test.tsx);
-the packaged suites of the action come with the third pull request of T4.4.
+the packaged suites of the action came with the third pull request of T4.4: the suite of
+the actions,
+[`velero-e2e-actions.tests.ts`](../../e2e/__tests__/velero-e2e-actions.tests.ts), and
+the views of the workspace in the pre-review.
