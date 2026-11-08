@@ -1115,11 +1115,12 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
         deleteOffered("InProgress").words,
       );
       await cluster.closeWorkspace(frame);
-      // The backup of the form, which no controller started: offered, with the words of a backup without a phase.
+      // The backup of the form, which no controller started: offered, with the words of a backup without a phase that
+      // names its storage location.
       await cluster.openWorkspace(frame, DELETED, cluster.BACKUPS);
       expect(await frame.locator("[data-testid=velero-backup-delete]").isDisabled()).toBe(false);
       expect(await cluster.wordsOf(frame, "[data-testid=velero-backup-delete-note]")).toBe(
-        deleteOffered(undefined).words,
+        deleteOffered(undefined, "views-available").words,
       );
       await frame.click("[data-testid=velero-backup-delete]");
       await frame.waitForSelector("[data-testid=velero-backup-delete-workspace]", { timeout: 30_000 });
@@ -1154,10 +1155,10 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
       expect(await frame.locator(deletion("text")).textContent()).toBe(
         deleteRequestText(deleteRequestOf(cluster.E2E_VIEWS_NAMESPACE, { name: DELETED, uid: backup.metadata.uid })),
       );
-      // What it means, in the order Velero does it: the backup without a phase, its location Available, and no other
-      // request of it.
+      // What it means: the backup without a phase, its location Available, and no other request of a backup of its
+      // name.
       expect(await frame.locator(`${deletion("meaning")} li`).allTextContents()).toEqual(
-        deleteMeaning(DELETED, { storageLocation: "views-available", location: { phase: "Available" } }).map(
+        deleteMeaning(DELETED, { storageLocation: "views-available", location: { phase: "Available" }, others: 0 }).map(
           (meaning) => meaning.words,
         ),
       );
@@ -1394,7 +1395,7 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
         ).toBe(history.metadata.resourceVersion);
         expect(everyWrite(earlier)).toEqual({});
         // The deletion of a backup, refused at the creation: the reader may read the backups, and may neither list nor
-        // create a request to delete one, so that the review says no other request.
+        // create a request to delete one, so that the review says that the other requests could not be read.
         const kept = read<BackupRead>("backups.velero.io", RESTORED, cluster.E2E_VIEWS_NAMESPACE);
 
         // Removed after the suite should the reader ever create one.
@@ -1407,7 +1408,9 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
         await other.waitForSelector(deletion("ask"), { timeout: 30_000 });
         await other.click(deletion("ask"));
         await other.waitForSelector(deletion("review"), { timeout: 30_000 });
-        expect(await other.locator(`${deletion("meaning")} [data-part=others]`).count()).toBe(0);
+        expect(await cluster.wordsOf(other, `${deletion("meaning")} [data-part=others]`)).toBe(
+          deleteMeaning(RESTORED, { others: "unread" }).find((meaning) => meaning.id === "others")?.words,
+        );
         await other.locator(deletionField("typed")).first().fill(RESTORED);
         await other.click(deletion("run"));
         await other.waitForSelector(deletion("failure"), { timeout: 60_000 });

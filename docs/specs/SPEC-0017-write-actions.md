@@ -2343,3 +2343,61 @@ backup that names no storage location left as an open question:
   offered beside a Delete backup enabled, which is held back now.
 - The line of the name of a backup with both commands and their notes, which wrap, is
   looked at in the pictures of the pre-review of the third pull request.
+
+T4.6, the third and last of its pull requests, on 2026-11-08: the proof in the packaged
+application, in the pre-review and end to end. The evidence, by check:
+
+- DELETE-05, the packaged part
+  ([`velero-e2e-actions.tests.ts`](../../e2e/__tests__/velero-e2e-actions.tests.ts)), on
+  the CRDs of the release alone, where no controller runs: Delete backup in the view of
+  the backup of the form, which no controller started, with the words of its phase, and
+  disabled for the backup in progress with the words why; the workspace over the view,
+  named in the address, which with writes off writes nothing; the review, whose text is
+  the request of the backup, with what it means, Delete backup enabled only once the
+  name of the backup is typed, left by Escape and by its command, a new review asking
+  for the name again, nothing written; the deletion, exactly one POST of a
+  DeleteBackupRequest answered 201, the text of its review, no write of the backup and
+  no other write of any kind of Velero, no DELETE, the request read with every field of
+  the text, a name generated from its prefix and no phase, the backup with its version
+  as it was, the words that Velero had not started it, and the way to the view of the
+  backup, which takes the place of the workspace; the reader of a part refused at the
+  creation of the request, its review saying that the other requests could not be read,
+  writes left on, no request of the backup and the backup as it was. The suite removes
+  each request of a backup whose deletion it asked, created since it began. 28 cases.
+- DELETE-05 and REQ-282, end to end
+  ([`local-delete-proof.mts`](../../e2e/scripts/local-delete-proof.mts), called by the
+  transport proof of `pnpm e2e`), the procedures of the compiled main process called as
+  a frame calls them, with the server of the release running: a backup of the ConfigMaps
+  of the run, Completed, deleted with its name typed, the review the request of that
+  backup with no other request of it, the run ended completed or in progress, then the
+  backup gone and no request of it left, which the server deletes with the backup; a
+  backup of a storage location that is not there, FailedValidation, deleted the same
+  way, refused with the one error of a refusal, `backup deletion failed: backup storage
+  location <location> not found`, the backup keeping its phase. The proof removes the
+  backup it refused by its object, the other through the request of the action, and
+  every request of them, whatever ended it.
+- ACT-10 ([`pre-review.tests.ts`](../../e2e/__tests__/pre-review.tests.ts)): Delete
+  backup, its workspace and its review with the name typed, in both themes, at 1440 by
+  900, at 900 by 650 and at twice the zoom, with nothing over something else, wider than
+  its room or cut, 64 views in all, the beginning of the workspace and of the review
+  brought into sight for the picture; and a deletion asked with the keyboard alone, from
+  the command on the line of the name of the backup, Enter to the review, which has the
+  focus, the name typed in its field and taken back by Escape, Escape back to the
+  command that asks again, Escape back to the view, whose way back has the focus, and
+  Escape back to the row of the backup, with nothing sent. 51 cases.
+- The parts of the views ([`views-plan.test.ts`](../../test/views-plan.test.ts)): the
+  workspace of the deletion, its words and the request run the suite of the actions.
+
+Decided while implementing, on 2026-11-08:
+
+- The packaged suite deletes the backup of the form it created, which no controller
+  started there, so that no fixture is asked for; on the CRDs alone the request stays
+  without a phase, and the suite removes it with the requests of the backups whose
+  deletion it asked, by the label of the UID of the backup, each by its name with its
+  UID as the precondition, when it was created since the suite began.
+- The proof of `pnpm e2e` refuses a request with a backup of a storage location that is
+  not there, which the server validates FailedValidation and refuses to delete before it
+  changes anything, and removes that backup by its object: it holds nothing in the
+  store.
+- The line the transport proof prints when it passes says the pause and the resume,
+  which it left out, and the deletion.
