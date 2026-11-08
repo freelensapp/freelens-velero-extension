@@ -144,6 +144,20 @@ export function backupFromSchedule(schedule: unknown, name: string): BackupFromS
   };
 }
 
+// The body a text writes, read back: what the review says beside the text is of what is sent. Nothing when the text is
+// not the body of a Backup with its labels.
+export function readBody(text: string): BackupFromSchedule | undefined {
+  try {
+    const body = JSON.parse(text) as BackupFromSchedule;
+
+    return isRecord(body) && body.kind === "Backup" && isRecord(body.metadata) && isRecord(body.metadata.labels)
+      ? body
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // The keys of an object in the order the text writes them: the ones of a Kubernetes object first, in their usual
 // order, then the others by their characters.
 const FIRST = [
@@ -207,13 +221,15 @@ export const MEANING_WORDS = {
 
 // What the review of a backup asked from a schedule says beside its text, in the order it is read: what Velero does
 // with it and when, what the state of the schedule changes, the owner, and each label and annotation the backup takes
-// from the schedule, by its key.
+// from the schedule, by its key. The labels, the annotations and the owner are read in the body, which the main
+// process built from the schedule as it read it; whether the schedule is paused or refused, in the schedule as the views
+// read it.
 export function backupFromScheduleMeaning(schedule: unknown, body: BackupFromSchedule): MeaningPart[] {
   const read = isRecord(schedule) ? schedule : {};
   const spec = isRecord(read.spec) ? read.spec : {};
   const status = isRecord(read.status) ? read.status : {};
-  const template = isRecord(spec.template) ? spec.template : {};
-  const fromTemplate = isRecord(template.metadata) && isRecord(template.metadata.labels);
+  // The builder writes the labels into the template only when the template has a map of them, which they come from.
+  const fromTemplate = isRecord(body.spec.metadata) && isRecord(body.spec.metadata.labels);
   const name = body.metadata.labels[SCHEDULE_NAME_LABEL];
   const parts: MeaningPart[] = [
     { id: "by-hand", words: MEANING_WORDS.byHand },

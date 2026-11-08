@@ -1221,4 +1221,3 @@ read in the name of the wrong one. The rest of REQ-162 is unchanged.
 backup asked eleven seconds after the submission is named beside the derived offset,
 one created two minutes after it is not, and an offset kept from a read before the
 backup asked by hand takes the risk at the next read.
-

@@ -1,15 +1,15 @@
 import { Renderer } from "@freelensapp/extensions";
 import { observer } from "mobx-react";
 import React from "react";
-import { BACKUP_NAME_WORDS, backupFromScheduleMeaning } from "../../common/backup-from-schedule";
+import { BACKUP_NAME_WORDS, backupFromScheduleMeaning, readBody } from "../../common/backup-from-schedule";
 import { escapeOfField } from "../components/artifact-viewer";
 import styles from "../components/views.module.css";
 import { focusFirst } from "../components/views-frame";
 import { Fact, NotShown, ViewLink, Workspace } from "../components/workspace";
 import { replaceView } from "../navigation";
 
-import type { BackupFromSchedule } from "../../common/backup-from-schedule";
 import type { ScheduleResource } from "../../common/types";
+import type { BackupNow, BackupNowEnd } from "../state/backup-now";
 import type { Installation } from "../state/installation";
 
 const {
@@ -39,19 +39,55 @@ export const BACKUP_NOW_VIEW_WORDS = {
   found:
     "The answer of the creation was lost on the way: the backup was found by its name, with the labels of the review, created since the confirmation.",
   unknownLeft:
-    "Look for it among the backups before asking again: a backup asked again is another backup, with another name.",
+    "Look for it among the backups before asking again: if it was created, its name is taken, and asking again needs another name.",
+  replaced:
+    "The schedule changed while the review was read: this review takes the place of the one before, and nothing was created. Read it again before you confirm.",
+  earlier: (schedule: string) => `The backup asked from the schedule ${schedule} ended while no workspace showed it:`,
 };
 
-// The body the review shows, read back from its text: what the words beside it say is of what is sent.
-function bodyOf(text: string): BackupFromSchedule | undefined {
-  try {
-    const body = JSON.parse(text) as BackupFromSchedule;
+// What an end says in words: the backup created, with what Velero wrote of it, or the words of the failure.
+function endWords(end: BackupNowEnd): string {
+  if (end.state === "failed") return end.failure.text;
+  const phase = end.backup.phase ? BACKUP_NOW_VIEW_WORDS.phase(end.backup.phase) : BACKUP_NOW_VIEW_WORDS.unread;
 
-    return body && typeof body === "object" && body.metadata?.labels ? body : undefined;
-  } catch {
-    return undefined;
-  }
+  return `${BACKUP_NOW_VIEW_WORDS.created(end.backup.name)} ${phase}`;
 }
+
+// The end of a backup asked from another schedule that no workspace showed, above the form, with the way to the
+// backup created, until the operator lets it go.
+const Earlier = observer(({ state }: { state: BackupNow }) => {
+  const earlier = state.earlier;
+
+  if (!earlier) return null;
+  const { schedule, end } = earlier;
+
+  return (
+    <section
+      className={styles.writeConfirmation}
+      data-testid={`${ID}-earlier`}
+      data-state={end.state}
+      aria-label={BACKUP_NOW_VIEW_WORDS.earlier(schedule)}
+    >
+      <p className={styles.stateText}>{BACKUP_NOW_VIEW_WORDS.earlier(schedule)}</p>
+      <p className={styles.stateText} data-testid={`${ID}-earlier-words`}>
+        {endWords(end)}
+      </p>
+      <div className={styles.writeActions}>
+        {end.state === "created" ? (
+          <ViewLink target={{ kind: "backup", name: end.backup.name }}>Open the backup {end.backup.name}</ViewLink>
+        ) : null}
+        <button
+          type="button"
+          className={styles.link}
+          data-testid={`${ID}-earlier-let-go`}
+          onClick={() => state.letGo()}
+        >
+          Let it go
+        </button>
+      </div>
+    </section>
+  );
+});
 
 export interface BackupNowWorkspaceProps {
   installation: Installation;
@@ -90,10 +126,20 @@ export const BackupNowWorkspace = observer(({ installation, name, back, onBack }
         ? BACKUP_NOW_VIEW_WORDS.running(step.name)
         : "";
 
-  // The workspace opened, by the command of the schedule or by the address: the form of the schedule.
+  // The workspace opened, by the command of the schedule or by the address: the form of the schedule. A backup asked
+  // from another schedule that was being created is waited for: the form of this one is given when it ends.
+  const waiting = state.busy;
+
   React.useEffect(() => {
-    if (uid) state.open({ name, uid });
-  }, [state, name, uid]);
+    if (uid && !waiting) state.open({ name, uid });
+  }, [state, name, uid, waiting]);
+
+  // An end the workspace shows is seen: it is not said again elsewhere.
+  const ended = ours && (step.state === "created" || step.state === "failed");
+
+  React.useEffect(() => {
+    if (ended) state.see();
+  }, [state, ended, step]);
 
   // A review is left with the workspace that shows it.
   React.useEffect(() => () => state.leave(), [state]);
@@ -107,7 +153,10 @@ export const BackupNowWorkspace = observer(({ installation, name, back, onBack }
     if (!busy) gesture.current = false;
     const active = document.activeElement;
 
-    if (active && active !== document.body && active !== status.current && document.body.contains(active)) return;
+    // A control that was disabled by the gesture keeps the focus without being where the operator moved it.
+    const free = !active || active === document.body || active === status.current || active.matches(":disabled");
+
+    if (!free && document.body.contains(active)) return;
     if (busy) status.current?.focus();
     else
       focusFirst(body.current, [
@@ -147,6 +196,7 @@ export const BackupNowWorkspace = observer(({ installation, name, back, onBack }
         <p className={styles.factNote} data-testid={`${ID}-what`}>
           {BACKUP_NOW_VIEW_WORDS.what(name, namespace)}
         </p>
+        <Earlier state={state} />
         {refused ? (
           <p className={styles.stateText} data-testid={`${ID}-refused`}>
             {refused}
@@ -157,6 +207,7 @@ export const BackupNowWorkspace = observer(({ installation, name, back, onBack }
             schedule={schedule}
             name={step.name}
             text={step.text}
+            replaced={step.replaced === true}
             cluster={cluster}
             context={context}
             onCreate={by(() => void state.create())}
@@ -311,6 +362,8 @@ interface ReviewProps {
   schedule: ScheduleResource;
   name: string;
   text: string;
+  // The review took the place of one whose schedule changed while it was read.
+  replaced: boolean;
   cluster: string;
   context: string;
   onCreate: () => void;
@@ -321,8 +374,8 @@ interface ReviewProps {
 // beside what it means, with the context and the namespace. Escape leaves it, as the command that leaves it does, and
 // the workspace stays. The focus is not on the command that creates, so that the key that asked is not the one that
 // confirms.
-function Review({ installation, schedule, name, text, cluster, context, onCreate, onBack }: ReviewProps) {
-  const body = bodyOf(text);
+function Review({ installation, schedule, name, text, replaced, cluster, context, onCreate, onBack }: ReviewProps) {
+  const body = readBody(text);
   const meaning = body ? backupFromScheduleMeaning(schedule, body) : [];
 
   return (
@@ -338,6 +391,11 @@ function Review({ installation, schedule, name, text, cluster, context, onCreate
         onBack();
       }}
     >
+      {replaced ? (
+        <p className={styles.stateText} data-testid={`${ID}-replaced`} role="status">
+          {BACKUP_NOW_VIEW_WORDS.replaced}
+        </p>
+      ) : null}
       <p className={styles.stateText}>{BACKUP_NOW_VIEW_WORDS.review}</p>
       <div className={styles.band}>
         <Fact name="Name">{name}</Fact>

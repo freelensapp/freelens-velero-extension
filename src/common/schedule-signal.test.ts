@@ -486,6 +486,28 @@ describe("ADH-03: the zone a schedule is read in, in its signal", () => {
       SIGNAL_WORDS.derived("UTC+02:00", own.metadata.name, SIGNAL_WORDS.thisSchedule, moment),
       SIGNAL_WORDS.shared(own.metadata.name, byHand.metadata.name),
     ]);
+    // An offset that changed since, read in a minute shared with a backup asked by hand, carries the risk too: the change
+    // may be no change of the zone at all.
+    const daily = schedule("daily", { phase: "Enabled", lastBackup: "2026-10-12T03:00:00Z" });
+    const before = submitted("daily", Date.parse("2026-10-12T03:00:00Z"), 60);
+    const handOfDaily = backup(
+      `daily-${digits(Date.parse("2026-10-12T03:00:09Z"))}`,
+      Date.parse("2026-10-12T03:00:09Z"),
+      {
+        schedule: "daily",
+      },
+    );
+
+    expect(scheduleSignal(nightly, contextOf([daily, nightly], [before, handOfDaily, own])).notes).toEqual([
+      SIGNAL_WORDS.derived("UTC+02:00", own.metadata.name, SIGNAL_WORDS.thisSchedule, moment),
+      SIGNAL_WORDS.changed(
+        "UTC+01:00",
+        before.metadata.name,
+        SIGNAL_WORDS.otherSchedule("daily"),
+        "2026-10-12 04:00:00 UTC+01:00",
+      ),
+      SIGNAL_WORDS.shared(before.metadata.name, handOfDaily.metadata.name),
+    ]);
     // An offset kept from a read before the backup asked by hand takes the risk at the next read.
     const kept = keepOffset(undefined, reads([nightly], [own]));
 

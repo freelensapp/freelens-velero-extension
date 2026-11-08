@@ -299,7 +299,8 @@ complete feature for ornamental work.
   refresh or reorder the user's selection under their cursor.
 - Escape in a text field of a view belongs to the field: it clears what was typed
   and goes no further, as in the search field of the host, and a view of one
-  object is never left from inside a field. Inside the confirmation of a request
+  object is never left from inside a field. A field that holds a proposal, as the
+  name of a backup asked from a schedule, is given back its proposal. Inside the confirmation of a request
   Escape leaves the confirmation, and the view stays. Anywhere else in the view
   Escape is the way back. The two exceptions depart from what the Restores ask of
   Escape: they are a

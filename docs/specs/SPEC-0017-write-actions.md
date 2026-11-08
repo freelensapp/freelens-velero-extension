@@ -759,8 +759,8 @@ Decided while implementing, on 2026-11-08:
   NOW-05).
 
 T4.2, the second of its pull requests, on 2026-11-08: the workspace of the action in
-the renderer, the command in the view of a schedule, the words of the gate and the
-risk to the offset of SPEC-0013. The evidence, by check:
+the renderer, the command in the view of a schedule and the risk to the offset of
+SPEC-0013; the words of the gate came with the first. The evidence, by check:
 
 - NOW-01, the component part: the command under the name of the schedule, there for
   a paused schedule, and disabled for a schedule of 64 characters with the words of
@@ -791,8 +791,8 @@ risk to the offset of SPEC-0013. The evidence, by check:
   `src/renderer/pages/backup-now-workspace.test.tsx`).
 - NOW-04: a 409 at the creation leads to the backup that has the name, and the form
   proposes the name of the next second.
-- REQ-245: the words of the gate name the backup from a schedule
-  (`src/renderer/components/writes.test.tsx`).
+- REQ-245: the words of the gate name the backup from a schedule since the first
+  pull request (`src/renderer/components/writes.test.tsx`).
 - NOW-05, the unit part: the risk to the offset of SPEC-0013, as
   [its amendment](SPEC-0013-schedule-adherence.md#amendments) says.
 
@@ -803,14 +803,39 @@ empties the name, the command enabled for a name of 64 characters, the words of 
 off left out, no other backup of the minute carried, the window of the minute not
 applied, and an offset kept that does not take the risk.
 
+The independent review of the pull request ran 139 changes against the tests, of
+which 65 survived, and found the workspace of a second schedule blank once the backup
+asked from the first one ended. The cases added after it pin what it named: the form
+of that schedule given when the other backup ends, with its end above it until it is
+let go, and no end said again once its workspace showed it; a review left with its
+workspace; the form opened from the address alone; the command that gives a new form;
+Enter in the field, with the focus on the words of what is asked; writes turned off,
+another installation and the end of the extension during a review; a renewal and a
+run dropped, a renewal refused, the expiry at its instant, and the review that takes
+the place of another and says so; a text that is not the body of a backup, confirmed
+for nothing; the name of the next second given back by Escape after a 409; one review
+at a time; what the client of the renderer sends; the nearest of three backups of the
+minute; and the risk carried by an offset that changed. Fifteen changes of what the
+review asked were seen failing.
+
 Decided while implementing, on 2026-11-08:
 
 - The state of the action is kept by the installation, as the version of the server
-  is: a visit to another page shows the form, the review or the backup being created
-  as they were; the installation that changes drops it, and writes turned off drop a
-  review.
+  is: a visit to another page shows the form with its name, and the backup being
+  created or how it ended, as they were; a review is left with the workspace that
+  shows it, and asked again; the installation that changes drops everything, and
+  writes turned off drop a review.
 - One backup is asked at a time from any workspace: the workspace of another schedule
-  opened while one is created says so, and asks nothing.
+  opened while one is created says so, asks nothing, and gives the form of its
+  schedule when that one ends.
+- An end no workspace showed, of a backup whose workspace was closed while it was
+  created, is not lost with its form: the next workspace says it above its form, with
+  the way to the backup created, until the operator lets it go. The end kept for the
+  cluster in the target bar, wherever the operator is, comes with the last pull
+  request of T4.2.
+- A review whose text the views cannot read as a Backup is not confirmed, and says
+  so; a review that took the place of one whose schedule changed while it was read
+  says so above it.
 - Escape in the field of the name gives back the name the form proposed: what was
   typed is the change of the proposal, and an empty name is not a way out.
 - The text of the review scrolls past 480 pixels; Chromium gives the keyboard a

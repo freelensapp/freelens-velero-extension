@@ -347,4 +347,3 @@ back, Back up now, the ways to the other views and the marks of the line, and by
 workspace of the action, with writes off and on, in
 [`backup-now-workspace.test.tsx`](../../src/renderer/pages/backup-now-workspace.test.tsx);
 the packaged suites of the action come with the last pull request of T4.2.
-

@@ -1,5 +1,5 @@
 import { action, computed, makeObservable, observable, observableRef, runInAction } from "mobx";
-import { backupNameProblem, proposedBackupName, scheduleRefused } from "../../common/backup-from-schedule";
+import { backupNameProblem, proposedBackupName, readBody, scheduleRefused } from "../../common/backup-from-schedule";
 
 import type { BackupCreated, Failure } from "../../common/ipc";
 import type { BackupNowClient } from "../api/ipc";
@@ -15,17 +15,21 @@ export interface ScheduleOfBackup {
 // main process could not be asked. The words of the main process say what the reads after it found.
 export type BackupLeft = "none" | "unknown";
 
+// How a backup asked from a schedule ended: created, with what Velero wrote of it; or without a backup, with the words
+// of the main process, the name that was asked and whether it may be there.
+export type BackupNowEnd =
+  | { state: "created"; backup: BackupCreated }
+  | { state: "failed"; failure: Failure; left: BackupLeft; name: string };
+
 // Where a backup asked from a schedule is (SPEC-0017, REQ-252): the form, with its name; the review asked of the main
-// process; the review shown, with its token and the text it will send; the backup created and read; created, with
-// what Velero wrote of it; or ended without a backup, with the words of the main process, the name that was asked and
-// whether it may be there.
+// process; the review shown, with its token and the text it will send, and whether it took the place of one whose
+// schedule changed while it was read; the backup created and read; or its end.
 export type BackupNowStep =
   | { state: "form" }
   | { state: "asking" }
-  | { state: "reviewing"; token: string; expires: number; text: string; name: string }
+  | { state: "reviewing"; token: string; expires: number; text: string; name: string; replaced?: true }
   | { state: "running"; request: string; name: string }
-  | { state: "created"; backup: BackupCreated }
-  | { state: "failed"; failure: Failure; left: BackupLeft; name: string };
+  | BackupNowEnd;
 
 export interface BackupNowDependencies {
   client?: BackupNowClient;
@@ -47,6 +51,15 @@ const NO_WAY: Failure = {
   stage: "way",
   retry: false,
   text: "The views have no way to the main process of the extension: the backup cannot be asked.",
+};
+
+// A review the views cannot show is not confirmed: the text of a Backup is what the operator confirms.
+const NO_TEXT: Failure = {
+  ok: false,
+  code: "validation",
+  stage: "review",
+  retry: false,
+  text: "The main process answered no text of a backup that the review can show: nothing can be confirmed, and nothing was created.",
 };
 
 // Where a write fails when it is not known what the main process did: its answer was lost on the way, was not one of
@@ -75,6 +88,11 @@ export class BackupNow {
   name = "";
   // The name the form proposed, which Escape in the field gives back.
   proposed = "";
+  // Whether a workspace showed the end of the step.
+  seen = false;
+  // The end of a backup asked from another schedule that no workspace showed: the next workspace says it above its
+  // form, until the operator lets it go (SPEC-0017, REQ-250 in the views).
+  earlier?: { schedule: string; end: BackupNowEnd };
   private readonly dependencies: BackupNowDependencies;
 
   constructor(dependencies: BackupNowDependencies) {
@@ -84,11 +102,15 @@ export class BackupNow {
       schedule: observableRef,
       name: observable,
       proposed: observable,
+      seen: observable,
+      earlier: observableRef,
       problem: computed,
       refused: computed,
       start: action,
       open: action,
       type: action,
+      see: action,
+      letGo: action,
       leave: action,
       drop: action,
     });
@@ -114,7 +136,11 @@ export class BackupNow {
   start(schedule: ScheduleOfBackup): void {
     if (this.step.state === "running") return;
     const proposed = proposedBackupName(schedule.name, this.dependencies.now());
+    const step = this.step;
 
+    // An end no workspace showed is not lost with the form it ended in.
+    if ((step.state === "created" || step.state === "failed") && !this.seen && this.schedule)
+      this.earlier = { schedule: this.schedule.name, end: step };
     this.schedule = schedule;
     this.name = proposed;
     this.proposed = proposed;
@@ -135,6 +161,16 @@ export class BackupNow {
     if (this.step.state !== "form" && this.step.state !== "running") this.step = { state: "form" };
   }
 
+  // A workspace showed the end of the step.
+  see(): void {
+    this.seen = true;
+  }
+
+  // The operator let the end of the earlier backup go.
+  letGo(): void {
+    this.earlier = undefined;
+  }
+
   // The first gesture: the main process is asked for the review of the backup, which it builds from the schedule as
   // it reads it, and answers the text it will send. Nothing is created.
   async review(): Promise<void> {
@@ -153,16 +189,18 @@ export class BackupNow {
     const answer = await client.confirmBackupNow(this.dependencies.cluster(), namespace, schedule, name);
 
     if (!this.at(asking)) return;
-    if (answer.ok)
+    // A review creates nothing, however it failed.
+    if (!answer.ok) this.fail(answer, "none", name);
+    else if (!answer.value.text || !readBody(answer.value.text))
+      this.take({ state: "failed", failure: NO_TEXT, left: "none", name });
+    else
       this.take({
         state: "reviewing",
         token: answer.value.token,
         expires: answer.value.expires,
-        text: answer.value.text ?? "",
+        text: answer.value.text,
         name,
       });
-    // A review creates nothing, however it failed.
-    else this.fail(answer, "none", name);
   }
 
   // The second gesture: the backup is created with the token of its review, and read until Velero writes its phase.
@@ -188,13 +226,18 @@ export class BackupNow {
         this.fail(renewed, "none", shown.name);
         return;
       }
+      if (!renewed.value.text || !readBody(renewed.value.text)) {
+        this.take({ state: "failed", failure: NO_TEXT, left: "none", name: shown.name });
+        return;
+      }
       if (renewed.value.text !== shown.text) {
         this.take({
           state: "reviewing",
           token: renewed.value.token,
           expires: renewed.value.expires,
-          text: renewed.value.text ?? "",
+          text: renewed.value.text,
           name: shown.name,
+          replaced: true,
         });
         return;
       }
@@ -242,6 +285,8 @@ export class BackupNow {
     this.schedule = undefined;
     this.name = "";
     this.proposed = "";
+    this.seen = false;
+    this.earlier = undefined;
   }
 
   // Whether the workspace is still at the step that asked: what is compared is the step itself, so that one that was
@@ -253,6 +298,8 @@ export class BackupNow {
   private take<Step extends BackupNowStep>(step: Step): Step {
     runInAction(() => {
       this.step = step;
+      // An end is not seen until a workspace shows it.
+      if (step.state === "created" || step.state === "failed") this.seen = false;
     });
     return step;
   }

@@ -8,7 +8,7 @@ import type { BackupNowClient } from "../api/ipc";
 // 2026-11-08 04:30:15 UTC, the clock of the machine.
 const NOW = Date.UTC(2026, 10, 8, 4, 30, 15);
 const SCHEDULE = { name: "nightly", uid: "schedule-uid" };
-const TEXT = '{\n  "apiVersion": "velero.io/v1",\n  "kind": "Backup"\n}';
+const TEXT = JSON.stringify({ apiVersion: "velero.io/v1", kind: "Backup", metadata: { labels: {} } }, null, 2);
 
 function failure(code: Failure["code"], stage: string, text = `${code} at ${stage}`): Failure {
   return { ok: false, code, stage, retry: false, text };
@@ -281,5 +281,205 @@ describe("a backup asked from a schedule, in the views", () => {
       failure: { code: "request-failed", stage: "way" },
     });
     expect(refusals).toHaveLength(0);
+  });
+});
+
+describe("what a backup asked from a schedule keeps and leaves, in the views", () => {
+  async function reviewing(main: ReturnType<typeof mainProcess>, state: BackupNow) {
+    state.start(SCHEDULE);
+    const asked = state.review();
+
+    main.confirms.at(-1)?.answer(confirmed(`token-${main.confirms.length}`));
+    await asked;
+  }
+
+  it("takes nothing that arrives for a run that was dropped, or for a renewal that was left", async () => {
+    const main = mainProcess();
+    const { state, clock } = backupNow({ client: main.client });
+
+    await reviewing(main, state);
+    clock.now += 31_000;
+    const renewing = state.create();
+
+    // The installation changed while the token was asked again.
+    state.drop();
+    main.confirms[1].answer(confirmed("token-2", TEXT, clock.now + 30_000));
+    await renewing;
+    expect(main.runs).toHaveLength(0);
+    expect(state.step).toEqual({ state: "form" });
+    // A new review, read in time.
+    clock.now = NOW;
+    await reviewing(main, state);
+    const running = state.create();
+
+    state.drop();
+    main.runs[0].answer({ ok: true, value: { name: "nightly-20261108043046", uid: "backup-uid" } });
+    await running;
+    expect(state.step).toEqual({ state: "form" });
+    expect(state.schedule).toBeUndefined();
+  });
+
+  it("ends without a backup when the token cannot be asked again, and says so", async () => {
+    const main = mainProcess();
+    const { state, clock, refusals } = backupNow({ client: main.client });
+
+    await reviewing(main, state);
+    clock.now += 31_000;
+    const created = state.create();
+    const off = failure("forbidden", "gate", "Writes are off for this installation.");
+
+    main.confirms[1].answer(off);
+    await created;
+    expect(state.step).toEqual({ state: "failed", failure: off, left: "none", name: "nightly-20261108043015" });
+    expect(main.runs).toHaveLength(0);
+    expect(refusals).toHaveLength(1);
+  });
+
+  it("asks the token again from the instant it expires, and gives the review that takes the place of the old one its own expiry", async () => {
+    const main = mainProcess();
+    const { state, clock } = backupNow({ client: main.client });
+
+    await reviewing(main, state);
+    clock.now = NOW + 30_000;
+    const created = state.create();
+
+    expect(main.confirms).toHaveLength(2);
+    main.confirms[1].answer(confirmed("token-2", `${TEXT} `, NOW + 60_000));
+    await created;
+    expect(state.step).toEqual({
+      state: "reviewing",
+      token: "token-2",
+      expires: NOW + 60_000,
+      text: `${TEXT} `,
+      name: "nightly-20261108043015",
+      replaced: true,
+    });
+  });
+
+  it("gives back the name of the next second, not the one that was taken, after a 409", async () => {
+    const main = mainProcess();
+    const { state } = backupNow({ client: main.client });
+
+    await reviewing(main, state);
+    const created = state.create();
+
+    main.runs[0].answer(failure("conflict", "creation"));
+    await created;
+    state.type("typed-by-hand");
+    // Escape in the field gives back the proposal.
+    state.type(state.proposed);
+    expect(state.name).toBe("nightly-20261108043016");
+  });
+
+  it("asks one review at a time, and nothing while a review is shown or a backup is created", async () => {
+    const main = mainProcess();
+    const { state } = backupNow({ client: main.client });
+
+    state.start(SCHEDULE);
+    const asked = state.review();
+
+    await state.review();
+    expect(main.confirms).toHaveLength(1);
+    main.confirms[0].answer(confirmed("token-1"));
+    await asked;
+    await state.review();
+    expect(main.confirms).toHaveLength(1);
+    const created = state.create();
+
+    await state.review();
+    expect(main.confirms).toHaveLength(1);
+    // Typing while it is created keeps the run.
+    state.type("another-name");
+    expect(state.step).toMatchObject({ state: "running" });
+    main.runs[0].answer({ ok: true, value: { name: "nightly-20261108043015", uid: "backup-uid" } });
+    await created;
+  });
+
+  it("runs nothing with writes off or without a way to the main process", async () => {
+    const main = mainProcess();
+    const { state, writes } = backupNow({ client: main.client });
+
+    await reviewing(main, state);
+    writes.on = false;
+    await state.create();
+    expect(main.runs).toHaveLength(0);
+    expect(state.step).toMatchObject({ state: "reviewing" });
+    const lone = backupNow();
+
+    lone.state.start(SCHEDULE);
+    await lone.state.create();
+    expect(lone.state.step).toEqual({ state: "form" });
+  });
+
+  it("says that a run the main process raised on may have created the backup", () => {
+    expect(backupLeft(failure("request-failed", "handler"))).toBe("unknown");
+  });
+
+  it("confirms no review whose text is missing, or is not the body of a backup", async () => {
+    const main = mainProcess();
+    const { state, clock } = backupNow({ client: main.client });
+
+    for (const text of [undefined, "{}", "not json"]) {
+      state.start(SCHEDULE);
+      const asked = state.review();
+
+      main.confirms.at(-1)?.answer({
+        ok: true,
+        value: { token: "token", expires: NOW + 30_000, ...(text === undefined ? {} : { text }) },
+      });
+      await asked;
+      expect(state.step).toMatchObject({
+        state: "failed",
+        left: "none",
+        failure: { code: "validation", stage: "review" },
+      });
+    }
+    // The text asked again when the token expired is read as well.
+    await reviewing(main, state);
+    clock.now += 31_000;
+    const created = state.create();
+
+    main.confirms.at(-1)?.answer({ ok: true, value: { token: "token", expires: clock.now + 30_000 } });
+    await created;
+    expect(state.step).toMatchObject({ state: "failed", failure: { stage: "review" } });
+    expect(main.runs).toHaveLength(0);
+  });
+
+  it("keeps an end no workspace showed for the next form, until it is let go, and not one that was shown", async () => {
+    const main = mainProcess();
+    const { state } = backupNow({ client: main.client });
+
+    await reviewing(main, state);
+    const created = state.create();
+
+    main.runs[0].answer({ ok: true, value: { name: "nightly-20261108043015", uid: "backup-uid", phase: "New" } });
+    await created;
+    state.start({ name: "weekly", uid: "weekly-uid" });
+    expect(state.earlier).toEqual({
+      schedule: "nightly",
+      end: { state: "created", backup: { name: "nightly-20261108043015", uid: "backup-uid", phase: "New" } },
+    });
+    state.letGo();
+    expect(state.earlier).toBeUndefined();
+    // Seen by its workspace: not kept.
+    await reviewing(main, state);
+    const shown = state.create();
+
+    main.runs[1].answer(failure("forbidden", "creation"));
+    await shown;
+    state.see();
+    state.start({ name: "weekly", uid: "weekly-uid" });
+    expect(state.earlier).toBeUndefined();
+    // A new end is not seen because the one before was.
+    await reviewing(main, state);
+    const next = state.create();
+
+    main.runs[2].answer(failure("validation", "creation"));
+    await next;
+    state.start({ name: "weekly", uid: "weekly-uid" });
+    expect(state.earlier).toMatchObject({ schedule: "nightly", end: { state: "failed" } });
+    // The installation that changes takes it with everything else.
+    state.drop();
+    expect(state.earlier).toBeUndefined();
   });
 });

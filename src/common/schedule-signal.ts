@@ -64,7 +64,7 @@ export interface ServerOffset {
   created: number;
   // The newest submission whose backup gives another offset: the zone of the server changed its offset
   // between the two, which a rule of daylight saving time does, and the newest stands.
-  changed?: { minutes: number; schedule: string; backup: string; submission: number };
+  changed?: { minutes: number; schedule: string; backup: string; submission: number; shared?: string };
   // Another backup of the schedule named as a submission and created within the same minute of it, as a backup asked
   // by hand then is: the command line names one in UTC, and the offset may be read in the name of that one
   // (SPEC-0017, the restatement of REQ-162).
@@ -151,6 +151,7 @@ function derivedOffset(schedules: ScheduleResource[], backups: BackupResource[])
           schedule: other.schedule,
           backup: other.backup,
           submission: other.submission,
+          ...(other.shared ? { shared: other.shared } : {}),
         },
       }
     : newest;
@@ -166,6 +167,7 @@ function sameOffset(one: ServerOffset, other: ServerOffset): boolean {
     one.changed?.minutes === other.changed?.minutes &&
     one.changed?.backup === other.changed?.backup &&
     one.changed?.submission === other.changed?.submission &&
+    one.changed?.shared === other.changed?.shared &&
     one.shared === other.shared
   );
 }
@@ -195,6 +197,7 @@ export function keepOffset(previous: ServerOffset | undefined, reads: AdherenceR
           schedule: previous.schedule,
           backup: previous.backup,
           submission: previous.submission,
+          ...(previous.shared ? { shared: previous.shared } : {}),
         },
       };
     } else if (previous.changed) {
@@ -797,6 +800,8 @@ function derivedNotes(zone: ZoneOf, schedule: string): string[] {
             whose(changed, schedule),
             momentText({ of: "fixed", minutes: changed.minutes }, changed.submission),
           ),
+          // A change read in the name of a backup asked by hand may be no change of the zone at all.
+          ...(changed.shared ? [SIGNAL_WORDS.shared(changed.backup, changed.shared)] : []),
         ]
       : []),
   ];

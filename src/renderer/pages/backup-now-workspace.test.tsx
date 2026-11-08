@@ -6,7 +6,7 @@ import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { confirmDialogs } from "../../../test/host-components";
 import { BACKUP_NAME_WORDS, MEANING_WORDS } from "../../common/backup-from-schedule";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
-import { closeViews, openViews } from "../navigation";
+import { closeViews, openView, openViews } from "../navigation";
 import { Installation } from "../state/installation";
 import { BACKUP_NOW_VIEW_WORDS } from "./backup-now-workspace";
 import { SchedulesPage } from "./schedules-page";
@@ -52,7 +52,7 @@ function answers(): Record<string, Answer> {
     [LOCATIONS]: list(location),
     [path("backups", A)]: list(),
     [path("restores", A)]: list(),
-    [path("schedules", A)]: list(schedule("nightly", { paused: true }), schedule(LONG)),
+    [path("schedules", A)]: list(schedule("nightly", { paused: true }), schedule(LONG), schedule("weekly")),
     [path("storageLocations", A)]: list(location),
     [path("snapshotLocations", A)]: list(),
   };
@@ -266,7 +266,6 @@ describe("back up now, from the view of a schedule", () => {
     fireEvent.keyDown(field(), { key: "Escape" });
     expect(field().value).toBe("nightly-20261108043015");
     expect(maybe("name-problem")).toBeNull();
-    expect(screen.queryByTestId("velero-backup-now-workspace")).toBeTruthy();
     expect(main.confirms).toHaveLength(0);
   });
 
@@ -409,5 +408,155 @@ describe("back up now, from the view of a schedule", () => {
     });
     expect(part("failure").getAttribute("data-left")).toBe("unknown");
     expect(part("failure-left").textContent).toBe(BACKUP_NOW_VIEW_WORDS.unknownLeft);
+  });
+
+  it("waits for a backup asked from another schedule, then gives the form of this one with the end of the other above it", async () => {
+    const { main } = mount();
+
+    await backUpNow();
+    await writesOn();
+    await review(main);
+    press("create");
+    await waitFor(() => expect(main.runs).toHaveLength(1));
+    // Away from the workspace while the backup is created, to the other schedule.
+    act(() => closeViews());
+    await openSchedule("weekly");
+    fireEvent.click(screen.getByTestId("velero-schedule-back-up-now"));
+    await screen.findByTestId("velero-backup-now-workspace");
+    expect(part("another").textContent).toBe(BACKUP_NOW_VIEW_WORDS.another("nightly"));
+    await main.run({ ok: true, value: { name: "nightly-20261108043015", uid: "backup-uid", phase: "New" } });
+    await waitFor(() => expect(field().value).toBe("weekly-20261108043015"));
+    expect(part("earlier-words").textContent).toBe(
+      `${BACKUP_NOW_VIEW_WORDS.created("nightly-20261108043015")} ${BACKUP_NOW_VIEW_WORDS.phase("New")}`,
+    );
+    expect(screen.getByTestId("velero-open-backup-nightly-20261108043015")).toBeTruthy();
+    fireEvent.click(part("earlier-let-go"));
+    expect(maybe("earlier")).toBeNull();
+  });
+
+  it("says no end again that its workspace showed", async () => {
+    const { main } = mount();
+
+    await backUpNow();
+    await writesOn();
+    await review(main);
+    press("create");
+    await waitFor(() => expect(main.runs).toHaveLength(1));
+    await main.run({ ok: true, value: { name: "nightly-20261108043015", uid: "backup-uid", phase: "New" } });
+    expect(maybe("result")).toBeTruthy();
+    act(() => closeViews());
+    await openSchedule("weekly");
+    fireEvent.click(screen.getByTestId("velero-schedule-back-up-now"));
+    await screen.findByTestId("velero-backup-now-workspace");
+    await waitFor(() => expect(field().value).toBe("weekly-20261108043015"));
+    expect(maybe("earlier")).toBeNull();
+  });
+
+  it("says that the review took the place of one whose schedule changed while it was read", async () => {
+    const { main } = mount();
+
+    await backUpNow();
+    await writesOn();
+    await review(main);
+    act(() => vi.setSystemTime(NOW + 31_000));
+    press("create");
+    await waitFor(() => expect(main.confirms).toHaveLength(2));
+    await main.confirm(TEXT.replace('"72h0m0s"', '"96h0m0s"'));
+    await waitFor(() => expect(maybe("replaced")).toBeTruthy());
+    expect(part("replaced").textContent).toBe(BACKUP_NOW_VIEW_WORDS.replaced);
+    expect(part("text").textContent).toContain('"96h0m0s"');
+    expect(main.runs).toHaveLength(0);
+  });
+
+  it("confirms no review whose text the views cannot read as a backup", async () => {
+    const { main } = mount();
+
+    await backUpNow();
+    await writesOn();
+    press("ask");
+    await waitFor(() => expect(main.confirms).toHaveLength(1));
+    await main.confirm("{}");
+    await waitFor(() => expect(maybe("failure")).toBeTruthy());
+    expect(part("failure").getAttribute("data-stage")).toBe("review");
+    expect(maybe("review")).toBeNull();
+  });
+
+  it("leaves a review with the workspace, and keeps the name for when it is opened again by the address", async () => {
+    const { main } = mount();
+
+    await backUpNow();
+    await writesOn();
+    fireEvent.change(field(), { target: { value: "nightly-by-hand" } });
+    await review(main);
+    fireEvent.click(screen.getByTestId("velero-back"));
+    await screen.findByTestId("velero-schedule-workspace");
+    act(() => openView({ kind: "backup-now", name: "nightly" }));
+    await screen.findByTestId("velero-backup-now-workspace");
+    expect(part("body").getAttribute("data-step")).toBe("form");
+    expect(field().value).toBe("nightly-by-hand");
+  });
+
+  it("opens the form of a schedule from the address alone, with the name the command line proposes", async () => {
+    mount();
+    await waitFor(() => expect(screen.getByText("nightly", { selector: "[data-schedule-row]" })).toBeTruthy());
+    act(() => openView({ kind: "backup-now", name: "nightly" }));
+    await screen.findByTestId("velero-backup-now-workspace");
+    await waitFor(() => expect(field().value).toBe("nightly-20261108043015"));
+  });
+
+  it("gives a new form with a new proposal each time the command is used", async () => {
+    mount();
+    await backUpNow();
+    fireEvent.change(field(), { target: { value: "nightly-by-hand" } });
+    fireEvent.click(screen.getByTestId("velero-back"));
+    await screen.findByTestId("velero-schedule-workspace");
+    fireEvent.click(screen.getByTestId("velero-schedule-back-up-now"));
+    await screen.findByTestId("velero-backup-now-workspace");
+    expect(field().value).toBe("nightly-20261108043015");
+  });
+
+  it("asks the review with Enter in the field, says what it does meanwhile, and asks nothing with writes off", async () => {
+    const { main } = mount();
+
+    await backUpNow();
+    fireEvent.keyDown(field(), { key: "Enter" });
+    expect(main.confirms).toHaveLength(0);
+    await writesOn();
+    act(() => field().focus());
+    fireEvent.keyDown(field(), { key: "Enter" });
+    await waitFor(() => expect(main.confirms).toHaveLength(1));
+    // The field, disabled while the main process is asked, gives the focus to the words that say so.
+    await waitFor(() => expect(focused()).toBe("velero-backup-now-status"));
+    await main.confirm();
+    await waitFor(() => expect(focused()).toBe("velero-backup-now-review"));
+  });
+
+  it("drops a review when writes are turned off, and keeps the name", async () => {
+    const { main } = mount();
+
+    await backUpNow();
+    await writesOn();
+    fireEvent.change(field(), { target: { value: "nightly-by-hand" } });
+    await review(main);
+    fireEvent.click(screen.getByTestId("velero-writes-off"));
+    await waitFor(() => expect(maybe("review")).toBeNull());
+    expect(words(part("writes-off"))).toBe(BACKUP_NOW_VIEW_WORDS.writesOff);
+    expect(field().value).toBe("nightly-by-hand");
+  });
+
+  it("drops everything of the backup when another installation is selected, and when the extension goes", async () => {
+    const { main, installation } = mount();
+
+    await backUpNow();
+    await writesOn();
+    await review(main);
+    act(() => {
+      installation.configure("velero-b");
+    });
+    await waitFor(() => expect(installation.backupNow.schedule).toBeUndefined());
+    expect(installation.backupNow.step).toEqual({ state: "form" });
+    act(() => installation.backupNow.start({ name: "nightly", uid: "nightly-uid" }));
+    act(() => installation.dispose());
+    expect(installation.backupNow.schedule).toBeUndefined();
   });
 });
