@@ -42,6 +42,7 @@ import {
 } from "../common/ipc";
 import { ArtifactHolder } from "./artifact-holder";
 import { confirmBackupCreate, runBackupCreate } from "./backup-create";
+import { confirmBackupDelete, runBackupDelete } from "./backup-delete";
 import { confirmBackupNow, runBackupNow } from "./backup-now";
 import { type CatalogEntry, refusalOf } from "./catalog";
 import { DiagnosticKubernetes, type HostClient } from "./diagnostic-kubernetes";
@@ -262,7 +263,8 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
       request.kind === "backup" ||
       request.kind === "restore" ||
       request.kind === "schedule-pause" ||
-      request.kind === "schedule-resume"
+      request.kind === "schedule-resume" ||
+      request.kind === "delete-backup"
         ? request.kind
         : "backup-from-schedule",
     namespace: request.namespace,
@@ -274,7 +276,7 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
         ? request.schedule
         : request.kind === "restore"
           ? request.restore
-          : request.kind === "schedule-pause" || request.kind === "schedule-resume"
+          : request.kind === "schedule-pause" || request.kind === "schedule-resume" || request.kind === "delete-backup"
             ? request.target?.name
             : request.backup,
     ),
@@ -282,17 +284,19 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
     ...(request.kind === "backup-from-schedule" ? { schedule: request.target?.name ?? "" } : {}),
     ...(request.kind === "restore" ? { backup: request.target?.name ?? "" } : {}),
     // A patch applied says nothing more than whether it was read so after an answer that was lost: the kind says what
-    // it did.
+    // it did. A deletion says what the reads after its request showed.
     outcome: !end.ok
       ? { created: false, code: end.code, text: end.text }
       : request.kind === "schedule-pause" || request.kind === "schedule-resume"
         ? { created: true, ...("found" in end.value && end.value.found ? { found: true } : {}) }
-        : {
-            created: true,
-            ...("phase" in end.value && end.value.phase ? { phase: end.value.phase } : {}),
-            ...("found" in end.value && end.value.found ? { found: true } : {}),
-            ...("paused" in end.value && end.value.paused ? { paused: true } : {}),
-          },
+        : "end" in end.value
+          ? { created: true, deletion: end.value.end, ...(end.value.found ? { found: true } : {}) }
+          : {
+              created: true,
+              ...("phase" in end.value && end.value.phase ? { phase: end.value.phase } : {}),
+              ...("found" in end.value && end.value.found ? { found: true } : {}),
+              ...("paused" in end.value && end.value.paused ? { paused: true } : {}),
+            },
     at: dependencies.now?.() ?? Date.now(),
   });
   // The writes of the actions of SPEC-0017 read the cluster before they confirm, and wait between their reads.
@@ -325,7 +329,8 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
       request.kind !== "backup-from-schedule" &&
       request.kind !== "backup" &&
       request.kind !== "schedule" &&
-      request.kind !== "restore"
+      request.kind !== "restore" &&
+      request.kind !== "delete-backup"
     )
       return gate.confirm(
         sender.key,
@@ -336,7 +341,7 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
         request.artifact,
       );
     // What the object depends on is read for the review while the frame that asks it is there: the schedule a backup
-    // is asked from, the locations the template names, or the backup a restore is of.
+    // is asked from, the locations the template names, or the backup a restore or a deletion is of.
     const controller = new AbortController();
     const watching = watchFrame(still, controller);
 
@@ -345,6 +350,8 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
         return await confirmScheduleCreate(actions, sender.key, request, controller.signal);
       if (request.kind === "restore")
         return await confirmRestoreCreate(actions, sender.key, request, controller.signal);
+      if (request.kind === "delete-backup")
+        return await confirmBackupDelete(actions, sender.key, request, controller.signal);
       return request.kind === "backup"
         ? await confirmBackupCreate(actions, sender.key, request, controller.signal)
         : await confirmBackupNow(actions, sender.key, request, controller.signal);
@@ -537,9 +544,9 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
   };
 
   // The writes of the actions that run, the creations of a backup asked from a schedule or with the form, of a schedule
-  // of the form and of a restore, and the pause and the resume of a schedule, by their cluster and the identifier of
-  // their request: the same request of the same frame, sent again while it runs, joins it and writes nothing more
-  // (SPEC-0017, REQ-249; SPEC-0016, REQ-239).
+  // of the form and of a restore, the pause and the resume of a schedule, and the deletion of a backup, by their
+  // cluster and the identifier of their request: the same request of the same frame, sent again while it runs, joins
+  // it and writes nothing more (SPEC-0017, REQ-249; SPEC-0016, REQ-239).
   const backupsNow = new Map<string, { fingerprint: string; promise: Promise<Answer<Done>> }>();
 
   procedure<WriteRunRequest, ServerStatusValue | ArtifactValue | Done>(
@@ -553,7 +560,8 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
         request.kind === "schedule" ||
         request.kind === "restore" ||
         request.kind === "schedule-pause" ||
-        request.kind === "schedule-resume"
+        request.kind === "schedule-resume" ||
+        request.kind === "delete-backup"
       ) {
         const key = `${request.cluster}/${request.request}`;
         const patch = request.kind === "schedule-pause" || request.kind === "schedule-resume";
@@ -567,7 +575,7 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
             request.backup ?? request.schedule ?? request.restore,
           ),
           request.token,
-          // The name typed of a restore is a part of what is run.
+          // The name typed of a restore or of a deletion is a part of what is run.
           request.typed ?? null,
         ]);
         const running = backupsNow.get(key);
@@ -576,9 +584,15 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
           return running.fingerprint === fingerprint
             ? running.promise
             : failure("forbidden", "request", false, "No write of this frame has this identifier.");
-        const run: typeof runBackupNow | typeof runScheduleCreate | typeof runRestoreCreate | typeof runSchedulePatch =
-          patch
-            ? runSchedulePatch
+        const run:
+          | typeof runBackupNow
+          | typeof runScheduleCreate
+          | typeof runRestoreCreate
+          | typeof runSchedulePatch
+          | typeof runBackupDelete = patch
+          ? runSchedulePatch
+          : request.kind === "delete-backup"
+            ? runBackupDelete
             : request.kind === "schedule"
               ? runScheduleCreate
               : request.kind === "restore"

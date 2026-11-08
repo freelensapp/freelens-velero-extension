@@ -97,7 +97,12 @@ async function proveCreation<Checked>(
     return read;
   };
   const remove = async (backup: { name: string; uid: string }) => {
-    await api.createGenerated("DeleteBackupRequest", DEMO_NAMESPACE, "proof-delete-", controller.signal, backup);
+    // The request as the deletion of the extension writes it, which the server processes once the backup ended.
+    await api.createDeleteBackupRequest(
+      DEMO_NAMESPACE,
+      main.deleteRequestText(main.deleteRequestOf(DEMO_NAMESPACE, backup)),
+      controller.signal,
+    );
     for (const until = Date.now() + ENDS_WITHIN; Date.now() < until; await delay(2000)) {
       if ((await readBackup(backup.name)) === undefined) return true;
     }

@@ -1,9 +1,30 @@
 // What the target bar says of the end of a write that no view showed (SPEC-0017, REQ-250): what to look for, where,
 // and how it ended, in the words of the main process for a failure.
 
-import type { KeptEnd } from "./ipc";
+import type { DeletionEnd, KeptEnd } from "./ipc";
+
+// What the last reads of a deletion showed, of the request and the backup together (SPEC-0017, REQ-282). It never
+// says that the backup was deleted before the read shows it gone.
+const DELETION_WORDS: Record<DeletionEnd, string> = {
+  completed: "the backup is not there any more: Velero deleted it, with the request.",
+  replaced: "the request is not there any more, and the backup is: a later request for the same backup replaced it.",
+  refused: "Velero refused the request, and the backup keeps its phase.",
+  failed: "a step of the deletion failed: the backup stays Deleting, and a new request tries again.",
+  unread: "Velero had not started the deletion when it was last read.",
+  "in-progress": "Velero was at the deletion when it was last read: the view of the backup says how it goes.",
+};
 
 export function keptEndWords(end: KeptEnd): string {
+  if (end.kind === "delete-backup") {
+    const what = `The deletion of the backup ${end.name}, in ${end.namespace} (context ${end.context}),`;
+
+    if (!end.outcome.created) return `${what} ended while no view of it was open: ${end.outcome.text}`;
+    const found = end.outcome.found
+      ? ", as the requests of the backup show, read after the answer of its creation was lost"
+      : "";
+
+    return `${what} was asked while no view of it was open${found}: ${DELETION_WORDS[end.outcome.deletion ?? "unread"]}`;
+  }
   if (end.kind === "schedule-pause" || end.kind === "schedule-resume") {
     const pause = end.kind === "schedule-pause";
     const what = `The ${pause ? "pause" : "resume"} of the schedule ${end.name}, in ${end.namespace} (context ${end.context}),`;

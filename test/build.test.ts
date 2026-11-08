@@ -364,6 +364,8 @@ describe("the bundle of the main process", () => {
         "KubectlTunnels",
         "WriteGate",
         "default",
+        "deleteRequestOf",
+        "deleteRequestText",
         "downloadArtifact",
         "expressionRefused",
         "registerHandlers",

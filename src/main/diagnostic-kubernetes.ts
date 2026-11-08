@@ -15,6 +15,7 @@
 
 import { X509Certificate } from "node:crypto";
 import { backupNameProblem } from "../common/backup-from-schedule";
+import { BACKUP_NAME_LABEL, BACKUP_UID_LABEL, readDeleteRequest } from "../common/delete-request";
 import { type ArtifactTarget, DIAGNOSTIC_REQUEST_LABEL, isArtifactTarget } from "../common/ipc";
 import { labelOf } from "../common/name-label";
 import { EXISTING_RESOURCE_POLICIES, RESTORE_SPEC_KEYS, restoreNameProblem } from "../common/restore-form";
@@ -88,6 +89,8 @@ const resources = {
 } as const;
 // The label of an endpoint slice that names the Service it is of.
 const SERVICE_NAME_LABEL = "kubernetes.io/service-name";
+// A value of a label, as the API server takes it: a UID read in a selector is one, and adds no other term to it.
+const LABEL_VALUE = /^[A-Za-z0-9](?:[-A-Za-z0-9_.]{0,61}[A-Za-z0-9])?$/;
 export type DiagnosticKind = keyof typeof resources;
 
 function name(value: string, maximum = 253): string {
@@ -539,33 +542,67 @@ export class DiagnosticKubernetes {
     });
   }
 
+  // The ServerStatusRequest of the view of the server (SPEC-0012), with the name the API server generates from the
+  // prefix.
   createGenerated(
-    kind: "ServerStatusRequest" | "DeleteBackupRequest",
+    kind: "ServerStatusRequest",
     namespace: string,
     prefix: string,
     signal: AbortSignal,
-    backup?: { name: string; uid: string },
   ): Promise<DiagnosticObject> {
-    if (!["ServerStatusRequest", "DeleteBackupRequest"].includes(kind) || !prefix.endsWith("-"))
-      throw new DiagnosticError("validation");
+    if (kind !== "ServerStatusRequest" || !prefix.endsWith("-")) throw new DiagnosticError("validation");
     name(prefix.slice(0, -1), 210);
-    if (kind === "DeleteBackupRequest" && (!backup?.uid || !backup.name)) throw new DiagnosticError("validation");
     return this.send("POST", this.path(kind, namespace), signal, {
       body: {
         apiVersion: "velero.io/v1",
         kind,
-        metadata: {
-          namespace: name(namespace, 63),
-          generateName: prefix,
-          labels: {
-            ...this.requestLabels,
-            ...(backup
-              ? { "velero.io/backup-name": labelOf(name(backup.name)), "velero.io/backup-uid": backup.uid }
-              : {}),
-          },
-        },
-        spec: kind === "DeleteBackupRequest" ? { backupName: backup?.name } : {},
+        metadata: { namespace: name(namespace, 63), generateName: prefix, labels: { ...this.requestLabels } },
+        spec: {},
       },
+    });
+  }
+
+  // The DeleteBackupRequest of one backup, sent as the text the review showed, byte for byte (SPEC-0017, REQ-279): a
+  // text that is not exactly the request of a backup of this namespace, as `velero backup delete` makes it, is refused
+  // before anything leaves. The adapter deletes nothing itself (REQ-284).
+  createDeleteBackupRequest(namespace: string, text: string, signal: AbortSignal): Promise<DiagnosticObject> {
+    const read = readDeleteRequest(text);
+
+    if (!read || read.namespace !== namespace) throw new DiagnosticError("validation");
+    name(read.backup.name);
+    return this.send("POST", this.path("DeleteBackupRequest", namespace), signal, { text });
+  }
+
+  // The DeleteBackupRequests of one backup, by the labels that name it and its UID, as the deletion controller finds
+  // them (SPEC-0017, REQ-250, REQ-282): what the cluster answers is taken only when every request is of that namespace
+  // and carries both labels.
+  deleteRequestsOf(
+    namespace: string,
+    backup: { name: string; uid: string },
+    signal: AbortSignal,
+  ): Promise<DiagnosticObject[]> {
+    const label = labelOf(name(backup.name));
+
+    if (typeof backup.uid !== "string" || !LABEL_VALUE.test(backup.uid)) throw new DiagnosticError("validation");
+    const selector = `${BACKUP_NAME_LABEL}=${label},${BACKUP_UID_LABEL}=${backup.uid}`;
+
+    return this.send("GET", this.path("DeleteBackupRequest", namespace), signal, {
+      query: { labelSelector: selector },
+    }).then((result) => {
+      const items = (result as { items?: unknown }).items;
+
+      if (
+        !Array.isArray(items) ||
+        !items.every(
+          (item: DiagnosticObject | undefined) =>
+            typeof item?.metadata?.name === "string" &&
+            item.metadata.namespace === namespace &&
+            item.metadata.labels?.[BACKUP_NAME_LABEL] === label &&
+            item.metadata.labels?.[BACKUP_UID_LABEL] === backup.uid,
+        )
+      )
+        throw new DiagnosticError("request-failed");
+      return items as DiagnosticObject[];
     });
   }
 

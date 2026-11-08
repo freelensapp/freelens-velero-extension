@@ -366,7 +366,14 @@ async function removeBackup(
   signal: AbortSignal,
 ): Promise<boolean> {
   if ((await endOf(context, backup.name)) === undefined) return true;
-  await api.createGenerated("DeleteBackupRequest", DEMO_NAMESPACE, "proof-delete-", signal, backup);
+  // The request as the deletion of the extension writes it, through the module the proof loaded once.
+  const main = await compiledDiagnostics();
+
+  await api.createDeleteBackupRequest(
+    DEMO_NAMESPACE,
+    main.deleteRequestText(main.deleteRequestOf(DEMO_NAMESPACE, backup)),
+    signal,
+  );
   for (const until = Date.now() + WITHIN; Date.now() < until; await delay(2000)) {
     if (readOf(context, "backups.velero.io", backup.name) === undefined) return true;
   }

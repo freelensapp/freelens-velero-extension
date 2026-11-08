@@ -1,0 +1,93 @@
+{
+  "about": "Each backup and the DeleteBackupRequest `velero backup delete` of Velero v1.18.4 creates for it, written from its source on 2026-11-08 (SPEC-0017, DELETE-02): the request of delete.go L123-L131, built by delete_backup_request_builder.go L31-L63, with the label of the name cut by label.go L32-L51 to its first 57 characters and the first 6 hexadecimal characters of the SHA-256 of the whole name, computed with Python's hashlib, beyond 63 characters. The command line gives the request no name, which the API server generates from the prefix.",
+  "cases": {
+    "plain": {
+      "namespace": "velero",
+      "backup": {
+        "name": "nightly-20261108030000",
+        "uid": "0b6f0c3e-8a4c-4f1e-9d6a-2f6b7c8d9e01"
+      },
+      "request": {
+        "apiVersion": "velero.io/v1",
+        "kind": "DeleteBackupRequest",
+        "metadata": {
+          "namespace": "velero",
+          "generateName": "nightly-20261108030000-",
+          "labels": {
+            "velero.io/backup-name": "nightly-20261108030000",
+            "velero.io/backup-uid": "0b6f0c3e-8a4c-4f1e-9d6a-2f6b7c8d9e01"
+          }
+        },
+        "spec": {
+          "backupName": "nightly-20261108030000"
+        }
+      }
+    },
+    "sixty-three": {
+      "namespace": "velero",
+      "backup": {
+        "name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.b63",
+        "uid": "5d41402a-bc4b-42a7-9d1c-0e6f3b2a1c55"
+      },
+      "request": {
+        "apiVersion": "velero.io/v1",
+        "kind": "DeleteBackupRequest",
+        "metadata": {
+          "namespace": "velero",
+          "generateName": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.b63-",
+          "labels": {
+            "velero.io/backup-name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.b63",
+            "velero.io/backup-uid": "5d41402a-bc4b-42a7-9d1c-0e6f3b2a1c55"
+          }
+        },
+        "spec": {
+          "backupName": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.b63"
+        }
+      }
+    },
+    "sixty-four": {
+      "namespace": "velero",
+      "backup": {
+        "name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.b64",
+        "uid": "7e2a9c41-3b5d-4c6e-8f70-91a2b3c4d5e6"
+      },
+      "request": {
+        "apiVersion": "velero.io/v1",
+        "kind": "DeleteBackupRequest",
+        "metadata": {
+          "namespace": "velero",
+          "generateName": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.b64-",
+          "labels": {
+            "velero.io/backup-name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa8665a0",
+            "velero.io/backup-uid": "7e2a9c41-3b5d-4c6e-8f70-91a2b3c4d5e6"
+          }
+        },
+        "spec": {
+          "backupName": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.b64"
+        }
+      }
+    },
+    "of-a-schedule": {
+      "namespace": "velero",
+      "backup": {
+        "name": "nightly-cluster-wide-backup-of-every-namespace-2026-10-04-03-00-00.070",
+        "uid": "c9d8e7f6-a5b4-4c3d-9e2f-1a0b9c8d7e6f"
+      },
+      "request": {
+        "apiVersion": "velero.io/v1",
+        "kind": "DeleteBackupRequest",
+        "metadata": {
+          "namespace": "velero",
+          "generateName": "nightly-cluster-wide-backup-of-every-namespace-2026-10-04-03-00-00.070-",
+          "labels": {
+            "velero.io/backup-name": "nightly-cluster-wide-backup-of-every-namespace-2026-10-04c32264",
+            "velero.io/backup-uid": "c9d8e7f6-a5b4-4c3d-9e2f-1a0b9c8d7e6f"
+          }
+        },
+        "spec": {
+          "backupName": "nightly-cluster-wide-backup-of-every-namespace-2026-10-04-03-00-00.070"
+        }
+      }
+    }
+  }
+}

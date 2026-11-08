@@ -85,6 +85,34 @@ describe("what the target bar says of an end no view showed", () => {
     );
   });
 
+  it("says the deletion of a backup by what its last reads showed, and never the backup deleted before a read showed it gone", () => {
+    const { schedule: _schedule, ...base } = { ...end, kind: "delete-backup" as const, name: "nightly" };
+    const what =
+      "The deletion of the backup nightly, in velero (context kind-demo), was asked while no view of it was open";
+
+    expect(
+      Object.fromEntries(
+        (["completed", "replaced", "refused", "failed", "unread", "in-progress"] as const).map((deletion) => [
+          deletion,
+          keptEndWords({ ...base, outcome: { created: true, deletion } }),
+        ]),
+      ),
+    ).toEqual({
+      completed: `${what}: the backup is not there any more: Velero deleted it, with the request.`,
+      replaced: `${what}: the request is not there any more, and the backup is: a later request for the same backup replaced it.`,
+      refused: `${what}: Velero refused the request, and the backup keeps its phase.`,
+      failed: `${what}: a step of the deletion failed: the backup stays Deleting, and a new request tries again.`,
+      unread: `${what}: Velero had not started the deletion when it was last read.`,
+      "in-progress": `${what}: Velero was at the deletion when it was last read: the view of the backup says how it goes.`,
+    });
+    expect(keptEndWords({ ...base, outcome: { created: true, deletion: "completed", found: true } })).toBe(
+      `${what}, as the requests of the backup show, read after the answer of its creation was lost: the backup is not there any more: Velero deleted it, with the request.`,
+    );
+    expect(keptEndWords({ ...base, outcome: { created: false, code: "conflict", text: "Taken." } })).toBe(
+      "The deletion of the backup nightly, in velero (context kind-demo), ended while no view of it was open: Taken.",
+    );
+  });
+
   it("says a backup of the form as one asked with the form", () => {
     const { schedule: _schedule, ...form } = { ...end, kind: "backup" as const, name: "shop-by-hand" };
 

@@ -1931,3 +1931,91 @@ medium weight and others, all applied:
   a read, the words of an action not offered, a patch of another schedule, the focus
   while asking, and the namespace of the review, and the evidence said more than the
   cases proved: all written, and the thirteen changes above seen failing.
+
+T4.6, the first of its pull requests, on 2026-11-08: the deletion of one backup in the
+main process, in the contract and in the adapter, with no surface of the renderer yet.
+The evidence, by check:
+
+- DELETE-02, the domain part
+  ([`delete-request.test.ts`](../../src/common/delete-request.test.ts)): the request
+  against the one `velero backup delete` makes, kept as a golden written from its source
+  ([`delete-backup-request.goldens.json`](../../test/delete-backup-request.goldens.json)):
+  the prefix of the generated name, the labels of the name and of the UID, with a name
+  of 22, 63, 64 and 70 characters, the last two cut as the release cuts the label of a
+  name, and `spec.backupName` whole; no name, no other label, no annotation and no
+  status; the text written as every text of the extension, and read back only when it is
+  that text byte for byte.
+- DELETE-02, DELETE-04, DELETE-05 and DELETE-07, the main part, and ACT-02 to ACT-07
+  ([`ipc-backup-delete.test.ts`](../../src/main/ipc-backup-delete.test.ts)): the
+  confirmation refused with writes off, reading nothing; the backup read by its name and
+  answered the text of its request with the token; a backup of every phase Velero
+  deletes confirmed, with no phase, New, Queued, ReadyToStart, ended or Deleting, and
+  one in progress, waiting for its plugins or finalizing a conflict with the words that
+  Velero refuses it, as one of another UID and one that went; the contract refuses a
+  target that is not a backup, any field of another write, and a name typed at the
+  confirmation, and asks one at the run ([`ipc.test.ts`](../../src/common/ipc.test.ts)).
+  The run takes the name typed as it is written before the token, any other runs nothing
+  and keeps the review; it reads the backup again, and one of another UID, one that went
+  or one in progress now sends nothing; a text kept with the token that is not exactly
+  the request of the backup of the run sends nothing; the text is sent byte for byte,
+  once, and the request is read by the name the API server gave it, with the backup,
+  every second for thirty seconds at most, until an end: gone with the backup,
+  completed, and Processed with no error once the backup is gone; gone with the backup
+  there, replaced; Processed with the error of a refusal and the backup in its phase,
+  refused, and with errors and the backup Deleting, failed, each error as written; no
+  phase for thirty seconds, unread; InProgress, in progress; a backup created again
+  under the name is not the one of the request; a read of the requests the identity may
+  not make is said, and the backup alone read then; a read that fails ends the reads
+  with what the last one showed. Each end of the creation with its code, its stage, its
+  safety and its words, a 409 the generated name meeting the name of a request that is
+  there, and the ends of what was sent kept for the cluster, with the backup and what
+  the reads showed; an answer that is not the request of this backup not taken; a
+  creation whose answer was lost, or dropped on this side once it was sent, never sent
+  again, the requests of the backup read by its labels with a signal of their own, the
+  newest made since a minute before the confirmation followed, none with the backup
+  there not done, none with the backup gone completed, and requests or a backup that
+  cannot be read not known; a frame gone before the creation sent nothing to, and after
+  it not answered, its end kept; a run sent again with the same identifier joined, and
+  sent once; a token of another frame, an expired one, of another namespace or of
+  another backup, and writes turned off after the confirmation, refused.
+- DELETE-07 and ACT-01, the adapter part
+  ([`diagnostic-kubernetes.test.ts`](../../src/main/diagnostic-kubernetes.test.ts)): one
+  POST of the request, its body the text byte for byte, and nothing for a text that is
+  not exactly the request of a backup of the namespace; the requests of a backup listed
+  by the labels of its name, cut as the release cuts it, and of its UID, none taken that
+  is not of them, and no UID that would add a term to the selector asked; the methods of
+  the adapter pinned, with no DELETE; the backups of the proofs of `pnpm e2e` deleted
+  through the request of the action, which the server of the release processes.
+- REQ-250: the target bar says the end of a deletion by what its last reads showed, and
+  never the backup deleted before a read showed it gone
+  ([`kept-end-words.test.ts`](../../src/common/kept-end-words.test.ts)).
+
+{MUTATIONS}
+
+Decided while implementing, on 2026-11-08:
+
+- The kind of the contract is `delete-backup`, as the table of the contract names it.
+- The main process refuses, at the confirmation and at the run, a backup in a phase
+  Velero refuses to delete, as REQ-278 disables the command for it: nothing is sent,
+  where Velero would refuse the request.
+- The adapter creates a DeleteBackupRequest only from the text of a review, compared
+  byte for byte with the text the builder writes; the creation of a generated name keeps
+  the ServerStatusRequest alone, and the proofs of `pnpm e2e` delete their backups
+  through the request of the action.
+- The reads after the creation stop at an end that is final, completed, replaced,
+  refused or failed, and read again a request Velero has not read or is at; a request
+  Processed with no error is one whose backup Velero deleted, since it deletes the
+  backup before it writes the request Processed, and is said completed only once the
+  read shows the backup gone.
+- After an answer that was lost, the requests of the backup are read by its labels, and
+  the newest made since a minute before the confirmation, the margin of SPEC-0016 for
+  the clocks, is followed by the same reads, since it is this request or a later one for
+  the same backup, which replaced it; none with the backup there is not done as far as
+  the read shows, and requests that cannot be read with the backup there leave the
+  creation not known.
+- An answer of the creation that is not the request of this backup, by its kind, its
+  backup and its UID, is not taken, and is said with its own words.
+- With the requests not read, Deleting is said in progress, with the mark that the
+  requests were not read, whose words say a deletion Velero is at or one that failed.
+
+{REVIEW}
