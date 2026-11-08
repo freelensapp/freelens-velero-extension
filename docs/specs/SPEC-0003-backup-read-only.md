@@ -356,4 +356,7 @@ PartiallyFailed with the words that some of its items may be missing; for a back
 any other phase it is disabled, with the words of why. It is proven at the component
 layer, with writes off and on, in
 [`restore-create-workspace.test.tsx`](../../src/renderer/pages/restore-create-workspace.test.tsx);
-the packaged suites of the action come with the third pull request of T4.4.
+the packaged suites of the action came with the third pull request of T4.4: the suite of
+the actions,
+[`velero-e2e-actions.tests.ts`](../../e2e/__tests__/velero-e2e-actions.tests.ts), and
+the views of the workspace in the pre-review.

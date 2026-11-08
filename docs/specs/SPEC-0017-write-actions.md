@@ -1606,6 +1606,58 @@ points to fix or to follow; all were applied:
 - The review of the first pull request found that a mapping of a namespace the lists
   of the restore leave out was taken; the form refuses it now.
 
+T4.4, the third and last of its pull requests, on 2026-11-08: the proof in the packaged
+application, in the pre-review and end to end. The evidence, by check:
+
+- RESTORE-08 and ACT-11, the packaged part
+  ([`velero-e2e-actions.tests.ts`](../../e2e/__tests__/velero-e2e-actions.tests.ts)), on
+  the CRDs of the release alone, where no controller runs: Restore in the view of a
+  backup that ended well, and its words why not for one that failed its validation,
+  which with writes off writes nothing; the review of the restore of the fields set,
+  with the namespace the backup holds mapped, whose text is the one the builder makes of
+  them, left by Escape, nothing written; the creation, enabled only once the name of the
+  backup is typed, exactly one POST of a Restore answered 201 and no other write of any
+  kind of Velero, every field of the text with the same value in the object, and the way
+  to its view; a name the installation read said before the review, and a POST answered
+  409 that keeps the form, with the way to the restore that has it; Restore from the
+  view of a schedule, of the newest of its backups that ended well, exactly one POST of
+  the text of its review, its metadata and its spec the ones of the text; and the reader
+  of a part refused at the creation of a restore, writes left on and nothing written. 22
+  cases.
+- RESTORE-08, end to end
+  ([`local-restore-proof.mts`](../../e2e/scripts/local-restore-proof.mts), called by the
+  transport proof of `pnpm e2e`): the backup of the run, Completed, restored through the
+  procedures of the compiled main process, as a frame calls them, with the name of the
+  backup typed, into a namespace its mapping names, of the ConfigMaps of the run alone,
+  with the server of the release running: Completed, every ConfigMap of the run in the
+  namespace of the mapping with what it holds in the source, its binary data decoded,
+  each with the labels Velero writes on what it restores; the restore and the namespace
+  it made removed, whatever ended the proof.
+- ACT-10 ([`pre-review.tests.ts`](../../e2e/__tests__/pre-review.tests.ts)): Restore,
+  its form and its review, with a name of 216 characters and a target of 63, in both
+  themes, at 1440 by 900, at 900 by 650 and at twice the zoom, with nothing over
+  something else, wider than its room or cut, 58 views in all; and a restore asked with
+  the keyboard alone, from the command of the view of a backup to the name and Escape in
+  it, which gives a proposal of its time back, a choice of the cluster-scoped resources,
+  the review, the name of the backup typed and Escape in it, Escape back to the form,
+  and the way back to the backup, with nothing created. 47 cases.
+- The parts of the views ([`views-plan.test.ts`](../../test/views-plan.test.ts)): the
+  view of a backup, where Restore is asked, runs its tabs and the actions; the form, the
+  words and the choices of a restore run the actions.
+
+Decided while implementing, on 2026-11-08:
+
+- The cases of a restore join the suite of the actions and its part of the views, and a
+  restore of a schedule is proven there with the backup of its history that ended well.
+- The proof restores the ConfigMaps of the run alone into a namespace its mapping names,
+  compares what each holds with the source, and removes the namespace it made.
+
+The independent review of this pull request, read-only, found one blocker, a time of the
+proposal of the name compared to the second while Escape gives it back a moment later,
+and points to fix: the proposal is checked between the seconds before and after Escape,
+the cleanup of the proof goes on after a removal that failed, and the restore of a
+schedule is counted by its codes and its writes. All were applied.
+
 T4.5, the first of its pull requests, on 2026-11-08: the pause and the resume of a
 schedule in the main process, in the contract and in the adapter, with no surface of
 the renderer yet. The evidence, by check:

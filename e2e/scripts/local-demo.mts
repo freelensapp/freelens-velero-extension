@@ -144,6 +144,7 @@ import {
   platformManifest,
   withhold,
 } from "./local-platform.mts";
+import { runRestoreCreateProof } from "./local-restore-proof.mts";
 import { type RunJournal, type StoreReach, storeRequest, tabRecord } from "./local-runtime.mts";
 import { runScheduleCreateProof } from "./local-schedule-proof.mts";
 import { assertOfficialImages } from "./local-security.mts";
@@ -2293,6 +2294,10 @@ async function runTransportProof(): Promise<void> {
     // minutes Enabled with its one backup, one the controller refuses with the words of the views, and one paused that
     // it does not read, each removed with the backup of the first (CRSCH-22).
     report.scheduleCreate = await runScheduleCreateProof(proofContext);
+    // Restore, end to end (SPEC-0017, ACT-11, RESTORE-08): the backup of the fixtures restored into the namespace of its
+    // mapping through the procedures of the compiled main process, with the name of the backup typed, Completed with
+    // every ConfigMap of the run, and removed with that namespace.
+    report.restoreCreate = await runRestoreCreateProof(proofContext);
 
     requireCondition(
       http.missingArtifacts === 2 && http.refusedBeforeCreation,
@@ -2427,7 +2432,7 @@ async function runTransportProof(): Promise<void> {
     });
     writeFileSync(join(STATE, "transport-proof.json"), JSON.stringify(report), { mode: 0o600 });
     console.log(
-      "PASS: compiled main found its route and downloaded 16 real artifacts through direct HTTPS, once the private address was allowed, and HTTP/HTTPS Kubernetes tunnels, with inline/referenced CA and negative signature/Host/CA checks; the store had no log for a backup and a restore that failed their validation, and no request was created for a restore without a backup; three identities were refused, at the creation, at the Service and the certificate, and at the port-forward, and the one with the documented permissions downloaded; Back up now asked a backup of the real schedule through the compiled main process, which the server Completed with the labels of its text and deleted through a DeleteBackupRequest, and so was a backup of the form, Completed with the fields of its text the server keeps as sent; a schedule of the form of every two minutes was Enabled at its creation with no backup, and had exactly one after its first instant, Completed with the template of the schedule, which the server deleted, one the controller refused was FailedValidation with the words the views say, and one paused was left unread by the controller, with no backup of the three left.",
+      "PASS: compiled main found its route and downloaded 16 real artifacts through direct HTTPS, once the private address was allowed, and HTTP/HTTPS Kubernetes tunnels, with inline/referenced CA and negative signature/Host/CA checks; the store had no log for a backup and a restore that failed their validation, and no request was created for a restore without a backup; three identities were refused, at the creation, at the Service and the certificate, and at the port-forward, and the one with the documented permissions downloaded; Back up now asked a backup of the real schedule through the compiled main process, which the server Completed with the labels of its text and deleted through a DeleteBackupRequest, and so was a backup of the form, Completed with the fields of its text the server keeps as sent; a schedule of the form of every two minutes was Enabled at its creation with no backup, and had exactly one after its first instant, Completed with the template of the schedule, which the server deleted, one the controller refused was FailedValidation with the words the views say, and one paused was left unread by the controller, with no backup of the three left; a restore of the backup of the run, asked with the name of the backup typed, Completed into the namespace of its mapping with every ConfigMap of the run, what each holds and the labels of the restore, and was removed with that namespace.",
     );
   } finally {
     // The location goes back once the store serves again, as above.
