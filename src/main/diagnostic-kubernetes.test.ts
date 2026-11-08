@@ -263,6 +263,20 @@ describe("the create-only adapter, through the client of the host", () => {
       verdict: undefined,
     });
     expect(value.host.requests).toHaveLength(1);
+    // A creation the cluster answered is said apart: it may have been made.
+    value.catalog.entry = ENTRY;
+    const text = JSON.stringify({
+      apiVersion: "velero.io/v1",
+      kind: "Backup",
+      metadata: { name: "daily-1", namespace: "velero" },
+      spec: {},
+    });
+
+    await expect(value.api.createBackup("velero", text, value.signal)).rejects.toMatchObject({
+      code: "target-changed",
+      verdict: "answered",
+    });
+    expect(value.host.requests.map((item) => item.method)).toEqual(["GET", "POST"]);
   });
 
   it("reads every answer by its status, which the client gives whatever it is", async () => {
@@ -295,7 +309,11 @@ describe("the create-only adapter, through the client of the host", () => {
       [409, expect.objectContaining({ code: "conflict" }), expect.objectContaining({ code: "conflict" })],
       // A creation the server refused for its content was not made, which is said as such; one it failed may have
       // been.
-      [422, expect.objectContaining({ code: "validation" }), expect.objectContaining({ code: "validation" })],
+      [
+        422,
+        expect.objectContaining({ code: "validation", verdict: "refused" }),
+        expect.objectContaining({ code: "validation", verdict: "refused" }),
+      ],
       [
         500,
         expect.objectContaining({ code: "request-failed" }),
@@ -611,6 +629,9 @@ describe("the create-only adapter, through the client of the host", () => {
       { ...backup, metadata: { name: "daily-1", namespace: "velero", generateName: "daily-" } },
       { ...backup, metadata: { name: "Daily", namespace: "velero" } },
       { ...backup, metadata: { name: "a".repeat(217), namespace: "velero" } },
+      // A name the form of the backup refuses: no "." next to another "." or to a "-".
+      { ...backup, metadata: { name: "a..b", namespace: "velero" } },
+      { ...backup, metadata: { name: "a-.b", namespace: "velero" } },
       { ...backup, status: { phase: "Completed" } },
     ])
       expect(refused(body)).toThrow("validation");

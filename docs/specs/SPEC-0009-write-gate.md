@@ -173,8 +173,9 @@ Turn writes on for the installation velero-demo of the cluster local-demo
 Until they are turned off, or another installation is selected, the extension
 may create in that namespace the requests the views ask for on purpose: a
 DownloadRequest for the log, the results, the resources or the volumes of an
-operation, and a ServerStatusRequest for the version of the server. Each one is
-confirmed where it is asked for. Nothing else is written.
+operation, a ServerStatusRequest for the version of the server, and a Backup from
+a schedule, asked from the view of the schedule. Each one is confirmed where it is
+asked for. Nothing else is written.
 ```
 
 These identifiers are synthetic. The tab of an artifact and the band of the
@@ -402,6 +403,16 @@ describe the client of the extension that SPEC-0015 removed, and are kept as the
 record of this spec. The header and the evidence of this spec move to Freelens v2
 with T0.8.
 
+GATE-08, as restated, is proven by the case of the suite of the tabs that loads the
+log of the backup of the demo through the tunnel for an identity whose token an
+`exec` plugin gives, in
+[`velero-e2e-artifacts.tests.ts`](../../e2e/__tests__/velero-e2e-artifacts.tests.ts),
+green on the nightly of the validation target on 2026-10-17, as the
+[evidence of SPEC-0015](SPEC-0015-freelens-v2-host.md#evidence-and-deviations)
+records: writes turned on, the text arrived, one creation was counted on the API
+server, no kubectl was left, and the plugin ran under the proxy of Freelens alone,
+never under the extension or the kubectl of the tunnel.
+
 ### 2026-11-08: The Text Of A Body (T4.2 Of SPEC-0017)
 
 As the table of the amendments of
@@ -413,14 +424,6 @@ nothing of the body: the main process sends the text it kept with the token. A
 confirmation is for its kind, its namespace, its target and, for a backup asked from
 a schedule, the name of the backup, and its token runs for nothing else. The first
 kind of a body is `backup-from-schedule`, with the first pull request of T4.2; the
-rest of this spec is read with the amendment, and is not changed by it.
-
-GATE-08, as restated, is proven by the case of the suite of the tabs that loads the
-log of the backup of the demo through the tunnel for an identity whose token an
-`exec` plugin gives, in
-[`velero-e2e-artifacts.tests.ts`](../../e2e/__tests__/velero-e2e-artifacts.tests.ts),
-green on the nightly of the validation target on 2026-10-17, as the
-[evidence of SPEC-0015](SPEC-0015-freelens-v2-host.md#evidence-and-deviations)
-records: writes turned on, the text arrived, one creation was counted on the API
-server, no kubectl was left, and the plugin ran under the proxy of Freelens alone,
-never under the extension or the kubectl of the tunnel.
+rest of this spec is read with the amendment, and is not changed by it. The text
+travels in the answer of the confirmation, within the bound of a request: one the
+answer cannot carry is not confirmed, and no token is given for it.

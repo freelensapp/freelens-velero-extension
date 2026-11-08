@@ -97,6 +97,13 @@ describe("the requests between the processes", () => {
       expect([backup, readWriteConfirmRequest({ ...now, backup })]).toEqual([backup, undefined]);
     }
     expect(readWriteConfirmRequest({ ...now, backup: "a".repeat(216) })).toMatchObject({ backup: "a".repeat(216) });
+    // A schedule whose name a label does not take is asked for no backup, by the reader as by the confirmation.
+    const long = { ...schedule, name: "s".repeat(64) };
+
+    expect(readWriteConfirmRequest({ ...now, target: long })).toBeUndefined();
+    expect(readWriteConfirmRequest({ ...now, target: { ...long, name: "s".repeat(63) } })).toMatchObject({
+      target: { name: "s".repeat(63) },
+    });
     // Of a schedule only, with no artifact, and no name of a backup for another kind.
     expect(
       readWriteConfirmRequest({ cluster, namespace: "velero", kind: "backup-from-schedule", backup: "b" }),
@@ -296,13 +303,20 @@ describe("the answers of a write of a body", () => {
 
     expect(readWriteConfirmAnswer({ token, expires: 1, text: "{}" })).toEqual({ token, expires: 1, text: "{}" });
     expect(readWriteConfirmAnswer({ token, expires: 1 })).toEqual({ token, expires: 1 });
-    for (const text of ["", 7, "x".repeat(TEXT_BOUND + 1)]) {
+    // The bound is of the text written as JSON, with its quotes and what it escapes.
+    for (const text of ["", 7, "x".repeat(TEXT_BOUND - 1), '"'.repeat(TEXT_BOUND / 2)]) {
       expect([String(text).length, readWriteConfirmAnswer({ token, expires: 1, text })]).toEqual([
         String(text).length,
         undefined,
       ]);
     }
-    expect(readWriteConfirmAnswer({ token, expires: 1, text: "x".repeat(TEXT_BOUND) })?.text).toHaveLength(TEXT_BOUND);
+    const largest = "x".repeat(TEXT_BOUND - 2);
+
+    expect(readWriteConfirmAnswer({ token, expires: 1, text: largest })?.text).toHaveLength(TEXT_BOUND - 2);
+    // The largest text arrives whole through the way of every answer, which is within the bound of a request.
+    expect(
+      readAnswer({ ok: true, value: { token, expires: Date.now() + 30_000, text: largest } }, readWriteConfirmAnswer),
+    ).toMatchObject({ ok: true, value: { text: largest } });
   });
 
   it("reads the backup a schedule was asked for: its name, its UID, and the phase Velero wrote when it wrote one", () => {
@@ -311,12 +325,16 @@ describe("the answers of a write of a body", () => {
       uid: "u-1",
     });
     expect(readBackupCreated({ name: "b", uid: "u-1", phase: "New" })).toEqual({ name: "b", uid: "u-1", phase: "New" });
+    // Found by its name after an answer that was lost.
+    expect(readBackupCreated({ name: "b", uid: "u-1", found: true })).toEqual({ name: "b", uid: "u-1", found: true });
     for (const value of [
       { name: "Not A Name", uid: "u" },
       { name: "b", uid: "" },
       { name: "b", uid: "u", phase: "" },
       { name: "b", uid: "u", phase: 1 },
       { name: "b", uid: "u", spec: {} },
+      { name: "b", uid: "u", found: false },
+      { name: "b", uid: "u", found: "yes" },
     ]) {
       expect([value, readBackupCreated(value)]).toEqual([value, undefined]);
     }

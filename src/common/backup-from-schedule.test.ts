@@ -265,13 +265,15 @@ describe("what the review of a backup asked from a schedule says", () => {
           "velero.io/schedule-name: daily. Velero finds the backups of the schedule by this label, for the hold of its submissions and for a restore from the schedule.",
       },
     ]);
-    expect(MEANING_WORDS.byHand).toBe(
+    // Read whole, each of them.
+    expect(meaning(schedule()).map(({ words }) => words)).toEqual([
       "The backup is asked by hand and is not a submission of the schedule: it moves nothing in the schedule, whose next run stays where it is.",
-    );
-    expect(MEANING_WORDS.hold).toContain(
-      "a run that falls due meanwhile is submitted once, at the first look after it",
-    );
-    expect(MEANING_WORDS.hold).toContain("Queued and ReadyToStart do not hold it");
+      "It waits in the queue of the server, Queued and then ReadyToStart, behind a backup that runs, and while an earlier backup takes some of its namespaces.",
+      "While it has no phase, or is New or InProgress, the schedule submits none of its own: a run that falls due meanwhile is submitted once, at the first look after it. Queued and ReadyToStart do not hold it.",
+      "A restore asked from the schedule may take this backup: the newest Completed one with the label of the schedule.",
+      "The template is validated when the backup starts: a template Velero refuses makes the backup FailedValidation.",
+      "velero.io/schedule-name: daily. Velero finds the backups of the schedule by this label, for the hold of its submissions and for a restore from the schedule.",
+    ]);
   });
 
   it("says that a paused schedule and one that failed its validation make the backup all the same", () => {
@@ -283,13 +285,20 @@ describe("what the review of a backup asked from a schedule says", () => {
     expect(ids(paused)).not.toContain("refused");
     expect(ids(refused)).toContain("refused");
     expect(ids(schedule())).not.toContain("paused");
-    expect(MEANING_WORDS.refused).toContain("which Velero validates when the backup starts");
+    expect(meaning(paused).find(({ id }) => id === "paused")?.words).toBe(
+      "The schedule is paused: the backup is made all the same, from its template.",
+    );
+    expect(meaning(refused).find(({ id }) => id === "refused")?.words).toBe(
+      "The schedule failed its validation: the backup is made all the same, from its template, which Velero validates when the backup starts.",
+    );
   });
 
   it("says that deleting the schedule deletes the backup only when the schedule owns it", () => {
     const owned = schedule({ spec: { useOwnerReferencesInBackup: true, template: {} } });
 
-    expect(meaning(owned).find(({ id }) => id === "owner")?.words).toBe(MEANING_WORDS.owner);
+    expect(meaning(owned).find(({ id }) => id === "owner")?.words).toBe(
+      "The schedule is the owner of the backup, by useOwnerReferencesInBackup: deleting the schedule deletes this backup, as it deletes the ones it submitted.",
+    );
     expect(meaning(schedule()).some(({ id }) => id === "owner")).toBe(false);
   });
 

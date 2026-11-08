@@ -4,7 +4,7 @@
 // file is in any of them: a failure is a code, a stage, whether it is safe to try again and words.
 
 import { type AllowanceFor, readAllowanceFor } from "./allowances";
-import { backupNameProblem } from "./backup-from-schedule";
+import { backupNameProblem, scheduleRefused } from "./backup-from-schedule";
 
 import type { DiagnosticCode } from "./diagnostic-code";
 
@@ -212,6 +212,9 @@ export interface BackupCreated {
   name: string;
   uid: string;
   phase?: string;
+  // The answer of the creation was lost, and the backup was found by its name as the review wrote it (SPEC-0017,
+  // REQ-250): what the reads found is said.
+  found?: true;
 }
 export interface WriteStatusRequest {
   cluster: string;
@@ -376,6 +379,8 @@ export function readWriteConfirmRequest(value: unknown): WriteConfirmRequest | u
   if (ofSchedule !== "backup" in value) return;
   if ("target" in value && ((value.target as WriteTarget).kind === "Schedule") !== ofSchedule) return;
   if (ofSchedule && (typeof value.backup !== "string" || backupNameProblem(value.backup) !== undefined)) return;
+  // A schedule whose name a label does not take is asked for no backup, here as in the confirmation.
+  if (ofSchedule && scheduleRefused((value.target as WriteTarget).name) !== undefined) return;
   // One of the eight artifacts, and of the kind of its target: the log of a restore is not asked of a
   // backup. The contents of a backup, and every other target of the API, are refused here.
   if ("artifact" in value) {
@@ -563,13 +568,18 @@ export function readConnection(value: unknown): Connection | undefined {
   return { supported: false, reason: value.reason as ConnectionReason };
 }
 
-// The text of a body is the size of a request at most.
-export const TEXT_BOUND = 1_048_576;
+// The text of a body travels in the answer of its confirmation, which is within the bound of a request: written as
+// JSON, with what it escapes, it leaves a kilobyte of the bound to the rest of the answer.
+export const TEXT_BOUND = REQUEST_BOUND - 1024;
+
+export function textWithinBound(text: string): boolean {
+  return JSON.stringify(text).length <= TEXT_BOUND;
+}
 
 export function readWriteConfirmAnswer(value: unknown): WriteConfirmAnswer | undefined {
   if (!isRecord(value) || !hasKeys(value, ["token", "expires"], ["text"]) || !isUuid(value.token)) return;
   if (typeof value.expires !== "number" || !Number.isFinite(value.expires)) return;
-  if ("text" in value && (typeof value.text !== "string" || !value.text || value.text.length > TEXT_BOUND)) return;
+  if ("text" in value && (typeof value.text !== "string" || !value.text || !textWithinBound(value.text))) return;
   return {
     token: value.token,
     expires: value.expires,
@@ -578,13 +588,20 @@ export function readWriteConfirmAnswer(value: unknown): WriteConfirmAnswer | und
 }
 
 export function readBackupCreated(value: unknown): BackupCreated | undefined {
-  if (!isRecord(value) || !hasKeys(value, ["name", "uid"], ["phase"]) || !isName(value.name) || !isText(value.uid))
+  if (
+    !isRecord(value) ||
+    !hasKeys(value, ["name", "uid"], ["phase", "found"]) ||
+    !isName(value.name) ||
+    !isText(value.uid)
+  )
     return;
   if ("phase" in value && !isText(value.phase, 64)) return;
+  if ("found" in value && value.found !== true) return;
   return {
     name: value.name,
     uid: value.uid,
     ...(typeof value.phase === "string" ? { phase: value.phase } : {}),
+    ...(value.found === true ? { found: true } : {}),
   };
 }
 

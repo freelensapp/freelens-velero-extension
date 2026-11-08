@@ -182,6 +182,8 @@ describe("the run of a backup asked from a schedule", () => {
     expect(created).toEqual({ ok: true, value: { name: NAME, uid: "backup-uid", phase: "New" } });
     expect(adapter.createBackup).toHaveBeenCalledTimes(1);
     expect(adapter.createBackup.mock.calls[0][1]).toBe(confirmed.value?.text);
+    // The reads stop at the phase: the first said none, the second New.
+    expect(adapter.read.mock.calls.filter(([kind]) => kind === "Backup")).toHaveLength(2);
   });
 
   it("says no phase when Velero wrote none within thirty seconds of reads", async () => {
@@ -211,6 +213,42 @@ describe("the run of a backup asked from a schedule", () => {
     });
     confirmed = await confirm();
     state.schedule = scheduleObject({ uid: "another-uid", labels: { team: "billing" } });
+    expect(await run(String(confirmed.value?.token))).toMatchObject({
+      ok: false,
+      code: "conflict",
+      text: BACKUP_NOW_WORDS.scheduleChanged,
+    });
+    expect(adapter.createBackup).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "its template",
+      { spec: { schedule: "0 3 * * *", template: { includedNamespaces: ["billing"], ttl: "720h0m0s" } } },
+    ],
+    ["its annotations", { metadata: { ...scheduleObject().metadata, annotations: { owner: "billing" } } }],
+  ])("sends nothing when the schedule changed %s since the review", async (_, change) => {
+    const { enable, confirm, run, adapter, state } = fixture();
+
+    await enable();
+    const confirmed = await confirm();
+
+    state.schedule = { ...scheduleObject(), ...change } as DiagnosticObject;
+    expect(await run(String(confirmed.value?.token))).toMatchObject({
+      ok: false,
+      code: "conflict",
+      text: BACKUP_NOW_WORDS.reviewChanged,
+    });
+    expect(adapter.createBackup).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing for a schedule of the same content with another UID: it is another schedule", async () => {
+    const { enable, confirm, run, adapter, state } = fixture();
+
+    await enable();
+    const confirmed = await confirm();
+
+    state.schedule = scheduleObject({ uid: "another-uid" });
     expect(await run(String(confirmed.value?.token))).toMatchObject({
       ok: false,
       code: "conflict",
@@ -265,8 +303,9 @@ describe("the run of a backup asked from a schedule", () => {
       code: "conflict",
       text: BACKUP_NOW_WORDS.exists(NAME),
     });
+    // A 422 of the API server.
     state.create = async () => {
-      throw new DiagnosticError("validation");
+      throw new DiagnosticError("validation", undefined, "refused");
     };
     expect(await run(String((await confirm()).value?.token))).toMatchObject({
       ok: false,
@@ -292,7 +331,7 @@ describe("the run of a backup asked from a schedule", () => {
     state.phases = ["New"];
     expect(await run(String((await confirm()).value?.token))).toEqual({
       ok: true,
-      value: { name: NAME, uid: "backup-uid", phase: "New" },
+      value: { name: NAME, uid: "backup-uid", phase: "New", found: true },
     });
     // Not created: not there as far as the reads show.
     state.backups.clear();
@@ -322,3 +361,337 @@ describe("the run of a backup asked from a schedule", () => {
     expect(adapter.createBackup).toHaveBeenCalledTimes(3);
   });
 });
+
+describe("what a backup asked from a schedule checks before and after its creation", () => {
+  const other = (url: string): IpcEvent => ({ senderFrame: { url }, processId: 1, frameId: 9 });
+
+  // A frame of its own, whose address the test changes when the page is left.
+  const ownFrame = async (call: ReturnType<typeof fixture>["call"]) => {
+    const frame = structuredClone(FRAME_A);
+
+    await call(
+      CHANNELS.gateEnable,
+      { cluster: "cluster-a", namespace: "velero", confirmation: { context: "kind-a", namespace: "velero" } },
+      frame,
+    );
+    const confirmed = await call(CHANNELS.writeConfirm, { ...ofSchedule(), backup: NAME }, frame);
+    const leave = () => {
+      // The frame now shows another cluster: it is not the frame of this one any more.
+      frame.senderFrame = { url: "https://cluster-b.renderer.freelens.app:1234/" };
+    };
+
+    return { frame, token: confirmed.value?.token, leave };
+  };
+
+  it("sends nothing when the frame went while the schedule was read again", async () => {
+    const { call, adapter, state } = fixture();
+    const { frame, token, leave } = await ownFrame(call);
+    const read = adapter.read.getMockImplementation() as (...args: unknown[]) => Promise<DiagnosticObject>;
+
+    adapter.read.mockImplementation(async (...args: unknown[]) => {
+      // The page of the cluster is left during the read.
+      if (args[0] === "Schedule") leave();
+      return read(...args);
+    });
+    const ended = await call(CHANNELS.writeRun, { ...ofSchedule(), backup: NAME, token, request: randomUUID() }, frame);
+
+    expect(ended).toMatchObject({ ok: false, code: "forbidden", stage: "frame", text: BACKUP_NOW_WORDS.frameGone });
+    expect(adapter.createBackup).not.toHaveBeenCalled();
+    expect(state.backups.size).toBe(0);
+  });
+
+  it("answers no frame that went after the creation", async () => {
+    const { call, adapter, state } = fixture();
+    const { frame, token, leave } = await ownFrame(call);
+    const create = adapter.createBackup.getMockImplementation() as (
+      namespace: string,
+      text: string,
+    ) => Promise<DiagnosticObject>;
+
+    adapter.createBackup.mockImplementation(async (namespace: string, text: string) => {
+      const created = await create(namespace, text);
+
+      leave();
+      return created;
+    });
+    state.phases = ["New"];
+    const ended = await call(CHANNELS.writeRun, { ...ofSchedule(), backup: NAME, token, request: randomUUID() }, frame);
+
+    expect(ended).toMatchObject({
+      ok: false,
+      code: "forbidden",
+      stage: "frame",
+      text: BACKUP_NOW_WORDS.frameGoneAfter,
+    });
+    expect(adapter.createBackup).toHaveBeenCalledTimes(1);
+  });
+
+  it("says that a backup the API server answered may be there, when the cluster changed before the answer was taken", async () => {
+    const { enable, confirm, run, adapter, state } = fixture();
+
+    await enable();
+    state.create = async () => {
+      throw new DiagnosticError("target-changed", undefined, "answered");
+    };
+    expect(await run(String((await confirm()).value?.token))).toMatchObject({
+      ok: false,
+      code: "submission-unknown",
+      stage: "creation",
+      text: BACKUP_NOW_WORDS.changedAfter(NAME),
+    });
+    // A cluster that changed before anything was sent is said as such.
+    state.create = async () => {
+      throw new DiagnosticError("target-changed");
+    };
+    expect(await run(String((await confirm()).value?.token))).toMatchObject({
+      ok: false,
+      code: "target-changed",
+      text: BACKUP_NOW_WORDS.changed,
+    });
+    expect(adapter.read.mock.calls.filter(([kind]) => kind === "Backup")).toHaveLength(0);
+  });
+
+  it("confirms no text the answer of the confirmation cannot carry, and gives no token for it", async () => {
+    const { enable, confirm, adapter, state } = fixture();
+
+    await enable();
+    state.schedule = scheduleObject({ annotations: { note: "x".repeat(70_000) } });
+    const refused = await confirm();
+
+    expect(refused).toMatchObject({ ok: false, code: "validation", stage: "review" });
+    expect(refused.text).toMatch(
+      /^The backup this schedule makes is written in \d+ characters, more than a review carries/,
+    );
+    expect(refused.value).toBeUndefined();
+    expect(adapter.createBackup).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["creation", new DiagnosticError("not-found"), "not-found", false, BACKUP_NOW_WORDS.notServed("velero")],
+    ["creation", new DiagnosticError("forbidden"), "forbidden", false, BACKUP_NOW_WORDS.forbiddenCreate("velero")],
+    [
+      "creation",
+      new DiagnosticError("forbidden", undefined, "credential"),
+      "request-failed",
+      true,
+      BACKUP_NOW_WORDS.credential,
+    ],
+    [
+      "creation",
+      new DiagnosticError("validation", undefined, "refused"),
+      "validation",
+      false,
+      BACKUP_NOW_WORDS.refused,
+    ],
+    ["creation", new DiagnosticError("validation"), "validation", false, BACKUP_NOW_WORDS.unsent],
+    ["creation", new DiagnosticError("request-failed"), "request-failed", false, BACKUP_NOW_WORDS.declined],
+    [
+      "creation",
+      new DiagnosticError("transport-unreachable"),
+      "transport-unreachable",
+      true,
+      BACKUP_NOW_WORDS.unreachable,
+    ],
+    ["read", new DiagnosticError("forbidden"), "forbidden", false, BACKUP_NOW_WORDS.forbiddenRead("velero")],
+    ["read", new DiagnosticError("not-found"), "not-found", false, BACKUP_NOW_WORDS.scheduleGone],
+    ["read", new DiagnosticError("deadline"), "deadline", true, BACKUP_NOW_WORDS.slow],
+    ["read", new DiagnosticError("transport-unreachable"), "transport-unreachable", true, BACKUP_NOW_WORDS.unreachable],
+    ["read", new DiagnosticError("cancelled"), "cancelled", true, BACKUP_NOW_WORDS.cancelled],
+    [
+      "read",
+      new DiagnosticError("forbidden", undefined, "credential"),
+      "request-failed",
+      true,
+      BACKUP_NOW_WORDS.credential,
+    ],
+  ])(
+    "ends a refusal at the %s as %s with its code, its safety and its words",
+    async (stage, error, code, retry, text) => {
+      const { enable, confirm, run, adapter, state } = fixture();
+
+      await enable();
+      const confirmed = await confirm();
+
+      if (stage === "read") {
+        adapter.read.mockImplementationOnce(async () => {
+          throw error;
+        });
+      } else {
+        state.create = async () => {
+          throw error;
+        };
+      }
+      expect(await run(String(confirmed.value?.token))).toEqual({ ok: false, code, stage, retry, text });
+      expect(adapter.read.mock.calls.filter(([kind]) => kind === "Backup")).toHaveLength(0);
+    },
+  );
+
+  it("takes a backup found by its name for the one created only when it carries every label of the text", async () => {
+    const { enable, confirm, run, state } = fixture();
+    const lost = (labels: Record<string, string>) => async (text: string) => {
+      const body = JSON.parse(text) as DiagnosticObject;
+
+      state.backups.set(body.metadata.name, {
+        ...body,
+        metadata: { ...body.metadata, labels, uid: "backup-uid", creationTimestamp: new Date(state.now).toISOString() },
+      } as DiagnosticObject);
+      throw new DiagnosticError("submission-unknown");
+    };
+
+    await enable();
+    // The label of the schedule alone: another hand made it, with other labels.
+    state.create = lost({ [SCHEDULE_NAME_LABEL]: "daily" });
+    expect(await run(String((await confirm()).value?.token))).toMatchObject({
+      ok: false,
+      code: "submission-unknown",
+      text: BACKUP_NOW_WORDS.other(NAME),
+    });
+    // The labels of the text, without the label of the schedule.
+    state.backups.clear();
+    state.create = lost({ team: "shop" });
+    expect(await run(String((await confirm()).value?.token))).toMatchObject({ text: BACKUP_NOW_WORDS.other(NAME) });
+    // Every label of the text, and the one of the location Velero adds when it starts it.
+    state.backups.clear();
+    state.create = lost({ team: "shop", [SCHEDULE_NAME_LABEL]: "daily", "velero.io/storage-location": "default" });
+    state.phases = ["InProgress"];
+    expect(await run(String((await confirm()).value?.token))).toEqual({
+      ok: true,
+      value: { name: NAME, uid: "backup-uid", phase: "InProgress", found: true },
+    });
+  });
+
+  it("looks for a backup whose creation was dropped on this side once it was sent", async () => {
+    const { enable, confirm, run, adapter, state } = fixture();
+
+    await enable();
+    state.create = async (text) => {
+      const body = JSON.parse(text) as DiagnosticObject;
+
+      state.backups.set(body.metadata.name, {
+        ...body,
+        metadata: { ...body.metadata, uid: "backup-uid", creationTimestamp: new Date(state.now).toISOString() },
+      } as DiagnosticObject);
+      throw new DiagnosticError("cancelled");
+    };
+    state.phases = ["New"];
+    expect(await run(String((await confirm()).value?.token))).toEqual({
+      ok: true,
+      value: { name: NAME, uid: "backup-uid", phase: "New", found: true },
+    });
+    expect(adapter.createBackup).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends nothing when writes go off while the schedule is read again", async () => {
+    const { enable, confirm, run, adapter, gate } = fixture();
+
+    await enable();
+    const confirmed = await confirm();
+    const read = adapter.read.getMockImplementation() as (...args: unknown[]) => Promise<DiagnosticObject>;
+
+    adapter.read.mockImplementation(async (...args: unknown[]) => {
+      if (args[0] === "Schedule") gate.disable("cluster-a");
+      return read(...args);
+    });
+    expect(await run(String(confirmed.value?.token))).toEqual({
+      ok: false,
+      code: "cancelled",
+      stage: "creation",
+      retry: true,
+      text: BACKUP_NOW_WORDS.cancelled,
+    });
+    expect(adapter.createBackup).not.toHaveBeenCalled();
+  });
+
+  it("stops reading a backup of that name that is not the one created", async () => {
+    const { enable, confirm, run, adapter, state } = fixture();
+
+    await enable();
+    const confirmed = await confirm();
+    const read = adapter.read.getMockImplementation() as (...args: unknown[]) => Promise<DiagnosticObject>;
+
+    adapter.read.mockImplementation(async (...args: unknown[]) => {
+      const object = await read(...args);
+
+      return args[0] === "Backup"
+        ? ({ ...object, metadata: { ...object.metadata, uid: "replaced-uid" } } as DiagnosticObject)
+        : object;
+    });
+    state.phases = ["Completed"];
+    expect(await run(String(confirmed.value?.token))).toEqual({ ok: true, value: { name: NAME, uid: "backup-uid" } });
+    expect(adapter.read.mock.calls.filter(([kind]) => kind === "Backup")).toHaveLength(1);
+  });
+
+  it("does not take a creation answered with another name, or with no UID, for the backup", async () => {
+    const { enable, confirm, run, state } = fixture();
+
+    await enable();
+    state.create = async () => ({ metadata: { name: "another", namespace: "velero", uid: "u" } }) as DiagnosticObject;
+    expect(await run(String((await confirm()).value?.token))).toMatchObject({
+      ok: false,
+      code: "submission-unknown",
+      text: BACKUP_NOW_WORDS.unknown(NAME),
+    });
+    state.create = async () => ({ metadata: { name: NAME, namespace: "velero", uid: "" } }) as DiagnosticObject;
+    expect(await run(String((await confirm()).value?.token))).toMatchObject({ code: "submission-unknown" });
+  });
+
+  it("gives no other frame, and no other token, the run of a request in flight", async () => {
+    const { enable, confirm, call, adapter } = fixture();
+
+    await enable();
+    const first = await confirm();
+    const second = await confirm();
+    const request = randomUUID();
+    const payload = (token: unknown) => ({ ...ofSchedule(), backup: NAME, token, request });
+    const running = call(CHANNELS.writeRun, payload(first.value?.token));
+    const [another, otherFrame] = await Promise.all([
+      call(CHANNELS.writeRun, payload(second.value?.token)),
+      call(CHANNELS.writeRun, payload(first.value?.token), other("https://cluster-a.renderer.freelens.app:1234/")),
+    ]);
+
+    expect((await running).ok).toBe(true);
+    expect(another).toMatchObject({
+      ok: false,
+      code: "forbidden",
+      text: "No write of this frame has this identifier.",
+    });
+    expect(otherFrame).toMatchObject({ ok: false, code: "forbidden" });
+    expect(adapter.createBackup).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses a token of another frame, an expired one, another namespace and writes turned off after the confirmation", async () => {
+    const { enable, confirm, call, run, adapter, state, gate } = fixture();
+
+    await enable();
+    const token = String((await confirm()).value?.token);
+    const otherFrame = other("https://cluster-a.renderer.freelens.app:1234/");
+
+    expect(
+      await call(CHANNELS.writeRun, { ...ofSchedule(), backup: NAME, token, request: randomUUID() }, otherFrame),
+    ).toMatchObject({ ok: false, code: "forbidden" });
+    const expired = String((await confirm()).value?.token);
+
+    state.now += 31_000;
+    expect(await run(expired)).toMatchObject({ ok: false, code: "forbidden", stage: "confirmation" });
+    const elsewhere = String((await confirm()).value?.token);
+
+    expect(
+      await call(CHANNELS.writeRun, {
+        ...ofSchedule(),
+        namespace: "velero-other",
+        backup: NAME,
+        token: elsewhere,
+        request: randomUUID(),
+      }),
+    ).toMatchObject({ ok: false, code: "forbidden" });
+    const off = String((await confirm()).value?.token);
+
+    gate.disable("cluster-a");
+    expect(await run(off)).toMatchObject({ ok: false, code: "forbidden", stage: "gate" });
+    expect(adapter.createBackup).not.toHaveBeenCalled();
+  });
+});
+
+function ofSchedule() {
+  return { cluster: "cluster-a", namespace: "velero", kind: "backup-from-schedule", target: SCHEDULE };
+}

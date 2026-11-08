@@ -89,7 +89,11 @@ export type DownloadVerdict =
   | "candidate"
   | "credential"
   | "absent"
-  | "disconnected";
+  | "disconnected"
+  // The API server refused a request as written, which the adapter would have sent.
+  | "refused"
+  // The cluster changed while it answered a creation: the answer is not used, and the object may have been made.
+  | "answered";
 
 export interface DownloadContext {
   artifact: ArtifactTarget;
@@ -188,6 +192,9 @@ export function downloadFailure(code: FailureCode, stage: string, context: Downl
           false,
           `What the storage location says of its certificate is not something the extension can use, and no connection is made without verification. ${none}`,
         );
+      // The API server refused the request as written: nothing was created.
+      if (context.verdict === "refused")
+        return say(false, `The cluster refused the request as written.${stage === "creation" ? ` ${none}` : left}`);
       // What the adapter refuses to send: nothing of it reached the cluster, at the creation either.
       return say(
         false,

@@ -622,9 +622,9 @@ needs a decision before the approval, and each has its first step in its slice.
 
 ## Evidence And Deviations
 
-None yet: no implementation, tests or runtime evidence. The facts of the reviewed
-release above were read in its source, each at the lines it links; nothing was run,
-and no cluster was contacted for this draft.
+The draft had no implementation, tests or runtime evidence: the facts of the
+reviewed release above were read in its source, each at the lines it links; nothing
+was run, and no cluster was contacted for it. The evidence of the slices follows.
 
 What this draft could not verify, and what the implementation establishes first:
 
@@ -661,22 +661,53 @@ review, and no surface of the renderer yet. The evidence, by check:
   annotation by its key (`src/common/backup-from-schedule.test.ts`).
 - ACT-02, ACT-03: the confirmation refused with writes off, reading nothing; its
   answer the text of the backup, which the adapter is asked byte for byte, once;
-  a token that runs only for the name it was confirmed for, and only once; the same
-  request of the same frame joining the run in flight; a request of the contract
-  with a field it does not know refused (`src/main/ipc-backup-now.test.ts`,
+  a token that runs only for the name it was confirmed for, and only once, and not
+  for another frame, once expired, for another namespace or with writes turned off
+  after the confirmation; the same request of the same frame joining the run in
+  flight, and no other frame or token given it; a text the answer of the
+  confirmation cannot carry confirmed for no token; a request of the contract with
+  a field it does not know refused (`src/main/ipc-backup-now.test.ts`,
   `src/common/ipc.test.ts`, `src/main/diagnostic-kubernetes.test.ts`).
-- ACT-05, ACT-06, ACT-07, NOW-04: the phase read after the creation, and none after
-  thirty seconds of reads; a backup of that name already there a conflict, the API
-  server refusing the body validation, a schedule gone not-found; a creation with no
-  answer never sent again, and looked for by its name: found as reviewed, not
-  there, and one of that name made before the confirmation, not known to be this
-  one (`src/main/ipc-backup-now.test.ts`).
+- NOW-02 at the run: a schedule whose template, annotations, labels or UID changed
+  since the review sends nothing.
+- ACT-05, ACT-06, ACT-07, NOW-04: the phase read after the creation, the reads
+  stopping at it, none after thirty seconds of reads, and no more read of a backup
+  of that name with another UID; a backup of that name already there a conflict; at
+  the read and at the creation, each code with its stage, whether asking again is
+  safe, and its words: a 404 that is a schedule gone at the read and a namespace or
+  a kind not served at the creation, a 403, a 401 said as a credential and as
+  request-failed, a 422 of the API server told from a body the adapter would not
+  send, a 400 or a 429 request-failed, the deadline, an API server that cannot be
+  reached and a write cancelled before anything was sent; a frame that goes while
+  the schedule is read again, and writes turned off then, send nothing, and a frame
+  that goes after the creation is answered nothing; a creation with no answer, or
+  dropped on this side once sent, never sent again, and looked for by its name:
+  found as reviewed, with every label of the text, and said as found; not there;
+  one of that name made before the confirmation, or without the labels of the
+  text, not known to be this one; a creation the API server answered while the
+  entry of the cluster changed said as one that may have been made; a creation
+  answered with another name or no UID not taken for the backup
+  (`src/main/ipc-backup-now.test.ts`, `src/main/diagnostic-kubernetes.test.ts`).
 
 Each new case was seen failing on a change made on purpose: the text not compared at
 the run, the UID not read at the confirmation, the name of the backup out of the
 signature, any backup of that name taken for the one created, no read after the
 creation, the run in flight not joined, and the labels of the template without the
-label of the schedule.
+label of the schedule. The independent review of the pull request ran 43 more
+changes against the tests and found nine that none killed. The cases added after it
+kill eight of them: the UID of the reads after the creation, the name and the UID of
+the answer of the creation, the abort before the send, a cancel after it looked for
+the backup, the join refused to another frame and another token, the words of a
+refusal and of a cluster that changed, the reads stopping at the phase, and the UID
+alone changed at the run; the ninth, the label of the schedule checked alone in the
+reconciliation, went with the check, since every label of the text, that one among
+them, is compared. Sixteen changes of what the review asked were seen failing as
+well: the frame before the creation and before its answer, a creation answered while
+the cluster changed, the bound of the text in the confirmation and in the reader,
+every label of the text, a 422 told apart in the adapter, in the words of the backup
+and in the words of a DownloadRequest, a 404 and a 401 by their stage, the safety of
+a deadline, the rule of a name in the adapter, and the reader of a schedule of 64
+characters and of a backup found.
 
 Decided while implementing, on 2026-11-08:
 
@@ -694,6 +725,30 @@ Decided while implementing, on 2026-11-08:
 - A creation dropped on this side after its request left, by the frame that went or
   the deadline, is looked for as one with no answer; one dropped before it left
   sends nothing and says so.
+- The frame that asked is looked at right before the creation and before its answer,
+  as for the other writes, and not only at the tick of its watch.
+- The text of a body travels in the answer of its confirmation, which is within the
+  bound of a request: the main process refuses, with words and before it gives a
+  token, a text that answer cannot carry, written as JSON, with a kilobyte of the
+  bound left to the rest of it.
+- A creation the API server answered while the entry of the cluster changed is
+  submission-unknown, with words that say it may have been made, and is not looked
+  for: the adapter asks nothing more of a cluster that changed.
+- A backup found by its name after a lost answer carries every label of the text,
+  the label of the storage location that Velero adds aside, and is answered as
+  found, which the views say.
+- The reads of the backup looked for after a lost answer are not stopped by a
+  cancel, writes turned off or the frame that went: they are reads, bounded by the
+  time of each read and by the thirty seconds of the reads after the creation.
+- The thirty seconds of the reads after the creation bound a read that hangs as
+  well.
+- A 401 says the credential and is request-failed, as ACT-06 asks; asking again is
+  safe where nothing was sent, after the deadline, an API server that cannot be
+  reached or a write cancelled before its creation.
+- The durations of the template are sent as the API server gives them, `720h`
+  where it gives `720h`, which the command line prints `720h0m0s`: Velero reads them
+  alike, and NOW-02 compares the builder with goldens printed from schedules that
+  wrote them whole.
 - What the next pull requests of T4.2 bring: the workspace of the action, the command
   in the view of a schedule and the words of the gate (REQ-245, REQ-252, REQ-253,
   NOW-01 and NOW-04 in the renderer); the end kept for the cluster and said in the

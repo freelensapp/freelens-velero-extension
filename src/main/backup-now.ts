@@ -4,11 +4,12 @@
 // when the backup it builds now is the same, and reads the backup every second until Velero writes its phase. A
 // creation whose answer is not known is never sent again: the backup is looked for by its name.
 
-import { backupFromSchedule, bodyText, SCHEDULE_NAME_LABEL, scheduleRefused } from "../common/backup-from-schedule";
+import { backupFromSchedule, bodyText, scheduleRefused } from "../common/backup-from-schedule";
 import {
   type Answer,
   type BackupCreated,
   failure,
+  textWithinBound,
   type WriteConfirmAnswer,
   type WriteConfirmRequest,
   type WriteRunRequest,
@@ -22,6 +23,9 @@ import type { Write, WriteGate } from "./write-gate";
 export const READ_AFTER = { everyMs: 1000, forMs: 30_000 };
 // The margin of the clocks within which a backup found by its name is taken for the one created (SPEC-0016).
 export const CREATION_MARGIN = 60_000;
+// The label Velero adds to a backup when it starts it: a backup found by its name may carry it beside the labels of
+// the text.
+const LOCATION_LABEL = "velero.io/storage-location";
 
 export const BACKUP_NOW_WORDS = {
   notASchedule: "A backup is asked from one schedule, by its name and its UID, with the name of the backup.",
@@ -29,16 +33,34 @@ export const BACKUP_NOW_WORDS = {
     "The schedule changed since the view read it: another one has its name now. Go back to the view, which reads it again.",
   reviewChanged: "The schedule changed since the review: nothing was sent. Ask for a new review.",
   scheduleGone: "The schedule is not there any more: nothing was sent.",
+  notServed: (namespace: string) =>
+    `The API server answered that what the backup needs is not there, the namespace ${namespace} or the kind Backup of Velero: nothing was created.`,
   unreadable: "The schedule could not be read as a schedule: nothing was sent.",
+  tooLarge: (characters: number) =>
+    `The backup this schedule makes is written in ${characters} characters, more than a review carries: nothing was confirmed. A backup of this schedule is asked from the command line.`,
   exists: (name: string) =>
     `A backup named ${name} is already there, and is left as it is: nothing was created. Ask for a new review with another name.`,
-  forbidden: (namespace: string) =>
-    `The identity of this cluster may not read the schedule or create a backup in ${namespace}: nothing was created.`,
+  forbiddenRead: (namespace: string) =>
+    `The identity of this cluster may not read the schedule in ${namespace}: nothing was sent.`,
+  forbiddenCreate: (namespace: string) =>
+    `The identity of this cluster may not create a backup in ${namespace}: nothing was created.`,
+  credential:
+    "The cluster did not take the credential of the context: it may have expired. Sign in again, then ask again. Nothing was created.",
   refused: "The API server refused the backup as written: nothing was created.",
+  unsent: "The backup could not be written for the cluster: nothing was sent.",
+  declined: "The API server did not take the creation, for a reason the extension does not name: nothing was created.",
+  changed: "The cluster changed: nothing was sent to it.",
+  cancelled: "The write was cancelled: nothing was sent.",
+  unreachable: "The API server could not be reached: nothing was sent. Asking again is safe.",
+  slow: "The API server did not answer the read of the schedule in time: nothing was sent. Asking again is safe.",
+  frameGone: "The frame that asked for the write is not there any more: nothing was sent.",
+  frameGoneAfter: "The frame that asked for the write is not there any more.",
+  changedAfter: (name: string) =>
+    `The cluster changed while it answered the creation: its answer is not used, and the backup ${name} may have been created. It is not sent again by itself: look for it among the backups.`,
   notDone: (name: string) =>
     `The API server did not answer the creation, and the backup ${name} is not there as far as the reads show. Asking again is a new review.`,
   other: (name: string) =>
-    `The API server did not answer the creation, and a backup named ${name} is there that is not known to be this one: it is not from this schedule, or it is older than the confirmation.`,
+    `The API server did not answer the creation, and a backup named ${name} is there that is not known to be this one: it does not carry the labels of the review, or it is older than the confirmation.`,
   unknown: (name: string) =>
     `The API server did not answer the creation, and the backup ${name} could not be read: it may have been created. It is not sent again by itself: look for it among the backups.`,
   failed: "The backup could not be asked: nothing is known to have been created.",
@@ -58,22 +80,52 @@ function phaseOf(object: DiagnosticObject): string | undefined {
   return typeof phase === "string" && phase ? phase : undefined;
 }
 
-// The end of a read or of the creation, in the words of this write; a cluster that changed is said as it is.
-function endOf(error: unknown, stage: string, namespace: string, backup: string): Answer<never> {
+// The end of a read or of the creation, in the words of this write, with whether asking again is safe: it is where
+// nothing was sent and what stopped it may pass. A cluster that changed is said as it is. A creation the API server
+// answered and the adapter did not take, because the cluster changed meanwhile, may have made the backup.
+function endOf(error: unknown, stage: "read" | "creation", namespace: string, backup: string): Answer<never> {
+  const creation = stage === "creation";
+
   if (!(error instanceof DiagnosticError)) return failure("request-failed", stage, false, BACKUP_NOW_WORDS.failed);
   switch (error.code) {
     case "not-found":
-      return failure("not-found", stage, false, BACKUP_NOW_WORDS.scheduleGone);
+      return failure(
+        "not-found",
+        stage,
+        false,
+        creation ? BACKUP_NOW_WORDS.notServed(namespace) : BACKUP_NOW_WORDS.scheduleGone,
+      );
     case "forbidden":
-      return failure("forbidden", stage, false, BACKUP_NOW_WORDS.forbidden(namespace));
+      // A credential the cluster does not take says nothing of what the identity may do (SPEC-0017, ACT-06).
+      if (error.verdict === "credential") return failure("request-failed", stage, true, BACKUP_NOW_WORDS.credential);
+      return failure(
+        "forbidden",
+        stage,
+        false,
+        creation ? BACKUP_NOW_WORDS.forbiddenCreate(namespace) : BACKUP_NOW_WORDS.forbiddenRead(namespace),
+      );
     case "conflict":
       return failure("conflict", stage, false, BACKUP_NOW_WORDS.exists(backup));
     case "validation":
-      return failure("validation", stage, false, BACKUP_NOW_WORDS.refused);
+      // The API server refused the body; or the adapter refused to send it, and nothing reached the cluster.
+      return failure(
+        "validation",
+        stage,
+        false,
+        error.verdict === "refused" ? BACKUP_NOW_WORDS.refused : BACKUP_NOW_WORDS.unsent,
+      );
     case "target-changed":
-      return failure("target-changed", stage, false, "The cluster changed: nothing more is asked of it.");
+      if (error.verdict === "answered")
+        return failure("submission-unknown", stage, false, BACKUP_NOW_WORDS.changedAfter(backup));
+      return failure("target-changed", stage, false, BACKUP_NOW_WORDS.changed);
     case "cancelled":
-      return failure("cancelled", stage, false, "The write was cancelled.");
+      return failure("cancelled", stage, true, BACKUP_NOW_WORDS.cancelled);
+    case "deadline":
+      return failure("deadline", stage, true, BACKUP_NOW_WORDS.slow);
+    case "transport-unreachable":
+      return failure("transport-unreachable", stage, true, BACKUP_NOW_WORDS.unreachable);
+    case "request-failed":
+      return failure("request-failed", stage, false, creation ? BACKUP_NOW_WORDS.declined : BACKUP_NOW_WORDS.failed);
     default:
       return failure(error.code, stage, false, BACKUP_NOW_WORDS.failed);
   }
@@ -109,6 +161,10 @@ export async function confirmBackupNow(
 
   if (!body) return failure("request-failed", "read", false, BACKUP_NOW_WORDS.unreadable);
   const text = bodyText(body);
+
+  // The text travels in the answer of the confirmation: one the answer cannot carry is not confirmed, and no token is
+  // given for it.
+  if (!textWithinBound(text)) return failure("validation", "review", false, BACKUP_NOW_WORDS.tooLarge(text.length));
   const confirmed = dependencies.gate.confirm(
     sender,
     request.cluster,
@@ -122,8 +178,9 @@ export async function confirmBackupNow(
   return confirmed.ok ? { ok: true, value: { ...confirmed.value, text } } : confirmed;
 }
 
-// The reads after the creation: every second for thirty seconds, until Velero writes a phase of the backup that
-// was created, by its UID. What is read is what is answered; a phase not written yet is none.
+// The reads after the creation: every second for thirty seconds at most, a read that hangs included, until Velero
+// writes a phase of the backup that was created, by its UID. What is read is what is answered; a phase not written
+// yet is none.
 async function readAfter(
   dependencies: BackupNowDependencies,
   adapter: DiagnosticKubernetes,
@@ -131,6 +188,7 @@ async function readAfter(
   created: DiagnosticObject,
   signal: AbortSignal,
   write: Write,
+  found: boolean,
 ): Promise<Answer<BackupCreated>> {
   const name = created.metadata.name;
   const uid = created.metadata.uid;
@@ -138,10 +196,12 @@ async function readAfter(
   const until = dependencies.now() + READ_AFTER.forMs;
 
   write.status = { step: "waiting for Velero" };
-  while (!phase && dependencies.now() < until && !signal.aborted) {
+  while (!phase && !signal.aborted && until - dependencies.now() >= READ_AFTER.everyMs) {
     try {
       await dependencies.sleep(READ_AFTER.everyMs, signal);
-      const read = await adapter.read("Backup", namespace, name, signal);
+      // A read that does not answer ends with the thirty seconds.
+      const bounded = AbortSignal.any([signal, AbortSignal.timeout(Math.max(until - dependencies.now(), 1))]);
+      const read = await adapter.read("Backup", namespace, name, bounded);
 
       // Another backup of that name is not the one created: nothing more is read of it.
       if (read.metadata.uid !== uid) break;
@@ -150,15 +210,28 @@ async function readAfter(
       break;
     }
   }
-  return { ok: true, value: { name, uid, ...(phase ? { phase } : {}) } };
+  return { ok: true, value: { name, uid, ...(phase ? { phase } : {}), ...(found ? { found: true } : {}) } };
+}
+
+// The labels the text gives the backup, which a backup found by its name carries when it is the one created.
+function labelsOf(text: string): Record<string, string> | undefined {
+  try {
+    const labels = (JSON.parse(text) as { metadata?: { labels?: unknown } }).metadata?.labels;
+
+    return labels && typeof labels === "object" ? (labels as Record<string, string>) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 // A creation whose answer is not known: the backup is read by its name, and is the one created when its creation is
-// not earlier than a minute before the confirmation and it carries the label of the schedule (SPEC-0017, REQ-250).
+// not earlier than a minute before the confirmation and it carries every label of the text, the label of the schedule
+// among them; the label of the storage location is the one Velero adds (SPEC-0017, REQ-250).
 async function reconcile(
   dependencies: BackupNowDependencies,
   adapter: DiagnosticKubernetes,
   request: WriteRunRequest,
+  text: string,
   confirmedAt: number,
   signal: AbortSignal,
   write: Write,
@@ -176,22 +249,28 @@ async function reconcile(
     return failure("submission-unknown", "creation", false, BACKUP_NOW_WORDS.unknown(backup));
   }
   const created = Date.parse(String((found.metadata as { creationTimestamp?: unknown }).creationTimestamp));
+  const labels = labelsOf(text);
+  const carried = found.metadata.labels ?? {};
+  // The labels of the text hold the label of the schedule, which the builder always writes.
   const ours =
     Number.isFinite(created) &&
     created >= confirmedAt - CREATION_MARGIN &&
-    found.metadata.labels?.[SCHEDULE_NAME_LABEL] === request.target?.name;
+    labels !== undefined &&
+    Object.entries(labels).every(([key, value]) => key === LOCATION_LABEL || carried[key] === value);
 
   if (!ours) return failure("submission-unknown", "creation", false, BACKUP_NOW_WORDS.other(backup));
-  return readAfter(dependencies, adapter, request.namespace, found, signal, write);
+  return readAfter(dependencies, adapter, request.namespace, found, signal, write, true);
 }
 
-// The run: the token of the confirmation, the schedule read again and the same backup built of it, the text sent
-// byte for byte, and the reads after the creation. The caller watches the frame and ends the write.
+// The run: the token of the confirmation, the schedule read again and the same backup built of it, the frame that
+// asked still there, the text sent byte for byte, and the reads after the creation. The caller watches the frame and
+// ends the write.
 export async function runBackupNow(
   dependencies: BackupNowDependencies,
   sender: string,
   request: WriteRunRequest,
   watch: (write: Write) => () => void,
+  still: () => boolean = () => true,
 ): Promise<Answer<BackupCreated>> {
   const { target, backup } = request;
 
@@ -230,8 +309,10 @@ export async function runBackupNow(
     // What would be sent now is what the review showed, or nothing is sent.
     if (!text || !again || bodyText(again) !== text)
       return failure("conflict", "read", false, BACKUP_NOW_WORDS.reviewChanged);
-    // A frame that went before anything was sent leaves nothing to look for.
-    if (signal.aborted) return failure("cancelled", "creation", false, "The write was cancelled: nothing was sent.");
+    // A frame that went, or a write stopped, before anything was sent leaves nothing to look for: the frame is
+    // looked at here, and not only at the tick of its watch.
+    if (signal.aborted) return failure("cancelled", "creation", true, BACKUP_NOW_WORDS.cancelled);
+    if (!still()) return failure("forbidden", "frame", false, BACKUP_NOW_WORDS.frameGone);
     write.status = { step: "creating the backup" };
     let created: DiagnosticObject;
 
@@ -241,12 +322,14 @@ export async function runBackupNow(
       // No answer, or one dropped on this side once the request had left: the backup may be there. It is looked for,
       // with reads of their own, which the frame that went does not stop.
       if (error instanceof DiagnosticError && (error.code === "submission-unknown" || error.code === "cancelled"))
-        return reconcile(dependencies, adapter, request, confirmedAt, new AbortController().signal, write);
+        return await reconcile(dependencies, adapter, request, text, confirmedAt, new AbortController().signal, write);
       return endOf(error, "creation", request.namespace, backup);
     }
     if (created.metadata.name !== backup || !created.metadata.uid)
       return failure("submission-unknown", "creation", false, BACKUP_NOW_WORDS.unknown(backup));
-    return await readAfter(dependencies, adapter, request.namespace, created, signal, write);
+    const read = await readAfter(dependencies, adapter, request.namespace, created, signal, write, false);
+
+    return still() ? read : failure("forbidden", "frame", false, BACKUP_NOW_WORDS.frameGoneAfter);
   } finally {
     stop();
     dependencies.gate.finish(request.cluster, request.request);

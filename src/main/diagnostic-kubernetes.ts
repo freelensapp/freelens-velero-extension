@@ -14,6 +14,7 @@
 // with a signal of its own, and 4 MiB of an answer, counted as the body arrives.
 
 import { X509Certificate } from "node:crypto";
+import { backupNameProblem } from "../common/backup-from-schedule";
 import { type ArtifactTarget, DIAGNOSTIC_REQUEST_LABEL, isArtifactTarget } from "../common/ipc";
 import { labelOf } from "../common/name-label";
 import { type CatalogEntry, refusalOf, sameEntry } from "./catalog";
@@ -109,8 +110,9 @@ function statusError(status: number, creation: boolean): DiagnosticError {
   if (status === 403) return new DiagnosticError("forbidden");
   if (status === 404) return new DiagnosticError("not-found");
   if (status === 409) return new DiagnosticError("conflict");
-  // The API server refused the request for its content: nothing was made (SPEC-0017, the way of a write).
-  if (status === 422) return new DiagnosticError("validation");
+  // The API server refused the request for its content: nothing was made (SPEC-0017, the way of a write). It is told
+  // from what the adapter refuses to send by itself.
+  if (status === 422) return new DiagnosticError("validation", undefined, "refused");
   return new DiagnosticError(creation && status >= 500 ? "submission-unknown" : "request-failed");
 }
 
@@ -347,8 +349,8 @@ export class DiagnosticKubernetes {
       // The answer of a creation that cannot be read says nothing of the creation.
       if (!bytes) throw new DiagnosticError(creation ? "submission-unknown" : "payload-too-large");
       // The cluster is looked at again once it answered: an answer of a cluster that changed meanwhile is
-      // not used.
-      if (this.refusal()) throw new DiagnosticError("target-changed");
+      // not used. A creation it answered may have been made, which is said apart.
+      if (this.refusal()) throw new DiagnosticError("target-changed", undefined, creation ? "answered" : undefined);
       let result: unknown;
 
       try {
@@ -429,7 +431,8 @@ export class DiagnosticKubernetes {
   }
 
   // The Backup a schedule was asked for, sent as the text the review showed, byte for byte (SPEC-0017, REQ-246): a
-  // text that is not a Backup of this namespace, with a name a backup may have, is refused before anything leaves.
+  // text that is not a Backup of this namespace, with a name the form of the backup takes, is refused before anything
+  // leaves.
   createBackup(namespace: string, text: string, signal: AbortSignal): Promise<DiagnosticObject> {
     let body: unknown;
 
@@ -449,7 +452,7 @@ export class DiagnosticKubernetes {
       "status" in body
     )
       throw new DiagnosticError("validation");
-    name(body.metadata.name, 216);
+    if (backupNameProblem(body.metadata.name) !== undefined) throw new DiagnosticError("validation");
     return this.send("POST", this.path("Backup", namespace), signal, { text });
   }
 

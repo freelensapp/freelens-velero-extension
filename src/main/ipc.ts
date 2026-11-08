@@ -479,15 +479,24 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
           return running.fingerprint === fingerprint
             ? running.promise
             : failure("forbidden", "request", false, "No write of this frame has this identifier.");
-        const promise = runBackupNow(actions, sender.key, request, (write) => {
-          const watching = watchFrame(still, write.controller);
+        const promise = runBackupNow(
+          actions,
+          sender.key,
+          request,
+          (write) => {
+            const watching = watchFrame(still, write.controller);
 
-          return () => clearInterval(watching);
-        }).finally(() => backupsNow.delete(key));
+            return () => clearInterval(watching);
+          },
+          still,
+        ).finally(() => backupsNow.delete(key));
 
         backupsNow.set(key, { fingerprint, promise });
         return promise;
       }
+      // A kind of write is run by its own branch: one with none is not run, and no token of it is taken.
+      if (request.kind !== "DownloadRequest")
+        return failure("validation", "request", false, "The request is not one the main process understands.");
       const key = `${request.cluster}/${request.request}`;
       const fingerprint = JSON.stringify([
         sender.key,
