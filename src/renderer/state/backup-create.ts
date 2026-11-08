@@ -90,6 +90,7 @@ export class BackupCreate {
       problems: computed,
       type: action,
       set: action,
+      start: action,
       see: action,
       letGoOf: action,
       leave: action,
@@ -126,6 +127,18 @@ export class BackupCreate {
     else template[field] = value;
     this.template = template;
     this.changed();
+  }
+
+  // The command of the list: a new form once the backup of the form before was created, as the command of Back up now
+  // gives one. A form that is being filled, or whose backup was not created, is shown as it was left, and a backup that
+  // is being created goes on. An end no workspace showed is not lost with the form: the main process keeps it for the
+  // target bar until a view shows it or the operator dismisses it (SPEC-0017, REQ-250).
+  start(): void {
+    if (this.step.state !== "created") return;
+    this.step = { state: "form" };
+    this.name = "";
+    this.template = {};
+    this.seen = false;
   }
 
   // A workspace showed the end of the step: the main process is told, when the end is of a run and is its end.

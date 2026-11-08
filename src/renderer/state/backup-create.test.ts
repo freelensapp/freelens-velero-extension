@@ -165,6 +165,41 @@ describe("a backup of the form, in the views", () => {
     expect(asked.refused).toBe(2);
   });
 
+  it("gives a new form from the command once the backup before was created, and keeps a form being filled, one that failed and a backup being created", async () => {
+    const text = textOf("shop", { storageLocation: "default", ttl: "1h" });
+    const { state } = made({
+      confirm: [confirmed(text), confirmed(text)],
+      run: [
+        { ok: false, code: "conflict", stage: "creation", retry: false, text: "Taken." },
+        { ok: true, value: { name: "shop", uid: "u" } },
+      ],
+    });
+
+    state.set("storageLocation", "default");
+    state.set("ttl", "1h");
+    state.type("shop");
+    state.start();
+    expect([state.step, state.name, state.template]).toEqual([
+      { state: "form" },
+      "shop",
+      { storageLocation: "default", ttl: "1h" },
+    ]);
+    await state.review();
+    await state.create();
+    state.start();
+    expect([state.step, state.name]).toEqual([expect.objectContaining({ state: "failed", name: "shop" }), "shop"]);
+    await state.review();
+    const creating = state.create();
+
+    state.start();
+    expect(state.step.state).toBe("running");
+    await creating;
+    expect(state.step.state).toBe("created");
+    state.see();
+    state.start();
+    expect([state.step, state.name, state.template, state.seen]).toEqual([{ state: "form" }, "", {}, false]);
+  });
+
   it("drops what was typed when the installation changes, and lets an end go from the target bar", async () => {
     const { state } = made({
       confirm: [confirmed(textOf("shop", { storageLocation: "default" }))],
