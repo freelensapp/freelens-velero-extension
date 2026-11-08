@@ -3456,20 +3456,37 @@ function requestsOfTheExtension(namespace: string, kind: RequestKind): number {
  * already gone; a read that fails for another reason is said.
  */
 export function removeCreatedBackup(namespace: string, name: string, uid: string | undefined, since: number): void {
+  removeCreated("backups", namespace, name, uid, since);
+}
+
+/** Removes a schedule a suite of the actions created, the same way as a backup. */
+export function removeCreatedSchedule(namespace: string, name: string, uid: string | undefined, since: number): void {
+  removeCreated("schedules", namespace, name, uid, since);
+}
+
+function removeCreated(
+  resource: "backups" | "schedules",
+  namespace: string,
+  name: string,
+  uid: string | undefined,
+  since: number,
+): void {
+  const noun = resource === "backups" ? "backup" : "schedule";
+
   if (namespace === "" || !SYNTHETIC_NAMESPACES.includes(namespace)) {
-    throw new Error(`The suites remove the backups of a namespace of the fixtures, and "${namespace}" is not one`);
+    throw new Error(`The suites remove the ${resource} of a namespace of the fixtures, and "${namespace}" is not one`);
   }
-  const found = kubectlE2E("get", "backups.velero.io", name, "--namespace", namespace, "-o", "json");
+  const found = kubectlE2E("get", `${resource}.velero.io`, name, "--namespace", namespace, "-o", "json");
 
   if (found.status !== 0) {
     if (/\(NotFound\)/.test(found.stderr)) return;
-    throw new Error(`The backup ${name} could not be read before its removal: ${found.stderr.trim()}`);
+    throw new Error(`The ${noun} ${name} could not be read before its removal: ${found.stderr.trim()}`);
   }
   const metadata = (JSON.parse(found.stdout) as { metadata: { uid: string; creationTimestamp?: string } }).metadata;
   const created = Date.parse(metadata.creationTimestamp ?? "");
 
   if (uid !== undefined ? metadata.uid !== uid : !(created >= since)) {
-    throw new Error(`The backup ${name} is not the one the suite created`);
+    throw new Error(`The ${noun} ${name} is not the one the suite created`);
   }
   const { status, stderr } = spawnSync(
     required("E2E_KUBECTL"),
@@ -3480,7 +3497,7 @@ export function removeCreatedBackup(namespace: string, name: string, uid: string
       E2E_KUBE_CONTEXT,
       "delete",
       "--raw",
-      `/apis/velero.io/v1/namespaces/${namespace}/backups/${name}`,
+      `/apis/velero.io/v1/namespaces/${namespace}/${resource}/${name}`,
       "-f",
       "-",
     ],
@@ -3491,7 +3508,7 @@ export function removeCreatedBackup(namespace: string, name: string, uid: string
     },
   );
 
-  if (status !== 0) throw new Error(`The backup ${name} could not be removed: ${(stderr ?? "").trim()}`);
+  if (status !== 0) throw new Error(`The ${noun} ${name} could not be removed: ${(stderr ?? "").trim()}`);
 }
 
 /**

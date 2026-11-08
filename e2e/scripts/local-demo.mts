@@ -145,6 +145,7 @@ import {
   withhold,
 } from "./local-platform.mts";
 import { type RunJournal, type StoreReach, storeRequest, tabRecord } from "./local-runtime.mts";
+import { runScheduleCreateProof } from "./local-schedule-proof.mts";
 import { assertOfficialImages } from "./local-security.mts";
 
 import type { ProofShell } from "./local-host.mts";
@@ -2288,6 +2289,10 @@ async function runTransportProof(): Promise<void> {
     // Create backup, end to end: a backup of the form of the ConfigMaps of the run Completes, carries the fields of its
     // text that Velero keeps as sent, and is deleted the same way (SPEC-0017, ACT-11).
     report.backupCreate = await runBackupCreateProof(proofContext);
+    // Create schedule, end to end, with the controller of the release (SPEC-0016, REQ-242): a schedule of every two
+    // minutes Enabled with its one backup, one the controller refuses with the words of the views, and one paused that
+    // it does not read, each removed with the backup of the first (CRSCH-22).
+    report.scheduleCreate = await runScheduleCreateProof(proofContext);
 
     requireCondition(
       http.missingArtifacts === 2 && http.refusedBeforeCreation,
@@ -2422,7 +2427,7 @@ async function runTransportProof(): Promise<void> {
     });
     writeFileSync(join(STATE, "transport-proof.json"), JSON.stringify(report), { mode: 0o600 });
     console.log(
-      "PASS: compiled main found its route and downloaded 16 real artifacts through direct HTTPS, once the private address was allowed, and HTTP/HTTPS Kubernetes tunnels, with inline/referenced CA and negative signature/Host/CA checks; the store had no log for a backup and a restore that failed their validation, and no request was created for a restore without a backup; three identities were refused, at the creation, at the Service and the certificate, and at the port-forward, and the one with the documented permissions downloaded; Back up now asked a backup of the real schedule through the compiled main process, which the server Completed with the labels of its text and deleted through a DeleteBackupRequest, and so was a backup of the form, Completed with the fields of its text the server keeps as sent.",
+      "PASS: compiled main found its route and downloaded 16 real artifacts through direct HTTPS, once the private address was allowed, and HTTP/HTTPS Kubernetes tunnels, with inline/referenced CA and negative signature/Host/CA checks; the store had no log for a backup and a restore that failed their validation, and no request was created for a restore without a backup; three identities were refused, at the creation, at the Service and the certificate, and at the port-forward, and the one with the documented permissions downloaded; Back up now asked a backup of the real schedule through the compiled main process, which the server Completed with the labels of its text and deleted through a DeleteBackupRequest, and so was a backup of the form, Completed with the fields of its text the server keeps as sent; a schedule of the form of every two minutes was Enabled at its creation with no backup, and had exactly one after its first instant, which the server deleted, one the controller refused was FailedValidation with the words the views say, and one paused was left unread by the controller.",
     );
   } finally {
     // The location goes back once the store serves again, as above.

@@ -4,13 +4,13 @@
  */
 
 // The actions of SPEC-0017 in a packaged Freelens, on the CRDs of the release alone, where no controller runs
-// (REQ-254, ACT-11): Back up now from the view of a schedule (T4.2), and Create backup from the list of the Backups
-// (T4.3). With writes off the command writes nothing; a review that is not confirmed, nothing; a confirmed one,
-// exactly one POST of a Backup, whose every field is the one of the text the review showed, and no other write. The
-// backup stays without a phase, as the result says, and the view of the schedule lists it at its next read (NOW-05). A
-// name already taken is a conflict (NOW-04). The reader of a part is refused at the creation. What the suite created
-// it removes, and the objects of Velero are as they were. The workspace in both themes, at every size and with the
-// keyboard alone, is in the pre-review (ACT-10).
+// (REQ-254, ACT-11): Back up now from the view of a schedule (T4.2), Create backup from the list of the Backups (T4.3),
+// and Create schedule of SPEC-0016 from the list of the Schedules (T4.7, REQ-241). With writes off the command writes
+// nothing; a review that is not confirmed, nothing; a confirmed one, exactly one POST of the object, whose every field
+// is the one of the text the review showed, and no other write. The backup stays without a phase, as the result says,
+// and the view of the schedule lists it at its next read (NOW-05). A name already taken is a conflict (NOW-04). The
+// reader of a part is refused at the creation. What the suite created it removes, and the objects of Velero are as they
+// were. The workspace in both themes, at every size and with the keyboard alone, is in the pre-review (ACT-10).
 
 import { readFile, writeFile } from "node:fs/promises";
 import * as path from "node:path";
@@ -21,7 +21,10 @@ import { BACKUP_CREATE_VIEW_WORDS } from "../../src/common/backup-create-words";
 import { backupFromForm, formBodyText } from "../../src/common/backup-form";
 import { backupFromSchedule, bodyText } from "../../src/common/backup-from-schedule";
 import { BACKUP_NOW_VIEW_WORDS } from "../../src/common/backup-now-words";
+import { scheduleResultWords } from "../../src/common/schedule-create-words";
+import { scheduleBodyText, scheduleFromForm } from "../../src/common/schedule-form";
 import { BACKUP_NOW_WORDS } from "../../src/main/backup-now";
+import { SCHEDULE_CREATE_WORDS } from "../../src/main/schedule-create";
 
 import type { Frame } from "playwright";
 
@@ -39,6 +42,11 @@ const part = (id: string) => `[data-testid=velero-backup-now-${id}]`;
 // identifier, or the input in it.
 const create = (id: string) => `[data-testid=velero-backup-create-${id}]`;
 const formField = (id: string) => `${create(id)} input, input${create(id)}`;
+// The parts of the workspace of the schedule of the form, and a field of it.
+const newSchedule = (id: string) => `[data-testid=velero-schedule-create-${id}]`;
+const scheduleField = (id: string) => `${newSchedule(id)} input, input${newSchedule(id)}`;
+// The schedule of the form the suite creates: its expression names its zone, and has no instant before the suite ends.
+const SCHEDULE_FORM = { expression: "CRON_TZ=Europe/Rome 0 3 * * *", template: { storageLocation: "views-available" } };
 // A choice of the form: the host gives the identifier to its input, and the class Select to the element around it,
 // and its options carry the identifier with -options.
 const choiceOf = (id: string) => `.Select:has(#velero-backup-create-${id})`;
@@ -76,6 +84,8 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
   // the suite read it. One whose creation the view did not say, created all the same, is removed by its name when it
   // was created since the suite began, a minute before it for the clocks.
   const created: { namespace: string; name: string; uid?: string }[] = [];
+  // The schedules the suite created, kept and removed the same way.
+  const createdSchedules: { namespace: string; name: string; uid?: string }[] = [];
   let began = 0;
 
   const writesOn = async () => {
@@ -101,6 +111,15 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
     await cluster.waitForList(on, cluster.BACKUPS);
     await on.click("[data-testid=velero-backups-create]");
     await on.waitForSelector(create("workspace"), { timeout: 30_000 });
+  };
+  // The workspace of a schedule of the form, from the command of the list of the Schedules of the installation of the
+  // views.
+  const openScheduleCreate = async (on: Frame) => {
+    await cluster.showList(on);
+    await cluster.openPage(on, SCHEDULES);
+    await cluster.waitForList(on, SCHEDULES);
+    await on.click("[data-testid=velero-schedules-create]");
+    await on.waitForSelector(newSchedule("workspace"), { timeout: 30_000 });
   };
   const nameInField = () => frame.locator(FIELD).first().inputValue();
   // The writes of the kinds of Velero since a reading of the counters, whoever made them.
@@ -129,10 +148,17 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
   afterAll(async () => {
     const left: string[] = [];
 
-    // Each backup the suite created is removed, whatever became of the others.
+    // Each backup and each schedule the suite created is removed, whatever became of the others.
     for (const backup of created) {
       try {
         cluster.removeCreatedBackup(backup.namespace, backup.name, backup.uid, began);
+      } catch (error) {
+        left.push(String(error));
+      }
+    }
+    for (const schedule of createdSchedules) {
+      try {
+        cluster.removeCreatedSchedule(schedule.namespace, schedule.name, schedule.uid, began);
       } catch (error) {
         left.push(String(error));
       }
@@ -481,6 +507,146 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
   );
 
   it(
+    "offers Create schedule in the header of the list of the Schedules, and with writes off fills the form and writes nothing",
+    async () => {
+      const earlier = cluster.apiRequests();
+
+      await openScheduleCreate(frame);
+      await frame.click("[data-testid=velero-writes-off]");
+      await frame.waitForSelector("[data-testid=velero-writes][data-writes=off]", { timeout: 60_000 });
+      await frame.locator(scheduleField("field")).first().fill(`${FORM}-schedule-off`);
+      await frame.locator(scheduleField("expression")).first().fill(SCHEDULE_FORM.expression);
+      await frame.locator(scheduleField("expression")).first().press("Enter");
+      await frame.waitForTimeout(NOTHING);
+      expect(await frame.locator(newSchedule("review")).count()).toBe(0);
+      expect(await frame.locator(newSchedule("writes-off")).count()).toBe(1);
+      expect(writesSince(earlier)).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows in its review the text of the schedule of the fields set, the flags written, and writes nothing for a review that is left",
+    async () => {
+      await writesOn();
+      const earlier = cluster.apiRequests();
+      const name = `${FORM}-schedule`;
+      const wrapper = {
+        expression: SCHEDULE_FORM.expression,
+        paused: false,
+        skipImmediately: true,
+        useOwnerReferencesInBackup: false,
+      };
+
+      await frame.locator(scheduleField("field")).first().fill(name);
+      await frame.click(newSchedule("skipImmediately"));
+      await frame.click(newSchedule("ask"));
+      await frame.waitForSelector(newSchedule("review"), { timeout: 30_000 });
+      const body = scheduleFromForm(cluster.E2E_VIEWS_NAMESPACE, name, wrapper, SCHEDULE_FORM.template, Date.now());
+
+      expect(await frame.locator(newSchedule("text")).textContent()).toBe(body && scheduleBodyText(body));
+      // Left by Escape: the form again, as it was, and nothing written.
+      await frame.locator(newSchedule("review")).focus();
+      await started?.window.keyboard.press("Escape");
+      await frame.waitForSelector(newSchedule("review"), { state: "detached", timeout: 30_000 });
+      expect(await frame.locator(scheduleField("field")).first().inputValue()).toBe(name);
+      await frame.waitForTimeout(NOTHING);
+      expect(writesSince(earlier)).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "creates exactly one Schedule of the form, the text of its review, and nothing else, and leads to it",
+    async () => {
+      const earlier = cluster.apiRequests();
+      const codes = cluster.requestCodes("schedules");
+      const name = await frame.locator(scheduleField("field")).first().inputValue();
+
+      await frame.click(newSchedule("ask"));
+      await frame.waitForSelector(newSchedule("review"), { timeout: 30_000 });
+      const text = String(await frame.locator(newSchedule("text")).textContent());
+      const asked: (typeof createdSchedules)[number] = { namespace: cluster.E2E_VIEWS_NAMESPACE, name };
+
+      createdSchedules.push(asked);
+      await frame.click(newSchedule("create"));
+      await frame.waitForSelector(newSchedule("result"), { timeout: 90_000 });
+      const schedule = read<BackupRead>("schedules.velero.io", name, cluster.E2E_VIEWS_NAMESPACE);
+
+      asked.uid = schedule.metadata.uid;
+      // No controller runs on the CRDs alone: Velero did not read it.
+      expect(await cluster.wordsOf(frame, newSchedule("phase"))).toBe(scheduleResultWords({}));
+      const { "GET 200": _reads, ...codesOfWrites } = cluster.counted(codes, cluster.requestCodes("schedules"));
+
+      expect(codesOfWrites).toEqual({ "POST 201": 1 });
+      const written = writesSince(earlier);
+
+      expect([Object.keys(written).length, Object.values(written)]).toEqual([1, [1]]);
+      expect(Object.keys(written)[0]).toMatch(/^POST schedules /);
+      // Every field of the text, with the same value in the object: no label, no annotation, the three flags written.
+      const sent = JSON.parse(text) as BackupRead;
+      const {
+        uid: _uid,
+        resourceVersion: _version,
+        creationTimestamp: _created,
+        generation: _generation,
+        managedFields: _fields,
+        ...metadata
+      } = schedule.metadata as Record<string, unknown>;
+
+      expect(metadata).toEqual(sent.metadata);
+      expect(schedule.spec).toEqual(sent.spec);
+      expect(schedule.status?.phase).toBeUndefined();
+      // The way to the schedule takes the place of the workspace: its way back is the list.
+      await frame.click(newSchedule("open"));
+      await frame.waitForSelector("[data-testid=velero-schedule-workspace]", { timeout: 30_000 });
+      await cluster.closeWorkspace(frame);
+      await frame.waitForSelector(newSchedule("workspace"), { state: "detached", timeout: 30_000 });
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "says a name already taken before the review, and at the creation a conflict that leaves the schedule that has it as it was",
+    async () => {
+      const schedule = createdSchedules[createdSchedules.length - 1];
+      const codes = cluster.requestCodes("schedules");
+      const before = read<{ metadata: { resourceVersion: string } }>(
+        "schedules.velero.io",
+        schedule.name,
+        cluster.E2E_VIEWS_NAMESPACE,
+      ).metadata.resourceVersion;
+
+      await openScheduleCreate(frame);
+      await frame.locator(scheduleField("field")).first().fill(schedule.name);
+      await frame.waitForSelector(newSchedule("name-taken"), { timeout: 30_000 });
+      await frame.locator(scheduleField("expression")).first().fill(SCHEDULE_FORM.expression);
+      await frame.click(newSchedule("ask"));
+      await frame.waitForSelector(newSchedule("review"), { timeout: 30_000 });
+      await frame.click(newSchedule("create"));
+      await frame.waitForSelector(newSchedule("failure"), { timeout: 60_000 });
+      expect(await frame.locator(newSchedule("failure")).getAttribute("data-code")).toBe("conflict");
+      expect(await cluster.wordsOf(frame, newSchedule("failure-text"))).toBe(
+        SCHEDULE_CREATE_WORDS.exists(schedule.name, cluster.E2E_VIEWS_NAMESPACE),
+      );
+      expect(await frame.locator(scheduleField("field")).first().inputValue()).toBe(schedule.name);
+      expect(await frame.locator(`[data-testid="velero-open-schedule-${schedule.name}"]`).count()).toBe(1);
+      const { "GET 200": _reads, ...codesOfWrites } = cluster.counted(codes, cluster.requestCodes("schedules"));
+
+      expect(codesOfWrites).toEqual({ "POST 409": 1 });
+      expect(
+        read<{ metadata: { resourceVersion: string } }>(
+          "schedules.velero.io",
+          schedule.name,
+          cluster.E2E_VIEWS_NAMESPACE,
+        ).metadata.resourceVersion,
+      ).toBe(before);
+      await cluster.closeWorkspace(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "refuses the reader of a part at the creation, with the words of what it may not do, writes left on and nothing written",
     async () => {
       if (!started) throw new Error("The application is not running");
@@ -558,6 +724,26 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
         ).not.toBe(0);
         expect(writesSince(earlier)).toEqual({});
         expect(await cluster.layoutProblems(other, cluster.BACKUPS)).toEqual([]);
+        // The schedule of the form, refused the same way.
+        const scheduleName = `${FORM}-schedule-of-the-reader`;
+
+        await openScheduleCreate(other);
+        await other.locator(scheduleField("field")).first().fill(scheduleName);
+        await other.locator(scheduleField("expression")).first().fill(SCHEDULE_FORM.expression);
+        await other.click(newSchedule("ask"));
+        await other.waitForSelector(newSchedule("review"), { timeout: 30_000 });
+        await other.click(newSchedule("create"));
+        await other.waitForSelector(newSchedule("failure"), { timeout: 60_000 });
+        expect([
+          await other.locator(newSchedule("failure")).getAttribute("data-code"),
+          await other.locator(newSchedule("failure")).getAttribute("data-stage"),
+          await cluster.wordsOf(other, newSchedule("failure-text")),
+        ]).toEqual(["forbidden", "creation", SCHEDULE_CREATE_WORDS.forbiddenCreate(cluster.E2E_VIEWS_NAMESPACE)]);
+        expect(
+          cluster.kubectlE2E("get", "schedules.velero.io", scheduleName, "--namespace", cluster.E2E_VIEWS_NAMESPACE)
+            .status,
+        ).not.toBe(0);
+        expect(writesSince(earlier)).toEqual({});
       } finally {
         // The cases after this one look at the first entry of the catalog, which is shown again.
         await velero.navigateToCatalog(running.app);
@@ -568,12 +754,16 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
   );
 
   it(
-    "leaves the objects of Velero as they were once its backup is removed",
+    "leaves the objects of Velero as they were once its backups and its schedules are removed",
     async () => {
       // Each one is let go once it was removed: one whose removal failed is tried again after the suite.
       for (const backup of [...created]) {
         cluster.removeCreatedBackup(backup.namespace, backup.name, backup.uid, began);
         created.splice(created.indexOf(backup), 1);
+      }
+      for (const schedule of [...createdSchedules]) {
+        cluster.removeCreatedSchedule(schedule.namespace, schedule.name, schedule.uid, began);
+        createdSchedules.splice(createdSchedules.indexOf(schedule), 1);
       }
       const after = cluster.clusterSnapshot();
 

@@ -365,6 +365,7 @@ describe("the bundle of the main process", () => {
         "WriteGate",
         "default",
         "downloadArtifact",
+        "expressionRefused",
         "registerHandlers",
       ],
       dispatchers: [true, true],

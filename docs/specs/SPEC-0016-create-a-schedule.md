@@ -799,6 +799,64 @@ server of the official image of the release, `velero/velero:v1.18.4`:
   [the persist](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/backup_controller.go#L828-L873)). The
   words of REQ-234 say it.
 
+T4.7, the third and last of its pull requests, on 2026-11-08: the proof in the packaged
+application, on the CRDs of the release alone, in the pre-review, and end to end with
+the controller of the release. The evidence, by check:
+
+- CRSCH-21, in the packaged application, in the suite of the actions,
+  [`velero-e2e-actions.tests.ts`](../../e2e/__tests__/velero-e2e-actions.tests.ts): Create
+  schedule in the header of the list of the Schedules opens the workspace; with writes
+  off the form is filled, Enter asks no review, and nothing is written; the review shows
+  the text the builder makes of the fields set, the three flags written, and a review
+  left by Escape writes nothing; a review confirmed is exactly one POST of a Schedule,
+  answered 201, and no PUT, no PATCH and no other write of any kind of Velero, every
+  field of the text the same in the object read, no label and no annotation, the words
+  that Velero has not read it, since no controller runs, and the way to its view, which
+  takes the place of the workspace; a name the installation read is said before the
+  review, and the creation is a POST answered 409 that keeps what was typed and leaves
+  the `resourceVersion` of the schedule that has the name as it was; the reader of a
+  part, as a second entry of the catalog, is refused at the creation, with the words of
+  what it may not do, writes left on and nothing written; every schedule the suite
+  created is removed by its name with its UID as the precondition. 16 cases.
+- CRSCH-20, in the pre-review,
+  [`pre-review.tests.ts`](../../e2e/__tests__/pre-review.tests.ts): Create schedule, its
+  form and its review, with a name of 63 characters and a long expression, in both
+  themes, at 1440 by 900, at 900 by 650 and at twice the zoom, with nothing over
+  something else, wider than its room or cut; and a schedule of the form asked with the
+  keyboard alone, from the command of the list to the name and Escape in it, the
+  expression, a flag by its checkbox, Enter to the review, Escape back, and the way back
+  to the list. 56 views, 45 cases. The pre-review found the page of the Schedules two pixels
+  wider than its room at 900 by 650 once Create schedule was in its header, and the
+  second pull request put the search of a head with a command under the others in a
+  narrow room.
+- CRSCH-22, end to end, in the transport proof of `pnpm e2e`
+  ([`local-schedule-proof.mts`](../../e2e/scripts/local-schedule-proof.mts)), with the
+  controller of the release on the disposable kind cluster, through the procedures of
+  the compiled main process, as a frame calls them: a schedule of every two minutes read
+  Enabled with no backup at its first reading and exactly one backup after its first
+  instant, which the server Completed and deleted through a DeleteBackupRequest; one the
+  controller refuses, `61 * * * *`, read FailedValidation with the words the form says
+  for it, which the proof reads from the compiled main process; and one paused with skip
+  immediately true, read with no phase, skip immediately still true and no last skipped;
+  each removed by its name with its UID as the precondition, and no backup of them left.
+
+On a second Linux machine, against Freelens 2.0.0, the validation target, with the
+reviews of the first and of the second pull request: the suite of the actions green
+with its 16 cases, `pnpm e2e` green in 433 seconds with the proof of the schedules, and
+the pre-review green with its 45 cases.
+
+Decided while implementing, on 2026-11-08:
+
+- The proofs of the environment read the words of a refused expression from the
+  compiled main process, which exports the refusal the form says: the scripts run under
+  Node, which does not resolve the imports of the sources without an extension.
+- The cases of Create schedule join the suite of the actions and its part of the
+  views, whose paths take the files of the form of a schedule, of its words and of the
+  hook of the choices of the template.
+
+With this pull request the work of T4.7 is complete: its row of the roadmap moves to
+Done after the merge, with the follow-up that PROCESS.md asks for.
+
 What this draft could not verify, and what the implementation establishes first:
 
 - The zones the server of the official image knows, the first open question.
