@@ -11568,6 +11568,7 @@ describe("platform of the test environment", () => {
   it("runs on the CRDs alone every suite of the views that reads no controller, and FND-10, and keeps with the server the ones that read what only it makes", () => {
     expect(WITHOUT_A_CONTROLLER).toEqual([
       "extensions",
+      "velero-e2e-actions",
       "velero-e2e-adherence",
       "velero-e2e-data-movement",
       "velero-e2e-gate",

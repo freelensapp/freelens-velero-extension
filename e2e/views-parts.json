@@ -64,6 +64,19 @@
         "velero-e2e-preferences"
       ],
       "paths": ["^src/(renderer|common)/", "^e2e/__tests__/", "^integration/__tests__/extensions\\."]
+    },
+    {
+      "name": "actions",
+      "environment": "definitions",
+      "suites": ["velero-e2e-actions"],
+      "paths": [
+        "^src/renderer/pages/(backup-now-|schedule-workspace|schedules-page|open-view)",
+        "^src/renderer/(state|api)/",
+        "^src/renderer/navigation\\.",
+        "^src/renderer/components/(target-bar|workspace\\.|write-confirmation)",
+        "^src/common/(backup-from-schedule|backup-now-words|kept-end-words|ipc|schedule-history|views)\\.",
+        "^e2e/__tests__/velero-e2e-actions\\."
+      ]
     }
   ],
   "everyPart": [

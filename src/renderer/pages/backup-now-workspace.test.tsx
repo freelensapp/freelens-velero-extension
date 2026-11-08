@@ -5,11 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { confirmDialogs } from "../../../test/host-components";
 import { BACKUP_NAME_WORDS, MEANING_WORDS } from "../../common/backup-from-schedule";
+import { BACKUP_NOW_VIEW_WORDS } from "../../common/backup-now-words";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { keptEndWords } from "../../common/kept-end-words";
 import { closeViews, openView, openViews } from "../navigation";
 import { Installation } from "../state/installation";
-import { BACKUP_NOW_VIEW_WORDS } from "./backup-now-workspace";
 import { SchedulesPage } from "./schedules-page";
 
 import type { Answer, Family } from "../../common/discovery";
