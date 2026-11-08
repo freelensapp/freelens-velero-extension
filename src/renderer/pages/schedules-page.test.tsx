@@ -1087,19 +1087,29 @@ describe("workspace of a schedule", () => {
     expect(installation.read("schedules").items).toHaveLength(1);
   });
 
-  it("writes nothing by itself: the way back, Back up now and Restore, which open their workspaces, the ways to other views and the marks of the line", async () => {
+  it("writes nothing by itself: the way back, Back up now, Pause or Resume and Restore, which open their workspaces, the ways to other views and the marks of the line", async () => {
     mount(answers(), chosen(A));
     const workspace = await open("nightly");
-    const controls = [...workspace.querySelectorAll("button, a, input, select, textarea")].map(
-      (control) => control.getAttribute("data-testid") ?? `mark ${control.getAttribute("data-strip-mark")}`,
-    );
+    const controls = (view: HTMLElement) =>
+      [...view.querySelectorAll("button, a, input, select, textarea")]
+        .map((control) => control.getAttribute("data-testid") ?? `mark ${control.getAttribute("data-strip-mark")}`)
+        .filter((control) => !control.startsWith("mark ") && !control.startsWith("velero-open-"));
 
-    expect(controls.filter((control) => !control.startsWith("mark ") && !control.startsWith("velero-open-"))).toEqual([
+    expect(controls(workspace)).toEqual([
       "velero-back",
       "velero-schedule-back-up-now",
+      "velero-schedule-pause",
       "velero-schedule-restore",
     ]);
     expect(workspace.textContent).not.toMatch(/\b(delete|edit|remove|pause now|resume|run now|trigger)\b/i);
+    // A schedule that is paused is offered Resume, and not Pause.
+    fireEvent.click(within(workspace).getByTestId("velero-back"));
+    expect(controls(await open("weekly"))).toEqual([
+      "velero-back",
+      "velero-schedule-back-up-now",
+      "velero-schedule-resume",
+      "velero-schedule-restore",
+    ]);
   });
 });
 

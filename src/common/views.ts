@@ -22,6 +22,8 @@ export const VIEW_KINDS = [
   "schedule-create",
   "restore-backup",
   "restore-schedule",
+  "schedule-pause",
+  "schedule-resume",
 ] as const;
 export type ViewKind = (typeof VIEW_KINDS)[number];
 
@@ -165,6 +167,22 @@ export const VIEWS: Record<
     family: "schedules",
     reads: BACKUPS_AND_LOCATIONS,
     title: "Restore",
+    noun: "schedule",
+    plural: "schedules",
+  },
+  // The workspace of a pause or of a resume is of the schedule, by its name: it reads what the view of the schedule
+  // reads, whose backups and offset say what a resume would do.
+  "schedule-pause": {
+    family: "schedules",
+    reads: BACKUPS_AND_LOCATIONS,
+    title: "Pause schedule",
+    noun: "schedule",
+    plural: "schedules",
+  },
+  "schedule-resume": {
+    family: "schedules",
+    reads: BACKUPS_AND_LOCATIONS,
+    title: "Resume schedule",
     noun: "schedule",
     plural: "schedules",
   },

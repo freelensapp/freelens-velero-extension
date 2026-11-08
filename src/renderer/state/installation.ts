@@ -22,6 +22,7 @@ import { BackupCreate } from "./backup-create";
 import { BackupNow } from "./backup-now";
 import { RestoreCreate } from "./restore-create";
 import { ScheduleCreate } from "./schedule-create";
+import { PauseResume } from "./schedule-patch";
 import { ServerStatus } from "./server-status";
 
 import type { Allowance, AllowanceFor } from "../../common/allowances";
@@ -63,6 +64,7 @@ import type {
   KeptEndsClient,
   RestoreCreateClient,
   ScheduleCreateClient,
+  SchedulePatchClient,
   WriteClient,
 } from "../api/ipc";
 
@@ -103,7 +105,7 @@ export interface InstallationDependencies {
   // an artifact it downloaded.
   writer?: WriteClient & ArtifactClient;
   // The writes of the actions of Velero, through the same way.
-  actions?: BackupNowClient & BackupCreateClient & ScheduleCreateClient & RestoreCreateClient;
+  actions?: BackupNowClient & BackupCreateClient & ScheduleCreateClient & RestoreCreateClient & SchedulePatchClient;
   // The ends of the writes the main process keeps for the cluster, through the same way.
   keptEnds?: KeptEndsClient;
   // What keeps, in the main process, what the operator allowed the downloads to do.
@@ -166,6 +168,8 @@ export class Installation {
   // A schedule of the form, from the list of the Schedules.
   readonly scheduleCreate: ScheduleCreate;
   readonly restoreCreate: RestoreCreate;
+  // A pause or a resume of a schedule, from the workspace of the schedule.
+  readonly pauseResume: PauseResume;
   // The ends of the writes of this cluster whose request was sent and that no view showed, as the main process keeps
   // them (SPEC-0017, REQ-250): the target bar says them wherever the operator is in the cluster.
   ends: KeptEnd[] = [];
@@ -240,6 +244,16 @@ export class Installation {
       shown: (request) => this.told(request),
     });
     this.restoreCreate = new RestoreCreate({
+      client: dependencies.actions,
+      cluster: () => this.cluster.id,
+      namespace: () => this.namespace,
+      writesOn: () => this.writes.on,
+      now: dependencies.now,
+      requestId,
+      refused: () => void this.openGate(),
+      shown: (request) => this.told(request),
+    });
+    this.pauseResume = new PauseResume({
       client: dependencies.actions,
       cluster: () => this.cluster.id,
       namespace: () => this.namespace,
@@ -363,6 +377,7 @@ export class Installation {
         this.backupCreate.leave();
         this.scheduleCreate.leave();
         this.restoreCreate.leave();
+        this.pauseResume.leave();
       }
     });
   }
@@ -614,6 +629,7 @@ export class Installation {
     this.backupCreate.drop();
     this.scheduleCreate.drop();
     this.restoreCreate.drop();
+    this.pauseResume.drop();
   }
 
   // What is kept is changed from what the store holds now, and not from what this installation read of
@@ -651,6 +667,7 @@ export class Installation {
     this.backupCreate.drop();
     this.scheduleCreate.drop();
     this.restoreCreate.drop();
+    this.pauseResume.drop();
     this.dropWrites(left);
   }
 

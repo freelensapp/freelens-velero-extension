@@ -380,3 +380,18 @@ in [`schedules-page.test.tsx`](../../src/renderer/pages/schedules-page.test.tsx)
 by the workspace of the restore, with writes off and on, in
 [`restore-create-workspace.test.tsx`](../../src/renderer/pages/restore-create-workspace.test.tsx);
 the packaged suites of the action come with the third pull request of T4.4.
+
+### 2026-11-08: Pause And Resume In The Workspace Of A Schedule (T4.5 Of SPEC-0017)
+
+With T4.5 the workspace of a schedule has Pause for a schedule that is not paused, and
+Resume for one that is, never both, between Back up now and Restore on the line of its
+name, as the restatement of REQ-074 and SCHED-11 above says: the command opens the
+workspace of its action over the view, named in the address as
+`schedule-pause/<schedule>` or `schedule-resume/<schedule>`, and writes nothing by
+itself. SCHED-11 is proven at the component layer by the view of a schedule whose
+controls are the way back, Back up now, Pause or Resume and Restore, the ways to the
+other views and the marks of the line, in
+[`schedules-page.test.tsx`](../../src/renderer/pages/schedules-page.test.tsx), and by
+the workspace of the action, with writes off and on, in
+[`schedule-patch-workspace.test.tsx`](../../src/renderer/pages/schedule-patch-workspace.test.tsx);
+the packaged suites of the action come with the third pull request of T4.5.

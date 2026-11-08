@@ -23,10 +23,12 @@ import {
   readGateState,
   readKeptEnds,
   readRestoreCreated,
+  readScheduleChanged,
   readScheduleCreated,
   readServerStatusValue,
   readWriteConfirmAnswer,
   readWriteStatus,
+  type ScheduleChanged,
   type ScheduleCreated,
   type ServerStatusValue,
   type WriteConfirmAnswer,
@@ -39,6 +41,7 @@ import type { AllowanceFor } from "../../common/allowances";
 import type { BackupTemplate } from "../../common/backup-template";
 import type { RestoreForm } from "../../common/restore-form";
 import type { ScheduleWrapper } from "../../common/schedule-form";
+import type { ResumeParameters, SchedulePatch } from "../../common/schedule-patch";
 
 // What the views ask of the gate, in the words of the contract.
 export interface GateClient {
@@ -172,6 +175,28 @@ export interface RestoreCreateClient {
   ): Promise<Answer<RestoreCreated>>;
 }
 
+// What the views ask of the main process for the pause and the resume of a schedule (SPEC-0017, T4.5): the confirmation,
+// which carries the schedule by its name and its UID and, for a resume, the expression its review read and the choice
+// of skipping a run, and answers the text of the patch with its token; and the run, which carries the schedule alone
+// and sends that text.
+export interface SchedulePatchClient {
+  confirmSchedulePatch(
+    cluster: string,
+    namespace: string,
+    action: SchedulePatch["action"],
+    schedule: { name: string; uid: string },
+    resume?: ResumeParameters,
+  ): Promise<Answer<WriteConfirmAnswer>>;
+  runSchedulePatch(
+    cluster: string,
+    namespace: string,
+    action: SchedulePatch["action"],
+    schedule: { name: string; uid: string },
+    token: string,
+    request: string,
+  ): Promise<Answer<ScheduleChanged>>;
+}
+
 // What the views ask of what the operator allows the downloads to do: to keep it, and to take it back.
 export interface AllowanceClient {
   allow(cluster: string, allowed: AllowanceFor): Promise<Answer<null>>;
@@ -191,6 +216,7 @@ export class VeleroIpcRenderer
     BackupCreateClient,
     ScheduleCreateClient,
     RestoreCreateClient,
+    SchedulePatchClient,
     KeptEndsClient
 {
   // `bounded` says that the reader of the value bounds it itself: it is so for the page of a text, which
@@ -429,6 +455,48 @@ export class VeleroIpcRenderer
       CHANNELS.writeRun,
       { cluster, namespace, kind: "restore", target: backup, restore, typed, token, request },
       readRestoreCreated,
+    );
+  }
+
+  confirmSchedulePatch(
+    cluster: string,
+    namespace: string,
+    action: SchedulePatch["action"],
+    schedule: { name: string; uid: string },
+    resume?: ResumeParameters,
+  ): Promise<Answer<WriteConfirmAnswer>> {
+    return this.ask(
+      CHANNELS.writeConfirm,
+      {
+        cluster,
+        namespace,
+        kind: action,
+        target: { kind: "Schedule", name: schedule.name, uid: schedule.uid },
+        ...(resume ? { resume } : {}),
+      },
+      readWriteConfirmAnswer,
+    );
+  }
+
+  runSchedulePatch(
+    cluster: string,
+    namespace: string,
+    action: SchedulePatch["action"],
+    schedule: { name: string; uid: string },
+    token: string,
+    request: string,
+  ): Promise<Answer<ScheduleChanged>> {
+    return this.ask(
+      CHANNELS.writeRun,
+      {
+        cluster,
+        namespace,
+        kind: action,
+        target: { kind: "Schedule", name: schedule.name, uid: schedule.uid },
+        token,
+        request,
+      },
+      readScheduleChanged,
     );
   }
 
