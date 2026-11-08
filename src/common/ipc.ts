@@ -223,14 +223,35 @@ export interface BackupCreated {
   // as written, when they are within the bounds of the contract (SPEC-0017, REQ-264).
   position?: number;
   errors?: string[];
+  // How many errors Velero wrote beyond the ones carried, which the view of the backup shows.
+  errorsLeft?: number;
   // The answer of the creation was lost, and the backup was found by its name as the review wrote it (SPEC-0017,
   // REQ-250): what the reads found is said.
   found?: true;
 }
 
-// The errors of a validation an answer carries: a few, each as written; more, or longer, are read in the view of the
-// backup.
-export const ERRORS_BOUND = { items: 16, item: 4096 } as const;
+// The errors of a validation an answer carries: a few, each as written, within a total that leaves the answer within
+// its bound; the others are counted, and read in the view of the backup.
+export const ERRORS_BOUND = { items: 16, item: 4096, total: 32_768 } as const;
+
+// The errors of a validation as an answer carries them: in the order Velero wrote them, each whole, until one does not
+// fit; how many are left is said.
+export function carriedErrors(errors: unknown): { errors?: string[]; errorsLeft?: number } {
+  if (!Array.isArray(errors)) return {};
+  const written = errors.filter((error): error is string => typeof error === "string" && error.length > 0);
+  const carried: string[] = [];
+  let total = 0;
+
+  for (const error of written) {
+    if (carried.length === ERRORS_BOUND.items || error.length > ERRORS_BOUND.item) break;
+    if (total + error.length > ERRORS_BOUND.total) break;
+    carried.push(error);
+    total += error.length;
+  }
+  const left = written.length - carried.length;
+
+  return { ...(carried.length ? { errors: carried } : {}), ...(left > 0 ? { errorsLeft: left } : {}) };
+}
 // How a write whose request was sent ended: the backup created, with the phase Velero wrote and whether it was found
 // by its name after an answer that was lost; or the code and the words of the failure.
 export type KeptOutcome =
@@ -708,7 +729,7 @@ export function readWriteConfirmAnswer(value: unknown): WriteConfirmAnswer | und
 export function readBackupCreated(value: unknown): BackupCreated | undefined {
   if (
     !isRecord(value) ||
-    !hasKeys(value, ["name", "uid"], ["phase", "position", "errors", "found"]) ||
+    !hasKeys(value, ["name", "uid"], ["phase", "position", "errors", "errorsLeft", "found"]) ||
     !isName(value.name) ||
     !isText(value.uid)
   )
@@ -720,9 +741,11 @@ export function readBackupCreated(value: unknown): BackupCreated | undefined {
     (!Array.isArray(value.errors) ||
       value.errors.length === 0 ||
       value.errors.length > ERRORS_BOUND.items ||
-      !value.errors.every((error) => isText(error, ERRORS_BOUND.item)))
+      !value.errors.every((error) => isText(error, ERRORS_BOUND.item)) ||
+      (value.errors as string[]).reduce((total, error) => total + error.length, 0) > ERRORS_BOUND.total)
   )
     return;
+  if ("errorsLeft" in value && (!Number.isSafeInteger(value.errorsLeft) || (value.errorsLeft as number) < 1)) return;
   if ("found" in value && value.found !== true) return;
   return {
     name: value.name,
@@ -730,6 +753,7 @@ export function readBackupCreated(value: unknown): BackupCreated | undefined {
     ...(typeof value.phase === "string" ? { phase: value.phase } : {}),
     ...(typeof value.position === "number" ? { position: value.position } : {}),
     ...(Array.isArray(value.errors) ? { errors: [...(value.errors as string[])] } : {}),
+    ...(typeof value.errorsLeft === "number" ? { errorsLeft: value.errorsLeft } : {}),
     ...(value.found === true ? { found: true } : {}),
   };
 }

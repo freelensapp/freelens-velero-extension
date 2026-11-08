@@ -8,7 +8,7 @@ import { backupFromSchedule, bodyText, scheduleRefused } from "../common/backup-
 import {
   type Answer,
   type BackupCreated,
-  ERRORS_BOUND,
+  carriedErrors,
   failure,
   PHASE_BOUND,
   textWithinBound,
@@ -97,20 +97,14 @@ function phaseOf(object: DiagnosticObject): string | undefined {
 }
 
 // Where a backup is in the queue of the server, and the errors of the validation Velero refused it with, as written:
-// what the contract cannot carry is read in the view of the backup.
-function detailsOf(object: DiagnosticObject): { position?: number; errors?: string[] } {
+// what the contract cannot carry is counted, and read in the view of the backup.
+function detailsOf(object: DiagnosticObject): { position?: number; errors?: string[]; errorsLeft?: number } {
   const status = (object as { status?: { queuePosition?: unknown; validationErrors?: unknown } }).status;
   const position = status?.queuePosition;
-  const errors = status?.validationErrors;
-  const carried =
-    Array.isArray(errors) &&
-    errors.length > 0 &&
-    errors.length <= ERRORS_BOUND.items &&
-    errors.every((error) => typeof error === "string" && error.length > 0 && error.length <= ERRORS_BOUND.item);
 
   return {
     ...(Number.isSafeInteger(position) && (position as number) >= 1 ? { position: position as number } : {}),
-    ...(carried ? { errors: [...(errors as string[])] } : {}),
+    ...carriedErrors(status?.validationErrors),
   };
 }
 

@@ -637,7 +637,6 @@ export class Installation {
   // The operator let an end go in the target bar: it is said no more, here or above a form.
   showEnd(request: string): void {
     this.backupNow.letGoOf(request);
-    this.backupCreate.letGoOf(request);
     this.told(request);
   }
 

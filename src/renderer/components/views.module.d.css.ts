@@ -24,6 +24,7 @@ declare const classNames: {
   readonly choiceOrigin: "choiceOrigin";
   readonly form: "form";
   readonly formField: "formField";
+  readonly preLine: "preLine";
   readonly formError: "formError";
   readonly namespaces: "namespaces";
   readonly named: "named";
