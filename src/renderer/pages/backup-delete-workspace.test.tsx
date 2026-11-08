@@ -557,6 +557,30 @@ describe("the deletion of a backup, in its workspace", () => {
     expect(words(part("typed-state"))).toBe(BACKUP_DELETE_VIEW_WORDS.notTyped("archived"));
   });
 
+  it("says the deletion of the backup that went as one of another backup when a backup of its name is created again while it is asked", async () => {
+    const { main, installation } = mount();
+
+    await deletionOf("nightly");
+    await writesOn();
+    await reviewed(main, 0);
+    type(part("typed"), "nightly");
+    press("run");
+    await waitFor(() => expect(main.runs).toHaveLength(1));
+    changed = {
+      nightly: { ...backup("nightly", "Completed"), metadata: { name: "nightly", namespace: A, uid: "again" } },
+    };
+    await act(() => installation.refresh());
+    await waitFor(() => expect(words(part("another"))).toBe(BACKUP_DELETE_VIEW_WORDS.another("nightly")));
+    expect(maybe("status")?.textContent).toBe("");
+    await main.run({ ok: true, value: { end: "completed" } });
+    // The backup of the workspace is the one created again: its own workspace, with nothing of the deletion that ended.
+    await waitFor(() => expect(maybe("another")).toBeNull());
+    expect(maybe("result")).toBeNull();
+    press("ask");
+    await waitFor(() => expect(main.confirms).toHaveLength(2));
+    expect(main.confirms[1].args).toEqual(["cluster-a", A, { kind: "Backup", name: "nightly", uid: "again" }]);
+  });
+
   it("says that the backup of the workspace is another one of the same name, created after the one that was open", async () => {
     const { installation } = mount();
 

@@ -88,9 +88,10 @@ export const BackupDeleteWorkspace = observer(({ installation, name, back, onBac
   const another = waiting && state.backup ? BACKUP_DELETE_VIEW_WORDS.another(state.backup.name) : undefined;
 
   // The workspace is of the backup of the view: one opened from the address, or for a backup created again under its
-  // name, is started here once the backup is read, and once a deletion of another one ended.
+  // name, is started here once the backup is read, and once a deletion of another one ended, since a deletion takes no
+  // other start while it is being asked.
   React.useEffect(() => {
-    if (uid && !waiting) state.start({ kind: "Backup", name, uid });
+    if (uid) state.start({ kind: "Backup", name, uid });
   }, [state, name, uid, waiting]);
 
   // An end the workspace shows is seen: it is not said again elsewhere.

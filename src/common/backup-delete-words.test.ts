@@ -106,6 +106,10 @@ describe("what the review of a deletion says", () => {
       "undone",
     ]);
     expect(deleteMeaning("shop-1").find((part) => part.id === "phase")?.words).toBe(deleteOffered(undefined).words);
+    // The phase of a backup not started is said with the location it names, or without one.
+    expect(deleteMeaning("shop-1", { storageLocation: "default" }).find((part) => part.id === "phase")?.words).toBe(
+      deleteOffered(undefined, "default").words,
+    );
   });
 
   it("says what the views read of the location when Velero would refuse the request, and a backup that names none", () => {
