@@ -122,11 +122,16 @@ type Scanned = { token: Token; literal: string };
 const whitespace = (character: string) => [" ", "\t", "\r", "\n"].includes(character);
 const special = (character: string) => ["=", "!", "(", ")", ",", ">", "<"].includes(character);
 
-// The lexer of `labels.Parse`, character by character.
+// A token of the table, and nothing an object inherits.
+function literal(text: string): Token | undefined {
+  return Object.hasOwn(LITERALS, text) ? LITERALS[text] : undefined;
+}
+
+// The lexer of `labels.Parse`, character by character: a NUL ends the selector, as the end of the text does.
 function scan(selector: string): Scanned[] {
   const scanned: Scanned[] = [];
   let at = 0;
-  const read = () => (at < selector.length ? selector[at++] : "");
+  const read = () => (at < selector.length && selector[at] !== "\u0000" ? selector[at++] : "");
 
   for (;;) {
     let character = read();
@@ -150,7 +155,7 @@ function scan(selector: string): Scanned[] {
           break;
         }
         buffer += next;
-        const token = LITERALS[buffer];
+        const token = literal(buffer);
 
         if (token) last = { token, literal: buffer };
         else if (last) {
@@ -173,7 +178,7 @@ function scan(selector: string): Scanned[] {
         }
         buffer += next;
       }
-      scanned.push({ token: LITERALS[buffer] ?? "identifier", literal: buffer });
+      scanned.push({ token: literal(buffer) ?? "identifier", literal: buffer });
     }
   }
 }
@@ -187,6 +192,19 @@ interface Requirement {
 }
 
 class SelectorError extends Error {}
+
+// A value quoted as `%q` of Go quotes one that is printable: in double quotes, its quotes and backslashes escaped.
+function quoted(value: string): string {
+  return JSON.stringify(value);
+}
+
+// The errors of one requirement as the aggregate of apimachinery writes them: one alone as it is, and several, each
+// once, in brackets, separated by commas.
+function aggregate(problems: string[]): string {
+  const distinct = [...new Set(problems)];
+
+  return distinct.length === 1 ? distinct[0] : `[${distinct.join(", ")}]`;
+}
 
 // The parser of `labels.Parse`: requirements separated by commas, each `[!] KEY [operator values]`.
 function parse(selector: string): Requirement[] {
@@ -203,7 +221,7 @@ function parse(selector: string): Requirement[] {
   const keyProblem = (key: string) => {
     const problems = qualifiedNameProblems(key);
 
-    if (problems.length > 0) throw new SelectorError(`Invalid value: "${key}": ${problems.join("; ")}`);
+    if (problems.length > 0) throw new SelectorError(`Invalid value: ${quoted(key)}: ${problems.join("; ")}`);
   };
   const requirement = (): Requirement => {
     let negated = false;
@@ -302,9 +320,9 @@ function parse(selector: string): Requirement[] {
     for (const value of sorted) {
       const valueProblems = labelValueProblems(value);
 
-      if (valueProblems.length > 0) problems.push(`Invalid value: "${value}": ${valueProblems.join("; ")}`);
+      if (valueProblems.length > 0) problems.push(`Invalid value: ${quoted(value)}: ${valueProblems.join("; ")}`);
     }
-    if (problems.length > 0) throw new SelectorError(problems.join(", "));
+    if (problems.length > 0) throw new SelectorError(aggregate(problems));
     return { key, operator, values: sorted };
   };
   const requirements: Requirement[] = [];
@@ -349,18 +367,19 @@ export function readLabelSelector(text: string): { selector: LabelSelector } | {
     throw error;
   }
   if (requirements.length === 0) return { problem: "The selector names no requirement." };
-  const matchLabels: Record<string, string> = {};
+  // A key is any text of a label: none is a name an object inherits.
+  const matchLabels = new Map<string, string>();
   const matchExpressions: NonNullable<LabelSelector["matchExpressions"]> = [];
 
   for (const { key, operator, values } of requirements) {
     if (operator === ">" || operator === "<")
       return { problem: `"${operator === ">" ? "gt" : "lt"}" isn't supported in label selectors` };
     if (operator === "=" || operator === "==") {
-      if (key in matchLabels && matchLabels[key] !== values[0])
+      if (matchLabels.has(key) && matchLabels.get(key) !== values[0])
         return {
           problem: `The key ${key} is given two values with =: a label has one value, and nothing is selected.`,
         };
-      matchLabels[key] = values[0];
+      matchLabels.set(key, values[0]);
       continue;
     }
     const written =
@@ -374,11 +393,13 @@ export function readLabelSelector(text: string): { selector: LabelSelector } | {
 
     matchExpressions.push({ key, operator: written, ...(values.length > 0 ? { values } : {}) });
   }
-  const keys = Object.keys(matchLabels).sort();
+  const keys = [...matchLabels.keys()].sort();
 
   return {
     selector: {
-      ...(keys.length > 0 ? { matchLabels: Object.fromEntries(keys.map((key) => [key, matchLabels[key]])) } : {}),
+      ...(keys.length > 0
+        ? { matchLabels: Object.fromEntries(keys.map((key) => [key, matchLabels.get(key) ?? ""])) }
+        : {}),
       ...(matchExpressions.length > 0 ? { matchExpressions } : {}),
     },
   };

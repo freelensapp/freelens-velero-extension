@@ -94,6 +94,35 @@ describe("a label selector as the form reads it", () => {
     });
   });
 
+  it("takes the names an object inherits as keys and values, as any other", () => {
+    expect(readLabelSelector("constructor=x,app=constructor")).toEqual({
+      selector: { matchLabels: { app: "constructor", constructor: "x" } },
+    });
+    expect(readLabelSelector("app in (toString, valueOf), !hasOwnProperty")).toEqual({
+      selector: {
+        matchExpressions: [
+          { key: "app", operator: "In", values: ["toString", "valueOf"] },
+          { key: "hasOwnProperty", operator: "DoesNotExist" },
+        ],
+      },
+    });
+    expect(readLabelSelector("constructor=x,constructor=y")).toEqual({
+      problem: "The key constructor is given two values with =: a label has one value, and nothing is selected.",
+    });
+  });
+
+  it("writes several errors of a requirement in brackets, quotes a value as Go does, and ends at a NUL", () => {
+    expect(readLabelSelector("app in (-a,-b)")).toEqual({
+      problem: expect.stringMatching(
+        /^unable to parse requirement: \[Invalid value: "-a": .*, Invalid value: "-b": .*\]$/,
+      ),
+    });
+    expect(readLabelSelector('app="web"')).toEqual({
+      problem: expect.stringMatching(/^unable to parse requirement: Invalid value: "\\"web\\"": a valid label/),
+    });
+    expect(readLabelSelector("app=web\u0000,x=y")).toEqual({ selector: { matchLabels: { app: "web" } } });
+  });
+
   it("refuses the comparisons, which a selector of the API does not take, a key with two values, and no requirement", () => {
     expect(readLabelSelector("app>1")).toEqual({ problem: `"gt" isn't supported in label selectors` });
     expect(readLabelSelector("app<1")).toEqual({ problem: `"lt" isn't supported in label selectors` });

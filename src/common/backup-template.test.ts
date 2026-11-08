@@ -93,12 +93,53 @@ describe("what the release refuses of a template, with its words", () => {
     expect(durationOf("1.5h")).toEqual({ written: "1h30m0s" });
   });
 
-  it("refuses a location that is not a name, and a snapshot location named twice", () => {
+  it("refuses a location that is not a name, and takes a snapshot location named twice, as the release does", () => {
     expect(templateProblems({ storageLocation: "Default" }).storageLocation?.[0]).toMatch(
       /^The name of a storage location a lowercase RFC 1123 subdomain/,
     );
-    expect(templateProblems({ ...LOCATED, volumeSnapshotLocations: ["aws", "aws"] })).toEqual({
-      volumeSnapshotLocations: [TEMPLATE_WORDS.snapshotLocationTwice("aws")],
+    expect(templateProblems({ ...LOCATED, volumeSnapshotLocations: ["Aws"] }).volumeSnapshotLocations?.[0]).toMatch(
+      /^The name of the snapshot location Aws a lowercase RFC 1123 subdomain/,
+    );
+    expect(templateProblems({ ...LOCATED, volumeSnapshotLocations: ["aws", "aws"] })).toEqual({});
+    expect(templateSpec({ ...LOCATED, volumeSnapshotLocations: ["aws", "aws"] })).toEqual({
+      storageLocation: "default",
+      volumeSnapshotLocations: ["aws"],
+    });
+  });
+
+  it("refuses the names of the excluded namespaces as the release does", () => {
+    expect(templateProblems({ ...LOCATED, excludedNamespaces: ["A_b", "a**"] }).excludedNamespaces).toEqual([
+      TEMPLATE_WORDS.namespaceLists(
+        `invalid namespace "A_b": a lowercase RFC 1123 label must consist of lower case alphanumeric characters or '-', and must start and end with an alphanumeric character (e.g. 'my-name',  or '123-abc', regex used for validation is '[a-z0-9]([-a-z0-9]*[a-z0-9])?')`,
+      ),
+      TEMPLATE_WORDS.namespaceLists("wildcard pattern contains consecutive asterisks (only single * allowed)"),
+    ]);
+  });
+
+  it("says a field beyond the bounds the contract gives it, and a template too large to be asked", () => {
+    const many = (count: number, length = 3) => Array.from({ length: count }, (_, at) => `n${at}`.padEnd(length, "x"));
+
+    expect(templateProblems({ ...LOCATED, includedResources: many(256) })).toEqual({});
+    expect(templateProblems({ ...LOCATED, includedResources: many(257) })).toEqual({
+      includedResources: [TEMPLATE_WORDS.tooMany(256)],
+    });
+    expect(templateProblems({ ...LOCATED, includedResources: ["r".repeat(254)] })).toEqual({
+      includedResources: [TEMPLATE_WORDS.tooLong(253)],
+    });
+    expect(templateProblems({ ...LOCATED, orLabelSelectors: Array.from({ length: 17 }, () => "a") })).toEqual({
+      orLabelSelectors: [TEMPLATE_WORDS.tooMany(16)],
+    });
+    expect(templateProblems({ ...LOCATED, labelSelector: `a in (${"v,".repeat(600)}v)` }).labelSelector).toContain(
+      TEMPLATE_WORDS.tooLong(1024),
+    );
+    const large = {
+      ...LOCATED,
+      includedResources: many(250, 240),
+      excludedResources: many(10, 240).map((item) => `e${item}`),
+    };
+
+    expect(templateProblems(large)).toEqual({
+      includedResources: [TEMPLATE_WORDS.tooLarge(JSON.stringify(large).length)],
     });
   });
 });

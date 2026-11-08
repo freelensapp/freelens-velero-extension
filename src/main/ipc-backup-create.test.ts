@@ -42,6 +42,19 @@ function location(kind: string, name: string, provider = "aws"): DiagnosticObjec
   } as DiagnosticObject;
 }
 
+// A read of a snapshot location that answers only when its request is aborted, which ends it as cancelled.
+function hangingUntilAborted(read: (...args: unknown[]) => Promise<DiagnosticObject>) {
+  return (...args: unknown[]): Promise<DiagnosticObject> => {
+    if (args[0] !== "VolumeSnapshotLocation") return read(...args);
+    const signal = args[3] as AbortSignal;
+
+    return new Promise((_resolve, reject) => {
+      if (signal.aborted) reject(new DiagnosticError("cancelled"));
+      signal.addEventListener("abort", () => reject(new DiagnosticError("cancelled")), { once: true });
+    });
+  };
+}
+
 function fixture() {
   const catalog: CatalogEntry[] = [
     { id: "cluster-a", name: "demo", kubeConfigPath: "/synthetic/a", contextName: "kind-a", status: "connected" },
@@ -138,7 +151,7 @@ function fixture() {
   const locationReads = () =>
     adapter.read.mock.calls.filter(([kind]) => kind === "BackupStorageLocation" || kind === "VolumeSnapshotLocation");
 
-  return { state, adapter, call, enable, confirm, run, locationReads };
+  return { state, adapter, gate, call, enable, confirm, run, locationReads };
 }
 
 describe("the confirmation of a backup of the form", () => {
@@ -228,6 +241,55 @@ describe("the confirmation of a backup of the form", () => {
     expect(adapter.createBackup).not.toHaveBeenCalled();
   });
 
+  it("stops reading the locations when the frame that asked goes, and gives no token", async () => {
+    const { adapter, call } = fixture();
+    const frame: IpcEvent = { ...FRAME_A, senderFrame: { url: FRAME_A.senderFrame?.url ?? "" } };
+
+    await call(
+      CHANNELS.gateEnable,
+      { cluster: "cluster-a", namespace: "velero", confirmation: { context: "kind-a", namespace: "velero" } },
+      frame,
+    );
+    const read = adapter.read.getMockImplementation() as (...args: unknown[]) => Promise<DiagnosticObject>;
+    const hanging = hangingUntilAborted(read);
+
+    adapter.read.mockImplementation((...args: unknown[]) => {
+      // The page of the cluster is left while the snapshot location is read.
+      if (args[0] === "VolumeSnapshotLocation")
+        frame.senderFrame = { url: "https://cluster-b.renderer.freelens.app:1234/" };
+      return hanging(...args);
+    });
+    const refused = await call(
+      CHANNELS.writeConfirm,
+      { cluster: "cluster-a", namespace: "velero", kind: "backup", backup: NAME, template: TEMPLATE },
+      frame,
+    );
+
+    expect(refused).toMatchObject({ ok: false, code: "cancelled", stage: "read", text: BACKUP_CREATE_WORDS.cancelled });
+    expect(refused.value).toBeUndefined();
+  });
+
+  it("confirms no text the answer of the confirmation cannot carry, and gives no token for it", async () => {
+    const { enable, confirm, adapter } = fixture();
+
+    await enable();
+    // Within the bounds of the contract and of a request, and written longer than the answer carries: the indentation
+    // of the text is longer than the commas of the request.
+    const resources = (prefix: string) => Array.from({ length: 256 }, (_, at) => `${prefix}${at}`.padEnd(114, "x"));
+    const refused = await confirm({
+      storageLocation: "default",
+      includedResources: resources("i"),
+      excludedResources: resources("e"),
+    });
+
+    expect(refused).toMatchObject({ ok: false, code: "validation", stage: "review" });
+    expect(refused.text).toMatch(
+      /^The backup of this template is written in \d+ characters, more than a review carries/,
+    );
+    expect(refused.value).toBeUndefined();
+    expect(adapter.createBackup).not.toHaveBeenCalled();
+  });
+
   it("is refused by the contract without a template or with a field it does not know", async () => {
     const { enable, call } = fixture();
 
@@ -262,6 +324,80 @@ describe("the run of a backup of the form", () => {
     expect(adapter.createBackup.mock.calls[0][1]).toBe(confirmed.value?.text);
     // Twice each location, at the confirmation and at the run.
     expect(locationReads()).toHaveLength(4);
+  });
+
+  it("stops reading the locations again when writes go off, and sends nothing", async () => {
+    const { enable, confirm, run, adapter, gate } = fixture();
+
+    await enable();
+    const confirmed = await confirm();
+    const read = adapter.read.getMockImplementation() as (...args: unknown[]) => Promise<DiagnosticObject>;
+    const hanging = hangingUntilAborted(read);
+
+    adapter.read.mockImplementation((...args: unknown[]) => {
+      if (args[0] === "VolumeSnapshotLocation") gate.disable("cluster-a");
+      return hanging(...args);
+    });
+    expect(await run(String(confirmed.value?.token))).toMatchObject({
+      ok: false,
+      code: "cancelled",
+      stage: "read",
+      text: BACKUP_CREATE_WORDS.cancelled,
+    });
+    expect(adapter.createBackup).not.toHaveBeenCalled();
+  });
+
+  it("takes a backup found by its name for the one created only when it carries the fields Velero keeps as they were sent", async () => {
+    const { enable, confirm, run, state } = fixture();
+
+    await enable();
+    // Another hand made a backup of that name since the confirmation, to another location; ours never landed.
+    state.create = async () => {
+      state.backups.set(NAME, {
+        apiVersion: "velero.io/v1",
+        kind: "Backup",
+        metadata: {
+          name: NAME,
+          namespace: "velero",
+          uid: "foreign-uid",
+          creationTimestamp: new Date(state.now).toISOString(),
+        },
+        spec: { includedNamespaces: ["shop"], storageLocation: "elsewhere", ttl: "48h0m0s" },
+      } as DiagnosticObject);
+      throw new DiagnosticError("submission-unknown");
+    };
+    expect(await run(String((await confirm()).value?.token))).toMatchObject({
+      ok: false,
+      code: "submission-unknown",
+      text: BACKUP_NOW_WORDS.other(NAME),
+    });
+    // One with the fields of the text, the lists Velero adds to aside, is the one created.
+    state.backups.clear();
+    state.create = async () => {
+      state.backups.set(NAME, {
+        apiVersion: "velero.io/v1",
+        kind: "Backup",
+        metadata: {
+          name: NAME,
+          namespace: "velero",
+          uid: "backup-uid",
+          creationTimestamp: new Date(state.now).toISOString(),
+        },
+        spec: {
+          includedNamespaces: ["shop"],
+          storageLocation: "default",
+          ttl: "48h0m0s",
+          volumeSnapshotLocations: ["aws-east", "gcp"],
+          excludedNamespaces: ["labelled"],
+          csiSnapshotTimeout: "10m0s",
+        },
+      } as DiagnosticObject);
+      throw new DiagnosticError("submission-unknown");
+    };
+    expect(await run(String((await confirm()).value?.token))).toEqual({
+      ok: true,
+      value: { name: NAME, uid: "backup-uid", found: true },
+    });
   });
 
   it("sends nothing when a location went since the review", async () => {

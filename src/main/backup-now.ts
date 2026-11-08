@@ -61,7 +61,7 @@ export const BACKUP_NOW_WORDS = {
   notDone: (name: string) =>
     `The API server did not answer the creation, and the backup ${name} is not there as far as the reads show. Asking again is a new review.`,
   other: (name: string) =>
-    `The API server did not answer the creation, and a backup named ${name} is there that is not known to be this one: it does not carry the labels of the review, or it is older than the confirmation.`,
+    `The API server did not answer the creation, and a backup named ${name} is there that is not known to be this one: it does not carry the labels or the fields of the review, or it is older than the confirmation.`,
   unknown: (name: string) =>
     `The API server did not answer the creation, and the backup ${name} could not be read: it may have been created. It is not sent again by itself: look for it among the backups.`,
   failed: "The backup could not be asked: nothing is known to have been created.",
@@ -244,10 +244,56 @@ function labelsOf(text: string): Record<string, string> | undefined {
   }
 }
 
+// The fields of the spec of a backup of the form that Velero keeps as they were sent when it starts it: the storage
+// location, which the form always writes, the selectors, the namespaces included, the choices and the durations. The
+// lists it adds to, the excluded namespaces, the resources and the snapshot locations, are not among them.
+const KEPT_AS_SENT = [
+  "storageLocation",
+  "includedNamespaces",
+  "labelSelector",
+  "orLabelSelectors",
+  "snapshotVolumes",
+  "includeClusterResources",
+  "defaultVolumesToFsBackup",
+  "snapshotMoveData",
+  "ttl",
+  "csiSnapshotTimeout",
+  "itemOperationTimeout",
+];
+
+// A value written with its keys in one order, whatever order a writer gave them.
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value && typeof value === "object")
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`)
+      .join(",")}}`;
+  return JSON.stringify(value) ?? "undefined";
+}
+
+// Whether a backup found by its name carries the fields of the text that Velero keeps as they were sent. A backup of
+// the form has no label and no source: what tells it from one another hand made with its name is its spec.
+function keptAsSent(text: string, found: DiagnosticObject): boolean {
+  let sent: Record<string, unknown> | undefined;
+
+  try {
+    sent = (JSON.parse(text) as { spec?: Record<string, unknown> }).spec;
+  } catch {
+    return false;
+  }
+  const carried = ((found as { spec?: unknown }).spec ?? {}) as Record<string, unknown>;
+
+  return (
+    sent !== undefined &&
+    KEPT_AS_SENT.every((field) => !(field in sent) || canonical(sent[field]) === canonical(carried[field]))
+  );
+}
+
 // A creation whose answer is not known: the backup is read by its name, and is the one created when its creation is
 // not earlier than a minute before the confirmation and it carries every label of the text, the label of the schedule
 // among them for a backup asked from one; the label of the storage location is the one Velero adds (SPEC-0017,
-// REQ-250).
+// REQ-250). A backup of the form, which has no label, carries the fields Velero keeps as they were sent.
 async function reconcile(
   dependencies: BackupNowDependencies,
   adapter: DiagnosticKubernetes,
@@ -278,7 +324,8 @@ async function reconcile(
     Number.isFinite(created) &&
     created >= confirmedAt - CREATION_MARGIN &&
     labels !== undefined &&
-    Object.entries(labels).every(([key, value]) => key === LOCATION_LABEL || carried[key] === value);
+    Object.entries(labels).every(([key, value]) => key === LOCATION_LABEL || carried[key] === value) &&
+    (Object.keys(labels).length > 0 || keptAsSent(text, found));
 
   if (!ours) return failure("submission-unknown", "creation", false, BACKUP_NOW_WORDS.other(backup));
   return readAfter(dependencies, adapter, request.namespace, found, signal, write, true);
