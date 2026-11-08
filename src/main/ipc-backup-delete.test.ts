@@ -415,8 +415,9 @@ describe("the run of the deletion of a backup", () => {
 
   it("ends a read that does not answer with the thirty seconds, and the look after a lost answer with its own bound", async () => {
     const { enable, run, token, state, adapter, requestOf } = fixture();
-    const hanging = (_kind: string, _namespace: string, _name: string, signal?: AbortSignal) =>
-      new Promise<DiagnosticObject>((_resolve, reject) => {
+    // A read that answers only when its signal ends.
+    const hanging = <Value>(signal?: AbortSignal) =>
+      new Promise<Value>((_resolve, reject) => {
         signal?.addEventListener("abort", () => reject(new DiagnosticError("cancelled")), { once: true });
       });
 
@@ -426,7 +427,7 @@ describe("the run of the deletion of a backup", () => {
     state.jump = 28_000;
     adapter.read.mockImplementation(async (kind, namespace, name, signal) =>
       kind === "DeleteBackupRequest"
-        ? hanging(kind, namespace, name, signal)
+        ? hanging<DiagnosticObject>(signal)
         : structuredClone(state.backup as DiagnosticObject),
     );
     expect(await run(confirmed)).toEqual({ ok: true, value: { end: "unread", request: expect.any(String) } });
@@ -435,9 +436,7 @@ describe("the run of the deletion of a backup", () => {
 
     LOOK_AFTER.forMs = 5;
     try {
-      adapter.deleteRequestsOf.mockImplementation((_namespace, _backup, signal) =>
-        hanging("DeleteBackupRequest", "", "", signal),
-      );
+      adapter.deleteRequestsOf.mockImplementation((_namespace, _backup, signal) => hanging<DiagnosticObject[]>(signal));
       state.create = async (text) => {
         state.requests.set(requestOf(text).metadata.name, requestOf(text));
         throw new DiagnosticError("submission-unknown");
@@ -782,6 +781,7 @@ describe("the run of the deletion of a backup", () => {
 
         return { ...created, metadata: { ...created.metadata, uid: "" } };
       },
+      (text: string) => requestOf(text, "another"),
     ]) {
       state.create = async (text) => strange(text) as DiagnosticObject;
       expect(await run(await token())).toEqual({

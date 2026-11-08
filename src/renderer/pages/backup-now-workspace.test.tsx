@@ -712,6 +712,31 @@ describe("back up now, from the view of a schedule", () => {
     );
   });
 
+  it("leads to the backup of a deletion the target bar says, but not to one whose deletion completed, which is gone", async () => {
+    const main = mainProcess();
+
+    for (const [request, name, deletion] of [
+      ["00000000-0000-4000-8000-0000000000d3", "nightly-1", "completed"],
+      ["00000000-0000-4000-8000-0000000000d4", "nightly-2", "refused"],
+    ] as const)
+      main.kept.push({
+        request,
+        kind: "delete-backup",
+        namespace: A,
+        context: "kind-local-demo",
+        name,
+        outcome: { created: true, deletion },
+        at: NOW,
+      });
+    mount(main);
+    await screen.findByTestId("velero-kept-ends");
+    expect(screen.queryByTestId("velero-open-backup-nightly-1")).toBeNull();
+    expect(screen.getByTestId("velero-open-backup-nightly-2").textContent).toBe("Open the backup nightly-2");
+    expect(screen.getByTestId("velero-kept-ends").textContent).toContain(
+      "The deletion of the backup nightly-1, in velero-a (context kind-local-demo), was asked while no view of it was open",
+    );
+  });
+
   it("says no end again above a form once the operator dismissed it in the target bar", async () => {
     const main = mainProcess();
     const { installation } = mount(main);
