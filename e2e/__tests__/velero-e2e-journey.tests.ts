@@ -526,13 +526,14 @@ describe("views of the first milestone", () => {
       expect(restores.state).toBe("listed");
       expect(restores.text).toContain("restore-of-daily-completed (Completed)");
       expect(restores.text).toContain("restore-of-daily-partiallyfailed (Partially failed)");
-      // The schedule, the locations and each restore are ways to their views.
+      // Restore, then the schedule, the locations and each restore, which are ways to their views.
       expect(
         (await frame.locator("[data-testid=velero-backup-workspace] button").allInnerTexts()).map((text) =>
           text.replace(/\s+/g, " ").trim(),
         ),
       ).toEqual([
         "arrow_back Backups",
+        "restore Restore",
         "views-daily",
         "views-available",
         "views-snapshots",
