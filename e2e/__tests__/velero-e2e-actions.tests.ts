@@ -4,7 +4,8 @@
  */
 
 // The actions of SPEC-0017 in a packaged Freelens, on the CRDs of the release alone, where no controller runs
-// (REQ-254, ACT-11): Back up now from the view of a schedule (T4.2). With writes off the command writes nothing; a
+// (REQ-254, ACT-11): Back up now from the view of a schedule (T4.2), and Create backup from the list of the Backups
+// (T4.3). With writes off the command writes nothing; a
 // review that is not confirmed, nothing; a confirmed one, exactly one POST of a Backup, whose every field is the one of
 // the text the review showed, and no other write. The backup stays without a phase, as the result says, and the view
 // of the schedule lists it at its next read (NOW-05). A name already taken is a conflict (NOW-04). The reader of a part
@@ -16,6 +17,8 @@ import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as cluster from "../../integration/helpers/velero-cluster";
 import * as velero from "../../integration/helpers/velero-extension";
+import { BACKUP_CREATE_VIEW_WORDS } from "../../src/common/backup-create-words";
+import { backupFromForm, formBodyText } from "../../src/common/backup-form";
 import { backupFromSchedule, bodyText } from "../../src/common/backup-from-schedule";
 import { BACKUP_NOW_VIEW_WORDS } from "../../src/common/backup-now-words";
 import { BACKUP_NOW_WORDS } from "../../src/main/backup-now";
@@ -24,13 +27,18 @@ import type { Frame } from "playwright";
 
 const TIMEOUT = 15 * 60 * 1000;
 const SCHEDULES = cluster.SCHEDULES;
-// The schedule with a history in the installation of the views.
+// The schedule with a history in the installation of the views, and the name of the backups of the form.
 const SCHEDULE = "views-history";
+const FORM = "views-form";
 // How long what must not happen is waited for.
 const NOTHING = 1500;
 // The context of the reader of a part, as a second entry of the catalog.
 const SECOND_CONTEXT = "velero-e2e-reader";
 const part = (id: string) => `[data-testid=velero-backup-now-${id}]`;
+// The parts of the workspace of the backup of the form, and a field of it: the host gives its own element the
+// identifier, or the input in it.
+const create = (id: string) => `[data-testid=velero-backup-create-${id}]`;
+const formField = (id: string) => `${create(id)} input, input${create(id)}`;
 // The field of the name: the host gives its own element the identifier, or the input in it.
 const FIELD = `${part("field")} input, input${part("field")}`;
 
@@ -81,6 +89,14 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
     await cluster.openWorkspace(frame, schedule, SCHEDULES);
     await frame.click("[data-testid=velero-schedule-back-up-now]");
     await frame.waitForSelector("[data-testid=velero-backup-now-workspace]", { timeout: 30_000 });
+  };
+  // The workspace of a backup of the form, from the command of the list of the Backups of the installation of the views.
+  const openCreate = async (on: Frame) => {
+    await cluster.showList(on);
+    await cluster.openPage(on, cluster.BACKUPS);
+    await cluster.waitForList(on, cluster.BACKUPS);
+    await on.click("[data-testid=velero-backups-create]");
+    await on.waitForSelector(create("workspace"), { timeout: 30_000 });
   };
   const nameInField = () => frame.locator(FIELD).first().inputValue();
   // The writes of the kinds of Velero since a reading of the counters, whoever made them.
@@ -285,6 +301,158 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
   );
 
   it(
+    "offers Create backup in the header of the list of the Backups, the locations a backup can go to with the reasons of the others, and with writes off writes nothing",
+    async () => {
+      const earlier = cluster.apiRequests();
+
+      await openCreate(frame);
+      // Writes are on from the cases before: off here, on again in the next case.
+      await frame.click("[data-testid=velero-writes-off]");
+      await frame.waitForSelector("[data-testid=velero-writes][data-writes=off]", { timeout: 60_000 });
+      expect(await cluster.wordsOf(frame, "#velero-backup-create-storageLocation .Select__single-value")).toBe(
+        "views-available, marked default",
+      );
+      for (const [location, words] of [
+        ["views-archive", BACKUP_CREATE_VIEW_WORDS.readOnly("views-archive")],
+        ["views-unavailable", BACKUP_CREATE_VIEW_WORDS.unavailable("views-unavailable")],
+        ["views-unreported", BACKUP_CREATE_VIEW_WORDS.unavailable("views-unreported")],
+      ]) {
+        expect([location, await cluster.wordsOf(frame, create(`storageLocation-refused-${location}`))]).toEqual([
+          location,
+          words,
+        ]);
+      }
+      // The namespaces the host lists are offered.
+      expect(await frame.locator(create("includedNamespaces-default")).count()).toBe(1);
+      await frame.locator(formField("field")).first().fill(`${FORM}-off`);
+      await frame.locator(formField("field")).first().press("Enter");
+      await frame.waitForTimeout(NOTHING);
+      expect(await frame.locator(create("review")).count()).toBe(0);
+      expect(await cluster.wordsOf(frame, create("writes-off"))).toBe(BACKUP_CREATE_VIEW_WORDS.writesOff);
+      expect(writesSince(earlier)).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows in its review the text of the backup of the fields set, and writes nothing for a review that is left",
+    async () => {
+      await writesOn();
+      const earlier = cluster.apiRequests();
+      const name = `${FORM}-reviewed`;
+      const template = {
+        includedNamespaces: ["default"],
+        excludedResources: ["secrets"],
+        storageLocation: "views-available",
+        volumeSnapshotLocations: ["views-snapshots"],
+        ttl: "72h",
+      };
+
+      await frame.locator(formField("field")).first().fill(name);
+      await frame.click(create("includedNamespaces-default"));
+      await frame.locator(formField("excludedResources")).first().fill("secrets");
+      await frame.locator(formField("ttl")).first().fill("72h");
+      await frame.click("#velero-backup-create-volumeSnapshotLocations-aws .Select__control");
+      await frame
+        .locator(".Select__option")
+        .filter({ hasText: /^views-snapshots$/ })
+        .first()
+        .click();
+      await frame.click(create("ask"));
+      await frame.waitForSelector(create("review"), { timeout: 30_000 });
+      const body = backupFromForm(cluster.E2E_VIEWS_NAMESPACE, name, template);
+
+      expect(await frame.locator(create("text")).textContent()).toBe(body && formBodyText(body));
+      // Left by Escape: the form again, as it was, and nothing written.
+      await frame.locator(create("review")).focus();
+      await started?.window.keyboard.press("Escape");
+      await frame.waitForSelector(create("review"), { state: "detached", timeout: 30_000 });
+      expect(await frame.locator(formField("field")).first().inputValue()).toBe(name);
+      await frame.waitForTimeout(NOTHING);
+      expect(writesSince(earlier)).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "creates exactly one Backup of the form, the text of its review, and nothing else, and leads to it",
+    async () => {
+      const earlier = cluster.apiRequests();
+      const codes = cluster.requestCodes("backups");
+      const name = await frame.locator(formField("field")).first().inputValue();
+
+      await frame.click(create("ask"));
+      await frame.waitForSelector(create("review"), { timeout: 30_000 });
+      const text = String(await frame.locator(create("text")).textContent());
+      const asked: (typeof created)[number] = { namespace: cluster.E2E_VIEWS_NAMESPACE, name };
+
+      created.push(asked);
+      await frame.click(create("create"));
+      await frame.waitForSelector(create("result"), { timeout: 90_000 });
+      const backup = read<BackupRead>("backups.velero.io", name, cluster.E2E_VIEWS_NAMESPACE);
+
+      asked.uid = backup.metadata.uid;
+      expect(await cluster.wordsOf(frame, create("phase"))).toBe(BACKUP_CREATE_VIEW_WORDS.unread);
+      const { "GET 200": _reads, ...codesOfWrites } = cluster.counted(codes, cluster.requestCodes("backups"));
+
+      expect(codesOfWrites).toEqual({ "POST 201": 1 });
+      const written = writesSince(earlier);
+
+      expect([Object.keys(written).length, Object.values(written)]).toEqual([1, [1]]);
+      expect(Object.keys(written)[0]).toMatch(/^POST backups /);
+      // Every field of the text, with the same value in the object: no label, no annotation, the fields set alone.
+      const sent = JSON.parse(text) as BackupRead;
+      const {
+        uid: _uid,
+        resourceVersion: _version,
+        creationTimestamp: _created,
+        generation: _generation,
+        managedFields: _fields,
+        ...metadata
+      } = backup.metadata as Record<string, unknown>;
+
+      expect(metadata).toEqual(sent.metadata);
+      expect(backup.spec).toEqual(sent.spec);
+      expect(backup.status?.phase).toBeUndefined();
+      // The way to the backup takes the place of the workspace: its way back is the list.
+      await frame.click(create("open"));
+      await frame.waitForSelector("[data-testid=velero-backup-workspace]", { timeout: 30_000 });
+      await cluster.closeWorkspace(frame);
+      await frame.waitForSelector(create("workspace"), { state: "detached", timeout: 30_000 });
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "says a name already taken before the review, and at the creation a conflict that keeps the name, with the way to the backup that has it",
+    async () => {
+      const backup = created[created.length - 1];
+      const codes = cluster.requestCodes("backups");
+
+      await openCreate(frame);
+      await frame.locator(formField("field")).first().fill(backup.name);
+      await frame.waitForSelector(create("name-taken"), { timeout: 30_000 });
+      expect(await cluster.wordsOf(frame, create("name-taken"))).toBe(BACKUP_CREATE_VIEW_WORDS.nameTaken(backup.name));
+      await frame.click(create("ask"));
+      await frame.waitForSelector(create("review"), { timeout: 30_000 });
+      await frame.click(create("create"));
+      await frame.waitForSelector(create("failure"), { timeout: 60_000 });
+      expect(await frame.locator(create("failure")).getAttribute("data-code")).toBe("conflict");
+      expect(await cluster.wordsOf(frame, create("failure-text"))).toBe(BACKUP_NOW_WORDS.exists(backup.name));
+      expect(await frame.locator(formField("field")).first().inputValue()).toBe(backup.name);
+      expect(await frame.locator(`[data-testid="velero-open-backup-${backup.name}"]`).count()).toBe(1);
+      const { "GET 200": _reads, ...codesOfWrites } = cluster.counted(codes, cluster.requestCodes("backups"));
+
+      expect(codesOfWrites).toEqual({ "POST 409": 1 });
+      expect(read<BackupRead>("backups.velero.io", backup.name, cluster.E2E_VIEWS_NAMESPACE).metadata.uid).toBe(
+        backup.uid,
+      );
+      await cluster.closeWorkspace(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "refuses the reader of a part at the creation, with the words of what it may not do, writes left on and nothing written",
     async () => {
       if (!started) throw new Error("The application is not running");
@@ -338,6 +506,24 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
         ).not.toBe(0);
         expect(writesSince(earlier)).toEqual({});
         expect(await cluster.layoutProblems(other, SCHEDULES)).toEqual([]);
+        // The backup of the form, refused the same way: the reads of the review are the reader's own.
+        const formName = `${FORM}-of-the-reader`;
+
+        await openCreate(other);
+        await other.locator(formField("field")).first().fill(formName);
+        await other.click(create("ask"));
+        await other.waitForSelector(create("review"), { timeout: 30_000 });
+        await other.click(create("create"));
+        await other.waitForSelector(create("failure"), { timeout: 60_000 });
+        expect([
+          await other.locator(create("failure")).getAttribute("data-code"),
+          await other.locator(create("failure")).getAttribute("data-stage"),
+          await cluster.wordsOf(other, create("failure-text")),
+        ]).toEqual(["forbidden", "creation", BACKUP_NOW_WORDS.forbiddenCreate(cluster.E2E_VIEWS_NAMESPACE)]);
+        expect(
+          cluster.kubectlE2E("get", "backups.velero.io", formName, "--namespace", cluster.E2E_VIEWS_NAMESPACE).status,
+        ).not.toBe(0);
+        expect(writesSince(earlier)).toEqual({});
       } finally {
         // The cases after this one look at the first entry of the catalog, which is shown again.
         await velero.navigateToCatalog(running.app);
