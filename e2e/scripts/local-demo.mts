@@ -3219,7 +3219,7 @@ async function runViews(): Promise<void> {
 const INTEGRATION_SESSION_LABEL = "freelensapp.io/velero-integration-session";
 
 // The integration test runs from this repository, under its Vitest, in the Freelens that FREELENS_APP names:
-// FND-10, which needs no cluster, and a session for each of the five kinds, each of which puts one object of
+// FND-10, which needs no cluster, and a session for each of the eight kinds, each of which puts one object of
 // its kind in a namespace of its own of this environment and removes it when it ends. It needs none of the
 // fixtures. E2E_TEST_PATTERN names some of its files by a part of their names, one or several separated by
 // spaces; without it every file runs. The target is checked before the first write and after the last, and

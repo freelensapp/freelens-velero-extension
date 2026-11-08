@@ -166,11 +166,11 @@ describe("the band of the volume operations of a backup", () => {
     expect(section().previousElementSibling?.getAttribute("data-testid")).toBe("velero-backup-status");
     expect(section().nextElementSibling?.textContent).toBe("Current stage");
     // The band under its title, then each kind of the operations under its own: the pod volume backups first.
-    expect(within(section()).getAllByRole("heading").map((heading) => heading.textContent)).toEqual([
-      "Volumes",
-      "Pod Volume Backups",
-      "Data Uploads",
-    ]);
+    expect(
+      within(section())
+        .getAllByRole("heading")
+        .map((heading) => heading.textContent),
+    ).toEqual(["Volumes", "Pod Volume Backups", "Data Uploads"]);
     expect(within(section()).getByTestId("velero-volume-sentence").textContent).toBe(
       "The pod volume backups run while the backup is InProgress: it waits for all of them, and at its own timeout asks the ones that have not ended to cancel. Its data uploads run while it waits for its plugin operations.",
     );

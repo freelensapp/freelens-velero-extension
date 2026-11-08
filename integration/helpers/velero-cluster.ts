@@ -14,7 +14,14 @@ import { createHash } from "node:crypto";
 import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { captureWindowScreenshot, EXTENSION_NAME } from "./velero-extension";
-import { installedVersion, operationListsOf, realScheduleSubmission, writesOf } from "./velero-guard";
+import {
+  installedVersion,
+  operationListsOf,
+  realScheduleSubmission,
+  workloadCountsOf,
+  workloadReadsOf,
+  writesOf,
+} from "./velero-guard";
 
 import type { Frame, Locator, Page, Request } from "playwright";
 
@@ -638,6 +645,21 @@ export function apiRequests(): Record<string, number> {
 
   READ_AT.set(counts, asked);
   return counts;
+}
+
+/** What `workloadReadsOf` keeps of the counters of the pods and of the Jobs: their reads in a namespace or by name. */
+export const workloadReads = workloadReadsOf;
+
+/**
+ * The counters of the pods and of the Jobs in the metrics of the API server, by verb, kind and scope, as `countsOf`
+ * keys the kinds of Velero: what reads a maintenance Job of a repository or a pod of the node agent, or anything else
+ * of the two, whoever asks (SPEC-0014, REQ-190).
+ */
+export function workloadRequests(): Record<string, number> {
+  const { status, stdout, stderr } = kubectlE2E("get", "--raw", "/metrics");
+
+  if (status !== 0) throw new Error(`The counters of the API server could not be read: ${stderr}`);
+  return workloadCountsOf(stdout);
 }
 
 /**
@@ -1847,6 +1869,69 @@ export async function measureOpen(frame: Frame, name: string, of: ListOf = BACKU
 
 export async function measureClose(frame: Frame, of: ListOf = BACKUPS): Promise<Measure> {
   return measure(frame, { kind: "close" }, of);
+}
+
+/**
+ * The time a view of an operation takes to open whole with the band of its volume operations: from the click on
+ * its row to the frame that shows the view with the rows of the band, which the family of the operations, already
+ * read, gives it from the index built for the read (SPEC-0014, REQ-194). Its response is its total: the list
+ * waits for nothing of the host.
+ */
+export async function measureOpenWithBand(
+  frame: Frame,
+  name: string,
+  of: ListOf = BACKUPS,
+  limit = 10_000,
+): Promise<Measure> {
+  return frame.evaluate(
+    ({ root, kind, name, limit }) =>
+      new Promise<{ total: number; response: number }>((resolve, reject) => {
+        const row = [...(document.querySelector(root)?.querySelectorAll<HTMLElement>(`[data-${kind}-row]`) ?? [])].find(
+          (element) => element.getAttribute(`data-${kind}-row`) === name,
+        );
+
+        if (!row) {
+          reject(new Error(`No row of ${name} is mounted`));
+          return;
+        }
+        // The band is whole when its first half, of the pod volume operations, shows its rows: with no rows it shows
+        // the words of its state instead. The second half, of the data movement, says its own state.
+        const whole = () => {
+          const band = document.querySelector(
+            `[data-testid=velero-${kind}-workspace] [data-testid=velero-volume-band] [data-testid=velero-volume-half]`,
+          );
+
+          return (
+            band !== null &&
+            band.querySelector("[data-testid=velero-volume-state]") === null &&
+            band.querySelectorAll("[data-testid=velero-volume-rows] tbody tr").length > 0
+          );
+        };
+        const start = performance.now();
+        let over = false;
+        const deadline = setTimeout(() => {
+          over = true;
+          reject(new Error(`The view of ${name} did not show the rows of its band`));
+        }, limit);
+        const wait = () => {
+          if (over) return;
+          if (whole()) {
+            requestAnimationFrame(() => {
+              const end = performance.now();
+
+              clearTimeout(deadline);
+              resolve({ total: end - start, response: end - start });
+            });
+          } else {
+            requestAnimationFrame(wait);
+          }
+        };
+
+        row.click();
+        requestAnimationFrame(wait);
+      }),
+    { root: list(of), kind: of.kind, name, limit },
+  );
 }
 
 /** Orders the list by a column, the way a click on its head gives, which is the other way at a second click. */

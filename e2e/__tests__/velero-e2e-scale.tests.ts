@@ -6,7 +6,11 @@
 // The long lists: a thousand synthetic backups and a thousand synthetic
 // restores in a namespace that holds no storage location. How many rows are
 // mounted, how long a list takes to answer, and what it keeps of its state
-// when an object is opened and closed.
+// when an object is opened and closed. Since the fifth pull request of T5.1,
+// the two thousand pod volume backups of the same namespace, the view of the
+// backup of two hundred of them, the reads of their families counted on the
+// API server, and nothing of a pod or of a Job read, with the control that
+// the counters see such a read.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as cluster from "../../integration/helpers/velero-cluster";
@@ -45,6 +49,32 @@ const RESTORE_SEARCHES = [
   "restore-1000",
   "completed",
 ];
+
+// The pod volume backups of the long list: two for each of the first nine hundred backups, and two hundred of the
+// thousandth, each named by its backup and a suffix the run makes.
+const POD_VOLUME_BACKUPS = 2000;
+// The same for the pod volume backups: by their phases and by the backups they belong to, which their names begin with.
+const POD_VOLUME_BACKUP_SEARCHES = [
+  "failed",
+  "backup-09",
+  "completed",
+  "backup-0123",
+  "accepted",
+  "backup-1000",
+  "canceled",
+  "prepared",
+  "backup-07",
+  "in progress",
+];
+
+// The lists of the two families of the operations of a volume, in the namespace of the installation.
+const PVB = "LIST podvolumebackups namespace";
+const PVR = "LIST podvolumerestores namespace";
+// How many reads of the installation each window of the reads waits for: one every fifteen seconds.
+const CYCLES = 3;
+// The backup whose band holds the most operations: the thousandth, with two hundred pod volume backups.
+const BUSIEST = "backup-1000";
+const OPERATIONS_OF_THE_BUSIEST = 200;
 
 function percentile(values: number[], fraction: number): number {
   const sorted = [...values].sort((one, other) => one - other);
@@ -346,6 +376,193 @@ describe("long list of backups", () => {
       expect(Math.abs(back.scroll - state.scroll)).toBeLessThanOrEqual(2);
       expect(back.first).toBe(state.first);
       await cluster.captureScreenshot(frame, "dark-restores-thousand-filtered-after-back");
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows all the two thousand pod volume backups of the namespace, and mounts a part of them",
+    async () => {
+      const of = cluster.POD_VOLUME_BACKUPS;
+
+      await cluster.showList(frame);
+      await cluster.openPage(frame, of);
+      await cluster.waitForList(frame, of);
+      expect((await cluster.target(frame)).namespace).toBe(`${cluster.E2E_SCALE_NAMESPACE} (configured)`);
+      await frame.waitForSelector(`[data-testid=velero-pod-volume-backups] >> text="${POD_VOLUME_BACKUPS} items"`, {
+        timeout: 60_000,
+      });
+      const mounted = await cluster.mounted(frame, of);
+
+      expect(mounted.length).toBeGreaterThan(0);
+      expect(mounted.length).toBeLessThanOrEqual(MOUNTED);
+      // No record is hidden: the search finds the operations of the thousandth backup, and only them, a part of them
+      // mounted.
+      const found = await cluster.search(frame, "backup-1000", of);
+
+      expect(found.length).toBeGreaterThan(0);
+      expect(found.length).toBeLessThanOrEqual(MOUNTED);
+      expect(found.filter((name) => !name.startsWith("backup-1000-"))).toEqual([]);
+      await cluster.search(frame, "", of);
+      await frame.waitForSelector(`[data-testid=velero-pod-volume-backups] >> text="${POD_VOLUME_BACKUPS} items"`, {
+        timeout: 60_000,
+      });
+      await endOfList(frame, of, mounted);
+      expect((await cluster.mounted(frame, of)).length).toBeLessThanOrEqual(MOUNTED);
+      await cluster.scrollList(frame, 0, of);
+      await cluster.captureScreenshot(frame, "dark-pod-volume-backups-two-thousand");
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "answers a search and a selection of the pod volume backups within the budget, twenty times over",
+    async () => {
+      const { objects, ...measured } = await measureList(frame, cluster.POD_VOLUME_BACKUPS, POD_VOLUME_BACKUP_SEARCHES);
+      const report = { podVolumeBackups: objects, ...measured };
+
+      // The report is written before anything is asserted of it: a case that fails leaves what was measured.
+      console.log(`KIND-18 ${JSON.stringify(report)}`);
+      await cluster.writeReport("kind-18-volumes-performance", report);
+      expect(objects).toBe(POD_VOLUME_BACKUPS);
+      expect(report.interactions).toBe(20);
+      expect(new Set(report.times.map((time) => time.interaction)).size).toBe(20);
+      expect(report.times.filter((time) => !(time.total > 0) || time.response > time.total)).toEqual([]);
+      expect(report.mounted).toBeGreaterThan(0);
+      expect(report.mounted).toBeLessThanOrEqual(MOUNTED);
+      expect(report.response.p95).toBeLessThan(BUDGET);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "counts on the API server a list of the pods and one of the Jobs of a namespace, which the cases after it count none of",
+    async () => {
+      // The control of the counters the cases of KIND-14 read: a list of each kind in a namespace, made by `kubectl`
+      // between two readings, is counted as a read in a namespace, as a read of the views would be. A count of none
+      // after it is one the counters could have seen.
+      const before = cluster.workloadRequests();
+
+      for (const kind of ["pods", "jobs"]) {
+        expect([kind, cluster.kubectlE2E("get", kind, "--namespace", "kube-system", "-o", "name").status]).toEqual([
+          kind,
+          0,
+        ]);
+      }
+      const read = cluster.workloadReads(cluster.counted(before, cluster.workloadRequests()));
+
+      expect(read["LIST pods namespace"] ?? 0).toBeGreaterThanOrEqual(1);
+      expect(read["LIST jobs namespace"] ?? 0).toBeGreaterThanOrEqual(1);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "reads the two thousand pod volume backups once at each read while their list is open, and not while the Overview is",
+    async () => {
+      // The requests the API server counted while the views read the installation `reads` times, from the end of a
+      // read to the end of the last: what the page that is shown asks at each read. On the CRDs alone no controller
+      // lists the two families, so what is counted is what the views asked.
+      const askedOver = async (reads: number) => {
+        await cluster.afterRead(frame);
+        const first = cluster.apiRequests();
+        const firstOfTheWorkloads = cluster.workloadRequests();
+
+        for (let read = 0; read < reads; read += 1) await cluster.afterRead(frame);
+        return {
+          ...cluster.counted(first, cluster.apiRequests()),
+          ...cluster.workloadReads(cluster.counted(firstOfTheWorkloads, cluster.workloadRequests())),
+        };
+      };
+      // What was read of a pod or of a Job in a namespace or by name: on the CRDs alone no server, node agent or
+      // maintenance Job runs, so what is counted there is what the views asked (SPEC-0014, REQ-190, KIND-14).
+      const workloads = (counts: Record<string, number>) =>
+        Object.fromEntries(Object.entries(counts).filter(([key]) => / (pods|jobs) /.test(key)));
+
+      await cluster.showList(frame);
+      await cluster.waitForList(frame, cluster.POD_VOLUME_BACKUPS);
+      const shown = await askedOver(CYCLES);
+
+      await cluster.openPage(frame, cluster.OVERVIEW);
+      await cluster.overview(frame);
+      // A read that was asked before the page was left may have asked them still: the window begins after it.
+      await cluster.afterRead(frame);
+      const overview = await askedOver(CYCLES);
+      const report = { cycles: CYCLES, podVolumeBackupsShown: shown, overviewShown: overview };
+
+      // The report is written before anything is asserted of it: a case that fails leaves what was counted.
+      console.log(`KIND-18 ${JSON.stringify(report)}`);
+      await cluster.writeReport("kind-18-reads-of-the-pod-volume-operations", report);
+      // One list of the two thousand at each read, however many they are, with a bound of one more for a read that
+      // ends at the edge of the window; none of the pod volume restores, which no view that is open shows.
+      expect(shown[PVB] ?? 0).toBeGreaterThanOrEqual(CYCLES);
+      expect(shown[PVB] ?? 0).toBeLessThanOrEqual(CYCLES + 1);
+      expect(shown[PVR] ?? 0).toBe(0);
+      // The Overview reads none of the families of the operations.
+      expect([overview[PVB] ?? 0, overview[PVR] ?? 0]).toEqual([0, 0]);
+      // And neither the list of the operations nor the Overview reads a pod or a Job.
+      expect([workloads(shown), workloads(overview)]).toEqual([{}, {}]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "opens the view of the backup of two hundred operations within the budget, twenty times over",
+    async () => {
+      await cluster.openPage(frame, cluster.BACKUPS);
+      await cluster.waitForBackups(frame);
+      expect(await cluster.search(frame, BUSIEST)).toEqual([BUSIEST]);
+      const workloadsBefore = cluster.workloadRequests();
+      // The first time the view asks the family of the operations, which the band waits for.
+      await cluster.openWorkspace(frame, BUSIEST);
+      const band = await cluster.volumeBand(frame, "rows");
+
+      expect(band.kind).toBe("PodVolumeBackup");
+      expect(band.count).toBe(`${OPERATIONS_OF_THE_BUSIEST} pod volume backups, from the newest`);
+      expect(band.rows).toHaveLength(10);
+      expect(band.more).toBe(true);
+      const times: number[] = [];
+      const listsBefore = cluster.apiRequests();
+      const began = Date.now();
+
+      // Each time: a read with the view open, which keeps the family read; then the view is closed and opened again
+      // before the next read, so that what is measured is the view and its band built from what was read.
+      for (let index = 0; index < 22; index += 1) {
+        await cluster.readAgain(frame);
+        await cluster.closeWorkspace(frame);
+        const measured = await cluster.measureOpenWithBand(frame, BUSIEST);
+
+        // The first two warm what the ones after find loaded.
+        if (index >= 2) times.push(measured.response);
+      }
+      // The family was read at each read and at no opening: one list of the pod volume backups for each of the
+      // twenty-two reads asked, and for each read of the views every fifteen seconds that fell in the loop, with one
+      // more for a read at its edge. An opening that asked the family again would add twenty-two.
+      const lists = cluster.counted(listsBefore, cluster.apiRequests())[PVB] ?? 0;
+      const periodic = Math.ceil((Date.now() - began) / 15_000);
+      const report = {
+        operations: OPERATIONS_OF_THE_BUSIEST,
+        interactions: times.length,
+        budget: BUDGET,
+        response: {
+          p95: Math.round(percentile(times, 0.95)),
+          median: Math.round(percentile(times, 0.5)),
+          slowest: Math.round(Math.max(...times)),
+        },
+        times: times.map(Math.round),
+      };
+
+      console.log(`KIND-18 ${JSON.stringify({ ...report, lists, periodic })}`);
+      await cluster.writeReport("kind-18-busiest-backup-performance", { ...report, lists, periodic });
+      await cluster.closeWorkspace(frame);
+      await cluster.search(frame, "");
+      expect(report.interactions).toBe(20);
+      expect(times.filter((time) => !(time > 0))).toEqual([]);
+      expect(report.response.p95).toBeLessThan(BUDGET);
+      expect(lists).toBeGreaterThanOrEqual(22);
+      expect(lists).toBeLessThanOrEqual(22 + periodic + 1);
+      // The view and its band read nothing of a pod or of a Job, twenty-two times opened (KIND-14).
+      expect(cluster.workloadReads(cluster.counted(workloadsBefore, cluster.workloadRequests()))).toEqual({});
     },
     TIMEOUT,
   );

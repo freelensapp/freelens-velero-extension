@@ -37,9 +37,10 @@ const OPENED = "backup-finalizingpartiallyfailed";
 const RESTORES = cluster.RESTORES;
 const RESTORED = "restore-mapped";
 const LONG_RESTORE = cluster.LONG_RESTORE_NAME;
-// The views that are checked, each in both themes at every size: eight of the tabs, then the thirty-two
-// of the pages, four of them of the adherence of the schedules.
-const VIEWS = 40;
+// The views that are checked, each in both themes at every size: eight of the tabs, then the thirty-eight
+// of the pages, four of them of the adherence of the schedules and six of the backup repositories and of the pod
+// volume operations.
+const VIEWS = 46;
 const OVERVIEW = cluster.OVERVIEW;
 const SCHEDULES = cluster.SCHEDULES;
 const SCHEDULED = "views-history";
@@ -987,13 +988,14 @@ describe("pre-review of the views", () => {
       expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
       // From the way back the keyboard goes through the five tabs of the workspace, each one a stop as the
       // tabs of the host are, then the band of its volumes, whose rows, the seven pod volume restores of the
-      // restore, each hold a way to the operation and a link to its pod, and then reaches the way to the backup.
+      // restore, each hold a way to the operation and a link to its pod, four of them a link to the node a node
+      // agent accepted them on, and then reaches the way to the backup: eighteen stops in the band.
       expect((await cluster.volumeBand(frame, "rows")).rows).toHaveLength(7);
       const stops = await frame
         .locator("[data-testid=velero-volume-band] a, [data-testid=velero-volume-band] button")
         .count();
 
-      expect(stops).toBeGreaterThanOrEqual(7);
+      expect(stops).toBe(7 + 7 + 4);
       expect(await cluster.tabTo(frame, (focus) => focus.startsWith("velero-open-backup-"), 40)).toBe(6 + stops);
       await started.window.keyboard.press("Enter");
       await frame.waitForSelector("[data-testid=velero-backup-workspace]", { timeout: 60_000 });
@@ -1285,6 +1287,120 @@ describe("pre-review of the views", () => {
       ]) {
         expect([view, found(view)]).toEqual([view, {}]);
       }
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows the lists of the backup repositories, the pod volume backups and the pod volume restores in both themes, at every size",
+    async () => {
+      for (const [view, list] of [
+        ["backup-repositories", cluster.REPOSITORIES],
+        ["pod-volume-backups", cluster.POD_VOLUME_BACKUPS],
+        ["pod-volume-restores", cluster.POD_VOLUME_RESTORES],
+      ] as const) {
+        await cluster.showList(frame);
+        await cluster.openPage(frame, list);
+        await cluster.waitForList(frame, list);
+        expect([view, (await cluster.target(frame)).namespace]).toEqual([view, cluster.E2E_VIEWS_NAMESPACE]);
+        await everyLayout(view, undefined, list);
+        expect([view, found(view)]).toEqual([view, {}]);
+      }
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows a repository with its maintenances and what used it, the band of the backup in progress whole, and a pod volume backup that failed with a message of several lines, in both themes, at every size",
+    async () => {
+      // The repository of the views whose newest maintenance failed: its three maintenances and what used it.
+      await cluster.showList(frame);
+      await cluster.openPage(frame, cluster.REPOSITORIES);
+      await cluster.waitForList(frame, cluster.REPOSITORIES);
+      await cluster.openWorkspace(frame, "views-workloads-views-available-kopia", cluster.REPOSITORIES);
+      await frame.waitForSelector("[data-testid=velero-backup-repository-maintenances]", { timeout: 60_000 });
+      // What used it, once each kind of the operations is read: none of its parts is being read when it is looked at.
+      await frame.waitForFunction(
+        () => {
+          const used = document.querySelector("[data-testid=velero-used-by]");
+
+          return used !== null && used.querySelector("[data-state=loading], [data-state=not-read]") === null;
+        },
+        undefined,
+        { timeout: 60_000 },
+      );
+      await everyLayout("backup-repository-workspace", undefined, cluster.REPOSITORIES);
+      expect(found("backup-repository-workspace")).toEqual({});
+      await cluster.closeWorkspace(frame);
+      // The band of the backup in progress with all of its rows shown, read where it is in the view.
+      const band = frame.locator("[data-testid=velero-volume-band]");
+
+      await cluster.openPage(frame, cluster.BACKUPS);
+      await cluster.waitForList(frame, cluster.BACKUPS);
+      await cluster.openWorkspace(frame, "backup-inprogress", cluster.BACKUPS);
+      await cluster.volumeBand(frame, "rows");
+      await frame.locator("[data-testid=velero-volume-more]").click();
+      await everyLayout("backup-inprogress-band", () => band.scrollIntoViewIfNeeded());
+      expect(found("backup-inprogress-band")).toEqual({});
+      // Its pod volume backup that failed with a message of several lines, read on the cluster by the label of the
+      // backup, opened from its row.
+      const [failed] = cluster
+        .labelledObjects<{ metadata: { name: string }; status?: { phase?: string; message?: string } }>(
+          "podvolumebackups",
+          "velero.io/backup-name=backup-inprogress",
+          cluster.E2E_VIEWS_NAMESPACE,
+        )
+        .filter(({ status }) => status?.phase === "Failed" && (status.message ?? "").includes("\n"));
+
+      expect(failed).toBeDefined();
+      await frame.locator(`[data-testid="velero-open-pod-volume-backup-${failed.metadata.name}"]`).click();
+      await frame.waitForSelector("[data-testid=velero-pod-volume-backup-workspace]", { timeout: 60_000 });
+      await everyLayout("pod-volume-backup-workspace");
+      expect(found("pod-volume-backup-workspace")).toEqual({});
+      await cluster.closeWorkspace(frame);
+      await cluster.closeWorkspace(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "reads the band of the backup in progress with the keyboard alone: ten more, a row, its view, and Escape back to the backup and to its row",
+    async () => {
+      await cluster.showList(frame);
+      await cluster.openPage(frame, cluster.BACKUPS);
+      await cluster.waitForList(frame, cluster.BACKUPS);
+      await cluster.openWorkspace(frame, "backup-inprogress", cluster.BACKUPS);
+      expect((await cluster.volumeBand(frame, "rows")).rows).toHaveLength(10);
+      // From the way back the keyboard reaches the command that shows ten more, and Enter shows them.
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      await cluster.tabTo(frame, (focus) => focus === "velero-volume-more", 80);
+      await started.window.keyboard.press("Enter");
+      await frame.waitForFunction(
+        () => document.querySelectorAll("[data-testid=velero-volume-rows] tbody tr").length > 10,
+        undefined,
+        { timeout: 60_000 },
+      );
+      // A way of a row, which Enter follows to the view of its operation; Escape comes back to the view of the backup
+      // with the focus on its way back, as from any view opened over another (the restore and its backup above).
+      // That the band shows its first ten rows again there, so that the row that was opened may not be among them,
+      // is for the review of the milestone: the focus is on the way back, as from any view.
+      await cluster.tabTo(frame, (focus) => focus.startsWith("velero-open-pod-volume-backup-"), 40);
+      const way = (await cluster.focused(frame)).replace(/^velero-open-pod-volume-backup-/, "");
+
+      await started.window.keyboard.press("Enter");
+      await frame.waitForSelector("[data-testid=velero-pod-volume-backup-workspace]", { timeout: 60_000 });
+      expect((await cluster.shownView(frame))?.name).toBe(way);
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      await started.window.keyboard.press("Escape");
+      await frame.waitForSelector("[data-testid=velero-pod-volume-backup-workspace]", {
+        state: "detached",
+        timeout: 60_000,
+      });
+      expect((await cluster.shownView(frame))?.name).toBe("backup-inprogress");
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      await started.window.keyboard.press("Escape");
+      await frame.waitForSelector("[data-testid=velero-backup-workspace]", { state: "detached", timeout: 60_000 });
+      expect(await cluster.focusOn(frame, "backup-inprogress")).toBe("backup-inprogress");
     },
     TIMEOUT,
   );

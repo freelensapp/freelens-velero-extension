@@ -11,12 +11,16 @@
 // proves the lists of the three kinds with what they say of a namespace that holds none, the repository of the
 // installation as the cluster holds it, and the reads of the pod volume operations, which the views ask only while
 // a view that shows them is open, counted on the API server: their lists, and the view of a backup and of a
-// restore, whose band shows the operations of its own kind. The suite reads the application and the cluster, and
-// writes to neither.
+// restore, whose band shows the operations of its own kind. Since the fifth pull request of T5.1 it proves them on
+// the fixtures and on the real operations as well: the view of each phase, the band of the backup in progress, the
+// details of the host and their way to the view, the real repository, pod volume backup and pod volume restore
+// against what the cluster holds of them, and no way to write, in the lists and in the views. The suite reads the
+// application and the cluster, and writes to neither.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as cluster from "../../integration/helpers/velero-cluster";
 import * as velero from "../../integration/helpers/velero-extension";
+import * as volumes from "../../integration/helpers/velero-volumes";
 
 import type { Frame } from "playwright";
 
@@ -121,7 +125,7 @@ describe("views of the backup repositories and of the pod volume operations", ()
     async () => {
       // The repository the server made for the volume of the run, read by the suite on the cluster by the three
       // labels the release writes into it, never by its name, which the release says it may change.
-      const made = cluster.labelledObjects<{ metadata: { name: string }; status?: { phase?: string } }>(
+      const made = cluster.labelledObjects<volumes.RepositoryObject>(
         "backuprepositories",
         cluster.runRepositorySelector(),
       );
@@ -145,6 +149,19 @@ describe("views of the backup repositories and of the pod volume operations", ()
         { timeout: 60_000 },
       );
       expect(await cluster.mounted(frame, cluster.REPOSITORIES)).toEqual([made[0].metadata.name]);
+      // Its cells against what the cluster holds of it, and its last maintenance, the time the server wrote when it
+      // made it ready, how long ago by the clock of the machine when the row was read (KIND-07).
+      expect(made[0].status?.lastMaintenanceTime).toBeTruthy();
+      const readFrom = Date.now() - volumes.VIEW_CLOCK_LAG;
+      const cells = await cluster.expectCells(
+        cluster.REPOSITORIES,
+        frame,
+        made[0].metadata.name,
+        volumes.repositoryCells(made[0]),
+      );
+      const expected = volumes.maintainedTexts(made[0], readFrom, Date.now());
+
+      expect(expected.includes(cells.maintained) ? cells.maintained : expected).toEqual(cells.maintained);
       expect(await cluster.notices(frame, [])).toEqual({});
       expect(await cluster.layoutProblems(frame, cluster.REPOSITORIES)).toEqual([]);
       await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
@@ -209,8 +226,29 @@ describe("views of the backup repositories and of the pod volume operations", ()
     "reads the pod volume backups while a backup is open and the pod volume restores while a restore is, once at each read, and not the family of the other",
     async () => {
       // The daily backup holds no operation of its own: its one pod volume backup names in its label the UID of an
-      // earlier backup of the same name, and its band says none. The mapped restore holds its seven pod volume
+      // earlier backup of the same name, and its band says none. The suite reads that pod volume backup on the
+      // cluster, by the label of the name, before the windows of the reads begin, so that the band says none of an
+      // operation the views placed, not of one that is not there. The mapped restore holds its seven pod volume
       // restores, which its band shows in rows.
+      const daily = cluster.veleroObject<{ metadata: { uid?: string } }>(
+        "backups",
+        BACKUP,
+        cluster.E2E_VIEWS_NAMESPACE,
+      );
+      const ofTheName = cluster.labelledObjects<{ metadata: { labels?: Record<string, string> } }>(
+        "podvolumebackups",
+        `velero.io/backup-name=${BACKUP}`,
+        cluster.E2E_VIEWS_NAMESPACE,
+      );
+
+      expect(daily?.metadata.uid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+      expect(
+        ofTheName.map(({ metadata }) => {
+          const uid = metadata.labels?.["velero.io/backup-uid"];
+
+          return { labelled: uid !== undefined, ofTheBackup: uid === daily?.metadata.uid };
+        }),
+      ).toEqual([{ labelled: true, ofTheBackup: false }]);
       for (const [of, name, kind, own, other, band] of [
         [cluster.BACKUPS, BACKUP, "backupOpen", PVB, PVR, "none"],
         [cluster.RESTORES, RESTORE, "restoreOpen", PVR, PVB, "rows"],
@@ -232,6 +270,400 @@ describe("views of the backup repositories and of the pod volume operations", ()
         // restore open, and none of the other family; the bound stays the one of the lists.
         expect([kind, (open[own] ?? 0) >= CYCLES, (open[own] ?? 0) <= CYCLES + 1]).toEqual([kind, true, true]);
         expect([kind, open[other] ?? 0]).toEqual([kind, 0]);
+        await cluster.closeWorkspace(frame);
+      }
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "says in the view of a pod volume backup of each phase what the phase means, as the release writes it",
+    async () => {
+      // The pod volume backups of the backup in progress, read by the suite on the cluster, one of each phase: the
+      // first of each in the order of their names.
+      const owner = cluster.veleroObject<{ metadata: { uid?: string } }>(
+        "backups",
+        "backup-inprogress",
+        cluster.E2E_VIEWS_NAMESPACE,
+      );
+      const own = cluster
+        .labelledObjects<{ metadata: { name: string; labels?: Record<string, string> }; status?: { phase?: string } }>(
+          "podvolumebackups",
+          "velero.io/backup-name=backup-inprogress",
+          cluster.E2E_VIEWS_NAMESPACE,
+        )
+        .filter(({ metadata }) => metadata.labels?.["velero.io/backup-uid"] === owner?.metadata.uid)
+        .sort((one, other) => one.metadata.name.localeCompare(other.metadata.name));
+      const ofEach = new Map<string, string>();
+
+      for (const { metadata, status } of own) {
+        if (!ofEach.has(status?.phase || "New")) ofEach.set(status?.phase || "New", metadata.name);
+      }
+      expect([...ofEach.keys()].sort()).toEqual(Object.keys(volumes.BACKUP_PHASE_SENTENCES).sort());
+      await cluster.openPage(frame, cluster.BACKUPS);
+      await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+      await cluster.waitForList(frame, cluster.BACKUPS);
+      await cluster.openWorkspace(frame, "backup-inprogress", cluster.BACKUPS);
+      for (const [phase, name] of ofEach) {
+        const way = frame.locator(`[data-testid="velero-open-pod-volume-backup-${name}"]`);
+
+        await cluster.volumeBand(frame, "rows");
+        // The band shows ten rows at first: the command shows the others.
+        if (!(await way.count())) await frame.locator("[data-testid=velero-volume-more]").click();
+        await way.click();
+        const view = frame.locator("[data-testid=velero-pod-volume-backup-workspace]");
+
+        await view.waitFor({ state: "visible", timeout: 60_000 });
+        expect([phase, (await view.innerText()).replace(/\s+/g, " ")]).toEqual([
+          phase,
+          expect.stringContaining(volumes.BACKUP_PHASE_SENTENCES[phase]),
+        ]);
+        await cluster.closeWorkspace(frame);
+      }
+      await cluster.closeWorkspace(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "counts the pod volume backups of the backup in progress by their phases, shows ten and ten more, each a way and back",
+    async () => {
+      // The operations of the backup in progress, read by the suite on the cluster by the label of its name and of
+      // its UID, as the release labels them; one with no phase is counted with New, as `velero backup describe`
+      // counts it.
+      const owner = cluster.veleroObject<{ metadata: { uid?: string } }>(
+        "backups",
+        "backup-inprogress",
+        cluster.E2E_VIEWS_NAMESPACE,
+      );
+      const own = cluster
+        .labelledObjects<{ metadata: { name: string; labels?: Record<string, string> }; status?: { phase?: string } }>(
+          "podvolumebackups",
+          "velero.io/backup-name=backup-inprogress",
+          cluster.E2E_VIEWS_NAMESPACE,
+        )
+        .filter(({ metadata }) => metadata.labels?.["velero.io/backup-uid"] === owner?.metadata.uid);
+      const counts = new Map<string, number>();
+
+      for (const { status } of own) counts.set(status?.phase || "New", (counts.get(status?.phase || "New") ?? 0) + 1);
+      expect(own.length).toBeGreaterThan(10);
+      expect(own.length).toBeLessThanOrEqual(20);
+      await cluster.openPage(frame, cluster.BACKUPS);
+      await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+      await cluster.waitForList(frame, cluster.BACKUPS);
+      await cluster.openWorkspace(frame, "backup-inprogress", cluster.BACKUPS);
+      const first = await cluster.volumeBand(frame, "rows");
+
+      expect([...first.groups].sort()).toEqual([...counts.entries()].sort());
+      expect(first.rows).toHaveLength(10);
+      expect(first.more).toBe(true);
+      await frame.locator("[data-testid=velero-volume-more]").click();
+      await frame.waitForFunction(
+        (shown) => document.querySelectorAll("[data-testid=velero-volume-rows] tbody tr").length === shown,
+        own.length,
+        { timeout: 60_000 },
+      );
+      const all = await cluster.volumeBand(frame, "rows");
+
+      expect([...all.rows].sort()).toEqual(own.map(({ metadata }) => metadata.name).sort());
+      expect(all.more).toBe(false);
+      await cluster.captureScreenshot(frame, "dark-backup-inprogress-band");
+      // A row is a way to the view of its operation, and the way back leads to the backup again.
+      for (const name of [all.rows[0], all.rows[all.rows.length - 1]]) {
+        const way = frame.locator(`[data-testid="velero-open-pod-volume-backup-${name}"]`);
+
+        // The view of the backup, shown again, shows ten rows of the band: the command shows the others.
+        await cluster.volumeBand(frame, "rows");
+        if (!(await way.count())) await frame.locator("[data-testid=velero-volume-more]").click();
+        await way.click();
+        await frame.waitForSelector("[data-testid=velero-pod-volume-backup-workspace]", { timeout: 60_000 });
+        expect((await cluster.shownView(frame))?.name).toBe(name);
+        await cluster.closeWorkspace(frame);
+        expect((await cluster.shownView(frame))?.name).toBe("backup-inprogress");
+      }
+      await cluster.closeWorkspace(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows the one pod volume backup of a backup that partially failed, failed with its message beside the failure of the backup, and no repository of the views for it",
+    async () => {
+      const name = "views-history-4";
+      const owner = cluster.veleroObject<{ metadata: { uid?: string }; status?: { phase?: string } }>(
+        "backups",
+        name,
+        cluster.E2E_VIEWS_NAMESPACE,
+      );
+      const own = cluster
+        .labelledObjects<{
+          metadata: { name: string; labels?: Record<string, string> };
+          status?: { phase?: string; message?: string };
+        }>("podvolumebackups", `velero.io/backup-name=${name}`, cluster.E2E_VIEWS_NAMESPACE)
+        .filter(({ metadata }) => metadata.labels?.["velero.io/backup-uid"] === owner?.metadata.uid);
+
+      expect(owner?.status?.phase).toBe("PartiallyFailed");
+      expect(own.map(({ status }) => status?.phase)).toEqual(["Failed"]);
+      const [operation] = own;
+
+      await cluster.openPage(frame, cluster.BACKUPS);
+      await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+      await cluster.waitForList(frame, cluster.BACKUPS);
+      await cluster.openWorkspace(frame, name, cluster.BACKUPS);
+      const band = await cluster.volumeBand(frame, "rows");
+
+      expect(band.groups).toEqual([["Failed", 1]]);
+      expect(band.rows).toEqual([operation.metadata.name]);
+      // The failure of the backup itself is beside the band, in the status of the backup.
+      expect(await frame.locator("[data-testid=velero-backup-status]").innerText()).toContain("Partially failed");
+      await frame.locator(`[data-testid="velero-open-pod-volume-backup-${operation.metadata.name}"]`).click();
+      const view = frame.locator("[data-testid=velero-pod-volume-backup-workspace]");
+
+      await view.waitFor({ state: "visible", timeout: 60_000 });
+      expect((await view.locator("[data-testid=velero-volume-message]").innerText()).trim()).toBe(
+        operation.status?.message,
+      );
+      // Its pod is of a namespace no repository of the views is for: none is found by the three labels.
+      expect(await view.locator("[data-testid=velero-volume-repository]").getAttribute("data-reference")).toBe("none");
+      await cluster.closeWorkspace(frame);
+      await cluster.closeWorkspace(frame);
+      expect(await cluster.shownView(frame)).toBeUndefined();
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "gives the details of the host of a pod volume backup and of a pod volume restore the reading of their views, and a way to each",
+    async () => {
+      // A pod volume backup that failed with a message, of the backup that partially failed, and the pod volume
+      // restore of the mapped restore that completed with no node, of the legacy controller of restic: each read by
+      // the suite on the cluster by the label of its owner.
+      const [backup] = cluster
+        .labelledObjects<{ metadata: { name: string }; status?: { phase?: string; message?: string } }>(
+          "podvolumebackups",
+          "velero.io/backup-name=views-history-4",
+          cluster.E2E_VIEWS_NAMESPACE,
+        )
+        .filter(({ status }) => status?.phase === "Failed");
+      const [restore] = cluster
+        .labelledObjects<{ metadata: { name: string }; spec?: { uploaderType?: string }; status?: { phase?: string } }>(
+          "podvolumerestores",
+          `velero.io/restore-name=${RESTORE}`,
+          cluster.E2E_VIEWS_NAMESPACE,
+        )
+        .filter(({ spec, status }) => status?.phase === "Completed" && spec?.uploaderType === "restic");
+
+      expect([Boolean(backup), Boolean(restore)]).toEqual([true, true]);
+      for (const [resource, kind, name, texts] of [
+        [
+          "podvolumebackups",
+          "pod-volume-backup",
+          backup.metadata.name,
+          ["Failed", backup.status?.message ?? "", "views-history-4"],
+        ],
+        ["podvolumerestores", "pod-volume-restore", restore.metadata.name, ["Completed", RESTORE]],
+      ] as const) {
+        await cluster.navigate(frame, `/crd/velero.io/${resource}`);
+        await cluster.selectHostNamespace(frame, cluster.E2E_VIEWS_NAMESPACE);
+        const details = await cluster.hostDetails(frame, name, ...texts, cluster.E2E_VIEWS_NAMESPACE);
+
+        expect([kind, details.includes("Velero")]).toEqual([kind, true]);
+        const link = frame.locator(`[data-testid=velero-${kind}-details-link]`);
+
+        expect([kind, await link.count()]).toEqual([kind, 1]);
+        await cluster.captureScreenshot(frame, `dark-${kind}-host-details`);
+        // The way of the section opens the view of the operation in the page of the extension: the drawer is gone
+        // with the address that named the object.
+        await link.click();
+        await frame.waitForSelector(`[data-testid=velero-${kind}-workspace]`, { timeout: 60_000 });
+        expect([kind, (await cluster.shownView(frame))?.name]).toEqual([kind, name]);
+        expect([kind, await cluster.hostDetailsGone(frame)]).toEqual([kind, { drawer: false, address: false }]);
+        await cluster.closeWorkspace(frame);
+      }
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "says of the pod volume backup of the name of the daily backup that its owner reference names the backup that is there, which its labels do not name",
+    async () => {
+      // Its labels name the daily backup with the UID of an earlier backup of that name; its owner reference names
+      // the one that is there, with the UID the cluster gave it. Both read by the suite on the cluster.
+      const daily = cluster.veleroObject<{ metadata: { uid?: string } }>(
+        "backups",
+        BACKUP,
+        cluster.E2E_VIEWS_NAMESPACE,
+      );
+      const [operation] = cluster.labelledObjects<{
+        metadata: { name: string; ownerReferences?: { kind?: string; name?: string; uid?: string }[] };
+      }>("podvolumebackups", `velero.io/backup-name=${BACKUP}`, cluster.E2E_VIEWS_NAMESPACE);
+
+      expect(operation.metadata.ownerReferences?.map(({ kind, name, uid }) => [kind, name, uid])).toEqual([
+        ["Backup", BACKUP, daily?.metadata.uid],
+      ]);
+      await cluster.openPage(frame, cluster.POD_VOLUME_BACKUPS);
+      await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+      await cluster.waitForList(frame, cluster.POD_VOLUME_BACKUPS);
+      await cluster.openWorkspace(frame, operation.metadata.name, cluster.POD_VOLUME_BACKUPS);
+      const view = frame.locator("[data-testid=velero-pod-volume-backup-workspace]");
+
+      await view.locator("[data-testid=velero-volume-belongs]").waitFor({ state: "visible", timeout: 60_000 });
+      expect((await view.locator("[data-testid=velero-volume-belongs]").innerText()).replace(/\s+/g, " ")).toContain(
+        `Its owner reference names the backup ${BACKUP} of UID ${daily?.metadata.uid}, which its labels do not name`,
+      );
+      await cluster.captureScreenshot(frame, "dark-pod-volume-backup-of-another-uid");
+      await cluster.closeWorkspace(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows the pod volume backup of the real backup of the volume as the cluster holds it, and the way to its repository and back",
+    async () => {
+      // What the node agent wrote for the volume of the run, read by the suite on the cluster by the label of the
+      // backup, never by its name, which the release makes; and the repository the server made for it.
+      const backup = `fixture-volume-backup-${cluster.E2E_FIXTURE_RUN}`;
+      const operations = cluster.labelledObjects<{
+        metadata: { name: string };
+        spec?: { node?: string; volume?: string; pod?: { namespace?: string } };
+        status?: { phase?: string; snapshotID?: string };
+      }>("podvolumebackups", `velero.io/backup-name=${backup}`);
+      const [repository] = cluster.labelledObjects<{ metadata: { name: string } }>(
+        "backuprepositories",
+        cluster.runRepositorySelector(),
+      );
+
+      expect(operations.map(({ status }) => status?.phase)).toEqual(["Completed"]);
+      const [operation] = operations;
+
+      expect(operation.status?.snapshotID).toBeTruthy();
+      await cluster.openPage(frame, cluster.BACKUPS);
+      await cluster.selectInstallation(frame, cluster.E2E_NAMESPACE);
+      await cluster.waitForList(frame, cluster.BACKUPS);
+      await cluster.openWorkspace(frame, backup, cluster.BACKUPS);
+      expect((await cluster.volumeBand(frame, "rows")).rows).toHaveLength(1);
+      // The row of the band is the way to the view of the pod volume backup.
+      await frame.locator(`[data-testid="velero-open-pod-volume-backup-${operation.metadata.name}"]`).click();
+      const view = frame.locator("[data-testid=velero-pod-volume-backup-workspace]");
+
+      await view.waitFor({ state: "visible", timeout: 60_000 });
+      expect((await cluster.shownView(frame))?.name).toBe(operation.metadata.name);
+      expect(await volumes.factOf(view, "Phase")).toMatch(/^Completed\b/);
+      expect(await volumes.factOf(view, "Snapshot ID")).toBe(operation.status?.snapshotID);
+      expect(await volumes.factOf(view, "Node")).toBe(operation.spec?.node);
+      expect(await volumes.factOf(view, "Volume")).toBe(operation.spec?.volume);
+      expect(await volumes.factOf(view, "Pod namespace")).toBe(operation.spec?.pod?.namespace);
+      await cluster.captureScreenshot(frame, "dark-pod-volume-backup-of-the-volume");
+      // Its repository, found by the three labels, is a way to the view of the repository, and the way back leads to
+      // the pod volume backup again, then to the backup, then to the list.
+      await frame.locator(`[data-testid="velero-open-backup-repository-${repository.metadata.name}"]`).click();
+      await frame.waitForSelector("[data-testid=velero-backup-repository-workspace]", { timeout: 60_000 });
+      expect((await cluster.shownView(frame))?.name).toBe(repository.metadata.name);
+      await cluster.closeWorkspace(frame);
+      expect((await cluster.shownView(frame))?.name).toBe(operation.metadata.name);
+      await cluster.closeWorkspace(frame);
+      expect((await cluster.shownView(frame))?.name).toBe(backup);
+      await cluster.closeWorkspace(frame);
+      expect(await cluster.shownView(frame)).toBeUndefined();
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows the pod volume restore of the real restore of the volume as the cluster holds it",
+    async () => {
+      // What the node agent wrote when it restored the volume of the run, read by the suite on the cluster by the
+      // label of the restore, never by its name, which the release makes (KIND-19).
+      const restore = `fixture-volume-restore-${cluster.E2E_FIXTURE_RUN}`;
+      const operations = cluster.labelledObjects<{
+        metadata: { name: string };
+        spec?: { volume?: string; snapshotID?: string; sourceNamespace?: string; pod?: { namespace?: string } };
+        status?: { phase?: string; node?: string };
+      }>("podvolumerestores", `velero.io/restore-name=${restore}`);
+
+      expect(operations.map(({ status }) => status?.phase)).toEqual(["Completed"]);
+      const [operation] = operations;
+
+      expect([operation.spec?.snapshotID, operation.status?.node].every(Boolean)).toBe(true);
+      await cluster.openPage(frame, cluster.RESTORES);
+      await cluster.selectInstallation(frame, cluster.E2E_NAMESPACE);
+      await cluster.waitForList(frame, cluster.RESTORES);
+      await cluster.openWorkspace(frame, restore, cluster.RESTORES);
+      expect((await cluster.volumeBand(frame, "rows")).rows).toEqual([operation.metadata.name]);
+      // The row of the band is the way to the view of the pod volume restore.
+      await frame.locator(`[data-testid="velero-open-pod-volume-restore-${operation.metadata.name}"]`).click();
+      const view = frame.locator("[data-testid=velero-pod-volume-restore-workspace]");
+
+      await view.waitFor({ state: "visible", timeout: 60_000 });
+      expect((await cluster.shownView(frame))?.name).toBe(operation.metadata.name);
+      expect(await volumes.factOf(view, "Phase")).toMatch(/^Completed\b/);
+      expect(await volumes.factOf(view, "Snapshot ID")).toBe(operation.spec?.snapshotID);
+      expect(await volumes.factOf(view, "Node")).toBe(operation.status?.node);
+      expect(await volumes.factOf(view, "Volume")).toBe(operation.spec?.volume);
+      expect(await volumes.factOf(view, "Pod namespace")).toBe(operation.spec?.pod?.namespace);
+      expect(await volumes.factOf(view, "Source namespace")).toBe(operation.spec?.sourceNamespace);
+      await cluster.captureScreenshot(frame, "dark-pod-volume-restore-of-the-volume");
+      await cluster.closeWorkspace(frame);
+      expect((await cluster.shownView(frame))?.name).toBe(restore);
+      await cluster.closeWorkspace(frame);
+      expect(await cluster.shownView(frame)).toBeUndefined();
+      await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "offers no way to select, edit, cancel or delete a pod volume backup or a pod volume restore, by pointer or by keyboard",
+    async () => {
+      // What must not happen is waited for, for longer than the host takes to open a menu, and is expected not to
+      // have happened: the host opens the menu of a row in the frame after the click.
+      const appears = (selector: string) =>
+        frame.waitForSelector(selector, { state: "visible", timeout: 1500 }).then(
+          () => true,
+          () => false,
+        );
+
+      for (const of of [cluster.POD_VOLUME_BACKUPS, cluster.POD_VOLUME_RESTORES]) {
+        const list = frame.locator(`[data-testid=velero-${of.id}]`);
+
+        await cluster.showList(frame);
+        await cluster.openPage(frame, of);
+        await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+        await cluster.waitForList(frame, of);
+        const [name] = await cluster.mounted(frame, of);
+
+        expect([of.id, Boolean(name)]).toEqual([of.id, true]);
+        expect([of.id, await list.locator(".TableCell.checkbox, .Checkbox, input[type=checkbox]").count()]).toEqual([
+          of.id,
+          0,
+        ]);
+        expect([of.id, await list.locator(".TableCell.menu .Icon, .MenuActions").count()]).toEqual([of.id, 0]);
+        await frame.locator(`[data-${of.kind}-row="${name}"]`).click({ button: "right" });
+        expect([of.id, await appears(".Menu .MenuItem")]).toEqual([of.id, false]);
+        await cluster.showList(frame);
+        await frame.locator(`[data-${of.kind}-row="${name}"]`).focus();
+        for (const key of ["Delete", "Backspace", "Control+a", "Meta+Backspace"]) {
+          await started.window.keyboard.press(key);
+          expect([of.id, key, await appears('[data-testid="confirmation-dialog"], .Dialog, .ConfirmDialog')]).toEqual([
+            of.id,
+            key,
+            false,
+          ]);
+          expect([of.id, key, await cluster.shownView(frame)]).toEqual([of.id, key, undefined]);
+        }
+        expect([of.id, await list.locator(".TableRow.selected, .TableRow.checked").count()]).toEqual([of.id, 0]);
+        // Its view holds no control that writes: every button is the way back or a way to another view, and it has
+        // no field (REQ-190).
+        await cluster.openWorkspace(frame, name, of);
+        const workspace = frame.locator(`[data-testid=velero-${of.kind}-workspace]`);
+        const buttons = await workspace
+          .locator("button")
+          .evaluateAll((found) =>
+            found.map((button) => button.getAttribute("data-testid") ?? button.textContent ?? ""),
+          );
+
+        expect([of.id, buttons.filter((id) => !/^velero-(back|open-)/.test(id))]).toEqual([of.id, []]);
+        expect([of.id, await workspace.locator("input, select, textarea").count()]).toEqual([of.id, 0]);
         await cluster.closeWorkspace(frame);
       }
     },
