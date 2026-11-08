@@ -16,6 +16,7 @@ import {
 import { createTlsFixture } from "../../test/tls-fixture";
 import { CLUSTER_WORDS, downloadFailure } from "../common/diagnostic-text";
 import { DIAGNOSTIC_REQUEST_LABEL } from "../common/ipc";
+import { patchText, pausePatch, resumePatch } from "../common/schedule-patch";
 import {
   DiagnosticKubernetes,
   type DiagnosticObject,
@@ -102,7 +103,7 @@ const ended = (promise: Promise<unknown>) =>
   );
 
 describe("the create-only adapter, through the client of the host", () => {
-  it("has a way to read and a way to create, and none to change or to remove an object", () => {
+  it("has a way to read, a way to create and the two patches of a schedule, and none to remove an object", () => {
     // What the adapter can do, by name: a method added to it is looked at here, against the rule that the
     // extension deletes no request.
     expect(Object.getOwnPropertyNames(DiagnosticKubernetes.prototype).sort()).toEqual([
@@ -115,11 +116,68 @@ describe("the create-only adapter, through the client of the host", () => {
       "createRestore",
       "createSchedule",
       "list",
+      "patchSchedule",
       "path",
       "read",
       "refusal",
       "send",
     ]);
+  });
+
+  it("patches a schedule with the text of a pause or of a resume as it is, byte for byte, with the method in capitals and the media type of a JSON patch, and sends no other patch", async () => {
+    const { api, host, signal } = fixture((request) =>
+      answered(200, objectOf(request.path.split("/").pop() ?? "", "velero", { spec: { paused: true } })),
+    );
+    const pause = patchText(pausePatch("nightly-uid"));
+    const resume = patchText(resumePatch("nightly-uid", { expression: "0 3 * * *", skipImmediately: true }));
+
+    await api.patchSchedule("velero", "nightly", pause, signal);
+    await api.patchSchedule("velero", "nightly", resume, signal);
+    expect(host.requests.map((item) => [item.method, item.path, item.headers["content-type"], item.text])).toEqual([
+      ["PATCH", `${API}/schedules/nightly`, "application/json-patch+json", pause],
+      ["PATCH", `${API}/schedules/nightly`, "application/json-patch+json", resume],
+    ]);
+    const refused = (text: string) => () => api.patchSchedule("velero", "nightly", text, signal);
+    const operations = JSON.parse(resume) as Record<string, unknown>[];
+
+    for (const text of [
+      "not json",
+      "[]",
+      JSON.stringify(JSON.parse(pause).slice(1)),
+      JSON.stringify([...JSON.parse(pause), { op: "add", path: "/spec/schedule", value: "* * * * *" }]),
+      JSON.stringify([{ op: "add", path: "/spec/paused", value: true }, ...JSON.parse(pause).slice(0, 1)]),
+      JSON.stringify(JSON.parse(pause).map((operation: Record<string, unknown>) => ({ ...operation, op: "replace" }))),
+      JSON.stringify([...operations.slice(0, 2), ...operations.slice(3)]),
+      JSON.stringify(operations.map((operation, at) => (at === 4 ? { ...operation, value: "true" } : operation))),
+      JSON.stringify(
+        operations.map((operation, at) => (at === 3 ? { ...operation, path: "/spec/schedule" } : operation)),
+      ),
+      JSON.stringify(operations.map((operation, at) => (at === 0 ? { ...operation, value: "" } : operation))),
+      JSON.stringify(operations.map((operation, at) => (at === 1 ? { ...operation, extra: 1 } : operation))),
+      JSON.stringify({ op: "add", path: "/spec/paused", value: true }),
+    ])
+      expect(refused(text)).toThrow("validation");
+    expect(() => api.patchSchedule("velero", "", pause, signal)).toThrow("validation");
+    expect(host.requests).toHaveLength(2);
+  });
+
+  it("says a patch whose answer is lost not known, as a creation, and a test of a patch the API server refused a refusal", async () => {
+    for (const [reply, code] of [
+      [{ reject: new Error("fetch failed") }, "submission-unknown"],
+      [{ status: 503, body: {} }, "submission-unknown"],
+      [{ status: 422, body: { kind: "Status", code: 422 } }, "validation"],
+      [{ status: 403, body: { kind: "Status", code: 403 } }, "forbidden"],
+      [{ status: 404, body: { kind: "Status", code: 404 } }, "not-found"],
+    ] as const) {
+      const { api, signal } = fixture(() => reply as HostReply);
+
+      expect(
+        await api.patchSchedule("velero", "nightly", patchText(pausePatch("nightly-uid")), signal).then(
+          () => "answered",
+          (error: DiagnosticError) => error.code,
+        ),
+      ).toBe(code);
+    }
   });
 
   it("sends every request through the client of the host for its cluster, with getResponse and nothing else", async () => {

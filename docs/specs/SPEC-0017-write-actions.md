@@ -1458,3 +1458,89 @@ was applied:
 The review of the second pull request found as well that a mapping of a namespace the
 lists of the restore leave out was taken and said as restored, while Velero skips that
 namespace: the form refuses it now.
+
+T4.5, the first of its pull requests, on 2026-11-08: the pause and the resume of a
+schedule in the main process, in the contract and in the adapter, with no surface of
+the renderer yet. The evidence, by check:
+
+- PAUSE-02, the domain part
+  ([`schedule-patch.test.ts`](../../src/common/schedule-patch.test.ts)): the patch of a
+  pause, a test of `/metadata/uid` and an add of `/spec/paused` with true, and of a
+  resume, the tests of `/metadata/uid`, of `/spec/paused` with true and of
+  `/spec/schedule` with the expression of the review, a replace of `/spec/paused` with
+  false and an add of `/spec/skipImmediately` with the value chosen, true and false,
+  operation by operation; the text written as every text of the extension and read back
+  only when it is exactly the patch of a pause or of a resume.
+- PAUSE-02 and PAUSE-04, the main part, and ACT-02 to ACT-07
+  ([`ipc-schedule-patch.test.ts`](../../src/main/ipc-schedule-patch.test.ts)): the
+  confirmation refused with writes off and on for another namespace, reading nothing,
+  and answering the text of the patch with the token, since the tests of the patch are
+  the check; the contract refuses what is not a schedule, a resume with nothing to
+  resume with, a pause with something to resume with, and anything more, and the run
+  carries the schedule alone ([`ipc.test.ts`](../../src/common/ipc.test.ts)). The run
+  sends the text byte for byte, once, reads the schedule once and answers it paused, or
+  resumed with what `skipImmediately` holds and the time Velero wrote it skipped a run
+  once it read the schedule; a pause of a schedule paused already leaves it as it was; a
+  422 is followed by one read, and a schedule of another UID, or at a resume one not
+  paused or of another expression, is a conflict with the words that it changed since
+  the review, one as the patch tested it a refusal, and one that went is said gone;
+  each end of the patch with its code, its stage, its safety and its words, the verb
+  patch the identity may not use among them; a patch whose answer was lost, or dropped
+  on this side once it was sent, never sent again, the schedule read with a signal of
+  its own and its state said; no answer of another schedule taken, and the answer of
+  the patch when the read after it does not answer; the ends of what was sent kept for
+  the cluster, applied or not, and none of what never left; a text kept with the token
+  of another action or of another schedule sends nothing; a token of another frame, an
+  expired one, of another namespace, of another action or of another schedule, and
+  writes turned off after the confirmation, refused; a frame gone after the patch not
+  answered, its end kept; seventeen patches in a row; a run sent again with the same
+  identifier joined, and none of another token or of another schedule.
+- ACT-01, the adapter part
+  ([`diagnostic-kubernetes.test.ts`](../../src/main/diagnostic-kubernetes.test.ts)): one
+  PATCH of the schedule, with the method in capitals and the media type of a JSON patch,
+  its body the text byte for byte; a text that is not exactly the patch of a pause or of
+  a resume refused before anything leaves; a patch whose answer is lost not known, as a
+  creation; the methods of the adapter pinned, `patchSchedule` among them.
+- REQ-250: the target bar says the end of a pause and of a resume, applied or not, and
+  leads to the view of the schedule
+  ([`kept-end-words.test.ts`](../../src/common/kept-end-words.test.ts),
+  [`backup-now-workspace.test.tsx`](../../src/renderer/pages/backup-now-workspace.test.tsx));
+  the words of the gate name the patch of a Schedule
+  ([`writes.test.tsx`](../../src/renderer/components/writes.test.tsx)).
+
+Each new case was seen failing on a change made on purpose, thirty-three in all: a test
+of the UID, of `paused` or of the expression left out of a patch, the choice of
+skipping written false; a text read back with no check of its UID; a resume confirmed
+with nothing to resume with, a pause with something to resume with, a text no answer
+carries confirmed; a text kept with the token of another action or of another schedule
+sent, a frame gone before the patch sent to; a 422 of another expression or of another
+UID said as a refusal, and of a schedule that went said as a refusal; an answer of
+another schedule taken, the read after the patch not taken, a lost answer said with no
+read, the read with the signal of the write; an end that never left kept; the place of
+a write never freed; a credential the cluster does not take and a cluster that changed
+after it answered said as others; the time a run was skipped dropped; the contract with
+no resume asked of a resume, an empty expression, a choice that is not true or false, a
+schedule refused as the target of a patch, a patch applied said with more, a choice read
+that is not true or false; the adapter with no check of the text, another media type, a
+lost answer of a patch said as nothing sent; the end kept with more than applied; the
+words of the end of a pause; and the end of a pause led to a backup. Four others found
+checks that did nothing beside another, which were removed.
+
+Decided while implementing, on 2026-11-08:
+
+- The confirmation reads nothing: the tests of the patch are the check, as the table of
+  the contract says, and the review reads the schedule with the views.
+- The run carries the schedule alone: the expression and the choice of skipping a run
+  are in the text kept with the token.
+- After a 200 the schedule is read once, and what it holds is answered; the answer of
+  the patch is taken when the read does not answer.
+- A 422 is followed by one read: the schedule not as the patch tested is a conflict, as
+  REQ-275 asks, and as it tested it a refusal; a read that does not answer says the
+  refusal, and one that finds nothing says the schedule gone.
+- A patch whose answer is lost is read once, with a signal the write that stopped does
+  not end, and said with what the read shows, paused or not: whether this patch did it
+  is not known, and it is never sent again.
+- The end of a pause or of a resume kept for the cluster is applied or not, with
+  nothing more, since its kind says what it did.
+- The adapter sends a write of any verb but GET as a creation is sent: an answer lost is
+  not known.

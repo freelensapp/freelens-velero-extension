@@ -26,6 +26,7 @@ import {
   readGateStateRequest,
   readKeptEnds,
   readRestoreCreated,
+  readScheduleChanged,
   readScheduleCreated,
   readServerStatusValue,
   readWriteCancelRequest,
@@ -192,6 +193,71 @@ describe("the requests between the processes", () => {
 
     expect(readWriteRunRequest(run)).toEqual(run);
     expect(readWriteRunRequest({ ...run, template })).toBeUndefined();
+  });
+
+  it("reads a pause and a resume of a schedule: the schedule, at a resume the expression its review read and the choice of skipping, and a run that carries nothing more", () => {
+    const target = { kind: "Schedule", name: "nightly", uid: "nightly-uid" };
+    const pause = { cluster, namespace: "velero", kind: "schedule-pause", target };
+    const resume = {
+      cluster,
+      namespace: "velero",
+      kind: "schedule-resume",
+      target,
+      resume: { expression: "CRON_TZ=Europe/Rome 0 3 * * *", skipImmediately: true },
+    };
+    const run = { token: randomUUID(), request: randomUUID() };
+
+    expect(readWriteConfirmRequest(pause)).toEqual(pause);
+    expect(readWriteConfirmRequest(resume)).toEqual(resume);
+    expect(readWriteRunRequest({ ...pause, ...run })).toEqual({ ...pause, ...run });
+    expect(readWriteRunRequest({ ...pause, kind: "schedule-resume", ...run })).toEqual({
+      ...pause,
+      kind: "schedule-resume",
+      ...run,
+    });
+    for (const [what, value] of [
+      ["no schedule", { ...pause, target: undefined }],
+      ["a backup", { ...pause, target: { ...target, kind: "Backup" } }],
+      ["a resume with nothing to resume with", { ...resume, resume: undefined }],
+      ["a pause with something to resume with", { ...pause, resume: resume.resume }],
+      ["an empty expression", { ...resume, resume: { ...resume.resume, expression: "" } }],
+      ["an expression beyond the bound", { ...resume, resume: { ...resume.resume, expression: "x".repeat(4097) } }],
+      ["a choice that is not true or false", { ...resume, resume: { ...resume.resume, skipImmediately: "true" } }],
+      ["a field it does not know", { ...resume, resume: { ...resume.resume, paused: false } }],
+      ["a backup named", { ...pause, backup: "nightly-1" }],
+      ["a form of a restore", { ...pause, restore: "r", restoreForm: { existingResourcePolicy: "none" } }],
+    ] as const) {
+      expect([what, readWriteConfirmRequest(value)]).toEqual([what, undefined]);
+    }
+    // The run carries nothing of the patch, which the text kept with the token is.
+    expect(readWriteRunRequest({ ...resume, ...run })).toBeUndefined();
+    expect(readWriteRunRequest({ ...pause, typed: "nightly", ...run })).toBeUndefined();
+  });
+
+  it("reads what a schedule is after its pause or its resume, and nothing else", () => {
+    const changed = {
+      name: "nightly",
+      uid: "u",
+      paused: false,
+      skipImmediately: true,
+      lastSkipped: "2026-11-08T12:00:00Z",
+    };
+
+    expect(readScheduleChanged(changed)).toEqual(changed);
+    expect(readScheduleChanged({ name: "nightly", uid: "u", paused: true })).toEqual({
+      name: "nightly",
+      uid: "u",
+      paused: true,
+    });
+    for (const wrong of [
+      { ...changed, paused: "true" },
+      { ...changed, skipImmediately: "false" },
+      { ...changed, lastSkipped: "" },
+      { ...changed, phase: "Enabled" },
+      { name: "nightly", uid: "u" },
+      { ...changed, name: "Nightly" },
+    ])
+      expect(readScheduleChanged(wrong)).toBeUndefined();
   });
 
   it("reads a confirmation of a restore: its backup, its name and its form, and a run with the name of its backup typed", () => {
@@ -732,6 +798,28 @@ describe("the ends kept for a cluster, between the processes", () => {
     expect(readWriteEndsRequest({ cluster })).toEqual({ cluster });
     expect(readWriteShownRequest({ cluster, request: end.request })).toEqual({ cluster, request: end.request });
     expect(readWriteShownRequest({ cluster, request: "not-a-uuid" })).toBeUndefined();
+  });
+
+  it("reads the end of a pause and of a resume, applied with nothing more or not done, and of no other shape", () => {
+    const { schedule: _schedule, ...base } = end;
+    const paused = {
+      ...base,
+      request: randomUUID(),
+      kind: "schedule-pause",
+      name: "nightly",
+      outcome: { created: true },
+    };
+    const resumed = { ...paused, request: randomUUID(), kind: "schedule-resume" };
+    const refused = {
+      ...paused,
+      request: randomUUID(),
+      outcome: { created: false, code: "conflict", text: "The schedule nightly changed since the review." },
+    };
+
+    expect(readKeptEnds([paused, resumed, refused])).toEqual([paused, resumed, refused]);
+    expect(readKeptEnds([{ ...paused, outcome: { created: true, phase: "Enabled" } }])).toEqual([]);
+    expect(readKeptEnds([{ ...paused, outcome: { created: true, paused: true } }])).toEqual([]);
+    expect(readKeptEnds([{ ...paused, schedule: "nightly" }])).toEqual([]);
   });
 
   it("reads the end of a schedule of the form, which names no schedule it was asked from", () => {
