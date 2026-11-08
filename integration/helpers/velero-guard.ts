@@ -144,3 +144,37 @@ export function realScheduleSubmission(name: string, items: InstalledObject[]): 
         "No suite expects one. Create the environment again with `pnpm demo:down` and `pnpm demo:up`."
     : undefined;
 }
+
+/** The counters of the pods, of group `""`, and of the Jobs, of group `batch`, in the metrics of the API server. */
+export function workloadCountsOf(metrics: string): Record<string, number> {
+  const counts: Record<string, number> = {};
+
+  for (const line of metrics.split("\n")) {
+    if (!line.startsWith("apiserver_request_total{")) continue;
+    const label = (name: string) => new RegExp(`[{,]${name}="([^"]*)"`).exec(line)?.[1] ?? "";
+    const group = label("group");
+    const resource = label("resource");
+
+    if (!((group === "" && resource === "pods") || (group === "batch" && resource === "jobs"))) continue;
+    const key = `${label("verb")} ${resource} ${label("scope")}`;
+
+    counts[key] = (counts[key] ?? 0) + Number(line.slice(line.lastIndexOf(" ") + 1));
+  }
+
+  return counts;
+}
+
+/**
+ * The reads of one object or of a namespace, among the counters of the pods and of the Jobs counted between two
+ * readings: what a view would ask of them. The lists and the watches of the whole cluster are left out: the control
+ * plane of the cluster and the host itself keep their own.
+ */
+export function workloadReadsOf(counts: Record<string, number>): Record<string, number> {
+  return Object.fromEntries(
+    Object.entries(counts).filter(([key]) => {
+      const [verb, , scope] = key.split(" ");
+
+      return (verb === "LIST" || verb === "GET" || verb === "WATCH") && scope !== "cluster";
+    }),
+  );
+}

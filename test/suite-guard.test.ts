@@ -4,6 +4,8 @@ import {
   OPERATION_KINDS,
   operationListsOf,
   realScheduleSubmission,
+  workloadCountsOf,
+  workloadReadsOf,
   writesOf,
 } from "../integration/helpers/velero-guard";
 
@@ -191,5 +193,29 @@ describe("the guard of the suites", () => {
     );
     // A backup with the label of a schedule that is gone is still a submission of it.
     expect(realScheduleSubmission(name, [backup(`${name}-20261026100000`, name)])).toMatch(/carries its label/);
+  });
+
+  it("counts the pods and the Jobs of the metrics of the API server by verb, kind and scope, and keeps their reads in a namespace or by name", () => {
+    const metrics = [
+      'apiserver_request_total{code="200",component="apiserver",dry_run="",group="",resource="pods",scope="namespace",subresource="",verb="LIST",version="v1"} 2',
+      'apiserver_request_total{code="200",component="apiserver",dry_run="",group="",resource="pods",scope="cluster",subresource="",verb="WATCH",version="v1"} 5',
+      'apiserver_request_total{code="200",component="apiserver",dry_run="",group="batch",resource="jobs",scope="resource",subresource="",verb="GET",version="v1"} 1',
+      'apiserver_request_total{code="200",component="apiserver",dry_run="",group="batch",resource="jobs",scope="cluster",subresource="",verb="LIST",version="v1"} 4',
+      'apiserver_request_total{code="200",component="apiserver",dry_run="",group="velero.io",resource="backups",scope="namespace",subresource="",verb="LIST",version="v1"} 9',
+      'apiserver_request_total{code="200",component="apiserver",dry_run="",group="apps",resource="jobs",scope="namespace",subresource="",verb="LIST",version="v1"} 3',
+      "# HELP apiserver_request_total Counter of apiserver requests",
+    ].join("\n");
+    const counts = workloadCountsOf(metrics);
+
+    // The pods of the core group and the Jobs of `batch`, and nothing of another group or kind.
+    expect(counts).toEqual({
+      "LIST pods namespace": 2,
+      "WATCH pods cluster": 5,
+      "GET jobs resource": 1,
+      "LIST jobs cluster": 4,
+    });
+    // What a view would ask: the reads in a namespace or by name; the lists and the watches of the whole cluster,
+    // which the control plane and the host keep, are left out.
+    expect(workloadReadsOf(counts)).toEqual({ "LIST pods namespace": 2, "GET jobs resource": 1 });
   });
 });

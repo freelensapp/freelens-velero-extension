@@ -55,7 +55,18 @@ describe("the parts of the views a run takes", () => {
     expect(partsToRun(definition, ["src/common/artifact-log.ts"])).toEqual(["artifacts", ...statics]);
     expect(partsToRun(definition, ["src/renderer/pages/server-band.tsx"])).toEqual(["volumes-and-server", ...statics]);
     expect(partsToRun(definition, ["src/renderer/pages/overview-page.tsx"])).toEqual(statics);
-    expect(partsToRun(definition, ["src/common/volume-band.ts"])).toEqual(["volumes-and-server", ...statics]);
+    // The band of the volumes, its index and the references of an operation make the ways of the Volumes tab too.
+    for (const file of ["src/common/volume-band.ts", "src/common/volume-index.ts", "src/common/volume-references.ts"]) {
+      expect([file, partsToRun(definition, [file])]).toEqual([file, ["artifacts", "volumes-and-server", ...statics]]);
+    }
+    expect(partsToRun(definition, ["src/common/volume-words.ts"])).toEqual(["volumes-and-server", ...statics]);
+    // The sections of the host of the three kinds of the volumes, whose cases are in the suites with the server.
+    for (const file of [
+      "src/renderer/details/repository-details.tsx",
+      "src/renderer/details/volume-operation-details.tsx",
+    ]) {
+      expect([file, partsToRun(definition, [file])]).toEqual([file, ["volumes-and-server", ...statics]]);
+    }
     expect(partsToRun(definition, ["src/renderer/components/views.module.css"])).toEqual(["pre-review", ...statics]);
   });
 

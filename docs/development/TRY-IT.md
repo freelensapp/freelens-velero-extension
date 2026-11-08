@@ -249,15 +249,25 @@ Then the locations, from Backup Storage Locations in the sidebar:
 | Volume Snapshot Locations, `velero-views-<run>` | The phase as it is written, with the mark of what is not known: the list says that the release neither writes nor checks it |
 | From a backup, a restore or a schedule | The locations they name lead to the view of the location, over the list the first view was opened from |
 
-Then the volumes, from Backup Repositories, Pod Volume Backups and Pod Volume
-Restores, after Volume Snapshot Locations in the sidebar. The environment holds no
-object of the three kinds yet: no backup of the file system ran in it, and their
-fixtures come with a later pull request of T5.1.
+Then the volumes, from Backup Repositories, Pod Volume Backups, Pod Volume
+Restores, Data Uploads and Data Downloads, after Volume Snapshot Locations in the
+sidebar.
 
 | Step | What to look at |
 | --- | --- |
-| Backup Repositories, `velero-demo` | No repository: the list says of what it is the list, and the host that it is empty |
-| Pod Volume Backups and Pod Volume Restores, `velero-views-<run>` | None of either, each list saying of what it is the list, with the note over it that the operations go with their backups or their restores |
+| Backup Repositories, `velero-views-<run>` | Nine repositories, each with its readiness, its last maintenance and its frequency: one Ready whose newest maintenance failed, with the mark beside the time of the last that succeeded; one of restic, Ready and never maintained; one Not ready, the lines of its message in its tip; one not initialized yet; one due by the clock; two of the same three labels; two of long names |
+| A repository, from its row | Its readiness, its last maintenance and the next one, due or due in how long by the clock of this machine, with the note of the look of the server every five minutes; its recent maintenances, newest first; what used it |
+| Pod Volume Backups and Pod Volume Restores, `velero-views-<run>` | The operations of the views in their phases, each a way to its view, its pod and its node the links of the host |
+| The backup `backup-inprogress`, its band | Its pod volume backups counted by phase, ten rows, and the command that shows ten more, then its data uploads, none yet |
+| Data Uploads and Data Downloads, `velero-views-<run>` | None of either yet: each list says of what it is the list, with the note over it; their fixtures come with the second pull request of T5.2 |
+| Backup Repositories, `velero-defaults-<run>` | No repository: the list says of what it is the list, and the host that it is empty |
+
+The manual review of SPEC-0014, its first two steps, which T5.1 makes possible: in
+`velero-demo`, open the backup `fixture-volume-backup-<run>`, read in its band how
+its volume went and follow it to its pod volume backup, to its repository and back;
+then open the repository and tell when it was initialized and when its maintenance
+is due. The answers are on the pages, nothing reads as a verdict on the backups,
+and the pod and the node are names that open the details of the host.
 
 With the keyboard alone: Tab reaches the choices, the search and the names of the
 rows, Enter opens, Tab reaches the ways to the other views and the marks of a line
