@@ -181,13 +181,12 @@ export async function confirmBackupDelete(
   const read = await readBackup(opened.value, request.namespace, target, signal);
 
   if (!read.ok) return read;
-  // The other requests of the backup, which Velero deletes before it starts this one, said by the review (REQ-283): a
-  // read that does not answer says nothing of them.
+  // The other requests of a backup of its name, which Velero deletes before it starts this one, by the label of the
+  // name alone, said by the review (REQ-283): a read that fails or does not answer in time is said as not read.
   let others: number | undefined;
 
   try {
-    others = (await opened.value.deleteRequestsOf(request.namespace, { name: target.name, uid: target.uid }, signal))
-      .length;
+    others = (await opened.value.deleteRequestsOf(request.namespace, { name: target.name }, signal)).length;
   } catch {
     others = undefined;
   }

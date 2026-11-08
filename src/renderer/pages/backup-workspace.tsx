@@ -39,7 +39,7 @@ const {
 // (REQ-278, REQ-284).
 function BackupCommands({ installation, backup }: { installation: Installation; backup: BackupResource }) {
   const offered = backupOffered(backup.status?.phase);
-  const deletable = deleteOffered(backup.status?.phase);
+  const deletable = deleteOffered(backup.status?.phase, backup.spec?.storageLocation);
   const name = backup.metadata.name;
   const uid = backup.metadata.uid;
 

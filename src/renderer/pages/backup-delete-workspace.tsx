@@ -35,18 +35,19 @@ export interface BackupDeleteWorkspaceProps {
 
 // What the views read of the storage location of a backup, for the review (REQ-280): not there, or its access mode and
 // its phase; nothing while the locations are not read.
-function locationOf(installation: Installation, location: string | undefined): DeleteReviewContext["location"] {
-  if (!location) return undefined;
+function locationRead(installation: Installation, location: string): Pick<DeleteReviewContext, "location"> {
   const read = installation.read("storageLocations");
   const known = read.status === "ready" || read.lastSuccess !== undefined;
   const found = (
     read.items as { metadata: { name: string }; spec?: { accessMode?: unknown }; status?: { phase?: unknown } }[]
   ).find((item) => item.metadata.name === location);
 
-  if (!found) return known ? { missing: true } : undefined;
+  if (!found) return known ? { location: { missing: true } } : {};
   return {
-    ...(typeof found.spec?.accessMode === "string" ? { accessMode: found.spec.accessMode } : {}),
-    ...(typeof found.status?.phase === "string" ? { phase: found.status.phase } : {}),
+    location: {
+      ...(typeof found.spec?.accessMode === "string" ? { accessMode: found.spec.accessMode } : {}),
+      ...(typeof found.status?.phase === "string" ? { phase: found.status.phase } : {}),
+    },
   };
 }
 
@@ -56,7 +57,6 @@ function locationOf(installation: Installation, location: string | undefined): D
 export const BackupDeleteWorkspace = observer(({ installation, name, back, onBack }: BackupDeleteWorkspaceProps) => {
   const namespace = installation.namespace ?? "";
   const state = installation.backupDelete;
-  const step = state.step;
   const writes = installation.writes;
   const gate = installation.gate;
   const body = React.useRef<HTMLDivElement>(null);
@@ -67,22 +67,31 @@ export const BackupDeleteWorkspace = observer(({ installation, name, back, onBac
     act();
   };
   const backupsRead = installation.read("backups");
-  const backup = (backupsRead.items as BackupResource[]).find((item) => item.metadata.name === name);
+  const backups = backupsRead.items as BackupResource[];
+  const backup = backups.find((item) => item.metadata.name === name);
   const uid = backup?.metadata.uid;
   const phase = backup?.status?.phase;
-  const offered = deleteOffered(phase);
+  const location = backup?.spec?.storageLocation;
+  const offered = deleteOffered(phase, location);
+  // The deletion is of this backup, by its name and its UID, or of another one, whose deletion may be being asked: then
+  // nothing of it is shown here.
+  const ours = uid !== undefined && state.backup?.name === name && state.backup.uid === uid;
+  const step = ours ? state.step : ({ state: "form" } as const);
   const busy =
     step.state === "asking"
       ? BACKUP_DELETE_VIEW_WORDS.asking
       : step.state === "running"
         ? BACKUP_DELETE_VIEW_WORDS.running(step.backup.name)
         : "";
+  // A deletion of another backup that is being asked is waited for: the workspace of this one is given when it ends.
+  const waiting = !ours && state.busy;
+  const another = waiting && state.backup ? BACKUP_DELETE_VIEW_WORDS.another(state.backup.name) : undefined;
 
   // The workspace is of the backup of the view: one opened from the address, or for a backup created again under its
-  // name, is started here once the backup is read.
+  // name, is started here once the backup is read, and once a deletion of another one ended.
   React.useEffect(() => {
-    if (uid) state.start({ kind: "Backup", name, uid });
-  }, [state, name, uid]);
+    if (uid && !waiting) state.start({ kind: "Backup", name, uid });
+  }, [state, name, uid, waiting]);
 
   // An end the workspace shows is seen: it is not said again elsewhere.
   const ended = step.state === "done" || step.state === "failed";
@@ -129,13 +138,22 @@ export const BackupDeleteWorkspace = observer(({ installation, name, back, onBac
   const noWay = !gate && installation.gateFailure !== undefined && !installation.gateUnknown;
   const cluster = gate?.cluster.name ?? installation.cluster.name;
   const context = gate?.cluster.context ?? "";
-  const location = backup?.spec?.storageLocation;
-  const locationRead = locationOf(installation, location);
+  // What the review says is of the backup it is of, as the installation reads it now: its phase, its location and what
+  // the views read of the location; a phase Velero refuses to delete holds Delete backup back, as the main process
+  // would refuse it.
+  const reviewed =
+    step.state === "reviewing"
+      ? backups.find((item) => item.metadata.name === step.backup.name && item.metadata.uid === step.backup.uid)
+      : undefined;
+  const reviewedPhase = reviewed?.status?.phase;
+  const reviewedLocation = reviewed?.spec?.storageLocation;
+  const reviewedOffered = deleteOffered(reviewedPhase, reviewedLocation);
 
   return (
     <Workspace
       kind="backup-delete"
       name={name}
+      {...(uid ? { uid } : {})}
       title={BACKUP_DELETE_VIEW_WORDS.title(name)}
       back={back}
       onBack={onBack}
@@ -153,11 +171,12 @@ export const BackupDeleteWorkspace = observer(({ installation, name, back, onBac
             cluster={cluster}
             context={context}
             meaning={{
-              ...(phase ? { backupPhase: phase } : {}),
-              ...(location ? { storageLocation: location } : {}),
-              ...(locationRead ? { location: locationRead } : {}),
-              ...(step.others === undefined ? {} : { others: step.others }),
+              ...(reviewedPhase ? { backupPhase: reviewedPhase } : {}),
+              ...(reviewedLocation ? { storageLocation: reviewedLocation } : {}),
+              ...(reviewedLocation ? locationRead(installation, reviewedLocation) : {}),
+              others: step.others ?? "unread",
             }}
+            {...(reviewedOffered.offered ? {} : { held: reviewedOffered.words })}
             onRun={by(() => void state.run())}
             onBack={by(() => state.leave())}
           />
@@ -227,7 +246,11 @@ export const BackupDeleteWorkspace = observer(({ installation, name, back, onBac
             >
               {busy}
             </div>
-            {busy ? null : !writes.on ? (
+            {another ? (
+              <p className={styles.stateText} data-testid={`${ID}-another`}>
+                {another}
+              </p>
+            ) : busy ? null : !writes.on ? (
               <>
                 <p className={styles.factNote} data-testid={`${ID}-writes-off`}>
                   {noWay
@@ -288,6 +311,8 @@ interface ReviewProps {
   cluster: string;
   context: string;
   meaning: DeleteReviewContext;
+  // Why Delete backup is held back: the backup is now in a phase Velero refuses to delete.
+  held?: string;
   onRun: () => void;
   onBack: () => void;
 }
@@ -297,9 +322,9 @@ interface ReviewProps {
 // which enables Delete backup once it is the name as it is written. Escape leaves it, and the workspace stays. The focus
 // is not on the command that deletes.
 const Review = observer(
-  ({ installation, state, backup, text, cluster, context, meaning, onRun, onBack }: ReviewProps) => {
+  ({ installation, state, backup, text, cluster, context, meaning, held, onRun, onBack }: ReviewProps) => {
     const parts = deleteMeaning(backup, meaning);
-    const confirmed = state.confirmed;
+    const confirmed = state.confirmed && held === undefined;
 
     return (
       <section
@@ -352,7 +377,7 @@ const Review = observer(
             blurOnEnter={false}
             onChange={(next) => state.typeBackup(next)}
             onSubmit={() => {
-              if (state.confirmed) onRun();
+              if (confirmed) onRun();
             }}
             onKeyDown={(event) => {
               escapeOfField(event, () => state.typeBackup(""));
@@ -362,7 +387,7 @@ const Review = observer(
             {BACKUP_DELETE_VIEW_WORDS.typeBackup(backup)}
           </p>
           <p id={`${ID}-typed-state`} className={styles.factNote} data-testid={`${ID}-typed-state`} aria-live="polite">
-            {confirmed ? BACKUP_DELETE_VIEW_WORDS.typed : BACKUP_DELETE_VIEW_WORDS.notTyped(backup)}
+            {held ?? (confirmed ? BACKUP_DELETE_VIEW_WORDS.typed : BACKUP_DELETE_VIEW_WORDS.notTyped(backup))}
           </p>
         </div>
         <div className={styles.writeActions}>

@@ -573,18 +573,23 @@ export class DiagnosticKubernetes {
     return this.send("POST", this.path("DeleteBackupRequest", namespace), signal, { text });
   }
 
-  // The DeleteBackupRequests of one backup, by the labels that name it and its UID, as the deletion controller finds
-  // them (SPEC-0017, REQ-250, REQ-282): what the cluster answers is taken only when every request is of that namespace
-  // and carries both labels.
+  // The DeleteBackupRequests of one backup, by the labels that name it and its UID (SPEC-0017, REQ-250, REQ-282); or,
+  // without its UID, every request of a backup of its name, by that label alone, which the deletion controller deletes
+  // the others of a request by (REQ-283, backup_deletion_controller.go L500-L522): what the cluster answers is taken
+  // only when every request is of that namespace and carries the labels asked for.
   deleteRequestsOf(
     namespace: string,
-    backup: { name: string; uid: string },
+    backup: { name: string; uid?: string },
     signal: AbortSignal,
   ): Promise<DiagnosticObject[]> {
     const label = labelOf(name(backup.name));
 
-    if (typeof backup.uid !== "string" || !LABEL_VALUE.test(backup.uid)) throw new DiagnosticError("validation");
-    const selector = `${BACKUP_NAME_LABEL}=${label},${BACKUP_UID_LABEL}=${backup.uid}`;
+    if (backup.uid !== undefined && (typeof backup.uid !== "string" || !LABEL_VALUE.test(backup.uid)))
+      throw new DiagnosticError("validation");
+    const selector =
+      backup.uid === undefined
+        ? `${BACKUP_NAME_LABEL}=${label}`
+        : `${BACKUP_NAME_LABEL}=${label},${BACKUP_UID_LABEL}=${backup.uid}`;
 
     return this.send("GET", this.path("DeleteBackupRequest", namespace), signal, {
       query: { labelSelector: selector },
@@ -598,7 +603,7 @@ export class DiagnosticKubernetes {
             typeof item?.metadata?.name === "string" &&
             item.metadata.namespace === namespace &&
             item.metadata.labels?.[BACKUP_NAME_LABEL] === label &&
-            item.metadata.labels?.[BACKUP_UID_LABEL] === backup.uid,
+            (backup.uid === undefined || item.metadata.labels?.[BACKUP_UID_LABEL] === backup.uid),
         )
       )
         throw new DiagnosticError("request-failed");

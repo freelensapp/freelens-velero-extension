@@ -127,7 +127,7 @@ describe("the deletion of a backup, in the views", () => {
     }
   });
 
-  it("runs an expired review with the token asked again for the same text, and shows another text in its place", async () => {
+  it("runs an expired review with the token asked again for the same text, and sends nothing when the renewal answers another text", async () => {
     const { state, asked, later } = made({
       confirm: [confirmed(), confirmed(TEXT, { token: "token-second", others: 2 })],
       run: [{ ok: true, value: { end: "unread" } }],

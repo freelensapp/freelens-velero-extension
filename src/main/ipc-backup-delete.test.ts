@@ -131,14 +131,21 @@ function fixture() {
       state.requests.set(created.metadata.name, created);
       return structuredClone(created);
     }),
-    deleteRequestsOf: vi.fn(async (_namespace: string, backup: { name: string; uid: string }, signal?: AbortSignal) => {
-      if (signal?.aborted) throw new DiagnosticError("cancelled");
-      step();
-      if (state.listError) throw state.listError;
-      return [...state.requests.values()]
-        .filter((item) => item.metadata.labels?.["velero.io/backup-uid"] === backup.uid)
-        .map((item) => structuredClone(item));
-    }),
+    deleteRequestsOf: vi.fn(
+      async (_namespace: string, backup: { name: string; uid?: string }, signal?: AbortSignal) => {
+        if (signal?.aborted) throw new DiagnosticError("cancelled");
+        step();
+        if (state.listError) throw state.listError;
+        // By the label of the name, and by the one of the UID when it is asked, as the API server selects them.
+        return [...state.requests.values()]
+          .filter(
+            (item) =>
+              item.metadata.labels?.["velero.io/backup-name"] === backup.name &&
+              (backup.uid === undefined || item.metadata.labels?.["velero.io/backup-uid"] === backup.uid),
+          )
+          .map((item) => structuredClone(item));
+      },
+    ),
   };
   // The request the API server makes of a text: a name generated from its prefix, a UID and the time of its creation.
   const requestOf = (text: string, namespace = "velero", at = state.now): DiagnosticObject => {
@@ -241,8 +248,8 @@ describe("the confirmation of the deletion of a backup", () => {
     expect(adapter.createDeleteBackupRequest).not.toHaveBeenCalled();
   });
 
-  it("says how many other requests to delete the backup are there, which Velero deletes before it starts this one, and nothing when they cannot be read", async () => {
-    const { enable, confirm, state, requestOf } = fixture();
+  it("says how many other requests to delete a backup of its name are there, by the label of the name, which Velero deletes before it starts this one, and nothing when they cannot be read", async () => {
+    const { enable, confirm, state, requestOf, adapter } = fixture();
 
     await enable();
     expect((await confirm()).value?.others).toBe(0);
@@ -252,6 +259,13 @@ describe("the confirmation of the deletion of a backup", () => {
     state.requests.set(older.metadata.name, older);
     state.requests.set(another.metadata.name, another);
     expect((await confirm()).value?.others).toBe(1);
+    // A request of an earlier backup of the same name, of another UID: Velero deletes it as well, by the label of the
+    // name, and it is counted.
+    const earlier = requestOf(deleteRequestText(deleteRequestOf("velero", { name: "nightly", uid: "nightly-before" })));
+
+    state.requests.set(earlier.metadata.name, earlier);
+    expect((await confirm()).value?.others).toBe(2);
+    expect(adapter.deleteRequestsOf).toHaveBeenLastCalledWith("velero", { name: "nightly" }, expect.anything());
     state.listError = new DiagnosticError("forbidden");
     const answer = await confirm();
 

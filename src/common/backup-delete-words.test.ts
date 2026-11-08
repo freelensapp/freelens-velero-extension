@@ -27,11 +27,19 @@ describe("Delete backup for each phase of a backup", () => {
       words:
         "The backup is Deleting: Velero is deleting it, or a deletion of it failed and it stays Deleting. A new request tries the deletion again.",
     });
-    for (const phase of [undefined, "New", "Queued", "ReadyToStart"])
-      expect(deleteOffered(phase)).toEqual({
+    for (const phase of [undefined, "New", "Queued", "ReadyToStart"]) {
+      expect(deleteOffered(phase, "default")).toEqual({
         offered: true,
         words: `The backup is ${phase ?? "without a phase"}: Velero has not started it, and deletes it before it starts it.`,
       });
+      // One that names no storage location: Velero writes it when it starts the backup, and reads the location the
+      // backup names when it processes a request, so that it refuses one before then.
+      expect(deleteOffered(phase)).toEqual({
+        offered: true,
+        words: `The backup is ${phase ?? "without a phase"} and names no storage location: Velero writes its location when it starts it, and refuses a request to delete it before then.`,
+      });
+      expect(deleteOffered(phase, "")).toEqual(deleteOffered(phase));
+    }
     for (const phase of ["Completed", "PartiallyFailed", "Failed", "FailedValidation"])
       expect(deleteOffered(phase)).toEqual({ offered: true });
     // Each phase of the release is one of the above.
@@ -116,24 +124,31 @@ describe("what the review of a deletion says", () => {
       `${refuses} The views read it Unavailable: Velero would refuse it until it is Available.`,
     );
     expect(location({ location: { accessMode: "ReadWrite", phase: "Available" } })).toBe(refuses);
-    expect(location({ location: {} })).toBe(refuses);
+    // Velero takes a location as Available by its phase alone: one the views read without a phase is refused.
+    expect(location({ location: {} })).toBe(
+      `${refuses} The views read it without a phase: Velero would refuse it until it is Available.`,
+    );
+    expect(location({})).toBe(refuses);
     expect(deleteMeaning("shop-1").find((part) => part.id === "location")?.words).toBe(
       "The backup names no storage location: Velero refuses the request when its location is not there, is ReadOnly or is not Available.",
     );
   });
 
-  it("says the other requests of the backup, which Velero deletes before it starts this one, and nothing when there are none or they were not read", () => {
-    const others = (count?: number) =>
+  it("says the other requests of a backup of its name, which Velero deletes before it starts this one, nothing when there are none, and that they could not be read", () => {
+    const others = (count?: number | "unread") =>
       deleteMeaning("shop-1", count === undefined ? {} : { others: count }).find((part) => part.id === "others")?.words;
 
     expect(others(1)).toBe(
-      "Another request to delete this backup is there: Velero deletes it before it starts this one.",
+      "Another request to delete a backup of this name is there: Velero deletes it before it starts this one.",
     );
     expect(others(3)).toBe(
-      "3 other requests to delete this backup are there: Velero deletes them before it starts this one.",
+      "3 other requests to delete a backup of this name are there: Velero deletes them before it starts this one.",
     );
     expect(others(0)).toBeUndefined();
     expect(others()).toBeUndefined();
+    expect(others("unread")).toBe(
+      "Velero deletes every other request to delete a backup of this name before it starts this one: whether there is one could not be read.",
+    );
     expect(deleteMeaning("shop-1", { others: 2 }).map((part) => part.id)).toEqual([
       "request",
       "phase",
@@ -162,12 +177,12 @@ describe("what the result of a deletion says", () => {
         errors: ["backup deletion failed: backup storage location default is ReadOnly"],
       }),
     ).toEqual([
-      "Velero refused the request, and deleted nothing: the backup shop-1 keeps its phase, Completed. Each error is as Velero wrote it:",
+      "Velero refused the request, and deleted nothing of the backup: the backup shop-1 keeps its phase, Completed. Each error is as Velero wrote it:",
       "backup deletion failed: backup storage location default is ReadOnly",
     ]);
     // A refusal of a backup that went says no phase.
     expect(deletedWords("shop-1", { end: "refused", errors: ["backup deletion failed: backup not found"] })).toEqual([
-      "Velero refused the request, and deleted nothing. Each error is as Velero wrote it:",
+      "Velero refused the request, and deleted nothing of the backup. Each error is as Velero wrote it:",
       "backup deletion failed: backup not found",
     ]);
     expect(deletedWords("shop-1", { end: "failed", phase: "Deleting", errors: ["one", "two"], errorsLeft: 3 })).toEqual(
@@ -179,10 +194,10 @@ describe("what the result of a deletion says", () => {
       ],
     );
     expect(deletedWords("shop-1", { end: "in-progress", phase: "Deleting" })).toEqual([
-      "Velero is deleting the backup shop-1: the request was InProgress when it was last read. The view of the backup says how it goes.",
+      "Velero is deleting the backup shop-1: when it was last read, the request was InProgress, or Processed with the backup still there. The view of the backup says how it goes.",
     ]);
     expect(deletedWords("shop-1", { end: "unread", phase: "Completed" })).toEqual([
-      "Velero has not read the request yet: it had no phase after thirty seconds of reads. The view of the backup says whether Velero deletes it.",
+      "Velero had not started the request when it was last read: it had no phase then. The view of the backup says whether Velero deletes it.",
     ]);
     expect(deletedWords("shop-1", { end: "refused", errorsLeft: 1 }).at(-1)).toBe(
       BACKUP_DELETE_VIEW_WORDS.errorsLeft(1, "shop-1"),

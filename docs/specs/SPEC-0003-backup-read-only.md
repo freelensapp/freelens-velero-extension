@@ -380,7 +380,11 @@ disabled for a backup in progress, waiting for its plugins or finalizing, which 
 refuses to delete, with the words of why; it is enabled for a backup Deleting, with the
 words that Velero is deleting it or that a deletion of it failed, which a new request
 tries again, and for one with no phase, New, Queued or ReadyToStart, with the words that
-Velero deletes it before it starts it. No row of the list, no menu and no selection
-offers a deletion. It is proven at the component layer, with writes off and on, in
-[`backup-delete-workspace.test.tsx`](../../src/renderer/pages/backup-delete-workspace.test.tsx);
-the packaged suites of the action come with the third pull request of T4.6.
+Velero deletes it before it starts it, or, for one that names no storage location, that
+Velero refuses to delete it until it starts it, when it writes its location. No row of
+the list, no menu and no selection offers a deletion. It is proven at the component
+layer, with writes off and on, in
+[`backup-delete-workspace.test.tsx`](../../src/renderer/pages/backup-delete-workspace.test.tsx),
+and for every phase of the release, with a location named and without one, in
+[`backup-delete-words.test.ts`](../../src/common/backup-delete-words.test.ts); the
+packaged suites of the action come with the third pull request of T4.6.

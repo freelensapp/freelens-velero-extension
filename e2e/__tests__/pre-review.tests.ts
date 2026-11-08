@@ -355,8 +355,10 @@ describe("pre-review of the views", () => {
       await stay("backup", REFUSED, "log");
       await frame.locator("[data-testid=velero-back]").focus();
       expect(await cluster.focused(frame)).toBe("velero-back");
-      // One press from the way back reaches the strip, at its first tab. The log is the tab that is open:
-      // each tab the keyboard reaches says whether it is the selected one.
+      // One press from the way back reaches Delete backup, on the line of the name, Restore being disabled for a
+      // backup that failed its validation; the next reaches the strip, at its first tab. The log is the tab that is
+      // open: each tab the keyboard reaches says whether it is the selected one.
+      expect(await moved("Tab")).toEqual({ id: "velero-backup-delete", selected: "" });
       expect(await moved("Tab")).toEqual({ id: tab("summary"), selected: "false" });
       expect(await moved("ArrowRight")).toEqual({ id: tab("log"), selected: "true" });
       expect(await moved("End")).toEqual({ id: tab("volumes"), selected: "false" });

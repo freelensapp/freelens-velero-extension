@@ -68,19 +68,25 @@ const backup = (name: string, phase: string | undefined, location = "default") =
   ...(phase ? { status: { phase, startTimestamp: "2026-11-08T03:00:00Z" } } : {}),
 });
 
+// What a read of the backups answers in place of a backup of the fixtures, by its name, as a case changes it.
+let changed: Record<string, ReturnType<typeof backup>> = {};
+
 function answers(): Record<string, Answer> {
   return {
     [DISCOVERY]: { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } },
     [LOCATIONS]: list(storage("default"), storage("archive", { accessMode: "ReadOnly" })),
     [path("backups", A)]: list(
-      backup("nightly", "Completed"),
-      backup("running", "InProgress"),
-      backup("finalizing", "Finalizing"),
-      backup("deleting", "Deleting"),
-      backup("fresh", "New"),
-      backup("unphased", undefined),
-      backup("archived", "Completed", "archive"),
-      backup("orphan", "Completed", "gone"),
+      ...[
+        backup("nightly", "Completed"),
+        backup("running", "InProgress"),
+        backup("finalizing", "Finalizing"),
+        backup("deleting", "Deleting"),
+        backup("fresh", "New"),
+        backup("unphased", undefined),
+        backup("nowhere", "Queued", ""),
+        backup("archived", "Completed", "archive"),
+        backup("orphan", "Completed", "gone"),
+      ].map((item) => changed[item.metadata.name] ?? item),
     ),
     [path("restores", A)]: list(),
     [path("schedules", A)]: list(),
@@ -255,19 +261,21 @@ afterEach(() => {
   act(() => closeViews());
   cleanup();
   confirmDialogs.length = 0;
+  changed = {};
   vi.useRealTimers();
 });
 
 describe("Delete backup, in the view of a backup", () => {
-  it("is offered for a backup that ended, Deleting or not started, with the words of its phase, and not for one in progress", async () => {
+  it("is offered for a backup that ended, Deleting or not started, with the words of its phase and of a location it does not name, and not for one in progress", async () => {
     mount();
-    for (const [name, phase, offered] of [
-      ["nightly", "Completed", true],
-      ["deleting", "Deleting", true],
-      ["fresh", "New", true],
-      ["unphased", undefined, true],
-      ["running", "InProgress", false],
-      ["finalizing", "Finalizing", false],
+    for (const [name, phase, offered, location] of [
+      ["nightly", "Completed", true, "default"],
+      ["deleting", "Deleting", true, "default"],
+      ["fresh", "New", true, "default"],
+      ["unphased", undefined, true, "default"],
+      ["nowhere", "Queued", true, ""],
+      ["running", "InProgress", false, "default"],
+      ["finalizing", "Finalizing", false, "default"],
     ] as const) {
       await openBackup(name);
       const command = screen.getByTestId("velero-backup-delete") as HTMLButtonElement;
@@ -276,7 +284,7 @@ describe("Delete backup, in the view of a backup", () => {
       expect([name, command.disabled, note ? words(note) : undefined]).toEqual([
         name,
         !offered,
-        deleteOffered(phase).words,
+        deleteOffered(phase, location).words,
       ]);
       expect(command.getAttribute("aria-describedby")).toBe(note ? "velero-backup-delete-note" : null);
       act(() => closeViews());
@@ -329,6 +337,10 @@ describe("the deletion of a backup, in its workspace", () => {
     type(part("typed"), "nightly");
     expect((part("run") as HTMLButtonElement).disabled).toBe(false);
     expect(words(part("typed-state"))).toBe(BACKUP_DELETE_VIEW_WORDS.typed);
+    // One character more disables it again: the name is compared as it is written.
+    type(part("typed"), "nightlyy");
+    expect((part("run") as HTMLButtonElement).disabled).toBe(true);
+    type(part("typed"), "nightly");
     // Escape in the field takes back what was typed.
     fireEvent.keyDown(part("typed"), { key: "Escape" });
     expect([(part("typed") as HTMLInputElement).value, (part("run") as HTMLButtonElement).disabled]).toEqual([
@@ -356,6 +368,7 @@ describe("the deletion of a backup, in its workspace", () => {
       { end: "failed", phase: "Deleting", errors: ["one", "two"], errorsLeft: 2 },
       { end: "replaced", phase: "Completed" },
       { end: "unread", phase: "Completed" },
+      { end: "in-progress", phase: "Deleting" },
       { end: "in-progress", phase: "Deleting", requestsUnread: true },
       { end: "completed", found: true },
       { end: "completed", found: true, requestsUnread: true },
@@ -454,7 +467,7 @@ describe("the deletion of a backup, in its workspace", () => {
     expect(document.activeElement?.getAttribute("data-testid")).toBe("velero-writes-on");
   });
 
-  it("says the location the views read when Velero would refuse the request: ReadOnly, or not there", async () => {
+  it("says the location the views read when Velero would refuse the request, ReadOnly or not there, and that the other requests could not be read", async () => {
     for (const [name, location] of [
       ["archived", { accessMode: "ReadOnly", phase: "Available" }],
       ["orphan", { missing: true }],
@@ -473,10 +486,87 @@ describe("the deletion of a backup, in its workspace", () => {
           location,
         }).find((meaning) => meaning.id === "location")?.words,
       );
+      // The main process answered no count of the other requests: the review says that they could not be read.
+      expect(words(part("meaning").querySelector('[data-part="others"]') as Element)).toBe(
+        deleteMeaning(name, { others: "unread" }).find((meaning) => meaning.id === "others")?.words,
+      );
       cleanup();
       act(() => closeViews());
       confirmDialogs.length = 0;
     }
+  });
+
+  it("deletes on Enter in the field once the name is typed, and holds Delete backup back while the backup is in a phase Velero refuses to delete", async () => {
+    const { main, installation } = mount();
+
+    await deletionOf("nightly");
+    await writesOn();
+    await reviewed(main, 0);
+    type(part("typed"), "nightly");
+    // The backup is in progress at the next read: Delete backup is held back, with why, and Enter deletes nothing.
+    changed = { nightly: backup("nightly", "InProgress") };
+    await act(() => installation.refresh());
+    await waitFor(() => expect(words(part("typed-state"))).toBe(deleteOffered("InProgress", "default").words));
+    expect((part("run") as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.keyDown(part("typed"), { key: "Enter" });
+    expect(main.runs).toHaveLength(0);
+    // It ended: Enter deletes.
+    changed = {};
+    await act(() => installation.refresh());
+    await waitFor(() => expect(words(part("typed-state"))).toBe(BACKUP_DELETE_VIEW_WORDS.typed));
+    fireEvent.keyDown(part("typed"), { key: "Enter" });
+    await waitFor(() => expect(main.runs).toHaveLength(1));
+    expect(main.runs[0].args.slice(0, 4)).toEqual(["cluster-a", A, TARGET, "nightly"]);
+  });
+
+  it("says the deletion of another backup that is being asked, shows nothing of it, and gives the workspace of this backup when it ends", async () => {
+    const { main } = mount();
+    const archived = { kind: "Backup", name: "archived", uid: "archived-uid" };
+
+    await deletionOf("nightly");
+    await writesOn();
+    await reviewed(main, 0);
+    type(part("typed"), "nightly");
+    press("run");
+    await waitFor(() => expect(main.runs).toHaveLength(1));
+    // The workspace of another backup while the deletion of nightly is being asked.
+    act(() => openView({ kind: "backup-delete", name: "archived" }));
+    await waitFor(() => expect(words(part("another"))).toBe(BACKUP_DELETE_VIEW_WORDS.another("nightly")));
+    expect([maybe("ask"), maybe("status")?.textContent, maybe("review"), maybe("result")]).toEqual([
+      null,
+      "",
+      null,
+      null,
+    ]);
+    await main.run({ ok: true, value: { end: "failed", phase: "Deleting", errors: ["one"] } });
+    // Its end is not shown here, and the review asked is of this backup, said by what is read of it.
+    await waitFor(() => expect(maybe("another")).toBeNull());
+    await waitFor(() => expect((part("ask") as HTMLButtonElement).disabled).toBe(false));
+    expect(maybe("result")).toBeNull();
+    press("ask");
+    await waitFor(() => expect(main.confirms).toHaveLength(2));
+    expect(main.confirms[1].args).toEqual(["cluster-a", A, archived]);
+    await main.confirm(deleteRequestText(deleteRequestOf(A, archived)), 0);
+    await waitFor(() => expect(maybe("review")).toBeTruthy());
+    expect(words(part("meaning").querySelector('[data-part="location"]') as Element)).toBe(
+      deleteMeaning("archived", {
+        storageLocation: "archive",
+        location: { accessMode: "ReadOnly", phase: "Available" },
+      }).find((meaning) => meaning.id === "location")?.words,
+    );
+    expect(words(part("typed-state"))).toBe(BACKUP_DELETE_VIEW_WORDS.notTyped("archived"));
+  });
+
+  it("says that the backup of the workspace is another one of the same name, created after the one that was open", async () => {
+    const { installation } = mount();
+
+    await deletionOf("nightly");
+    expect(screen.queryByTestId("velero-backup-delete-replaced")).toBeNull();
+    changed = {
+      nightly: { ...backup("nightly", "Completed"), metadata: { name: "nightly", namespace: A, uid: "again" } },
+    };
+    await act(() => installation.refresh());
+    await waitFor(() => expect(screen.queryByTestId("velero-backup-delete-replaced")).toBeTruthy());
   });
 
   it("refuses a review whose text is not the request of this backup, and confirms nothing", async () => {

@@ -9,8 +9,13 @@ import type { BackupDeleted } from "./ipc";
 
 // Whether Delete backup is offered for a backup in this phase, and the words its command says (REQ-278): one Velero
 // refuses to delete is not offered; one Deleting is, as a new attempt; one Velero has not started is, and Velero
-// deletes it before it starts it.
-export function deleteOffered(phase: string | undefined): { offered: boolean; words?: string } {
+// deletes it before it starts it when it names its storage location. One that names none Velero refuses to delete
+// until it starts it: it writes the location of a backup when it starts it (backup_controller.go L431-L446), and reads
+// the location the backup names when it processes a request (backup_deletion_controller.go L188-L198).
+export function deleteOffered(
+  phase: string | undefined,
+  storageLocation?: string,
+): { offered: boolean; words?: string } {
   if (phase !== undefined && (IN_PROGRESS as readonly string[]).includes(phase))
     return {
       offered: false,
@@ -25,7 +30,9 @@ export function deleteOffered(phase: string | undefined): { offered: boolean; wo
   if (phase === undefined || phase === "New" || phase === "Queued" || phase === "ReadyToStart")
     return {
       offered: true,
-      words: `The backup is ${phase ?? "without a phase"}: Velero has not started it, and deletes it before it starts it.`,
+      words: storageLocation
+        ? `The backup is ${phase ?? "without a phase"}: Velero has not started it, and deletes it before it starts it.`
+        : `The backup is ${phase ?? "without a phase"} and names no storage location: Velero writes its location when it starts it, and refuses a request to delete it before then.`,
     };
   return { offered: true };
 }
@@ -37,8 +44,8 @@ export const BACKUP_DELETE_VIEW_WORDS = {
     `A deletion of the backup ${backup} in ${namespace}: Velero deletes its data, its files in the store and its restores, then the backup itself. The main process reads the backup again when the review is asked, and again when the request is created.`,
   writesOff:
     "Writes are off for this installation: the review asks for writes on, which are turned on in the target bar.",
-  notOffered: (backup: string) =>
-    `The backup ${backup} is not one Delete backup is offered for now: its view says why. Nothing is asked.`,
+  another: (backup: string) =>
+    `The deletion of the backup ${backup} is being asked: one is asked at a time, and this one can be asked when it ends.`,
   backupMissing: (backup: string, namespace: string) =>
     `The backup ${backup} is not among the backups of ${namespace} the installation read: there is no backup to delete.`,
   backupNotRead: "The backups of this installation are not read yet: the review opens once the backup is read.",
@@ -57,7 +64,7 @@ export const BACKUP_DELETE_VIEW_WORDS = {
   typed: "The name is typed as it is written: Delete backup is enabled.",
   notTyped: (backup: string) => `Delete backup is enabled once ${backup} is typed as it is written.`,
   found:
-    "The answer of the creation was lost on the way: a request of the backup made since a minute before the confirmation was found by the labels of the backup. It is this request or another of the same backup.",
+    "The answer of the creation was lost on the way: what is said is what was read after it, the requests of the backup made since a minute before the confirmation, by the labels of the backup, and the backup. A request read is this one or another of the same backup.",
   foundUnread:
     "The answer of the creation was lost on the way, and the requests of the backup could not be read: what came of it is what the backup alone shows.",
   unread:
@@ -69,13 +76,14 @@ export const BACKUP_DELETE_VIEW_WORDS = {
 };
 
 // What the installation read that the review is said with: the phase of the backup, its storage location and what the
-// views read of it, and how many other requests to delete it the main process found at the confirmation.
+// views read of it, and how many other requests to delete a backup of its name the main process found at the
+// confirmation, or that it could not read them.
 export interface DeleteReviewContext {
   backupPhase?: string;
   storageLocation?: string;
   // The location as the views read it: not there, its access mode and its phase, when they are known.
   location?: { missing: true } | { accessMode?: string; phase?: string };
-  others?: number;
+  others?: number | "unread";
 }
 
 // The location of the backup in the words of what Velero refuses (REQ-280), with what the views read of it when it
@@ -92,15 +100,18 @@ function locationWords(context: DeleteReviewContext): string {
     return `${refuses} The views do not read a location of that name in this installation: Velero would refuse it.`;
   if (location.accessMode === "ReadOnly")
     return `${refuses} The views read it ReadOnly: Velero would refuse it until it is ReadWrite.`;
-  if (location.phase !== undefined && location.phase !== "Available")
-    return `${refuses} The views read it ${location.phase}: Velero would refuse it until it is Available.`;
+  // Velero takes a location as Available by its phase alone (util/velero/velero.go L130-L132): one without a phase is
+  // refused.
+  if (location.phase !== "Available")
+    return `${refuses} The views read it ${location.phase ?? "without a phase"}: Velero would refuse it until it is Available.`;
   return refuses;
 }
 
-// What the review of a deletion says beside its text, in the order Velero does it (REQ-280, REQ-283, REQ-284): the one
-// request, and what it is not; the phase of the backup; what Velero deletes, step by step; what it deletes only when
-// nothing failed, and what stays when something did; the location and its refusals; the other requests of the backup
-// it deletes first; the other installations of the location; and that it cannot be undone.
+// What the review of a deletion says beside its text (REQ-280, REQ-283, REQ-284): the one request, and what it is not;
+// the phase of the backup; what Velero deletes, step by step in the order it does it; what it deletes only when nothing
+// failed, and what stays when something did; the location and its refusals, and the other requests of a backup of its
+// name, which Velero checks and deletes before the steps; the other installations of the location; and that it cannot
+// be undone.
 export function deleteMeaning(backup: string, context: DeleteReviewContext = {}): MeaningPart[] {
   const parts: MeaningPart[] = [
     {
@@ -108,7 +119,7 @@ export function deleteMeaning(backup: string, context: DeleteReviewContext = {})
       words: `One DeleteBackupRequest of the backup ${backup}, which Velero processes, and nothing else: no DELETE of the Backup, which would leave its files in the store, from where the sync of the location brings it back.`,
     },
   ];
-  const offered = deleteOffered(context.backupPhase);
+  const offered = deleteOffered(context.backupPhase, context.storageLocation);
 
   if (offered.words) parts.push({ id: "phase", words: offered.words });
   parts.push(
@@ -124,13 +135,20 @@ export function deleteMeaning(backup: string, context: DeleteReviewContext = {})
     },
     { id: "location", words: locationWords(context) },
   );
-  if (context.others !== undefined && context.others > 0)
+  // Velero deletes the other requests of a backup by the label of its name (backup_deletion_controller.go L500-L522).
+  if (context.others === "unread")
+    parts.push({
+      id: "others",
+      words:
+        "Velero deletes every other request to delete a backup of this name before it starts this one: whether there is one could not be read.",
+    });
+  else if (context.others !== undefined && context.others > 0)
     parts.push({
       id: "others",
       words:
         context.others === 1
-          ? "Another request to delete this backup is there: Velero deletes it before it starts this one."
-          : `${context.others} other requests to delete this backup are there: Velero deletes them before it starts this one.`,
+          ? "Another request to delete a backup of this name is there: Velero deletes it before it starts this one."
+          : `${context.others} other requests to delete a backup of this name are there: Velero deletes them before it starts this one.`,
     });
   parts.push(
     {
@@ -166,17 +184,17 @@ export function deletedWords(backup: string, deleted: BackupDeleted): string[] {
         break;
       case "refused":
         end = deleted.phase
-          ? `Velero refused the request, and deleted nothing: the backup ${backup} keeps its phase, ${deleted.phase}. Each error is as Velero wrote it:`
-          : `Velero refused the request, and deleted nothing. Each error is as Velero wrote it:`;
+          ? `Velero refused the request, and deleted nothing of the backup: the backup ${backup} keeps its phase, ${deleted.phase}. Each error is as Velero wrote it:`
+          : `Velero refused the request, and deleted nothing of the backup. Each error is as Velero wrote it:`;
         break;
       case "failed":
         end = `Velero started the deletion of the backup ${backup}, and a step of it failed: the backup stays Deleting, and a new request tries the deletion again. Each error is as Velero wrote it:`;
         break;
       case "in-progress":
-        end = `Velero is deleting the backup ${backup}: the request was InProgress when it was last read. The view of the backup says how it goes.`;
+        end = `Velero is deleting the backup ${backup}: when it was last read, the request was InProgress, or Processed with the backup still there. The view of the backup says how it goes.`;
         break;
       default:
-        end = `Velero has not read the request yet: it had no phase after thirty seconds of reads. The view of the backup says whether Velero deletes it.`;
+        end = `Velero had not started the request when it was last read: it had no phase then. The view of the backup says whether Velero deletes it.`;
     }
   return [
     ...(deleted.requestsUnread ? [BACKUP_DELETE_VIEW_WORDS.unread] : []),
