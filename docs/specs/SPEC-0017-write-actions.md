@@ -633,3 +633,69 @@ What this draft could not verify, and what the implementation establishes first:
   the template, which the mapping of a restore offers as targets.
 - The words of each action, which the lead maintainer judges at the review of the
   milestone.
+
+T4.2, the first of its pull requests, on 2026-11-08: the backup asked from a
+schedule in the main process, with the contract of its write and the words of its
+review, and no surface of the renderer yet. The evidence, by check:
+
+- NOW-01, the unit part: the name the command line proposes, `<schedule>-` and the
+  time in UTC to the second; a name refused empty, at 217 characters, with capitals,
+  and with a `-` or a `.` where a DNS-1123 subdomain has none, each with its words;
+  the schedule of 64 characters refused with the words of the label, in both
+  processes: the reader of the contract and the confirmation
+  (`src/common/backup-from-schedule.test.ts`, `src/common/ipc.test.ts`,
+  `src/main/ipc-backup-now.test.ts`).
+- NOW-02, ACT-08: the builder against eight goldens that `velero backup create
+  <name> --from-schedule <schedule> -o json` of v1.18.4 printed on the kind cluster
+  of the suites, without creating them, from schedules placed there for it: a
+  template with labels, one with an empty map of labels, one without, the labels of
+  the schedule with `velero.io/schedule-name` of another value, its annotations, the
+  owner with `useOwnerReferencesInBackup` true and false, and a resource policy;
+  kept in `test/backup-from-schedule.goldens.json`. No label and no annotation of
+  the extension; a schedule whose UID changed before the confirmation, or whose
+  backup is another one at the run, ends as a conflict, and the adapter is asked no
+  POST (`src/common/backup-from-schedule.test.ts`, `src/main/ipc-backup-now.test.ts`).
+- NOW-03: the words of the review read whole, asked by hand and moving nothing, the
+  queue, the hold of the submissions, a restore from the schedule, the validation at
+  the start, a paused and a refused schedule, the owner, and each label and
+  annotation by its key (`src/common/backup-from-schedule.test.ts`).
+- ACT-02, ACT-03: the confirmation refused with writes off, reading nothing; its
+  answer the text of the backup, which the adapter is asked byte for byte, once;
+  a token that runs only for the name it was confirmed for, and only once; the same
+  request of the same frame joining the run in flight; a request of the contract
+  with a field it does not know refused (`src/main/ipc-backup-now.test.ts`,
+  `src/common/ipc.test.ts`, `src/main/diagnostic-kubernetes.test.ts`).
+- ACT-05, ACT-06, ACT-07, NOW-04: the phase read after the creation, and none after
+  thirty seconds of reads; a backup of that name already there a conflict, the API
+  server refusing the body validation, a schedule gone not-found; a creation with no
+  answer never sent again, and looked for by its name: found as reviewed, not
+  there, and one of that name made before the confirmation, not known to be this
+  one (`src/main/ipc-backup-now.test.ts`).
+
+Each new case was seen failing on a change made on purpose: the text not compared at
+the run, the UID not read at the confirmation, the name of the backup out of the
+signature, any backup of that name taken for the one created, no read after the
+creation, the run in flight not joined, and the labels of the template without the
+label of the schedule.
+
+Decided while implementing, on 2026-11-08:
+
+- The body is the template of the schedule as the API server gives it, with the
+  label of the schedule that the builder of the release also sets in the labels of
+  the template, which the spec holds: the goldens show it. It leaves out what the
+  types of the command line print where the schedule has nothing, the durations of
+  `0s`, the empty objects and a null `apiGroup`, which the release reads as not set;
+  NOW-02 compares the builder with the goldens without them.
+- The text is written with two spaces, the keys of an object first in their usual
+  order, then the others by their characters, so that the same body is the same
+  text whatever the order the API server gave.
+- A 422 of the API server is validation for every write, the DownloadRequests of the
+  tabs included, as the way of a write says: before, it was request-failed.
+- A creation dropped on this side after its request left, by the frame that went or
+  the deadline, is looked for as one with no answer; one dropped before it left
+  sends nothing and says so.
+- What the next pull requests of T4.2 bring: the workspace of the action, the command
+  in the view of a schedule and the words of the gate (REQ-245, REQ-252, REQ-253,
+  NOW-01 and NOW-04 in the renderer); the end kept for the cluster and said in the
+  target bar (REQ-250); the packaged suites and the end to end proof (ACT-11,
+  NOW-05).

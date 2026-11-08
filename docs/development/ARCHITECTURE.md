@@ -806,6 +806,12 @@ refuses one that is not there, not connected, or whose kubeconfig path or contex
 name changed since writes were turned on, before anything is sent; it reads the
 entry again once the cluster answered, and drops the answer of a cluster that
 changed meanwhile. It validates exact namespace/name plus UID presence on reads.
+Since the first pull request of T4.2 of
+[SPEC-0017](../specs/SPEC-0017-write-actions.md) it reads a Schedule and creates a
+Backup asked from it, from the text the review showed, sent byte for byte, which it
+refuses before anything leaves when the text is not a Backup of the namespace with
+a name a backup may have; a 422 of the API server is a refusal of the content, said
+as validation, for every write.
 
 A creation that got no answer, from a fetch that failed, the deadline, an answer
 that cannot be read or is too large, or a 5xx, is an unknown submission, never an

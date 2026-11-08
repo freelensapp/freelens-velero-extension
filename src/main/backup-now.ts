@@ -89,7 +89,7 @@ export async function confirmBackupNow(
 ): Promise<Answer<WriteConfirmAnswer>> {
   const { target, backup } = request;
 
-  if (!target || target.kind !== "Schedule" || !backup)
+  if (target?.kind !== "Schedule" || !backup)
     return failure("validation", "request", false, BACKUP_NOW_WORDS.notASchedule);
   const refused = scheduleRefused(target.name);
 
@@ -195,7 +195,7 @@ export async function runBackupNow(
 ): Promise<Answer<BackupCreated>> {
   const { target, backup } = request;
 
-  if (!target || target.kind !== "Schedule" || !backup)
+  if (target?.kind !== "Schedule" || !backup)
     return failure("validation", "request", false, BACKUP_NOW_WORDS.notASchedule);
   const taken = dependencies.gate.take(
     sender,

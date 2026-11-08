@@ -402,6 +402,19 @@ describe the client of the extension that SPEC-0015 removed, and are kept as the
 record of this spec. The header and the evidence of this spec move to Freelens v2
 with T0.8.
 
+### 2026-11-08: The Text Of A Body (T4.2 Of SPEC-0017)
+
+As the table of the amendments of
+[SPEC-0017](SPEC-0017-write-actions.md#the-amendments-the-slices-bring) says, approved
+with it: `write.confirm` answers, for a write whose body the review shows, the text
+of that body beside the token and its expiry, written once by the main process, and
+the run of that write carries the token and the identifier of the request, and
+nothing of the body: the main process sends the text it kept with the token. A
+confirmation is for its kind, its namespace, its target and, for a backup asked from
+a schedule, the name of the backup, and its token runs for nothing else. The first
+kind of a body is `backup-from-schedule`, with the first pull request of T4.2; the
+rest of this spec is read with the amendment, and is not changed by it.
+
 GATE-08, as restated, is proven by the case of the suite of the tabs that loads the
 log of the backup of the demo through the tunnel for an identity whose token an
 `exec` plugin gives, in
