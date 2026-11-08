@@ -813,7 +813,14 @@ refuses before anything leaves when the text is not a Backup of the namespace wi
 a name the form of the backup takes; a 422 of the API server is a refusal of the
 content, said as validation, for every write, and told from what the adapter
 refuses to send by itself. A creation the cluster answered while its entry changed
-is said apart, since it may have been made.
+is said apart, since it may have been made. Since the first pull request of T4.5 it
+patches a Schedule, to pause it or to resume it, with the text the review showed,
+sent byte for byte with the method in capitals and the media type of a JSON patch,
+never the strategic merge patch of the host: the text is exactly the patch of a pause,
+a test of the UID and an add of `spec.paused`, or of a resume, the tests of the UID,
+of `spec.paused` and of the expression, a replace of `spec.paused` and an add of
+`spec.skipImmediately`, or nothing leaves. A patch whose answer is lost is not known,
+as a creation is.
 
 A creation that got no answer, from a fetch that failed, the deadline, an answer
 that cannot be read or is too large, or a 5xx, is an unknown submission, never an
@@ -922,8 +929,12 @@ Schedule of the form, its name and namespace its only metadata, whose confirmati
 reads the locations of its template the same way; since the first pull request of
 T4.4 a Restore of a backup, its name and namespace its only metadata, whose
 confirmation and run read the backup by its name, and run only when the name of the
-backup the operator typed is the one of the review; each action of SPEC-0017 adds its
-kind with its slice. The creations share one course in the main process,
+backup the operator typed is the one of the review; since the first pull request of
+T4.5 the pause and the resume of a Schedule, a JSON patch whose tests are the check of
+what the review read, the schedule read once after it and checked against what the
+patch wrote, after a 422 to say whether it changed since the review, and after an
+answer that was lost to say what it holds of the patch; each action of SPEC-0017 adds
+its kind with its slice. The creations share one course in the main process,
 [`creation.ts`](../../src/main/creation.ts): the POST of the text kept, the reads
 after it until Velero writes a phase, and, when the answer is not known, the look for
 the object by its name, with the rule and the words of each kind.

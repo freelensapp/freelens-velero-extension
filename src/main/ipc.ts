@@ -52,12 +52,13 @@ import { KubectlTunnels, type Spawn, type TunnelHost } from "./diagnostic-tunnel
 import { KeptEnds } from "./kept-ends";
 import { confirmRestoreCreate, runRestoreCreate } from "./restore-create";
 import { confirmScheduleCreate, runScheduleCreate } from "./schedule-create";
+import { confirmSchedulePatch, runSchedulePatch } from "./schedule-patch";
 import { readServerStatus, serverStatusFailure } from "./server-status";
 import { signatureOf, WriteGate } from "./write-gate";
 
 import type { IpcMainInvokeEvent } from "electron";
 
-import type { Created } from "./creation";
+import type { Done } from "./creation";
 
 // What a handler reads of the event the host gives it, with the types Electron gives them: the frame that
 // sent the request, by its address, and the identifiers of its process and of the frame, which tell the
@@ -254,10 +255,14 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
   // The ends of the writes whose request was sent, for their cluster (SPEC-0017, REQ-250).
   const kept = new KeptEnds();
   // What a kept end says: what to look for, in which namespace of which context, and how it ended.
-  const keptEnd = (request: WriteRunRequest, end: Answer<Created>, context: string): KeptEnd => ({
+  const keptEnd = (request: WriteRunRequest, end: Answer<Done>, context: string): KeptEnd => ({
     request: request.request,
     kind:
-      request.kind === "schedule" || request.kind === "backup" || request.kind === "restore"
+      request.kind === "schedule" ||
+      request.kind === "backup" ||
+      request.kind === "restore" ||
+      request.kind === "schedule-pause" ||
+      request.kind === "schedule-resume"
         ? request.kind
         : "backup-from-schedule",
     namespace: request.namespace,
@@ -265,26 +270,36 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
     // have now.
     context: context || request.cluster,
     name: String(
-      request.kind === "schedule" ? request.schedule : request.kind === "restore" ? request.restore : request.backup,
+      request.kind === "schedule"
+        ? request.schedule
+        : request.kind === "restore"
+          ? request.restore
+          : request.kind === "schedule-pause" || request.kind === "schedule-resume"
+            ? request.target?.name
+            : request.backup,
     ),
     // A backup asked from a schedule names it, and a restore its backup; a backup or a schedule of the form names none.
     ...(request.kind === "backup-from-schedule" ? { schedule: request.target?.name ?? "" } : {}),
     ...(request.kind === "restore" ? { backup: request.target?.name ?? "" } : {}),
-    outcome: end.ok
-      ? {
-          created: true,
-          ...(end.value.phase ? { phase: end.value.phase } : {}),
-          ...(end.value.found ? { found: true } : {}),
-          ...("paused" in end.value && end.value.paused ? { paused: true } : {}),
-        }
-      : { created: false, code: end.code, text: end.text },
+    // A patch applied says nothing more than whether it was read so after an answer that was lost: the kind says what
+    // it did.
+    outcome: !end.ok
+      ? { created: false, code: end.code, text: end.text }
+      : request.kind === "schedule-pause" || request.kind === "schedule-resume"
+        ? { created: true, ...("found" in end.value && end.value.found ? { found: true } : {}) }
+        : {
+            created: true,
+            ...("phase" in end.value && end.value.phase ? { phase: end.value.phase } : {}),
+            ...("found" in end.value && end.value.found ? { found: true } : {}),
+            ...("paused" in end.value && end.value.paused ? { paused: true } : {}),
+          },
     at: dependencies.now?.() ?? Date.now(),
   });
   // The writes of the actions of SPEC-0017 read the cluster before they confirm, and wait between their reads.
   const actions = {
     gate,
     now: () => dependencies.now?.() ?? Date.now(),
-    keep: (request: WriteRunRequest, end: Answer<Created>, context: string) =>
+    keep: (request: WriteRunRequest, end: Answer<Done>, context: string) =>
       kept.keep(request.cluster, keptEnd(request, end, context)),
     sleep:
       dependencies.sleep ??
@@ -304,6 +319,8 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
   };
 
   procedure(CHANNELS.writeConfirm, readWriteConfirmRequest, async (sender, request, still) => {
+    if (request.kind === "schedule-pause" || request.kind === "schedule-resume")
+      return confirmSchedulePatch(actions, sender.key, request, new AbortController().signal);
     if (
       request.kind !== "backup-from-schedule" &&
       request.kind !== "backup" &&
@@ -519,12 +536,13 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
     }
   };
 
-  // The creations that run, of a backup asked from a schedule or with the form, of a schedule of the form, or of a
-  // restore, by their cluster and the identifier of their request: the same request of the same frame, sent again while
-  // it runs, joins it and creates nothing (SPEC-0017, REQ-249; SPEC-0016, REQ-239).
-  const backupsNow = new Map<string, { fingerprint: string; promise: Promise<Answer<Created>> }>();
+  // The writes of the actions that run, the creations of a backup asked from a schedule or with the form, of a schedule
+  // of the form and of a restore, and the pause and the resume of a schedule, by their cluster and the identifier of
+  // their request: the same request of the same frame, sent again while it runs, joins it and writes nothing more
+  // (SPEC-0017, REQ-249; SPEC-0016, REQ-239).
+  const backupsNow = new Map<string, { fingerprint: string; promise: Promise<Answer<Done>> }>();
 
-  procedure<WriteRunRequest, ServerStatusValue | ArtifactValue | Created>(
+  procedure<WriteRunRequest, ServerStatusValue | ArtifactValue | Done>(
     CHANNELS.writeRun,
     readWriteRunRequest,
     (sender, request, still) => {
@@ -533,9 +551,12 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
         request.kind === "backup-from-schedule" ||
         request.kind === "backup" ||
         request.kind === "schedule" ||
-        request.kind === "restore"
+        request.kind === "restore" ||
+        request.kind === "schedule-pause" ||
+        request.kind === "schedule-resume"
       ) {
         const key = `${request.cluster}/${request.request}`;
+        const patch = request.kind === "schedule-pause" || request.kind === "schedule-resume";
         const fingerprint = JSON.stringify([
           sender.key,
           signatureOf(
@@ -555,15 +576,17 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
           return running.fingerprint === fingerprint
             ? running.promise
             : failure("forbidden", "request", false, "No write of this frame has this identifier.");
-        const run: typeof runBackupNow | typeof runScheduleCreate | typeof runRestoreCreate =
-          request.kind === "schedule"
-            ? runScheduleCreate
-            : request.kind === "restore"
-              ? runRestoreCreate
-              : request.kind === "backup"
-                ? runBackupCreate
-                : runBackupNow;
-        const promise: Promise<Answer<Created>> = run(
+        const run: typeof runBackupNow | typeof runScheduleCreate | typeof runRestoreCreate | typeof runSchedulePatch =
+          patch
+            ? runSchedulePatch
+            : request.kind === "schedule"
+              ? runScheduleCreate
+              : request.kind === "restore"
+                ? runRestoreCreate
+                : request.kind === "backup"
+                  ? runBackupCreate
+                  : runBackupNow;
+        const promise: Promise<Answer<Done>> = run(
           actions,
           sender.key,
           request,
