@@ -32,6 +32,7 @@ import {
   assertFixtureNamespaceContents,
   assertFixtureOperationsRemoved,
   assertMaintenanceAhead,
+  awaitRealSchedule,
   awaitRequestsBeforeCleanup,
   awaitRequestsRemoved,
   awaitVolumeOperationsRemoved,
@@ -49,6 +50,7 @@ import {
   liveBackup,
   placeAdherenceFixtures,
   placementWords,
+  placeRealSchedule,
   placeRefusedFixtures,
   placeViewAndTabFixtures,
   proofIdentities,
@@ -2274,7 +2276,12 @@ async function runTransportProof(): Promise<void> {
     // the way the bytes would have come by.
     const http = await runDownloadProof({ ...proofContext, refused });
     // Back up now, end to end, with the server of the release: the backup of the real schedule of the run ends
-    // Completed and is deleted through a DeleteBackupRequest the server processes (SPEC-0017, ACT-11).
+    // Completed and is deleted through a DeleteBackupRequest the server processes (SPEC-0017, ACT-11). The schedule is
+    // placed for this run, once the controller validated it, and goes with the run.
+    const runtime = fixtureRuntime();
+
+    placeRealSchedule(runtime, active.id);
+    awaitRealSchedule(runtime, active.id);
     const backupNow = await runBackupNowProof(proofContext);
 
     report.backupNow = backupNow;
