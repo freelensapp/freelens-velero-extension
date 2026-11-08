@@ -146,7 +146,7 @@ import {
 } from "./local-platform.mts";
 import { runRestoreCreateProof } from "./local-restore-proof.mts";
 import { type RunJournal, type StoreReach, storeRequest, tabRecord } from "./local-runtime.mts";
-import { runScheduleCreateProof } from "./local-schedule-proof.mts";
+import { runScheduleCreateProof, runSchedulePatchProof } from "./local-schedule-proof.mts";
 import { assertOfficialImages } from "./local-security.mts";
 
 import type { ProofShell } from "./local-host.mts";
@@ -2298,6 +2298,11 @@ async function runTransportProof(): Promise<void> {
     // mapping through the procedures of the compiled main process, with the name of the backup typed, Completed with
     // every ConfigMap of the run, and removed with that namespace.
     report.restoreCreate = await runRestoreCreateProof(proofContext);
+    // Pause and resume, end to end, with the controller of the release (SPEC-0017, PAUSE-04): two schedules paused
+    // through an instant submit nothing; resumed, one submits its backup at once and the other skips it with the time
+    // Velero writes; a resume whose schedule changed since its review is refused by the API server with 422, which its
+    // metrics count, as a conflict. Each is removed with the backup of the first.
+    report.schedulePatch = await runSchedulePatchProof(proofContext);
 
     requireCondition(
       http.missingArtifacts === 2 && http.refusedBeforeCreation,
