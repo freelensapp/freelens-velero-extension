@@ -108,10 +108,24 @@ describe("the parts of the views a run takes", () => {
       "src/common/backup-now-words.ts",
       "src/common/kept-end-words.ts",
       "src/common/schedule-history.ts",
+      "src/renderer/pages/backup-create-workspace.tsx",
+      "src/renderer/components/backup-template-form.tsx",
+      "src/common/backup-create-words.ts",
+      "src/common/backup-form.ts",
+      "src/common/backup-template.ts",
+      "src/common/label-selector.ts",
+      "src/common/go-duration.ts",
+      "src/renderer/pages/backups-page.tsx",
       "e2e/__tests__/velero-e2e-actions.tests.ts",
     ]) {
       expect([file, partsToRun(definition, [file])]).toEqual([file, [...statics, "actions"]]);
     }
+    // The page of a list, which the pre-review looks at, and which holds the command of the backup of the form.
+    expect(partsToRun(definition, ["src/renderer/components/family-page.tsx"])).toEqual([
+      "pre-review",
+      ...statics,
+      "actions",
+    ]);
     // The views of a page, which the reads of the suites with a server name as well.
     expect(partsToRun(definition, ["src/common/views.ts"])).toEqual(["volumes-and-server", ...statics, "actions"]);
     expect(partsToRun(definition, ["src/renderer/components/write-confirmation.tsx"])).toEqual([
