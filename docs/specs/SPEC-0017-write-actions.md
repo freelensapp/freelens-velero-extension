@@ -916,3 +916,47 @@ Decided while implementing, on 2026-11-08:
   each end of a list on their own, and leave out one they cannot read.
 - What remains of T4.2: the packaged suites and the end to end proof (ACT-11,
   NOW-05), and the pre-review of the workspace (ACT-10).
+
+T4.2, the fourth and last of its pull requests, on 2026-11-08: the proof in the packaged
+application, on the CRDs of the release alone, and end to end with the server of the
+release. The evidence, by check:
+
+- ACT-11, on the CRDs alone, in the suite of the actions,
+  [`velero-e2e-actions.tests.ts`](../../e2e/__tests__/velero-e2e-actions.tests.ts), in a
+  part of the views of its own: with writes off the command fills the form and writes
+  nothing, Enter asking no review; a review left by Escape or by its command writes
+  nothing; a review confirmed is exactly one POST of a Backup, answered 201, and no other
+  write of any kind of Velero, with every field of the text the review showed the same in
+  the object read; the reader of a part, as a second entry of the catalog, is shown the
+  review and refused at the creation, with the words of what it may not do, writes left
+  on and nothing written; once the suite removed the backup it created, the objects of
+  Velero are as they were.
+- NOW-04: a name already taken is a POST answered 409, said with the words of the main
+  process, with the way to the backup that has it and the name of the next second.
+- NOW-05: the result says that Velero has not read the backup after thirty seconds of
+  reads, since no controller runs; the way to its view takes the place of the workspace;
+  the history of the schedule lists it at the next read. The risk to the offset of
+  SPEC-0013 is proven at the unit layer, by the second pull request: no suite can create
+  a backup within the minute of a submission the fixtures wrote before it.
+- ACT-10: the form and the review with the longest name a schedule may have, in both
+  themes, at 1440 by 900, at 900 by 650 and at twice the zoom, with nothing over something
+  else, wider than its room or cut, twelve reviews and nothing written; the screenshots
+  are among the reports of the part.
+- ACT-11, end to end: the transport proof of `pnpm e2e` asks a backup of the real schedule
+  of the run through the procedures of the compiled main process, as a frame does, with
+  the server of the release running: the backup ends Completed, carries the labels of the
+  text of its confirmation and of the schedule, and is deleted through a
+  DeleteBackupRequest the server processes; a backup the proof created is removed whatever
+  ended it ([`local-backup-now-proof.mts`](../../e2e/scripts/local-backup-now-proof.mts)).
+
+Decided while implementing, on 2026-11-08:
+
+- The suite of the actions runs in a part of its own on the CRDs alone, which the files
+  of the actions reach, so that the parts of the static views keep their time; each
+  action of SPEC-0017 adds its cases to it with its slice.
+- The words of the workspace are in a module of their own in `src/common`, which the
+  suite reads, as the suites read the words of the other views.
+- The suite removes the backup it created by its name and its UID, with the one helper
+  that deletes a backup on the CRDs alone, where no controller holds it.
+
+With this pull request T4.2 is done.

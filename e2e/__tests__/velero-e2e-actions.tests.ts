@@ -11,6 +11,8 @@
 // themes, at every size and at twice the zoom, with the longest name a schedule may have (ACT-10). What the suite
 // created it removes, and the objects of Velero are as they were.
 
+import { readFile, writeFile } from "node:fs/promises";
+import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as cluster from "../../integration/helpers/velero-cluster";
 import * as velero from "../../integration/helpers/velero-extension";
@@ -33,6 +35,8 @@ const SIZES = [
 ];
 // How long what must not happen is waited for.
 const NOTHING = 1500;
+// The context of the reader of a part, as a second entry of the catalog.
+const SECOND_CONTEXT = "velero-e2e-reader";
 const part = (id: string) => `[data-testid=velero-backup-now-${id}]`;
 // The field of the name: the host gives its own element the identifier, or the input in it.
 const FIELD = `${part("field")} input, input${part("field")}`;
@@ -60,6 +64,7 @@ function read<Value>(resource: string, name: string, namespace: string): Value {
 describe("the actions of Velero, on the CRDs of the release alone", () => {
   let started: velero.StartedApplication | undefined;
   let frame: Frame;
+  let kubeconfig = "";
   const errors = velero.createErrorCollector();
   let before: cluster.ClusterSnapshot;
   // What the suite created, to remove it.
@@ -73,9 +78,10 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
     await dialog.locator("[data-testid=confirm]").click();
     await frame.waitForSelector("[data-testid=velero-writes][data-writes=on]", { timeout: 60_000 });
   };
-  const backUpNow = async (namespace: string, schedule: string) => {
+  // The installations of the adherence hold no storage location: the operator names them, and the others are chosen.
+  const backUpNow = async (namespace: string, schedule: string, choose = cluster.selectInstallation) => {
     await cluster.openPage(frame, SCHEDULES);
-    await cluster.selectInstallation(frame, namespace);
+    await choose(frame, namespace);
     await cluster.waitForList(frame, SCHEDULES);
     await cluster.openWorkspace(frame, schedule, SCHEDULES);
     await frame.click("[data-testid=velero-schedule-back-up-now]");
@@ -91,7 +97,6 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
     }
     before = cluster.clusterSnapshot();
     errors.start();
-    let kubeconfig = "";
 
     // The kubeconfig is in the profile before the install is asked, for each start of the application.
     started = await velero.startWithExtension(async () => {
@@ -189,8 +194,10 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
 
       created.push({ namespace: cluster.E2E_VIEWS_NAMESPACE, name, uid: backup.metadata.uid });
       expect(await cluster.wordsOf(frame, part("phase"))).toBe(BACKUP_NOW_VIEW_WORDS.unread);
-      // One POST of a Backup, and no other write of any kind of Velero.
-      expect(cluster.counted(codes, cluster.requestCodes("backups"))).toEqual({ "POST 201": 1 });
+      // One POST of a Backup, and no other write of any kind of Velero. The result read the backup every second.
+      const { "GET 200": _reads, ...asked } = cluster.counted(codes, cluster.requestCodes("backups"));
+
+      expect(asked).toEqual({ "POST 201": 1 });
       const written = writesSince(earlier);
 
       expect([Object.keys(written).length, Object.values(written)]).toEqual([1, [1]]);
@@ -246,12 +253,77 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
       expect(proposed).toMatch(new RegExp(`^${SCHEDULE}-\\d{14}$`));
       expect(proposed).not.toBe(backup.name);
       expect(await frame.locator(`[data-testid="velero-open-backup-${backup.name}"]`).count()).toBe(1);
-      expect(cluster.counted(codes, cluster.requestCodes("backups"))).toEqual({ "POST 409": 1 });
+      const { "GET 200": _reads, ...asked } = cluster.counted(codes, cluster.requestCodes("backups"));
+
+      expect(asked).toEqual({ "POST 409": 1 });
       // The backup that has the name is as it was.
       expect(read<BackupRead>("backups.velero.io", backup.name, cluster.E2E_VIEWS_NAMESPACE).metadata.uid).toBe(
         backup.uid,
       );
       await cluster.closeWorkspace(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "refuses the reader of a part at the creation, with the words of what it may not do, writes left on and nothing written",
+    async () => {
+      if (!started) throw new Error("The application is not running");
+      const running = started;
+      // A second entry of the catalog: the same cluster through the kubeconfig of the reader of a part, which may read
+      // the backups, the schedules and the storage locations of the namespace of the views, and create nothing. Its
+      // context is renamed: the catalog tells the two entries apart by it.
+      const source = JSON.parse(await readFile(cluster.readerKubeconfigPath(), "utf8")) as {
+        contexts?: { name: string }[];
+        "current-context"?: string;
+      };
+
+      for (const context of source.contexts ?? []) context.name = SECOND_CONTEXT;
+      source["current-context"] = SECOND_CONTEXT;
+      const renamed = path.join(running.directory, "reader-kubeconfig.json");
+
+      await writeFile(renamed, JSON.stringify(source), { mode: 0o600 });
+      const second = await cluster.publishKubeconfig(renamed, "velero-e2e-reader");
+      const earlier = cluster.apiRequests();
+      const name = `${SCHEDULE}-of-the-reader`;
+
+      try {
+        await velero.navigateToCatalog(running.app);
+        await running.window.waitForSelector(`div.TableCell >> text='${SECOND_CONTEXT}'`, { timeout: 60_000 });
+        const other = await cluster.openClusterFromCatalog(running.window, second, SECOND_CONTEXT);
+
+        await cluster.openPage(other, SCHEDULES);
+        await cluster.configureInstallation(other, cluster.E2E_VIEWS_NAMESPACE);
+        await cluster.waitForList(other, SCHEDULES);
+        await cluster.openWorkspace(other, SCHEDULE, SCHEDULES);
+        await other.click("[data-testid=velero-schedule-back-up-now]");
+        await other.waitForSelector("[data-testid=velero-backup-now-workspace]", { timeout: 30_000 });
+        await other.waitForSelector("[data-testid=velero-writes-on]", { timeout: 60_000 });
+        await cluster.turnWritesOn(other);
+        await other.locator(FIELD).first().fill(name);
+        // The reads of the review are the reader's own: the schedule is read, and the review shown.
+        await other.click(part("ask"));
+        await other.waitForSelector(part("review"), { timeout: 30_000 });
+        await other.click(part("create"));
+        await other.waitForSelector(part("failure"), { timeout: 60_000 });
+        expect([
+          await other.locator(part("failure")).getAttribute("data-code"),
+          await other.locator(part("failure")).getAttribute("data-stage"),
+          await cluster.wordsOf(other, part("failure-text")),
+        ]).toEqual(["forbidden", "creation", BACKUP_NOW_WORDS.forbiddenCreate(cluster.E2E_VIEWS_NAMESPACE)]);
+        // The refusal is of the cluster, not of the gate: writes stay on, and nothing is in the namespace.
+        await other.waitForTimeout(NOTHING);
+        expect(await cluster.writesState(other)).toBe("on");
+        expect(
+          cluster.kubectlE2E("get", "backups.velero.io", name, "--namespace", cluster.E2E_VIEWS_NAMESPACE).status,
+        ).not.toBe(0);
+        expect(writesSince(earlier)).toEqual({});
+        expect(await cluster.layoutProblems(other, SCHEDULES)).toEqual([]);
+      } finally {
+        // The cases after this one look at the first entry of the catalog, which is shown again.
+        await velero.navigateToCatalog(running.app);
+        frame = await cluster.openClusterFromCatalog(running.window, kubeconfig);
+      }
     },
     TIMEOUT,
   );
@@ -264,7 +336,7 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
       const screenshots: string[] = [];
       const earlier = cluster.apiRequests();
 
-      await backUpNow(cluster.E2E_ADHERENCE_NAMESPACE, LONG);
+      await backUpNow(cluster.E2E_ADHERENCE_NAMESPACE, LONG, cluster.configureInstallation);
       await writesOn();
       for (const theme of THEMES) {
         await velero.setColorTheme(started.app, started.window, theme);

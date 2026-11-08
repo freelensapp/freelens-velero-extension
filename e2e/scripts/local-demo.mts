@@ -26,6 +26,7 @@ import { promisify } from "node:util";
 import { gunzipSync } from "node:zlib";
 import { createTlsFixture } from "../../test/tls-fixture.ts";
 import { tabArtifacts, tabExpectations } from "./local-artifacts.mts";
+import { runBackupNowProof } from "./local-backup-now-proof.mts";
 import { DIRECT_PROOF_ORIGIN, runDownloadProof, runIdentityProof, tlsProofResources } from "./local-download-proof.mts";
 import {
   assertFixtureNamespaceContents,
@@ -2272,6 +2273,11 @@ async function runTransportProof(): Promise<void> {
     // Asked once, through the tunnel over HTTP: what the store and the server answer does not depend on
     // the way the bytes would have come by.
     const http = await runDownloadProof({ ...proofContext, refused });
+    // Back up now, end to end, with the server of the release: the backup of the real schedule of the run ends
+    // Completed and is deleted through a DeleteBackupRequest the server processes (SPEC-0017, ACT-11).
+    const backupNow = await runBackupNowProof(proofContext);
+
+    report.backupNow = backupNow;
 
     requireCondition(
       http.missingArtifacts === 2 && http.refusedBeforeCreation,
