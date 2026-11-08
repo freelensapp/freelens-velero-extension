@@ -26,11 +26,13 @@ import { promisify } from "node:util";
 import { gunzipSync } from "node:zlib";
 import { createTlsFixture } from "../../test/tls-fixture.ts";
 import { tabArtifacts, tabExpectations } from "./local-artifacts.mts";
+import { runBackupNowProof } from "./local-backup-now-proof.mts";
 import { DIRECT_PROOF_ORIGIN, runDownloadProof, runIdentityProof, tlsProofResources } from "./local-download-proof.mts";
 import {
   assertFixtureNamespaceContents,
   assertFixtureOperationsRemoved,
   assertMaintenanceAhead,
+  awaitRealSchedule,
   awaitRequestsBeforeCleanup,
   awaitRequestsRemoved,
   awaitVolumeOperationsRemoved,
@@ -48,6 +50,7 @@ import {
   liveBackup,
   placeAdherenceFixtures,
   placementWords,
+  placeRealSchedule,
   placeRefusedFixtures,
   placeViewAndTabFixtures,
   proofIdentities,
@@ -2272,6 +2275,16 @@ async function runTransportProof(): Promise<void> {
     // Asked once, through the tunnel over HTTP: what the store and the server answer does not depend on
     // the way the bytes would have come by.
     const http = await runDownloadProof({ ...proofContext, refused });
+    // Back up now, end to end, with the server of the release: the backup of the real schedule of the run ends
+    // Completed and is deleted through a DeleteBackupRequest the server processes (SPEC-0017, ACT-11). The schedule is
+    // placed for this run, once the controller validated it, and goes with the run.
+    const runtime = fixtureRuntime();
+
+    placeRealSchedule(runtime, active.id);
+    awaitRealSchedule(runtime, active.id);
+    const backupNow = await runBackupNowProof(proofContext);
+
+    report.backupNow = backupNow;
 
     requireCondition(
       http.missingArtifacts === 2 && http.refusedBeforeCreation,
@@ -2406,7 +2419,7 @@ async function runTransportProof(): Promise<void> {
     });
     writeFileSync(join(STATE, "transport-proof.json"), JSON.stringify(report), { mode: 0o600 });
     console.log(
-      "PASS: compiled main found its route and downloaded 16 real artifacts through direct HTTPS, once the private address was allowed, and HTTP/HTTPS Kubernetes tunnels, with inline/referenced CA and negative signature/Host/CA checks; the store had no log for a backup and a restore that failed their validation, and no request was created for a restore without a backup; three identities were refused, at the creation, at the Service and the certificate, and at the port-forward, and the one with the documented permissions downloaded.",
+      "PASS: compiled main found its route and downloaded 16 real artifacts through direct HTTPS, once the private address was allowed, and HTTP/HTTPS Kubernetes tunnels, with inline/referenced CA and negative signature/Host/CA checks; the store had no log for a backup and a restore that failed their validation, and no request was created for a restore without a backup; three identities were refused, at the creation, at the Service and the certificate, and at the port-forward, and the one with the documented permissions downloaded; Back up now asked a backup of the real schedule through the compiled main process, which the server Completed with the labels of its text and deleted through a DeleteBackupRequest.",
     );
   } finally {
     // The location goes back once the store serves again, as above.
