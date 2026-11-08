@@ -5,19 +5,21 @@
 
 // The actions of SPEC-0017 in a packaged Freelens, on the CRDs of the release alone, where no controller runs
 // (REQ-254, ACT-11): Back up now from the view of a schedule (T4.2), Create backup from the list of the Backups (T4.3),
-// Create schedule of SPEC-0016 from the list of the Schedules (T4.7, REQ-241), and Restore from the view of a backup or
-// of a schedule (T4.4). With writes off the command writes nothing; a review that is not confirmed, nothing; a
-// confirmed one, exactly one POST of the object, whose every field is the one of the text the review showed, and no
-// other write. The backup stays without a phase, as the result says, and the view of the schedule lists it at its next
-// read (NOW-05). A name already taken is a conflict (NOW-04). The reader of a part is refused at the creation. What the
-// suite created it removes, and the objects of Velero are as they were. The workspace in both themes, at every size and
-// with the keyboard alone, is in the pre-review (ACT-10).
+// Create schedule of SPEC-0016 from the list of the Schedules (T4.7, REQ-241), Restore from the view of a backup or of a
+// schedule (T4.4), and Pause and Resume from the view of a schedule (T4.5, PAUSE-04). With writes off the command
+// writes nothing; a review that is not confirmed, nothing; a confirmed one, exactly one POST of the object, whose every
+// field is the one of the text the review showed, or one PATCH of the schedule, the text of the review, and no other
+// write. The backup stays without a phase, as the result says, and the view of the schedule lists it at its next read
+// (NOW-05). A name already taken is a conflict (NOW-04). The reader of a part is refused at the creation and at the
+// patch. What the suite created it removes, and the objects of Velero are as they were. The workspace in both themes,
+// at every size and with the keyboard alone, is in the pre-review (ACT-10).
 
 import { readFile, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as cluster from "../../integration/helpers/velero-cluster";
 import * as velero from "../../integration/helpers/velero-extension";
+import { writesOf } from "../../integration/helpers/velero-guard";
 import { BACKUP_CREATE_VIEW_WORDS } from "../../src/common/backup-create-words";
 import { backupFromForm, formBodyText } from "../../src/common/backup-form";
 import { backupFromSchedule, bodyText } from "../../src/common/backup-from-schedule";
@@ -26,9 +28,12 @@ import { backupOffered, RESTORE_CREATE_VIEW_WORDS, restoreResultWords } from "..
 import { type RestoreForm, restoreBodyText, restoreFromForm } from "../../src/common/restore-form";
 import { scheduleResultWords } from "../../src/common/schedule-create-words";
 import { scheduleBodyText, scheduleFromForm } from "../../src/common/schedule-form";
+import { patchText, pausePatch, resumePatch } from "../../src/common/schedule-patch";
+import { SCHEDULE_PATCH_VIEW_WORDS } from "../../src/common/schedule-patch-words";
 import { BACKUP_NOW_WORDS } from "../../src/main/backup-now";
 import { RESTORE_CREATE_WORDS } from "../../src/main/restore-create";
 import { SCHEDULE_CREATE_WORDS } from "../../src/main/schedule-create";
+import { SCHEDULE_PATCH_WORDS } from "../../src/main/schedule-patch";
 
 import type { Frame } from "playwright";
 
@@ -49,6 +54,8 @@ const formField = (id: string) => `${create(id)} input, input${create(id)}`;
 // The parts of the workspace of the schedule of the form, and a field of it.
 const newSchedule = (id: string) => `[data-testid=velero-schedule-create-${id}]`;
 const scheduleField = (id: string) => `${newSchedule(id)} input, input${newSchedule(id)}`;
+// The parts of the workspace of a pause and of a resume.
+const patch = (id: string) => `[data-testid=velero-schedule-patch-${id}]`;
 // The schedule of the form the suite creates: its expression names its zone, and has no instant before the suite ends.
 const SCHEDULE_FORM = { expression: "CRON_TZ=Europe/Rome 0 3 * * *", template: { storageLocation: "views-available" } };
 // A choice of the form: the host gives the identifier to its input, and the class Select to the element around it,
@@ -76,6 +83,11 @@ interface BackupRead {
   };
   spec?: unknown;
   status?: { phase?: string };
+}
+
+interface ScheduleRead {
+  metadata: { name: string; uid: string; resourceVersion: string };
+  spec: Record<string, unknown>;
 }
 
 function read<Value>(resource: string, name: string, namespace: string): Value {
@@ -146,6 +158,18 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
   const nameInField = () => frame.locator(FIELD).first().inputValue();
   // The writes of the kinds of Velero since a reading of the counters, whoever made them.
   const writesSince = (earlier: Record<string, number>) => cluster.writes(earlier, cluster.apiRequests());
+  // The same, each PATCH of a schedule counted: on the CRDs alone no controller patches one, and a PATCH of one is the
+  // suite's. The PATCH of the storage location that the runner sends once a minute, in place of the server, is left out
+  // as the guard of the suites leaves it out.
+  const everyWrite = (earlier: Record<string, number>) =>
+    writesOf(cluster.counted(earlier, cluster.apiRequests()), false, 0);
+  // The codes of the writes of the schedules since a reading, each one counted.
+  const scheduleCodes = (codes: Record<string, number>) =>
+    Object.fromEntries(
+      Object.entries(cluster.counted(codes, cluster.requestCodes("schedules"))).filter(
+        ([key]) => !key.startsWith("GET "),
+      ),
+    );
 
   beforeAll(async () => {
     if (!cluster.fixturesReady()) {
@@ -716,6 +740,109 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
   );
 
   it(
+    "offers Pause in the view of the schedule of the form, which is not paused, over the view and named in the address, and with writes off writes nothing",
+    async () => {
+      const name = `${FORM}-schedule`;
+
+      // Writes are on, as the case before left them.
+      await frame.waitForSelector("[data-testid=velero-writes][data-writes=on]", { timeout: 60_000 });
+      const earlier = cluster.apiRequests();
+
+      await cluster.openPage(frame, SCHEDULES);
+      await cluster.waitForList(frame, SCHEDULES);
+      await cluster.openWorkspace(frame, name, SCHEDULES);
+      expect(await frame.locator("[data-testid=velero-schedule-resume]").count()).toBe(0);
+      await frame.click("[data-testid=velero-schedule-pause]");
+      await frame.waitForSelector("[data-testid=velero-schedule-pause-workspace]", { timeout: 30_000 });
+      expect(await cluster.addressViews(frame)).toEqual([`schedule/${name}`, `schedule-pause/${name}`]);
+      await frame.click("[data-testid=velero-writes-off]");
+      await frame.waitForSelector("[data-testid=velero-writes][data-writes=off]", { timeout: 60_000 });
+      expect(await frame.locator(patch("writes-off")).count()).toBe(1);
+      expect(await frame.locator(patch("ask")).count()).toBe(0);
+      await frame.waitForTimeout(NOTHING);
+      expect(everyWrite(earlier)).toEqual({});
+      // Writes on again, as the next case takes them.
+      await writesOn();
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "pauses it with exactly one PATCH of the Schedule, the text of its review, answered 200, and nothing else, and says it paused",
+    async () => {
+      const name = `${FORM}-schedule`;
+      const before = read<ScheduleRead>("schedules.velero.io", name, cluster.E2E_VIEWS_NAMESPACE);
+      const earlier = cluster.apiRequests();
+      const codes = cluster.requestCodes("schedules");
+
+      await frame.click(patch("ask"));
+      await frame.waitForSelector(patch("review"), { timeout: 30_000 });
+      expect(await frame.locator(patch("text")).textContent()).toBe(patchText(pausePatch(before.metadata.uid)));
+      await frame.click(patch("run"));
+      await frame.waitForSelector(patch("result"), { timeout: 60_000 });
+      expect(await cluster.wordsOf(frame, patch("result-0"))).toBe(SCHEDULE_PATCH_VIEW_WORDS.paused(name));
+      // One PATCH of the schedule, answered 200, and no other write of any kind of Velero.
+      expect(scheduleCodes(codes)).toEqual({ "PATCH 200": 1 });
+      const written = everyWrite(earlier);
+
+      expect([Object.keys(written).length, Object.values(written)]).toEqual([1, [1]]);
+      expect(Object.keys(written)[0]).toMatch(/^PATCH schedules /);
+      // Paused, and nothing else of the schedule changed.
+      const after = read<ScheduleRead>("schedules.velero.io", name, cluster.E2E_VIEWS_NAMESPACE);
+
+      expect([after.metadata.uid, after.spec]).toEqual([before.metadata.uid, { ...before.spec, paused: true }]);
+      // The way to the view of the schedule takes the place of the workspace, and the view offers Resume at its read.
+      await frame.click(patch("open"));
+      await frame.waitForSelector("[data-testid=velero-schedule-resume]", { timeout: 60_000 });
+      expect(await cluster.addressViews(frame)).toEqual([`schedule/${name}`]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "resumes it with skip immediately as the schedule carries it, exactly one PATCH, and says what skip immediately holds",
+    async () => {
+      const name = `${FORM}-schedule`;
+      const before = read<ScheduleRead>("schedules.velero.io", name, cluster.E2E_VIEWS_NAMESPACE);
+      const earlier = cluster.apiRequests();
+      const codes = cluster.requestCodes("schedules");
+
+      expect([before.spec.paused, before.spec.skipImmediately]).toEqual([true, true]);
+      await frame.click("[data-testid=velero-schedule-resume]");
+      await frame.waitForSelector("[data-testid=velero-schedule-resume-workspace]", { timeout: 30_000 });
+      // The schedule of the form was created with skip immediately true: the resume proposes it.
+      expect(await frame.locator(patch("skip")).isChecked()).toBe(true);
+      await frame.click(patch("ask"));
+      await frame.waitForSelector(patch("review"), { timeout: 30_000 });
+      expect(await frame.locator(patch("text")).textContent()).toBe(
+        patchText(resumePatch(before.metadata.uid, { expression: SCHEDULE_FORM.expression, skipImmediately: true })),
+      );
+      await frame.click(patch("run"));
+      await frame.waitForSelector(patch("result"), { timeout: 60_000 });
+      // No controller runs on the CRDs alone: skip immediately is as written, and no run was skipped.
+      expect([
+        await cluster.wordsOf(frame, patch("result-0")),
+        await cluster.wordsOf(frame, patch("result-1")),
+      ]).toEqual([
+        SCHEDULE_PATCH_VIEW_WORDS.resumed(name),
+        SCHEDULE_PATCH_VIEW_WORDS.skipAfter({ name, uid: before.metadata.uid, paused: false, skipImmediately: true }),
+      ]);
+      expect(scheduleCodes(codes)).toEqual({ "PATCH 200": 1 });
+      expect(Object.values(everyWrite(earlier))).toEqual([1]);
+      const after = read<ScheduleRead>("schedules.velero.io", name, cluster.E2E_VIEWS_NAMESPACE);
+
+      expect(after.spec).toEqual({ ...before.spec, paused: false, skipImmediately: true });
+      await cluster.closeWorkspace(frame);
+      await frame.waitForSelector("[data-testid=velero-schedule-resume-workspace]", {
+        state: "detached",
+        timeout: 30_000,
+      });
+      await cluster.closeWorkspace(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "offers Restore in the view of a backup that ended well, says why not for one that failed its validation, and with writes off writes nothing",
     async () => {
       const earlier = cluster.apiRequests();
@@ -948,7 +1075,7 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
   );
 
   it(
-    "refuses the reader of a part at the creation, with the words of what it may not do, writes left on and nothing written",
+    "refuses the reader of a part at the creation and at the patch, with the words of what it may not do, writes left on and nothing written",
     async () => {
       if (!started) throw new Error("The application is not running");
       const running = started;
@@ -1064,6 +1191,30 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
         await other.waitForTimeout(NOTHING);
         expect(await cluster.writesState(other)).toBe("on");
         expect(writesSince(earlier)).toEqual({});
+        // The pause of a schedule, refused at the patch: the reader may read the schedules, and patch none.
+        const history = read<ScheduleRead>("schedules.velero.io", SCHEDULE, cluster.E2E_VIEWS_NAMESPACE);
+
+        await cluster.showList(other);
+        await cluster.openPage(other, SCHEDULES);
+        await cluster.waitForList(other, SCHEDULES);
+        await cluster.openWorkspace(other, SCHEDULE, SCHEDULES);
+        await other.click("[data-testid=velero-schedule-pause]");
+        await other.waitForSelector(patch("ask"), { timeout: 30_000 });
+        await other.click(patch("ask"));
+        await other.waitForSelector(patch("review"), { timeout: 30_000 });
+        await other.click(patch("run"));
+        await other.waitForSelector(patch("failure"), { timeout: 60_000 });
+        expect([
+          await other.locator(patch("failure")).getAttribute("data-code"),
+          await other.locator(patch("failure")).getAttribute("data-stage"),
+          await cluster.wordsOf(other, patch("failure-text")),
+        ]).toEqual(["forbidden", "patch", SCHEDULE_PATCH_WORDS.forbidden(cluster.E2E_VIEWS_NAMESPACE)]);
+        await other.waitForTimeout(NOTHING);
+        expect(await cluster.writesState(other)).toBe("on");
+        expect(
+          read<ScheduleRead>("schedules.velero.io", SCHEDULE, cluster.E2E_VIEWS_NAMESPACE).metadata.resourceVersion,
+        ).toBe(history.metadata.resourceVersion);
+        expect(everyWrite(earlier)).toEqual({});
       } finally {
         // The cases after this one look at the first entry of the catalog, which is shown again.
         await velero.navigateToCatalog(running.app);
