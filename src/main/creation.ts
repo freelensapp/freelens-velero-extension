@@ -10,6 +10,7 @@ import {
   failure,
   PHASE_BOUND,
   type RestoreCreated,
+  type ScheduleChanged,
   type ScheduleCreated,
   type WriteRunRequest,
 } from "../common/ipc";
@@ -25,6 +26,8 @@ export const CREATION_MARGIN = 60_000;
 
 // What a creation answers once the object was created.
 export type Created = BackupCreated | ScheduleCreated | RestoreCreated;
+// What a write of an action answers once it was done: an object created, or a schedule paused or resumed.
+export type Done = Created | ScheduleChanged;
 
 // What the main process gives the procedures of the writes that create.
 export interface CreationDependencies {
@@ -34,7 +37,7 @@ export interface CreationDependencies {
   sleep(milliseconds: number, signal: AbortSignal): Promise<void>;
   // Keeps the end of a run whose request was sent, for the cluster, until a frame of it has shown it (REQ-250), with
   // the context of the entry the request was sent to.
-  keep?(request: WriteRunRequest, end: Answer<Created>, context: string): void;
+  keep?(request: WriteRunRequest, end: Answer<Done>, context: string): void;
 }
 
 // What differs from one kind to another: what is created and how, the words of its ends, what tells it from another

@@ -170,7 +170,7 @@ Excluded, with their owners:
 | ID | Contract | Acceptance check |
 | --- | --- | --- |
 | REQ-274 | The workspace of a schedule offers Pause when `spec.paused` is not true, and Resume when it is (REQ-252). Each opens the workspace of its action over the view of the schedule, with the state it acts on, read with the schedule | PAUSE-01 |
-| REQ-275 | Pause is one JSON patch of the Schedule, sent with the method in capitals and the media type of a JSON patch: a test of `/metadata/uid` with the UID of the review, then an add of `/spec/paused` with true; nothing else. A schedule that is not paused may have no `paused` at all, and a test cannot test what is absent; a pause that finds the schedule paused already leaves it as it was. Resume is a test of `/metadata/uid`, a test of `/spec/paused` with true, a test of `/spec/schedule` with the expression the review read, a replace of `/spec/paused` with false, and an add of `/spec/skipImmediately` with the value chosen; nothing else. The form proposes `skipImmediately` as the schedule carries it, true when it is true and false otherwise, and says when the choice replaces what the schedule carries. A 422 to a patch is followed by a read of the Schedule: when its UID, `paused` or its expression is not as the patch tested, it is a conflict, with the words that the schedule changed since the review and the way back to its view, which reads it again; otherwise it is validation. The action needs the verb patch on the schedules, which the CLI of the release does not use, since it updates the whole object: a refusal says that the identity may not patch schedules in that namespace | PAUSE-02 |
+| REQ-275 | Pause is one JSON patch of the Schedule, sent with the method in capitals and the media type of a JSON patch: a test of `/metadata/uid` with the UID of the review, then an add of `/spec/paused` with true; nothing else. A schedule that is not paused carries `paused` false or none at all, and no one test passes on both; a pause that finds the schedule paused already leaves it as it was. Resume is a test of `/metadata/uid`, a test of `/spec/paused` with true, a test of `/spec/schedule` with the expression the review read, a replace of `/spec/paused` with false, and an add of `/spec/skipImmediately` with the value chosen; nothing else. The form proposes `skipImmediately` as the schedule carries it, true when it is true and false otherwise, and says when the choice replaces what the schedule carries. A 422 to a patch is followed by a read of the Schedule: when its UID, `paused` or its expression is not as the patch tested, it is a conflict, with the words that the schedule changed since the review and the way back to its view, which reads it again; otherwise it is validation. The action needs the verb patch on the schedules, which the CLI of the release does not use, since it updates the whole object: a refusal says that the identity may not patch schedules in that namespace | PAUSE-02 |
 | REQ-276 | The review of a pause says that Velero does not read a paused schedule: it submits no backup, writes no phase and validates nothing until the schedule is resumed; that a backup the schedule already submitted goes on; and that the adherence of SPEC-0013 says the schedule is paused. The review of a resume says when the next backup is due, counted from the last backup of the schedule, or from its creation when it has none, or from `status.lastSkipped` when that is later: at once, at the first look of the controller after the resume, one backup and not one for each run missed, when an instant of the expression has passed since then, unless `skipImmediately` is true, and while a backup of the schedule has no phase or is InProgress, at the first look after it; with `skipImmediately` true, that Velero skips that run and counts the next one from the time it reads the schedule, and sets the field back to false; that Velero validates the expression again when it reads the schedule, and writes FailedValidation for one it refuses; and the next runs, as REQ-230 and REQ-231 of SPEC-0016 compute and say them, with the zone of the expression | PAUSE-03 |
 | REQ-277 | After the patch the workspace reads the Schedule once, checks its UID and the fields the patch wrote, and shows them: paused, or resumed with what `skipImmediately` holds and, once Velero read it, `status.lastSkipped`; then it leads to the view of the schedule of SPEC-0006, where SPEC-0013 counts its adherence | PAUSE-04 |
 
@@ -615,7 +615,17 @@ needs a decision before the approval, and each has its first step in its slice.
   known answers a failed test with 422, as it answers a body it refuses. The design
   reads the Schedule after any 422 to a patch, so the end is right either way; the
   slice of T4.5 establishes the answer first, on the test environment, and records
-  it.
+  it. The source answers it, and the third pull request of T4.5 proves it on the
+  test environment: the API server of Kubernetes 1.34.11, the version of the test
+  clusters, answers every error of the application of a JSON patch, a failed test
+  among them, with 422, and a patch it cannot decode with 400
+  ([`patch.go`](https://github.com/kubernetes/kubernetes/blob/v1.34.11/staging/src/k8s.io/apiserver/pkg/endpoints/handlers/patch.go#L403-L415)).
+  It applies the patch with json-patch v4.12.0, which compares a tested string by
+  the bytes of its JSON, while the API server writes the object with the escapes of
+  Go: an expression that holds `<`, `>`, `&`, a line or a paragraph separator, a
+  backspace or a form feed would never pass its test, and a resume of one is not
+  confirmed
+  ([`lazyNode.equal`](https://github.com/evanphx/json-patch/blob/v4.12.0/patch.go#L183-L192)).
 - **The verbs of the identities of the test environment (REQ-254).** The restricted
   identity of the suites reads the views and may not write. The slice of each
   action establishes that it lacks the verb its action needs, `create` on the kind
@@ -1595,6 +1605,7 @@ points to fix or to follow; all were applied:
   workspace the probe of the review found missing.
 - The review of the first pull request found that a mapping of a namespace the lists
   of the restore leave out was taken; the form refuses it now.
+
 T4.4, the third and last of its pull requests, on 2026-11-08: the proof in the packaged
 application, in the pre-review and end to end. The evidence, by check:
 
@@ -1646,3 +1657,152 @@ proposal of the name compared to the second while Escape gives it back a moment 
 and points to fix: the proposal is checked between the seconds before and after Escape,
 the cleanup of the proof goes on after a removal that failed, and the restore of a
 schedule is counted by its codes and its writes. All were applied.
+
+T4.5, the first of its pull requests, on 2026-11-08: the pause and the resume of a
+schedule in the main process, in the contract and in the adapter, with no surface of
+the renderer yet. The evidence, by check:
+
+- PAUSE-02, the domain part
+  ([`schedule-patch.test.ts`](../../src/common/schedule-patch.test.ts)): the patch of a
+  pause, a test of `/metadata/uid` and an add of `/spec/paused` with true, and of a
+  resume, the tests of `/metadata/uid`, of `/spec/paused` with true and of
+  `/spec/schedule` with the expression of the review, a replace of `/spec/paused` with
+  false and an add of `/spec/skipImmediately` with the value chosen, true and false,
+  operation by operation; the text written as every text of the extension and read back
+  only when it is exactly the patch of a pause or of a resume.
+- PAUSE-02 and PAUSE-04, the main part, and ACT-02 to ACT-07
+  ([`ipc-schedule-patch.test.ts`](../../src/main/ipc-schedule-patch.test.ts)): the
+  confirmation refused with writes off and on for another namespace, reading nothing,
+  and answering the text of the patch with the token, since the tests of the patch are
+  the check; the contract refuses what is not a schedule, a resume with nothing to
+  resume with, a pause with something to resume with, and anything more, the run
+  carries the schedule alone, and the answer carries that it was read after an answer
+  that was lost, and a time of 64 characters at most
+  ([`ipc.test.ts`](../../src/common/ipc.test.ts)). A resume of an expression the API
+  server writes in another form, which its test would never pass, is not confirmed, and
+  one of tabs is. The run sends the text byte for byte, once, reads the schedule once
+  and answers it paused, or resumed with what `skipImmediately` holds and, for a resume
+  that asked the skip, the time Velero wrote it skipped the run, not earlier than a
+  minute before the confirmation, of 64 characters at most; a schedule read after the
+  patch that does not hold what it wrote, resumed by someone else after a pause, paused
+  again after a resume, its field set back with no time or an older one, or a field
+  that is not true or false, is said changed since; a pause of a schedule paused
+  already leaves it as it was; a 422 is followed by one read, and a schedule of another
+  UID, or at a resume one not paused or of another expression, is a conflict with the
+  words that it changed since the review, one as the patch tested it a refusal, a pause
+  whatever its `paused` and its expression, and one that went is said gone; each end of
+  the patch with its code, its stage, its safety and its words, the verb patch the
+  identity may not use among them; a patch whose answer was lost, or dropped on this
+  side once it was sent, never sent again, the schedule read with a signal of its own
+  by the fields the patch wrote and said as REQ-250 asks: done as reviewed, paused, or
+  resumed with the skip as written or taken by Velero; not done as far as the read
+  shows, not paused or still paused; or something else, resumed but not as written,
+  with an older time of a skip or with no `paused`, another schedule of its name, none,
+  or a read that does not answer; the answer of another schedule not taken, with its
+  own words, and the answer of the patch when the read after it does not answer or
+  finds another schedule of its name; the ends of what was sent kept for the cluster,
+  applied, read so after an answer that was lost, not done, refused, a 422 of a
+  schedule that changed or went, the answer of another schedule and a schedule changed
+  since, and none of what never left; a text kept with the token
+  of another action or of another schedule sends nothing; a token of another frame, an
+  expired one, of another namespace, of another action or of another schedule, and
+  writes turned off after the confirmation, refused; a frame gone after the patch not
+  answered, its end kept; seventeen patches in a row; a run sent again with the same
+  identifier joined, and none of another token or of another schedule.
+- ACT-01, the adapter part
+  ([`diagnostic-kubernetes.test.ts`](../../src/main/diagnostic-kubernetes.test.ts)): one
+  PATCH of the schedule, with the method in capitals and the media type of a JSON patch,
+  its body the text byte for byte; a text that is not exactly the patch of a pause or of
+  a resume refused before anything leaves; a patch whose answer is lost not known, as a
+  creation; the methods of the adapter pinned, `patchSchedule` among them.
+- REQ-250: the target bar says the end of a pause and of a resume, applied, read so
+  after an answer that was lost, or not, and leads to the view of the schedule
+  ([`kept-end-words.test.ts`](../../src/common/kept-end-words.test.ts),
+  [`backup-now-workspace.test.tsx`](../../src/renderer/pages/backup-now-workspace.test.tsx));
+  the words of the gate name the patch of a Schedule
+  ([`writes.test.tsx`](../../src/renderer/components/writes.test.tsx)).
+
+Each new case was seen failing on a change made on purpose, thirty-three in all: a test
+of the UID, of `paused` or of the expression left out of a patch, the choice of
+skipping written false; a text read back with no check of its UID; a resume confirmed
+with nothing to resume with, a pause with something to resume with, a text no answer
+carries confirmed; a text kept with the token of another action or of another schedule
+sent, a frame gone before the patch sent to; a 422 of another expression or of another
+UID said as a refusal, and of a schedule that went said as a refusal; an answer of
+another schedule taken, the read after the patch not taken, a lost answer said with no
+read, the read with the signal of the write; an end that never left kept; the place of
+a write never freed; a credential the cluster does not take and a cluster that changed
+after it answered said as others; the time a run was skipped dropped; the contract with
+no resume asked of a resume, an empty expression, a choice that is not true or false, a
+schedule refused as the target of a patch, a patch applied said with more, a choice read
+that is not true or false; the adapter with no check of the text, another media type, a
+lost answer of a patch said as nothing sent; the end kept with more than applied; the
+words of the end of a pause; and the end of a pause led to a backup. Four others found
+checks that did nothing beside another, which were removed. After the independent
+review, thirty-three more, each seen failing: a character of an expression the test
+would never pass taken out of the set or a tab put in, and the check left out; the
+bound of a time and the minute before the confirmation moved; a pause answered paused
+whatever the read, a resume with no check of `paused`, of the skip, or of the time of
+the skip; a read that found nothing said as one that does not answer, another schedule
+of the name or the mark of a lost answer taken, not done and something else swapped or
+merged; the answer of another schedule said in the words of a lost answer, the read
+after the patch taken whatever its UID or never, a read that does not hold the patch
+answered, the words of the pause said of a resume; a 422 of a pause judged on its
+`paused`; the mark of a lost answer left out of the end kept and of its words; and the
+contract taking a mark that is not true, dropping it, taking a patch applied with a
+phase or paused, and a time of 65 characters. A check of the skip asked, which the one
+before it made of no use, was removed.
+
+Decided while implementing, on 2026-11-08:
+
+- The confirmation reads nothing: the tests of the patch are the check, as the table of
+  the contract says, and the review reads the schedule with the views.
+- The run carries the schedule alone: the expression and the choice of skipping a run
+  are in the text kept with the token.
+- After a 200 the schedule is read once and checked against what the patch wrote, and
+  what it holds is answered; one that does not hold it was changed since; the answer of
+  the patch is taken when the read does not answer or finds another schedule of its
+  name.
+- A 422 is followed by one read: the schedule not as the patch tested is a conflict, as
+  REQ-275 asks, and as it tested it a refusal; a read that does not answer says the
+  refusal, and one that finds nothing says the schedule gone.
+- A patch whose answer is lost is read once, with a signal the write that stopped does
+  not end, by the fields the patch wrote, as REQ-250 asks: done as reviewed, not done
+  as far as the read shows, or something else; it is never sent again. An answer of
+  another schedule is not read for: it is said with its own words.
+- The time Velero wrote it skipped a run is answered for a resume that asked the skip,
+  when it is not earlier than a minute before the confirmation, the margin of SPEC-0016
+  for the clocks; an older one is of another resume.
+- A resume of an expression that holds a character the API server writes in another
+  form is not confirmed, since its test would never pass, as the answer of the open
+  question of the 422 says; no expression a schedule of the release runs holds one.
+- The end of a pause or of a resume kept for the cluster is applied, read so after an
+  answer that was lost, or not, with nothing more, since its kind says what it did.
+- The adapter sends a write of any verb but GET as a creation is sent: an answer lost is
+  not known.
+
+The independent review of this pull request, read-only, found one blocker, of the
+conformance to REQ-250 rather than of safety: the gate, the binding of the token, the
+one PATCH of the kept text, with no retry, and the read of a lost answer with a signal
+of its own hold. What it found was applied:
+
+- A patch whose answer was lost was read for `paused` alone, and said with the words
+  that whether it did it is not known, where REQ-250 reads it by the fields it wrote
+  and says done as reviewed, not done, or something else: it does now, and the words
+  of a read that does not answer are no longer said of an answer of another schedule or
+  of a read that found another schedule of the name.
+- The time Velero wrote it skipped a run was answered whatever its age, and the read
+  after the patch was answered without a check of what the patch wrote, so that a pause
+  read not paused was kept as applied: the time is of this resume, and a read that does
+  not hold the patch is said changed since.
+- Cases were missing for the ends kept of a lost answer, of a 422 and of an answer of
+  another schedule, for a read of another schedule after the patch and after a lost
+  answer, for a 422 of a pause, and for the bounds of the time: all written, and the
+  thirty-three changes above seen failing. The evidence said more than the cases
+  proved: it says what they prove now.
+- The answer of the API server to a failed test was not recorded: the source says it,
+  with the expressions whose test would never pass, which are not confirmed.
+- The reason of D6 said that a test cannot test what is absent, while a test of null
+  passes on an absent field: no one test passes on both forms of a schedule not paused,
+  which is the reason now. A type nothing used was removed, the words of the identity
+  name the velero command line, and a line of ARCHITECTURE was too long.

@@ -16,6 +16,7 @@ import {
 import { EXPRESSION_BOUND, type ScheduleWrapper, scheduleNameProblem } from "./schedule-form";
 
 import type { DiagnosticCode } from "./diagnostic-code";
+import type { ResumeParameters } from "./schedule-patch";
 
 export const CHANNELS = {
   gateState: "gate.state",
@@ -44,6 +45,8 @@ export const WRITE_KINDS = [
   "backup",
   "schedule",
   "restore",
+  "schedule-pause",
+  "schedule-resume",
 ] as const;
 export type WriteKind = (typeof WRITE_KINDS)[number];
 
@@ -219,6 +222,9 @@ export interface WriteConfirmRequest {
   // The fields of the form of a restore (SPEC-0017, REQ-268 to REQ-270), at the confirmation only: the body is built of
   // them, and the run carries none of them.
   restoreForm?: RestoreForm;
+  // The expression the review of a resume read and the value of `skipImmediately` chosen (SPEC-0017, REQ-275), at the
+  // confirmation only: the patch is built of them, and the run carries none of them.
+  resume?: ResumeParameters;
 }
 export interface WriteConfirmAnswer {
   token: string;
@@ -275,6 +281,18 @@ export interface ScheduleCreated {
   found?: true;
 }
 
+// What a schedule paused or resumed is once the patch was applied, as the main process read it once after it (SPEC-0017,
+// REQ-277): paused; or resumed, with what `skipImmediately` holds and the time Velero wrote it skipped the run, once it
+// read the schedule; and that it was read so after an answer of the patch that was lost (REQ-250).
+export interface ScheduleChanged {
+  name: string;
+  uid: string;
+  paused: boolean;
+  skipImmediately?: boolean;
+  lastSkipped?: string;
+  found?: true;
+}
+
 // What a restore of the form is once it was created: its name and its UID, and what Velero wrote of it within the reads
 // after the creation (SPEC-0017, REQ-272): its phase, and the errors of a validation as written, within the bounds of
 // the contract; and that it was found by its name after an answer that was lost (REQ-250).
@@ -312,6 +330,8 @@ export function carriedErrors(errors: unknown): { errors?: string[]; errorsLeft?
 }
 // How a write whose request was sent ended: the backup created, with the phase Velero wrote and whether it was found
 // by its name after an answer that was lost; or the code and the words of the failure.
+// What a write did: for a creation, the object created; for a pause and a resume, the patch applied, with nothing
+// more, since the kind says which.
 export type KeptOutcome =
   | { created: true; phase?: string; found?: true; paused?: true }
   | { created: false; code: FailureCode; text: string };
@@ -321,7 +341,7 @@ export type KeptOutcome =
 export interface KeptEnd {
   // The identifier of the request of the write.
   request: string;
-  kind: "backup-from-schedule" | "backup" | "schedule" | "restore";
+  kind: "backup-from-schedule" | "backup" | "schedule" | "restore" | "schedule-pause" | "schedule-resume";
   namespace: string;
   // The context of the entry of the cluster in the catalog of the host.
   context: string;
@@ -649,7 +669,7 @@ function readWriteParameters(value: unknown, run: boolean): WriteConfirmRequest 
     !hasKeys(
       value,
       ["cluster", "namespace", "kind"],
-      ["target", "artifact", "backup", "template", "schedule", "wrapper", "restore", "restoreForm"],
+      ["target", "artifact", "backup", "template", "schedule", "wrapper", "restore", "restoreForm", "resume"],
     )
   )
     return;
@@ -664,8 +684,15 @@ function readWriteParameters(value: unknown, run: boolean): WriteConfirmRequest 
   const ofForm = value.kind === "backup";
   const newSchedule = value.kind === "schedule";
   const ofRestore = value.kind === "restore";
+  // A pause and a resume are of a schedule, and a resume carries, at the confirmation, the expression its review read
+  // and the value of `skipImmediately` chosen.
+  const ofPatch = value.kind === "schedule-pause" || value.kind === "schedule-resume";
 
-  if ((value.kind === "DownloadRequest" || ofSchedule || ofRestore) !== "target" in value) return;
+  if ((value.kind === "DownloadRequest" || ofSchedule || ofRestore || ofPatch) !== "target" in value) return;
+  if (!run && (value.kind === "schedule-resume") !== "resume" in value) return;
+  const resume = "resume" in value ? readResume(value.resume) : undefined;
+
+  if ("resume" in value && !resume) return;
   if (ofRestore !== "restore" in value) return;
   if (!run && ofRestore !== "restoreForm" in value) return;
   if (ofRestore && (value.target as WriteTarget | undefined)?.kind !== "Backup") return;
@@ -682,7 +709,7 @@ function readWriteParameters(value: unknown, run: boolean): WriteConfirmRequest 
   const wrapper = "wrapper" in value ? readWrapper(value.wrapper) : undefined;
 
   if ("wrapper" in value && !wrapper) return;
-  if ("target" in value && ((value.target as WriteTarget).kind === "Schedule") !== ofSchedule) return;
+  if ("target" in value && ((value.target as WriteTarget).kind === "Schedule") !== (ofSchedule || ofPatch)) return;
   if ((ofSchedule || ofForm) && (typeof value.backup !== "string" || backupNameProblem(value.backup) !== undefined))
     return;
   const template = "template" in value ? readTemplate(value.template) : undefined;
@@ -708,6 +735,44 @@ function readWriteParameters(value: unknown, run: boolean): WriteConfirmRequest 
     ...(wrapper ? { wrapper } : {}),
     ...(typeof value.restore === "string" ? { restore: value.restore } : {}),
     ...(restoreForm ? { restoreForm } : {}),
+    ...(resume ? { resume } : {}),
+  };
+}
+
+// What a resume writes beside its tests: an expression within the bound the contract carries, and true or false.
+function readResume(value: unknown): ResumeParameters | undefined {
+  if (
+    !isRecord(value) ||
+    !hasKeys(value, ["expression", "skipImmediately"]) ||
+    typeof value.expression !== "string" ||
+    value.expression.length === 0 ||
+    value.expression.length > EXPRESSION_CARRIED ||
+    typeof value.skipImmediately !== "boolean"
+  )
+    return;
+  return { expression: value.expression, skipImmediately: value.skipImmediately };
+}
+
+// What a schedule is after its pause or its resume, as the main process answers it.
+export function readScheduleChanged(value: unknown): ScheduleChanged | undefined {
+  if (
+    !isRecord(value) ||
+    !hasKeys(value, ["name", "uid", "paused"], ["skipImmediately", "lastSkipped", "found"]) ||
+    !isName(value.name) ||
+    !isText(value.uid) ||
+    typeof value.paused !== "boolean"
+  )
+    return;
+  if ("skipImmediately" in value && typeof value.skipImmediately !== "boolean") return;
+  if ("lastSkipped" in value && !isText(value.lastSkipped, 64)) return;
+  if ("found" in value && value.found !== true) return;
+  return {
+    name: value.name,
+    uid: value.uid,
+    paused: value.paused,
+    ...(typeof value.skipImmediately === "boolean" ? { skipImmediately: value.skipImmediately } : {}),
+    ...(typeof value.lastSkipped === "string" ? { lastSkipped: value.lastSkipped } : {}),
+    ...(value.found === true ? { found: true } : {}),
   };
 }
 
@@ -1052,7 +1117,9 @@ export function readKeptEnds(value: unknown): KeptEnd[] | undefined {
       (item.kind !== "backup-from-schedule" &&
         item.kind !== "backup" &&
         item.kind !== "schedule" &&
-        item.kind !== "restore") ||
+        item.kind !== "restore" &&
+        item.kind !== "schedule-pause" &&
+        item.kind !== "schedule-resume") ||
       // A backup asked from a schedule names it, and one of the form names none; a restore names its backup.
       (item.kind === "backup-from-schedule") !== "schedule" in item ||
       ("schedule" in item && !isName(item.schedule)) ||
@@ -1068,6 +1135,14 @@ export function readKeptEnds(value: unknown): KeptEnd[] | undefined {
     const outcome = readKeptOutcome(item.outcome);
 
     if (!outcome) continue;
+    // A patch applied says nothing more of what was patched than whether it was read so after an answer that was lost:
+    // the kind says it.
+    if (
+      (item.kind === "schedule-pause" || item.kind === "schedule-resume") &&
+      outcome.created &&
+      ("phase" in outcome || "paused" in outcome)
+    )
+      continue;
     ends.delete(item.request);
     ends.set(item.request, {
       request: item.request,

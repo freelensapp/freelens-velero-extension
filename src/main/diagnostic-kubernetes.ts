@@ -19,6 +19,7 @@ import { type ArtifactTarget, DIAGNOSTIC_REQUEST_LABEL, isArtifactTarget } from 
 import { labelOf } from "../common/name-label";
 import { EXISTING_RESOURCE_POLICIES, RESTORE_SPEC_KEYS, restoreNameProblem } from "../common/restore-form";
 import { scheduleNameProblem } from "../common/schedule-form";
+import { readSchedulePatch } from "../common/schedule-patch";
 import { type CatalogEntry, refusalOf, sameEntry } from "./catalog";
 import { DiagnosticError } from "./diagnostic-transport";
 
@@ -42,7 +43,9 @@ export interface HostAnswer {
 // What a request is sent with. Header names are lowercase: the client merges them into its own headers key
 // by key, and a name in capitals would be sent beside its default, not in its place.
 export interface HostRequestInit {
-  method: "GET" | "POST";
+  // In capitals: the fetch of Chromium sends a method other than DELETE, GET, HEAD, OPTIONS, POST and PUT as it is
+  // written, and the API server answers a patch in small letters with 405 (SPEC-0017, the contract).
+  method: "GET" | "POST" | "PATCH";
   headers: Record<string, string>;
   body?: string;
   signal: AbortSignal;
@@ -216,7 +219,7 @@ async function bodyOf(
 }
 
 // The adapter is one for each cluster, made for the entry of the catalog writes were turned on with, and
-// asks the cluster for reads and for creations, and for nothing else.
+// asks the cluster for reads, for creations and for the two patches of a schedule, and for nothing else.
 // The keys of an object the actions create, and no other: no status, which the API server would keep for a kind with
 // no subresource of it, and nothing it does not know.
 const OBJECT_KEYS = "apiVersion,kind,metadata,spec";
@@ -275,15 +278,16 @@ export class DiagnosticKubernetes {
   }
 
   private async send(
-    method: "GET" | "POST",
+    method: "GET" | "POST" | "PATCH",
     path: string,
     signal: AbortSignal,
-    options: { query?: Record<string, string | undefined>; body?: unknown; text?: string } = {},
+    options: { query?: Record<string, string | undefined>; body?: unknown; text?: string; contentType?: string } = {},
   ): Promise<DiagnosticObject> {
     // Before anything leaves: the cluster is in the catalog, connected, and the one of the adapter.
     this.assertCurrent();
     if (signal.aborted) throw new DiagnosticError("cancelled");
-    const creation = method === "POST";
+    // A write, a creation or a patch, whose answer is lost is not known to have been made, and is looked for.
+    const creation = method !== "GET";
     // A body written once, as the review showed it, is sent as it is: what was read is what is sent.
     const payload = options.text ?? (options.body === undefined ? undefined : JSON.stringify(options.body));
     const query = queryOf(options.query);
@@ -322,7 +326,7 @@ export class DiagnosticKubernetes {
                 method,
                 headers: {
                   accept: "application/json",
-                  ...(payload === undefined ? {} : { "content-type": "application/json" }),
+                  ...(payload === undefined ? {} : { "content-type": options.contentType ?? "application/json" }),
                 },
                 ...(payload === undefined ? {} : { body: payload }),
                 signal: controller.signal,
@@ -521,6 +525,18 @@ export class DiagnosticKubernetes {
       throw new DiagnosticError("validation");
     if (restoreNameProblem(body.metadata.name) !== undefined) throw new DiagnosticError("validation");
     return this.send("POST", this.path("Restore", namespace), signal, { text });
+  }
+
+  // The pause or the resume of a schedule, sent as the text the review showed, byte for byte, with the method in
+  // capitals and the media type of a JSON patch (SPEC-0017, REQ-275): a text that is not exactly the patch of a pause or
+  // of a resume of a schedule is refused before anything leaves.
+  patchSchedule(namespace: string, scheduleName: string, text: string, signal: AbortSignal): Promise<DiagnosticObject> {
+    if (!readSchedulePatch(text) || typeof scheduleName !== "string" || scheduleName === "")
+      throw new DiagnosticError("validation");
+    return this.send("PATCH", this.path("Schedule", namespace, scheduleName), signal, {
+      text,
+      contentType: "application/json-patch+json",
+    });
   }
 
   createGenerated(

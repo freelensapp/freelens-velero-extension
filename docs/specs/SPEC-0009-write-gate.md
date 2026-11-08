@@ -431,7 +431,11 @@ run the name alone. The kind `restore` comes with the first pull request of T4.4
 confirmation carries the backup by its name and its UID, the name of the restore and
 the fields of its form, and its run the backup, the name of the restore and the name
 of the backup as the operator typed it, which the main process compares before the
-token is taken; the rest of this spec is read with the amendment, and is not changed
+token is taken. The kinds `schedule-pause` and `schedule-resume` come with the first
+pull request of T4.5: their confirmation carries the schedule by its name and its
+UID, and for a resume the expression the review read and the choice of skipping a
+run, and their run the schedule alone; the text kept with the token is the JSON patch
+of the action. The rest of this spec is read with the amendment, and is not changed
 by it. The text
 travels in the answer of the confirmation, within the bound of a request: one the
 answer cannot carry is not confirmed, and no token is given for it.

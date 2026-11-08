@@ -685,6 +685,26 @@ describe("back up now, from the view of a schedule", () => {
     );
   });
 
+  it("leads to the schedule of a pause or of a resume the target bar says, as a schedule, with what was done", async () => {
+    const main = mainProcess();
+
+    main.kept.push({
+      request: "00000000-0000-4000-8000-0000000000d2",
+      kind: "schedule-pause",
+      namespace: A,
+      context: "kind-local-demo",
+      name: "nightly",
+      outcome: { created: true },
+      at: NOW,
+    });
+    mount(main);
+    await screen.findByTestId("velero-kept-ends");
+    expect(screen.getByTestId("velero-open-schedule-nightly").textContent).toBe("Open the schedule nightly");
+    expect(screen.getByTestId("velero-kept-ends").textContent).toContain(
+      "The pause of the schedule nightly, in velero-a (context kind-local-demo), was applied while no view of it was open",
+    );
+  });
+
   it("says no end again above a form once the operator dismissed it in the target bar", async () => {
     const main = mainProcess();
     const { installation } = mount(main);

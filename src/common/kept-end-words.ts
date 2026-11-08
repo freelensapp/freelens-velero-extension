@@ -4,6 +4,15 @@
 import type { KeptEnd } from "./ipc";
 
 export function keptEndWords(end: KeptEnd): string {
+  if (end.kind === "schedule-pause" || end.kind === "schedule-resume") {
+    const pause = end.kind === "schedule-pause";
+    const what = `The ${pause ? "pause" : "resume"} of the schedule ${end.name}, in ${end.namespace} (context ${end.context}),`;
+
+    if (!end.outcome.created) return `${what} ended while no view of it was open: ${end.outcome.text}`;
+    const found = end.outcome.found ? ", as the read after the answer of the patch was lost shows" : "";
+
+    return `${what} was applied while no view of it was open${found}: ${pause ? "the schedule is paused, and Velero does not read it until it is resumed." : "the schedule is resumed, and Velero reads it at once."}`;
+  }
   const source = end.schedule === undefined ? "asked with the form" : `asked from the schedule ${end.schedule}`;
   const what =
     end.kind === "schedule"

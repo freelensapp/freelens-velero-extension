@@ -47,7 +47,7 @@ export function writesDialogWords(
   return {
     first: `Turn writes on for the installation ${namespace} of the cluster ${cluster} (context ${context})?`,
     second:
-      "Until they are turned off, or another installation is selected, the extension may create in that namespace the requests the views ask for on purpose: a DownloadRequest for the log, the results, the resources or the volumes of an operation, a ServerStatusRequest for the version of the server, a Backup from a schedule, asked from the view of the schedule, a Backup of the form, asked from the list of the Backups, a Schedule of the form, asked from the list of the Schedules, and a Restore of a backup, asked from the view of that backup or from the view of the schedule that made it. Each one is confirmed where it is asked for. Nothing else is written.",
+      "Until they are turned off, or another installation is selected, the extension may create in that namespace the requests the views ask for on purpose: a DownloadRequest for the log, the results, the resources or the volumes of an operation, a ServerStatusRequest for the version of the server, a Backup from a schedule, asked from the view of the schedule, a Backup of the form, asked from the list of the Backups, a Schedule of the form, asked from the list of the Schedules, a Restore of a backup, asked from the view of that backup or from the view of the schedule that made it, and a patch of a Schedule that pauses or resumes it, asked from the view of the schedule. Each one is confirmed where it is asked for. Nothing else is written.",
   };
 }
 
@@ -319,8 +319,10 @@ export const TargetBar = observer(({ installation }: { installation: Installatio
   );
 });
 
-// What an end kept for the cluster is of: a schedule, a restore or a backup, which its view shows.
+// What an end kept for the cluster is of: a schedule, created, paused or resumed, a restore or a backup, which its view
+// shows.
 function objectOf(end: KeptEnd): "schedule" | "restore" | "backup" {
+  if (end.kind === "schedule-pause" || end.kind === "schedule-resume") return "schedule";
   return end.kind === "schedule" || end.kind === "restore" ? end.kind : "backup";
 }
 
