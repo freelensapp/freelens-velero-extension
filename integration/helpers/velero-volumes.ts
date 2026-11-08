@@ -180,8 +180,8 @@ function durationText(milliseconds: number): string {
 
 /**
  * What the cell of the last maintenance of a repository may say when it is read between two readings of the
- * clock: how long ago the last maintenance was at either of them, with the words of a newest one that failed,
- * or that there was none.
+ * clock: how long ago the last maintenance was at any second between them, with the words of a newest one that
+ * failed, or that there was none.
  */
 export function maintainedTexts(repository: RepositoryObject, readFrom: number, readTo: number): string[] {
   const last = repository.status?.lastMaintenanceTime;
@@ -189,8 +189,13 @@ export function maintainedTexts(repository: RepositoryObject, readFrom: number, 
 
   if (!last) return [`${REPOSITORY_WORDS.neverMaintained}${failed}`];
   const at = Date.parse(last);
+  const texts = new Set<string>();
 
-  return [...new Set([readFrom, readTo].map((now) => `${durationText(now - at)} ago${failed}`))];
+  // Every second of the window the row was read in: one of several seconds says any of them, not only its ends.
+  for (let now = readFrom; now < readTo + 1000; now += 1000) {
+    texts.add(`${durationText(Math.min(now, readTo) - at)} ago${failed}`);
+  }
+  return [...texts];
 }
 
 /** What the cells of the row of a repository show that does not depend on the clock, by their columns. */

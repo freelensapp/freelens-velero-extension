@@ -749,6 +749,9 @@ Decided while implementing, on 2026-11-08:
   where it gives `720h`, which the command line prints `720h0m0s`: Velero reads them
   alike, and NOW-02 compares the builder with goldens printed from schedules that
   wrote them whole.
+- The cell of the last maintenance of a repository is checked by the packaged suites
+  against every second of the window it was read in, and not only its two ends: a
+  window of several seconds failed in CI on 2026-11-08 with a time between them.
 - What the next pull requests of T4.2 bring: the workspace of the action, the command
   in the view of a schedule and the words of the gate (REQ-245, REQ-252, REQ-253,
   NOW-01 and NOW-04 in the renderer); the end kept for the cluster and said in the
