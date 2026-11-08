@@ -233,7 +233,7 @@ pnpm demo:up              # The cluster with the fixtures left in place
 pnpm demo:views           # What the views need beside them, and where the kubeconfigs of the demo are
 pnpm e2e:views            # The suites of the views in the Freelens FREELENS_APP names, against the fixtures
 pnpm pre-review           # Both themes, the sizes of the window, the zoom and the keyboard
-pnpm e2e:integration      # FND-10 and a session for each of the five kinds, in the Freelens FREELENS_APP names
+pnpm e2e:integration      # FND-10 and a session for each of the eight kinds, in the Freelens FREELENS_APP names
 
 # Build
 pnpm build                # Both Vite runs, renderer then main, without the type check
@@ -265,7 +265,7 @@ src/
   common/                   # Pure helpers on plain data, and the store of the preferences
 build/                      # Vite plugins of the template: modules of the host, standard decorators, CSS module declarations
 environment-tests/          # Probes of the programs of each process, which fail on an API of another environment
-integration/                # FND-10, a session for each of the five kinds, and the helpers of the suites of the views
+integration/                # FND-10, a session for each of the eight kinds, and the helpers of the suites of the views
 test/                       # The stub of the SDK, the doubles of the host, the build and environment tests, the measures
 e2e/scripts/                # Disposable kind cluster with Velero and S3, fixtures, transport proof, stand-ins of the host
 e2e/__tests__/              # The suites of the views, run in the Freelens that FREELENS_APP names
@@ -937,7 +937,7 @@ for the changes that reach them:
 - `trunk-check.yaml`: Trunk on every file.
 - `unit-tests.yaml`: `pnpm test:unit`, the build first, then the tests and the
   measures alone.
-- `integration-tests.yaml`: FND-10 and the five sessions of the integration test,
+- `integration-tests.yaml`: FND-10 and the eight sessions of the integration test,
   in Freelens built from source at the commit of the validation target, on the
   disposable kind cluster with the CRDs of the release alone that
   `pnpm e2e:cluster:up:definitions` makes, taken down whatever happens.
@@ -945,7 +945,8 @@ for the changes that reach them:
   parts side by side, each a job with an environment of its own and one run of the
   runner of `pnpm e2e:views`, in Freelens built at the same commit: three on the
   environment and the fixtures of `pnpm demo:up`, for the suites that read what
-  only a server makes (the artifacts, the pre-review, the volumes and the server),
+  only a server makes (the artifacts, the pre-review, the volumes, the server and
+  the repositories),
   each then with the cleanup of the fixtures and the verification of the
   environment; and two on the CRDs of the release alone with the static fixtures
   and the counterparts of what the controllers leave in the installation, for the

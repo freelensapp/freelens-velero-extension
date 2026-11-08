@@ -78,7 +78,7 @@ ConfigMaps and the transport run in Node. It is not a claim about the full
 product, about the recovery of persistent volumes or about all the eight
 artifact formats.
 
-The integration test, FND-10 and a session for each of the five kinds,
+The integration test, FND-10 and a session for each of the eight kinds,
 installs the packed build in a Freelens built from source at the commit of the
 validation target, on every pull request and on main; the suites of the views
 run in the same build.
@@ -173,7 +173,7 @@ tests had run green in CI on main with the reviewed release moved to v1.18.4.
 | Expected runs from the cron expression, `status.lastBackup` and the newest matching Backup | T3.1 | [SPEC-0013](../specs/SPEC-0013-schedule-adherence.md) | Done |
 | Grace periods, paused, new and invalid schedules, timezone and daylight saving, skipped runs, clock skew, incomplete history, limited RBAC | T3.2 | [SPEC-0013](../specs/SPEC-0013-schedule-adherence.md) | Done |
 | Next expected run, last observed run and overdue state in list, detail and overview, with the reason | T3.3 | [SPEC-0013](../specs/SPEC-0013-schedule-adherence.md) | Done |
-| BackupRepository, PodVolumeBackup and PodVolumeRestore views | T5.1 | [SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md) | In PR |
+| BackupRepository, PodVolumeBackup and PodVolumeRestore views | T5.1 | [SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md) | Done |
 | DataUpload and DataDownload views with progress and relationships | T5.2 | [SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md) | Approved |
 
 The two specs of the milestone were approved on 2026-10-14, as drafted. The order

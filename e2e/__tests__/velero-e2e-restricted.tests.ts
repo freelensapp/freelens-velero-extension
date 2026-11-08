@@ -92,6 +92,18 @@ describe("views with restricted access", () => {
       expect(shown.podVolumeBackups).toContain("access is denied");
       expect(shown.restores).toContain("access is denied");
       expect(shown.snapshotLocations).toContain("access is denied");
+      // The band itself says that the pod volume backups cannot be read, and that how many the backup has is not
+      // known: no count, no group, no row, which would say a number of what was not read (scenario 7, KIND-16).
+      expect(await cluster.volumeBand(frame, "denied")).toMatchObject({
+        kind: "PodVolumeBackup",
+        state: "denied",
+        words:
+          "The pod volume backups of this installation cannot be read: access is denied. How many this backup has is not known.",
+        count: "",
+        groups: [],
+        rows: [],
+        more: false,
+      });
       expect(await frame.locator("[data-testid=velero-backup-status]").innerText()).toContain("Completed");
       expect((await cluster.reference(frame, "velero-reference-Schedule-views-daily", "resolved")).state).toBe(
         "resolved",

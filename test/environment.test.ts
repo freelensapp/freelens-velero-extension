@@ -11392,6 +11392,7 @@ describe("platform of the test environment", () => {
     expect(suites.filter((suite) => !WITHOUT_A_CONTROLLER.some((name) => suite.includes(name))).sort()).toEqual([
       "pre-review",
       "velero-e2e-artifacts",
+      "velero-e2e-repositories",
       "velero-e2e-server",
       "velero-e2e-volumes",
     ]);

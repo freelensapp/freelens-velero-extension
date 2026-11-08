@@ -361,6 +361,46 @@ describe("restores with restricted access", () => {
   );
 
   it(
+    "says of a pod volume restore the restore it belongs to, and of a pod volume backup that its backup cannot be read, which is not that it is not there",
+    async () => {
+      // A pod volume restore of the mapped restore, whose restores this identity reads, and the pod volume backup of
+      // the backup that partially failed, whose backups it does not read: both read by the suite on the cluster with
+      // the kubeconfig of the environment.
+      const [restore] = cluster.labelledObjects<{ metadata: { name: string } }>(
+        "podvolumerestores",
+        "velero.io/restore-name=restore-mapped",
+        cluster.E2E_VIEWS_NAMESPACE,
+      );
+      const [backup] = cluster.labelledObjects<{ metadata: { name: string } }>(
+        "podvolumebackups",
+        "velero.io/backup-name=views-history-4",
+        cluster.E2E_VIEWS_NAMESPACE,
+      );
+
+      expect([Boolean(restore), Boolean(backup)]).toEqual([true, true]);
+      await cluster.openPage(frame, cluster.POD_VOLUME_RESTORES);
+      await cluster.waitForList(frame, cluster.POD_VOLUME_RESTORES);
+      await cluster.openWorkspace(frame, restore.metadata.name, cluster.POD_VOLUME_RESTORES);
+      const resolved = frame.locator('[data-testid="velero-reference-Restore-restore-mapped"]');
+
+      await resolved.waitFor({ state: "visible", timeout: 60_000 });
+      expect(await resolved.getAttribute("data-reference")).toBe("resolved");
+      await cluster.closeWorkspace(frame);
+      await cluster.openPage(frame, cluster.POD_VOLUME_BACKUPS);
+      await cluster.waitForList(frame, cluster.POD_VOLUME_BACKUPS);
+      await cluster.openWorkspace(frame, backup.metadata.name, cluster.POD_VOLUME_BACKUPS);
+      const denied = frame.locator('[data-testid="velero-reference-Backup-views-history-4"]');
+
+      await denied.waitFor({ state: "visible", timeout: 60_000 });
+      expect(await denied.getAttribute("data-reference")).toBe("inaccessible");
+      expect(await denied.innerText()).toContain("access is denied");
+      await cluster.captureScreenshot(frame, "dark-restricted-pod-volume-backup-owner-denied");
+      await cluster.closeWorkspace(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "leaves the objects of Velero as they were",
     async () => {
       const after = cluster.clusterSnapshot();

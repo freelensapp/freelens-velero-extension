@@ -3,13 +3,16 @@
  * Licensed under MIT License. See LICENSE in root directory for more information.
  */
 
-// What the sessions of the integration test share: one session for each of the five kinds of the first
-// milestones, Backup, Restore, Schedule, BackupStorageLocation and VolumeSnapshotLocation, as the integration
-// test of the template has one for each version of its kind. The three kinds of the backup repositories and
-// of the pod volume operations have pages of their own and no session yet: the amendment of SPEC-0015 for
-// them says why. A session puts one object of its kind in a namespace of its own on the cluster of the test
-// environment, and removes the namespace with the object when it ends. The namespace is not the one of a
-// server of Velero, so no controller reads the object: it stays as it was written. The session needs neither
+// What the sessions of the integration test share: one session for each of the eight kinds the extension
+// shows, as the integration test of the template has one for each version of its kind. Five are the kinds of
+// the first milestones, Backup, Restore, Schedule, BackupStorageLocation and VolumeSnapshotLocation; three are
+// the kinds of SPEC-0014 under `velero.io/v1`, BackupRepository, PodVolumeBackup and PodVolumeRestore, whose
+// sessions the amendment of SPEC-0015 of 2026-10-27 left to the last pull request of T5.1. A session puts one
+// object of its kind in a namespace of its own on the cluster of the test environment, and removes the
+// namespace with the object when it ends. The namespace is not the one of a server of Velero, so no
+// controller reads the object: the cache of the server holds its own namespace only, and the node agent
+// selects the pod volume operations of its namespace by a field (v1.18.4, pkg/cmd/server/server.go:272-276,
+// pkg/cmd/cli/nodeagent/server.go:183-193). The object stays as it was written. The session needs neither
 // the fixtures of the views nor another file having run, and it writes nothing but its namespace and its
 // object.
 //
@@ -30,10 +33,18 @@ export const SESSION_LABEL = "freelensapp.io/velero-integration-session";
 const ELEMENT_TIMEOUT = 60 * 1000;
 const KUBECTL_TIMEOUT = 5 * 60 * 1000;
 
-/** One of the five sessions: the kind, how the extension and the host show it, and the object of the session. */
+/** One of the eight sessions: the kind, how the extension and the host show it, and the object of the session. */
 export interface KindSession {
   /** The kind, as the API names it. */
-  kind: "Backup" | "Restore" | "Schedule" | "BackupStorageLocation" | "VolumeSnapshotLocation";
+  kind:
+    | "Backup"
+    | "Restore"
+    | "Schedule"
+    | "BackupStorageLocation"
+    | "VolumeSnapshotLocation"
+    | "BackupRepository"
+    | "PodVolumeBackup"
+    | "PodVolumeRestore";
   /** Its plural, by which the API and the list of the host name it. */
   resource: string;
   /** The list of the extension that shows it. */
@@ -50,7 +61,18 @@ function session(kind: KindSession["kind"], resource: string, list: cluster.List
   return { kind, resource, list, namespace: `velero-integration-${list.id}`, name: `integration-${list.kind}`, spec };
 }
 
-/** The five sessions, by the list of the extension each one opens. */
+/**
+ * The pod of the pod volume operations of the sessions: a reference of the shape the release writes, to a pod no
+ * namespace of the cluster holds, as no node agent reads the operations.
+ */
+const SESSION_POD = {
+  kind: "Pod",
+  namespace: "integration-source",
+  name: "integration-pod",
+  uid: "integration-pod-uid",
+};
+
+/** The eight sessions, by the list of the extension each one opens. */
 export const SESSIONS = {
   backups: session("Backup", "backups", cluster.BACKUPS, {
     includedNamespaces: ["integration-source"],
@@ -73,6 +95,35 @@ export const SESSIONS = {
   snapshotLocations: session("VolumeSnapshotLocation", "volumesnapshotlocations", cluster.SNAPSHOT_LOCATIONS, {
     provider: "aws",
     config: { region: "us-east-1" },
+  }),
+  repositories: session("BackupRepository", "backuprepositories", cluster.REPOSITORIES, {
+    volumeNamespace: "integration-source",
+    backupStorageLocation: "integration-location",
+    repositoryType: "kopia",
+    maintenanceFrequency: "168h0m0s",
+  }),
+  podVolumeBackups: session("PodVolumeBackup", "podvolumebackups", cluster.POD_VOLUME_BACKUPS, {
+    node: "integration-node",
+    pod: SESSION_POD,
+    volume: "integration-volume",
+    tags: {
+      backup: "integration-backup",
+      pod: SESSION_POD.name,
+      ns: SESSION_POD.namespace,
+      volume: "integration-volume",
+    },
+    backupStorageLocation: "integration-location",
+    repoIdentifier: "",
+    uploaderType: "kopia",
+  }),
+  podVolumeRestores: session("PodVolumeRestore", "podvolumerestores", cluster.POD_VOLUME_RESTORES, {
+    pod: SESSION_POD,
+    volume: "integration-volume",
+    backupStorageLocation: "integration-location",
+    repoIdentifier: "",
+    uploaderType: "kopia",
+    snapshotID: "integration-snapshot",
+    sourceNamespace: SESSION_POD.namespace,
   }),
 } satisfies Record<string, KindSession>;
 

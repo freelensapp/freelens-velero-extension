@@ -133,16 +133,16 @@ const REMOVED_WITHIN = 12 * 60 * 1000;
 // How long the panel has to show the part of a load the main process runs for a step of that part to be
 // expected among the ones it showed: the views ask the main process where a load is four times a second.
 const WATCHABLE = 1000;
-// The second gestures the cases of the suite give, twenty-five: eighteen loads that end with their text, which
+// The second gestures the cases of the suite give, twenty-six: nineteen loads that end with their text, which
 // are the four tabs of the restore, the log of the backup twice and its other three tabs, the three empty
 // artifacts of the backup synced without its log, the results, the resources and the volumes of the backup
 // synced with its artifacts, its log, the log of the backup through the identity whose token an `exec` plugin
-// gives, and the log of the backup once the extension was disabled and enabled again; three that end as a file
-// the store does not have, the log of the backup synced without one and the logs of the two operations that
-// failed their validation; one that ends at the port-forward, which its identity may not ask; one whose cluster
-// is disconnected while it runs; and two that are cancelled, the results of the backup as soon as their load
-// begins, and the large log once its request is in the cluster.
-const GESTURES = 25;
+// gives, the log of the backup once the extension was disabled and enabled again, and the volumes of the real
+// backup of the volume of the run; three that end as a file the store does not have, the log of the backup synced
+// without one and the logs of the two operations that failed their validation; one that ends at the port-forward,
+// which its identity may not ask; one whose cluster is disconnected while it runs; and two that are cancelled, the
+// results of the backup as soon as their load begins, and the large log once its request is in the cluster.
+const GESTURES = 26;
 // The rows a list of lines mounts at most.
 const ROWS_BOUND = 100;
 // The characters a row shows of a line at most: a longer line is cut in its row, and whole in its copy.
@@ -2811,6 +2811,55 @@ describe("the log, the results, the resources and the volumes of an operation", 
   );
 
   it(
+    "leads from the row of the volume of the real backup of the volume, in its tab of the volumes, to the pod volume backup of the installation that made it, and back",
+    async () => {
+      // The real backup of the volume of the run, made by the server of the release with its node agent: one volume
+      // of a pod, backed up by the one pod volume backup the cluster holds for it, which the suite reads by the
+      // label of the backup, never by its name, which the release makes (SPEC-0014, REQ-188, KIND-12).
+      const backup = `fixture-volume-backup-${RUN}`;
+      const operations = cluster.labelledObjects<{ metadata: { name: string } }>(
+        "podvolumebackups",
+        `velero.io/backup-name=${backup}`,
+      );
+
+      expect(operations).toHaveLength(1);
+      const [operation] = operations;
+
+      await stay("backup", "volumes", backup);
+      // The load is a write: the gate is on for it, as for every load of the suite.
+      await writesOn();
+      await loadOf("backup", "volumes", backup);
+      const volumes = await artifacts.volumesShown(frame, "backup");
+      // The one row the file of the volumes holds of a pod volume backup: the volume of the pod the backup took.
+      const rows = volumes.rows.flatMap((row, index) => (/PodVolumeBackup/.test(row.method ?? "") ? [index] : []));
+
+      expect(rows).toHaveLength(1);
+      const [row] = rows;
+      const toggle = artifacts.PARTS.volumeToggle("backup", row);
+
+      await artifacts.clickOn(frame, toggle);
+      const details = frame.locator(`[data-testid="${artifacts.PARTS.volumeDetails("backup", row)}"]`);
+      const way = details.locator("[data-detail=operation] button");
+
+      // Its details offer one way, to the pod volume backup that made the row, found by the owner of the tab, the
+      // namespace of the pod, the pod and the volume the row carries.
+      expect(await way.count()).toBe(1);
+      expect(await way.getAttribute("data-way")).toBe(`pod-volume-backup/${operation.metadata.name}`);
+      await application().window.mouse.move(1, 1);
+      await cluster.captureScreenshot(frame, "dark-artifact-volumes-way-to-the-pod-volume-backup");
+      await way.click();
+      await frame
+        .locator("[data-testid=velero-pod-volume-backup-workspace]")
+        .waitFor({ state: "visible", timeout: 60_000 });
+      expect((await cluster.shownView(frame))?.name).toBe(operation.metadata.name);
+      // The way back leads to the backup again.
+      await cluster.closeWorkspace(frame);
+      expect((await cluster.shownView(frame))?.name).toBe(backup);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "cancels the load of the log of the backup synced from the store once its request is in the cluster, and says how it ended, with the command that asks again and no text; then asks again: a new request, the steps of the load in the order the main process tells them, the pages of the text rising to the last, and the bytes of the download that do not go down",
     async () => {
       const id = (part?: artifacts.PanelPart) => artifacts.PARTS.panel("backup", "log", part);
@@ -4148,7 +4197,7 @@ describe("the log, the results, the resources and the volumes of an operation", 
         await frame.waitForSelector("[data-testid=velero-writes][data-writes=off]", { timeout: 60_000 });
       }
       expect(await cluster.writesState(frame)).toBe("off");
-      // Last, what says that every case before this one gave its gesture: eighteen loads that end with their
+      // Last, what says that every case before this one gave its gesture: nineteen loads that end with their
       // text, three that end as a file the store does not have, one that ends at the port-forward, one whose
       // cluster is disconnected while it runs, and two that are cancelled, each a request of its own but for
       // the first cancelled one, which created one or none. A case that failed before its gesture is found

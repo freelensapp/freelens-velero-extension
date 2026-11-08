@@ -1468,6 +1468,118 @@ Decided while implementing, on 2026-11-04:
   at `127.0.0.1`, with no credentials and nothing written; the scripts of the
   environment keep asking the store only what `assertStoreRequest` allows.
 
+T5.1, the fifth of its five pull requests, on 2026-11-05: the three kinds proven in
+the packaged application on the fixtures of the fourth, with their sessions of the
+integration test, the measure of their long list and the pre-review of their views.
+Its runs were made on a second Linux machine, in Freelens built at the validation
+target `b9b53e16`. Its final runs, on 2026-11-07 and 2026-11-08, at its head with
+main merged in: on that machine, the integration test in 96 seconds, the part of the
+volumes and the server, thirty cases of three suites, in 920 seconds, the two parts on
+the CRDs alone, 157 cases of twelve files, in 698 seconds, and the pre-review and the
+suite of the tabs, 38 and 54 cases, in 1,681 seconds; on macOS x64, in Freelens 2.0.0
+of the release, the suite of the long lists, 11 cases in 258 seconds, before the
+control of its counters was added, and the suite of the tabs with the case of
+KIND-12, which passed in each of two runs while three cases did not on that machine,
+for the reasons the last bullet records. The cases the review of the pull request
+added, the control of the counters, the views with no control that writes, the way
+of the details followed, the real repository and the real pod volume restore against
+the cluster, ran in the hosted runs of its pull request, which ran every part. The
+changes made on purpose to see the new cases fail are recorded in the last bullet.
+
+- The sessions of the integration test (REQ-215 of SPEC-0015): a BackupRepository, a
+  PodVolumeBackup and a PodVolumeRestore, each in a namespace no controller of the
+  release reads, their nine cases green in 35 seconds and each seen failing for its
+  own reason; the whole integration test, nine files and thirty cases, green in 97
+  seconds.
+- KIND-03, KIND-07, KIND-19 (the suite of the repositories): the nine repositories of
+  the views against what the cluster holds of each, read with `kubectl` in their
+  namespace before the page; the last maintenance how long ago between two readings
+  of the clock, the first moved back by what the clock of the views may lag, with the
+  mark of a newest one that failed; the orders of the readiness and of the last
+  maintenance, each both ways; the search; the three maintenances of the one whose
+  newest failed, newest first; the next maintenance of each; the identifier of the
+  one of restic as written; what used the real repository of the installation, its
+  pod volume backup and its pod volume restore, each a way and back.
+- KIND-05 (the details of the host): for a repository, a pod volume backup and a pod
+  volume restore, the section reads as the row and its way leads to the view, with
+  the drawer gone with the address that named the object, as for every kind.
+- KIND-06, KIND-09, KIND-10, KIND-11 (the suite of the volumes): the sentence of each
+  phase of a pod volume backup; the band of the backup in progress counted by phase
+  as `velero backup describe` counts an operation with no phase, ten rows and ten
+  more; the backup that partially failed, its one pod volume backup failed with its
+  message and no repository for its namespace; the pod volume backup of the name of
+  the daily backup, read on the cluster before the band says none, whose owner
+  reference names the backup its labels do not; the pod volume backup of the real
+  backup of the volume with its phase, snapshot ID, node, volume and namespace of the
+  pod as the cluster holds them, and the way to its repository and back; the pod
+  volume restore of the real restore of the volume with its phase, snapshot ID, node,
+  volume, namespace of the pod and source namespace as the cluster holds them; the
+  real repository with the cells of its row and its last maintenance, the time the
+  server wrote when it made it ready, against the cluster (KIND-07, KIND-19).
+- KIND-12 (the tab of the volumes): the row of the real backup of the volume of the
+  run whose method is PodVolumeBackup leads, from its details, to the pod volume backup
+  of the installation that made it, found by the owner of the tab, the namespace of the
+  pod, the pod and the volume, which the suite reads on the cluster by the label of the
+  backup; the way back leads to the backup. The rows of the backup synced from the
+  store offer no way and say nothing absent, as before.
+- KIND-14 (no write): no way to select, edit, cancel or delete a repository or a pod
+  volume operation, by pointer or by keyboard; nothing written. Nothing of a pod or of
+  a Job is read, counted on the API server on the CRDs of the release alone, in the
+  suite of the long lists, where no server, node agent or maintenance Job reads
+  either: no read of a pod or of a Job in a namespace or by name while the list of the
+  two thousand pod volume backups, the Overview and the view of the backup of two
+  hundred operations are shown. The counters are proven to see such a read: a list of
+  the pods and one of the Jobs of `kube-system`, made by `kubectl` between two
+  readings in the same suite, are each counted as a list in a namespace. The views of
+  a repository, of a pod volume backup and of a pod volume restore hold no control
+  that writes: every button is the way back or a way to another view, with no field.
+  Decided while implementing, on 2026-11-07: on the environment with the server, the
+  lists of the Jobs of its maintenance cannot be told from the views by the counters,
+  which carry no namespace and no client, and the reader of the extension asks no path
+  outside `/apis/velero.io/` (LOC-09).
+- KIND-16 (the readers): to the first reader the band says that the pod volume
+  backups cannot be read and how many the backup has is not known, with no count; to
+  the second, a pod volume restore with the restore it belongs to, and a pod volume
+  backup with its backup denied.
+- KIND-17 (the pre-review): the three lists, the view of the repository whose newest
+  maintenance failed, the band of the backup in progress whole and the view of its
+  pod volume backup that failed with a message of several lines, in both themes at
+  every size, forty-six views in all; the band read with the keyboard alone. The
+  restores suite and the pre-review count the eleven links the band of the mapped
+  restore draws.
+- KIND-18 (the long list): the two thousand pod volume backups, a hundred rows
+  mounted at most, twenty interactions against the budget of 250 milliseconds at the
+  95th percentile, reported as `kind-18-volumes-performance`. The view of the backup
+  of two hundred operations, opened twenty times after two that warm it, each time
+  after a read with the view open, which keeps the family read: the band whole in
+  34 milliseconds at the 95th percentile, 32 at the median, reported as
+  `kind-18-busiest-backup-performance`, with the lists of the family counted over the
+  loop: one at each read and none at an opening. The reads, counted on the API server over
+  three reads of the installation: with the list of the two thousand open, three
+  lists of the pod volume backups, one at each read, and none of the pod volume
+  restores; with the Overview, none of either, reported as
+  `kind-18-reads-of-the-pod-volume-operations`. Measured on 2026-11-07 on macOS x64
+  with Docker Desktop, in Freelens 2.0.0 of the release: the list of the two thousand
+  at 159 milliseconds at the 95th percentile and 46 at the median.
+- The changes made on purpose, on macOS on 2026-11-07 and 2026-11-08, each seen
+  failing: the Overview made to hold the family of the pod volume backups, and the case
+  of the reads counted three lists of them with the Overview open, where none is
+  expected; the band of the busiest backup slowed, and its case measured 342
+  milliseconds at the 95th percentile against the budget of 250; the way of a row of
+  the Volumes tab taken away, and the case of KIND-12 found no way in the details of
+  the row of the real backup of the volume; the two path rules of the parts taken
+  away, and the test of the plan failed. The control of the counters, made by hand on
+  the environment with the server before it was a case, counted one list of the pods
+  and one of the Jobs of the namespace of the installation. On that machine the suite
+  of the tabs failed, in its three runs, cases of the timing of the machine and not of
+  this pull request: the answers of the log of 200,000 lines at 289 to 301
+  milliseconds at the 95th percentile against 250, and the frames of its scroll at 132
+  to 199 against 50, with the virtual machine of Docker at work beside it; once, the
+  menu of the catalog that disconnects the cluster, not stable when it was clicked, and
+  the case after it, whose click the catalog left over the page took; once, the picture
+  of a load in flight in the light theme, which three loads ended before it was taken.
+  Its hosted runs, where these cases pass, are the evidence of them.
+
 Amendment of 2026-11-07 (REQ-195, KIND-19): the suite of the volumes keeps the
 server of the release, the real repository and the real pod volume operations, in
 the part of the hosted job of the views with the server. The suites of the Overview
