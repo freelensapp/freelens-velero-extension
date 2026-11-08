@@ -403,6 +403,57 @@ describe("the frame of a cluster", () => {
     expect(asked).toEqual([{ cluster: "synthetic-cluster" }, { cluster: "synthetic-cluster" }]);
   });
 
+  it("asks the main process for the review and the run of a backup asked from a schedule, with what each carries", async () => {
+    resetIpc();
+    const asked: [string, unknown][] = [];
+    const token = "00000000-0000-4000-8000-000000000001";
+    const text = '{"kind":"Backup","metadata":{"labels":{}}}';
+
+    ipcHandlers.set(CHANNELS.writeConfirm, (_frame, request) => {
+      asked.push([CHANNELS.writeConfirm, request]);
+      return { ok: true, value: { token, expires: 1, text } };
+    });
+    ipcHandlers.set(CHANNELS.writeRun, (_frame, request) => {
+      asked.push([CHANNELS.writeRun, request]);
+      return { ok: true, value: { name: "nightly-1", uid: "backup-uid", found: true } };
+    });
+    const ipc = VeleroIpcRenderer.createInstance(anExtension("renderer") as never);
+    const schedule = { name: "nightly", uid: "schedule-uid" };
+    const target = { kind: "Schedule", name: "nightly", uid: "schedule-uid" };
+
+    expect(await ipc.confirmBackupNow("synthetic-cluster", "velero", schedule, "nightly-1")).toEqual({
+      ok: true,
+      value: { token, expires: 1, text },
+    });
+    expect(
+      await ipc.runBackupNow("synthetic-cluster", "velero", schedule, "nightly-1", token, "request-identifier"),
+    ).toEqual({ ok: true, value: { name: "nightly-1", uid: "backup-uid", found: true } });
+    expect(asked).toEqual([
+      [
+        CHANNELS.writeConfirm,
+        {
+          cluster: "synthetic-cluster",
+          namespace: "velero",
+          kind: "backup-from-schedule",
+          target,
+          backup: "nightly-1",
+        },
+      ],
+      [
+        CHANNELS.writeRun,
+        {
+          cluster: "synthetic-cluster",
+          namespace: "velero",
+          kind: "backup-from-schedule",
+          target,
+          backup: "nightly-1",
+          token,
+          request: "request-identifier",
+        },
+      ],
+    ]);
+  });
+
   it("hears the arguments of a broadcast of the main process, and never reads the event it is given with them", () => {
     resetIpc();
     const ipc = VeleroIpcRenderer.createInstance(anExtension("renderer") as never);

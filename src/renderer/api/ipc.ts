@@ -9,6 +9,7 @@ import {
   type ArtifactSaved,
   type ArtifactTarget,
   type ArtifactValue,
+  type BackupCreated,
   CHANNELS,
   failure,
   type GateState,
@@ -16,6 +17,7 @@ import {
   readArtifactPage,
   readArtifactSaved,
   readArtifactValue,
+  readBackupCreated,
   readGateState,
   readServerStatusValue,
   readWriteConfirmAnswer,
@@ -76,6 +78,25 @@ export interface ArtifactClient {
   save(cluster: string, request: string): Promise<Answer<ArtifactSaved>>;
 }
 
+// What the views ask of the main process for a backup asked from a schedule by hand (SPEC-0017, T4.2): the
+// confirmation, which answers the text of the backup with its token, and the run, which sends that text.
+export interface BackupNowClient {
+  confirmBackupNow(
+    cluster: string,
+    namespace: string,
+    schedule: { name: string; uid: string },
+    backup: string,
+  ): Promise<Answer<WriteConfirmAnswer>>;
+  runBackupNow(
+    cluster: string,
+    namespace: string,
+    schedule: { name: string; uid: string },
+    backup: string,
+    token: string,
+    request: string,
+  ): Promise<Answer<BackupCreated>>;
+}
+
 // What the views ask of what the operator allows the downloads to do: to keep it, and to take it back.
 export interface AllowanceClient {
   allow(cluster: string, allowed: AllowanceFor): Promise<Answer<null>>;
@@ -86,7 +107,7 @@ const NO_ANSWER = failure("request-failed", "way", true, "The main process did n
 
 export class VeleroIpcRenderer
   extends Renderer.Ipc
-  implements GateClient, WriteClient, ArtifactClient, AllowanceClient
+  implements GateClient, WriteClient, ArtifactClient, AllowanceClient, BackupNowClient
 {
   // `bounded` says that the reader of the value bounds it itself: it is so for the page of a text, which
   // is larger than every other answer.
@@ -190,6 +211,48 @@ export class VeleroIpcRenderer
 
   takeBack(cluster: string, allowed: AllowanceFor): Promise<Answer<null>> {
     return this.ask(CHANNELS.allowanceRevoke, { cluster, ...allowed }, (value) => (value === null ? null : undefined));
+  }
+
+  confirmBackupNow(
+    cluster: string,
+    namespace: string,
+    schedule: { name: string; uid: string },
+    backup: string,
+  ): Promise<Answer<WriteConfirmAnswer>> {
+    return this.ask(
+      CHANNELS.writeConfirm,
+      {
+        cluster,
+        namespace,
+        kind: "backup-from-schedule",
+        target: { kind: "Schedule", name: schedule.name, uid: schedule.uid },
+        backup,
+      },
+      readWriteConfirmAnswer,
+    );
+  }
+
+  runBackupNow(
+    cluster: string,
+    namespace: string,
+    schedule: { name: string; uid: string },
+    backup: string,
+    token: string,
+    request: string,
+  ): Promise<Answer<BackupCreated>> {
+    return this.ask(
+      CHANNELS.writeRun,
+      {
+        cluster,
+        namespace,
+        kind: "backup-from-schedule",
+        target: { kind: "Schedule", name: schedule.name, uid: schedule.uid },
+        backup,
+        token,
+        request,
+      },
+      readBackupCreated,
+    );
   }
 
   status(cluster: string, request: string): Promise<Answer<WriteStatus>> {

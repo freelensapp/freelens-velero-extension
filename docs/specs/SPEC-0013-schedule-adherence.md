@@ -1200,3 +1200,24 @@ three items that wait for the confirmation of the lead maintainer at the review 
 above and hold as they are: the amendment of REQ-166 (L776-L780), and the precisions of REQ-170 (L883-L889) and of
 REQ-171 (L943-L946). The manual review of the Success Criteria (L567-L575) waits for the lead maintainer, with its steps
 in [TRY-IT.md](../development/TRY-IT.md); Verified waits for it and for those three items.
+
+## Amendments
+
+### 2026-11-08: A Backup Asked By Hand In The Minute Of A Submission (T4.2 Of SPEC-0017)
+
+As the table of the amendments of
+[SPEC-0017](SPEC-0017-write-actions.md#the-amendments-the-slices-bring) says,
+approved with it: Back up now makes a backup by hand one command away, named as the
+command line names it, `<schedule>-<yyyymmddhhmmss>` with the time in UTC, and one
+asked within the minute of a submission can mislead the offset derived from the
+backups of the schedule (REQ-162). The backup of a last submission is found as REQ-162
+says, the nearest to the submission; when another backup of the schedule is named as
+a submission and was created within the same minute of it, the offset carries it, and
+the words of the derived offset name the risk: the other backup, created within the
+same minute, as a backup asked by hand then is, and that the offset may have been
+read in the name of the wrong one. The rest of REQ-162 is unchanged.
+
+[`schedule-signal.test.ts`](../../src/common/schedule-signal.test.ts) proves it: a
+backup asked eleven seconds after the submission is named beside the derived offset,
+one created two minutes after it is not, and an offset kept from a read before the
+backup asked by hand takes the risk at the next read.

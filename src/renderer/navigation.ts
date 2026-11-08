@@ -1,5 +1,5 @@
 import { Renderer } from "@freelensapp/extensions";
-import { closed, decodeViews, encodeView, openedFrom, sameView } from "../common/views";
+import { closed, decodeViews, encodeView, openedFrom, replaced, sameView } from "../common/views";
 import { readTab } from "./components/workspace-tabs";
 
 import type { ViewKind, ViewTarget } from "../common/views";
@@ -44,6 +44,7 @@ export const PAGES: Record<ViewKind, string> = {
   "pod-volume-restore": POD_VOLUME_RESTORES_PAGE_ID,
   "data-upload": DATA_UPLOADS_PAGE_ID,
   "data-download": DATA_DOWNLOADS_PAGE_ID,
+  "backup-now": SCHEDULES_PAGE_ID,
 };
 
 // The views that are open travel in the address, by their kind and their name, in the order they were
@@ -118,6 +119,11 @@ function showViews(path: ViewTarget[]): void {
 // Opens a view from the one that is shown, or from the list.
 export function openView(target: ViewTarget): void {
   showViews(openedFrom(openViews(), target));
+}
+
+// The view that is shown gives its place to another, whose way back leads where the first one was opened from.
+export function replaceView(target: ViewTarget): void {
+  showViews(replaced(openViews(), target));
 }
 
 // Takes the way back: to the view this one was opened from, or to the list.

@@ -922,7 +922,7 @@ describe("views of the schedules", () => {
   );
 
   it(
-    "offers no way to select, edit, delete, pause or run a schedule, by pointer or by keyboard",
+    "offers no way to select, edit, delete, pause or run a schedule, by pointer or by keyboard, and Back up now writes nothing by itself",
     async () => {
       const list = frame.locator("[data-testid=velero-schedules]");
 
@@ -975,13 +975,21 @@ describe("views of the schedules", () => {
           ),
         );
 
-      // The way back, the ways to the other views and the marks of the line: nothing that writes.
+      // The way back, Back up now, the ways to the other views and the marks of the line: nothing that writes by
+      // itself (SCHED-11 as SPEC-0017 restates it).
       expect(controls.filter((control) => control !== "mark" && !control.startsWith("velero-open-"))).toEqual([
         "velero-back",
+        "velero-schedule-back-up-now",
       ]);
       expect(await frame.locator("[data-testid=velero-schedule-workspace]").innerText()).not.toMatch(
         /\b(delete|edit|pause now|resume|run now|trigger)\b/i,
       );
+      // Back up now opens its workspace over the view, and writes nothing: its form, and no review without writes on.
+      await frame.click("[data-testid=velero-schedule-back-up-now]");
+      await frame.waitForSelector("[data-testid=velero-backup-now-workspace]", { timeout: 30_000 });
+      expect(await frame.locator("[data-testid=velero-backup-now-review]").count()).toBe(0);
+      await cluster.closeWorkspace(frame);
+      await frame.waitForSelector("[data-testid=velero-schedule-workspace]", { timeout: 30_000 });
       await cluster.closeWorkspace(frame);
     },
     TIMEOUT,

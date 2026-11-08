@@ -324,3 +324,26 @@ pre-review in the views run. Green on v2: SCHED-01 to SCHED-12 and SCHED-14 at t
 unit and component layers; SCHED-01 to SCHED-11 and SCHED-14 in the packaged
 application, SCHED-14 with the second reader, and SCHED-13 in the pre-review. The
 deviation recorded above holds on v2 as it is; v2 brings no other.
+
+## Amendments
+
+### 2026-11-08: The Commands Of A Schedule (T4.2 Of SPEC-0017)
+
+As the table of the amendments of
+[SPEC-0017](SPEC-0017-write-actions.md#the-amendments-the-slices-bring) says,
+approved with it, the second pull request of T4.2 restates two requirements and
+their checks, and the rest of this spec is read with them:
+
+| Requirement and check | Restated |
+| --- | --- |
+| REQ-065, SCHED-02 | The workspace of a schedule, which reads and offers the commands of REQ-074 as restated here, opened from a row; the details of the host read through the same helpers |
+| REQ-074, SCHED-11 | No surface offers to edit, delete or select a schedule; the workspace of a schedule offers Back up now (T4.2), Pause or Resume (T4.5) and Restore (T4.4), each opening the workspace of its action of SPEC-0017 and writing nothing by itself; the list offers Create schedule of SPEC-0016 and nothing else that writes |
+
+With T4.2 the workspace of a schedule has Back up now, under its name, and no other
+command yet: the command opens the workspace of the backup asked from the schedule
+over the view, named in the address, and writes nothing by itself. SCHED-11 is
+proven at the component layer by the view of a schedule whose controls are the way
+back, Back up now, the ways to the other views and the marks of the line, and by the
+workspace of the action, with writes off and on, in
+[`backup-now-workspace.test.tsx`](../../src/renderer/pages/backup-now-workspace.test.tsx);
+the packaged suites of the action come with the last pull request of T4.2.

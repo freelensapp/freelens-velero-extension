@@ -18,6 +18,7 @@ import { emptyRead, failed, failedStatus, loading, succeeded } from "../../commo
 import { keepOffset } from "../../common/schedule-signal";
 import { readWindow } from "../../common/window";
 import { ArtifactLoads } from "./artifact-loads";
+import { BackupNow } from "./backup-now";
 import { ServerStatus } from "./server-status";
 
 import type { Allowance, AllowanceFor } from "../../common/allowances";
@@ -50,7 +51,7 @@ import type {
   VolumeSnapshotLocationResource,
 } from "../../common/types";
 import type { Window } from "../../common/window";
-import type { AllowanceClient, ArtifactClient, GateClient, WriteClient } from "../api/ipc";
+import type { AllowanceClient, ArtifactClient, BackupNowClient, GateClient, WriteClient } from "../api/ipc";
 
 // What asks the cluster: one verb, and the status of the answer beside its body.
 export type Reader = (path: string, signal?: AbortSignal) => Promise<Answer>;
@@ -88,6 +89,8 @@ export interface InstallationDependencies {
   // The writes of the main process, through the same way as the gate, and what it gives of the text of
   // an artifact it downloaded.
   writer?: WriteClient & ArtifactClient;
+  // The writes of the actions of Velero, through the same way.
+  actions?: BackupNowClient;
   // What keeps, in the main process, what the operator allowed the downloads to do.
   allowances?: AllowanceClient;
   // The identifier of a new request of a write. A random UUID when none is given.
@@ -141,6 +144,8 @@ export class Installation {
   // What Velero wrote into its storage of the backup or the restore whose view is open, when the operator
   // asked for it: the loads of its tabs.
   readonly artifacts: ArtifactLoads;
+  // A backup asked from a schedule by hand, from the workspace of the schedule.
+  readonly backupNow: BackupNow;
   // Whether a view of the extension is open, so that the families are asked again every so often: what is
   // drawn where no view is, as the details of the host, says how old what it computed with is once none is.
   watched = false;
@@ -174,6 +179,15 @@ export class Installation {
       // its name and its UID before anything is created for it.
       object: (kind, name) =>
         this.reads[kind === "Backup" ? "backups" : "restores"].items.find((item) => item.metadata.name === name),
+      writesOn: () => this.writes.on,
+      now: dependencies.now,
+      requestId,
+      refused: () => void this.openGate(),
+    });
+    this.backupNow = new BackupNow({
+      client: dependencies.actions,
+      cluster: () => this.cluster.id,
+      namespace: () => this.namespace,
       writesOn: () => this.writes.on,
       now: dependencies.now,
       requestId,
@@ -287,6 +301,7 @@ export class Installation {
       if (!this.writes.on) {
         this.server.leave();
         this.artifacts.leave();
+        this.backupNow.leave();
       }
     });
   }
@@ -534,6 +549,7 @@ export class Installation {
     });
     this.server.drop();
     this.artifacts.drop();
+    this.backupNow.drop();
   }
 
   // What is kept is changed from what the store holds now, and not from what this installation read of
@@ -567,6 +583,7 @@ export class Installation {
     this.serverTime = undefined;
     this.server.drop();
     this.artifacts.drop();
+    this.backupNow.drop();
     this.dropWrites(left);
   }
 

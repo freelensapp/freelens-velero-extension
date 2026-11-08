@@ -757,3 +757,92 @@ Decided while implementing, on 2026-11-08:
   NOW-01 and NOW-04 in the renderer); the end kept for the cluster and said in the
   target bar (REQ-250); the packaged suites and the end to end proof (ACT-11,
   NOW-05).
+
+T4.2, the second of its pull requests, on 2026-11-08: the workspace of the action in
+the renderer, the command in the view of a schedule and the risk to the offset of
+SPEC-0013; the words of the gate came with the first. The evidence, by check:
+
+- NOW-01, the component part: the command under the name of the schedule, there for
+  a paused schedule, and disabled for a schedule of 64 characters with the words of
+  the label tied to it; the name proposed from a fixed clock in UTC, edited, and
+  refused at 217 characters and with capitals, each with its words tied to the field;
+  Escape in the field gives back the name proposed and does not leave the view
+  (`src/renderer/pages/backup-now-workspace.test.tsx`,
+  `src/renderer/state/backup-now.test.ts`).
+- ACT-03: the review shows the text of the confirmation unchanged beside what it
+  means, with the context and the namespace; a change of the name drops the review
+  and its token; a token that expired is asked again, the run goes on for the same
+  text, and for another the new review takes the place of the old one and nothing is
+  sent; the review left by its command and by Escape.
+- ACT-05 and NOW-05, the component part: the phase read after the creation, the
+  words that Velero has not read the backup yet when it wrote none, and the way to
+  the view of the backup, which takes the place of the workspace, so that its way
+  back leads to the schedule.
+- ACT-06: a second gesture while the backup is created asks nothing more, and the
+  run keeps the identifier of its request.
+- ACT-07, the component part: a creation whose answer is not known says that the
+  backup may be there, and to look for it before asking again; a backup found by its
+  name after an answer that was lost is said as found.
+- ACT-09: the command where REQ-252 puts it and no other control that writes in the
+  view; the workspace over the view of the schedule, named in the address; the way
+  back to the view as it was; with writes off the form is filled, the review does not
+  open, and the words lead to the target bar
+  (`src/renderer/pages/schedules-page.test.tsx`,
+  `src/renderer/pages/backup-now-workspace.test.tsx`).
+- NOW-04: a 409 at the creation leads to the backup that has the name, and the form
+  proposes the name of the next second.
+- REQ-245: the words of the gate name the backup from a schedule since the first
+  pull request (`src/renderer/components/writes.test.tsx`).
+- NOW-05, the unit part: the risk to the offset of SPEC-0013, as
+  [its amendment](SPEC-0013-schedule-adherence.md#amendments) says.
+
+Each new case was seen failing on a change made on purpose: a change of the name that
+keeps the review, no name of the next second, a token that expired taken again for any
+text, a token that expired not asked again, no way to the backup created, Escape that
+empties the name, the command enabled for a name of 64 characters, the words of writes
+off left out, no other backup of the minute carried, the window of the minute not
+applied, and an offset kept that does not take the risk.
+
+The independent review of the pull request ran 139 changes against the tests, of
+which 65 survived, and found the workspace of a second schedule blank once the backup
+asked from the first one ended. The cases added after it pin what it named: the form
+of that schedule given when the other backup ends, with its end above it until it is
+let go, and no end said again once its workspace showed it; a review left with its
+workspace; the form opened from the address alone; the command that gives a new form;
+Enter in the field, with the focus on the words of what is asked; writes turned off,
+another installation and the end of the extension during a review; a renewal and a
+run dropped, a renewal refused, the expiry at its instant, and the review that takes
+the place of another and says so; a text that is not the body of a backup, confirmed
+for nothing; the name of the next second given back by Escape after a 409; one review
+at a time; what the client of the renderer sends; the nearest of three backups of the
+minute; and the risk carried by an offset that changed. Fifteen changes of what the
+review asked were seen failing.
+
+Decided while implementing, on 2026-11-08:
+
+- The state of the action is kept by the installation, as the version of the server
+  is: a visit to another page shows the form with its name, and the backup being
+  created or how it ended, as they were; a review is left with the workspace that
+  shows it, and asked again; the installation that changes drops everything, and
+  writes turned off drop a review.
+- One backup is asked at a time from any workspace: the workspace of another schedule
+  opened while one is created says so, asks nothing, and gives the form of its
+  schedule when that one ends.
+- An end no workspace showed, of a backup whose workspace was closed while it was
+  created, is not lost with its form: the next workspace says it above its form, with
+  the way to the backup created, until the operator lets it go. The end kept for the
+  cluster in the target bar, wherever the operator is, comes with the last pull
+  request of T4.2.
+- A review whose text the views cannot read as a Backup is not confirmed, and says
+  so; a review that took the place of one whose schedule changed while it was read
+  says so above it.
+- Escape in the field of the name gives back the name the form proposed: what was
+  typed is the change of the proposal, and an empty name is not a way out.
+- The text of the review scrolls past 480 pixels; Chromium gives the keyboard a
+  scroller with nothing to focus in it, and the text is not made focusable.
+- The way to the backup created takes the place of the workspace in the address; the
+  way to a backup that already had the name opens over the workspace, whose way back
+  leads to the form with the name of the next second.
+- What the last pull request of T4.2 brings: the end kept for the cluster and said in
+  the target bar (REQ-250), the packaged suites and the end to end proof (ACT-11,
+  NOW-05), and the pre-review of the workspace (ACT-10).

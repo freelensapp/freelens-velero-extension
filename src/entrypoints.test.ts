@@ -150,8 +150,18 @@ describe("what the extension registers", () => {
     for (const page of pages) {
       expect([page, menus.find((menu) => menu.target.pageId === page)?.parentId]).toEqual([page, "velero"]);
     }
-    // Every kind that has a view has the page of its list, which is where a link from outside opens it.
-    expect([...Object.values(PAGES), "overview"].sort()).toEqual([...pages].sort());
+    // Every kind that has a view has the page of its list, which is where a link from outside opens it: the
+    // workspace of an action opens on the page of the object it is asked from.
+    expect([...new Set([...Object.values(PAGES), "overview"])].sort()).toEqual([...pages].sort());
+    // The workspace of an action is the one view that shares a page, the one of the object it is asked from.
+    const shared = Object.entries(PAGES).filter(
+      ([, page]) => Object.values(PAGES).filter((one) => one === page).length > 1,
+    );
+
+    expect(shared).toEqual([
+      ["schedule", "schedules"],
+      ["backup-now", "schedules"],
+    ]);
     for (const menu of menus) expect(pages).toContain(menu.target.pageId);
     expect(
       (extension.kubeObjectDetailItems as { kind: string; apiVersions: string[] }[]).map((item) => [

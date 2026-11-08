@@ -93,6 +93,14 @@ declare const classNames: {
   readonly writeConfirmation: "writeConfirmation";
   readonly writeObject: "writeObject";
   readonly writeActions: "writeActions";
+  readonly commands: "commands";
+  readonly backupName: "backupName";
+  readonly review: "review";
+  readonly reviewColumns: "reviewColumns";
+  readonly reviewPart: "reviewPart";
+  readonly reviewMeaning: "reviewMeaning";
+  readonly reviewMeaningPart: "reviewMeaningPart";
+  readonly reviewText: "reviewText";
   readonly serverFocus: "serverFocus";
   readonly serverNames: "serverNames";
   readonly serverProviders: "serverProviders";

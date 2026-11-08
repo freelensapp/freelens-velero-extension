@@ -921,8 +921,9 @@ function isSubmissionName(name: string, schedule: string): boolean {
 }
 
 export type SubmissionBackup =
-  // The milliseconds from the submission to the creation of the backup.
-  | { kind: "found"; backup: BackupResource; distance: number }
+  // The milliseconds from the submission to the creation of the backup, and the nearest other backup of the schedule
+  // that is named as a submission and was created within the same minute of it, as one asked by hand then would be.
+  | { kind: "found"; backup: BackupResource; distance: number; shared?: BackupResource }
   // The submission stands, since the schedule carries it: its backup expired, was deleted or cannot be read.
   | { kind: "not-found"; submission: number }
   | { kind: "no-submission" };
@@ -935,7 +936,7 @@ export function submissionBackup(schedule: ScheduleResource, backups: BackupReso
   const submission = timestamp(schedule.status?.lastBackup);
 
   if (submission === undefined) return { kind: "no-submission" };
-  let found: { backup: BackupResource; distance: number } | undefined;
+  const near: { backup: BackupResource; distance: number }[] = [];
 
   for (const backup of backupsOf(backups, schedule.metadata.namespace ?? "", schedule.metadata.name)) {
     if (!isSubmissionName(backup.metadata.name, schedule.metadata.name)) continue;
@@ -944,16 +945,18 @@ export function submissionBackup(schedule: ScheduleResource, backups: BackupReso
     if (created === undefined) continue;
     const distance = created - submission;
 
-    if (Math.abs(distance) > SUBMISSION_WINDOW) continue;
-    if (
-      !found ||
-      Math.abs(distance) < Math.abs(found.distance) ||
-      (Math.abs(distance) === Math.abs(found.distance) && backup.metadata.name < found.backup.metadata.name)
-    ) {
-      found = { backup, distance };
-    }
+    if (Math.abs(distance) <= SUBMISSION_WINDOW) near.push({ backup, distance });
   }
-  return found ? { kind: "found", ...found } : { kind: "not-found", submission };
+  // The nearest to the submission, and the first by name of two as near.
+  near.sort(
+    (one, other) =>
+      Math.abs(one.distance) - Math.abs(other.distance) ||
+      (one.backup.metadata.name < other.backup.metadata.name ? -1 : 1),
+  );
+  const [found, shared] = near;
+
+  if (!found) return { kind: "not-found", submission };
+  return { kind: "found", ...found, ...(shared ? { shared: shared.backup } : {}) };
 }
 
 // The backups of the schedule that are newer than its last submission, the backup of the submission left
