@@ -4,6 +4,7 @@ import {
   ARTIFACT_TARGETS,
   artifactKind,
   downloadRequestName,
+  KEPT_ENDS_BOUND,
   PAGE_BOUND,
   REQUEST_BOUND,
   REQUEST_STAGES,
@@ -19,11 +20,14 @@ import {
   readGateEnableRequest,
   readGateState,
   readGateStateRequest,
+  readKeptEnds,
   readServerStatusValue,
   readWriteCancelRequest,
   readWriteConfirmAnswer,
   readWriteConfirmRequest,
+  readWriteEndsRequest,
   readWriteRunRequest,
+  readWriteShownRequest,
   readWriteStatus,
   readWriteStatusRequest,
   savedFileName,
@@ -338,6 +342,49 @@ describe("the answers of a write of a body", () => {
     ]) {
       expect([value, readBackupCreated(value)]).toEqual([value, undefined]);
     }
+  });
+});
+
+describe("the ends kept for a cluster, between the processes", () => {
+  const end = {
+    request: randomUUID(),
+    kind: "backup-from-schedule",
+    namespace: "velero",
+    context: "kind-a",
+    name: "daily-20261108034105",
+    schedule: "daily",
+    outcome: { created: true, phase: "New", found: true },
+    at: 1,
+  };
+
+  it("reads the ends of a cluster, each with what to look for and how it ended, and the end a frame showed", () => {
+    const refused = {
+      ...end,
+      outcome: { created: false, code: "conflict", text: "A backup named it is already there." },
+    };
+
+    expect(readKeptEnds([end, refused])).toEqual([end, refused]);
+    expect(readKeptEnds([])).toEqual([]);
+    expect(readWriteEndsRequest({ cluster })).toEqual({ cluster });
+    expect(readWriteShownRequest({ cluster, request: end.request })).toEqual({ cluster, request: end.request });
+    expect(readWriteShownRequest({ cluster, request: "not-a-uuid" })).toBeUndefined();
+  });
+
+  it.each([
+    ["a request that is not an identifier", { ...end, request: "r" }],
+    ["another kind", { ...end, kind: "DownloadRequest" }],
+    ["a name that is not one", { ...end, name: "Daily" }],
+    ["a field the contract does not know", { ...end, more: 1 }],
+    ["an outcome of no shape", { ...end, outcome: { created: "yes" } }],
+    ["a failure without words", { ...end, outcome: { created: false, code: "conflict" } }],
+    ["a time that is not one", { ...end, at: Number.NaN }],
+  ])("refuses the ends with %s", (_, value) => {
+    expect(readKeptEnds([value])).toBeUndefined();
+  });
+
+  it("refuses more ends than are kept", () => {
+    expect(readKeptEnds(Array.from({ length: KEPT_ENDS_BOUND + 1 }, () => end))).toBeUndefined();
+    expect(readKeptEnds(Array.from({ length: KEPT_ENDS_BOUND }, () => end))).toHaveLength(KEPT_ENDS_BOUND);
   });
 });
 

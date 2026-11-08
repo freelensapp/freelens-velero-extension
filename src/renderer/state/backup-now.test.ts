@@ -40,6 +40,7 @@ function mainProcess() {
 function backupNow(options: { client?: BackupNowClient; writesOn?: boolean } = {}) {
   const clock = { now: NOW };
   const refusals: number[] = [];
+  const shown: string[] = [];
   let request = 0;
   const writes = { on: options.writesOn ?? true };
   const state = new BackupNow({
@@ -50,9 +51,10 @@ function backupNow(options: { client?: BackupNowClient; writesOn?: boolean } = {
     now: () => clock.now,
     requestId: () => `request-${++request}`,
     refused: () => refusals.push(clock.now),
+    shown: (request) => shown.push(request),
   });
 
-  return { state, clock, refusals, writes };
+  return { state, clock, refusals, writes, shown };
 }
 
 const turn = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -166,6 +168,7 @@ describe("a backup asked from a schedule, in the views", () => {
     expect(state.step).toEqual({
       state: "created",
       backup: { name: "nightly-20261108043015", uid: "backup-uid", phase: "New" },
+      request: "request-1",
     });
   });
 
@@ -186,7 +189,11 @@ describe("a backup asked from a schedule, in the views", () => {
     expect(main.runs[0].args[4]).toBe("token-2");
     main.runs[0].answer({ ok: true, value: { name: "nightly-20261108043015", uid: "backup-uid" } });
     await created;
-    expect(state.step).toEqual({ state: "created", backup: { name: "nightly-20261108043015", uid: "backup-uid" } });
+    expect(state.step).toEqual({
+      state: "created",
+      backup: { name: "nightly-20261108043015", uid: "backup-uid" },
+      request: "request-1",
+    });
 
     // The schedule changed while the review was read: the new text is a new review, and nothing is sent.
     state.start(SCHEDULE);
@@ -215,7 +222,13 @@ describe("a backup asked from a schedule, in the views", () => {
 
     main.runs[0].answer(taken);
     await created;
-    expect(state.step).toEqual({ state: "failed", failure: taken, left: "none", name: "nightly-20261108043015" });
+    expect(state.step).toEqual({
+      state: "failed",
+      failure: taken,
+      left: "none",
+      name: "nightly-20261108043015",
+      request: "request-1",
+    });
     expect(state.name).toBe("nightly-20261108043016");
     expect(refusals).toHaveLength(1);
     // Asking again is a new review, of the name proposed.
@@ -457,7 +470,11 @@ describe("what a backup asked from a schedule keeps and leaves, in the views", (
     state.start({ name: "weekly", uid: "weekly-uid" });
     expect(state.earlier).toEqual({
       schedule: "nightly",
-      end: { state: "created", backup: { name: "nightly-20261108043015", uid: "backup-uid", phase: "New" } },
+      end: {
+        state: "created",
+        backup: { name: "nightly-20261108043015", uid: "backup-uid", phase: "New" },
+        request: "request-1",
+      },
     });
     state.letGo();
     expect(state.earlier).toBeUndefined();
@@ -481,5 +498,42 @@ describe("what a backup asked from a schedule keeps and leaves, in the views", (
     // The installation that changes takes it with everything else.
     state.drop();
     expect(state.earlier).toBeUndefined();
+  });
+});
+
+describe("the end of a run, which a view shows, in the views", () => {
+  it("tells the main process that a view showed the end of a run, and of the earlier one, and nothing of an end before a run", async () => {
+    const main = mainProcess();
+    const { state, shown } = backupNow({ client: main.client });
+
+    state.start(SCHEDULE);
+    let asked = state.review();
+
+    main.confirms[0].answer(failure("forbidden", "gate"));
+    await asked;
+    state.see();
+    expect(shown).toEqual([]);
+    asked = state.review();
+    main.confirms[1].answer(confirmed("token-2"));
+    await asked;
+    const created = state.create();
+
+    main.runs[0].answer({ ok: true, value: { name: "nightly-20261108043015", uid: "backup-uid" } });
+    await created;
+    state.start({ name: "weekly", uid: "weekly-uid" });
+    state.seeEarlier();
+    expect(shown).toEqual(["request-1"]);
+    state.letGo();
+    state.start(SCHEDULE);
+    const again = state.review();
+
+    main.confirms[2].answer(confirmed("token-3"));
+    await again;
+    const failed = state.create();
+
+    main.runs[1].answer(failure("conflict", "creation"));
+    await failed;
+    state.see();
+    expect(shown).toEqual(["request-1", "request-2"]);
   });
 });

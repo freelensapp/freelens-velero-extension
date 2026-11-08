@@ -818,6 +818,49 @@ at a time; what the client of the renderer sends; the nearest of three backups o
 minute; and the risk carried by an offset that changed. Fifteen changes of what the
 review asked were seen failing.
 
+T4.2, the third of its pull requests, on 2026-11-08: the end kept for the cluster
+(REQ-250). The main process keeps every end of a backup asked from a schedule whose
+request was sent, created or not, with what to look for and where; the frame that asked
+and showed it says so, and the others of the cluster ask for the ends at every read of
+the installation, through `write.ends` and `write.shown`, which
+[the amendment of SPEC-0009](SPEC-0009-write-gate.md#amendments) adds. The evidence:
+
+- ACT-07, REQ-250: the end of a backup whose frame went after the creation, kept and
+  given to another frame of the same cluster, and let go once it says it showed it;
+  the end of a request the frame showed let go; no end of a request that was not
+  sent, refused by the adapter, before a change of the cluster or for a schedule that
+  changed; nothing for a frame that names another cluster; nothing after the
+  extension went; sixteen ends at most for a cluster, the newest
+  (`src/main/ipc-backup-now.test.ts`, `src/main/kept-ends.test.ts`).
+- The contract: the ends read whole, and refused with any field out of their shape or
+  more of them than are kept (`src/common/ipc.test.ts`).
+- The views: the workspace that shows the result, and the notice of an earlier end,
+  say they showed it; the target bar says an end no view showed, in words read whole,
+  with the way to the backup created in the installation that is shown, until it is
+  dismissed (`src/renderer/state/backup-now.test.ts`,
+  `src/renderer/pages/backup-now-workspace.test.tsx`,
+  `src/common/kept-end-words.test.ts`).
+
+Each new case was seen failing on a change made on purpose: the end not kept, the
+ends not sent kept, the ends of every cluster given, no bound, the ends kept after the
+extension went, the end shown not let go, the workspace or the notice that does not
+say it showed it, the ends not read at every read, the end dismissed left in the bar,
+the words of a backup found, and the reader without its bound.
+
+Decided while implementing, on 2026-11-08:
+
+- Every end of a request that was sent is kept, the refusals of the API server among
+  them, and not only the ones whose answer was lost: a frame that went misses those
+  as well. What the adapter refused to send, a cluster that changed before anything
+  left and an API server that could not be reached are not kept: nothing was sent.
+- The frames ask for the ends at every read of the installation, every fifteen
+  seconds while a view is open, and nothing is broadcast, as SPEC-0009 says.
+- An end is let go once a view of the cluster showed it: the result in the workspace,
+  the notice of the earlier end above a form, or the operator who dismissed it in the
+  target bar.
+- What remains of T4.2: the packaged suites and the end to end proof (ACT-11,
+  NOW-05), and the pre-review of the workspace (ACT-10).
+
 Decided while implementing, on 2026-11-08:
 
 - The state of the action is kept by the installation, as the version of the server

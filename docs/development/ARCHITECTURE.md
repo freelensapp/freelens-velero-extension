@@ -891,7 +891,11 @@ is the answer of the call that ran it; its progress is read by the frame that as
 by the identifier of the request; nothing of a write is broadcast. The main process
 broadcasts only that the gate of a cluster changed for a reason of its own, the entry
 of the catalog, the connection or the frame that turned writes on, and looks at the
-catalog and at that frame every five seconds while writes are on somewhere.
+catalog and at that frame every five seconds while writes are on somewhere. The end
+of a write whose request was sent is kept for its cluster until a frame of that
+cluster has shown it, or the extension is deactivated: the views ask for the ends of
+their cluster at every read, and the target bar says each one that no view showed
+(REQ-250 of [SPEC-0017](../specs/SPEC-0017-write-actions.md)).
 
 A cluster is resolved from the catalog of the host, by the identifier of its frame,
 and must be an entry of the catalog of the main process, connected; no default

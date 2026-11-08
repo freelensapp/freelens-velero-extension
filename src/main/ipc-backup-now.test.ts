@@ -85,7 +85,7 @@ function fixture() {
   };
   const gate = new WriteGate({ catalog: () => catalog, adapter: () => adapter as never, now: () => state.now });
 
-  registerHandlers(registrar, {
+  const release = registerHandlers(registrar, {
     catalog: () => catalog,
     gate,
     pollMs: 5,
@@ -118,7 +118,7 @@ function fixture() {
   const run = (token: string, backup = NAME, request = randomUUID()) =>
     call(CHANNELS.writeRun, { ...of, backup, token, request });
 
-  return { state, adapter, gate, call, enable, confirm, run };
+  return { state, adapter, gate, call, enable, confirm, run, release };
 }
 
 describe("the confirmation of a backup asked from a schedule", () => {
@@ -695,3 +695,131 @@ describe("what a backup asked from a schedule checks before and after its creati
 function ofSchedule() {
   return { cluster: "cluster-a", namespace: "velero", kind: "backup-from-schedule", target: SCHEDULE };
 }
+
+describe("the end of a backup asked from a schedule, kept for its cluster", () => {
+  const another: IpcEvent = {
+    senderFrame: { url: "https://cluster-a.renderer.freelens.app:1234/" },
+    processId: 1,
+    frameId: 7,
+  };
+  const ends = (call: ReturnType<typeof fixture>["call"], event: IpcEvent = another) =>
+    call(CHANNELS.writeEnds, { cluster: "cluster-a" }, event);
+
+  it("keeps the end of a backup whose frame went after the creation, for any frame of the cluster, until one shows it", async () => {
+    const { call, adapter, state } = fixture();
+    const frame = structuredClone(FRAME_A);
+
+    await call(
+      CHANNELS.gateEnable,
+      { cluster: "cluster-a", namespace: "velero", confirmation: { context: "kind-a", namespace: "velero" } },
+      frame,
+    );
+    const confirmed = await call(CHANNELS.writeConfirm, { ...ofSchedule(), backup: NAME }, frame);
+    const create = adapter.createBackup.getMockImplementation() as (
+      namespace: string,
+      text: string,
+    ) => Promise<DiagnosticObject>;
+
+    adapter.createBackup.mockImplementation(async (namespace: string, text: string) => {
+      const created = await create(namespace, text);
+
+      frame.senderFrame = { url: "https://cluster-b.renderer.freelens.app:1234/" };
+      return created;
+    });
+    state.phases = ["New"];
+    const request = randomUUID();
+
+    expect(
+      await call(CHANNELS.writeRun, { ...ofSchedule(), backup: NAME, token: confirmed.value?.token, request }, frame),
+    ).toMatchObject({ ok: false, stage: "frame" });
+    expect(await ends(call)).toEqual({
+      ok: true,
+      value: [
+        {
+          request,
+          kind: "backup-from-schedule",
+          namespace: "velero",
+          context: "kind-a",
+          name: NAME,
+          schedule: "daily",
+          outcome: { created: true, phase: "New" },
+          at: state.now,
+        },
+      ],
+    });
+    expect(await call(CHANNELS.writeShown, { cluster: "cluster-a", request }, another)).toEqual({
+      ok: true,
+      value: null,
+    });
+    expect(await ends(call)).toEqual({ ok: true, value: [] });
+  });
+
+  it("keeps the end of a request that was sent until the frame that asked shows it, and none of one that was not sent", async () => {
+    const { enable, confirm, call, state } = fixture();
+
+    await enable();
+    const request = randomUUID();
+    const token = String((await confirm()).value?.token);
+
+    state.create = async () => {
+      throw new DiagnosticError("conflict");
+    };
+    expect(await call(CHANNELS.writeRun, { ...ofSchedule(), backup: NAME, token, request })).toMatchObject({
+      code: "conflict",
+    });
+    expect((await ends(call, FRAME_A)).value).toEqual([
+      expect.objectContaining({
+        request,
+        outcome: { created: false, code: "conflict", text: BACKUP_NOW_WORDS.exists(NAME) },
+      }),
+    ]);
+    await call(CHANNELS.writeShown, { cluster: "cluster-a", request });
+    // Refused before it left: by the adapter, a cluster that changed before anything was sent, a schedule that changed.
+    for (const refusal of [new DiagnosticError("validation"), new DiagnosticError("target-changed")]) {
+      state.create = async () => {
+        throw refusal;
+      };
+      await call(CHANNELS.writeRun, {
+        ...ofSchedule(),
+        backup: NAME,
+        token: String((await confirm()).value?.token),
+        request: randomUUID(),
+      });
+    }
+    const changed = String((await confirm()).value?.token);
+
+    state.schedule = scheduleObject({ labels: { team: "billing" } });
+    await call(CHANNELS.writeRun, { ...ofSchedule(), backup: NAME, token: changed, request: randomUUID() });
+    expect(await ends(call)).toEqual({ ok: true, value: [] });
+  });
+
+  it("gives a frame the ends of its own cluster alone, and lets them go with the extension", async () => {
+    const { enable, confirm, call, release, state } = fixture();
+
+    await enable();
+    state.create = async () => {
+      throw new DiagnosticError("forbidden");
+    };
+    await call(CHANNELS.writeRun, {
+      ...ofSchedule(),
+      backup: NAME,
+      token: String((await confirm()).value?.token),
+      request: randomUUID(),
+    });
+    expect((await ends(call)).value).toHaveLength(1);
+    // A frame of another cluster names this one: refused.
+    expect(
+      await call(
+        CHANNELS.writeEnds,
+        { cluster: "cluster-a" },
+        {
+          senderFrame: { url: "https://cluster-b.renderer.freelens.app:1234/" },
+          processId: 1,
+          frameId: 8,
+        },
+      ),
+    ).toMatchObject({ ok: false, code: "forbidden" });
+    release();
+    expect(await ends(call)).toEqual({ ok: true, value: [] });
+  });
+});

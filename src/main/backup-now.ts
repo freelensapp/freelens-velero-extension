@@ -72,6 +72,17 @@ export interface BackupNowDependencies {
   now(): number;
   // Waits, or ends with the signal.
   sleep(milliseconds: number, signal: AbortSignal): Promise<void>;
+  // Keeps the end of a run whose request was sent, for the cluster, until a frame of it has shown it (REQ-250).
+  keep?(request: WriteRunRequest, end: Answer<BackupCreated>): void;
+}
+
+// Whether a creation that failed reached the API server: what the adapter refused to send, a cluster that changed
+// before anything was sent and an API server that could not be reached did not.
+function sent(error: unknown): boolean {
+  if (!(error instanceof DiagnosticError)) return true;
+  if (error.code === "validation") return error.verdict === "refused";
+  if (error.code === "target-changed") return error.verdict === "answered";
+  return error.code !== "transport-unreachable";
 }
 
 function phaseOf(object: DiagnosticObject): string | undefined {
@@ -314,6 +325,12 @@ export async function runBackupNow(
     if (signal.aborted) return failure("cancelled", "creation", true, BACKUP_NOW_WORDS.cancelled);
     if (!still()) return failure("forbidden", "frame", false, BACKUP_NOW_WORDS.frameGone);
     write.status = { step: "creating the backup" };
+    // Every end of a request that was sent is kept for the cluster, and is answered to the frame that asked when it is
+    // still there: it says it showed the end, or the target bar of the cluster shows it.
+    const ended = (end: Answer<BackupCreated>): Answer<BackupCreated> => {
+      dependencies.keep?.(request, end);
+      return still() ? end : failure("forbidden", "frame", false, BACKUP_NOW_WORDS.frameGoneAfter);
+    };
     let created: DiagnosticObject;
 
     try {
@@ -322,14 +339,16 @@ export async function runBackupNow(
       // No answer, or one dropped on this side once the request had left: the backup may be there. It is looked for,
       // with reads of their own, which the frame that went does not stop.
       if (error instanceof DiagnosticError && (error.code === "submission-unknown" || error.code === "cancelled"))
-        return await reconcile(dependencies, adapter, request, text, confirmedAt, new AbortController().signal, write);
-      return endOf(error, "creation", request.namespace, backup);
+        return ended(
+          await reconcile(dependencies, adapter, request, text, confirmedAt, new AbortController().signal, write),
+        );
+      const end = endOf(error, "creation", request.namespace, backup);
+
+      return sent(error) ? ended(end) : end;
     }
     if (created.metadata.name !== backup || !created.metadata.uid)
-      return failure("submission-unknown", "creation", false, BACKUP_NOW_WORDS.unknown(backup));
-    const read = await readAfter(dependencies, adapter, request.namespace, created, signal, write, false);
-
-    return still() ? read : failure("forbidden", "frame", false, BACKUP_NOW_WORDS.frameGoneAfter);
+      return ended(failure("submission-unknown", "creation", false, BACKUP_NOW_WORDS.unknown(backup)));
+    return ended(await readAfter(dependencies, adapter, request.namespace, created, signal, write, false));
   } finally {
     stop();
     dependencies.gate.finish(request.cluster, request.request);
