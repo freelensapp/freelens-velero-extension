@@ -5,12 +5,13 @@
 
 // The actions of SPEC-0017 in a packaged Freelens, on the CRDs of the release alone, where no controller runs
 // (REQ-254, ACT-11): Back up now from the view of a schedule (T4.2), Create backup from the list of the Backups (T4.3),
-// and Create schedule of SPEC-0016 from the list of the Schedules (T4.7, REQ-241). With writes off the command writes
-// nothing; a review that is not confirmed, nothing; a confirmed one, exactly one POST of the object, whose every field
-// is the one of the text the review showed, and no other write. The backup stays without a phase, as the result says,
-// and the view of the schedule lists it at its next read (NOW-05). A name already taken is a conflict (NOW-04). The
-// reader of a part is refused at the creation. What the suite created it removes, and the objects of Velero are as they
-// were. The workspace in both themes, at every size and with the keyboard alone, is in the pre-review (ACT-10).
+// Create schedule of SPEC-0016 from the list of the Schedules (T4.7, REQ-241), and Restore from the view of a backup or
+// of a schedule (T4.4). With writes off the command writes nothing; a review that is not confirmed, nothing; a
+// confirmed one, exactly one POST of the object, whose every field is the one of the text the review showed, and no
+// other write. The backup stays without a phase, as the result says, and the view of the schedule lists it at its next
+// read (NOW-05). A name already taken is a conflict (NOW-04). The reader of a part is refused at the creation. What the
+// suite created it removes, and the objects of Velero are as they were. The workspace in both themes, at every size and
+// with the keyboard alone, is in the pre-review (ACT-10).
 
 import { readFile, writeFile } from "node:fs/promises";
 import * as path from "node:path";
