@@ -1102,13 +1102,14 @@ describe("pre-review of the views", () => {
       await started.window.keyboard.press("Enter");
       await frame.waitForSelector(`[data-testid=velero-schedule-name] >> text="${SCHEDULED}"`, { timeout: 60_000 });
       expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
-      // After the way back and the newest backup, the marks of the line, from the oldest, one press each.
+      // After the way back, the commands of the schedule and the newest backup, the marks of the line, from the
+      // oldest, one press each.
       const reached: string[] = [];
       const line = await cluster.history(frame);
 
       // Each day of the history has its mark: what is expected below is of an environment that is not old.
       expect(cluster.dayOnTheLine(line.width)).toBeGreaterThan(2 * cluster.MARK_WIDTH);
-      for (let presses = 0; presses < 12 && reached.length < 7; presses += 1) {
+      for (let presses = 0; presses < 16 && reached.length < 7; presses += 1) {
         await started.window.keyboard.press("Tab");
         const mark = await frame.evaluate(() => document.activeElement?.getAttribute("data-strip-mark") ?? "");
 
