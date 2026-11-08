@@ -26,7 +26,7 @@ import { promisify } from "node:util";
 import { gunzipSync } from "node:zlib";
 import { createTlsFixture } from "../../test/tls-fixture.ts";
 import { tabArtifacts, tabExpectations } from "./local-artifacts.mts";
-import { runBackupNowProof } from "./local-backup-now-proof.mts";
+import { runBackupCreateProof, runBackupNowProof } from "./local-backup-now-proof.mts";
 import { DIRECT_PROOF_ORIGIN, runDownloadProof, runIdentityProof, tlsProofResources } from "./local-download-proof.mts";
 import {
   assertFixtureNamespaceContents,
@@ -2285,6 +2285,9 @@ async function runTransportProof(): Promise<void> {
     const backupNow = await runBackupNowProof(proofContext);
 
     report.backupNow = backupNow;
+    // Create backup, end to end: a backup of the form of the ConfigMaps of the run Completes, carries the fields of its
+    // text that Velero keeps as sent, and is deleted the same way (SPEC-0017, ACT-11).
+    report.backupCreate = await runBackupCreateProof(proofContext);
 
     requireCondition(
       http.missingArtifacts === 2 && http.refusedBeforeCreation,
@@ -2419,7 +2422,7 @@ async function runTransportProof(): Promise<void> {
     });
     writeFileSync(join(STATE, "transport-proof.json"), JSON.stringify(report), { mode: 0o600 });
     console.log(
-      "PASS: compiled main found its route and downloaded 16 real artifacts through direct HTTPS, once the private address was allowed, and HTTP/HTTPS Kubernetes tunnels, with inline/referenced CA and negative signature/Host/CA checks; the store had no log for a backup and a restore that failed their validation, and no request was created for a restore without a backup; three identities were refused, at the creation, at the Service and the certificate, and at the port-forward, and the one with the documented permissions downloaded; Back up now asked a backup of the real schedule through the compiled main process, which the server Completed with the labels of its text and deleted through a DeleteBackupRequest.",
+      "PASS: compiled main found its route and downloaded 16 real artifacts through direct HTTPS, once the private address was allowed, and HTTP/HTTPS Kubernetes tunnels, with inline/referenced CA and negative signature/Host/CA checks; the store had no log for a backup and a restore that failed their validation, and no request was created for a restore without a backup; three identities were refused, at the creation, at the Service and the certificate, and at the port-forward, and the one with the documented permissions downloaded; Back up now asked a backup of the real schedule through the compiled main process, which the server Completed with the labels of its text and deleted through a DeleteBackupRequest, and so was a backup of the form, Completed with the fields of its text the server keeps as sent.",
     );
   } finally {
     // The location goes back once the store serves again, as above.

@@ -70,11 +70,11 @@
       "environment": "definitions",
       "suites": ["velero-e2e-actions"],
       "paths": [
-        "^src/renderer/pages/(backup-now-|schedule-workspace|schedules-page|open-view)",
+        "^src/renderer/pages/(backup-now-|backup-create-|backups-page|schedule-workspace|schedules-page|open-view)",
         "^src/renderer/(state|api)/",
         "^src/renderer/navigation\\.",
-        "^src/renderer/components/(target-bar|workspace\\.|write-confirmation)",
-        "^src/common/(backup-from-schedule|backup-now-words|kept-end-words|ipc|schedule-history|views)\\.",
+        "^src/renderer/components/(target-bar|workspace\\.|write-confirmation|backup-template-form|family-page|artifact-viewer|views-frame)",
+        "^src/common/(backup-from-schedule|backup-now-words|backup-create-words|backup-form|backup-template|label-selector|go-duration|kept-end-words|ipc|location-view|schedule-history|views)\\.",
         "^e2e/__tests__/velero-e2e-actions\\."
       ]
     }

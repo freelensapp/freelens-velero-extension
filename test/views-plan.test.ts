@@ -86,11 +86,6 @@ describe("the parts of the views a run takes", () => {
     expect(partsToRun(definition, ["src/renderer/navigation.ts"])).toEqual(["artifacts", ...statics, "actions"]);
     expect(partsToRun(definition, ["src/renderer/details/backup-details.tsx"])).toEqual(["artifacts", ...statics]);
     expect(partsToRun(definition, ["src/common/discovery.ts"])).toEqual(["volumes-and-server", ...statics]);
-    expect(partsToRun(definition, ["src/renderer/components/views-frame.tsx"])).toEqual([
-      "pre-review",
-      "volumes-and-server",
-      ...statics,
-    ]);
     expect(partsToRun(definition, ["src/renderer/components/target-bar.tsx"])).toEqual(every);
     expect(partsToRun(definition, ["src/renderer/components/workspace.tsx"])).toEqual([
       "pre-review",
@@ -108,10 +103,37 @@ describe("the parts of the views a run takes", () => {
       "src/common/backup-now-words.ts",
       "src/common/kept-end-words.ts",
       "src/common/schedule-history.ts",
+      "src/renderer/pages/backup-create-workspace.tsx",
+      "src/renderer/components/backup-template-form.tsx",
+      "src/common/backup-create-words.ts",
+      "src/common/backup-form.ts",
+      "src/common/backup-template.ts",
+      "src/common/label-selector.ts",
+      "src/common/go-duration.ts",
+      "src/renderer/pages/backups-page.tsx",
+      "src/common/location-view.ts",
       "e2e/__tests__/velero-e2e-actions.tests.ts",
     ]) {
       expect([file, partsToRun(definition, [file])]).toEqual([file, [...statics, "actions"]]);
     }
+    // The helpers the workspaces of the actions share with other views: the escape of a field and the focus of a view.
+    expect(partsToRun(definition, ["src/renderer/components/artifact-viewer.ts"])).toEqual([
+      "artifacts",
+      ...statics,
+      "actions",
+    ]);
+    expect(partsToRun(definition, ["src/renderer/components/views-frame.tsx"])).toEqual([
+      "pre-review",
+      "volumes-and-server",
+      ...statics,
+      "actions",
+    ]);
+    // The page of a list, which the pre-review looks at, and which holds the command of the backup of the form.
+    expect(partsToRun(definition, ["src/renderer/components/family-page.tsx"])).toEqual([
+      "pre-review",
+      ...statics,
+      "actions",
+    ]);
     // The views of a page, which the reads of the suites with a server name as well.
     expect(partsToRun(definition, ["src/common/views.ts"])).toEqual(["volumes-and-server", ...statics, "actions"]);
     expect(partsToRun(definition, ["src/renderer/components/write-confirmation.tsx"])).toEqual([
