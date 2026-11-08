@@ -1,14 +1,11 @@
 // The pause and the resume of a schedule (SPEC-0017, REQ-275, D6, D7): each is one JSON patch of the Schedule, whose
-// tests are the check of what the review read. A pause tests the UID and adds `spec.paused` true: a schedule that is not
-// paused may carry no `paused` at all, and a test cannot test what is absent, so a pause that finds the schedule paused
-// already leaves it as it was. A resume tests the UID, that the schedule is paused and that its expression is the one
-// the review read, then replaces `paused` with false and adds `skipImmediately` with the value chosen. The main process
-// builds the patch at the confirmation; the review shows the text it writes, and the run sends that text.
+// tests are the check of what the review read. A pause tests the UID and adds `spec.paused` true: a schedule that is
+// not paused carries `paused` false or none at all, and no one test passes on both, so a pause that finds the schedule
+// paused already leaves it as it was. A resume tests the UID, that the schedule is paused and that its expression is
+// the one the review read, then replaces `paused` with false and adds `skipImmediately` with the value chosen. The main
+// process builds the patch at the confirmation; the review shows the text it writes, and the run sends that text.
 
 import { bodyText } from "./backup-from-schedule";
-
-// The two actions on a schedule, as the contract names them.
-export type ScheduleAction = "schedule-pause" | "schedule-resume";
 
 // What a resume writes beside the tests: the expression the review read, which the patch tests, and the value of
 // `skipImmediately` the operator chose.
@@ -16,6 +13,12 @@ export interface ResumeParameters {
   expression: string;
   skipImmediately: boolean;
 }
+
+// A patch of a pause or of a resume, as its text is read back: the action, the UID it tests and, for a resume, what it
+// tests and writes beside.
+export type SchedulePatch =
+  | { action: "schedule-pause"; uid: string }
+  | ({ action: "schedule-resume"; uid: string } & ResumeParameters);
 
 export type PatchOperation =
   | { op: "test"; path: string; value: unknown }
@@ -48,12 +51,7 @@ export function patchText(patch: PatchOperation[]): string {
 
 // What a text of a patch is, read back: the action and what it tests and writes, or nothing when it is not exactly the
 // patch of a pause or of a resume.
-export function readSchedulePatch(
-  text: string,
-):
-  | { action: "schedule-pause"; uid: string }
-  | ({ action: "schedule-resume"; uid: string } & ResumeParameters)
-  | undefined {
+export function readSchedulePatch(text: string): SchedulePatch | undefined {
   let patch: unknown;
 
   try {

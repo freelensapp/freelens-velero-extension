@@ -931,8 +931,10 @@ T4.4 a Restore of a backup, its name and namespace its only metadata, whose
 confirmation and run read the backup by its name, and run only when the name of the
 backup the operator typed is the one of the review; since the first pull request of
 T4.5 the pause and the resume of a Schedule, a JSON patch whose tests are the check of
-what the review read, the schedule read once after it, and after a 422 to say whether
-it changed since the review; each action of SPEC-0017 adds its kind with its slice. The creations share one course in the main process,
+what the review read, the schedule read once after it and checked against what the
+patch wrote, after a 422 to say whether it changed since the review, and after an
+answer that was lost to say what it holds of the patch; each action of SPEC-0017 adds
+its kind with its slice. The creations share one course in the main process,
 [`creation.ts`](../../src/main/creation.ts): the POST of the text kept, the reads
 after it until Velero writes a phase, and, when the answer is not known, the look for
 the object by its name, with the rule and the words of each kind.

@@ -9,7 +9,9 @@ export function keptEndWords(end: KeptEnd): string {
     const what = `The ${pause ? "pause" : "resume"} of the schedule ${end.name}, in ${end.namespace} (context ${end.context}),`;
 
     if (!end.outcome.created) return `${what} ended while no view of it was open: ${end.outcome.text}`;
-    return `${what} was applied while no view of it was open: ${pause ? "the schedule is paused, and Velero does not read it until it is resumed." : "the schedule is resumed, and Velero reads it at once."}`;
+    const found = end.outcome.found ? ", as the read after the answer of the patch was lost shows" : "";
+
+    return `${what} was applied while no view of it was open${found}: ${pause ? "the schedule is paused, and Velero does not read it until it is resumed." : "the schedule is resumed, and Velero reads it at once."}`;
   }
   const source = end.schedule === undefined ? "asked with the form" : `asked from the schedule ${end.schedule}`;
   const what =

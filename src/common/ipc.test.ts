@@ -249,10 +249,18 @@ describe("the requests between the processes", () => {
       uid: "u",
       paused: true,
     });
+    // Read after an answer that was lost, and a time of the longest the contract carries.
+    expect(readScheduleChanged({ ...changed, found: true })).toEqual({ ...changed, found: true });
+    expect(readScheduleChanged({ ...changed, lastSkipped: "x".repeat(64) })).toEqual({
+      ...changed,
+      lastSkipped: "x".repeat(64),
+    });
     for (const wrong of [
       { ...changed, paused: "true" },
       { ...changed, skipImmediately: "false" },
       { ...changed, lastSkipped: "" },
+      { ...changed, lastSkipped: "x".repeat(65) },
+      { ...changed, found: false },
       { ...changed, phase: "Enabled" },
       { name: "nightly", uid: "u" },
       { ...changed, name: "Nightly" },
@@ -800,7 +808,7 @@ describe("the ends kept for a cluster, between the processes", () => {
     expect(readWriteShownRequest({ cluster, request: "not-a-uuid" })).toBeUndefined();
   });
 
-  it("reads the end of a pause and of a resume, applied with nothing more or not done, and of no other shape", () => {
+  it("reads the end of a pause and of a resume, applied, read so after an answer that was lost, or not done, and of no other shape", () => {
     const { schedule: _schedule, ...base } = end;
     const paused = {
       ...base,
@@ -816,7 +824,9 @@ describe("the ends kept for a cluster, between the processes", () => {
       outcome: { created: false, code: "conflict", text: "The schedule nightly changed since the review." },
     };
 
-    expect(readKeptEnds([paused, resumed, refused])).toEqual([paused, resumed, refused]);
+    const found = { ...resumed, request: randomUUID(), outcome: { created: true, found: true } };
+
+    expect(readKeptEnds([paused, resumed, refused, found])).toEqual([paused, resumed, refused, found]);
     expect(readKeptEnds([{ ...paused, outcome: { created: true, phase: "Enabled" } }])).toEqual([]);
     expect(readKeptEnds([{ ...paused, outcome: { created: true, paused: true } }])).toEqual([]);
     expect(readKeptEnds([{ ...paused, schedule: "nightly" }])).toEqual([]);

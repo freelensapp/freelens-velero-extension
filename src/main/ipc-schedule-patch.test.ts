@@ -37,6 +37,19 @@ function scheduleOf(paused: boolean | undefined, more: Record<string, unknown> =
   } as DiagnosticObject;
 }
 
+// What Velero does once it reads a schedule resumed with `skipImmediately` true: it skips the run, sets the field back
+// to false and writes when, at the time given.
+function skipping(at: string) {
+  return (schedule: DiagnosticObject) => {
+    const spec = schedule.spec as Record<string, unknown>;
+
+    if (spec.paused === false && spec.skipImmediately === true) {
+      spec.skipImmediately = false;
+      schedule.status = { ...(schedule.status ?? {}), lastSkipped: at };
+    }
+  };
+}
+
 function fixture() {
   const catalog: CatalogEntry[] = [
     { id: "cluster-a", name: "demo", kubeConfigPath: "/synthetic/a", contextName: "kind-a", status: "connected" },
@@ -191,6 +204,18 @@ describe("the confirmation of a pause and of a resume", () => {
         expect.objectContaining({ ok: false, code: "validation" }),
       ]);
   });
+
+  it("confirms no resume of an expression the API server writes in another form, whose test would never pass, and confirms one of tabs", async () => {
+    const { enable, confirm, resume } = fixture();
+
+    await enable();
+    for (const character of ["<", ">", "&", "\u2028", "\u2029", "\b", "\f"])
+      expect([character, await confirm(resume(false, `0 3 * * *${character}`))]).toEqual([
+        character,
+        { ok: false, code: "validation", stage: "request", retry: false, text: SCHEDULE_PATCH_WORDS.untestable },
+      ]);
+    expect(await confirm(resume(false, "0\t3\t*\t*\t*"))).toMatchObject({ ok: true });
+  });
 });
 
 describe("the run of a pause and of a resume", () => {
@@ -306,6 +331,14 @@ describe("the run of a pause and of a resume", () => {
       code: "validation",
       text: SCHEDULE_PATCH_WORDS.rejected,
     });
+    // A pause tests the UID alone: its schedule read not paused, of another expression, is no change since the review.
+    state.readError = undefined;
+    state.schedule = scheduleOf(false, { spec: { schedule: "0 4 * * *", template: {}, paused: false } });
+    expect(await run(String((await confirm()).value?.token))).toMatchObject({
+      ok: false,
+      code: "validation",
+      text: SCHEDULE_PATCH_WORDS.rejected,
+    });
   });
 
   it.each([
@@ -349,29 +382,62 @@ describe("the run of a pause and of a resume", () => {
     },
   );
 
-  it("never sends again a patch whose answer is not known, and says what the schedule read then shows", async () => {
-    const { enable, confirm, run, state, adapter, gate } = fixture();
+  it("never sends again a patch whose answer is not known, and reads the schedule by the fields it wrote: done as reviewed, or not done", async () => {
+    const { enable, confirm, resume, run, state, adapter, gate } = fixture();
+    // The answer is lost, once the API server applied the patch or before it did.
+    const lost = (applied: boolean) => {
+      state.patch = async (text) => {
+        if (applied) fixtureApply(state, text);
+        throw new DiagnosticError("submission-unknown");
+      };
+    };
 
     await enable();
-    // The answer was lost after the patch was applied: the schedule is paused, as far as the read shows.
-    state.patch = async (text) => {
-      fixtureApply(state, text);
-      throw new DiagnosticError("submission-unknown");
-    };
-    expect(await run(String((await confirm()).value?.token))).toMatchObject({
-      ok: false,
-      code: "submission-unknown",
-      text: SCHEDULE_PATCH_WORDS.unknownRead("nightly", true),
+    lost(true);
+    expect(await run(String((await confirm()).value?.token))).toEqual({
+      ok: true,
+      value: { name: "nightly", uid: "nightly-uid", paused: true, found: true },
     });
-    // The read fails as well.
-    state.readError = new DiagnosticError("transport-unreachable");
-    expect(await run(String((await confirm()).value?.token))).toMatchObject({
+    state.schedule = scheduleOf(false);
+    lost(false);
+    expect(await run(String((await confirm()).value?.token))).toEqual({
       ok: false,
       code: "submission-unknown",
-      text: SCHEDULE_PATCH_WORDS.unknown("nightly"),
+      stage: "patch",
+      retry: false,
+      text: SCHEDULE_PATCH_WORDS.notDone("nightly", true),
+    });
+    state.schedule = scheduleOf(true);
+    lost(true);
+    expect(await run(String((await confirm(resume(false))).value?.token), "schedule-resume")).toEqual({
+      ok: true,
+      value: { name: "nightly", uid: "nightly-uid", paused: false, skipImmediately: false, found: true },
+    });
+    // Velero took the skip: the field set back to false, and the time it skipped the run, a minute before the
+    // confirmation at the earliest.
+    state.schedule = scheduleOf(true);
+    state.afterRead = skipping("2026-11-08T11:59:00Z");
+    lost(true);
+    expect(await run(String((await confirm(resume(true))).value?.token), "schedule-resume")).toEqual({
+      ok: true,
+      value: {
+        name: "nightly",
+        uid: "nightly-uid",
+        paused: false,
+        skipImmediately: false,
+        lastSkipped: "2026-11-08T11:59:00Z",
+        found: true,
+      },
+    });
+    state.afterRead = undefined;
+    state.schedule = scheduleOf(true);
+    lost(false);
+    expect(await run(String((await confirm(resume(true))).value?.token), "schedule-resume")).toMatchObject({
+      ok: false,
+      code: "submission-unknown",
+      text: SCHEDULE_PATCH_WORDS.notDone("nightly", false),
     });
     // Writes go off while the API server has the request: the read has a signal of its own.
-    state.readError = undefined;
     state.schedule = scheduleOf(undefined);
     state.patch = async () => {
       gate.disable("cluster-a");
@@ -380,20 +446,67 @@ describe("the run of a pause and of a resume", () => {
     expect(await run(String((await confirm()).value?.token))).toMatchObject({
       ok: false,
       code: "submission-unknown",
-      text: SCHEDULE_PATCH_WORDS.unknownRead("nightly", false),
+      text: SCHEDULE_PATCH_WORDS.notDone("nightly", true),
     });
-    expect(adapter.patchSchedule).toHaveBeenCalledTimes(3);
+    expect(adapter.patchSchedule).toHaveBeenCalledTimes(6);
   });
 
-  it("takes no answer of another schedule, and answers the patch when the read after it does not answer", async () => {
+  it("says something else of a patch whose answer is not known, when the read finds another schedule, none, a resume it did not write, or nothing", async () => {
+    const { enable, confirm, resume, run, state, adapter } = fixture();
+
+    await enable();
+    state.patch = async () => {
+      throw new DiagnosticError("submission-unknown");
+    };
+    // Resumed, but not as the patch wrote it: by another resume with no skip, with a skip Velero wrote before the
+    // confirmation, or with no paused at all.
+    for (const schedule of [
+      scheduleOf(false, { spec: { schedule: EXPRESSION, template: {}, paused: false, skipImmediately: false } }),
+      scheduleOf(false, {
+        spec: { schedule: EXPRESSION, template: {}, paused: false, skipImmediately: false },
+        status: { phase: "Enabled", lastSkipped: "2026-11-08T11:58:59Z" },
+      }),
+      scheduleOf(undefined, { spec: { schedule: EXPRESSION, template: {}, skipImmediately: true } }),
+    ]) {
+      state.schedule = schedule;
+      expect(await run(String((await confirm(resume(true))).value?.token), "schedule-resume")).toEqual({
+        ok: false,
+        code: "submission-unknown",
+        stage: "patch",
+        retry: false,
+        text: SCHEDULE_PATCH_WORDS.other("nightly"),
+      });
+    }
+    state.schedule = scheduleOf(true, { metadata: { name: "nightly", namespace: "velero", uid: "other-uid" } });
+    expect(await run(String((await confirm()).value?.token))).toMatchObject({
+      code: "submission-unknown",
+      text: SCHEDULE_PATCH_WORDS.replaced("nightly"),
+    });
+    state.schedule = undefined;
+    expect(await run(String((await confirm()).value?.token))).toMatchObject({
+      code: "submission-unknown",
+      text: SCHEDULE_PATCH_WORDS.goneAfter("nightly", "velero"),
+    });
+    state.schedule = scheduleOf(true);
+    state.readError = new DiagnosticError("transport-unreachable");
+    expect(await run(String((await confirm()).value?.token))).toMatchObject({
+      code: "submission-unknown",
+      text: SCHEDULE_PATCH_WORDS.unknown("nightly"),
+    });
+    expect(adapter.patchSchedule).toHaveBeenCalledTimes(6);
+  });
+
+  it("takes no answer of another schedule, and answers the patch when the read after it does not answer, or finds another schedule of its name", async () => {
     const { enable, confirm, run, state } = fixture();
 
     await enable();
     state.patch = async (text) => ({ ...fixtureApply(state, text), metadata: { name: "nightly", uid: "other-uid" } });
-    expect(await run(String((await confirm()).value?.token))).toMatchObject({
+    expect(await run(String((await confirm()).value?.token))).toEqual({
       ok: false,
       code: "submission-unknown",
-      text: SCHEDULE_PATCH_WORDS.unknown("nightly"),
+      stage: "patch",
+      retry: false,
+      text: SCHEDULE_PATCH_WORDS.strange("nightly"),
     });
     state.patch = undefined;
     state.schedule = scheduleOf(undefined);
@@ -402,34 +515,184 @@ describe("the run of a pause and of a resume", () => {
       ok: true,
       value: { name: "nightly", uid: "nightly-uid", paused: true },
     });
+    // Deleted and created again under its name, not paused, between the patch and the read.
+    state.readError = undefined;
+    state.schedule = scheduleOf(undefined);
+    state.afterRead = (schedule) => {
+      schedule.metadata.uid = "other-uid";
+      (schedule.spec as Record<string, unknown>).paused = false;
+    };
+    expect(await run(String((await confirm()).value?.token))).toEqual({
+      ok: true,
+      value: { name: "nightly", uid: "nightly-uid", paused: true },
+    });
+  });
+
+  it("says a schedule that does not hold what the patch wrote, read after it, changed since", async () => {
+    const { enable, confirm, resume, run, state } = fixture();
+
+    await enable();
+    // Resumed by someone else between the pause and the read.
+    state.afterRead = (schedule) => {
+      (schedule.spec as Record<string, unknown>).paused = false;
+    };
+    expect(await run(String((await confirm()).value?.token))).toEqual({
+      ok: false,
+      code: "conflict",
+      stage: "patch",
+      retry: false,
+      text: SCHEDULE_PATCH_WORDS.changedSince("nightly", true),
+    });
+    // A resume with the skip: the field false with no time Velero wrote, a time before the confirmation or longer than
+    // the contract carries, a field that is not true or false, with a time or not, and the schedule paused again.
+    for (const after of [
+      (spec: Record<string, unknown>) => {
+        spec.skipImmediately = false;
+      },
+      (spec: Record<string, unknown>, schedule: DiagnosticObject) => {
+        spec.skipImmediately = false;
+        schedule.status = { phase: "Enabled", lastSkipped: "2026-11-08T11:58:59Z" };
+      },
+      (spec: Record<string, unknown>, schedule: DiagnosticObject) => {
+        spec.skipImmediately = false;
+        schedule.status = { phase: "Enabled", lastSkipped: `2026-11-08T12:00:01.${"0".repeat(44)}Z` };
+      },
+      (spec: Record<string, unknown>) => {
+        spec.skipImmediately = "true";
+      },
+      (spec: Record<string, unknown>, schedule: DiagnosticObject) => {
+        spec.skipImmediately = "false";
+        schedule.status = { phase: "Enabled", lastSkipped: "2026-11-08T12:00:01Z" };
+      },
+      (spec: Record<string, unknown>) => {
+        spec.paused = true;
+      },
+    ]) {
+      state.schedule = scheduleOf(true);
+      state.afterRead = (schedule) => after(schedule.spec as Record<string, unknown>, schedule);
+      expect(await run(String((await confirm(resume(true))).value?.token), "schedule-resume")).toMatchObject({
+        ok: false,
+        code: "conflict",
+        text: SCHEDULE_PATCH_WORDS.changedSince("nightly", false),
+      });
+    }
+  });
+
+  it("answers the time Velero wrote it skipped a run only for a resume that asked the skip, and since its confirmation", async () => {
+    const { enable, confirm, resume, run, state } = fixture();
+    const skippedLongAgo = { phase: "Enabled", lastSkipped: "2026-01-01T00:00:00Z" };
+
+    await enable();
+    // A resume with no skip, of a schedule last skipped long ago.
+    state.schedule = scheduleOf(true, { status: skippedLongAgo });
+    expect(await run(String((await confirm(resume(false))).value?.token), "schedule-resume")).toEqual({
+      ok: true,
+      value: { name: "nightly", uid: "nightly-uid", paused: false, skipImmediately: false },
+    });
+    // A resume with the skip, read before Velero read it: the time is of an earlier skip.
+    state.schedule = scheduleOf(true, { status: skippedLongAgo });
+    expect(await run(String((await confirm(resume(true))).value?.token), "schedule-resume")).toEqual({
+      ok: true,
+      value: { name: "nightly", uid: "nightly-uid", paused: false, skipImmediately: true },
+    });
+    // The longest time the contract carries.
+    const longest = `2026-11-08T12:00:01.${"0".repeat(43)}Z`;
+
+    state.schedule = scheduleOf(true);
+    state.afterRead = skipping(longest);
+    expect(await run(String((await confirm(resume(true))).value?.token), "schedule-resume")).toEqual({
+      ok: true,
+      value: { name: "nightly", uid: "nightly-uid", paused: false, skipImmediately: false, lastSkipped: longest },
+    });
+    // A pause says it is paused, and nothing of a skip.
+    state.afterRead = undefined;
+    state.schedule = scheduleOf(false, {
+      spec: { schedule: EXPRESSION, template: {}, paused: false, skipImmediately: true },
+      status: { phase: "Enabled", lastSkipped: "2026-11-08T12:00:00Z" },
+    });
+    expect(await run(String((await confirm()).value?.token))).toEqual({
+      ok: true,
+      value: { name: "nightly", uid: "nightly-uid", paused: true },
+    });
   });
 
   it("keeps for the cluster the end of a patch that was sent, applied or not, and none of one that never left", async () => {
-    const { enable, confirm, run, state, endsOf } = fixture();
+    const { enable, confirm, resume, run, state, endsOf } = fixture();
+    const sent = async (kind = "schedule-pause", payload?: object) => {
+      const request = randomUUID();
+
+      await run(String((await confirm(payload)).value?.token), kind, request);
+      return request;
+    };
+    const refusedWith = (code: string, text: string) => ({ created: false, code, text });
 
     await enable();
-    const applied = randomUUID();
-    const refused = randomUUID();
+    const applied = await sent();
+    // Applied, read so after the answer was lost, and not done as far as the read shows.
+    state.patch = async (text) => {
+      fixtureApply(state, text);
+      throw new DiagnosticError("submission-unknown");
+    };
+    const found = await sent();
 
-    await run(String((await confirm()).value?.token), "schedule-pause", applied);
+    state.schedule = scheduleOf(false);
+    state.patch = async () => {
+      throw new DiagnosticError("submission-unknown");
+    };
+    const notDone = await sent();
+
     state.patch = async () => {
       throw new DiagnosticError("conflict");
     };
-    await run(String((await confirm()).value?.token), "schedule-pause", refused);
+    const refused = await sent();
+
+    // A 422 of a schedule that changed since the review, and of one that went.
+    state.patch = async () => {
+      throw new DiagnosticError("validation", undefined, "refused");
+    };
+    state.schedule = scheduleOf(false);
+    const changed = await sent("schedule-resume", resume());
+
+    state.schedule = undefined;
+    const gone = await sent();
+
+    // The answer of another schedule, and a read after the patch that does not hold what it wrote.
+    state.schedule = scheduleOf(undefined);
+    state.patch = async (text) => ({ ...fixtureApply(state, text), metadata: { name: "nightly", uid: "other-uid" } });
+    const strange = await sent();
+
+    state.patch = undefined;
+    state.afterRead = (schedule) => {
+      (schedule.spec as Record<string, unknown>).paused = false;
+    };
+    const since = await sent();
+
+    state.afterRead = undefined;
     for (const error of [new DiagnosticError("validation"), new DiagnosticError("transport-unreachable")]) {
       state.patch = async () => {
         throw error;
       };
-      await run(String((await confirm()).value?.token));
+      await sent();
     }
     expect((await endsOf()).map((end) => [end.request, end.kind, end.name, end.outcome])).toEqual([
       [applied, "schedule-pause", "nightly", { created: true }],
+      [found, "schedule-pause", "nightly", { created: true, found: true }],
       [
-        refused,
+        notDone,
         "schedule-pause",
         "nightly",
-        { created: false, code: "conflict", text: SCHEDULE_PATCH_WORDS.conflict("nightly") },
+        refusedWith("submission-unknown", SCHEDULE_PATCH_WORDS.notDone("nightly", true)),
       ],
+      [refused, "schedule-pause", "nightly", refusedWith("conflict", SCHEDULE_PATCH_WORDS.conflict("nightly"))],
+      [changed, "schedule-resume", "nightly", refusedWith("conflict", SCHEDULE_PATCH_WORDS.changed("nightly"))],
+      [gone, "schedule-pause", "nightly", refusedWith("not-found", SCHEDULE_PATCH_WORDS.gone("nightly", "velero"))],
+      [
+        strange,
+        "schedule-pause",
+        "nightly",
+        refusedWith("submission-unknown", SCHEDULE_PATCH_WORDS.strange("nightly")),
+      ],
+      [since, "schedule-pause", "nightly", refusedWith("conflict", SCHEDULE_PATCH_WORDS.changedSince("nightly", true))],
     ]);
   });
 

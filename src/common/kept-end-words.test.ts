@@ -32,7 +32,7 @@ describe("what the target bar says of an end no view showed", () => {
     );
   });
 
-  it("says the pause and the resume of a schedule, applied or not done, with what Velero does then", () => {
+  it("says the pause and the resume of a schedule, applied, read so after an answer that was lost, or not done, with what Velero does then", () => {
     const { schedule: _schedule, ...base } = { ...end, name: "nightly" };
 
     expect(keptEndWords({ ...base, kind: "schedule-pause", outcome: { created: true } })).toBe(
@@ -40,6 +40,9 @@ describe("what the target bar says of an end no view showed", () => {
     );
     expect(keptEndWords({ ...base, kind: "schedule-resume", outcome: { created: true } })).toBe(
       "The resume of the schedule nightly, in velero (context kind-demo), was applied while no view of it was open: the schedule is resumed, and Velero reads it at once.",
+    );
+    expect(keptEndWords({ ...base, kind: "schedule-pause", outcome: { created: true, found: true } })).toBe(
+      "The pause of the schedule nightly, in velero (context kind-demo), was applied while no view of it was open, as the read after the answer of the patch was lost shows: the schedule is paused, and Velero does not read it until it is resumed.",
     );
     expect(
       keptEndWords({

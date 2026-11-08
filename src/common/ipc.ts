@@ -282,14 +282,15 @@ export interface ScheduleCreated {
 }
 
 // What a schedule paused or resumed is once the patch was applied, as the main process read it once after it (SPEC-0017,
-// REQ-277): whether it is paused, what `skipImmediately` holds, and the time Velero wrote it skipped a run, once it read
-// the schedule.
+// REQ-277): paused; or resumed, with what `skipImmediately` holds and the time Velero wrote it skipped the run, once it
+// read the schedule; and that it was read so after an answer of the patch that was lost (REQ-250).
 export interface ScheduleChanged {
   name: string;
   uid: string;
   paused: boolean;
   skipImmediately?: boolean;
   lastSkipped?: string;
+  found?: true;
 }
 
 // What a restore of the form is once it was created: its name and its UID, and what Velero wrote of it within the reads
@@ -756,7 +757,7 @@ function readResume(value: unknown): ResumeParameters | undefined {
 export function readScheduleChanged(value: unknown): ScheduleChanged | undefined {
   if (
     !isRecord(value) ||
-    !hasKeys(value, ["name", "uid", "paused"], ["skipImmediately", "lastSkipped"]) ||
+    !hasKeys(value, ["name", "uid", "paused"], ["skipImmediately", "lastSkipped", "found"]) ||
     !isName(value.name) ||
     !isText(value.uid) ||
     typeof value.paused !== "boolean"
@@ -764,12 +765,14 @@ export function readScheduleChanged(value: unknown): ScheduleChanged | undefined
     return;
   if ("skipImmediately" in value && typeof value.skipImmediately !== "boolean") return;
   if ("lastSkipped" in value && !isText(value.lastSkipped, 64)) return;
+  if ("found" in value && value.found !== true) return;
   return {
     name: value.name,
     uid: value.uid,
     paused: value.paused,
     ...(typeof value.skipImmediately === "boolean" ? { skipImmediately: value.skipImmediately } : {}),
     ...(typeof value.lastSkipped === "string" ? { lastSkipped: value.lastSkipped } : {}),
+    ...(value.found === true ? { found: true } : {}),
   };
 }
 
@@ -1132,11 +1135,12 @@ export function readKeptEnds(value: unknown): KeptEnd[] | undefined {
     const outcome = readKeptOutcome(item.outcome);
 
     if (!outcome) continue;
-    // A patch applied says nothing more of what was patched: the kind says it.
+    // A patch applied says nothing more of what was patched than whether it was read so after an answer that was lost:
+    // the kind says it.
     if (
       (item.kind === "schedule-pause" || item.kind === "schedule-resume") &&
       outcome.created &&
-      Object.keys(outcome).length > 1
+      ("phase" in outcome || "paused" in outcome)
     )
       continue;
     ends.delete(item.request);

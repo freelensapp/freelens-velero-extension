@@ -281,11 +281,12 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
     // A backup asked from a schedule names it, and a restore its backup; a backup or a schedule of the form names none.
     ...(request.kind === "backup-from-schedule" ? { schedule: request.target?.name ?? "" } : {}),
     ...(request.kind === "restore" ? { backup: request.target?.name ?? "" } : {}),
-    // A patch applied says nothing more: the kind says what it did.
+    // A patch applied says nothing more than whether it was read so after an answer that was lost: the kind says what
+    // it did.
     outcome: !end.ok
       ? { created: false, code: end.code, text: end.text }
       : request.kind === "schedule-pause" || request.kind === "schedule-resume"
-        ? { created: true }
+        ? { created: true, ...("found" in end.value && end.value.found ? { found: true } : {}) }
         : {
             created: true,
             ...("phase" in end.value && end.value.phase ? { phase: end.value.phase } : {}),
