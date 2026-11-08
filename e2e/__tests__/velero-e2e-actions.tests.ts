@@ -6,13 +6,14 @@
 // The actions of SPEC-0017 in a packaged Freelens, on the CRDs of the release alone, where no controller runs
 // (REQ-254, ACT-11): Back up now from the view of a schedule (T4.2), Create backup from the list of the Backups (T4.3),
 // Create schedule of SPEC-0016 from the list of the Schedules (T4.7, REQ-241), Restore from the view of a backup or of a
-// schedule (T4.4), and Pause and Resume from the view of a schedule (T4.5, PAUSE-04). With writes off the command
-// writes nothing; a review that is not confirmed, nothing; a confirmed one, exactly one POST of the object, whose every
-// field is the one of the text the review showed, or one PATCH of the schedule, the text of the review, and no other
-// write. The backup stays without a phase, as the result says, and the view of the schedule lists it at its next read
-// (NOW-05). A name already taken is a conflict (NOW-04). The reader of a part is refused at the creation and at the
-// patch. What the suite created it removes, and the objects of Velero are as they were. The workspace in both themes,
-// at every size and with the keyboard alone, is in the pre-review (ACT-10).
+// schedule (T4.4), Pause and Resume from the view of a schedule (T4.5, PAUSE-04), and Delete backup from the view of a
+// backup (T4.6, DELETE-05). With writes off the command writes nothing; a review that is not confirmed, nothing; a
+// confirmed one, exactly one POST of the object, whose every field is the one of the text the review showed, or one
+// PATCH of the schedule, the text of the review, and no other write. The backup stays without a phase, as the result
+// says, and the view of the schedule lists it at its next read (NOW-05); a request to delete a backup stays without a
+// phase, and the backup as it was. A name already taken is a conflict (NOW-04). The reader of a part is refused at the
+// creation and at the patch. What the suite created it removes, and the objects of Velero are as they were. The
+// workspace in both themes, at every size and with the keyboard alone, is in the pre-review (ACT-10).
 
 import { readFile, writeFile } from "node:fs/promises";
 import * as path from "node:path";
@@ -21,15 +22,23 @@ import * as cluster from "../../integration/helpers/velero-cluster";
 import * as velero from "../../integration/helpers/velero-extension";
 import { writesOf } from "../../integration/helpers/velero-guard";
 import { BACKUP_CREATE_VIEW_WORDS } from "../../src/common/backup-create-words";
+import {
+  BACKUP_DELETE_VIEW_WORDS,
+  deletedWords,
+  deleteMeaning,
+  deleteOffered,
+} from "../../src/common/backup-delete-words";
 import { backupFromForm, formBodyText } from "../../src/common/backup-form";
 import { backupFromSchedule, bodyText } from "../../src/common/backup-from-schedule";
 import { BACKUP_NOW_VIEW_WORDS } from "../../src/common/backup-now-words";
+import { deleteRequestOf, deleteRequestText } from "../../src/common/delete-request";
 import { backupOffered, RESTORE_CREATE_VIEW_WORDS, restoreResultWords } from "../../src/common/restore-create-words";
 import { type RestoreForm, restoreBodyText, restoreFromForm } from "../../src/common/restore-form";
 import { scheduleResultWords } from "../../src/common/schedule-create-words";
 import { scheduleBodyText, scheduleFromForm } from "../../src/common/schedule-form";
 import { patchText, pausePatch, resumePatch } from "../../src/common/schedule-patch";
 import { SCHEDULE_PATCH_VIEW_WORDS } from "../../src/common/schedule-patch-words";
+import { BACKUP_DELETE_WORDS } from "../../src/main/backup-delete";
 import { BACKUP_NOW_WORDS } from "../../src/main/backup-now";
 import { RESTORE_CREATE_WORDS } from "../../src/main/restore-create";
 import { SCHEDULE_CREATE_WORDS } from "../../src/main/schedule-create";
@@ -71,12 +80,20 @@ const restoreField = (id: string) => `${restore(id)} input, input${restore(id)}`
 // that failed its validation, which is not offered.
 const RESTORED = "views-history-1";
 const NOT_RESTORABLE = "views-history-0";
+// The parts of the workspace of a deletion, and a field of it.
+const deletion = (id: string) => `[data-testid=velero-backup-delete-${id}]`;
+const deletionField = (id: string) => `${deletion(id)} input, input${deletion(id)}`;
+// The backup the suite deletes, the one of the form it created, which no controller starts on the CRDs alone; and the
+// backup in progress of the installation of the views, which Delete backup is not offered for.
+const DELETED = `${FORM}-reviewed`;
+const IN_PROGRESS_BACKUP = "backup-inprogress";
 
 interface BackupRead {
   metadata: {
     name: string;
     namespace: string;
     uid: string;
+    resourceVersion?: string;
     labels?: Record<string, string>;
     annotations?: Record<string, string>;
     ownerReferences?: unknown[];
@@ -111,6 +128,9 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
   const createdSchedules: { namespace: string; name: string; uid?: string }[] = [];
   // The restores the suite created, kept and removed the same way.
   const createdRestores: { namespace: string; name: string; uid?: string }[] = [];
+  // The requests to delete a backup the suite asked for, by the UID of the backup from the moment each is asked: each
+  // request of that backup created since the suite began is removed.
+  const createdRequests: { namespace: string; backupUid: string }[] = [];
   let began = 0;
 
   const writesOn = async () => {
@@ -212,6 +232,13 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
     for (const restored of createdRestores) {
       try {
         cluster.removeCreatedRestore(restored.namespace, restored.name, restored.uid, began);
+      } catch (error) {
+        left.push(String(error));
+      }
+    }
+    for (const asked of createdRequests) {
+      try {
+        cluster.removeCreatedDeleteRequests(asked.namespace, asked.backupUid, began);
       } catch (error) {
         left.push(String(error));
       }
@@ -1075,6 +1102,157 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
   );
 
   it(
+    "offers Delete backup in the view of a backup, says why not for one in progress, opens over the view and named in the address, and with writes off writes nothing",
+    async () => {
+      const earlier = cluster.apiRequests();
+
+      await cluster.showList(frame);
+      await cluster.openPage(frame, cluster.BACKUPS);
+      await cluster.waitForList(frame, cluster.BACKUPS);
+      await cluster.openWorkspace(frame, IN_PROGRESS_BACKUP, cluster.BACKUPS);
+      expect(await frame.locator("[data-testid=velero-backup-delete]").isDisabled()).toBe(true);
+      expect(await cluster.wordsOf(frame, "[data-testid=velero-backup-delete-note]")).toBe(
+        deleteOffered("InProgress").words,
+      );
+      await cluster.closeWorkspace(frame);
+      // The backup of the form, which no controller started: offered, with the words of a backup without a phase.
+      await cluster.openWorkspace(frame, DELETED, cluster.BACKUPS);
+      expect(await frame.locator("[data-testid=velero-backup-delete]").isDisabled()).toBe(false);
+      expect(await cluster.wordsOf(frame, "[data-testid=velero-backup-delete-note]")).toBe(
+        deleteOffered(undefined).words,
+      );
+      await frame.click("[data-testid=velero-backup-delete]");
+      await frame.waitForSelector("[data-testid=velero-backup-delete-workspace]", { timeout: 30_000 });
+      expect(await cluster.addressViews(frame)).toEqual([`backup/${DELETED}`, `backup-delete/${DELETED}`]);
+      // Writes are on from the cases before: off here, on again in the next case.
+      if ((await cluster.writesState(frame)) === "on") {
+        await frame.click("[data-testid=velero-writes-off]");
+        await frame.waitForSelector("[data-testid=velero-writes][data-writes=off]", { timeout: 60_000 });
+      }
+      expect(await cluster.wordsOf(frame, deletion("writes-off"))).toBe(BACKUP_DELETE_VIEW_WORDS.writesOff);
+      expect(await frame.locator(deletion("ask")).count()).toBe(0);
+      await frame.waitForTimeout(NOTHING);
+      expect(everyWrite(earlier)).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows in its review the request of the backup and what it means, enables Delete backup only once the name is typed, and writes nothing for a review that is left",
+    async () => {
+      await writesOn();
+      const earlier = cluster.apiRequests();
+      const backup = read<BackupRead & { spec: { storageLocation?: string } }>(
+        "backups.velero.io",
+        DELETED,
+        cluster.E2E_VIEWS_NAMESPACE,
+      );
+
+      expect([backup.spec.storageLocation, backup.status?.phase]).toEqual(["views-available", undefined]);
+      await frame.click(deletion("ask"));
+      await frame.waitForSelector(deletion("review"), { timeout: 30_000 });
+      expect(await frame.locator(deletion("text")).textContent()).toBe(
+        deleteRequestText(deleteRequestOf(cluster.E2E_VIEWS_NAMESPACE, { name: DELETED, uid: backup.metadata.uid })),
+      );
+      // What it means, in the order Velero does it: the backup without a phase, its location Available, and no other
+      // request of it.
+      expect(await frame.locator(`${deletion("meaning")} li`).allTextContents()).toEqual(
+        deleteMeaning(DELETED, { storageLocation: "views-available", location: { phase: "Available" } }).map(
+          (meaning) => meaning.words,
+        ),
+      );
+      expect(await frame.locator(deletion("run")).isDisabled()).toBe(true);
+      await frame.locator(deletionField("typed")).first().fill(DELETED.slice(0, -1));
+      expect(await frame.locator(deletion("run")).isDisabled()).toBe(true);
+      expect(await cluster.wordsOf(frame, deletion("typed-state"))).toBe(BACKUP_DELETE_VIEW_WORDS.notTyped(DELETED));
+      // Left by Escape: the command again, and a new review asks for the name again.
+      await frame.locator(deletion("review")).focus();
+      await started?.window.keyboard.press("Escape");
+      await frame.waitForSelector(deletion("review"), { state: "detached", timeout: 30_000 });
+      await frame.click(deletion("ask"));
+      await frame.waitForSelector(deletion("review"), { timeout: 30_000 });
+      expect(await frame.locator(deletionField("typed")).first().inputValue()).toBe("");
+      await frame.click(deletion("back"));
+      await frame.waitForSelector(deletion("review"), { state: "detached", timeout: 30_000 });
+      await frame.waitForTimeout(NOTHING);
+      expect(everyWrite(earlier)).toEqual({});
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "deletes it with exactly one POST of a DeleteBackupRequest, the text of its review, once the name is typed, and nothing else, no write of the backup, and says that Velero has not read it",
+    async () => {
+      const backup = read<BackupRead>("backups.velero.io", DELETED, cluster.E2E_VIEWS_NAMESPACE);
+      const earlier = cluster.apiRequests();
+      const codes = cluster.requestCodes("deletebackuprequests");
+      const backupCodes = cluster.requestCodes("backups");
+
+      await frame.click(deletion("ask"));
+      await frame.waitForSelector(deletion("review"), { timeout: 30_000 });
+      const text = String(await frame.locator(deletion("text")).textContent());
+
+      await frame.locator(deletionField("typed")).first().fill(DELETED);
+      expect(await cluster.wordsOf(frame, deletion("typed-state"))).toBe(BACKUP_DELETE_VIEW_WORDS.typed);
+      // Known before it is asked: a request created whose result the view does not say is removed all the same.
+      createdRequests.push({ namespace: cluster.E2E_VIEWS_NAMESPACE, backupUid: backup.metadata.uid });
+      await frame.click(deletion("run"));
+      // Read with the backup every second for thirty seconds: no controller processes it here.
+      await frame.waitForSelector(deletion("result"), { timeout: 90_000 });
+      expect(await frame.locator(deletion("result")).getAttribute("data-end")).toBe("unread");
+      expect(await cluster.wordsOf(frame, deletion("result-0"))).toBe(deletedWords(DELETED, { end: "unread" })[0]);
+      // One POST of a DeleteBackupRequest, answered 201, no write of the backup, and no other write of any kind of
+      // Velero: no DELETE.
+      const { "GET 200": _reads, ...codesOfWrites } = cluster.counted(
+        codes,
+        cluster.requestCodes("deletebackuprequests"),
+      );
+      const { "GET 200": _backupReads, ...backupWrites } = cluster.counted(
+        backupCodes,
+        cluster.requestCodes("backups"),
+      );
+
+      expect([codesOfWrites, backupWrites]).toEqual([{ "POST 201": 1 }, {}]);
+      const written = everyWrite(earlier);
+
+      expect([Object.keys(written).length, Object.values(written)]).toEqual([1, [1]]);
+      expect(Object.keys(written)[0]).toMatch(/^POST deletebackuprequests /);
+      // Every field of the text, with the same value in the request, its name generated from the prefix, and no other
+      // field in its metadata but the ones the API server writes of every object; no phase, and the backup as it was.
+      const sent = JSON.parse(text) as cluster.DeleteRequestRead;
+      const requests = cluster.deleteRequestsOf(cluster.E2E_VIEWS_NAMESPACE, backup.metadata.uid);
+
+      expect(requests.length).toBe(1);
+      const {
+        name,
+        uid: _uid,
+        resourceVersion: _version,
+        creationTimestamp: _created,
+        generation: _generation,
+        managedFields: _fields,
+        ...metadata
+      } = requests[0].metadata as unknown as Record<string, unknown>;
+
+      expect(name).toMatch(new RegExp(`^${DELETED}-[a-z0-9]{5}$`));
+      expect(metadata).toEqual(sent.metadata);
+      expect(requests[0].spec).toEqual(sent.spec);
+      expect(requests[0].status?.phase).toBeUndefined();
+      expect(read<BackupRead>("backups.velero.io", DELETED, cluster.E2E_VIEWS_NAMESPACE).metadata.resourceVersion).toBe(
+        backup.metadata.resourceVersion,
+      );
+      // The way to the backup takes the place of the workspace.
+      await frame.click(deletion("open"));
+      await frame.waitForSelector("[data-testid=velero-backup-delete-workspace]", {
+        state: "detached",
+        timeout: 30_000,
+      });
+      expect(await cluster.addressViews(frame)).toEqual([`backup/${DELETED}`]);
+      await cluster.closeWorkspace(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "refuses the reader of a part at the creation and at the patch, with the words of what it may not do, writes left on and nothing written",
     async () => {
       if (!started) throw new Error("The application is not running");
@@ -1215,6 +1393,36 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
           read<ScheduleRead>("schedules.velero.io", SCHEDULE, cluster.E2E_VIEWS_NAMESPACE).metadata.resourceVersion,
         ).toBe(history.metadata.resourceVersion);
         expect(everyWrite(earlier)).toEqual({});
+        // The deletion of a backup, refused at the creation: the reader may read the backups, and may neither list nor
+        // create a request to delete one, so that the review says no other request.
+        const kept = read<BackupRead>("backups.velero.io", RESTORED, cluster.E2E_VIEWS_NAMESPACE);
+
+        // Removed after the suite should the reader ever create one.
+        createdRequests.push({ namespace: cluster.E2E_VIEWS_NAMESPACE, backupUid: kept.metadata.uid });
+        await cluster.showList(other);
+        await cluster.openPage(other, cluster.BACKUPS);
+        await cluster.waitForList(other, cluster.BACKUPS);
+        await cluster.openWorkspace(other, RESTORED, cluster.BACKUPS);
+        await other.click("[data-testid=velero-backup-delete]");
+        await other.waitForSelector(deletion("ask"), { timeout: 30_000 });
+        await other.click(deletion("ask"));
+        await other.waitForSelector(deletion("review"), { timeout: 30_000 });
+        expect(await other.locator(`${deletion("meaning")} [data-part=others]`).count()).toBe(0);
+        await other.locator(deletionField("typed")).first().fill(RESTORED);
+        await other.click(deletion("run"));
+        await other.waitForSelector(deletion("failure"), { timeout: 60_000 });
+        expect([
+          await other.locator(deletion("failure")).getAttribute("data-code"),
+          await other.locator(deletion("failure")).getAttribute("data-stage"),
+          await cluster.wordsOf(other, deletion("failure-text")),
+        ]).toEqual(["forbidden", "creation", BACKUP_DELETE_WORDS.forbiddenCreate(cluster.E2E_VIEWS_NAMESPACE)]);
+        await other.waitForTimeout(NOTHING);
+        expect(await cluster.writesState(other)).toBe("on");
+        expect(cluster.deleteRequestsOf(cluster.E2E_VIEWS_NAMESPACE, kept.metadata.uid)).toEqual([]);
+        expect(
+          read<BackupRead>("backups.velero.io", RESTORED, cluster.E2E_VIEWS_NAMESPACE).metadata.resourceVersion,
+        ).toBe(kept.metadata.resourceVersion);
+        expect(everyWrite(earlier)).toEqual({});
       } finally {
         // The cases after this one look at the first entry of the catalog, which is shown again.
         await velero.navigateToCatalog(running.app);
@@ -1225,7 +1433,7 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
   );
 
   it(
-    "leaves the objects of Velero as they were once its backups, its schedules and its restores are removed",
+    "leaves the objects of Velero as they were once its backups, its schedules, its restores and its requests to delete a backup are removed",
     async () => {
       // Each one is let go once it was removed: one whose removal failed is tried again after the suite.
       for (const backup of [...created]) {
@@ -1239,6 +1447,10 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
       for (const restored of [...createdRestores]) {
         cluster.removeCreatedRestore(restored.namespace, restored.name, restored.uid, began);
         createdRestores.splice(createdRestores.indexOf(restored), 1);
+      }
+      for (const asked of [...createdRequests]) {
+        cluster.removeCreatedDeleteRequests(asked.namespace, asked.backupUid, began);
+        createdRequests.splice(createdRequests.indexOf(asked), 1);
       }
       const after = cluster.clusterSnapshot();
 

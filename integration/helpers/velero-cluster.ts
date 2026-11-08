@@ -3494,14 +3494,58 @@ export function removeCreatedRestore(namespace: string, name: string, uid: strin
   removeCreated("restores", namespace, name, uid, since);
 }
 
+/** A DeleteBackupRequest as a suite compares it with the text of its review: it carries no URL, and is read whole. */
+export interface DeleteRequestRead {
+  metadata: { name: string; uid: string; generateName?: string; labels?: Record<string, string> };
+  spec?: unknown;
+  status?: { phase?: string; errors?: string[] };
+}
+
+/** The DeleteBackupRequests of a namespace of the fixtures that carry the label of the UID of a backup. */
+export function deleteRequestsOf(namespace: string, backupUid: string): DeleteRequestRead[] {
+  const { status, stdout, stderr } = kubectlE2E(
+    "get",
+    "deletebackuprequests.velero.io",
+    "--namespace",
+    namespace,
+    "--selector",
+    `velero.io/backup-uid=${backupUid}`,
+    "-o",
+    "json",
+  );
+
+  if (status !== 0) throw new Error(`kubectl get deletebackuprequests failed: ${stderr}`);
+  return (JSON.parse(stdout) as { items: DeleteRequestRead[] }).items;
+}
+
+/**
+ * Removes the DeleteBackupRequests a suite of the actions created for a backup, on the environment of the CRDs alone,
+ * where no controller processes them: each one that carries the label of the UID of the backup, by its name, when it
+ * was created since the suite began, the same way as a backup whose UID the suite could not read. One created before
+ * is not the suite's: it is left as it is, and said.
+ */
+export function removeCreatedDeleteRequests(namespace: string, backupUid: string, since: number): void {
+  for (const request of deleteRequestsOf(namespace, backupUid)) {
+    removeCreated("deletebackuprequests", namespace, request.metadata.name, undefined, since);
+  }
+}
+
+// What each kind a suite of the actions creates is called in what it says.
+const CREATED_NOUNS = {
+  backups: "backup",
+  schedules: "schedule",
+  restores: "restore",
+  deletebackuprequests: "request to delete a backup",
+} as const;
+
 function removeCreated(
-  resource: "backups" | "schedules" | "restores",
+  resource: keyof typeof CREATED_NOUNS,
   namespace: string,
   name: string,
   uid: string | undefined,
   since: number,
 ): void {
-  const noun = resource === "backups" ? "backup" : resource === "restores" ? "restore" : "schedule";
+  const noun = CREATED_NOUNS[resource];
 
   if (namespace === "" || !SYNTHETIC_NAMESPACES.includes(namespace)) {
     throw new Error(`The suites remove the ${resource} of a namespace of the fixtures, and "${namespace}" is not one`);
