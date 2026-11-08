@@ -500,8 +500,8 @@ export function labelledObjects<Read>(resource: string, selector: string, namesp
 }
 
 // The kinds whose objects the snapshot of a suite compares before and after it: the ones its fixtures place, with
-// the repositories and the pod volume operations of the views and of the long lists, by their versions, and the
-// real ones the volume of the run leaves in the installation, by their identities.
+// the repositories, the pod volume operations and the data movement of the views and of the long lists, by their
+// versions, and the real ones the volume of the run leaves in the installation, by their identities.
 const SNAPSHOT_KINDS = [
   "backups",
   "restores",
@@ -511,6 +511,8 @@ const SNAPSHOT_KINDS = [
   "backuprepositories",
   "podvolumebackups",
   "podvolumerestores",
+  "datauploads",
+  "datadownloads",
 ];
 // The kinds the views read: the families of an installation, which a suite reads and counts the reads of. They are
 // the kinds of the snapshot.

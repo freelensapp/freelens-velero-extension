@@ -116,6 +116,7 @@ import {
   runLiveVolume,
   runRepository,
   SCALE_BACKUPS,
+  SCALE_DATA_UPLOADS,
   SCALE_OPERATION_PHASES,
   SCALE_OPERATIONS,
   SCALE_OPERATIONS_OF_THE_LAST,
@@ -2526,8 +2527,8 @@ describe("foundation fixture boundaries", () => {
 
     expect(placed).toEqual({
       views: viewFixtures("synthetic-owner", run).filter((resource) => resource.kind !== "Namespace").length,
-      // Twenty-three pod volume operations and nine repositories.
-      operations: 32,
+      // Twenty-three pod volume operations, twenty-one of the data movement and nine repositories.
+      operations: 53,
       overview: overviewFixtures("synthetic-owner", run, now).length,
       scale: SCALE_BACKUPS,
       restores: SCALE_RESTORES,
@@ -2575,7 +2576,7 @@ describe("foundation fixture boundaries", () => {
     expect([...target.objects.entries()]).toEqual(objects);
   }, 30_000);
 
-  it("places the long lists in two phases by their owners, and removes their pod volume backups before the rest", () => {
+  it("places the long lists in two phases by their owners, and removes their operations before the rest", () => {
     const names = fixtureNames(run);
     const started = Date.parse("2026-09-28T07:31:17.123Z");
     const target = cluster("synthetic-owner", Date.parse("2026-09-28T07:43:00Z"));
@@ -2587,24 +2588,30 @@ describe("foundation fixture boundaries", () => {
       restores: SCALE_RESTORES,
       scaleOperations: SCALE_OPERATIONS,
     });
-    // The backups and the restores first, then the pod volume backups, each naming the UID the cluster gave its
-    // backup, in its owner reference and in its label, with the digest of the others.
+    // The backups and the restores first, then the pod volume backups and the data uploads, each naming the UID the
+    // cluster gave its backup, in its owner reference and in its label, with the digest of the others.
     const order = target.order.filter((name) => name.includes(`/${names.scale}/`));
     const first = order.findIndex(inScale("podvolumebackup"));
 
     expect(first).toBe(SCALE_BACKUPS + SCALE_RESTORES);
-    expect(order.slice(first).every(inScale("podvolumebackup"))).toBe(true);
+    expect(order.slice(first, first + SCALE_OPERATIONS).every(inScale("podvolumebackup"))).toBe(true);
+    expect(order.slice(first + SCALE_OPERATIONS)).toHaveLength(SCALE_DATA_UPLOADS);
+    expect(order.slice(first + SCALE_OPERATIONS).every(inScale("dataupload"))).toBe(true);
     const shape = (
       target.find("Backup", names.scale, "backup-0001")?.metadata.annotations as Record<string, string> | undefined
     )?.[SHAPE_ANNOTATION];
     const operations = order.slice(first).map((name) => {
-      const found = target.find("PodVolumeBackup", names.scale, name.split("/")[2]);
+      const found = target.find(
+        name.startsWith("dataupload/") ? "DataUpload" : "PodVolumeBackup",
+        names.scale,
+        name.split("/")[2],
+      );
 
       if (!found) throw new Error(`${name} is not there`);
       return found as unknown as KubeResource;
     });
 
-    expect(operations).toHaveLength(SCALE_OPERATIONS);
+    expect(operations).toHaveLength(SCALE_OPERATIONS + SCALE_DATA_UPLOADS);
     for (const operation of operations) {
       const backup = String(operation.metadata.labels?.["velero.io/backup-name"]);
       const uid = target.find("Backup", names.scale, backup)?.metadata.uid;
@@ -2626,10 +2633,14 @@ describe("foundation fixture boundaries", () => {
     const removed = target.removed.filter((name) => name.includes(`/${names.scale}/`));
 
     expect(again.again).toEqual([names.overview, names.scale]);
-    expect(removed).toHaveLength(SCALE_BACKUPS + SCALE_RESTORES + SCALE_OPERATIONS);
-    expect(removed.slice(0, SCALE_OPERATIONS).every(inScale("podvolumebackup"))).toBe(true);
+    expect(removed).toHaveLength(SCALE_BACKUPS + SCALE_RESTORES + SCALE_OPERATIONS + SCALE_DATA_UPLOADS);
+    expect(
+      removed
+        .slice(0, SCALE_OPERATIONS + SCALE_DATA_UPLOADS)
+        .every((name) => inScale("podvolumebackup")(name) || inScale("dataupload")(name)),
+    ).toBe(true);
     const renewed = target.find("Backup", names.scale, "backup-1000")?.metadata.uid;
-    const last = target.find("PodVolumeBackup", names.scale, operations[operations.length - 1].metadata.name) as
+    const last = target.find("PodVolumeBackup", names.scale, operations[SCALE_OPERATIONS - 1].metadata.name) as
       | KubeResource
       | undefined;
 
@@ -2716,7 +2727,7 @@ describe("foundation fixture boundaries", () => {
     }
   });
 
-  it("gives the operations of the views the phases the release writes, with the times of each, and nothing of the data movement", () => {
+  it("gives the operations of the views the phases the release writes, with the times of each, the data movement among them", () => {
     const started = Date.parse("2026-09-28T07:31:17.123Z");
     const made = viewOperationFixtures("synthetic-owner", run, started, viewOwners(run));
     const of = (kind: string, owner: string) =>
@@ -2751,9 +2762,73 @@ describe("foundation fixture boundaries", () => {
       "Canceled",
       "Completed",
     ]);
+    expect(of("DataUpload", "backup-inprogress").map(phase)).toEqual([
+      undefined,
+      "New",
+      "Accepted",
+      "Prepared",
+      "InProgress",
+      "Canceling",
+      "Completed",
+      "Completed",
+      "Failed",
+      "Failed",
+      "Canceled",
+      undefined,
+    ]);
+    expect(of("DataUpload", LONG_BACKUP_NAME).map(phase)).toEqual(["InProgress"]);
+    expect(of("DataDownload", "restore-mapped").map(phase)).toEqual([
+      "New",
+      "Accepted",
+      "Prepared",
+      "InProgress",
+      "Completed",
+      "Failed",
+      "Canceled",
+      "Failed",
+    ]);
     expect(
-      made.map((item) => item.kind).filter((kind) => !kind.startsWith("Pod") && kind !== "BackupRepository"),
+      made
+        .map((item) => item.kind)
+        .filter((kind) => !kind.startsWith("Pod") && !kind.startsWith("Data") && kind !== "BackupRepository"),
     ).toEqual([]);
+    // The data movement is of the second version of the group, and carries the labels of the CSI plugin: its owner,
+    // its operation ID, and the claim of an upload.
+    const uploads = of("DataUpload", "backup-inprogress");
+    const downloads = of("DataDownload", "restore-mapped");
+
+    for (const item of [...uploads, ...downloads]) {
+      expect([item.metadata.name, item.apiVersion]).toEqual([item.metadata.name, "velero.io/v2alpha1"]);
+      expect(item.metadata.labels?.["velero.io/async-operation-id"]).toMatch(
+        item.kind === "DataUpload" ? /^du-[0-9a-z-]{8}\.views-pvc-uid-\d+$/ : /^dd-[0-9a-z-]{8}\.views-pvc-uid-\d+$/,
+      );
+      expect(String(item.metadata.labels?.["velero.io/async-operation-id"]).length).toBeLessThanOrEqual(63);
+    }
+    for (const item of uploads) expect(item.metadata.labels?.["velero.io/pvc-uid"]).toMatch(/^views-pvc-uid-\d+$/);
+    // The node of the data path, and the node agent that accepted it, another one for the one prepared.
+    expect(status(uploads[3])).toMatchObject({ node: "views-node-2", acceptedByNode: "views-node-1" });
+    expect(status(uploads[6])).toMatchObject({
+      snapshotID: expect.stringMatching(/^[0-9a-f]{32}$/),
+      incrementalBytes: 4 * 1024 * 1024,
+    });
+    expect(status(uploads[7]).message).toBe("volume was empty so no data was upload");
+    expect(status(uploads[9])).toEqual({
+      phase: "Failed",
+      acceptedByNode: "views-node-1",
+      acceptedTimestamp: status(uploads[9]).acceptedTimestamp,
+      message: "timeout on preparing data upload",
+    });
+    expect((uploads[11].spec as { datamover?: string }).datamover).toBe("views-mover");
+    // The downloads restore the snapshot of the completed upload, but the last, whose snapshot no upload names.
+    expect(downloads.slice(0, -1).map((item) => (item.spec as { snapshotID?: string }).snapshotID)).toEqual(
+      downloads.slice(0, -1).map(() => status(uploads[6]).snapshotID),
+    );
+    expect((downloads.at(-1)?.spec as { snapshotID?: string }).snapshotID).not.toBe(status(uploads[6]).snapshotID);
+    expect(status(downloads[5])).toEqual({
+      phase: "Failed",
+      completionTimestamp: status(downloads[5]).completionTimestamp,
+      message: "error to expose the snapshot\nthe target claim is not bound",
+    });
     const backups = of("PodVolumeBackup", "backup-inprogress");
     const restores = of("PodVolumeRestore", "restore-mapped");
 
@@ -2894,7 +2969,9 @@ describe("foundation fixture boundaries", () => {
     const overview = overviewFixtures("synthetic-owner", run, after).length;
 
     expect(again).toMatchObject({ again: [names.overview, names.scale], overview, scale: SCALE_BACKUPS });
-    expect(target.removed).toHaveLength(overview + SCALE_BACKUPS + SCALE_RESTORES + SCALE_OPERATIONS);
+    expect(target.removed).toHaveLength(
+      overview + SCALE_BACKUPS + SCALE_RESTORES + SCALE_OPERATIONS + SCALE_DATA_UPLOADS,
+    );
     expect(
       target.removed.every((name) => name.includes(`/${names.overview}/`) || name.includes(`/${names.scale}/`)),
     ).toBe(true);
@@ -2986,7 +3063,11 @@ describe("foundation fixture boundaries", () => {
     ]);
     // What was in place was removed before the ones of now were created, and nothing else was.
     expect(target.removed).toHaveLength(
-      overviewFixtures("synthetic-owner", run, before).length + SCALE_BACKUPS + SCALE_RESTORES + SCALE_OPERATIONS,
+      overviewFixtures("synthetic-owner", run, before).length +
+        SCALE_BACKUPS +
+        SCALE_RESTORES +
+        SCALE_OPERATIONS +
+        SCALE_DATA_UPLOADS,
     );
     expect(
       target.removed.every((name) => name.includes(`/${names.overview}/`) || name.includes(`/${names.scale}/`)),
@@ -9970,6 +10051,41 @@ describe("foundation fixture boundaries", () => {
     );
     // The same moment gives the same objects.
     expect(scaleFixtures("synthetic-owner", run, placed).operations).toEqual(operations);
+  });
+
+  it("makes the data uploads of the long lists, one of each of two hundred backups that hold pod volume backups, in the phases in turn", () => {
+    const names = fixtureNames(run);
+    const placed = Date.parse("2026-10-27T09:00:00Z");
+    const { backups, dataUploads } = scaleFixtures("synthetic-owner", run, placed);
+    const owned = dataUploads.map((upload) => String(upload.metadata.labels?.["velero.io/backup-name"]));
+
+    expect(dataUploads).toHaveLength(SCALE_DATA_UPLOADS);
+    // One of each of the backups 701 to 900, which hold two pod volume backups each; none of the others.
+    expect(owned).toEqual(
+      backups.slice(SCALE_OWNERS_OF_TWO - SCALE_DATA_UPLOADS, SCALE_OWNERS_OF_TWO).map(({ metadata }) => metadata.name),
+    );
+    expect(dataUploads.map((upload) => (upload.status as { phase?: string }).phase)).toEqual(
+      dataUploads.map((_, index) => SCALE_OPERATION_PHASES[index % SCALE_OPERATION_PHASES.length]),
+    );
+    for (const upload of dataUploads) {
+      expect([upload.metadata.name, upload.apiVersion, upload.metadata.namespace]).toEqual([
+        upload.metadata.name,
+        "velero.io/v2alpha1",
+        names.scale,
+      ]);
+      expect(upload.metadata.ownerReferences?.[0]).toMatchObject({ kind: "Backup", controller: true });
+      expect(upload.metadata.labels?.["velero.io/backup-uid"]).toBe(upload.metadata.ownerReferences?.[0].uid);
+      expect(String(upload.metadata.labels?.["velero.io/async-operation-id"]).length).toBeLessThanOrEqual(63);
+    }
+    expect(new Set(dataUploads.map(({ metadata }) => metadata.name)).size).toBe(SCALE_DATA_UPLOADS);
+    // With the UIDs the cluster gave the backups, the data uploads name them.
+    const owners = Object.fromEntries(backups.map((backup, index) => [backup.metadata.name, `given-uid-${index}`]));
+
+    expect(
+      scaleFixtures("synthetic-owner", run, placed, owners).dataUploads.map(
+        (upload) => upload.metadata.ownerReferences?.[0].uid,
+      ),
+    ).toEqual(owned.map((backup) => owners[backup]));
   });
 
   it("gives the views schedules whose backups go where none is taken, and one that names its time zone", () => {
