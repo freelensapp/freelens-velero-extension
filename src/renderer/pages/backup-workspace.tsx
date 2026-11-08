@@ -31,9 +31,9 @@ const {
   Component: { Button, Icon },
 } = Renderer;
 
-// The commands of a backup (SPEC-0017, REQ-252): each opens the workspace of its action over this view, which is as it
-// was when the workspace closes, with writes on or off. A restore is offered of a backup that ended well, and the
-// command says why it is not for another (REQ-267).
+// The commands of a backup (SPEC-0017, REQ-252), on the line of its name, where they take no room from its tabs: each
+// opens the workspace of its action over this view, which is as it was when the workspace closes, with writes on or
+// off. A restore is offered of a backup that ended well, and the command says why it is not for another (REQ-267).
 function BackupCommands({ installation, backup }: { installation: Installation; backup: BackupResource }) {
   const offered = backupOffered(backup.status?.phase);
   const name = backup.metadata.name;
@@ -121,8 +121,14 @@ export const BackupWorkspace = observer(({ installation, name, now, back, onBack
   const tab = openTab();
 
   return (
-    <Workspace kind="backup" name={view.name} uid={view.uid} back={back} onBack={onBack}>
-      <BackupCommands installation={installation} backup={backup} />
+    <Workspace
+      kind="backup"
+      name={view.name}
+      uid={view.uid}
+      back={back}
+      onBack={onBack}
+      commands={<BackupCommands installation={installation} backup={backup} />}
+    >
       <div className={styles.tabStrip}>
         <WorkspaceTabs kind="backup" current={tab} onChange={showTab} />
       </div>

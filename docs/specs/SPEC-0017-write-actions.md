@@ -1464,10 +1464,10 @@ with the commands of the views it is asked from. The evidence, by check:
 
 - RESTORE-01, the component part
   ([`restore-create-workspace.test.tsx`](../../src/renderer/pages/restore-create-workspace.test.tsx)):
-  Restore in the workspace of a backup, above its tabs, and in the workspace of a
-  schedule, beside Back up now; each opens the workspace of the restore over the view,
-  named in the address, with writes off and on, and closing it leaves the view as it
-  was. The name is proposed from the backup and the time in UTC, edited, refused with
+  Restore in the workspace of a backup, on the line of its name, and in the workspace
+  of a schedule, beside Back up now on the line of its name; each opens the workspace
+  of the restore over the view, named in the address, with writes off and on, and
+  closing it leaves the view as it was. The name is proposed from the backup and the time in UTC, edited, refused with
   capitals, said taken when a restore of the installation has it, proposed again for
   another backup until the operator types one, and given back by Escape in its field
   ([`restore-create.test.ts`](../../src/renderer/state/restore-create.test.ts)). A form
@@ -1568,6 +1568,10 @@ Decided while implementing, on 2026-11-08:
   its own view.
 - The review leads to the tab of the resources of the backup, in one change of the
   address.
+- The commands of a backup and of a schedule are on the line of its name, at its end:
+  under the name, a line of commands took the room of the tabs of a backup, and the
+  views of the packaged application found the log and the resources at 1440 by 900
+  taller than the room they are read in.
 
 The independent review of this pull request, read-only, found three blockers, and
 points to fix or to follow; all were applied:

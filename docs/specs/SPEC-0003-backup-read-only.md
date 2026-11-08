@@ -348,11 +348,12 @@ check, and the rest of this spec is read with it:
 | --- | --- |
 | REQ-030, BACK-07 | The workspace of a backup, which reads and offers two commands, Restore (T4.4) and Delete backup (T4.6), each opening the workspace of its action of SPEC-0017 and writing nothing by itself; no placeholder control |
 
-With T4.4 the workspace of a backup has Restore, above its tabs, and no other command
-yet: the command opens the workspace of the restore of the backup over the view,
-named in the address, and writes nothing by itself. It is enabled for a backup
-Completed, and for one PartiallyFailed with the words that some of its items may be
-missing; for a backup in any other phase it is disabled, with the words of why. It is
-proven at the component layer, with writes off and on, in
+With T4.4 the workspace of a backup has Restore, on the line of its name, where it
+takes no room from its tabs and their lists, and no other command yet: the command
+opens the workspace of the restore of the backup over the view, named in the address,
+and writes nothing by itself. It is enabled for a backup Completed, and for one
+PartiallyFailed with the words that some of its items may be missing; for a backup in
+any other phase it is disabled, with the words of why. It is proven at the component
+layer, with writes off and on, in
 [`restore-create-workspace.test.tsx`](../../src/renderer/pages/restore-create-workspace.test.tsx);
 the packaged suites of the action come with the third pull request of T4.4.

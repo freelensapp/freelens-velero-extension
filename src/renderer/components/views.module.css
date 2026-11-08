@@ -1165,13 +1165,16 @@
   margin: 8px 0;
 }
 
-/* The commands of a view of one object, under its name: the actions that open their workspace over it. */
+/* The commands of an object, on the line of its name, at its end: what is read under the name, the tabs of an
+   operation and their lists, keeps its room. On a line too short for them they go under the name, and their words
+   under them. */
 .commands {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin: 0 0 16px;
+  min-width: 0;
+  margin-left: auto;
 }
 
 /* The field of the name of a backup asked from a schedule, with its rule and what is wrong with it under it. */

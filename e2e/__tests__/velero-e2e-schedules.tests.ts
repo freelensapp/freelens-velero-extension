@@ -975,11 +975,12 @@ describe("views of the schedules", () => {
           ),
         );
 
-      // The way back, Back up now, the ways to the other views and the marks of the line: nothing that writes by
-      // itself (SCHED-11 as SPEC-0017 restates it).
+      // The way back, Back up now, Restore, the ways to the other views and the marks of the line: nothing that
+      // writes by itself (SCHED-11 as SPEC-0017 restates it).
       expect(controls.filter((control) => control !== "mark" && !control.startsWith("velero-open-"))).toEqual([
         "velero-back",
         "velero-schedule-back-up-now",
+        "velero-schedule-restore",
       ]);
       expect(await frame.locator("[data-testid=velero-schedule-workspace]").innerText()).not.toMatch(
         /\b(delete|edit|pause now|resume|run now|trigger)\b/i,

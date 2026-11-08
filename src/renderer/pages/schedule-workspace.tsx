@@ -210,10 +210,10 @@ function Template({ references, location }: { references: TemplateReferences; lo
   );
 }
 
-// The commands of a schedule (SPEC-0017, REQ-252): each opens the workspace of its action over this view, which is as
-// it was when the workspace closes. They are there with writes on or off: the form of an action can be filled with
-// writes off, and its review asks for them. A schedule whose name is longer than a label takes is asked for no backup
-// (REQ-255).
+// The commands of a schedule (SPEC-0017, REQ-252), on the line of its name: each opens the workspace of its action over
+// this view, which is as it was when the workspace closes. They are there with writes on or off: the form of an action
+// can be filled with writes off, and its review asks for them. A schedule whose name is longer than a label takes is
+// asked for no backup (REQ-255).
 function ScheduleCommands({ installation, name, uid }: { installation: Installation; name: string; uid?: string }) {
   const refused = scheduleRefused(name);
   // A restore is offered of the backups of the schedule that ended well, the newest Completed first (REQ-265, REQ-267).
@@ -317,8 +317,14 @@ export const ScheduleWorkspace = observer(({ installation, name, now, back, onBa
   const newest = history.state === "listed" ? history.items[0] : undefined;
 
   return (
-    <Workspace kind="schedule" name={view.name} uid={view.uid} back={back} onBack={onBack}>
-      <ScheduleCommands installation={installation} name={view.name} uid={view.uid} />
+    <Workspace
+      kind="schedule"
+      name={view.name}
+      uid={view.uid}
+      back={back}
+      onBack={onBack}
+      commands={<ScheduleCommands installation={installation} name={view.name} uid={view.uid} />}
+    >
       <div className={styles.band} data-testid="velero-schedule-status">
         <Fact name="Validation">
           <ValidationMark state={view.state} />
