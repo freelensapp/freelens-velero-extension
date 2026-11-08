@@ -37,9 +37,9 @@ const OPENED = "backup-finalizingpartiallyfailed";
 const RESTORES = cluster.RESTORES;
 const RESTORED = "restore-mapped";
 const LONG_RESTORE = cluster.LONG_RESTORE_NAME;
-// The views that are checked, each in both themes at every size: eight of the tabs, then the forty-six
-// of the pages, four of them of the adherence of the schedules, ten of the backup repositories, of the pod
-// volume operations and of the data movement, two of Back up now and two of Create backup.
+// The views that are checked, each in both themes at every size: eight of the tabs, then the forty-eight of the
+// pages, four of them of the adherence of the schedules, ten of the backup repositories, of the pod volume operations
+// and of the data movement, two of Back up now, two of Create backup and two of Create schedule.
 const VIEWS = 56;
 const OVERVIEW = cluster.OVERVIEW;
 const SCHEDULES = cluster.SCHEDULES;
@@ -73,6 +73,8 @@ const createBackup = (id: string) => `[data-testid=velero-backup-create-${id}]`;
 const CREATE_FIELD = `${createBackup("field")} input, input${createBackup("field")}`;
 const createSchedule = (id: string) => `[data-testid=velero-schedule-create-${id}]`;
 const SCHEDULE_FIELD = `${createSchedule("field")} input, input${createSchedule("field")}`;
+// An expression of 200 characters the parser takes: a zone, each of the first forty-eight minutes, and a few hours.
+const LONG_EXPRESSION = `CRON_TZ=America/Argentina/ComodRivadavia ${Array.from({ length: 48 }, (_, at) => at).join(",")} 13-15 1-7,15-21 * MON-FRI`;
 const SCHEDULE_EXPRESSION = `${createSchedule("expression")} input, input${createSchedule("expression")}`;
 // A tab of the view that is shown: the operation the view is of, and the tab.
 interface Tab {
@@ -2104,12 +2106,10 @@ describe("pre-review of the views", () => {
       if ((await cluster.writesState(frame)) !== "on") await cluster.turnWritesOn(frame);
       await frame.click("[data-testid=velero-schedules-create]");
       await frame.waitForSelector(createSchedule("workspace"), { timeout: 30_000 });
-      // The longest name a schedule may have, and a long expression.
+      // The longest name a schedule may have, and an expression of 200 characters.
+      expect(LONG_EXPRESSION).toHaveLength(200);
       await frame.locator(SCHEDULE_FIELD).first().fill("a".repeat(63));
-      await frame
-        .locator(SCHEDULE_EXPRESSION)
-        .first()
-        .fill("CRON_TZ=America/Argentina/ComodRivadavia 0,15,30,45 3-5 1-7,15-21 * MON-FRI");
+      await frame.locator(SCHEDULE_EXPRESSION).first().fill(LONG_EXPRESSION);
       await everyLayout("schedule-create-form", top, SCHEDULES, undefined, inSight(SCHEDULE_FIELD));
       await frame.click(createSchedule("ask"));
       await frame.waitForSelector(createSchedule("review"), { timeout: 30_000 });

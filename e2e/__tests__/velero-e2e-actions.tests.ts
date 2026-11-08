@@ -526,6 +526,46 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
   );
 
   it(
+    "opens Create schedule over the list, named in the address, leaves the list as it was when it closes, and drops a review when writes go off before the creation, which creates nothing",
+    async () => {
+      await writesOn();
+      await cluster.showList(frame);
+      await cluster.openPage(frame, SCHEDULES);
+      await cluster.waitForList(frame, SCHEDULES);
+      await cluster.search(frame, "views", SCHEDULES);
+      await cluster.scrollList(frame, 60, SCHEDULES);
+      const state = await cluster.listState(frame, SCHEDULES);
+
+      await frame.click("[data-testid=velero-schedules-create]");
+      await frame.waitForSelector(newSchedule("workspace"), { timeout: 30_000 });
+      expect(await cluster.addressViews(frame)).toEqual(["schedule-create/new"]);
+      await cluster.closeWorkspace(frame);
+      const back = await cluster.listStateLike(frame, state, SCHEDULES);
+
+      expect([back.search, back.items, back.first]).toEqual([state.search, state.items, state.first]);
+      expect(Math.abs(back.scroll - state.scroll)).toBeLessThanOrEqual(2);
+      await cluster.search(frame, "", SCHEDULES);
+      // A review shown when writes go off is dropped with its token, and nothing is created (CRSCH-23).
+      const earlier = cluster.apiRequests();
+      const codes = cluster.requestCodes("schedules");
+
+      await openScheduleCreate(frame);
+      await frame.locator(scheduleField("field")).first().fill(`${FORM}-schedule-dropped`);
+      await frame.locator(scheduleField("expression")).first().fill(SCHEDULE_FORM.expression);
+      await frame.click(newSchedule("ask"));
+      await frame.waitForSelector(newSchedule("review"), { timeout: 30_000 });
+      await frame.click("[data-testid=velero-writes-off]");
+      await frame.waitForSelector("[data-testid=velero-writes][data-writes=off]", { timeout: 60_000 });
+      await frame.waitForSelector(newSchedule("review"), { state: "detached", timeout: 30_000 });
+      await frame.waitForTimeout(NOTHING);
+      expect(cluster.requestWrites("schedules", codes, cluster.requestCodes("schedules"))).toEqual({});
+      expect(writesSince(earlier)).toEqual({});
+      await cluster.closeWorkspace(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "shows in its review the text of the schedule of the fields set, the flags written, and writes nothing for a review that is left",
     async () => {
       await writesOn();
@@ -576,9 +616,8 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
       asked.uid = schedule.metadata.uid;
       // No controller runs on the CRDs alone: Velero did not read it.
       expect(await cluster.wordsOf(frame, newSchedule("phase"))).toBe(scheduleResultWords({}));
-      const { "GET 200": _reads, ...codesOfWrites } = cluster.counted(codes, cluster.requestCodes("schedules"));
-
-      expect(codesOfWrites).toEqual({ "POST 201": 1 });
+      // The controller of the environment of the demo patches the real schedule at every look: those are left out.
+      expect(cluster.requestWrites("schedules", codes, cluster.requestCodes("schedules"))).toEqual({ "POST 201": 1 });
       const written = writesSince(earlier);
 
       expect([Object.keys(written).length, Object.values(written)]).toEqual([1, [1]]);
@@ -631,9 +670,7 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
       );
       expect(await frame.locator(scheduleField("field")).first().inputValue()).toBe(schedule.name);
       expect(await frame.locator(`[data-testid="velero-open-schedule-${schedule.name}"]`).count()).toBe(1);
-      const { "GET 200": _reads, ...codesOfWrites } = cluster.counted(codes, cluster.requestCodes("schedules"));
-
-      expect(codesOfWrites).toEqual({ "POST 409": 1 });
+      expect(cluster.requestWrites("schedules", codes, cluster.requestCodes("schedules"))).toEqual({ "POST 409": 1 });
       expect(
         read<{ metadata: { resourceVersion: string } }>(
           "schedules.velero.io",

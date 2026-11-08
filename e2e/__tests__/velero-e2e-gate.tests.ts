@@ -97,6 +97,9 @@ describe("the gate of the writes", () => {
       expect(words).toContain(`context ${cluster.E2E_KUBE_CONTEXT}`);
       expect(words).toContain("DownloadRequest");
       expect(words).toContain("ServerStatusRequest");
+      // The writes of the actions, each named with where it is asked.
+      expect(words).toContain("a Backup of the form, asked from the list of the Backups");
+      expect(words).toContain("a Schedule of the form, asked from the list of the Schedules");
       expect(words).toContain("Turn writes on");
       await cluster.captureScreenshot(frame, "dark-gate-dialog");
       // Nothing is on before the dialog is answered.

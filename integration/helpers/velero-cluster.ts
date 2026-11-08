@@ -15,6 +15,7 @@ import { copyFile, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import { captureWindowScreenshot, EXTENSION_NAME } from "./velero-extension";
 import {
+  codeWritesOf,
   countedAs,
   installedVersion,
   operationListsOf,
@@ -3316,6 +3317,7 @@ export function serverStatusRequests(namespace: string): ServerStatusRequestObje
  * watches its requests, and lists them again when a watch ends.
  */
 export function requestCodes(resource: string): Record<string, number> {
+  const asked = Date.now();
   const { status, stdout, stderr } = kubectlE2E("get", "--raw", "/metrics");
 
   if (status !== 0) throw new Error(`The counters of the API server could not be read: ${stderr}`);
@@ -3330,8 +3332,31 @@ export function requestCodes(resource: string): Record<string, number> {
 
     counts[key] = (counts[key] ?? 0) + Number(line.slice(line.lastIndexOf(" ") + 1));
   }
-
+  READ_AT.set(counts, asked);
   return counts;
+}
+
+/**
+ * The codes of the requests of a kind that change something, between two
+ * readings of `requestCodes`: the reads left out, and for the schedules the
+ * PATCH its controller sends a schedule at every look, within the bound of the
+ * minutes between the readings, as `writes` leaves it out
+ * (`SCHEDULE_PATCHED_AT_EVERY_LOOK`).
+ */
+export function requestWrites(
+  resource: string,
+  before: Record<string, number>,
+  after: Record<string, number>,
+): Record<string, number> {
+  const from = READ_AT.get(before);
+  const to = READ_AT.get(after);
+
+  if (from === undefined || to === undefined) {
+    throw new Error(
+      "The codes are counted between two readings of requestCodes, which keep the moment they were asked",
+    );
+  }
+  return codeWritesOf(resource, counted(before, after), SCHEDULE_PATCHED_AT_EVERY_LOOK, (to - from) / 60_000);
 }
 
 /**

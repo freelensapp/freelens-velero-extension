@@ -817,10 +817,22 @@ the controller of the release. The evidence, by check:
   the `resourceVersion` of the schedule that has the name as it was; the reader of a
   part, as a second entry of the catalog, is refused at the creation, with the words of
   what it may not do, writes left on and nothing written; every schedule the suite
-  created is removed by its name with its UID as the precondition. 16 cases.
+  created is removed by its name with its UID as the precondition. The counts of the
+  schedules leave out the PATCH the controller of the environment of the demo sends the
+  real schedule at every look, within the bound the writes leave it out with. 17 cases.
+- CRSCH-01, the packaged part, in the same suite: the workspace opens over the list,
+  named in the address as `schedule-create/new`, and the list is with its search, its
+  rows and its scroll as they were once it closes.
+- CRSCH-02, the packaged part: with writes off nothing is written, in the same suite; the
+  dialog of the host that turns writes on names the Schedule of the form with where it
+  is asked, in the suite of the gate
+  ([`velero-e2e-gate.tests.ts`](../../e2e/__tests__/velero-e2e-gate.tests.ts)).
+- CRSCH-23, the packaged part before the POST: a review shown when writes go off is
+  dropped with its token, and the API server counts no write of a schedule.
 - CRSCH-20, in the pre-review,
   [`pre-review.tests.ts`](../../e2e/__tests__/pre-review.tests.ts): Create schedule, its
-  form and its review, with a name of 63 characters and a long expression, in both
+  form and its review, with a name of 63 characters and an expression of 200 characters
+  the parser takes, in both
   themes, at 1440 by 900, at 900 by 650 and at twice the zoom, with nothing over
   something else, wider than its room or cut; and a schedule of the form asked with the
   keyboard alone, from the command of the list to the name and Escape in it, the
@@ -832,13 +844,17 @@ the controller of the release. The evidence, by check:
 - CRSCH-22, end to end, in the transport proof of `pnpm e2e`
   ([`local-schedule-proof.mts`](../../e2e/scripts/local-schedule-proof.mts)), with the
   controller of the release on the disposable kind cluster, through the procedures of
-  the compiled main process, as a frame calls them: a schedule of every two minutes read
-  Enabled with no backup at its first reading and exactly one backup after its first
-  instant, which the server Completed and deleted through a DeleteBackupRequest; one the
-  controller refuses, `61 * * * *`, read FailedValidation with the words the form says
-  for it, which the proof reads from the compiled main process; and one paused with skip
-  immediately true, read with no phase, skip immediately still true and no last skipped;
-  each removed by its name with its UID as the precondition, and no backup of them left.
+  the compiled main process, as a frame calls them: a schedule of every two minutes,
+  created clear of an instant, read Enabled with no backup at its first reading and
+  exactly one backup at the first look that finds one after its first instant, which
+  ends Completed with the location, the namespaces and the resources of its template and
+  is deleted by the server through a DeleteBackupRequest; one the controller refuses,
+  `61 * * * *`, read FailedValidation with the words the form says for it, which the
+  proof reads from the compiled main process; and one paused with skip immediately true,
+  read with no phase, skip immediately still true and no last skipped; no backup of the
+  three left; each removed by its name with its UID as the precondition, one whose answer
+  was lost by its name when it was created since the proof began, and every backup of
+  them through the server once it ended, whatever ended the proof.
 
 On a second Linux machine, against Freelens 2.0.0, the validation target, with the
 reviews of the first and of the second pull request: the suite of the actions green
@@ -851,8 +867,40 @@ Decided while implementing, on 2026-11-08:
   compiled main process, which exports the refusal the form says: the scripts run under
   Node, which does not resolve the imports of the sources without an extension.
 - The cases of Create schedule join the suite of the actions and its part of the
-  views, whose paths take the files of the form of a schedule, of its words and of the
-  hook of the choices of the template.
+  views, whose paths take the files of the form of a schedule, of its words, of the
+  hook of the choices of the template and of the parser of the expressions.
+- The part of CRSCH-23 after the POST is proven at the main contract and the component
+  layers: the packaged application cannot hold the answer of the API server between a
+  POST and its answer, as for the ends of Back up now of SPEC-0017 (REQ-250).
+- The counts of the codes of the schedules leave out the PATCH the controller sends the
+  real schedule at every look, within the bound of the minutes the writes use.
+- The kubectl of the proof checks the cluster of the environment before each call and
+  keeps its cache in the private state of the environment; the proof removes what it
+  asked even when the answer was lost, and creates the valid schedule clear of an
+  instant, since the controller reads its creation to the second.
+
+The independent review of this pull request, read-only, found no hard blocker, and the
+assumptions of the proof on the controller of the release right in its source. What it
+found was applied:
+
+- The kubectl of the proof wrote its cache into the folder of the extension, where the
+  check of the format found it: its cache is in the state now, and the cluster is
+  checked before each call.
+- A schedule whose answer was lost, and a backup of the schedules the proof did not
+  count, were left: the cleanup removes them.
+- The proof did not check that the backup ended Completed with the template, nor that
+  the refused and the paused schedules made none: it does.
+- The counts of the schedules took the PATCH of the controller of the environment of
+  the demo for a write: they leave it out within the bound.
+- A schedule created a moment before an instant could be due at its first look: it is
+  created clear of one.
+- The documents said an expression of 200 characters and a pre-review of other counts,
+  and packaged layers no case gave: the pre-review takes an expression of 200
+  characters, the counts are right, and the packaged parts of CRSCH-01, CRSCH-02 and
+  CRSCH-23 are written or said where they are proven.
+- The part of the views of the actions did not run for the parser of the expressions:
+  it does.
+- The proof answered constants: it answers what it read.
 
 With this pull request the work of T4.7 is complete: its row of the roadmap moves to
 Done after the merge, with the follow-up that PROCESS.md asks for.
