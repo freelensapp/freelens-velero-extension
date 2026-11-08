@@ -26,6 +26,10 @@ export function OpenView({ target, ...props }: OpenViewProps) {
       return <VolumeOperationWorkspace volume="PodVolumeBackup" name={target.name} {...props} />;
     case "pod-volume-restore":
       return <VolumeOperationWorkspace volume="PodVolumeRestore" name={target.name} {...props} />;
+    case "data-upload":
+      return <VolumeOperationWorkspace volume="DataUpload" name={target.name} {...props} />;
+    case "data-download":
+      return <VolumeOperationWorkspace volume="DataDownload" name={target.name} {...props} />;
     default:
       return <BackupWorkspace name={target.name} {...props} />;
   }

@@ -257,11 +257,12 @@ describe("views of the restores", () => {
         "Waiting for plugin operations",
         "1 error",
       );
-      // Opening a restore asks the cluster for one thing: the pod volume restores of the installation, for the band
-      // of its volumes, once and at once, which the views read only while a view that shows them is open. What else
-      // it shows was read with the installation. It is opened in the time between two reads of the installation,
-      // with the counters of the API server read before and after; a view that closes lets the family go at the
-      // read after, so the restore asks it again each time it is opened.
+      // Opening a restore asks the cluster for the two families of the band of its volumes, once each and at once,
+      // which the views read only while a view that shows them is open: the pod volume restores, counted here, and
+      // the data downloads, which the suites count with the fixtures of the data movement, in the second pull request
+      // of T5.2. What else it shows was read with the installation. It is opened in the time between two reads of the
+      // installation, with the counters of the API server read before and after; a view that closes lets the family go
+      // at the read after, so the restore asks it again each time it is opened.
       expect(
         await cluster.readsDuring(
           frame,
@@ -355,7 +356,8 @@ describe("views of the restores", () => {
       expect(band).toMatchObject({
         kind: "PodVolumeRestore",
         state: "rows",
-        sentence: "The restore waits for its plugin operations, which is when its data downloads run.",
+        sentence:
+          "The data downloads of the restore were made while it was InProgress. It waits for its plugin operations, among them its data downloads.",
         more: false,
       });
       expect(band.rows).toHaveLength(VOLUMES_OF_MAPPED.length);
@@ -434,7 +436,7 @@ describe("views of the restores", () => {
         kind: "PodVolumeRestore",
         state: "none",
         sentence:
-          "The pod volume restores of a restore are made while it is InProgress: this one failed its validation, and did not run.",
+          "The pod volume restores and the data downloads of a restore are made once it runs: this one failed its validation, and did not run.",
         words: NO_POD_VOLUME_RESTORE,
         count: "",
         groups: [],

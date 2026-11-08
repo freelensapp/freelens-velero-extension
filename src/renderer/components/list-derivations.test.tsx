@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { autorun, runInAction } from "mobx";
 import { afterEach, describe, expect, it } from "vitest";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { listProps } from "../../../test/host-components";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { BackupsPage } from "../pages/backups-page";
@@ -44,7 +45,7 @@ function backup(name: string, phase: string, resourceVersion = "1") {
 
 function mount() {
   const table: Record<string, Answer> = {
-    [DISCOVERY]: { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } },
+    [DISCOVERY]: { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } },
     [LOCATIONS]: list({ metadata: { name: "default", namespace: A } }),
     [path("backups", A)]: list(backup("nightly-1", "Completed"), backup("nightly-2", "InProgress")),
     [path("restores", A)]: list(),

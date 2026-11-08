@@ -2,6 +2,7 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { addressSearch, Renderer } from "../../../test/freelens-extensions";
 import { confirmDialogs, listProps } from "../../../test/host-components";
 import * as layout from "../../../test/list-layout";
@@ -64,7 +65,7 @@ function object(kind: string, name: string, spec: object, status: object) {
 
 function answers(): Record<string, Answer> {
   return {
-    [DISCOVERY]: { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } },
+    [DISCOVERY]: { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } },
     [LOCATIONS]: list({ metadata: { name: "default", namespace: A } }),
     // The release counts the status and the results of an operation on the same messages, and adds to
     // the status alone the errors of the operations of its plugins: each status counts one error more

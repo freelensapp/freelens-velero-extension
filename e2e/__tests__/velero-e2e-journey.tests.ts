@@ -25,12 +25,14 @@ const NOTHING = 1500;
 const MENU = ".Menu .MenuItem";
 const DIALOG = '[data-testid="confirmation-dialog"], .Dialog, .ConfirmDialog';
 const STARTED = /\b2026\b/;
-// The eight kinds of Velero with pages of their own, as the API names them: the Custom Resources tree of the host
+// The ten kinds of Velero with pages of their own, as the API names them: the Custom Resources tree of the host
 // leaves them out while the extension is enabled.
 const PAGED = [
   "backuprepositories",
   "backups",
   "backupstoragelocations",
+  "datadownloads",
+  "datauploads",
   "podvolumebackups",
   "podvolumerestores",
   "restores",
@@ -46,8 +48,8 @@ const READ_ALWAYS = [
   "schedules",
   "volumesnapshotlocations",
 ];
-// The two read only while a view that shows them is open.
-const ON_DEMAND = ["podvolumebackups", "podvolumerestores"];
+// The four read only while a view that shows them is open.
+const ON_DEMAND = ["podvolumebackups", "podvolumerestores", "datauploads", "datadownloads"];
 // The words of the error the suite makes the section of the details of a backup throw: the one error the
 // application is to have, which is known by them.
 const MADE = "The suite made the section of the details of a backup throw";
@@ -161,6 +163,8 @@ describe("views of the first milestone", () => {
         "velero-backup-repositories": "Backup Repositories",
         "velero-pod-volume-backups": "Pod Volume Backups",
         "velero-pod-volume-restores": "Pod Volume Restores",
+        "velero-data-uploads": "Data Uploads",
+        "velero-data-downloads": "Data Downloads",
       });
       await frame.waitForSelector("[data-testid=velero-state-choose]", { timeout: 60_000 });
       expect((await cluster.target(frame)).cluster).toBe(cluster.E2E_KUBE_CONTEXT);
@@ -346,13 +350,16 @@ describe("views of the first milestone", () => {
         if (JSON.stringify(Object.entries(sent).sort()) === JSON.stringify(Object.entries(asked).sort())) break;
       }
       // Every read went from the frame of the cluster to the proxy of its own address: of a kind of Velero, or
-      // of the group, which says what the cluster serves.
+      // of a version of the group, which says what the cluster serves; under the second version, its discovery and
+      // the two kinds of the data movement alone.
       expect(
         seen.filter(
           (request) =>
             request.method !== "GET" ||
             new URL(request.url).origin !== origin ||
-            !/^\/api-kube\/apis\/velero\.io\/v1(\/|$)/.test(new URL(request.url).pathname) ||
+            !/^\/api-kube\/apis\/velero\.io\/(v1(\/|$)|v2alpha1(\/namespaces\/[a-z0-9-]+\/(datauploads|datadownloads))?$)/.test(
+              new URL(request.url).pathname,
+            ) ||
             new URL(request.frame || "about:blank").origin !== origin,
         ),
       ).toEqual([]);
@@ -790,7 +797,7 @@ describe("views of the first milestone", () => {
   );
 
   it(
-    "gives every page of the group the tabs of the group, and leaves its eight kinds out of the Custom Resources of the host until it is disabled",
+    "gives every page of the group the tabs of the group, and leaves its ten kinds out of the Custom Resources of the host until it is disabled",
     async () => {
       const { velero: _group, ...entries } = await cluster.veleroSidebarEntries(frame);
       const titles = Object.values(entries);
@@ -805,6 +812,8 @@ describe("views of the first milestone", () => {
         cluster.REPOSITORIES,
         cluster.POD_VOLUME_BACKUPS,
         cluster.POD_VOLUME_RESTORES,
+        cluster.DATA_UPLOADS,
+        cluster.DATA_DOWNLOADS,
       ]) {
         await cluster.openPage(frame, of);
         expect([of.id, await cluster.groupTabs(frame)]).toEqual([of.id, { tabs: titles, active: [entries[of.menu]] }]);
@@ -817,7 +826,7 @@ describe("views of the first milestone", () => {
       expect(enabled.filter((kind) => PAGED.includes(kind))).toEqual([]);
       expect(enabled).toContain("downloadrequests");
       await cluster.captureScreenshot(frame, "dark-custom-resources-enabled");
-      // Disabled from the Extensions page, the extension leaves the sidebar, and the tree has the eight again.
+      // Disabled from the Extensions page, the extension leaves the sidebar, and the tree has the ten again.
       await velero.disableExtension(started.app, started.window);
       await velero.captureWindowScreenshot(started.window, "dark-extension-disabled");
       await velero.navigateToCatalog(started.app);

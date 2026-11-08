@@ -14,13 +14,21 @@ const MADE = new WeakMap<Installation, { key: unknown[]; index: VolumeIndex }>()
 export function volumesOf(installation: Installation): VolumeIndex {
   // The reads as they are stored: what the installation gives of a family is a new object at each call. The
   // availability of the API is in the key as well, since what a read is said to be depends on it.
-  const key = [installation.reads.podVolumeBackups, installation.reads.podVolumeRestores, installation.api];
+  const key = [
+    installation.reads.podVolumeBackups,
+    installation.reads.podVolumeRestores,
+    installation.reads.dataUploads,
+    installation.reads.dataDownloads,
+    installation.api,
+  ];
   const made = MADE.get(installation);
 
   if (made?.key.every((value, index) => value === key[index])) return made.index;
   const index = volumeIndex({
     podVolumeBackups: installation.read("podVolumeBackups"),
     podVolumeRestores: installation.read("podVolumeRestores"),
+    dataUploads: installation.read("dataUploads"),
+    dataDownloads: installation.read("dataDownloads"),
   });
 
   MADE.set(installation, { key, index });

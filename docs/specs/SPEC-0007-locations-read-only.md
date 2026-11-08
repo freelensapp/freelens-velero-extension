@@ -310,3 +310,13 @@ LOC-01 to LOC-13 and LOC-15 at the unit and component layers; LOC-01 to LOC-12,
 LOC-14 and LOC-15 in the packaged application, LOC-09, LOC-10 and LOC-15 with the
 two readers, and LOC-14 in the pre-review as well. The two deviations recorded above
 hold on v2 as they are; v2 brings no other.
+
+**T5.2 of [SPEC-0014](SPEC-0014-repositories-and-data-movement.md), 2026-11-08: LOC-09
+with the second version of the group.** The reader takes the paths of the kinds of
+Velero under `velero.io/v1` as before, and under `velero.io/v2alpha1` the discovery
+of the version and the lists of the data uploads and of the data downloads in one
+namespace, and nothing else of it: not a kind of the first version, not a list of the
+whole cluster, not an object by its name, not another version
+(`src/renderer/api/reader.ts`). Its unit test asks both versions' paths of the
+families and refuses those, beside the Secrets, the dots and the queries of before;
+every path the views have is still under `/apis/velero.io/`.

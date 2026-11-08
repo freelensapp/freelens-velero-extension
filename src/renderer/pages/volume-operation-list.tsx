@@ -1,5 +1,5 @@
 import { Renderer } from "@freelensapp/extensions";
-import { writtenType } from "../../common/volume-phases";
+import { dataMovement } from "../../common/volume-phases";
 import { VOLUME_SORTING, volumeSearch, volumeView } from "../../common/volume-view";
 import {
   bytesText,
@@ -8,7 +8,6 @@ import {
   NOT_REPORTED,
   NOT_WRITTEN,
   spanText,
-  uploaderText,
   VOLUME_WORDS,
 } from "../../common/volume-words";
 import { time } from "../components/status";
@@ -29,25 +28,43 @@ const {
 
 const OF: Record<
   VolumeKind,
-  { kind: "pod-volume-backup" | "pod-volume-restore"; id: string; owner: "backup" | "restore" }
+  {
+    kind: "pod-volume-backup" | "pod-volume-restore" | "data-upload" | "data-download";
+    id: string;
+    owner: "backup" | "restore";
+    tableId: string;
+  }
 > = {
-  PodVolumeBackup: { kind: "pod-volume-backup", id: "pod-volume-backups", owner: "backup" },
-  PodVolumeRestore: { kind: "pod-volume-restore", id: "pod-volume-restores", owner: "restore" },
+  PodVolumeBackup: {
+    kind: "pod-volume-backup",
+    id: "pod-volume-backups",
+    owner: "backup",
+    tableId: "veleroPodVolumeBackupsTable",
+  },
+  PodVolumeRestore: {
+    kind: "pod-volume-restore",
+    id: "pod-volume-restores",
+    owner: "restore",
+    tableId: "veleroPodVolumeRestoresTable",
+  },
+  DataUpload: { kind: "data-upload", id: "data-uploads", owner: "backup", tableId: "veleroDataUploadsTable" },
+  DataDownload: { kind: "data-download", id: "data-downloads", owner: "restore", tableId: "veleroDataDownloadsTable" },
 };
 
 // The list of the operations of one kind: the same columns for each, in the order of the spec, with the cells they
-// share. The secondary columns give their room in a narrow list in the order of the design.
+// share. The secondary columns give their room in a narrow list in the order of the design. The column of the
+// uploader of a pod volume operation is the one of the data mover of a data movement.
 export function volumeOperationList(
   volume: VolumeKind,
   object: VeleroKind<RendererType.K8sApi.KubeObject>,
 ): ListDefinition<VolumeView> {
-  const { kind, id, owner } = OF[volume];
+  const { kind, id, owner, tableId } = OF[volume];
 
   return {
     kind,
     id,
     object,
-    tableId: volume === "PodVolumeBackup" ? "veleroPodVolumeBackupsTable" : "veleroPodVolumeRestoresTable",
+    tableId,
     // The backup or the restore of a row is a way to its view when it is among the ones that were read.
     uses: [owner === "backup" ? "backups" : "restores"],
     columns: [
@@ -66,7 +83,12 @@ export function volumeOperationList(
       { title: "Started", id: "started", sortBy: "started", className: "started" },
       { title: "Duration", id: "duration", sortBy: "duration", className: "duration" },
       { title: "Storage location", id: "storage", sortBy: "storage", className: "storage" },
-      { title: "Uploader", id: "uploader", sortBy: "uploader", className: "uploader" },
+      {
+        title: dataMovement(volume) ? "Data mover" : "Uploader",
+        id: "uploader",
+        sortBy: "uploader",
+        className: "uploader",
+      },
       { title: "Age", id: "age", sortBy: "age", className: "age" },
     ],
     view: (resource, now, installation) =>
@@ -97,10 +119,8 @@ export function volumeOperationList(
       </span>,
       <WithTooltip key="storage">{row.location ?? NOT_REPORTED}</WithTooltip>,
       <span key="uploader" className={styles.cellWords}>
-        <WithTooltip
-          tooltip={writtenType(row.uploader) ? undefined : `${uploaderText(row.uploader)}: ${NOT_WRITTEN.mark}`}
-        >
-          <WrittenValue text={uploaderText(row.uploader)} known={writtenType(row.uploader)} />
+        <WithTooltip tooltip={row.mover.known ? undefined : `${row.mover.text}: ${NOT_WRITTEN.mark}`}>
+          <WrittenValue text={row.mover.text} known={row.mover.known} />
         </WithTooltip>
       </span>,
       <KubeObjectAge key="age" object={item} />,

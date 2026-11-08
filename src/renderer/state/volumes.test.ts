@@ -1,7 +1,8 @@
 import { runInAction } from "mobx";
 import { describe, expect, it } from "vitest";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { backup, NOW, ownedBy, podVolumeBackup, read } from "../../../test/volume-builders";
-import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
+import { emptyPreferences, heldPreferences } from "../../common/discovery";
 import { rowKey, volumeWays } from "../../common/volume-band";
 import { Installation } from "./installation";
 import { volumesOf, volumeWaysOf } from "./volumes";
@@ -57,7 +58,7 @@ describe("the index of the operations of an installation", () => {
     runInAction(() => {
       made.api = {
         state: "served",
-        resources: Object.values(RESOURCES).filter((name) => name !== "podvolumebackups"),
+        resources: FIRST_VERSION_RESOURCES.filter((name) => name !== "podvolumebackups"),
         missing: ["podVolumeBackups"],
       };
     });

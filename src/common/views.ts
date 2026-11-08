@@ -15,6 +15,8 @@ export const VIEW_KINDS = [
   "backup-repository",
   "pod-volume-backup",
   "pod-volume-restore",
+  "data-upload",
+  "data-download",
 ] as const;
 export type ViewKind = (typeof VIEW_KINDS)[number];
 
@@ -28,21 +30,21 @@ export interface ViewTarget {
 // operations of the volumes is read while a view that reads it is open, and only then. Each view reads the
 // families it shows, and no other: the families read at every read are asked whatever view is open, and a view
 // that reads fewer of them asks no less of the cluster. A backup and a restore are shown with the band of their
-// operations of the volumes, each of its own kind.
+// operations of the volumes, the pod volume operations and the data movement of their own kind.
 export const VIEWS: Record<
   ViewKind,
   { family: Family; reads: readonly Family[]; title: string; noun: string; plural: string }
 > = {
   backup: {
     family: "backups",
-    reads: [...BACKUPS_AND_LOCATIONS, "podVolumeBackups"],
+    reads: [...BACKUPS_AND_LOCATIONS, "podVolumeBackups", "dataUploads"],
     title: "Backups",
     noun: "backup",
     plural: "backups",
   },
   restore: {
     family: "restores",
-    reads: [...BACKUPS_AND_LOCATIONS, "podVolumeRestores"],
+    reads: [...BACKUPS_AND_LOCATIONS, "podVolumeRestores", "dataDownloads"],
     title: "Restores",
     noun: "restore",
     plural: "restores",
@@ -73,7 +75,16 @@ export const VIEWS: Record<
   // wrote into it or read from it, and the backups and the restores they belong to.
   "backup-repository": {
     family: "backupRepositories",
-    reads: ["backupRepositories", "storageLocations", "podVolumeBackups", "podVolumeRestores", "backups", "restores"],
+    reads: [
+      "backupRepositories",
+      "storageLocations",
+      "podVolumeBackups",
+      "podVolumeRestores",
+      "dataUploads",
+      "dataDownloads",
+      "backups",
+      "restores",
+    ],
     title: "Backup Repositories",
     noun: "backup repository",
     plural: "backup repositories",
@@ -92,6 +103,21 @@ export const VIEWS: Record<
     title: "Pod Volume Restores",
     noun: "pod volume restore",
     plural: "pod volume restores",
+  },
+  "data-upload": {
+    family: "dataUploads",
+    reads: ["dataUploads", "backups", "storageLocations", "backupRepositories"],
+    title: "Data Uploads",
+    noun: "data upload",
+    plural: "data uploads",
+  },
+  // A data download is shown with the data upload whose snapshot it restores, when one is found.
+  "data-download": {
+    family: "dataDownloads",
+    reads: ["dataDownloads", "dataUploads", "restores", "storageLocations", "backupRepositories"],
+    title: "Data Downloads",
+    noun: "data download",
+    plural: "data downloads",
   },
 };
 

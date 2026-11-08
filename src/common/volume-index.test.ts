@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   backup,
   before,
+  dataDownload,
+  dataUpload,
   MINUTE,
+  moved,
   ownedBy,
   podVolumeBackup,
   podVolumeRestore,
@@ -23,7 +26,12 @@ function index(
   backups: PodVolumeBackupResource[],
   restores: PodVolumeRestoreResource[] = [],
 ): ReturnType<typeof volumeIndex> {
-  return volumeIndex({ podVolumeBackups: read(backups), podVolumeRestores: read(restores) });
+  return volumeIndex({
+    podVolumeBackups: read(backups),
+    podVolumeRestores: read(restores),
+    dataUploads: read([]),
+    dataDownloads: read([]),
+  });
 }
 
 const names = (items: readonly { metadata: { name: string } }[] | undefined) =>
@@ -180,10 +188,10 @@ describe("the index of the operations of the volumes", () => {
   });
 
   it("is made in one pass over each family", () => {
-    const passes = { podVolumeBackups: 0, podVolumeRestores: 0 };
+    const passes = { podVolumeBackups: 0, podVolumeRestores: 0, dataUploads: 0, dataDownloads: 0 };
     // Each item read, by any way through the array: a loop, an index or a method of the array all read the items by
     // their index, so one pass reads each of them once, and a second pass reads them again.
-    const reads = { podVolumeBackups: 0, podVolumeRestores: 0 };
+    const reads = { podVolumeBackups: 0, podVolumeRestores: 0, dataUploads: 0, dataDownloads: 0 };
     const counted = <Item>(family: keyof typeof passes, items: Item[]): FamilyRead<Item> => {
       const proxied = new Proxy(items, {
         get(target, key, receiver) {
@@ -204,8 +212,14 @@ describe("the index of the operations of the volumes", () => {
       podVolumeRestores: counted("podVolumeRestores", [
         podVolumeRestore("monday-a", { phase: "Completed" }, ownedBy("Restore", monday)),
       ]),
+      dataUploads: counted("dataUploads", [
+        dataUpload("nightly-du", { phase: "Completed", snapshotID: "snap-1" }, moved("Backup", nightly, "du-a")),
+      ]),
+      dataDownloads: counted("dataDownloads", [
+        dataDownload("monday-dd", { phase: "Completed" }, moved("Restore", monday, "dd-a")),
+      ]),
     });
-    expect(passes).toEqual({ podVolumeBackups: 1, podVolumeRestores: 1 });
-    expect(reads).toEqual({ podVolumeBackups: 2, podVolumeRestores: 1 });
+    expect(passes).toEqual({ podVolumeBackups: 1, podVolumeRestores: 1, dataUploads: 1, dataDownloads: 1 });
+    expect(reads).toEqual({ podVolumeBackups: 2, podVolumeRestores: 1, dataUploads: 1, dataDownloads: 1 });
   });
 });

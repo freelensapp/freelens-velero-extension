@@ -4,7 +4,9 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { observer } from "mobx-react";
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
+import { emptyPreferences, heldPreferences } from "../../common/discovery";
+import { PATHS } from "../../common/paths";
 import { Installation } from "../state/installation";
 import { EntryState } from "./entry-state";
 import { Coverage, TargetBar } from "./target-bar";
@@ -12,6 +14,8 @@ import { Coverage, TargetBar } from "./target-bar";
 import type { Answer, Family, Preferences } from "../../common/discovery";
 
 const DISCOVERY = "/apis/velero.io/v1";
+// The discovery of the second version of the group, which serves the data movement.
+const SECOND = "/apis/velero.io/v2alpha1";
 const LOCATIONS = "/apis/velero.io/v1/backupstoragelocations";
 const A = "velero-a";
 const B = "velero-b";
@@ -19,7 +23,7 @@ const B = "velero-b";
 type Answers = Record<string, Answer | (() => Promise<Answer>)>;
 
 function path(family: Family, namespace: string): string {
-  return `/apis/velero.io/v1/namespaces/${namespace}/${RESOURCES[family]}`;
+  return PATHS.family(family, namespace);
 }
 
 function list(...items: unknown[]): Answer {
@@ -30,7 +34,7 @@ function object(name: string, namespace: string) {
   return { metadata: { name, namespace, uid: `${namespace}-${name}` } };
 }
 
-const served: Answer = { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } };
+const served: Answer = { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } };
 
 function answers(more: Answers = {}): Answers {
   return {
@@ -111,7 +115,7 @@ describe("entry of the views", () => {
     expect(screen.getByTestId(`velero-choice-${A}`)).toBeTruthy();
     expect(screen.getByTestId(`velero-choice-${B}`)).toBeTruthy();
     expect(screen.queryByTestId("content")).toBeNull();
-    expect(asked).toEqual([DISCOVERY, LOCATIONS]);
+    expect(asked).toEqual([DISCOVERY, SECOND, LOCATIONS]);
     fireEvent.click(screen.getByTestId(`velero-choice-${B}`));
     await waitFor(() => expect(names(installation)).toEqual([`${B}/nightly-1`]));
     expect(screen.getByTestId("content").textContent).toBe(B);
@@ -178,7 +182,7 @@ describe("entry of the views", () => {
     fireEvent.click(screen.getByTestId("velero-configure-submit"));
     expect(screen.getByTestId("velero-configure-error").textContent).toContain("Not the name of a namespace");
     // What is not a name is refused before it is part of a request.
-    expect(asked).toEqual([DISCOVERY, LOCATIONS]);
+    expect(asked).toEqual([DISCOVERY, SECOND, LOCATIONS]);
     fireEvent.change(screen.getByTestId("velero-configure-input"), { target: { value: A } });
     fireEvent.click(screen.getByTestId("velero-configure-submit"));
     await waitFor(() => expect(names(installation)).toHaveLength(2));

@@ -41,6 +41,9 @@ export interface VolumeRow {
   // The pod and the volume the detail of a pod volume backup or restore names, by which the operation of the
   // installation that made it is found: each a text, and none when one of the three is not.
   podVolume?: { podNamespace: string; pod: string; volume: string };
+  // The operation ID the detail of a moved volume names, which is the label of the data upload or the data download
+  // of the installation that moved it.
+  operationId?: string;
   details: VolumeDetail[];
   // The fields of the entry the tab does not know, each by its name and its value.
   others: VolumeField[];
@@ -157,6 +160,11 @@ function row(entry: Record<string, unknown>, of: "Backup" | "Restore"): VolumeRo
 
     // What the release leaves out when it is empty is left out here when it is written empty.
     if (podNamespace && pod && volume) read.podVolume = { podNamespace, pod, volume };
+  }
+  const movement = entry.snapshotDataMovementInfo;
+
+  if (isObject(movement) && typeof movement.operationID === "string" && movement.operationID) {
+    read.operationId = movement.operationID;
   }
   for (const key of SIZED) {
     const size = (entry[key] as { size?: unknown } | undefined)?.size;

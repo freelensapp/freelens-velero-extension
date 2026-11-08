@@ -1,10 +1,11 @@
 // What an operation of the volumes refers to inside its installation: the backup or the restore it belongs to, its
-// storage location, the backup repository it writes into or reads from, and the pod and the node it is of, which
-// are names the extension does not read.
+// storage location, the backup repository it writes into or reads from, and the pod, the claim and the node it is of,
+// which are names the extension does not read.
 
 import { labelOf } from "./name-label";
 import { resolveReference, unavailable } from "./references";
 import { LABELS, PVC_NAME_ANNOTATION } from "./types";
+import { dataMovement } from "./volume-phases";
 import { REFERENCE_WORDS } from "./volume-words";
 
 import type { FamilyRead } from "./read-state";
@@ -13,6 +14,8 @@ import type {
   BackupRepositoryResource,
   BackupResource,
   BackupStorageLocationResource,
+  DataDownloadResource,
+  DataUploadResource,
   ObjectMetadata,
   PodVolumeBackupResource,
   PodVolumeRestoreResource,
@@ -20,7 +23,11 @@ import type {
 } from "./types";
 import type { VolumeKind } from "./volume-phases";
 
-export type VolumeOperation = PodVolumeBackupResource | PodVolumeRestoreResource;
+export type VolumeOperation =
+  | PodVolumeBackupResource
+  | PodVolumeRestoreResource
+  | DataUploadResource
+  | DataDownloadResource;
 
 function named(value: unknown): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined;
@@ -57,6 +64,8 @@ export type OwnerKind = "Backup" | "Restore";
 export const OWNER_KIND: Record<VolumeKind, OwnerKind> = {
   PodVolumeBackup: "Backup",
   PodVolumeRestore: "Restore",
+  DataUpload: "Backup",
+  DataDownload: "Restore",
 };
 
 export interface Owner {
@@ -165,12 +174,20 @@ export function repositoryType(uploader: unknown): string | undefined {
   return undefined;
 }
 
+// The type of the repository an operation names: the one of the uploader of a pod volume operation, and kopia for a
+// data movement, whose data path is kopia's.
+export function operationType(kind: VolumeKind, operation: VolumeOperation): string | undefined {
+  return dataMovement(kind)
+    ? "kopia"
+    : repositoryType((operation as PodVolumeBackupResource | PodVolumeRestoreResource).spec?.uploaderType);
+}
+
 // The namespace of the volumes of an operation: the one of its pod for a pod volume backup, the source namespace for
-// a pod volume restore.
+// the other three, which for a data download is the namespace the volume was backed up from.
 export function volumeNamespace(kind: VolumeKind, operation: VolumeOperation): string | undefined {
   return kind === "PodVolumeBackup"
     ? named((operation as PodVolumeBackupResource).spec?.pod?.namespace)
-    : named((operation as PodVolumeRestoreResource).spec?.sourceNamespace);
+    : named((operation as PodVolumeRestoreResource | DataUploadResource | DataDownloadResource).spec?.sourceNamespace);
 }
 
 export type OperationRepository =
@@ -212,14 +229,14 @@ export function operationRepository(
 ): OperationRepository {
   const namespace = volumeNamespace(kind, operation);
   const location = named(operation.spec?.backupStorageLocation);
-  const type = repositoryType(operation.spec?.uploaderType);
+  const type = operationType(kind, operation);
 
   if (!namespace || !location || !type) {
     return {
       state: "no-triple",
       names: [],
       reason: !type
-        ? `The uploader ${String(operation.spec?.uploaderType)} names no type of repository the reviewed release knows`
+        ? `The uploader ${String((operation as PodVolumeBackupResource).spec?.uploaderType)} names no type of repository the reviewed release knows`
         : "The operation does not name the namespace of its volume and its storage location",
     };
   }
@@ -267,7 +284,7 @@ export interface PodOf {
 }
 
 export function operationPod(operation: VolumeOperation): PodOf {
-  const pod = operation.spec?.pod;
+  const pod = (operation as PodVolumeBackupResource | PodVolumeRestoreResource).spec?.pod;
 
   return {
     ...(named(pod?.namespace) ? { namespace: pod?.namespace } : {}),
@@ -276,18 +293,37 @@ export function operationPod(operation: VolumeOperation): PodOf {
   };
 }
 
-// The node of an operation: `spec.node` of a pod volume backup, which has none in its status; `status.node` of a
-// pod volume restore, which its node agent writes when it accepts it.
+// The node of an operation: `spec.node` of a pod volume backup, which has none in its status; `status.node` of the
+// other three, which the node agent writes: of a pod volume restore when it accepts it, of a data movement when the
+// node agent of the node its data path runs on prepares it.
 export function operationNode(kind: VolumeKind, operation: VolumeOperation): string | undefined {
   return kind === "PodVolumeBackup"
     ? named((operation as PodVolumeBackupResource).spec?.node)
-    : named((operation as PodVolumeRestoreResource).status?.node);
+    : named((operation as PodVolumeRestoreResource | DataUploadResource | DataDownloadResource).status?.node);
 }
 
-// The claim of the volume of an operation, by its name and its UID, as text.
+// The node whose node agent accepted a data movement, when it is not the node of the operation: any node agent may
+// accept one, and the data path runs where the pod that reaches the volume was placed.
+export function acceptedBy(kind: VolumeKind, operation: VolumeOperation): string | undefined {
+  if (!dataMovement(kind)) return undefined;
+  const accepted = named((operation as DataUploadResource | DataDownloadResource).status?.acceptedByNode);
+
+  return accepted !== undefined && accepted !== operationNode(kind, operation) ? accepted : undefined;
+}
+
+// The claim of the volume of an operation, by its name and its UID, as text: the annotation and the label of a pod
+// volume backup, the label of a pod volume restore, the source claim of a data upload with its label, and the target
+// claim of a data download.
 export function operationClaim(kind: VolumeKind, operation: VolumeOperation): { name?: string; uid?: string } {
   const uid = named(operation.metadata.labels?.[LABELS.pvcUid]);
-  const name = kind === "PodVolumeBackup" ? named(operation.metadata.annotations?.[PVC_NAME_ANNOTATION]) : undefined;
+  const name =
+    kind === "PodVolumeBackup"
+      ? named(operation.metadata.annotations?.[PVC_NAME_ANNOTATION])
+      : kind === "DataUpload"
+        ? named((operation as DataUploadResource).spec?.sourcePVC)
+        : kind === "DataDownload"
+          ? named((operation as DataDownloadResource).spec?.targetVolume?.pvc)
+          : undefined;
 
   return { ...(name ? { name } : {}), ...(uid ? { uid } : {}) };
 }

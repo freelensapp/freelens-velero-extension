@@ -40,6 +40,7 @@ declare const classNames: {
   readonly back: "back";
   readonly title: "title";
   readonly band: "band";
+  readonly volumeHalf: "volumeHalf";
   readonly factName: "factName";
   readonly factValue: "factValue";
   readonly factNote: "factNote";

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { ArtifactLoads } from "./artifact-loads";
 import { Installation } from "./installation";
@@ -333,7 +334,7 @@ async function installation(options: { writes?: boolean } = {}) {
   const gate = gateClient();
   const clock = { now: 1_000 };
   const table: Record<string, Answer> = {
-    [DISCOVERY]: { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } },
+    [DISCOVERY]: { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } },
     [LOCATIONS]: list(object("default", "velero-a"), object("default", "velero-b")),
     [path("backups", "velero-a")]: list(object("nightly", "velero-a")),
     [path("restores", "velero-a")]: list(object("monday", "velero-a")),

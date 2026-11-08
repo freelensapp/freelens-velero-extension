@@ -2,9 +2,11 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { addressChanges, hostObject } from "../../../test/freelens-extensions";
 import { drawerNames, drawerValue, listProps } from "../../../test/host-components";
-import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
+import { emptyPreferences, heldPreferences } from "../../common/discovery";
+import { PATHS } from "../../common/paths";
 import { RESTORE_PHASES } from "../../common/phases";
 import { Restore } from "../api/kinds";
 import { RestoreDetails } from "../details/restore-details";
@@ -19,6 +21,8 @@ import type { Answer, Family, Preferences } from "../../common/discovery";
 import type { ArtifactClient, GateClient, WriteClient } from "../api/ipc";
 
 const DISCOVERY = "/apis/velero.io/v1";
+// The discovery of the second version of the group, which serves the data movement.
+const SECOND = "/apis/velero.io/v2alpha1";
 const LOCATIONS = "/apis/velero.io/v1/backupstoragelocations";
 const A = "velero-a";
 const B = "velero-b";
@@ -26,7 +30,7 @@ const B = "velero-b";
 type Answers = Record<string, Answer | (() => Promise<Answer>)>;
 
 function path(family: Family, namespace: string): string {
-  return `/apis/velero.io/v1/namespaces/${namespace}/${RESOURCES[family]}`;
+  return PATHS.family(family, namespace);
 }
 
 function list(...items: unknown[]): Answer {
@@ -98,11 +102,12 @@ const backup = object(
   { storageLocation: "default" },
   { phase: "Completed", startTimestamp: "2026-09-01T09:00:00Z", completionTimestamp: "2026-09-01T09:01:00Z" },
 );
-const served: Answer = { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } };
+const served: Answer = { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } };
 
 function answers(more: Answers = {}): Answers {
   return {
     [DISCOVERY]: served,
+    [SECOND]: { status: 200, body: { resources: [{ name: "datauploads" }, { name: "datadownloads" }] } },
     [LOCATIONS]: list({ metadata: { name: "default", namespace: A } }, { metadata: { name: "default", namespace: B } }),
     [path("restores", A)]: list(waiting, completed, refused),
     [path("restores", B)]: list(object("Restore", "restore-waiting", B, { backupName: "other" }, { phase: "New" })),
@@ -118,6 +123,8 @@ function answers(more: Answers = {}): Answers {
     [path("snapshotLocations", B)]: list(),
     [path("podVolumeBackups", A)]: list(),
     [path("podVolumeRestores", A)]: list(),
+    [path("dataUploads", A)]: list(),
+    [path("dataDownloads", A)]: list(),
     ...more,
   };
 }
@@ -379,9 +386,7 @@ describe("list of the restores", () => {
     const partly: Answer = {
       status: 200,
       body: {
-        resources: Object.values(RESOURCES)
-          .filter((name) => name !== "restores")
-          .map((name) => ({ name })),
+        resources: FIRST_VERSION_RESOURCES.filter((name) => name !== "restores").map((name) => ({ name })),
       },
     };
     const { asked } = mount(answers({ [DISCOVERY]: partly }), chosen(A));
@@ -583,12 +588,16 @@ describe("workspace of a restore", () => {
     expect(within(workspace).getByTestId("velero-restore-operations").textContent).toBe("1 / 0 / 0");
     expect(within(workspace).queryByTestId("velero-restore-hooks")).toBeNull();
     expect(within(workspace).queryByTestId("velero-restore-completed-note")).toBeNull();
-    // Opening a restore asks the pod volume restores of its installation at once, which its band is made of, and
-    // nothing else: what else it shows was read with the installation.
+    // Opening a restore asks the pod volume restores and the data downloads of its installation at once, which its
+    // band is made of, and nothing else: what else it shows was read with the installation.
     await waitFor(() =>
-      expect(within(workspace).getByTestId("velero-volume-band").getAttribute("data-state")).toBe("rows"),
+      expect(
+        within(workspace)
+          .getAllByTestId("velero-volume-half")
+          .map((half) => half.getAttribute("data-state")),
+      ).toEqual(["rows", "rows"]),
     );
-    expect(asked.slice(before)).toEqual([path("podVolumeRestores", A)]);
+    expect(asked.slice(before)).toEqual([path("podVolumeRestores", A), path("dataDownloads", A)]);
     expect(asked.every((address) => !/request/i.test(address))).toBe(true);
     expect(document.activeElement).toBe(screen.getByTestId("velero-back"));
     expect(screen.getByTestId("velero-back").textContent).toContain("Restores");

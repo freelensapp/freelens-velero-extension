@@ -3,7 +3,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { otherShape } from "../../common/artifact-volumes";
-import { rowKey } from "../../common/volume-band";
+import { movedKey, rowKey } from "../../common/volume-band";
 import { TAB_WAY_WORDS } from "../../common/volume-words";
 import { closeViews, openViews } from "../navigation";
 import { CONTENT } from "./artifact-viewer";
@@ -613,6 +613,29 @@ describe("the way of a row to the operation of the installation that made it", (
     expect(Object.keys(fields(1))).toEqual(["Operation", "Pod volume backup"]);
     fireEvent.click(way(1) as HTMLElement);
     expect(openViews()).toEqual([{ kind: "pod-volume-backup", name: "nightly-x7k2p" }]);
+  });
+
+  it("is in the details of a row whose data was moved, by the operation ID of the data upload that moved it", () => {
+    const ways = new Map([[movedKey("du-1"), { kind: "data-upload" as const, name: "nightly-d4m8s" }]]);
+
+    render(<VolumesViewer id={ID} text={JSON.stringify(ALL)} of="Backup" ways={ways} />);
+    for (const index of [0, 1, 2, 3, 4]) fireEvent.click(toggle(index));
+    expect([0, 1, 2, 3, 4].map((index) => way(index)?.textContent ?? null)).toEqual([
+      null,
+      null,
+      null,
+      "Open the data upload nightly-d4m8s",
+      null,
+    ]);
+    fireEvent.click(way(3) as HTMLElement);
+    expect(openViews()).toEqual([{ kind: "data-upload", name: "nightly-d4m8s" }]);
+    cleanup();
+    // A row whose data was not moved is not found by an operation ID it carries.
+    const kept = { ...ALL[3], snapshotDataMoved: false };
+
+    render(<VolumesViewer id={ID} text={JSON.stringify([kept])} of="Backup" ways={ways} />);
+    fireEvent.click(toggle(0));
+    expect(way(0)).toBeNull();
   });
 
   it("is in the details of a row of a pod volume restore, by the pod and the volume the restore names", () => {

@@ -2,6 +2,7 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { listProps } from "../../../test/host-components";
 import {
   backup,
@@ -156,7 +157,7 @@ const location = (name: string, accessMode = "ReadWrite") => ({
 
 function answers(more: Answers = {}): Answers {
   return {
-    [DISCOVERY]: { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } },
+    [DISCOVERY]: { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } },
     [LOCATIONS]: list(location("default")),
     [path("backups")]: list(nightly),
     [path("restores")]: list(monday),

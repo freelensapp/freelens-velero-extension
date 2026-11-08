@@ -293,6 +293,83 @@ export interface PodVolumeRestoreStatus {
   node?: string;
 }
 
+// The snapshot of a volume a data upload moves the data of: the release knows the snapshots of CSI alone.
+export interface CsiSnapshotSpec {
+  volumeSnapshot?: string;
+  storageClass?: string;
+  snapshotClass?: string;
+  driver?: string;
+}
+
+// The data movement, served under the second version of the group: a data upload moves the data of the snapshot of a
+// claim into a repository, for a backup; a data download moves it back into a new claim, for a restore.
+export interface DataUploadSpec {
+  // `CSI`, the one type the release knows.
+  snapshotType?: string;
+  csiSnapshot?: CsiSnapshotSpec | null;
+  sourcePVC?: string;
+  // Empty or `velero` for the built-in data mover.
+  datamover?: string;
+  backupStorageLocation?: string;
+  sourceNamespace?: string;
+  dataMoverConfig?: Record<string, string> | null;
+  cancel?: boolean;
+  // A duration, as Go writes one.
+  operationTimeout?: string;
+}
+
+export interface DataUploadStatus {
+  phase?: string;
+  path?: string;
+  snapshotID?: string;
+  dataMoverResult?: Record<string, string> | null;
+  message?: string;
+  startTimestamp?: string | null;
+  completionTimestamp?: string | null;
+  progress?: DataMoveProgress | null;
+  // Left out when zero.
+  incrementalBytes?: number;
+  // The node whose node agent prepared it, which is where its data path runs.
+  node?: string;
+  // `auto`, `linux` or `windows`.
+  nodeOS?: string;
+  // The node whose node agent accepted it.
+  acceptedByNode?: string;
+  acceptedTimestamp?: string | null;
+}
+
+// The claim a data download moves the data into, made by the restore.
+export interface TargetVolumeSpec {
+  pvc?: string;
+  pv?: string;
+  namespace?: string;
+}
+
+export interface DataDownloadSpec {
+  targetVolume?: TargetVolumeSpec | null;
+  backupStorageLocation?: string;
+  datamover?: string;
+  snapshotID?: string;
+  sourceNamespace?: string;
+  dataMoverConfig?: Record<string, string> | null;
+  cancel?: boolean;
+  operationTimeout?: string;
+  nodeOS?: string;
+  // The logical size of the snapshot, taken from the data upload it restores from.
+  snapshotSize?: number;
+}
+
+export interface DataDownloadStatus {
+  phase?: string;
+  message?: string;
+  startTimestamp?: string | null;
+  completionTimestamp?: string | null;
+  progress?: DataMoveProgress | null;
+  node?: string;
+  acceptedByNode?: string;
+  acceptedTimestamp?: string | null;
+}
+
 export type BackupResource = VeleroResource<BackupSpec, BackupStatus>;
 export type RestoreResource = VeleroResource<RestoreSpec, RestoreStatus>;
 export type ScheduleResource = VeleroResource<ScheduleSpec, ScheduleStatus>;
@@ -301,6 +378,8 @@ export type VolumeSnapshotLocationResource = VeleroResource<VolumeSnapshotLocati
 export type BackupRepositoryResource = VeleroResource<BackupRepositorySpec, BackupRepositoryStatus>;
 export type PodVolumeBackupResource = VeleroResource<PodVolumeBackupSpec, PodVolumeBackupStatus>;
 export type PodVolumeRestoreResource = VeleroResource<PodVolumeRestoreSpec, PodVolumeRestoreStatus>;
+export type DataUploadResource = VeleroResource<DataUploadSpec, DataUploadStatus>;
+export type DataDownloadResource = VeleroResource<DataDownloadSpec, DataDownloadStatus>;
 
 // The release of Velero the specs were reviewed against, whose CRD schemas these types are written from.
 export const REVIEWED_RELEASE = "v1.18.4";

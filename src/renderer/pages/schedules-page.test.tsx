@@ -3,6 +3,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { scheduleObject, submissionOf } from "../../../test/adherence-builders";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { hostObject } from "../../../test/freelens-extensions";
 import { drawerValue, listProps } from "../../../test/host-components";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
@@ -124,7 +125,7 @@ const backups = [
   object("Backup", "weekly-20260830", A, template, ran("2026-08-30"), of("weekly")),
   object("Backup", "by-hand", A, template, ran("2026-09-09")),
 ];
-const served: Answer = { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } };
+const served: Answer = { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } };
 
 function answers(more: Answers = {}): Answers {
   return {
@@ -592,9 +593,7 @@ describe("list of the schedules", () => {
     const partly: Answer = {
       status: 200,
       body: {
-        resources: Object.values(RESOURCES)
-          .filter((name) => name !== "schedules")
-          .map((name) => ({ name })),
+        resources: FIRST_VERSION_RESOURCES.filter((name) => name !== "schedules").map((name) => ({ name })),
       },
     };
     const { asked } = mount(answers({ [DISCOVERY]: partly }), chosen(A));

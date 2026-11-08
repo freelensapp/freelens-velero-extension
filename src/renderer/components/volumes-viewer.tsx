@@ -19,7 +19,7 @@ import {
 } from "../../common/artifact-volumes";
 import { timestamp } from "../../common/duration";
 import { VIEWS } from "../../common/views";
-import { rowKey } from "../../common/volume-band";
+import { movedKey, rowKey } from "../../common/volume-band";
 import { TAB_WAY_WORDS } from "../../common/volume-words";
 import { openView } from "../navigation";
 import { ArtifactLines } from "./artifact-lines";
@@ -220,14 +220,17 @@ function Fields({ name, title, fields }: { name: string; title: string; fields: 
 // The methods of the rows whose operation is a pod volume backup or a pod volume restore of the installation.
 const POD_VOLUME_METHODS = ["PodVolumeBackup", "PodVolumeRestore"];
 
-// The way from the details of a row to the operation of the installation that matches it, by the owner of the tab,
-// the namespace of the pod, the pod and the volume (REQ-188). When none matches, nothing is offered and nothing is
+// The way from the details of a row to the operation of the installation that matches it (REQ-188): a pod volume
+// operation by the owner of the tab, the namespace of the pod, the pod and the volume; a data movement by the owner of
+// the tab and the operation ID of a row whose data was moved. When none matches, nothing is offered and nothing is
 // said absent: the rows are what the store holds, and the operations may be gone.
 function OperationWay({ id, index, row, ways }: { id: string; index: number; row: VolumeRow; ways?: VolumeWays }) {
   const found =
     row.method && POD_VOLUME_METHODS.includes(row.method.text) && row.podVolume
       ? ways?.get(rowKey(row.podVolume.podNamespace, row.podVolume.pod, row.podVolume.volume))
-      : undefined;
+      : row.moved && row.operationId
+        ? ways?.get(movedKey(row.operationId))
+        : undefined;
 
   if (!found) return null;
   return (

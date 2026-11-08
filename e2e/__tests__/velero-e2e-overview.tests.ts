@@ -278,6 +278,8 @@ describe("overview of an installation", () => {
         "velero-backup-repositories": "Backup Repositories",
         "velero-pod-volume-backups": "Pod Volume Backups",
         "velero-pod-volume-restores": "Pod Volume Restores",
+        "velero-data-uploads": "Data Uploads",
+        "velero-data-downloads": "Data Downloads",
       });
       expect((await frame.locator(".TabLayout .Tabs .Tab").allInnerTexts()).map(text)).toEqual([
         "Overview",
@@ -289,6 +291,8 @@ describe("overview of an installation", () => {
         "Backup Repositories",
         "Pod Volume Backups",
         "Pod Volume Restores",
+        "Data Uploads",
+        "Data Downloads",
       ]);
       expect(text(await frame.locator(".TabLayout .Tabs .Tab.active").innerText())).toBe("Overview");
       expect(await frame.locator(".TabLayout .TabLayout").count()).toBe(0);

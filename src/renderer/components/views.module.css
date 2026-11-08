@@ -319,6 +319,12 @@
   border-top: 1px solid var(--borderFaintColor);
 }
 
+/* One kind of the operations of the volumes of a backup or a restore, under its title: the pod volume operations,
+   then the data movement. */
+.volumeHalf {
+  padding: 8px 0;
+}
+
 .fact {
   min-width: 0;
 }

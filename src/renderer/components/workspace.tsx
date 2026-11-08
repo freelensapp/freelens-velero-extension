@@ -27,6 +27,8 @@ const VIEW_OF: Partial<Record<ReferenceKind, ViewKind>> = {
   BackupRepository: "backup-repository",
   PodVolumeBackup: "pod-volume-backup",
   PodVolumeRestore: "pod-volume-restore",
+  DataUpload: "data-upload",
+  DataDownload: "data-download",
 };
 
 export function Fact({ name, note, children }: { name: string; note?: ReactNode; children: ReactNode }) {

@@ -4,8 +4,14 @@
 
 import type { Execution, Lifecycle } from "./phases";
 
-// The kinds whose objects are operations on the data of a volume.
-export type VolumeKind = "PodVolumeBackup" | "PodVolumeRestore";
+// The kinds whose objects are operations on the data of a volume: the pod volume operations of the file system backup,
+// and the data movement of the snapshots of CSI.
+export type VolumeKind = "PodVolumeBackup" | "PodVolumeRestore" | "DataUpload" | "DataDownload";
+
+// The kinds of the data movement, served under the second version of the group.
+export function dataMovement(kind: VolumeKind): kind is "DataUpload" | "DataDownload" {
+  return kind === "DataUpload" || kind === "DataDownload";
+}
 
 export const VOLUME_PHASES = [
   "New",
@@ -172,6 +178,25 @@ const WRITTEN_TYPES: readonly string[] = ["kopia", "restic"];
 
 export function writtenType(value: string | undefined): boolean {
   return value === undefined || value === "" || WRITTEN_TYPES.includes(value);
+}
+
+// The data mover of a data movement: empty or `velero` is the built-in one, which the node agent runs; the release
+// ignores any other, which a data mover of its own takes (SPEC-0014, what the release does). Another is kept as its
+// text with the mark of what is not known (REQ-182).
+export function builtInMover(value: string | undefined): boolean {
+  return value === undefined || value === "" || value === "velero";
+}
+
+// The type of the snapshot of a data upload: the release knows CSI alone.
+export function writtenSnapshotType(value: string | undefined): boolean {
+  return value === undefined || value === "" || value === "CSI";
+}
+
+// The operating system of the node of a data movement, as the release writes it.
+const NODE_OS: readonly string[] = ["auto", "linux", "windows"];
+
+export function writtenNodeOS(value: string | undefined): boolean {
+  return value === undefined || value === "" || NODE_OS.includes(value);
 }
 
 // A result of a maintenance the reviewed release does not write, which is kept as its text with the mark of what is

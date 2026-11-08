@@ -70,10 +70,12 @@ preferences; the main process registers its procedures on an instance of
 `Main.Ipc` made for the activation, and the renderer registers the pages of the
 Overview, of the Backups, of the Restores, of the Schedules, of the Backup Storage
 Locations, of the Volume Snapshot Locations, of the Backup Repositories, of the Pod
-Volume Backups and of the Pod Volume Restores, their entries of the sidebar, the
-sections it adds to the details the host shows of each of the eight kinds, made with
-`detailsFor`, and the eight kinds as `customResources`, which the Custom Resources
-tree of the cluster leaves out while the extension is enabled. Every page and
+Volume Backups, of the Pod Volume Restores, of the Data Uploads and of the Data
+Downloads, their entries of the sidebar, the sections it adds to the details the host
+shows of each of the ten kinds, made with `detailsFor`, and the ten kinds as
+`customResources`, which the Custom Resources tree of the cluster leaves out while the
+extension is enabled. Eight kinds are of `velero.io/v1`, and the two of the data
+movement of `velero.io/v2alpha1`, the version that serves them. Every page and
 section is drawn inside an
 [error boundary](../../src/renderer/components/error-boundary.tsx) of the template,
 since the host has none around its drawer of the details. The main entry also
@@ -249,10 +251,10 @@ says with the lines of their source.
 
 | Read | When | Path |
 | --- | --- | --- |
-| What the API serves | A view opens, or the operator reads again | `/apis/velero.io/v1` |
+| What the API serves | A view opens, or the operator reads again | `/apis/velero.io/v1`, and `/apis/velero.io/v2alpha1` for the two kinds of the data movement alone |
 | Where the installations may be | The same | The backup storage locations of the cluster |
 | The six families read at every read: the five of the first milestones and the backup repositories | A namespace is selected, every 15 seconds while a view is open, or the operator reads again | The lists of the selected namespace |
-| The pod volume backups, the pod volume restores | At once when a view that shows them first needs them, then with every read while one holds them | The lists of the selected namespace |
+| The pod volume backups, the pod volume restores, the data uploads, the data downloads | At once when a view that shows them first needs them, then with every read while one holds them; never a family of a version the API does not serve | The lists of the selected namespace, under the version of each kind |
 
 Facts of the host the design rests on, found by asking the packaged application on
 Freelens 1 and proven again on v2, by the packaged suites or in the source of the
@@ -308,17 +310,19 @@ and say its age when no view is open or when it is older than that period.
 The operations of the volumes are found the same way, in an
 [index](../../src/common/volume-index.ts) made once for a read
 ([SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md), REQ-194), in one
-pass over each of the two families of the pod volume operations: the operations of
-each backup and of each restore by its namespace and the label of its UID, and the
+pass over each of the four families of the operations: the operations of each backup
+and of each restore by its namespace and the label of its UID, each kind apart, the
 operations that name each repository by the namespace and the three labels the
 release names a repository with, the namespace of the volume and the location cut as
-the release cuts a long name, each list from the newest. The
+the release cuts a long name, and the type kopia for the data movement, and the data
+uploads by the snapshot their result names, which a data download restores, each list
+from the newest. The
 [memo](../../src/renderer/state/volumes.ts) is one entry for each installation,
-keyed by the reads of those two families as they are stored and by the availability
+keyed by the reads of those four families as they are stored and by the availability
 of the API, never by what the installation gives of a family, which is a new object
 at each call: a tick of the clock makes no new index, a read makes one, since it
 makes a new array of items, and a family let go is dropped to a new empty read at the
-read after, so a new index then, once. The index is made of the two families alone:
+read after, so a new index then, once. The index is made of the four families alone:
 the owners and the repositories an operation names are found with the maps of the
 reads of their families, made once for each array of items
 ([the references](../../src/common/volume-references.ts)), so a read of the backups,
@@ -335,34 +339,37 @@ the views that are open hold, shows a failed read as such, with what was read be
 and when, and stops when the last view closes. The watch comes with the spec that
 needs what it gives.
 
-The families of an installation are one union of eight
-([the families](../../src/common/discovery.ts)): six read at every read, and the
-pod volume backups and the pod volume restores, read only while a view that shows
-them is open ([SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md),
-REQ-178): an installation may hold thousands of them, and a view that does not show
-them does not pay for them. What a view needs of those is said by a holder, in one
-call that replaces what it needed before, and the call answers the function that
-lets it go. The frame of a page is a holder: it needs what its page and every view of
-the way that is open over it read of the families on demand, since the list stays
-under the views and the way back leads to each of them, and calls again when the way
-changes, so that a way that changes never lets go of a family a view still on it
-needs. A backup, a pod volume backup opened from its band and the storage location
-of that operation keep the pod volume backups between them, and the way back draws
-the operation and the band from what was read, with no view that waits for its
-family again; the address names every view of the way as open, so a family is read
-while a view that needs it is open, at one list of it at each read while the way is,
-as decided while implementing, on 2026-10-29. A family needed and never read
-is asked at once, alone, in the generation, through the same guarded read; then at
-every read while it is held. A family no holder needs is not asked at the read after
-it was let go, and what was read of it goes then: a view opened again within a read
-finds it still read, and no timer is added. A new generation keeps the holders and
-empties the reads, and an answer of a family no holder needs any more is not taken.
-The views of a backup and of a restore hold their family of the operations, the pod
-volume backups of a backup and the pod volume restores of a restore, which the band
-of their summary shows, and the view of a repository holds both, for what used it,
-since the second pull request of T5.1; the Overview, the lists of the other kinds and
-the views of a schedule and of a location hold none; the sections of the details of
-the host hold none and ask nothing.
+The families of an installation are one union of ten ([the
+families](../../src/common/discovery.ts)): six read at every read, and the pod
+volume backups, the pod volume restores, the data uploads and the data downloads,
+read only while a view that shows them is open
+([SPEC-0014](../specs/SPEC-0014-repositories-and-data-movement.md), REQ-178): an
+installation may hold thousands of them, and a view that does not show them does not
+pay for them. What a view needs of those is said by a holder, in one call that
+replaces what it needed before, and the call answers the function that lets it go.
+The frame of a page is a holder: it needs what its page and every view of the way
+that is open over it read of the families on demand, since the list stays under the
+views and the way back leads to each of them, and calls again when the way changes,
+so that a way that changes never lets go of a family a view still on it needs. A
+backup, a pod volume backup opened from its band and the storage location of that
+operation keep the pod volume backups between them, and the way back draws the
+operation and the band from what was read, with no view that waits for its family
+again; the address names every view of the way as open, so a family is read while a
+view that needs it is open, at one list of it at each read while the way is, as
+decided while implementing, on 2026-10-29. A family needed and never read is asked
+at once, alone, in the generation, through the same guarded read; then at every read
+while it is held. A family no holder needs is not asked at the read after it was let
+go, and what was read of it goes then: a view opened again within a read finds it
+still read, and no timer is added. A new generation keeps the holders and empties
+the reads, and an answer of a family no holder needs any more is not taken. The
+views of a backup and of a restore hold their families of the operations, the pod
+volume backups and the data uploads of a backup and the pod volume restores and the
+data downloads of a restore, which the two halves of the band of their summary show,
+and the view of a repository holds the four, for what used it, since the second pull
+request of T5.1 and the first of T5.2; the view of a data download holds the data
+uploads, for the one whose snapshot it restores; the Overview, the lists of the
+other kinds and the views of a schedule and of a location hold none; the sections of
+the details of the host hold none and ask nothing.
 
 What is [known of a family](../../src/common/read-state.ts) is what the last read
 that ended said of it. A family that is asked again keeps that, and is marked as
@@ -438,30 +445,33 @@ host opens the page of the kind with the view in its address. The views that are
 open are of the installation they were opened in: they close when another one is
 selected.
 
-A reference to an object is a way to its view only when the object was found and
-its kind has a view: a reference to a kind that has none yet is a name with what
-is known of its target. The kinds that have a view are the ones of the
-[list](../../src/common/views.ts) the address is checked against. What each of
-them needs of the renderer is beside what uses it: its
+A reference to an object is a way to its view only when the object was found and its
+kind has a view: a reference to a kind that has none yet is a name with what is
+known of its target. The kinds that have a view are the ones of the
+[list](../../src/common/views.ts) the address is checked against. What each of them
+needs of the renderer is beside what uses it: its
 [page](../../src/renderer/navigation.ts), its
 [component](../../src/renderer/pages/open-view.tsx) and the
 [references](../../src/renderer/components/workspace.tsx) that lead to it. Since
 T5.1 they are eight: the five of the first milestones, `backup-repository`,
-`pod-volume-backup` and `pod-volume-restore`, and a reference to a backup
-repository, a pod volume backup or a pod volume restore that is found leads to its
+`pod-volume-backup` and `pod-volume-restore`, and since T5.2 ten, with `data-upload`
+and `data-download`; a reference to a kind of the volumes that is found leads to its
 view as the others do. Each view reads the families it shows, and the notices over
 it are of those alone, as decided while implementing, on 2026-10-26: a schedule the
 backups, the restores, the schedules and the two locations; a backup and a restore
-those, and since the second pull request of T5.1 their own family of the
-operations, the pod volume backups of a backup and the pod volume restores of a
+those, and since the second pull request of T5.1 their own family of the operations,
+the pod volume backups of a backup and the pod volume restores of a restore, and
+since the first of T5.2 the data uploads of a backup and the data downloads of a
 restore, which the frame holds for the band of their summary; a repository the
-repositories and the storage locations, and since that pull request the two families
-of the pod volume operations and the backups and the restores, which what used it
-counts and leads to, as decided while implementing, on 2026-10-29; an operation its
-own family, which the frame holds, the family of its owner, the storage locations
-and the repositories. The pod and the node of an operation are the links of the host
-to their details (`LinkToPod`, `LinkToNode`), which read nothing and leave the host
-to read the object when its drawer opens.
+repositories and the storage locations, and since the second pull request of T5.1
+the two families of the pod volume operations and the backups and the restores,
+which what used it counts and leads to, as decided while implementing, on
+2026-10-29, and the two families of the data movement since the first pull request
+of T5.2; an operation its own family, which the frame holds, the family of its
+owner, the storage locations and the repositories, and a data download the data
+uploads as well. The pod and the node of an operation are the links of the host to
+their details (`LinkToPod`, `LinkToNode`), which read nothing and leave the host to
+read the object when its drawer opens.
 
 ### The Time Of An Operation And The History Of A Schedule
 

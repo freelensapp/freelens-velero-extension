@@ -127,7 +127,7 @@ requests (M3, M5); the adherence of the schedules (T3.1 to T3.3).
 | REQ-184 | Show the progress of an operation as the release writes it: the bytes done of the total bytes of `status.progress`, with a percentage only when the total is above zero and the bytes done are not above it; a progress the object does not carry is not reported, and is not zero; on a terminal phase the bytes are shown as written, and nothing is said of what was not transferred. `status.incrementalBytes`, of a pod volume backup and of a data upload, the kinds that carry it, is shown when the object carries it and said not reported otherwise: the release writes no zero into it; a pod volume restore and a data download have no such field, and nothing is said of it for them. `spec.snapshotSize` of a pod volume restore and of a data download is the logical size of the snapshot, shown as such | KIND-08 |
 | REQ-185 | Show the times as the release writes them: accepted, started and completed. The duration of a terminal operation goes from its start to its completion; the elapsed time of one InProgress or Canceling from its start; the waiting time of one Accepted from its acceptance, with the note that the node agent fails it after its preparing timeout, which the view does not read; the waiting time of one Prepared from its acceptance, with the note that the node agent of its node is about to start the data path; one New or without a phase has no time but its creation. A cancellation or a failure of an operation that never started writes a start into some of the kinds and not into others: a start equal to the completion is shown as written, with no duration said of it. A terminal operation without a completion, as one the preparing timeout failed, has no duration and no elapsed time, and the view says that the release wrote no time for it. The time of an operation, for its order, is its start when it reports one and its creation otherwise | KIND-09 |
 | REQ-186 | Resolve what an operation refers to inside the installation. Its backup or restore, by the owner reference and by the labels of the name and of the UID: a way to the workspace when an object of that name and that UID is found; a name with its reason when the name is found with another UID, or is absent, denied or not read. Its storage location, by `spec.backupStorageLocation`. Its repository, by the three labels the release names one with: the volume namespace, which is the namespace of the pod for a pod volume backup and `spec.sourceNamespace` for the other three, the location, and the type, read from the uploader type for the pod volume kinds and kopia for a data movement. Its pod and its node are names: the pod from `spec.pod` with its namespace and UID; the node from `spec.node` of a pod volume backup and from `status.node` of the others, with `status.acceptedByNode` of a data movement when it differs; each with a way to the details the host shows of a Pod or of a Node, which the host resolves when it opens: the extension reads neither and does not say whether they exist. A data upload shows its snapshot, its snapshot class, its driver, its storage class, its source claim and namespace; a data download its target claim, volume and namespace, its snapshot ID, its source namespace, and a way to the data upload of the installation whose `status.snapshotID` is its `spec.snapshotID`, when one is found | KIND-10 |
-| REQ-187 | The workspace of a backup has a band of its volume operations, after its status: its pod volume backups and its data uploads, found by the label of its UID in its namespace, counted by phase, each with its pod and volume or its source claim, its phase, its bytes and its node, ten at a time with the way to the others, each leading to its view; the workspace of a restore has the same of its pod volume restores and data downloads. The band says what the release does: the pod volume backups run while the backup is InProgress, the data uploads while it waits for its plugin operations; a backup synced from the store carries the pod volume backups the sync created from the store, in the phase they were stored in. A backup or a restore whose families were read and that holds none says that it has none; what was not read is not known, not none. The workspace of a repository shows what used it: the operations of the installation whose volume namespace, location and type name it, counted by kind and by phase with the newest of each kind, and the backups and the restores they belong to | KIND-11 |
+| REQ-187 | The workspace of a backup has a band of its volume operations, after its status: its pod volume backups and its data uploads, found by the label of its UID in its namespace, counted by phase, each with its pod and volume or its source claim, its phase, its bytes and its node, ten at a time with the way to the others, each leading to its view; the workspace of a restore has the same of its pod volume restores and data downloads. The band says what the release does: the pod volume backups run while the backup is InProgress, and the data uploads are made then, as the CSI plugin snapshots each claim, and waited for in its plugin operations; a backup synced from the store carries the pod volume backups the sync created from the store, in the phase they were stored in. A backup or a restore whose families were read and that holds none says that it has none; what was not read is not known, not none. The workspace of a repository shows what used it: the operations of the installation whose volume namespace, location and type name it, counted by kind and by phase with the newest of each kind, and the backups and the restores they belong to | KIND-11 |
 | REQ-188 | In the Volumes tab of a backup and of a restore, the details of a row whose method is PodVolumeBackup or PodVolumeRestore, or whose data was moved, offer a way to the operation of the installation that matches it: a pod volume operation by the owner of the tab, the pod namespace, the pod name and the volume name the row carries; a data movement by the operation ID the row carries, which is the label `velero.io/async-operation-id` of the object. When none matches, nothing is offered and nothing is said absent: the rows are what the store holds, and the objects may be gone | KIND-12 |
 | REQ-189 | The Overview adds a cell for the backup repositories to what was read, and two rules to what needs attention, after the A11 of SPEC-0013: A12, a repository reports NotReady, with its message; A13, the newest maintenance of a repository failed, with its message and its time. The cell and the two rows join the table of REQ-096 of SPEC-0008 with the pull request of the slice: OVER-02 is restated with the cell and OVER-04 with the rules. The Overview reads none of the four families of the operations | KIND-13 |
 | REQ-190 | No surface of the extension writes: no cancel, no edit, no delete, no selection, by pointer, menu or keyboard; `spec.cancel` is never written; the lists are given no menu and no selection; nothing of a maintenance Job or of a pod of the node agent is read or created | KIND-14 |
@@ -241,7 +241,7 @@ Read in the source of the reviewed release. Nothing was run.
 | The backup waits for all its pod volume backups while it is InProgress; at its own timeout it asks the ones not ended to cancel, and takes a Failed or Canceled one as an error of the backup. The server, when it starts, fails the backups InProgress and asks their pod volume backups and data uploads that are New, Accepted, Prepared or InProgress to cancel | [The wait](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/podvolume/backupper.go#L397-L459), [in the backup](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/backup/backup.go#L703-L704), [the server start](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/cmd/server/server.go#L1008-L1009), [the phases cancelled](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/cmd/server/server.go#L1136-L1142) |
 | The node agent of the node of the pod takes a pod volume backup with no phase or New: it writes Accepted with the accepted time, and exposes the volume through a pod of its own; when that pod runs, Prepared; then InProgress with the start time, when its data path begins; the progress as the data path reports it; then Completed with the path, the snapshot ID, the completion time and the incremental bytes, with the message `volume was empty so no snapshot was taken` for an empty volume; or Failed with the message and the completion time, and a start time when there was none; or Canceled, with a start when there was none and the completion. Canceling is written only for one InProgress whose cancellation is asked; one Accepted whose pod cannot run is asked to cancel, and one Accepted longer than the preparing timeout is Failed with `timeout on preparing PVB`, with no start and no completion | [New](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L226-L259), [Accepted](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L405-L417), [Prepared](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L713-L732), [InProgress](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L333-L345), [progress](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L627-L636), [Completed](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L540-L561), [Failed](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L772-L802), [Canceled](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L419-L448), [Canceling](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L368-L398), [an abnormal pod](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L733-L750), [the timeout](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L467-L497) |
 | A pod volume restore is created with the generated name `<restore>-`, owned by the restore, labelled with the name and the UID of the restore and the UID of the pod, with the snapshot ID and the logical size taken from the pod volume backup, the location, the identifier, the uploader and the source namespace of the backup. The node agent of the node of the restored pod takes it when the init container `restore-wait` of that pod runs, writes Accepted with the accepted time and its own name as the node, then Prepared, InProgress with the start, the progress, and Completed, Failed or Canceled as a backup; a failure writes no start time, and one Accepted longer than the preparing timeout is Failed with `timeout on preparing PVR` and no time at all. One whose uploader is restic is taken by a legacy controller, which writes InProgress with the start and Completed with the completion, and no node | [Creation](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/podvolume/restorer.go#L261-L307), [snapshot and size](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/podvolume/util.go#L75-L118), [the init container](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_restore_controller.go#L568-L592), [its name](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/restorehelper/util.go#L25), [Accepted with the node](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_restore_controller.go#L417-L430), [Failed](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_restore_controller.go#L545-L566), [the timeout](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_restore_controller.go#L482-L512), [legacy](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_restore_controller_legacy.go#L362-L364), [its phases](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_restore_controller_legacy.go#L160-L161), [and its end](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_restore_controller_legacy.go#L297-L298) |
-| A data upload is created by the CSI plugin for a backup that moves the data of its snapshots, with the generated name `<backup>-`, owned by the backup, labelled with the name and the UID of the backup, the UID of the claim and the operation ID of the plugin operation, prefixed `du-`; its spec names the snapshot, the storage class, the driver, the class when the snapshot has one, the source claim and namespace, the data mover, the location and the timeout, which is the CSI snapshot timeout of the backup. A data mover that is empty or `velero` is the built-in one; the controller ignores any other. The backup is in its phases of the plugin operations while the data uploads run, and reads their phase and bytes as the progress of the operation | [Creation](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/backup/actions/csi/pvc_action.go#L540-L597), [the prefix](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/apis/velero/v1/labels_annotations.go#L129-L134), [built-in](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/datamover/util.go#L21-L31), [ignored](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_upload_controller.go#L160-L163), [the progress read](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/backup/actions/csi/pvc_action.go#L491-L515) |
+| A data upload is created by the CSI plugin for a backup that moves the data of its snapshots, with the generated name `<backup>-`, owned by the backup, labelled with the name and the UID of the backup, the UID of the claim and the operation ID of the plugin operation, prefixed `du-`; its spec names the snapshot, the storage class, the driver, the class when the snapshot has one, the source claim and namespace, the data mover, the location and the timeout, which is the CSI snapshot timeout of the backup. A data mover that is empty or `velero` is the built-in one; the controller ignores any other. The data uploads are made while the backup is InProgress, as its items are backed up; the backup waits for them in its phases of the plugin operations, which it enters once its items are done, and reads their phase and bytes as the progress of the operation. The data downloads are made while the restore is InProgress, as its claims are restored, and it waits for them in the same way | [Creation](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/backup/actions/csi/pvc_action.go#L540-L597), [the prefix](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/apis/velero/v1/labels_annotations.go#L129-L134), [built-in](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/datamover/util.go#L21-L31), [ignored](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_upload_controller.go#L160-L163), [the progress read](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/backup/actions/csi/pvc_action.go#L491-L515), [made with the items](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/backup/item_backupper.go#L439), [by the plugin](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/backup/actions/csi/pvc_action.go#L384-L424), [the phase after the items](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/backup_controller.go#L833-L848), [the downloads with the items](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/restore/restore.go#L1633), [by the plugin of the restore](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/restore/actions/csi/pvc_action.go#L132-L156), [the phase of the restore](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/restore_controller.go#L694-L710) |
 | Any node agent may accept a data upload with no phase or New: the first to write Accepted, with its own name as the accepted-by node and the accepted time, wins, and exposes the snapshot as a volume of a pod of its own, which the scheduler places; the node agent of that node writes Prepared with its name as the node, then InProgress with the start and the node OS, the progress, Completed with the path, the snapshot ID, the incremental bytes and the completion, with the message `volume was empty so no data was upload` for an empty one, Failed with the message, the completion and a start when there was none, or Canceled. One Accepted longer than the preparing timeout is Failed with `timeout on preparing data upload`, with no start and no completion | [Accepted](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_upload_controller.go#L812-L844), [exposed](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_upload_controller.go#L285-L299), [Prepared](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_upload_controller.go#L762-L765), [InProgress](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_upload_controller.go#L377-L395), [Completed](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_upload_controller.go#L501-L518), [Failed](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_upload_controller.go#L781-L810), [Canceled](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_upload_controller.go#L541-L576), [the timeout](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_upload_controller.go#L846-L889) |
 | A data download is created by the CSI plugin for a restore of a volume whose data was moved, with the generated name `<restore>-`, owned by the restore, labelled with the name and the UID of the restore and the operation ID, prefixed `dd-`; its spec names the target claim and namespace, with no volume yet, the location, the data mover, the snapshot ID, the size and the source namespace of the data upload it restores from, the timeout and the node OS. The node agent waits for the target claim to exist, accepts, exposes, and writes Prepared with the node, InProgress with the start, the progress, Completed after it rebinds the volume to the target claim, Failed with the message and the completion and no start, or Canceled; one Accepted longer than the preparing timeout is Failed with `timeout on preparing data download` and no time at all | [Creation](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/restore/actions/csi/pvc_action.go#L405-L453), [the claim awaited](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_download_controller.go#L260-L263), [Accepted](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_download_controller.go#L762-L795), [Prepared](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_download_controller.go#L726-L729), [InProgress](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_download_controller.go#L368-L380), [Completed](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_download_controller.go#L478-L505), [Failed](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_download_controller.go#L738-L760), [the timeout](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/data_download_controller.go#L797-L828) |
 | An operation that is deleted while it is not in a final phase is asked to cancel first, and deleted once the node agent cleaned up: a finalizer holds it. When the node agent starts, it resumes the operations InProgress of its node and asks to cancel the ones it cannot resume | [Deletion](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L146-L204), [resume](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/pod_volume_backup_controller.go#L939-L983) |
@@ -250,16 +250,16 @@ Read in the source of the reviewed release. Nothing was run.
 | The volume information of a backup names, for each pod volume backup, the pod, its namespace, the volume, the node, the snapshot ID, the total bytes as the size and the incremental bytes, and for each data upload the operation ID and the phase; the one of a restore names the pod, its namespace and the volume of each pod volume restore, and the operation ID of each data download, from its label | [From a pod volume backup](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/internal/volume/volumes_information.go#L252-L264), [from a data upload](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/internal/volume/volumes_information.go#L634-L639), [from a pod volume restore](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/internal/volume/volumes_information.go#L266-L275), [from a data download](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/internal/volume/volumes_information.go#L852-L886) |
 | The documentation of the release says that the data mover shows the progress as bytes done of an estimated total, that the two are equal upon completion, and that the incremental bytes are filled once the upload is done; that the preparing timeout of the node agent is thirty minutes and the timeout of an item operation four hours unless set otherwise; that a CSI driver with snapshots at the v1 API is a prerequisite of the data movement; and that restic is being deprecated | [Progress](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/site/content/docs/main/csi-snapshot-data-movement.md#L119), [timeouts](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/site/content/docs/main/csi-snapshot-data-movement.md#L254-L257), [prerequisites](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/site/content/docs/main/csi-snapshot-data-movement.md#L29-L39), [restic](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/site/content/docs/main/file-system-backup.md#L41), [one repository for each namespace](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/site/content/docs/main/file-system-backup.md#L70-L72) |
 
-Of these, the views say in words, where they help: that a repository is created
-by the first backup or restore of a namespace to a location and shared by them;
-that a pod volume backup runs while its backup is InProgress and a data upload
-while its backup waits for its plugin operations; that a pod volume operation New
-waits for the node agent of the node of its pod and a data movement New for any
-node agent of the installation; that the preparing timeout and the timeout of the
-backup are settings of the installation the extension does not read; that the
-bytes are what the data mover reports, and that an equal incremental size is
-not written. The views never compute a speed or a time left: the release writes
-neither.
+Of these, the views say in words, where they help: that a repository is created by
+the first backup or restore of a namespace to a location and shared by them; that
+a pod volume backup runs while its backup is InProgress, and that a data upload is
+made then and waited for in the plugin operations of its backup; that a pod volume
+operation New waits for the node agent of the node of its pod and a data movement
+New for any node agent of the installation; that the preparing timeout and the
+timeout of the backup are settings of the installation the extension does not
+read; that the bytes are what the data mover reports, and that an equal
+incremental size is not written. The views never compute a speed or a time left:
+the release writes neither.
 
 ### Phases
 
@@ -1589,3 +1589,135 @@ alone, where the static fixtures hold their counterparts, completed with their o
 item each as the server left them on 2026-11-06, and no repository and no pod volume
 operation, which the suites count on the cluster (SPEC-0015, amendment of
 2026-11-07).
+
+T5.2, the first of its two pull requests, on 2026-11-08: the data uploads and the
+data downloads, read under the second version of the group, in their lists, their
+views, the details of the host and the bands, read only. The gates on the machine of
+the runs, macOS x64 with Node 24.21.0 and pnpm 12.15.0: `pnpm type:check`, the nine
+programs, and `pnpm lint:check`, each with no error; `pnpm test:unit`, the build, then
+101 files and 3,014 tests, all passed, three timed cases of the log viewer and of the
+Overview alone after the full run met their five seconds beside a run of the views
+on the same machine; the build test with the eleven pages and the ten sections. The unit and
+component evidence, by check:
+
+- KIND-01: the two classes, with their kind, their `declare` literals, the version
+  `velero.io/v2alpha1`, their plural and no short name; `detailsFor` given the kind
+  and the version of each; `customResources` of ten; eleven pages and ten sections in
+  the build test (`src/entrypoints.test.ts`, `test/build.test.ts`,
+  `src/renderer/registrations.test.tsx`). The reader takes the discovery of the second
+  version and the lists of its two kinds in one namespace, and refuses a kind of the
+  first version under it, a list of the whole cluster, an object by its name, a query
+  and another version (`src/renderer/api/reader.test.ts`). The discovery of the second
+  version served, with one kind, not served, denied, failed and not a list, each with
+  the families it affects, and never a word of it on whether Velero is there
+  (`src/common/discovery.test.ts`).
+- KIND-02: one union of ten families, the six read at every read and the four of the
+  operations on demand; the data movement asked under its version when a holder needs
+  it, and never asked where its version is not served, the pod volume backups asked
+  as before (`src/renderer/state/installation.test.ts`); the view of a backup asks the
+  data uploads with the pod volume backups and not the data downloads, the view of a
+  restore the converse, and the Overview none (`src/renderer/pages/data-movement.test.tsx`,
+  `src/renderer/pages/backups-page.test.tsx`, `src/renderer/pages/restores-page.test.tsx`).
+- KIND-04, KIND-05, KIND-06, KIND-08, KIND-09, KIND-10, KIND-16: the lists of the two
+  kinds with the twelve columns, the data mover in the place of the uploader, the
+  source claim of an upload and the target claim of a download, the restore of a
+  download a way; a data mover the release does not run marked as not known; the two
+  lists said not served where the second version is not; the view of an upload with
+  its snapshot, its classes, its driver, its source claim and the node of its data
+  path, the node agent that accepted it said only when it is another node; its data
+  mover, configuration, timeout, node OS, snapshot type, snapshot ID, path and result;
+  a snapshot type and a data mover the release does not write marked as not known; the
+  view of a download with its target claim, its volume when bound, its source
+  namespace, its snapshot ID and the data upload of that snapshot as a way and back,
+  nothing said when none names it; what an upload and a download New wait for; no
+  control that writes; the sections of the host of both, asking nothing
+  (`src/renderer/pages/data-movement.test.tsx`).
+- KIND-11: the band of a backup and of a restore in two halves, each under its title
+  with the state of its own read, the second the data movement, with its rows by claim,
+  ten at a time, a way to each view and back; a denied half beside one in rows; the
+  sentence of each phase of the owner, speaking of both kinds; what used a repository
+  counted over the four kinds, the data movement by its source namespace and the type
+  kopia (`src/common/volume-band.test.ts`, `src/renderer/pages/volume-band.test.tsx`,
+  `src/renderer/pages/data-movement.test.tsx`). The index made in one pass over each of
+  the four families, with the data uploads by their snapshot
+  (`src/common/volume-index.test.ts`).
+- KIND-12: a row whose data was moved leads to the data upload of its operation ID
+  among the operations of the owner of the tab, and a row whose data was not moved is
+  not found by the ID it carries; the ID read from the detail of the row, and none
+  when it is empty or not a text (`src/common/volume-band.test.ts`,
+  `src/renderer/components/volumes-viewer.test.tsx`, `src/common/artifact-volumes.test.ts`).
+
+The packaged application has no data upload or data download yet: the fixtures of
+the data movement, with their suites, their measures and their pre-review, are the
+second pull request of T5.2. The suites of the views read the two kinds where they
+are: the journey with the eleven entries and the ten kinds, every request of the
+frame of a version of the group; the restricted suite with the first reader denied
+the two kinds, their lists and the notice over the view of a backup saying so; the
+band of every view through its first half, the pod volume operations; the sentences
+of the band restated. The hosted runs of its pull request at the head with main merged
+in, `80bcddb`, passed every part of the views, among them the journey in the part
+`static-views-1` in 9 minutes, the integration tests with Freelens v2 in 3 minutes 46
+seconds and the end-to-end tests in 9 minutes 31 seconds (runs 42431786999,
+42431787058 and 42431787083).
+
+Decided while implementing, on 2026-11-08:
+
+- The discovery asks the second version of the group beside the first, at each of
+  its asks, and takes from it only whether the two kinds of the data movement are
+  served: an answer that lists them serves them, one that lists one of them serves
+  that one, and a version the API does not serve, the only evidence of an absence,
+  makes the two families not served, which are then never asked. An answer that
+  refused, that failed or that is not a list says nothing of them: they are read,
+  and the read of each says what it is. The first version alone says whether
+  Velero is there (`src/common/discovery.ts`, `apiAvailability`).
+- The reader takes the second version for its discovery and for the lists of the
+  two kinds in one namespace, and for nothing else of it: not a kind of the first
+  version, not a list of the whole cluster, not an object by its name
+  (`src/renderer/api/reader.ts`).
+- The band of a backup and of a restore is two halves, one for each kind of its
+  operations, the pod volume operations first, each under its title and with the
+  state of its own read: a family that is denied, failed or not served says so in
+  its half and takes nothing from the other. The sentence of what the release does
+  is one for the band, and speaks of both kinds
+  (`src/renderer/components/volume-band.tsx`).
+- The column of the uploader of a pod volume operation is, in the lists of the data
+  movement, the one of its data mover, titled Data mover, with the same identifier
+  and the same place in a narrow list: a data mover that is not set is said
+  Built-in, the word of the spec, and `velero` is shown as written; any other is
+  kept as its text with the mark of what is not known.
+- The repository of a data movement is found by the type kopia, whatever its data
+  mover, since the release names the repository of the data movement by that type.
+- The node of a data movement is the one of its data path, `status.node`; the node
+  whose node agent accepted it is said beside it in its view, as Accepted by, only
+  when it is another one.
+- The way from a row of the Volumes tab whose data was moved is found among the
+  data uploads or the data downloads of the owner of the tab, by the label of the
+  operation ID the row carries, as a pod volume operation is found among the ones
+  of its owner: the release makes the operation ID of the UID of the owner, and an
+  operation of another owner is not the one of the row.
+- The data upload of a data download is found among the data uploads of the
+  installation by the snapshot its result names, the newest when two name it, in
+  the index made once for a read; one found is a way, and none found is not said.
+- The four families of the operations are read on demand; the Overview reads none.
+- The phases of the data movement are grouped in the order of the describe of their
+  owner, which groups neither kind: the data uploads in the order of `backup
+  describe`, the data downloads in the order of `restore describe`, and a data
+  download Canceling after the others, as a pod volume restore Canceling is
+  (`src/common/volume-band.ts`).
+- The two identities of the views the runner makes for the suite of the tabs read
+  the two kinds as well (`viewIdentityWithoutPortForward` and
+  `viewIdentityOfAnExecPlugin`), and so does the second reader of the restricted
+  suites; the first reader, which reads none of the volumes, is denied them, and
+  its lists and the notice over the view of a backup say so.
+- The suites count the reads of the families of the views among the kinds of their
+  snapshot, which hold no data movement until its fixtures are placed: the second
+  pull request of T5.2 adds the two kinds to them with the fixtures.
+
+Amendment of 2026-11-08 (REQ-187, KIND-11): the independent review of the first pull
+request of T5.2 read in the release that the CSI plugin makes the data uploads of a
+backup while it is InProgress, as its items are backed up, and the data downloads of
+a restore while it is InProgress, as its claims are restored; the backup and the
+restore wait for them in their phases of the plugin operations, which they enter once
+their items are done. REQ-187, the fact of the data uploads and the words of the views
+said that the data uploads run while the backup waits for its plugin operations: they
+are restated, and so are the sentences of the band.
