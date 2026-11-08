@@ -80,14 +80,14 @@ export interface ArtifactClient {
   save(cluster: string, request: string): Promise<Answer<ArtifactSaved>>;
 }
 
-// What the views ask of the main process for a backup asked from a schedule by hand (SPEC-0017, T4.2): the
-// confirmation, which answers the text of the backup with its token, and the run, which sends that text.
 // What the views ask of the ends kept for their cluster: the list, and the one a view showed (SPEC-0017, REQ-250).
 export interface KeptEndsClient {
   ends(cluster: string): Promise<Answer<KeptEnd[]>>;
   shown(cluster: string, request: string): Promise<Answer<null>>;
 }
 
+// What the views ask of the main process for a backup asked from a schedule by hand (SPEC-0017, T4.2): the
+// confirmation, which answers the text of the backup with its token, and the run, which sends that text.
 export interface BackupNowClient {
   confirmBackupNow(
     cluster: string,

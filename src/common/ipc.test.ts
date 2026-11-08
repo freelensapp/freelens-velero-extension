@@ -360,10 +360,14 @@ describe("the ends kept for a cluster, between the processes", () => {
   it("reads the ends of a cluster, each with what to look for and how it ended, and the end a frame showed", () => {
     const refused = {
       ...end,
+      request: randomUUID(),
       outcome: { created: false, code: "conflict", text: "A backup named it is already there." },
     };
 
     expect(readKeptEnds([end, refused])).toEqual([end, refused]);
+    // One request is one end, the last.
+    expect(readKeptEnds([end, { ...end, at: 2 }])).toEqual([{ ...end, at: 2 }]);
+    expect(KEPT_ENDS_BOUND).toBe(16);
     expect(readKeptEnds([])).toEqual([]);
     expect(readWriteEndsRequest({ cluster })).toEqual({ cluster });
     expect(readWriteShownRequest({ cluster, request: end.request })).toEqual({ cluster, request: end.request });
@@ -378,13 +382,28 @@ describe("the ends kept for a cluster, between the processes", () => {
     ["an outcome of no shape", { ...end, outcome: { created: "yes" } }],
     ["a failure without words", { ...end, outcome: { created: false, code: "conflict" } }],
     ["a time that is not one", { ...end, at: Number.NaN }],
-  ])("refuses the ends with %s", (_, value) => {
-    expect(readKeptEnds([value])).toBeUndefined();
+    ["a phase longer than one", { ...end, outcome: { created: true, phase: "P".repeat(65) } }],
+    ["a namespace that is not one", { ...end, namespace: "Velero" }],
+    ["no context", { ...end, context: "" }],
+    ["a schedule that is not a name", { ...end, schedule: "" }],
+    ["a time of another type", { ...end, at: "1" }],
+    ["an outcome with a field it does not know", { ...end, outcome: { created: true, more: 1 } }],
+    ["a found that is not true", { ...end, outcome: { created: true, found: false } }],
+    ["a code that is not one", { ...end, outcome: { created: false, code: "", text: "words" } }],
+    ["words too long", { ...end, outcome: { created: false, code: "conflict", text: "w".repeat(1025) } }],
+    ["no object", 7],
+  ])("leaves out an end with %s, and keeps the others", (_, value) => {
+    const other = { ...end, request: randomUUID() };
+
+    expect(readKeptEnds([value, other])).toEqual([other]);
   });
 
-  it("refuses more ends than are kept", () => {
-    expect(readKeptEnds(Array.from({ length: KEPT_ENDS_BOUND + 1 }, () => end))).toBeUndefined();
-    expect(readKeptEnds(Array.from({ length: KEPT_ENDS_BOUND }, () => end))).toHaveLength(KEPT_ENDS_BOUND);
+  it("refuses what is not a list of ends, or more ends than are kept", () => {
+    const many = (count: number) => Array.from({ length: count }, () => ({ ...end, request: randomUUID() }));
+
+    expect(readKeptEnds({ ends: [end] })).toBeUndefined();
+    expect(readKeptEnds(many(KEPT_ENDS_BOUND + 1))).toBeUndefined();
+    expect(readKeptEnds(many(KEPT_ENDS_BOUND))).toHaveLength(KEPT_ENDS_BOUND);
   });
 });
 

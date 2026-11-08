@@ -1,8 +1,9 @@
 // The procedures the renderer calls of the main process, and what binds them: every request is validated,
 // every sender is the frame of one cluster, the cluster a request names is the one of its frame and one the
 // catalog of the host gives as connected, and every answer is a result. Nothing is raised to the renderer,
-// nothing is broadcast of a write, and the catalog of the host is where a cluster is resolved. The end of a write
-// whose request was sent is kept for its cluster, and given to the frames of that cluster that ask for it.
+// nothing is broadcast of a write, and the catalog of the host is where a cluster is resolved. The end of a backup
+// asked from a schedule whose request was sent is kept for its cluster, and given to the frames of that cluster that
+// ask for it.
 
 import { Main } from "@freelensapp/extensions";
 import { ALLOWANCES_BOUND, type Allowances, isAllowed, withAllowance, withoutAllowance } from "../common/allowances";
@@ -249,11 +250,13 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
   // The ends of the writes whose request was sent, for their cluster (SPEC-0017, REQ-250).
   const kept = new KeptEnds();
   // What a kept end says: what to look for, in which namespace of which context, and how it ended.
-  const keptEnd = (request: WriteRunRequest, end: Answer<BackupCreated>): KeptEnd => ({
+  const keptEnd = (request: WriteRunRequest, end: Answer<BackupCreated>, context: string): KeptEnd => ({
     request: request.request,
     kind: "backup-from-schedule",
     namespace: request.namespace,
-    context: dependencies.catalog().find((entry) => entry.id === request.cluster)?.contextName || request.cluster,
+    // The context of the entry the request was sent to, which the adapter was made for: not the one the catalog may
+    // have now.
+    context: context || request.cluster,
     name: String(request.backup),
     schedule: request.target?.name ?? "",
     outcome: end.ok
@@ -269,7 +272,8 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
   const actions = {
     gate,
     now: () => dependencies.now?.() ?? Date.now(),
-    keep: (request: WriteRunRequest, end: Answer<BackupCreated>) => kept.keep(request.cluster, keptEnd(request, end)),
+    keep: (request: WriteRunRequest, end: Answer<BackupCreated>, context: string) =>
+      kept.keep(request.cluster, keptEnd(request, end, context)),
     sleep:
       dependencies.sleep ??
       ((milliseconds: number, signal: AbortSignal) =>

@@ -10,8 +10,11 @@ import type { KeptEnd } from "../common/ipc";
 
 export class KeptEnds {
   private readonly ends = new Map<string, KeptEnd[]>();
+  // The extension went: a run still in flight keeps nothing.
+  private closed = false;
 
   keep(cluster: string, end: KeptEnd): void {
+    if (this.closed) return;
     const kept = (this.ends.get(cluster) ?? []).filter((one) => one.request !== end.request);
 
     this.ends.set(cluster, [...kept, end].slice(-KEPT_ENDS_BOUND));
@@ -30,6 +33,7 @@ export class KeptEnds {
   }
 
   clear(): void {
+    this.closed = true;
     this.ends.clear();
   }
 }

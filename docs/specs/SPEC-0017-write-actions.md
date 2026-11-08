@@ -416,6 +416,7 @@ introduces this spec leaves them as they are.
 | SPEC-0005 | REQ-057, REST-08, with T4.6 | No surface offers to edit, delete or select a restore | No surface offers to edit, delete or select a restore by itself; Delete backup of SPEC-0017 deletes, through Velero, the restores of the backup it deletes, and its review says so |
 | SPEC-0006 | REQ-065, SCHED-02, with T4.2 | A read-only workspace of a schedule | The workspace of a schedule, which reads and offers the commands of REQ-074 as restated here |
 | SPEC-0009 | The procedures, with T4.2 | `write.confirm` answers a token or a refusal | For each kind of [the contract](#the-contract), the answer carries the text of the body, as D8 of SPEC-0016 extends it for a Schedule; this lands with T4.2, the first slice, and not with T4.7 as D8 and D12 of SPEC-0016 say |
+| SPEC-0009 | REQ-113, GATE-06, with the third pull request of T4.2 | A frame reads and cancels only what it asked | What a write is at and its cancel stay for the frame that asked it; the ends kept for a cluster (REQ-250) are given to every frame of that cluster, which may say it showed one, through `write.ends` and `write.shown` |
 | SPEC-0013 | The derivation of the offset (REQ-162), with T4.2 | A backup asked by hand is never within a minute of a submission in practice | Back up now makes a backup by hand one command away: one asked within the minute of a submission can mislead the offset derived from the backups of the schedule, a risk the band names when the backup of the last submission is not the only one of that minute |
 | SPEC-0016 | D1, with this spec | The spec of T4.3 is reviewed and approved on its own | The spec of T4.3 is the section [Create A Backup](#create-a-backup-t43) of this spec, reviewed and approved with it |
 | SPEC-0016 | The restatement of SCHED-11, with T4.2 | SCHED-11 restated with T4.7: nothing selects, edits, deletes, pauses, resumes or runs a schedule | Replaced by the restatement of REQ-074 and SCHED-11 of this table, which T4.2 brings first, T4.5 and T4.4 extend, and T4.7 completes with Create schedule |
@@ -818,6 +819,35 @@ at a time; what the client of the renderer sends; the nearest of three backups o
 minute; and the risk carried by an offset that changed. Fifteen changes of what the
 review asked were seen failing.
 
+Decided while implementing, on 2026-11-08:
+
+- The state of the action is kept by the installation, as the version of the server
+  is: a visit to another page shows the form with its name, and the backup being
+  created or how it ended, as they were; a review is left with the workspace that
+  shows it, and asked again; the installation that changes drops everything, and
+  writes turned off drop a review.
+- One backup is asked at a time from any workspace: the workspace of another schedule
+  opened while one is created says so, asks nothing, and gives the form of its
+  schedule when that one ends.
+- An end no workspace showed, of a backup whose workspace was closed while it was
+  created, is not lost with its form: the next workspace says it above its form, with
+  the way to the backup created, until the operator lets it go. The end kept for the
+  cluster in the target bar, wherever the operator is, comes with the third pull
+  request of T4.2.
+- A review whose text the views cannot read as a Backup is not confirmed, and says
+  so; a review that took the place of one whose schedule changed while it was read
+  says so above it.
+- Escape in the field of the name gives back the name the form proposed: what was
+  typed is the change of the proposal, and an empty name is not a way out.
+- The text of the review scrolls past 480 pixels; Chromium gives the keyboard a
+  scroller with nothing to focus in it, and the text is not made focusable.
+- The way to the backup created takes the place of the workspace in the address; the
+  way to a backup that already had the name opens over the workspace, whose way back
+  leads to the form with the name of the next second.
+- What the next pull requests of T4.2 bring: the end kept for the cluster and said in
+  the target bar (REQ-250), with the third, then the packaged suites and the end to end
+  proof (ACT-11, NOW-05), and the pre-review of the workspace (ACT-10).
+
 T4.2, the third of its pull requests, on 2026-11-08: the end kept for the cluster
 (REQ-250). The main process keeps every end of a backup asked from a schedule whose
 request was sent, created or not, with what to look for and where; the frame that asked
@@ -847,45 +877,42 @@ extension went, the end shown not let go, the workspace or the notice that does 
 say it showed it, the ends not read at every read, the end dismissed left in the bar,
 the words of a backup found, and the reader without its bound.
 
+The independent review of the pull request ran 135 changes against the tests, of which
+47 survived, and found four defects, all fixed: a phase longer than the contract takes
+made every end of the cluster unreadable; the context was the one of the catalog when
+the run ended, not the one of the entry the request was sent to; an end dismissed in the
+target bar came back above the next form; and a run whose answer did not come back was
+said shown, though the views showed the words of the way and not its end. The cases
+added after it pin the backup found after a lost answer and the answer with another
+name kept, the 422, the change after an answer and an error that is not of the adapter
+kept, a client that could not be had not kept, the context of the entry, no phase
+longer than one, a store that raises, nothing kept once the extension went, the others
+of a cluster left when one is shown, the bound of sixteen, each guard of the reader,
+the client and the way of the context, the notice above a form that says it showed
+its end, an end dismissed and a late list that still holds it, the ends asked at
+every read, and no way to a backup of another installation or to one not created. Twenty-one
+changes of what the review asked were seen failing.
+
 Decided while implementing, on 2026-11-08:
 
 - Every end of a request that was sent is kept, the refusals of the API server among
   them, and not only the ones whose answer was lost: a frame that went misses those
   as well. What the adapter refused to send, a cluster that changed before anything
-  left and an API server that could not be reached are not kept: nothing was sent.
+  left and a client of the host that could not be had are not kept: nothing was
+  sent. A request that left and got no answer is looked for, and its end is kept.
 - The frames ask for the ends at every read of the installation, every fifteen
   seconds while a view is open, and nothing is broadcast, as SPEC-0009 says.
 - An end is let go once a view of the cluster showed it: the result in the workspace,
   the notice of the earlier end above a form, or the operator who dismissed it in the
   target bar.
+- The target bar is the one of the pages of the extension: wherever the operator is
+  among them, in the cluster, it says the ends; a page of the host has no bar, and an
+  end waits there for the next page of the extension, read again every fifteen
+  seconds while one is open.
+- An end dismissed in the target bar is let go in the state of the views as well: it
+  is said no more above a form.
+- An end is kept with the context of the entry its request was sent to, and with a
+  phase only when it is one the release writes, at most 64 characters: the views read
+  each end of a list on their own, and leave out one they cannot read.
 - What remains of T4.2: the packaged suites and the end to end proof (ACT-11,
-  NOW-05), and the pre-review of the workspace (ACT-10).
-
-Decided while implementing, on 2026-11-08:
-
-- The state of the action is kept by the installation, as the version of the server
-  is: a visit to another page shows the form with its name, and the backup being
-  created or how it ended, as they were; a review is left with the workspace that
-  shows it, and asked again; the installation that changes drops everything, and
-  writes turned off drop a review.
-- One backup is asked at a time from any workspace: the workspace of another schedule
-  opened while one is created says so, asks nothing, and gives the form of its
-  schedule when that one ends.
-- An end no workspace showed, of a backup whose workspace was closed while it was
-  created, is not lost with its form: the next workspace says it above its form, with
-  the way to the backup created, until the operator lets it go. The end kept for the
-  cluster in the target bar, wherever the operator is, comes with the last pull
-  request of T4.2.
-- A review whose text the views cannot read as a Backup is not confirmed, and says
-  so; a review that took the place of one whose schedule changed while it was read
-  says so above it.
-- Escape in the field of the name gives back the name the form proposed: what was
-  typed is the change of the proposal, and an empty name is not a way out.
-- The text of the review scrolls past 480 pixels; Chromium gives the keyboard a
-  scroller with nothing to focus in it, and the text is not made focusable.
-- The way to the backup created takes the place of the workspace in the address; the
-  way to a backup that already had the name opens over the workspace, whose way back
-  leads to the form with the name of the next second.
-- What the last pull request of T4.2 brings: the end kept for the cluster and said in
-  the target bar (REQ-250), the packaged suites and the end to end proof (ACT-11,
   NOW-05), and the pre-review of the workspace (ACT-10).

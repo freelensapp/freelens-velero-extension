@@ -206,7 +206,7 @@ export class Installation {
       now: dependencies.now,
       requestId,
       refused: () => void this.openGate(),
-      shown: (request) => this.showEnd(request),
+      shown: (request) => this.told(request),
     });
     makeObservable(this, {
       api: observableRef,
@@ -604,8 +604,6 @@ export class Installation {
     this.dropWrites(left);
   }
 
-  // A read of the installation: the families read at every read, and the ones a holder needs. What was read of a
-  // family no holder needs any more goes, and it is not asked.
   // The ends the main process keeps for the cluster, asked at every read: a read that fails keeps what was known.
   async readEnds(): Promise<void> {
     const client = this.dependencies.keptEnds;
@@ -619,13 +617,23 @@ export class Installation {
     });
   }
 
-  // A view showed an end, or the operator let it go: the main process keeps it no more.
+  // The operator let an end go in the target bar: it is said no more, here or above a form.
   showEnd(request: string): void {
-    this.shownEnds.add(request);
-    this.ends = this.ends.filter((end) => end.request !== request);
+    this.backupNow.letGoOf(request);
+    this.told(request);
+  }
+
+  // A view showed an end: the main process keeps it no more, and the target bar does not say it.
+  private told(request: string): void {
+    runInAction(() => {
+      this.shownEnds.add(request);
+      this.ends = this.ends.filter((end) => end.request !== request);
+    });
     void this.dependencies.keptEnds?.shown(this.cluster.id, request);
   }
 
+  // A read of the installation: the families read at every read, and the ones a holder needs. What was read of a
+  // family no holder needs any more goes, and it is not asked. The ends kept for the cluster are asked with them.
   private async readFamilies(): Promise<void> {
     const held = this.held();
 

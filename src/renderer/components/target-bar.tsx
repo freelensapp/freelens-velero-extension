@@ -326,8 +326,10 @@ const KeptEnds = observer(({ installation }: { installation: Installation }) => 
 
   if (!ends.length) return null;
   return (
+    // Said to who does not see as it appears, after a read.
     <section
       className={styles.namespaces}
+      role="status"
       aria-label="Writes that ended while no view of them was open"
       data-testid="velero-kept-ends"
     >
@@ -340,10 +342,16 @@ const KeptEnds = observer(({ installation }: { installation: Installation }) => 
             data-created={end.outcome.created}
           >
             <span>{keptEndWords(end)}</span>
+            <span className={styles.muted}>at {new Date(end.at).toLocaleTimeString()}</span>
             {end.outcome.created && installation.namespace === end.namespace ? (
-              <ViewLink target={{ kind: "backup", name: end.name }}>Open the backup</ViewLink>
+              <ViewLink target={{ kind: "backup", name: end.name }}>Open the backup {end.name}</ViewLink>
             ) : null}
-            <Button plain data-testid="velero-kept-end-dismiss" onClick={() => installation.showEnd(end.request)}>
+            <Button
+              plain
+              aria-label={`Dismiss what is said of the backup ${end.name}`}
+              data-testid="velero-kept-end-dismiss"
+              onClick={() => installation.showEnd(end.request)}
+            >
               Dismiss
             </Button>
           </li>

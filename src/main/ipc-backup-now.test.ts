@@ -6,10 +6,11 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { backupFromSchedule, bodyText, SCHEDULE_NAME_LABEL } from "../common/backup-from-schedule";
-import { CHANNELS } from "../common/ipc";
+import { CHANNELS, readKeptEnds } from "../common/ipc";
 import { BACKUP_NOW_WORDS } from "./backup-now";
 import { DiagnosticError } from "./diagnostic-transport";
 import { registerHandlers } from "./ipc";
+import { KeptEnds } from "./kept-ends";
 import { WriteGate } from "./write-gate";
 
 import type { CatalogEntry } from "./catalog";
@@ -52,6 +53,8 @@ function fixture() {
     now: NOW,
   };
   const adapter = {
+    // The entry the adapter was made for.
+    binding: { id: "cluster-a", name: "demo", kubeConfigPath: "/synthetic/a", contextName: "kind-a" },
     assertCurrent: vi.fn(),
     read: vi.fn(async (kind: string, _namespace: string, name: string): Promise<DiagnosticObject> => {
       if (kind === "Schedule") {
@@ -118,7 +121,7 @@ function fixture() {
   const run = (token: string, backup = NAME, request = randomUUID()) =>
     call(CHANNELS.writeRun, { ...of, backup, token, request });
 
-  return { state, adapter, gate, call, enable, confirm, run, release };
+  return { state, adapter, gate, call, enable, confirm, run, release, catalog };
 }
 
 describe("the confirmation of a backup asked from a schedule", () => {
@@ -821,5 +824,93 @@ describe("the end of a backup asked from a schedule, kept for its cluster", () =
     ).toMatchObject({ ok: false, code: "forbidden" });
     release();
     expect(await ends(call)).toEqual({ ok: true, value: [] });
+  });
+});
+
+describe("what the end kept for a cluster says, and when it is kept", () => {
+  const ends = (call: ReturnType<typeof fixture>["call"]) =>
+    call(CHANNELS.writeEnds, { cluster: "cluster-a" }) as Promise<{ ok: boolean; value?: Record<string, unknown>[] }>;
+  const lost = (state: ReturnType<typeof fixture>["state"]) => async (text: string) => {
+    const body = JSON.parse(text) as DiagnosticObject;
+
+    state.backups.set(body.metadata.name, {
+      ...body,
+      metadata: { ...body.metadata, uid: "backup-uid", creationTimestamp: new Date(state.now).toISOString() },
+    } as DiagnosticObject);
+    throw new DiagnosticError("submission-unknown");
+  };
+
+  it("keeps a backup found after a lost answer, and an answer with another name, each with how it ended", async () => {
+    const { enable, confirm, run, call, state } = fixture();
+
+    await enable();
+    state.create = lost(state);
+    state.phases = ["New"];
+    await run(String((await confirm()).value?.token));
+    state.backups.clear();
+    state.create = async () => ({ metadata: { name: "another", namespace: "velero", uid: "u" } }) as DiagnosticObject;
+    await run(String((await confirm()).value?.token));
+    expect((await ends(call)).value?.map(({ outcome }) => outcome)).toEqual([
+      { created: true, phase: "New", found: true },
+      { created: false, code: "submission-unknown", text: BACKUP_NOW_WORDS.unknown(NAME) },
+    ]);
+  });
+
+  it.each([
+    ["a 422 of the API server", new DiagnosticError("validation", undefined, "refused"), 1],
+    ["a creation answered while the cluster changed", new DiagnosticError("target-changed", undefined, "answered"), 1],
+    ["an error that is not one of the adapter", new Error("thrown"), 1],
+    ["a client of the host that could not be had", new DiagnosticError("transport-unreachable"), 0],
+  ])("keeps the end of %s when it was sent, and not otherwise", async (_, error, count) => {
+    const { enable, confirm, run, call, state } = fixture();
+
+    await enable();
+    state.create = async () => {
+      throw error;
+    };
+    await run(String((await confirm()).value?.token));
+    expect((await ends(call)).value).toHaveLength(count);
+  });
+
+  it("says the context of the entry the request was sent to, not the one the catalog has once it changed", async () => {
+    const { enable, confirm, run, call, state, catalog } = fixture();
+
+    await enable();
+    state.create = async () => {
+      catalog[0] = { ...catalog[0], contextName: "kind-other" };
+      throw new DiagnosticError("target-changed", undefined, "answered");
+    };
+    await run(String((await confirm()).value?.token));
+    catalog[0] = { ...catalog[0], contextName: "kind-a" };
+    expect((await ends(call)).value?.map(({ context }) => context)).toEqual(["kind-a"]);
+  });
+
+  it("carries no phase longer than one, so that the ends of the cluster stay readable", async () => {
+    const { enable, confirm, run, call, state } = fixture();
+
+    await enable();
+    state.phases = ["P".repeat(65)];
+    expect(await run(String((await confirm()).value?.token))).toEqual({
+      ok: true,
+      value: { name: NAME, uid: "backup-uid" },
+    });
+    const listed = await ends(call);
+
+    expect(readKeptEnds(listed.value)).toEqual([expect.objectContaining({ outcome: { created: true } })]);
+  });
+
+  it("ends a run the same way when what keeps its end raises", async () => {
+    const { enable, confirm, run, state } = fixture();
+    const keep = vi.spyOn(KeptEnds.prototype, "keep").mockImplementation(() => {
+      throw new Error("the store raised");
+    });
+
+    try {
+      await enable();
+      state.phases = ["New"];
+      expect(await run(String((await confirm()).value?.token))).toMatchObject({ ok: true, value: { phase: "New" } });
+    } finally {
+      keep.mockRestore();
+    }
   });
 });

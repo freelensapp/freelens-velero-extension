@@ -537,3 +537,40 @@ describe("the end of a run, which a view shows, in the views", () => {
     expect(shown).toEqual(["request-1", "request-2"]);
   });
 });
+
+describe("an end the views let go of, or do not know", () => {
+  it("tells the main process nothing of a run whose answer did not come back, which it keeps for the target bar", async () => {
+    const main = mainProcess();
+    const { state, shown } = backupNow({ client: main.client });
+
+    state.start(SCHEDULE);
+    const asked = state.review();
+
+    main.confirms[0].answer(confirmed("token-1"));
+    await asked;
+    const created = state.create();
+
+    main.runs[0].answer(failure("validation", "answer"));
+    await created;
+    state.see();
+    expect(shown).toEqual([]);
+  });
+
+  it("takes an end the operator let go in the target bar for seen, and says it no more above a form", async () => {
+    const main = mainProcess();
+    const { state } = backupNow({ client: main.client });
+
+    state.start(SCHEDULE);
+    const asked = state.review();
+
+    main.confirms[0].answer(confirmed("token-1"));
+    await asked;
+    const created = state.create();
+
+    main.runs[0].answer({ ok: true, value: { name: "nightly-20261108043015", uid: "backup-uid" } });
+    await created;
+    state.letGoOf("request-1");
+    state.start({ name: "weekly", uid: "weekly-uid" });
+    expect(state.earlier).toBeUndefined();
+  });
+});

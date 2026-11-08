@@ -244,6 +244,10 @@ export interface KeptEnd {
 // How many ends are kept for one cluster: the oldest go first.
 export const KEPT_ENDS_BOUND = 16;
 
+// The longest phase of an object the contract carries: a phase of the release is a short word, and a longer one is no
+// phase Velero writes.
+export const PHASE_BOUND = 64;
+
 export interface WriteStatusRequest {
   cluster: string;
   request: string;
@@ -626,7 +630,7 @@ export function readBackupCreated(value: unknown): BackupCreated | undefined {
     !isText(value.uid)
   )
     return;
-  if ("phase" in value && !isText(value.phase, 64)) return;
+  if ("phase" in value && !isText(value.phase, PHASE_BOUND)) return;
   if ("found" in value && value.found !== true) return;
   return {
     name: value.name,
@@ -640,7 +644,7 @@ function readKeptOutcome(value: unknown): KeptOutcome | undefined {
   if (!isRecord(value) || typeof value.created !== "boolean") return;
   if (value.created) {
     if (!hasKeys(value, ["created"], ["phase", "found"])) return;
-    if ("phase" in value && !isText(value.phase, 64)) return;
+    if ("phase" in value && !isText(value.phase, PHASE_BOUND)) return;
     if ("found" in value && value.found !== true) return;
     return {
       created: true,
@@ -652,9 +656,11 @@ function readKeptOutcome(value: unknown): KeptOutcome | undefined {
   return { created: false, code: value.code as FailureCode, text: value.text };
 }
 
+// The ends of a cluster, each read on its own: one the views cannot read is left out, and hides none of the others.
+// One request is one end, the last.
 export function readKeptEnds(value: unknown): KeptEnd[] | undefined {
   if (!Array.isArray(value) || value.length > KEPT_ENDS_BOUND) return;
-  const ends: KeptEnd[] = [];
+  const ends = new Map<string, KeptEnd>();
 
   for (const item of value) {
     if (
@@ -669,11 +675,12 @@ export function readKeptEnds(value: unknown): KeptEnd[] | undefined {
       typeof item.at !== "number" ||
       !Number.isFinite(item.at)
     )
-      return;
+      continue;
     const outcome = readKeptOutcome(item.outcome);
 
-    if (!outcome) return;
-    ends.push({
+    if (!outcome) continue;
+    ends.delete(item.request);
+    ends.set(item.request, {
       request: item.request,
       kind: item.kind,
       namespace: item.namespace,
@@ -684,7 +691,7 @@ export function readKeptEnds(value: unknown): KeptEnd[] | undefined {
       at: item.at,
     });
   }
-  return ends;
+  return [...ends.values()];
 }
 
 export function readWriteStatus(value: unknown): WriteStatus | undefined {

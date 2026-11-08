@@ -115,6 +115,7 @@ export class BackupNow {
       type: action,
       see: action,
       seeEarlier: action,
+      letGoOf: action,
       letGo: action,
       leave: action,
       drop: action,
@@ -166,19 +167,24 @@ export class BackupNow {
     if (this.step.state !== "form" && this.step.state !== "running") this.step = { state: "form" };
   }
 
-  // A workspace showed the end of the step: the main process is told, when the end is of a run.
+  // A workspace showed the end of the step: the main process is told, when the end is of a run and is its end. A run
+  // whose answer did not come back is not: the main process keeps how it ended, for the target bar.
   see(): void {
-    const step = this.step;
-
     this.seen = true;
-    if ((step.state === "created" || step.state === "failed") && step.request) this.dependencies.shown?.(step.request);
+    this.tell(this.step);
   }
 
   // A workspace showed the end of the earlier backup.
   seeEarlier(): void {
-    const request = this.earlier?.end.request;
+    if (this.earlier) this.tell(this.earlier.end);
+  }
 
-    if (request) this.dependencies.shown?.(request);
+  // The operator let an end go in the target bar: it is seen, and said no more above a form.
+  letGoOf(request: string): void {
+    const step = this.step;
+
+    if ((step.state === "created" || step.state === "failed") && step.request === request) this.seen = true;
+    if (this.earlier?.end.request === request) this.earlier = undefined;
   }
 
   // The operator let the end of the earlier backup go.
@@ -308,6 +314,12 @@ export class BackupNow {
   // left and taken again, even to the same state, is another.
   private at(step: BackupNowStep): boolean {
     return this.step === step;
+  }
+
+  private tell(step: BackupNowStep): void {
+    if (step.state === "created" && step.request) this.dependencies.shown?.(step.request);
+    if (step.state === "failed" && step.request && !NOT_KNOWN.includes(step.failure.stage))
+      this.dependencies.shown?.(step.request);
   }
 
   private take<Step extends BackupNowStep>(step: Step): Step {
