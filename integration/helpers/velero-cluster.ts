@@ -3489,14 +3489,19 @@ export function removeCreatedSchedule(namespace: string, name: string, uid: stri
   removeCreated("schedules", namespace, name, uid, since);
 }
 
+/** Removes a restore a suite of the actions created, the same way as a backup: no controller runs on the CRDs alone. */
+export function removeCreatedRestore(namespace: string, name: string, uid: string | undefined, since: number): void {
+  removeCreated("restores", namespace, name, uid, since);
+}
+
 function removeCreated(
-  resource: "backups" | "schedules",
+  resource: "backups" | "schedules" | "restores",
   namespace: string,
   name: string,
   uid: string | undefined,
   since: number,
 ): void {
-  const noun = resource === "backups" ? "backup" : "schedule";
+  const noun = resource === "backups" ? "backup" : resource === "restores" ? "restore" : "schedule";
 
   if (namespace === "" || !SYNTHETIC_NAMESPACES.includes(namespace)) {
     throw new Error(`The suites remove the ${resource} of a namespace of the fixtures, and "${namespace}" is not one`);
