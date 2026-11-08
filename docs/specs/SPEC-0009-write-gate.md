@@ -427,3 +427,23 @@ kind of a body is `backup-from-schedule`, with the first pull request of T4.2; t
 rest of this spec is read with the amendment, and is not changed by it. The text
 travels in the answer of the confirmation, within the bound of a request: one the
 answer cannot carry is not confirmed, and no token is given for it.
+
+### 2026-11-08: The Ends Kept For A Cluster (T4.2 Of SPEC-0017)
+
+As REQ-250 of [SPEC-0017](SPEC-0017-write-actions.md#requirements) says, approved
+with it, after REQ-243 of SPEC-0016: the end of a backup asked from a schedule whose
+request was sent is kept by the main process for its cluster, with what to look for
+and where, until a frame of that cluster has shown it or the extension is
+deactivated; each action of SPEC-0017 adds its kind with its slice. REQ-113 and
+GATE-06 are read with it: what a write is at and its cancel stay for the frame that
+asked it, and the ends kept for a cluster are given to every frame of that cluster,
+which may say it showed one. Two procedures come with the third pull request of T4.2:
+
+| Procedure | From the renderer | The main process answers |
+| --- | --- | --- |
+| `write.ends` | The cluster | The ends kept for the cluster of the frame: the identifier of the request, the kind, the namespace, the context, what to look for and how it ended, sixteen at most |
+| `write.shown` | The cluster and the identifier of the request | Nothing: the end is not kept any more |
+
+Nothing more is broadcast: the views of a cluster ask for its ends at every read of
+the installation, and a frame is given the ends of its own cluster alone. The rest
+of this spec is read with the amendment, and is not changed by it otherwise.

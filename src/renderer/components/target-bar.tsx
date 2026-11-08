@@ -4,9 +4,11 @@ import React from "react";
 import { locationWords } from "../../common/allowances";
 import { TITLES } from "../../common/discovery";
 import { CONNECTION_REASONS } from "../../common/ipc";
+import { keptEndWords } from "../../common/kept-end-words";
 import { isStale } from "../../common/read-state";
 import { ConfigureNamespace } from "./entry-state";
 import styles from "./views.module.css";
+import { ViewLink } from "./workspace";
 
 import type { Allowance } from "../../common/allowances";
 import type { Family } from "../../common/discovery";
@@ -311,7 +313,51 @@ export const TargetBar = observer(({ installation }: { installation: Installatio
           ) : null}
         </section>
       ) : null}
+      <KeptEnds installation={installation} />
     </>
+  );
+});
+
+// The ends of the writes of this cluster whose request was sent and that no view showed, wherever the operator is in
+// the cluster, until each is dismissed (SPEC-0017, REQ-250): what to look for, where, and how it ended, with the way to
+// the backup when it was created in the installation that is shown.
+const KeptEnds = observer(({ installation }: { installation: Installation }) => {
+  const ends = installation.ends;
+
+  if (!ends.length) return null;
+  return (
+    // Said to who does not see as it appears, after a read.
+    <section
+      className={styles.namespaces}
+      role="status"
+      aria-label="Writes that ended while no view of them was open"
+      data-testid="velero-kept-ends"
+    >
+      <ul className={styles.named}>
+        {ends.map((end) => (
+          <li
+            key={end.request}
+            data-testid="velero-kept-end"
+            data-request={end.request}
+            data-created={end.outcome.created}
+          >
+            <span>{keptEndWords(end)}</span>
+            <span className={styles.muted}>at {new Date(end.at).toLocaleTimeString()}</span>
+            {end.outcome.created && installation.namespace === end.namespace ? (
+              <ViewLink target={{ kind: "backup", name: end.name }}>Open the backup {end.name}</ViewLink>
+            ) : null}
+            <Button
+              plain
+              aria-label={`Dismiss what is said of the backup ${end.name}`}
+              data-testid="velero-kept-end-dismiss"
+              onClick={() => installation.showEnd(end.request)}
+            >
+              Dismiss
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 });
 

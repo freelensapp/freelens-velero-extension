@@ -17,6 +17,8 @@ export const CHANNELS = {
   writeRun: "write.run",
   writeStatus: "write.status",
   writeCancel: "write.cancel",
+  writeEnds: "write.ends",
+  writeShown: "write.shown",
   artifactPage: "artifact.page",
   artifactRelease: "artifact.release",
   artifactSave: "artifact.save",
@@ -216,6 +218,36 @@ export interface BackupCreated {
   // REQ-250): what the reads found is said.
   found?: true;
 }
+// How a write whose request was sent ended: the backup created, with the phase Velero wrote and whether it was found
+// by its name after an answer that was lost; or the code and the words of the failure.
+export type KeptOutcome =
+  | { created: true; phase?: string; found?: true }
+  | { created: false; code: FailureCode; text: string };
+
+// The end of a write whose request was sent, kept for its cluster until a frame of that cluster has shown it, or the
+// extension is deactivated (SPEC-0017, REQ-250; SPEC-0016, REQ-243): what to look for and where, and how it ended.
+export interface KeptEnd {
+  // The identifier of the request of the write.
+  request: string;
+  kind: "backup-from-schedule";
+  namespace: string;
+  // The context of the entry of the cluster in the catalog of the host.
+  context: string;
+  // What to look for: the backup, by its name, and the schedule it was asked from.
+  name: string;
+  schedule: string;
+  outcome: KeptOutcome;
+  // When it ended, by the clock of the main process.
+  at: number;
+}
+
+// How many ends are kept for one cluster: the oldest go first.
+export const KEPT_ENDS_BOUND = 16;
+
+// The longest phase of an object the contract carries: a phase of the release is a short word, and a longer one is no
+// phase Velero writes.
+export const PHASE_BOUND = 64;
+
 export interface WriteStatusRequest {
   cluster: string;
   request: string;
@@ -438,6 +470,9 @@ export function readAllowanceRequest(value: unknown): AllowanceRequest | undefin
 }
 
 export const readWriteCancelRequest = readWriteStatusRequest;
+// The ends kept for the cluster of the frame, and the one a frame of it has shown.
+export const readWriteEndsRequest = readGateStateRequest;
+export const readWriteShownRequest = readWriteStatusRequest;
 export const readArtifactReleaseRequest = readWriteStatusRequest;
 // The text a view asks to save is named as the one it lets go: by its cluster and its request, and by
 // nothing of a file, which the operator chooses in a dialog of the host.
@@ -595,7 +630,7 @@ export function readBackupCreated(value: unknown): BackupCreated | undefined {
     !isText(value.uid)
   )
     return;
-  if ("phase" in value && !isText(value.phase, 64)) return;
+  if ("phase" in value && !isText(value.phase, PHASE_BOUND)) return;
   if ("found" in value && value.found !== true) return;
   return {
     name: value.name,
@@ -603,6 +638,60 @@ export function readBackupCreated(value: unknown): BackupCreated | undefined {
     ...(typeof value.phase === "string" ? { phase: value.phase } : {}),
     ...(value.found === true ? { found: true } : {}),
   };
+}
+
+function readKeptOutcome(value: unknown): KeptOutcome | undefined {
+  if (!isRecord(value) || typeof value.created !== "boolean") return;
+  if (value.created) {
+    if (!hasKeys(value, ["created"], ["phase", "found"])) return;
+    if ("phase" in value && !isText(value.phase, PHASE_BOUND)) return;
+    if ("found" in value && value.found !== true) return;
+    return {
+      created: true,
+      ...(typeof value.phase === "string" ? { phase: value.phase } : {}),
+      ...(value.found === true ? { found: true } : {}),
+    };
+  }
+  if (!hasKeys(value, ["created", "code", "text"]) || !isText(value.code, 64) || !isText(value.text, 1024)) return;
+  return { created: false, code: value.code as FailureCode, text: value.text };
+}
+
+// The ends of a cluster, each read on its own: one the views cannot read is left out, and hides none of the others.
+// One request is one end, the last.
+export function readKeptEnds(value: unknown): KeptEnd[] | undefined {
+  if (!Array.isArray(value) || value.length > KEPT_ENDS_BOUND) return;
+  const ends = new Map<string, KeptEnd>();
+
+  for (const item of value) {
+    if (
+      !isRecord(item) ||
+      !hasKeys(item, ["request", "kind", "namespace", "context", "name", "schedule", "outcome", "at"]) ||
+      !isUuid(item.request) ||
+      item.kind !== "backup-from-schedule" ||
+      !isNamespace(item.namespace) ||
+      !isText(item.context) ||
+      !isName(item.name) ||
+      !isName(item.schedule) ||
+      typeof item.at !== "number" ||
+      !Number.isFinite(item.at)
+    )
+      continue;
+    const outcome = readKeptOutcome(item.outcome);
+
+    if (!outcome) continue;
+    ends.delete(item.request);
+    ends.set(item.request, {
+      request: item.request,
+      kind: item.kind,
+      namespace: item.namespace,
+      context: item.context,
+      name: item.name,
+      schedule: item.schedule,
+      outcome,
+      at: item.at,
+    });
+  }
+  return [...ends.values()];
 }
 
 export function readWriteStatus(value: unknown): WriteStatus | undefined {

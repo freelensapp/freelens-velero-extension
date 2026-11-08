@@ -196,7 +196,7 @@ describe("the gate of the writes", () => {
           { id: secondId, contextName: SECOND_CONTEXT, status: "connected" },
         ].sort(byId),
       );
-      // The handlers of the twelve procedures the frames call, as the host registered them in the main process,
+      // The handlers of the fourteen procedures the frames call, as the host registered them in the main process,
       // are watched there; each frame asks the state of its gate when a page of the group opens.
       const channels = await velero.watchHandlers(app);
 
@@ -211,7 +211,9 @@ describe("the gate of the writes", () => {
         "gate.state",
         "write.cancel",
         "write.confirm",
+        "write.ends",
         "write.run",
+        "write.shown",
         "write.status",
       ]);
       try {

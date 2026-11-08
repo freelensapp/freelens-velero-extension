@@ -34,7 +34,7 @@ import type {
   Selection,
   Suggestions,
 } from "../../common/discovery";
-import type { GateState } from "../../common/ipc";
+import type { GateState, KeptEnd } from "../../common/ipc";
 import type { FamilyRead } from "../../common/read-state";
 import type { ApiServerTime, ServerOffset } from "../../common/schedule-signal";
 import type {
@@ -51,7 +51,14 @@ import type {
   VolumeSnapshotLocationResource,
 } from "../../common/types";
 import type { Window } from "../../common/window";
-import type { AllowanceClient, ArtifactClient, BackupNowClient, GateClient, WriteClient } from "../api/ipc";
+import type {
+  AllowanceClient,
+  ArtifactClient,
+  BackupNowClient,
+  GateClient,
+  KeptEndsClient,
+  WriteClient,
+} from "../api/ipc";
 
 // What asks the cluster: one verb, and the status of the answer beside its body.
 export type Reader = (path: string, signal?: AbortSignal) => Promise<Answer>;
@@ -91,6 +98,8 @@ export interface InstallationDependencies {
   writer?: WriteClient & ArtifactClient;
   // The writes of the actions of Velero, through the same way.
   actions?: BackupNowClient;
+  // The ends of the writes the main process keeps for the cluster, through the same way.
+  keptEnds?: KeptEndsClient;
   // What keeps, in the main process, what the operator allowed the downloads to do.
   allowances?: AllowanceClient;
   // The identifier of a new request of a write. A random UUID when none is given.
@@ -146,6 +155,9 @@ export class Installation {
   readonly artifacts: ArtifactLoads;
   // A backup asked from a schedule by hand, from the workspace of the schedule.
   readonly backupNow: BackupNow;
+  // The ends of the writes of this cluster whose request was sent and that no view showed, as the main process keeps
+  // them (SPEC-0017, REQ-250): the target bar says them wherever the operator is in the cluster.
+  ends: KeptEnd[] = [];
   // Whether a view of the extension is open, so that the families are asked again every so often: what is
   // drawn where no view is, as the details of the host, says how old what it computed with is once none is.
   watched = false;
@@ -155,6 +167,8 @@ export class Installation {
   // What each holder needs of the families read on demand, with the call that recorded it: a release lets go of
   // what its own call recorded, and of nothing a later call of the same holder recorded.
   private readonly holders = new Map<object, { families: Family[]; call: symbol }>();
+  // The ends a view of this frame showed: the main process was told, and they are not said again.
+  private readonly shownEnds = new Set<string>();
 
   constructor(dependencies: InstallationDependencies) {
     this.dependencies = dependencies;
@@ -192,6 +206,7 @@ export class Installation {
       now: dependencies.now,
       requestId,
       refused: () => void this.openGate(),
+      shown: (request) => this.told(request),
     });
     makeObservable(this, {
       api: observableRef,
@@ -207,6 +222,8 @@ export class Installation {
       gate: observableRef,
       gateFailure: observable,
       allowanceFailure: observable,
+      ends: observableRef,
+      showEnd: action,
       choices: computed,
       selection: computed,
       entry: computed,
@@ -587,11 +604,40 @@ export class Installation {
     this.dropWrites(left);
   }
 
+  // The ends the main process keeps for the cluster, asked at every read: a read that fails keeps what was known.
+  async readEnds(): Promise<void> {
+    const client = this.dependencies.keptEnds;
+
+    if (!client) return;
+    const answer = await client.ends(this.cluster.id);
+
+    if (!answer.ok) return;
+    runInAction(() => {
+      this.ends = answer.value.filter((end) => !this.shownEnds.has(end.request));
+    });
+  }
+
+  // The operator let an end go in the target bar: it is said no more, here or above a form.
+  showEnd(request: string): void {
+    this.backupNow.letGoOf(request);
+    this.told(request);
+  }
+
+  // A view showed an end: the main process keeps it no more, and the target bar does not say it.
+  private told(request: string): void {
+    runInAction(() => {
+      this.shownEnds.add(request);
+      this.ends = this.ends.filter((end) => end.request !== request);
+    });
+    void this.dependencies.keptEnds?.shown(this.cluster.id, request);
+  }
+
   // A read of the installation: the families read at every read, and the ones a holder needs. What was read of a
-  // family no holder needs any more goes, and it is not asked.
+  // family no holder needs any more goes, and it is not asked. The ends kept for the cluster are asked with them.
   private async readFamilies(): Promise<void> {
     const held = this.held();
 
+    void this.readEnds();
     runInAction(() => {
       this.kept();
       this.target();

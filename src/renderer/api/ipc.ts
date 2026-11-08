@@ -13,12 +13,14 @@ import {
   CHANNELS,
   failure,
   type GateState,
+  type KeptEnd,
   readAnswer,
   readArtifactPage,
   readArtifactSaved,
   readArtifactValue,
   readBackupCreated,
   readGateState,
+  readKeptEnds,
   readServerStatusValue,
   readWriteConfirmAnswer,
   readWriteStatus,
@@ -78,6 +80,12 @@ export interface ArtifactClient {
   save(cluster: string, request: string): Promise<Answer<ArtifactSaved>>;
 }
 
+// What the views ask of the ends kept for their cluster: the list, and the one a view showed (SPEC-0017, REQ-250).
+export interface KeptEndsClient {
+  ends(cluster: string): Promise<Answer<KeptEnd[]>>;
+  shown(cluster: string, request: string): Promise<Answer<null>>;
+}
+
 // What the views ask of the main process for a backup asked from a schedule by hand (SPEC-0017, T4.2): the
 // confirmation, which answers the text of the backup with its token, and the run, which sends that text.
 export interface BackupNowClient {
@@ -107,7 +115,7 @@ const NO_ANSWER = failure("request-failed", "way", true, "The main process did n
 
 export class VeleroIpcRenderer
   extends Renderer.Ipc
-  implements GateClient, WriteClient, ArtifactClient, AllowanceClient, BackupNowClient
+  implements GateClient, WriteClient, ArtifactClient, AllowanceClient, BackupNowClient, KeptEndsClient
 {
   // `bounded` says that the reader of the value bounds it itself: it is so for the page of a text, which
   // is larger than every other answer.
@@ -211,6 +219,14 @@ export class VeleroIpcRenderer
 
   takeBack(cluster: string, allowed: AllowanceFor): Promise<Answer<null>> {
     return this.ask(CHANNELS.allowanceRevoke, { cluster, ...allowed }, (value) => (value === null ? null : undefined));
+  }
+
+  ends(cluster: string): Promise<Answer<KeptEnd[]>> {
+    return this.ask(CHANNELS.writeEnds, { cluster }, readKeptEnds);
+  }
+
+  shown(cluster: string, request: string): Promise<Answer<null>> {
+    return this.ask(CHANNELS.writeShown, { cluster, request }, (value) => (value === null ? null : undefined));
   }
 
   confirmBackupNow(

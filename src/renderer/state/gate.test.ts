@@ -454,6 +454,42 @@ describe("the frame of a cluster", () => {
     ]);
   });
 
+  it("asks the main process for the ends of its cluster and says which one it showed, through the way of the context", async () => {
+    resetIpc();
+    const asked: [string, unknown][] = [];
+    const end = {
+      request: "00000000-0000-4000-8000-0000000000aa",
+      kind: "backup-from-schedule",
+      namespace: "velero",
+      context: "kind-synthetic",
+      name: "nightly-1",
+      schedule: "nightly",
+      outcome: { created: true },
+      at: 1,
+    };
+
+    ipcHandlers.set(CHANNELS.writeEnds, (_frame, request) => {
+      asked.push([CHANNELS.writeEnds, request]);
+      return { ok: true, value: [end] };
+    });
+    ipcHandlers.set(CHANNELS.writeShown, (_frame, request) => {
+      asked.push([CHANNELS.writeShown, request]);
+      return { ok: true, value: null };
+    });
+    VeleroIpcRenderer.createInstance(anExtension("renderer") as never);
+    const installation = currentInstallation();
+
+    await installation.readEnds();
+    expect(installation.ends).toEqual([end]);
+    installation.showEnd(end.request);
+    await vi.waitFor(() => expect(asked).toHaveLength(2));
+    expect(asked).toEqual([
+      [CHANNELS.writeEnds, { cluster: "synthetic-cluster" }],
+      [CHANNELS.writeShown, { cluster: "synthetic-cluster", request: end.request }],
+    ]);
+    expect(installation.ends).toEqual([]);
+  });
+
   it("hears the arguments of a broadcast of the main process, and never reads the event it is given with them", () => {
     resetIpc();
     const ipc = VeleroIpcRenderer.createInstance(anExtension("renderer") as never);

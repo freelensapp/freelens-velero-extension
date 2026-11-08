@@ -189,6 +189,8 @@ describe("the procedures of a DownloadRequest", () => {
         CHANNELS.writeRun,
         CHANNELS.writeStatus,
         CHANNELS.writeCancel,
+        CHANNELS.writeEnds,
+        CHANNELS.writeShown,
         CHANNELS.artifactPage,
         CHANNELS.artifactRelease,
         CHANNELS.artifactSave,

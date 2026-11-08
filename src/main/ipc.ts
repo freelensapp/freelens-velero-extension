@@ -1,7 +1,9 @@
 // The procedures the renderer calls of the main process, and what binds them: every request is validated,
 // every sender is the frame of one cluster, the cluster a request names is the one of its frame and one the
 // catalog of the host gives as connected, and every answer is a result. Nothing is raised to the renderer,
-// nothing is broadcast of a write, and the catalog of the host is where a cluster is resolved.
+// nothing is broadcast of a write, and the catalog of the host is where a cluster is resolved. The end of a backup
+// asked from a schedule whose request was sent is kept for its cluster, and given to the frames of that cluster that
+// ask for it.
 
 import { Main } from "@freelensapp/extensions";
 import { ALLOWANCES_BOUND, type Allowances, isAllowed, withAllowance, withoutAllowance } from "../common/allowances";
@@ -19,6 +21,7 @@ import {
   CHANNELS,
   type Failure,
   failure,
+  type KeptEnd,
   REQUEST_LABELS,
   readAllowanceRequest,
   readArtifactPageRequest,
@@ -29,7 +32,9 @@ import {
   readGateStateRequest,
   readWriteCancelRequest,
   readWriteConfirmRequest,
+  readWriteEndsRequest,
   readWriteRunRequest,
+  readWriteShownRequest,
   readWriteStatusRequest,
   type ServerStatusValue,
   savedFileName,
@@ -44,6 +49,7 @@ import { resolveRoute } from "./diagnostic-route";
 import { type DiagnosticOptions, runDownload } from "./diagnostic-service";
 import { DiagnosticError } from "./diagnostic-transport";
 import { KubectlTunnels, type Spawn, type TunnelHost } from "./diagnostic-tunnel";
+import { KeptEnds } from "./kept-ends";
 import { readServerStatus, serverStatusFailure } from "./server-status";
 import { signatureOf, WriteGate } from "./write-gate";
 
@@ -241,10 +247,33 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
     return answer;
   });
   procedure(CHANNELS.gateDisable, readGateDisableRequest, (_sender, request) => gate.disable(request.cluster));
+  // The ends of the writes whose request was sent, for their cluster (SPEC-0017, REQ-250).
+  const kept = new KeptEnds();
+  // What a kept end says: what to look for, in which namespace of which context, and how it ended.
+  const keptEnd = (request: WriteRunRequest, end: Answer<BackupCreated>, context: string): KeptEnd => ({
+    request: request.request,
+    kind: "backup-from-schedule",
+    namespace: request.namespace,
+    // The context of the entry the request was sent to, which the adapter was made for: not the one the catalog may
+    // have now.
+    context: context || request.cluster,
+    name: String(request.backup),
+    schedule: request.target?.name ?? "",
+    outcome: end.ok
+      ? {
+          created: true,
+          ...(end.value.phase ? { phase: end.value.phase } : {}),
+          ...(end.value.found ? { found: true } : {}),
+        }
+      : { created: false, code: end.code, text: end.text },
+    at: dependencies.now?.() ?? Date.now(),
+  });
   // The writes of the actions of SPEC-0017 read the cluster before they confirm, and wait between their reads.
   const actions = {
     gate,
     now: () => dependencies.now?.() ?? Date.now(),
+    keep: (request: WriteRunRequest, end: Answer<BackupCreated>, context: string) =>
+      kept.keep(request.cluster, keptEnd(request, end, context)),
     sleep:
       dependencies.sleep ??
       ((milliseconds: number, signal: AbortSignal) =>
@@ -288,6 +317,15 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
   procedure(CHANNELS.writeCancel, readWriteCancelRequest, (sender, request) =>
     gate.cancel(sender.key, request.cluster, request.request),
   );
+  // The ends kept for the cluster of the frame, which any frame of that cluster may show, and the one it showed.
+  procedure(CHANNELS.writeEnds, readWriteEndsRequest, (_sender, request) => ({
+    ok: true,
+    value: kept.list(request.cluster),
+  }));
+  procedure(CHANNELS.writeShown, readWriteShownRequest, (_sender, request) => {
+    kept.shown(request.cluster, request.request);
+    return { ok: true, value: null };
+  });
   // While a write runs its frame is watched: a frame that goes aborts it, so that nothing is submitted
   // for it after a wait, as the one for a kubectl the host prepares.
   const watchFrame = (still: () => boolean, controller: AbortController) =>
@@ -646,6 +684,7 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
     stopLetGo();
     holder.dispose();
     gate.dispose();
+    kept.clear();
     tunnels?.closeAll();
   };
 }

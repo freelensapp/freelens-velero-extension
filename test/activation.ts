@@ -14,6 +14,8 @@ export const ACTIVATION_CALLS = {
     "Ipc.handle write.confirm",
     "Ipc.handle write.status",
     "Ipc.handle write.cancel",
+    "Ipc.handle write.ends",
+    "Ipc.handle write.shown",
     "Ipc.handle write.run",
     "Ipc.handle artifact.page",
     "Ipc.handle artifact.release",

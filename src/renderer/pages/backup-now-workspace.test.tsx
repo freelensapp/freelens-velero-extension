@@ -6,14 +6,22 @@ import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { confirmDialogs } from "../../../test/host-components";
 import { BACKUP_NAME_WORDS, MEANING_WORDS } from "../../common/backup-from-schedule";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
+import { keptEndWords } from "../../common/kept-end-words";
 import { closeViews, openView, openViews } from "../navigation";
 import { Installation } from "../state/installation";
 import { BACKUP_NOW_VIEW_WORDS } from "./backup-now-workspace";
 import { SchedulesPage } from "./schedules-page";
 
 import type { Answer, Family } from "../../common/discovery";
-import type { BackupCreated, Failure, GateState, Answer as IpcAnswer, WriteConfirmAnswer } from "../../common/ipc";
-import type { ArtifactClient, BackupNowClient, GateClient, WriteClient } from "../api/ipc";
+import type {
+  BackupCreated,
+  Failure,
+  GateState,
+  Answer as IpcAnswer,
+  KeptEnd,
+  WriteConfirmAnswer,
+} from "../../common/ipc";
+import type { ArtifactClient, BackupNowClient, GateClient, KeptEndsClient, WriteClient } from "../api/ipc";
 
 const DISCOVERY = "/apis/velero.io/v1";
 const LOCATIONS = "/apis/velero.io/v1/backupstoragelocations";
@@ -108,6 +116,20 @@ function mainProcess() {
     release: async () => NOTHING,
     save: async () => NOTHING,
   };
+  // What the main process keeps for the cluster, and the ends a view said it showed.
+  const kept: KeptEnd[] = [];
+  const shown: string[] = [];
+  let asks = 0;
+  const keptEnds: KeptEndsClient = {
+    ends: async () => {
+      asks += 1;
+      return { ok: true, value: [...kept] };
+    },
+    shown: async (_cluster, request) => {
+      shown.push(request);
+      return { ok: true, value: null };
+    },
+  };
   const actions: BackupNowClient = {
     confirmBackupNow: (...args) => new Promise((answer) => confirms.push({ args, answer })),
     runBackupNow: (...args) => new Promise((answer) => runs.push({ args, answer })),
@@ -127,6 +149,11 @@ function mainProcess() {
     gate,
     writer,
     actions,
+    keptEnds,
+    kept,
+    shown,
+    // How many times the views asked for the ends.
+    asked: () => asks,
     confirms,
     runs,
     confirm: (text = TEXT) =>
@@ -144,6 +171,7 @@ function mount(main = mainProcess()) {
     gate: main.gate,
     writer: main.writer,
     actions: main.actions,
+    keptEnds: main.keptEnds,
   });
   const view = render(<SchedulesPage installation={installation} />);
 
@@ -331,6 +359,8 @@ describe("back up now, from the view of a schedule", () => {
     await main.run({ ok: true, value: { name: "nightly-20261108043015", uid: "backup-uid", phase: "InProgress" } });
     expect(part("phase").textContent).toBe(BACKUP_NOW_VIEW_WORDS.phase("InProgress"));
     expect(focused()).toBe("velero-backup-now-result");
+    // Shown here: the main process keeps it no more.
+    await waitFor(() => expect(main.shown).toEqual([main.runs[0].args[5]]));
     fireEvent.click(part("open"));
     expect(openViews()).toEqual([
       { kind: "schedule", name: "nightly" },
@@ -430,6 +460,8 @@ describe("back up now, from the view of a schedule", () => {
       `${BACKUP_NOW_VIEW_WORDS.created("nightly-20261108043015")} ${BACKUP_NOW_VIEW_WORDS.phase("New")}`,
     );
     expect(screen.getByTestId("velero-open-backup-nightly-20261108043015")).toBeTruthy();
+    // Shown above the form: the main process keeps it no more.
+    await waitFor(() => expect(main.shown).toEqual([main.runs[0].args[5]]));
     fireEvent.click(part("earlier-let-go"));
     expect(maybe("earlier")).toBeNull();
   });
@@ -558,5 +590,105 @@ describe("back up now, from the view of a schedule", () => {
     act(() => installation.backupNow.start({ name: "nightly", uid: "nightly-uid" }));
     act(() => installation.dispose());
     expect(installation.backupNow.schedule).toBeUndefined();
+  });
+
+  it("says in the target bar the end of a backup no view showed, with the way to it, until it is dismissed", async () => {
+    const main = mainProcess();
+    const end: KeptEnd = {
+      request: "00000000-0000-4000-8000-0000000000aa",
+      kind: "backup-from-schedule",
+      namespace: A,
+      context: "kind-local-demo",
+      name: "nightly-20261108043015",
+      schedule: "nightly",
+      outcome: { created: true, phase: "Completed" },
+      at: NOW,
+    };
+
+    main.kept.push(end);
+    mount(main);
+    const band = await screen.findByTestId("velero-kept-ends");
+
+    expect(band.textContent).toContain(keptEndWords(end));
+    expect(screen.getByTestId("velero-open-backup-nightly-20261108043015")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("velero-kept-end-dismiss"));
+    expect(main.shown).toEqual([end.request]);
+    expect(screen.queryByTestId("velero-kept-ends")).toBeNull();
+  });
+
+  it("says no end again above a form once the operator dismissed it in the target bar", async () => {
+    const main = mainProcess();
+    const { installation } = mount(main);
+
+    await backUpNow();
+    await writesOn();
+    await review(main);
+    press("create");
+    await waitFor(() => expect(main.runs).toHaveLength(1));
+    // Away from the workspace while the backup is created: its end is for the target bar.
+    act(() => closeViews());
+    const request = String(main.runs[0].args[5]);
+
+    await main.run({ ok: true, value: { name: "nightly-20261108043015", uid: "backup-uid", phase: "New" } });
+    main.kept.push({
+      request,
+      kind: "backup-from-schedule",
+      namespace: A,
+      context: "kind-local-demo",
+      name: "nightly-20261108043015",
+      schedule: "nightly",
+      outcome: { created: true, phase: "New" },
+      at: NOW,
+    });
+    await act(async () => {
+      await installation.readEnds();
+    });
+    fireEvent.click(await screen.findByTestId("velero-kept-end-dismiss"));
+    expect(main.shown).toEqual([request]);
+    await openSchedule("weekly");
+    fireEvent.click(screen.getByTestId("velero-schedule-back-up-now"));
+    await screen.findByTestId("velero-backup-now-workspace");
+    await waitFor(() => expect(field().value).toBe("weekly-20261108043015"));
+    expect(maybe("earlier")).toBeNull();
+    // A late list that still holds it does not bring it back.
+    await act(async () => {
+      await installation.readEnds();
+    });
+    expect(screen.queryByTestId("velero-kept-ends")).toBeNull();
+  });
+
+  it("asks for the ends at every read, and leads to a backup only when it was created in the installation shown", async () => {
+    const main = mainProcess();
+    const end = (request: string, more: Partial<KeptEnd>): KeptEnd => ({
+      request,
+      kind: "backup-from-schedule",
+      namespace: A,
+      context: "kind-local-demo",
+      name: "nightly-20261108043015",
+      schedule: "nightly",
+      outcome: { created: true },
+      at: NOW,
+      ...more,
+    });
+
+    main.kept.push(
+      end("00000000-0000-4000-8000-0000000000b1", { namespace: "velero-b", name: "weekly-20261108043015" }),
+      end("00000000-0000-4000-8000-0000000000b2", {
+        name: "nightly-20261108043016",
+        outcome: { created: false, code: "conflict", text: "A backup named nightly-20261108043016 is already there." },
+      }),
+    );
+    const { installation } = mount(main);
+
+    await screen.findByTestId("velero-kept-ends");
+    expect(screen.getAllByTestId("velero-kept-end")).toHaveLength(2);
+    expect(screen.queryByTestId("velero-open-backup-weekly-20261108043015")).toBeNull();
+    expect(screen.queryByTestId("velero-open-backup-nightly-20261108043016")).toBeNull();
+    const before = main.asked();
+
+    await act(async () => {
+      await installation.refresh();
+    });
+    expect(main.asked()).toBeGreaterThan(before);
   });
 });

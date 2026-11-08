@@ -17,9 +17,11 @@ export type BackupLeft = "none" | "unknown";
 
 // How a backup asked from a schedule ended: created, with what Velero wrote of it; or without a backup, with the words
 // of the main process, the name that was asked and whether it may be there.
+// The identifier of the request is the one of the run, which the main process keeps the end of for the cluster until
+// a view showed it (REQ-250); a failure before the run has none.
 export type BackupNowEnd =
-  | { state: "created"; backup: BackupCreated }
-  | { state: "failed"; failure: Failure; left: BackupLeft; name: string };
+  | { state: "created"; backup: BackupCreated; request: string }
+  | { state: "failed"; failure: Failure; left: BackupLeft; name: string; request?: string };
 
 // Where a backup asked from a schedule is (SPEC-0017, REQ-252): the form, with its name; the review asked of the main
 // process; the review shown, with its token and the text it will send, and whether it took the place of one whose
@@ -43,6 +45,8 @@ export interface BackupNowDependencies {
   // The main process refused, or the write did not end well: what it holds of the gate may not be what the views
   // show any more, and it is asked.
   refused(): void;
+  // A view showed the end of a run: the main process keeps it no more.
+  shown?(request: string): void;
 }
 
 const NO_WAY: Failure = {
@@ -110,6 +114,8 @@ export class BackupNow {
       open: action,
       type: action,
       see: action,
+      seeEarlier: action,
+      letGoOf: action,
       letGo: action,
       leave: action,
       drop: action,
@@ -161,9 +167,24 @@ export class BackupNow {
     if (this.step.state !== "form" && this.step.state !== "running") this.step = { state: "form" };
   }
 
-  // A workspace showed the end of the step.
+  // A workspace showed the end of the step: the main process is told, when the end is of a run and is its end. A run
+  // whose answer did not come back is not: the main process keeps how it ended, for the target bar.
   see(): void {
     this.seen = true;
+    this.tell(this.step);
+  }
+
+  // A workspace showed the end of the earlier backup.
+  seeEarlier(): void {
+    if (this.earlier) this.tell(this.earlier.end);
+  }
+
+  // The operator let an end go in the target bar: it is seen, and said no more above a form.
+  letGoOf(request: string): void {
+    const step = this.step;
+
+    if ((step.state === "created" || step.state === "failed") && step.request === request) this.seen = true;
+    if (this.earlier?.end.request === request) this.earlier = undefined;
   }
 
   // The operator let the end of the earlier backup go.
@@ -254,7 +275,7 @@ export class BackupNow {
 
     if (!this.at(running)) return;
     if (answer.ok) {
-      this.take({ state: "created", backup: answer.value });
+      this.take({ state: "created", backup: answer.value, request: running.request });
       return;
     }
     // A name the API server answered with 409 is another backup's: the form proposes the name of the next second
@@ -269,7 +290,7 @@ export class BackupNow {
         this.proposed = next;
       });
     }
-    this.fail(answer, backupLeft(answer), shown.name);
+    this.fail(answer, backupLeft(answer), shown.name, running.request);
   }
 
   // A review is left without creating anything: by its command, with the workspace that shows it, or because writes
@@ -295,6 +316,12 @@ export class BackupNow {
     return this.step === step;
   }
 
+  private tell(step: BackupNowStep): void {
+    if (step.state === "created" && step.request) this.dependencies.shown?.(step.request);
+    if (step.state === "failed" && step.request && !NOT_KNOWN.includes(step.failure.stage))
+      this.dependencies.shown?.(step.request);
+  }
+
   private take<Step extends BackupNowStep>(step: Step): Step {
     runInAction(() => {
       this.step = step;
@@ -304,8 +331,8 @@ export class BackupNow {
     return step;
   }
 
-  private fail(failure: Failure, left: BackupLeft, name: string): void {
-    this.take({ state: "failed", failure, left, name });
+  private fail(failure: Failure, left: BackupLeft, name: string, request?: string): void {
+    this.take({ state: "failed", failure, left, name, ...(request ? { request } : {}) });
     this.dependencies.refused();
   }
 }

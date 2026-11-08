@@ -62,6 +62,8 @@ describe("the gate through the IPC and the catalog of the host", () => {
         CHANNELS.writeRun,
         CHANNELS.writeStatus,
         CHANNELS.writeCancel,
+        CHANNELS.writeEnds,
+        CHANNELS.writeShown,
         CHANNELS.artifactPage,
         CHANNELS.artifactRelease,
         CHANNELS.artifactSave,

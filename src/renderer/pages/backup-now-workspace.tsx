@@ -58,6 +58,10 @@ function endWords(end: BackupNowEnd): string {
 const Earlier = observer(({ state }: { state: BackupNow }) => {
   const earlier = state.earlier;
 
+  // Shown here: the main process keeps it no more.
+  React.useEffect(() => {
+    if (earlier) state.seeEarlier();
+  }, [state, earlier]);
   if (!earlier) return null;
   const { schedule, end } = earlier;
 
