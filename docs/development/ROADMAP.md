@@ -221,7 +221,7 @@ the accuracy of the adherence signal, including its uncertainty states.
 | Create backup form, followed by a review of the exact request | T4.3 | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | Done |
 | Create schedule form, followed by a review of the exact request | T4.7 | [SPEC-0016](../specs/SPEC-0016-create-a-schedule.md) | Done |
 | Restore from backup or schedule, with namespace mappings and existing-resource policy | T4.4 | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | Done |
-| Pause and resume of a schedule, with explicit `skipImmediately` behavior | T4.5 | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | In PR |
+| Pause and resume of a schedule, with explicit `skipImmediately` behavior | T4.5 | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | Done |
 | Delete one backup through `DeleteBackupRequest`, with double confirmation | T4.6 | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | In PR |
 
 Creating a Schedule is in v1.0.0, decided by the lead maintainer on 2026-10-23:
