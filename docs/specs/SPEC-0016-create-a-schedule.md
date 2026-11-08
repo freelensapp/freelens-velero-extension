@@ -516,7 +516,8 @@ needs a decision before the approval, and each has its first step in the slice.
   outside the tree. If it does not, every expression that names a zone is
   FailedValidation on such a server, and the way out of REQ-231 is wrong. The slice
   establishes it first, on the test environment, by a Schedule with `CRON_TZ=Europe/Rome` and the phase the
-  controller writes, and the words follow what it finds.
+  controller writes, and the words follow what it finds. Answered on 2026-11-08, in the
+  evidence of the second pull request of T4.7: it knows them.
 - **What a backup in progress had written (REQ-234).** When the Schedule is deleted
   with `useOwnerReferencesInBackup` true while one of its backups is in progress,
   the source shows the object of that backup deleted, and its pod volume backups and
@@ -524,7 +525,8 @@ needs a decision before the approval, and each has its first step in the slice.
   backup had already written to the store or to its repository, nor what the backup
   controller does when the object goes while it runs. The words of the review say
   that it is not known; the slice establishes it on the test environment, by a schedule whose
-  backup is deleted in progress, before the words are final.
+  backup is deleted in progress, before the words are final. Answered on 2026-11-08, in
+  the evidence of the second pull request of T4.7.
 
 ## Evidence And Deviations
 
@@ -671,6 +673,131 @@ Decided while implementing, on 2026-11-08:
 - A paused schedule is read once, as soon as it is created.
 - The reads of the locations, and the words of a location that is not there and of two
   snapshot locations of one provider, are the ones of the backup of the form.
+
+T4.7, the second of its pull requests, on 2026-11-08: the workspace of the schedule of
+the form, with the form of the template of T4.3. The evidence, by check:
+
+- CRSCH-01, the component part: Create schedule in the header of the list of the
+  Schedules, after the count of the host, opens the workspace over the list, named in
+  the address, with writes off and on; closing it leaves the list; a new form once a
+  schedule was created, the form as it was left before
+  ([`schedule-create-workspace.test.tsx`](../../src/renderer/pages/schedule-create-workspace.test.tsx)).
+- CRSCH-05 and CRSCH-06, the component part: a name of 64 characters refused with its
+  words, a name the installation read said before the review; an expression the parser
+  refuses said with the words of the controller, as Velero's, and one Velero would take
+  that the main process refuses, with no instant or with a character that is not
+  printable, in the words of the main process; a zone Go would not load, a name in other
+  letters than the zone database writes it, a part of it that begins with a small letter,
+  or an offset, said with the words the controller writes for it; each tied to the
+  field, the review held back with why.
+- CRSCH-09, the component part: the review shows the text of the confirmation as it
+  came; a change of the name, of the expression, of a flag or of a field drops it, and
+  an expired token is asked again for the same text, with the same form, and the run
+  takes the token answered then; another text takes the place of the review, and nothing
+  is sent; a renewal with no text, with the text of another kind, or refused, ends the
+  run; the renewal of a step that moved on is not taken; a review is asked only from the
+  form, and nothing is created with writes off; the end of a write whose answer is not
+  known is not told to the main process as shown
+  ([`schedule-create.test.ts`](../../src/renderer/state/schedule-create.test.ts)).
+- CRSCH-10 and CRSCH-11: no backup at the creation and the first one within the minute
+  after the first instant; the next five runs with their dates in the zone the
+  expression names, counted from the time of the review, each with the offset of the
+  zone then, so that a change of daylight saving time shows: a run of every day and one
+  of every hour in the hour Rome repeats, each said twice with the words of the views,
+  the hour Rome skips, and the weeks of New York across its change; an interval said
+  from the creation, and the zone one names, which the server still loads; no run while
+  paused; the offset derived in the installation, with the backup and the schedule it
+  was read in, for an expression with no zone and for one that names Local, with the
+  words of a backup of the same minute and of an offset that changed; why the runs are
+  not known, and the way out on the expression typed, `CRON_TZ=<zone>`; a zone this
+  machine does not know, which the server of the official image refuses; the same words
+  on a machine fourteen hours east of UTC
+  ([`schedule-create-words.test.ts`](../../src/common/schedule-create-words.test.ts)).
+- CRSCH-12 to CRSCH-14: the words of each flag, true and false, and of skip immediately
+  on a schedule paused, read whole, beside the notes of the flags in the form, each flag
+  named by its label alone and described by its note, under it.
+- CRSCH-15 to CRSCH-17: the form of the template of T4.3, its words, its refusals, its
+  choices and what this version does not offer, the words of its bounds naming the
+  schedule and the command line it is created from; a provider with several snapshot
+  locations and none chosen warned of for each backup of the schedule; the review held
+  back while the storage locations cannot be read, a location the form held before
+  included; the words of a namespace labelled to be excluded after the review, of a
+  global volume policy and of a time to live set, read whole.
+- CRSCH-18 and CRSCH-19, the component part: the result says Enabled, FailedValidation
+  with each error and how many more the view shows, no phase yet, and a paused schedule
+  read once; that Velero checks the template on each backup and that the list shows the
+  schedule at its next read; the way to the view of the schedule; a conflict keeps what
+  was typed, with the way to the schedule that has it.
+- CRSCH-23, the component part: the end of a schedule no view showed is said in the
+  target bar, with the way to it, until it is dismissed.
+- REQ-240, the component part: the fields wait while the review is asked; Enter in the
+  name and in the expression asks for it, and Escape in each takes back what was typed;
+  the result has the focus once the schedule was created, and the command that asks
+  again once the creation failed, which is said as an alert; the name is described by
+  its rule and by what is wrong of it or taken; a schedule found by its name after a
+  lost answer, and one that may be there, are said with what to do before asking again;
+  a gate that is not known is said, with the way to the target bar.
+
+The workspaces of the backup and of the schedule of the form take the choices of the
+form, and what holds their review back, from one hook,
+[`template-choices.ts`](../../src/renderer/components/template-choices.ts). Each new
+case was seen failing on a change made on purpose, twenty-six in all; after the
+independent review of the pull request, twenty-six more: a change of the name and of a
+field that kept the review; the renewal run with the old token, with any other text
+taken for the same, with any text taken, its answer taken after the step moved on, and
+one of another kind taken; the end of a write not known told as shown; a review asked
+from any step; a creation with writes off; a failure that kept the gate the main process
+holds; the words of the parser not said as Velero's, and the ones of the main process
+said as Velero's; a flag named by its note, and one left enabled while the review is
+asked; the offset derived not given to the review; the review not held back while the
+locations cannot be read; the words of a write that may be there dropped; the runs
+without their offsets, and the hour repeated not said; Local said as no zone, and the
+backup of the same minute not said; the zone of an interval taken as the zone of its
+runs; a zone in other letters, a part that begins with a small letter, and an offset
+taken; and the bound of a template of a schedule said as the one of a backup.
+
+Decided while implementing, on 2026-11-08:
+
+- The workspace of the schedule of the form is named in the address as
+  `schedule-create/new`, over the list of the Schedules, whose header holds its command
+  after the count of the host, as the list of the Backups does.
+- The three flags are checkboxes under the expression, each with a note of what it does
+  when it is chosen; the review says it whole.
+- The runs to come are counted from the moment the review is shown, and the offset of
+  the server is the one the views keep for the installation, with the words of the
+  adherence of SPEC-0013 for why there is none, and for what makes it less sure.
+- After the independent review: each run says the offset of its zone, and the run of an
+  hour the zone repeats is said twice with the words of REQ-162; the form refuses, with
+  the words the controller writes, an expression whose zone Go would not load, as it
+  refuses what the parser of the controller refuses (D11): Go loads a zone by the name
+  the zone database writes, which the runtime takes in other letters and as an offset;
+  a name the runtime does not know is left to the review, which says that the server of
+  the official image refuses a zone it cannot load, since the zone database of a server
+  may be newer than the one of the runtime. Each flag is named by its label and
+  described by its note, under it. The head of a list that holds a command puts its
+  search under the others in a room of 640 pixels or less.
+
+The two open questions, answered on the test environment on 2026-11-08, with the
+server of the official image of the release, `velero/velero:v1.18.4`:
+
+- The zones the server knows (REQ-231): schedules that name America/New_York,
+  Europe/Rome and UTC with `CRON_TZ=`, and Asia/Tokyo with `TZ=`, were written Enabled,
+  and one that names `Mars/Olympus_Mons` FailedValidation, with `invalid schedule:
+  unknown time zone "Mars/Olympus_Mons": unknown time zone Mars/Olympus_Mons`. The tree
+  of the release embeds no zone database, so the run is the evidence, not the source.
+  The words of REQ-231 say it, and the form refuses a zone Go would not load.
+- What a backup in progress had written (REQ-234): a schedule of every minute with
+  `useOwnerReferencesInBackup` true, whose backup ran a pre hook of 120 seconds, was
+  deleted with the default propagation while the backup was InProgress. The Backup
+  object was gone within ten seconds; the server went on with the backup, its update of
+  the status was answered not found, it wrote the backup to the storage and logged that
+  it moved to Finalizing; the sync tried every minute to bring it into the cluster, and
+  no Backup of it came back within the five minutes watched. The sync of the release
+  skips a backup that waited for plugins or was finalizing until its time to live has
+  passed, then brings it back as PartiallyFailed for the collector of expired backups
+  ([the sync](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/backup_sync_controller.go#L172-L190),
+  [the persist](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/backup_controller.go#L828-L873)). The
+  words of REQ-234 say it.
 
 What this draft could not verify, and what the implementation establishes first:
 

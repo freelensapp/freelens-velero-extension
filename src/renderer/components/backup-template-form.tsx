@@ -1,12 +1,12 @@
 import { Renderer } from "@freelensapp/extensions";
 import { observer } from "mobx-react";
 import React from "react";
-import { NOT_OFFERED, TEMPLATE_FIELD_WORDS } from "../../common/backup-create-words";
+import { NOT_OFFERED, NOT_OFFERED_OF_A_SCHEDULE, TEMPLATE_FIELD_WORDS } from "../../common/backup-create-words";
 import { durationOf, TEMPLATE_WORDS } from "../../common/backup-template";
 import { escapeOfField } from "./artifact-viewer";
 import styles from "./views.module.css";
 
-import type { BackupTemplate, TemplateField, TemplateProblems } from "../../common/backup-template";
+import type { BackupTemplate, TemplateField, TemplateOf, TemplateProblems } from "../../common/backup-template";
 import type { HostNamespace } from "../api/host-namespaces";
 
 const {
@@ -569,66 +569,77 @@ export interface BackupTemplateFormProps {
   id: string;
   // What Enter in a field that is typed asks: the review, as Enter in the name does.
   onSubmit?(): void;
+  // What the template is of, which what the form does not offer names.
+  of?: TemplateOf;
 }
 
 // The form of the template of a backup (SPEC-0016, the form; SPEC-0017, REQ-260), which the creation of a backup and
 // the creation of a schedule share: each field with its label, what Velero does when it is not set and what is wrong
 // with it, tied to it; and under it what this version does not offer.
-export const BackupTemplateForm = observer(({ state, choices, disabled, id, onSubmit }: BackupTemplateFormProps) => {
-  const field = (name: TemplateField) => `${id}-${name}`;
+export const BackupTemplateForm = observer(
+  ({ state, choices, disabled, id, onSubmit, of = "backup" }: BackupTemplateFormProps) => {
+    const field = (name: TemplateField) => `${id}-${name}`;
 
-  return (
-    <div className={styles.templateForm} data-testid={`${id}-template`}>
-      {(["includedNamespaces", "excludedNamespaces"] as const).map((name) => (
-        <NamespacesField
-          key={name}
-          state={state}
-          field={name}
-          id={field(name)}
-          namespaces={choices.namespaces}
-          disabled={disabled}
-          blockers={choices.blockers?.[name]}
-          onSubmit={onSubmit}
-        />
-      ))}
-      {(["includedResources", "excludedResources"] as const).map((name) => (
-        <div key={name} className={styles.templateField}>
-          <ItemsField
+    return (
+      <div className={styles.templateForm} data-testid={`${id}-template`}>
+        {(["includedNamespaces", "excludedNamespaces"] as const).map((name) => (
+          <NamespacesField
+            key={name}
+            state={state}
+            field={name}
             id={field(name)}
-            label={`${TEMPLATE_FIELD_WORDS[name].label}, separated by commas`}
-            items={state.template[name] ?? []}
+            namespaces={choices.namespaces}
             disabled={disabled}
-            describedBy={describedBy(field(name), state.problems[name])}
-            invalid={Boolean(state.problems[name]?.length)}
-            onItems={(items) => state.set(name, items)}
+            blockers={choices.blockers?.[name]}
             onSubmit={onSubmit}
           />
-          <FieldNotes id={field(name)} field={name} problems={state.problems[name]} />
-        </div>
-      ))}
-      <BooleanField
-        state={state}
-        field="includeClusterResources"
-        id={field("includeClusterResources")}
-        disabled={disabled}
-      />
-      <SelectorField state={state} id={field("labelSelector")} disabled={disabled} onSubmit={onSubmit} />
-      <StorageLocationField state={state} id={field("storageLocation")} choices={choices} disabled={disabled} />
-      <SnapshotLocationsField
-        state={state}
-        id={field("volumeSnapshotLocations")}
-        choices={choices}
-        disabled={disabled}
-      />
-      {(["snapshotVolumes", "defaultVolumesToFsBackup", "snapshotMoveData"] as const).map((name) => (
-        <BooleanField key={name} state={state} field={name} id={field(name)} disabled={disabled} />
-      ))}
-      {(["ttl", "csiSnapshotTimeout", "itemOperationTimeout"] as const).map((name) => (
-        <DurationField key={name} state={state} field={name} id={field(name)} disabled={disabled} onSubmit={onSubmit} />
-      ))}
-      <p className={styles.factNote} data-testid={`${id}-not-offered`}>
-        {NOT_OFFERED}
-      </p>
-    </div>
-  );
-});
+        ))}
+        {(["includedResources", "excludedResources"] as const).map((name) => (
+          <div key={name} className={styles.templateField}>
+            <ItemsField
+              id={field(name)}
+              label={`${TEMPLATE_FIELD_WORDS[name].label}, separated by commas`}
+              items={state.template[name] ?? []}
+              disabled={disabled}
+              describedBy={describedBy(field(name), state.problems[name])}
+              invalid={Boolean(state.problems[name]?.length)}
+              onItems={(items) => state.set(name, items)}
+              onSubmit={onSubmit}
+            />
+            <FieldNotes id={field(name)} field={name} problems={state.problems[name]} />
+          </div>
+        ))}
+        <BooleanField
+          state={state}
+          field="includeClusterResources"
+          id={field("includeClusterResources")}
+          disabled={disabled}
+        />
+        <SelectorField state={state} id={field("labelSelector")} disabled={disabled} onSubmit={onSubmit} />
+        <StorageLocationField state={state} id={field("storageLocation")} choices={choices} disabled={disabled} />
+        <SnapshotLocationsField
+          state={state}
+          id={field("volumeSnapshotLocations")}
+          choices={choices}
+          disabled={disabled}
+        />
+        {(["snapshotVolumes", "defaultVolumesToFsBackup", "snapshotMoveData"] as const).map((name) => (
+          <BooleanField key={name} state={state} field={name} id={field(name)} disabled={disabled} />
+        ))}
+        {(["ttl", "csiSnapshotTimeout", "itemOperationTimeout"] as const).map((name) => (
+          <DurationField
+            key={name}
+            state={state}
+            field={name}
+            id={field(name)}
+            disabled={disabled}
+            onSubmit={onSubmit}
+          />
+        ))}
+        <p className={styles.factNote} data-testid={`${id}-not-offered`}>
+          {of === "schedule" ? NOT_OFFERED_OF_A_SCHEDULE : NOT_OFFERED}
+        </p>
+      </div>
+    );
+  },
+);

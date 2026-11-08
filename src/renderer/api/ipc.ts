@@ -21,9 +21,11 @@ import {
   readBackupCreated,
   readGateState,
   readKeptEnds,
+  readScheduleCreated,
   readServerStatusValue,
   readWriteConfirmAnswer,
   readWriteStatus,
+  type ScheduleCreated,
   type ServerStatusValue,
   type WriteConfirmAnswer,
   type WriteKind,
@@ -33,6 +35,7 @@ import {
 
 import type { AllowanceFor } from "../../common/allowances";
 import type { BackupTemplate } from "../../common/backup-template";
+import type { ScheduleWrapper } from "../../common/schedule-form";
 
 // What the views ask of the gate, in the words of the contract.
 export interface GateClient {
@@ -125,6 +128,26 @@ export interface BackupCreateClient {
   ): Promise<Answer<BackupCreated>>;
 }
 
+// What the views ask of the main process for a schedule of the form (SPEC-0016, T4.7): the confirmation, which carries
+// the name, the wrapper and the fields of the template and answers the text of the Schedule with its token, and the
+// run, which carries the name alone and sends that text.
+export interface ScheduleCreateClient {
+  confirmScheduleCreate(
+    cluster: string,
+    namespace: string,
+    schedule: string,
+    wrapper: ScheduleWrapper,
+    template: BackupTemplate,
+  ): Promise<Answer<WriteConfirmAnswer>>;
+  runScheduleCreate(
+    cluster: string,
+    namespace: string,
+    schedule: string,
+    token: string,
+    request: string,
+  ): Promise<Answer<ScheduleCreated>>;
+}
+
 // What the views ask of what the operator allows the downloads to do: to keep it, and to take it back.
 export interface AllowanceClient {
   allow(cluster: string, allowed: AllowanceFor): Promise<Answer<null>>;
@@ -142,6 +165,7 @@ export class VeleroIpcRenderer
     AllowanceClient,
     BackupNowClient,
     BackupCreateClient,
+    ScheduleCreateClient,
     KeptEndsClient
 {
   // `bounded` says that the reader of the value bounds it itself: it is so for the page of a text, which
@@ -322,6 +346,34 @@ export class VeleroIpcRenderer
       CHANNELS.writeRun,
       { cluster, namespace, kind: "backup", backup, token, request },
       readBackupCreated,
+    );
+  }
+
+  confirmScheduleCreate(
+    cluster: string,
+    namespace: string,
+    schedule: string,
+    wrapper: ScheduleWrapper,
+    template: BackupTemplate,
+  ): Promise<Answer<WriteConfirmAnswer>> {
+    return this.ask(
+      CHANNELS.writeConfirm,
+      { cluster, namespace, kind: "schedule", schedule, wrapper, template },
+      readWriteConfirmAnswer,
+    );
+  }
+
+  runScheduleCreate(
+    cluster: string,
+    namespace: string,
+    schedule: string,
+    token: string,
+    request: string,
+  ): Promise<Answer<ScheduleCreated>> {
+    return this.ask(
+      CHANNELS.writeRun,
+      { cluster, namespace, kind: "schedule", schedule, token, request },
+      readScheduleCreated,
     );
   }
 

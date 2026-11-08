@@ -655,7 +655,7 @@ export function agoText(at: number, now: number): string {
 }
 
 // An offset from UTC, as the words write it.
-function offsetText(minutes: number): string {
+export function offsetText(minutes: number): string {
   if (minutes === 0) return "UTC";
   const size = Math.abs(minutes);
 
@@ -663,7 +663,7 @@ function offsetText(minutes: number): string {
 }
 
 // A zone as the words name it: by the name the expression gives it, or by its offset.
-function zoneName(zone: Zone): string {
+export function zoneName(zone: Zone): string {
   return zone.of === "named" ? zone.name : offsetText(zone.minutes);
 }
 
@@ -695,6 +695,13 @@ export function momentText(zone: Zone, instant: number): string {
   return `${wall.date} ${wall.minute}:${pad(wall.second)} ${zoneName(zone)}`;
 }
 
+// A run in a zone with its date, and with its seconds when it has some.
+export function datedRunText(zone: Zone, instant: number): string {
+  const wall = wallClock(zone, instant);
+
+  return `${wall.date} ${wall.minute}${wall.second ? `:${pad(wall.second)}` : ""} ${zoneName(zone)}`;
+}
+
 // A run in a zone: with its seconds when it has some, and with its date when it is not the day of the clock in
 // that zone.
 export function runText(zone: Zone, instant: number, now: number): string {
@@ -702,6 +709,15 @@ export function runText(zone: Zone, instant: number, now: number): string {
   const time = `${wall.minute}${wall.second ? `:${pad(wall.second)}` : ""} ${zoneName(zone)}`;
 
   return wall.date === wallClock(zone, now).date ? time : `${time} on ${wall.date}`;
+}
+
+// A run in a zone the expression names, with its date and the offset of the zone then: a change of daylight saving time
+// shows in the offset, and the two runs of an hour the zone repeats are told apart.
+export function zonedRunText(zone: Zone, instant: number): string {
+  if (zone.of !== "named") return datedRunText(zone, instant);
+  const wall = wallClock(zone, instant);
+
+  return `${datedRunText(zone, instant)} (${offsetText(wall.offset)})`;
 }
 
 // A run in the hour a zone repeats, with the offset that tells the two occurrences apart.
@@ -995,7 +1011,7 @@ function everyLookWhat(parsed: ParsedExpression): string {
 // The day the zone the expression names repeats an hour, when it is the day of the run and the expression has
 // a run in that hour: the words of the two runs (REQ-162). A change is found in the offsets the computation
 // reads, with two hours of room on each side of the day.
-function repeatedHour(parsed: ParsedExpression, zone: Zone, at: number): string | undefined {
+export function repeatedHour(parsed: ParsedExpression, zone: Zone, at: number): string | undefined {
   if (zone.of !== "named") return undefined;
   const run = wallClock(zone, at);
   const midnight = Date.UTC(Number(run.date.slice(0, 4)), Number(run.date.slice(5, 7)) - 1, Number(run.date.slice(8)));

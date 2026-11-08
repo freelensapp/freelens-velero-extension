@@ -71,6 +71,33 @@ describe("what the main process refuses of an expression", () => {
     // An expression with no instant is one the parser takes: the main process refuses it on its own.
     expect(expressionRefused("@none")).toBeUndefined();
   });
+
+  it("says with the words of the controller a zone Go would not load, which the runtime takes, and leaves the others", () => {
+    const unknown = (zone: string) => `invalid schedule: unknown time zone "${zone}": unknown time zone ${zone}`;
+
+    // Go loads a zone by its name as the zone database writes it: other letters, and an offset, are not one.
+    for (const [expression, zone] of [
+      ["CRON_TZ=europe/rome 0 3 * * *", "europe/rome"],
+      ["CRON_TZ=Europe/ROME 0 3 * * *", "Europe/ROME"],
+      ["TZ=utc 0 3 * * *", "utc"],
+      ["CRON_TZ=local 0 3 * * *", "local"],
+      ["CRON_TZ=+01:00 0 3 * * *", "+01:00"],
+      ["CRON_TZ=us/Eastern @daily", "us/Eastern"],
+    ])
+      expect([expression, expressionRefused(expression)]).toEqual([expression, unknown(zone)]);
+    // The names of the zone database, a name it keeps for an older one, UTC and Local are loaded; a name this runtime
+    // does not know is left to the review, which says it.
+    for (const expression of [
+      "CRON_TZ=Europe/Rome 0 3 * * *",
+      "TZ=Asia/Tokyo 0 3 * * *",
+      "CRON_TZ=US/Eastern 0 3 * * *",
+      "CRON_TZ=Etc/GMT+5 0 3 * * *",
+      "CRON_TZ=UTC 0 3 * * *",
+      "TZ=Local 0 3 * * *",
+      "CRON_TZ=Mars/Olympus_Mons 0 3 * * *",
+    ])
+      expect([expression, expressionRefused(expression)]).toEqual([expression, undefined]);
+  });
 });
 
 describe("the Schedule of the form", () => {

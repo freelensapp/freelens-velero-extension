@@ -72,12 +72,12 @@ export const TEMPLATE_WORDS = {
   storageLocation: (problem: string) => `The name of a storage location ${problem}`,
   noStorageLocation: "The storage location is chosen: the form always writes it.",
   snapshotLocation: (name: string, problem: string) => `The name of the snapshot location ${name} ${problem}`,
-  tooMany: (bound: number) =>
-    `The form takes ${bound} at most here: a backup that needs more is asked from the command line.`,
-  tooLong: (bound: number) =>
-    `An item longer than ${bound} characters is not one the form takes: a backup that needs it is asked from the command line.`,
-  tooLarge: (characters: number) =>
-    `The fields of the form are written in ${characters} characters, more than the main process is asked with: a backup this large is asked from the command line.`,
+  tooMany: (bound: number, of: TemplateOf = "backup") =>
+    `The form takes ${bound} at most here: ${of === "schedule" ? "a schedule that needs more is created" : "a backup that needs more is asked"} from the command line.`,
+  tooLong: (bound: number, of: TemplateOf = "backup") =>
+    `An item longer than ${bound} characters is not one the form takes: ${of === "schedule" ? "a schedule that needs it is created" : "a backup that needs it is asked"} from the command line.`,
+  tooLarge: (characters: number, of: TemplateOf = "backup") =>
+    `The fields of the form are written in ${characters} characters, more than the main process is asked with: ${of === "schedule" ? "a schedule this large is created" : "a backup this large is asked"} from the command line.`,
   duration: (text: string) =>
     `${text} is not a duration Go reads: a number with its unit, h, m, s, ms, us or ns, as 720h, 1h30m or 90s.`,
   notAboveZero: (text: string) => `${text} is not above zero: a duration of zero is the same as one that is not set.`,
@@ -154,11 +154,15 @@ function once(items: string[] | undefined): string[] {
 
 export type TemplateProblems = Partial<Record<TemplateField, string[]>>;
 
+// What the template is of: a backup of the form, or the backups of a schedule of the form, which the words of what the
+// form does not take name.
+export type TemplateOf = "backup" | "schedule";
+
 // What the release refuses of a template, field by field, with its words, and what the form refuses beside it. The
 // release takes no included namespace as every namespace, `*`, before it reads the lists. What depends on the cluster,
 // a namespace labelled to be excluded and what the locations named are, is not here: the form reads what the host
 // lists and what the installation read, and the main process reads the locations.
-export function templateProblems(template: BackupTemplate): TemplateProblems {
+export function templateProblems(template: BackupTemplate, of: TemplateOf = "backup"): TemplateProblems {
   const problems: TemplateProblems = {};
   const add = (field: TemplateField, ...words: string[]) => {
     if (words.length > 0) problems[field] = [...(problems[field] ?? []), ...words];
@@ -211,24 +215,24 @@ export function templateProblems(template: BackupTemplate): TemplateProblems {
     const read = durationOf(text);
 
     if ("problem" in read) add(field, read.problem);
-    if (text.length > TEMPLATE_BOUNDS.duration) add(field, TEMPLATE_WORDS.tooLong(TEMPLATE_BOUNDS.duration));
+    if (text.length > TEMPLATE_BOUNDS.duration) add(field, TEMPLATE_WORDS.tooLong(TEMPLATE_BOUNDS.duration, of));
   }
   // What the contract carries: a field beyond one of its bounds is said, and so is a template too large to be asked.
   for (const field of LIST_FIELDS) {
     const items = template[field] ?? [];
 
-    if (items.length > TEMPLATE_BOUNDS.items) add(field, TEMPLATE_WORDS.tooMany(TEMPLATE_BOUNDS.items));
+    if (items.length > TEMPLATE_BOUNDS.items) add(field, TEMPLATE_WORDS.tooMany(TEMPLATE_BOUNDS.items, of));
     if (items.some((item) => item.length > TEMPLATE_BOUNDS.item))
-      add(field, TEMPLATE_WORDS.tooLong(TEMPLATE_BOUNDS.item));
+      add(field, TEMPLATE_WORDS.tooLong(TEMPLATE_BOUNDS.item, of));
   }
   if ((template.orLabelSelectors?.length ?? 0) > TEMPLATE_BOUNDS.selectors)
-    add("orLabelSelectors", TEMPLATE_WORDS.tooMany(TEMPLATE_BOUNDS.selectors));
+    add("orLabelSelectors", TEMPLATE_WORDS.tooMany(TEMPLATE_BOUNDS.selectors, of));
   for (const [field, texts] of [
     ["labelSelector", template.labelSelector === undefined ? [] : [template.labelSelector]],
     ["orLabelSelectors", template.orLabelSelectors ?? []],
   ] as const) {
     if (texts.some((text) => text.length > TEMPLATE_BOUNDS.selector))
-      add(field, TEMPLATE_WORDS.tooLong(TEMPLATE_BOUNDS.selector));
+      add(field, TEMPLATE_WORDS.tooLong(TEMPLATE_BOUNDS.selector, of));
   }
   const written = JSON.stringify(template).length;
 
@@ -237,7 +241,7 @@ export function templateProblems(template: BackupTemplate): TemplateProblems {
       JSON.stringify(template[other] ?? []).length > JSON.stringify(template[one] ?? []).length ? other : one,
     );
 
-    add(largest, TEMPLATE_WORDS.tooLarge(written));
+    add(largest, TEMPLATE_WORDS.tooLarge(written, of));
   }
   return problems;
 }

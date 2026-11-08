@@ -81,11 +81,35 @@ export function expressionProblem(expression: string, now: number): string | und
   return next.kind === "none" ? SCHEDULE_FORM_WORDS.noInstant : undefined;
 }
 
-// The words the controller writes for an expression its parser refuses, or nothing when it takes it.
+// The words the controller writes for an expression its parser refuses, or nothing when it takes it: the parser of
+// SPEC-0013, and a zone the server would not load. Go loads a zone by its name as the zone database writes it, and the
+// server of the official image refuses one it cannot load (the test environment, 2026-11-08); the runtime takes a name
+// in other letters, and an offset, which Go does not. A name the runtime does not know is left to the review, which
+// says it: the zone database of the server may be newer.
 export function expressionRefused(expression: string): string | undefined {
   const parsed = parseExpression(expression);
 
-  return parsed.kind === "refused" ? parsed.reason : undefined;
+  if (parsed.kind === "refused") return parsed.reason;
+  const zone = expressionZone(parsed);
+
+  return zone?.of === "named" && !zoneLoads(zone.name)
+    ? `invalid schedule: unknown time zone "${zone.name}": unknown time zone ${zone.name}`
+    : undefined;
+}
+
+// Whether Go would load a zone the runtime may know: not an offset, no part of the name that begins with a small letter,
+// and not a name the runtime writes in other letters. The parser lets a name hold letters, digits and / _ - + : alone.
+function zoneLoads(name: string): boolean {
+  if (name === "UTC" || name === "Local") return true;
+  if (/^[+\-0-9]/.test(name) || name.split("/").some((part) => /^[a-z]/.test(part))) return false;
+  let written: string;
+
+  try {
+    written = new Intl.DateTimeFormat("en-US", { timeZone: name }).resolvedOptions().timeZone;
+  } catch {
+    return true;
+  }
+  return written === name || written.toLowerCase() !== name.toLowerCase();
 }
 
 // The Schedule of the form, or nothing when its name, its expression at the time given or its template is refused.

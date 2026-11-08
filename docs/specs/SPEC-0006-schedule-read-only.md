@@ -350,3 +350,14 @@ the packaged suites of the action came with the fourth pull request of T4.2: the
 suite of the actions,
 [`velero-e2e-actions.tests.ts`](../../e2e/__tests__/velero-e2e-actions.tests.ts), and
 the views of the workspace in the pre-review.
+
+### 2026-11-08: Create Schedule In The List (T4.7 Of SPEC-0016)
+
+With T4.7 the list offers Create schedule, the one command of its header, after the
+count of the host, as the restatement of REQ-074 and SCHED-11 above says and as
+[SPEC-0016](SPEC-0016-create-a-schedule.md#the-amendment-of-spec-0006) completes it:
+the command opens the workspace of the schedule of the form over the list, named in
+the address, and writes nothing by itself. It is proven at the component layer, with
+writes off and on, in
+[`schedule-create-workspace.test.tsx`](../../src/renderer/pages/schedule-create-workspace.test.tsx);
+the packaged suites of the action come with the third pull request of T4.7.

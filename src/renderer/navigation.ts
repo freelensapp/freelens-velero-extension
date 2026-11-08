@@ -46,6 +46,7 @@ export const PAGES: Record<ViewKind, string> = {
   "data-download": DATA_DOWNLOADS_PAGE_ID,
   "backup-now": SCHEDULES_PAGE_ID,
   "backup-create": BACKUPS_PAGE_ID,
+  "schedule-create": SCHEDULES_PAGE_ID,
 };
 
 // The views that are open travel in the address, by their kind and their name, in the order they were

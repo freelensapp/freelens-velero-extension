@@ -147,7 +147,7 @@ export async function confirmScheduleCreate(
   const expression = expressionProblem(wrapper.expression, now);
 
   if (expression) return failure("validation", "request", false, SCHEDULE_CREATE_WORDS.expression(expression));
-  const problems = Object.values(templateProblems(template)).flat();
+  const problems = Object.values(templateProblems(template, "schedule")).flat();
 
   if (problems.length > 0) return failure("validation", "request", false, SCHEDULE_CREATE_WORDS.refused(problems));
   const body = scheduleFromForm(request.namespace, name, wrapper, template, now);
