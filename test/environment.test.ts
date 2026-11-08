@@ -2823,7 +2823,9 @@ describe("foundation fixture boundaries", () => {
     expect(downloads.slice(0, -1).map((item) => (item.spec as { snapshotID?: string }).snapshotID)).toEqual(
       downloads.slice(0, -1).map(() => status(uploads[6]).snapshotID),
     );
-    expect((downloads.at(-1)?.spec as { snapshotID?: string }).snapshotID).not.toBe(status(uploads[6]).snapshotID);
+    expect((downloads.at(-1)?.spec as { snapshotID?: string } | undefined)?.snapshotID).not.toBe(
+      status(uploads[6]).snapshotID,
+    );
     expect(status(downloads[5])).toEqual({
       phase: "Failed",
       completionTimestamp: status(downloads[5]).completionTimestamp,
