@@ -132,13 +132,10 @@ function FamilyListView<View extends { name: string }>({ definition, installatio
         customizeHeader={({ filters: _hostNamespaces, info, ...placeholders }) => ({
           ...placeholders,
           // The host counts what the list holds: a list that was not read holds nothing, which is not none.
-          info: (
-            <>
-              {hasItems(read) ? info : <span data-testid={`velero-${id}-not-counted`}>{LIST_WORDS.notCounted}</span>}
-              {definition.command?.(installation)}
-            </>
-          ),
-          filters: <></>,
+          info: hasItems(read) ? info : <span data-testid={`velero-${id}-not-counted`}>{LIST_WORDS.notCounted}</span>,
+          // The command of the list, in the place of the filters of the host, after the count and before the search:
+          // the count keeps its panel to itself, which is what it says.
+          filters: <>{definition.command?.(installation)}</>,
         })}
         onDetails={(item: HostObject) => openView({ kind, name: item.getName() })}
         sortingCallbacks={sortingCallbacks}

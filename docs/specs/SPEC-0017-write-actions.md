@@ -1100,8 +1100,9 @@ The evidence, by check:
   provider, or none; the namespaces the host lists as checkboxes and the patterns
   typed; what the release refuses of a field, with its words, tied to the field, and
   an included namespace the host lists with the label that excludes it, each holding
-  the review back; a duration said as Go writes it; the command, which gives a new form
-  once the backup of the form before was created, and the form as it was left before
+  the review back; a duration said as Go writes it; the command, after the count of
+  the host, whose panel says the count alone, which gives a new form once the backup of
+  the form before was created, and the form as it was left before
   (`src/renderer/pages/backup-create-workspace.test.tsx`).
 - CRBAK-03, the component part: a name among the backups the installation read is
   said before the review; a 409 keeps the name, with the way to the backup that has
@@ -1125,7 +1126,7 @@ The evidence, by check:
   after a creation only, and leaves a backup being created to go on
   (`src/renderer/state/backup-create.test.ts`).
 
-Each new case was seen failing on a change made on purpose, twenty-two in all: an empty
+Each new case was seen failing on a change made on purpose, twenty-three in all: an empty
 list written, the review asked past what the workspace holds it back for, the place
 in the queue not said, a name read not said, a ReadOnly location offered, the default
 not chosen, the command of the list gone, the label that excludes a namespace not
@@ -1137,13 +1138,17 @@ not a backup of the form taken, a token that expired not asked again; and, for t
 command that the packaged suite of the third pull request found giving the result of
 the backup before and no form, the command that starts nothing, a form being filled
 started anew, a backup being created dropped, and the fields of the backup before kept
-in the new form.
+in the new form; and, for the command that the suites of the views of the hosted runner
+found in the panel of the count, where they read the count, the command put back
+there.
 
 Decided while implementing, on 2026-11-08:
 
 - The workspace of the backup of the form is named in the address as
   `backup-create/new`, over the list of the Backups, whose header holds its command
-  beside the count of the host.
+  after the count of the host, in the place of the filters of the host, which the
+  views do not offer: the panel of the count says the count alone, as the suites of
+  the views read it.
 - The namespaces the host lists are read from its store, `namespaceStore`, which the
   frame of the cluster holds for its own views: the extension asks the host nothing
   more. The patterns and the names the host does not list are typed beside them,
