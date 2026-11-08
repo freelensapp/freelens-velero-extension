@@ -27,6 +27,7 @@ import { gunzipSync } from "node:zlib";
 import { createTlsFixture } from "../../test/tls-fixture.ts";
 import { tabArtifacts, tabExpectations } from "./local-artifacts.mts";
 import { runBackupCreateProof, runBackupNowProof } from "./local-backup-now-proof.mts";
+import { runDeleteBackupProof } from "./local-delete-proof.mts";
 import { DIRECT_PROOF_ORIGIN, runDownloadProof, runIdentityProof, tlsProofResources } from "./local-download-proof.mts";
 import {
   assertFixtureNamespaceContents,
@@ -2324,6 +2325,10 @@ async function runTransportProof(): Promise<void> {
     // Velero writes; a resume whose schedule changed since its review is refused by the API server with 422, which its
     // metrics count, as a conflict. Each is removed with the backup of the first.
     report.schedulePatch = await runSchedulePatchProof(proofContext);
+    // The deletion of a backup, end to end (SPEC-0017, DELETE-05): a backup of the run deleted through the procedures of
+    // the compiled main process, with its name typed, gone with its request; and a backup of a storage location that is
+    // not there, whose request the server refuses with the one error of a refusal, the backup in its phase.
+    report.deleteBackup = await runDeleteBackupProof(proofContext);
 
     requireCondition(
       http.missingArtifacts === 2 && http.refusedBeforeCreation,
