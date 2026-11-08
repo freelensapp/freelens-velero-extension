@@ -258,8 +258,9 @@ sidebar.
 | Backup Repositories, `velero-views-<run>` | Nine repositories, each with its readiness, its last maintenance and its frequency: one Ready whose newest maintenance failed, with the mark beside the time of the last that succeeded; one of restic, Ready and never maintained; one Not ready, the lines of its message in its tip; one not initialized yet; one due by the clock; two of the same three labels; two of long names |
 | A repository, from its row | Its readiness, its last maintenance and the next one, due or due in how long by the clock of this machine, with the note of the look of the server every five minutes; its recent maintenances, newest first; what used it |
 | Pod Volume Backups and Pod Volume Restores, `velero-views-<run>` | The operations of the views in their phases, each a way to its view, its pod and its node the links of the host |
-| The backup `backup-inprogress`, its band | Its pod volume backups counted by phase, ten rows, and the command that shows ten more, then its data uploads, none yet |
-| Data Uploads and Data Downloads, `velero-views-<run>` | None of either yet: each list says of what it is the list, with the note over it; their fixtures come with the second pull request of T5.2 |
+| The backup `backup-inprogress`, its band | Its pod volume backups counted by phase, ten rows, and the command that shows ten more, then its twelve data uploads the same way, by their claims |
+| Data Uploads and Data Downloads, `velero-views-<run>` | The data movement of the views in its phases: the data mover of each, Built-in or marked as not known, its claim, the node of its data path; the data upload that failed with a message of three lines, the one of an empty volume |
+| The restore `restore-mapped`, its band, then its data download that completed | Its eight data downloads in the second half of its band; the one that completed leads to the data upload of its snapshot and back, and the one whose snapshot no data upload names says nothing of one |
 | Backup Repositories, `velero-defaults-<run>` | No repository: the list says of what it is the list, and the host that it is empty |
 
 The manual review of SPEC-0014, its first two steps, which T5.1 makes possible: in

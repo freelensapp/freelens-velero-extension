@@ -810,12 +810,12 @@ describe("views of the restores", () => {
   );
 
   it(
-    "counts what the views ask when they are asked to read again, and only the pod volume restores when a restore is opened",
+    "counts what the views ask when they are asked to read again, and only the pod volume restores and the data downloads when a restore is opened",
     async () => {
-      // What counts one list of the pod volume restores when a restore is opened counts the reads of a read that is
-      // asked: the six families read at every read of the namespace that is selected, and the discovery. The list of
-      // the restores shows no pod volume operation, and the restores that were opened were closed: neither of their
-      // families is asked.
+      // What counts one list of the pod volume restores and one of the data downloads when a restore is opened counts
+      // the reads of a read that is asked: the six families read at every read of the namespace that is selected, and
+      // the discovery. The list of the restores shows no operation of the volumes, and the restores that were opened
+      // were closed: none of the four families is asked.
       const seen = (await cluster.readState(frame)).read;
 
       await cluster.afterRead(frame, seen);
@@ -836,7 +836,7 @@ describe("views of the restores", () => {
       ]) {
         expect([kind, (asked[`LIST ${kind} namespace`] ?? 0) >= 1]).toEqual([kind, true]);
       }
-      for (const kind of ["podvolumebackups", "podvolumerestores"]) {
+      for (const kind of ["podvolumebackups", "podvolumerestores", "datauploads", "datadownloads"]) {
         expect([kind, asked[`LIST ${kind} namespace`] ?? 0]).toEqual([kind, 0]);
       }
       expect(asked["LIST backupstoragelocations cluster"]).toBe(1);
