@@ -974,3 +974,114 @@ Decided while implementing, on 2026-11-08:
 
 With this pull request the work of T4.2 is complete: its row of the roadmap moves to
 Done after the merge, with the follow-up that PROCESS.md asks for.
+T4.3, the first of its pull requests, on 2026-11-08: the backup of the form in the
+main process and in the contract, with the template that the creation of a schedule
+will share, and no surface of the renderer yet. The evidence, by check:
+
+- CRBAK-02: the body of the form, a Backup with its name and its namespace, no label
+  and no annotation, and the fields that were set alone; a list with each item once
+  and an empty list not written; a selector as the API takes it; a duration as Go
+  prints it; the text written once, with two spaces and its keys in a fixed order
+  (`src/common/backup-form.test.ts`, `src/common/backup-template.test.ts`,
+  `src/main/ipc-backup-create.test.ts`).
+- CRBAK-01, the unit part: what the release refuses of the template, with its
+  words: the lists of the namespaces, no namespace included standing for every one;
+  the patterns the wildcard package of the release refuses, and the names they are
+  not once their wildcards are replaced; the lists of the resources; both
+  selectors; a selector Kubernetes does not read; a duration Go does not read, or
+  not above zero, with the words of the form; the storage location, always written;
+  a snapshot location named twice taken once, as the release takes it; and a field
+  beyond the bounds of the contract, said with the words of the form
+  (`src/common/backup-template.test.ts`). The selectors are read as `labels.Parse` of
+  apimachinery v0.33.12, the version of the release, reads them, and written as
+  `metav1.ParseToLabelSelector` writes them; the durations as `time.ParseDuration`
+  of Go reads them and `Duration.String` prints them
+  (`src/common/label-selector.test.ts`, `src/common/go-duration.test.ts`): against
+  what Go 1.26 and apimachinery v0.33.12 made of 51 durations and 52 selectors, run
+  in a container on 2026-11-08 and kept in `test/template-goldens.json`, every
+  duration read and printed, every selector read, and the words of each refusal of a
+  selector without the paths of its fields, but for what the form decides otherwise
+  below. A name an object inherits, as `constructor`, is a key, a value or a unit as
+  any other text; several errors of one requirement are written in brackets, and a
+  value is quoted, as apimachinery writes them; a NUL ends a selector, as it ends it
+  for the lexer of Kubernetes.
+- CRBAK-03: a name the API server refuses, refused by the reader of the contract
+  and never confirmed; a 409 at the creation a conflict, with the words that lead to
+  the backup that has the name.
+- ACT-01: the adapter reads a BackupStorageLocation and a VolumeSnapshotLocation by
+  their names, and creates nothing it did not create before
+  (`src/main/diagnostic-kubernetes.test.ts`).
+- ACT-02, ACT-03: the confirmation refused with writes off, reading nothing; its
+  answer the text of the backup, which the adapter is asked byte for byte, once; a
+  token that runs only for the name it was confirmed for, and not for a backup asked
+  from a schedule; the run carries no field of the template; a field of the template
+  the contract does not know, of another type or beyond its bounds, refused
+  (`src/common/ipc.test.ts`, `src/main/ipc-backup-create.test.ts`).
+- The locations: read at the confirmation and again at the run; one that is not
+  there, one the identity may not read, a read that did not answer in time, and two
+  snapshot locations of one provider, with the words the backup controller of the
+  release writes, each ending the write before anything is sent; a read stopped when
+  the frame that asked goes at the confirmation, or when writes go off at the run; a
+  text the answer of the confirmation cannot carry, confirmed for no token.
+- ACT-05 to ACT-07: the reads after the creation until Velero writes a phase; a
+  creation with no answer, looked for by its name and found by its creation time and
+  the fields Velero keeps as they were sent, since a backup of the form carries no
+  label; one of that name another hand made since the confirmation, to another
+  location, not known to be this one; not there; made before the confirmation; never
+  sent again; the end kept for the cluster with its name and no schedule, and said in
+  the target bar as a backup asked with the form (`src/common/kept-end-words.test.ts`).
+  The dialog of the gate names the backup of the form among what writes on allow
+  (`src/renderer/components/writes.test.tsx`).
+
+Each new case was seen failing on a change made on purpose, twenty-six in all: `!=`
+written as In, the requirements and the values not sorted, a key given two values,
+`gt` and `lt` taken, the words of an example with one space, the fraction of a
+duration rounded, the minutes of an hour left out, no included namespace not read as
+every one, an unclosed bracket taken, a duration of zero taken, the storage location
+not asked, empty lists and items given twice written, a label in the body, a field
+of the template the contract does not know taken, a confirmation without a
+template, the end of a backup of the form with a schedule, the snapshot locations
+not read, two of one provider taken, the locations not read again at the run, a
+backup with no label not taken for the one created, a schedule in the end of the
+form, the words of the target bar without the form, the template not checked by the
+main process, and, through a call of the run of its own, a text kept with the token
+that is not the backup of the run. A check of the reader of the parameters that
+refused a template at the run, which the reader of the run already refuses, was
+removed: no case could reach it.
+
+The independent review of the pull request found two kinds of text that broke the
+reads, a unit or a key named as a member every object inherits, a location named
+twice that the release takes, two forms of the words of apimachinery the port did not
+write, bounds that refused a template the release takes, and a backup another hand
+made with its name taken for the one created after a lost answer: each is fixed, with
+the cases above, and the five changes it ran that no case killed are killed now: the
+path of the read of a snapshot location, the bound of the text of the answer, the
+signals of the reads of the locations, and the names of the excluded namespaces and
+of the snapshot locations.
+
+Decided while implementing, on 2026-11-08:
+
+- `key!=value`, one of the forms SPEC-0016 lists for the field, is written as
+  `NotIn` with its one value, which selects the same objects: the parser of the
+  command line of the release refuses `!=`.
+- A key given two values with `=` is refused: `metav1.ParseToLabelSelector` keeps the
+  last, and the selector would select other objects than its text says. A selector
+  with no requirement is not set: the contract refuses an empty text.
+- The creation of a backup of the form shares with Back up now the POST of the text
+  kept with the token, the reads after it and the look for a backup whose answer was
+  lost: one function of the main process. A backup of the form, which carries no
+  label and no source, is taken for the one created by its name, its creation time
+  and the fields Velero keeps as they were sent: the storage location, the namespaces
+  included, the selectors, the choices and the durations; the lists it adds to when it
+  starts the backup are not compared.
+- The main process reads each snapshot location named, and refuses two of one
+  provider with the words of the release, before anything is sent; one named twice is
+  one, as the release takes it. Whether a storage location is Available and not
+  ReadOnly is said by the form, from the reads of the installation, as REQ-236 of
+  SPEC-0016 says.
+- The contract carries 256 items in a list, of 253 characters each, 16 selectors of
+  1,024 characters, durations of 64 characters and a template of 60,000 characters,
+  which the release does not bound: the form says when a field goes beyond one, and a
+  backup that needs more is asked from the command line.
+- The fields of the template are checked by the same functions in both processes, in
+  `src/common/backup-template.ts`, which the creation of a schedule (T4.7) shares.

@@ -61,7 +61,7 @@ export const BACKUP_NOW_WORDS = {
   notDone: (name: string) =>
     `The API server did not answer the creation, and the backup ${name} is not there as far as the reads show. Asking again is a new review.`,
   other: (name: string) =>
-    `The API server did not answer the creation, and a backup named ${name} is there that is not known to be this one: it does not carry the labels of the review, or it is older than the confirmation.`,
+    `The API server did not answer the creation, and a backup named ${name} is there that is not known to be this one: it does not carry the labels or the fields of the review, or it is older than the confirmation.`,
   unknown: (name: string) =>
     `The API server did not answer the creation, and the backup ${name} could not be read: it may have been created. It is not sent again by itself: look for it among the backups.`,
   failed: "The backup could not be asked: nothing is known to have been created.",
@@ -228,20 +228,72 @@ async function readAfter(
   return { ok: true, value: { name, uid, ...(phase ? { phase } : {}), ...(found ? { found: true } : {}) } };
 }
 
-// The labels the text gives the backup, which a backup found by its name carries when it is the one created.
+// The labels the text gives the backup, which a backup found by its name carries when it is the one created: none for a
+// backup of the form, which has no label. Nothing when the text cannot be read.
 function labelsOf(text: string): Record<string, string> | undefined {
   try {
-    const labels = (JSON.parse(text) as { metadata?: { labels?: unknown } }).metadata?.labels;
+    const metadata = (JSON.parse(text) as { metadata?: unknown }).metadata;
 
+    if (!metadata || typeof metadata !== "object") return undefined;
+    const labels = (metadata as { labels?: unknown }).labels;
+
+    if (labels === undefined) return {};
     return labels && typeof labels === "object" ? (labels as Record<string, string>) : undefined;
   } catch {
     return undefined;
   }
 }
 
+// The fields of the spec of a backup of the form that Velero keeps as they were sent when it starts it: the storage
+// location, which the form always writes, the selectors, the namespaces included, the choices and the durations. The
+// lists it adds to, the excluded namespaces, the resources and the snapshot locations, are not among them.
+const KEPT_AS_SENT = [
+  "storageLocation",
+  "includedNamespaces",
+  "labelSelector",
+  "orLabelSelectors",
+  "snapshotVolumes",
+  "includeClusterResources",
+  "defaultVolumesToFsBackup",
+  "snapshotMoveData",
+  "ttl",
+  "csiSnapshotTimeout",
+  "itemOperationTimeout",
+];
+
+// A value written with its keys in one order, whatever order a writer gave them.
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value && typeof value === "object")
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`)
+      .join(",")}}`;
+  return JSON.stringify(value) ?? "undefined";
+}
+
+// Whether a backup found by its name carries the fields of the text that Velero keeps as they were sent. A backup of
+// the form has no label and no source: what tells it from one another hand made with its name is its spec.
+function keptAsSent(text: string, found: DiagnosticObject): boolean {
+  let sent: Record<string, unknown> | undefined;
+
+  try {
+    sent = (JSON.parse(text) as { spec?: Record<string, unknown> }).spec;
+  } catch {
+    return false;
+  }
+  const carried = ((found as { spec?: unknown }).spec ?? {}) as Record<string, unknown>;
+
+  return (
+    sent !== undefined &&
+    KEPT_AS_SENT.every((field) => !(field in sent) || canonical(sent[field]) === canonical(carried[field]))
+  );
+}
+
 // A creation whose answer is not known: the backup is read by its name, and is the one created when its creation is
 // not earlier than a minute before the confirmation and it carries every label of the text, the label of the schedule
-// among them; the label of the storage location is the one Velero adds (SPEC-0017, REQ-250).
+// among them for a backup asked from one; the label of the storage location is the one Velero adds (SPEC-0017,
+// REQ-250). A backup of the form, which has no label, carries the fields Velero keeps as they were sent.
 async function reconcile(
   dependencies: BackupNowDependencies,
   adapter: DiagnosticKubernetes,
@@ -266,12 +318,14 @@ async function reconcile(
   const created = Date.parse(String((found.metadata as { creationTimestamp?: unknown }).creationTimestamp));
   const labels = labelsOf(text);
   const carried = found.metadata.labels ?? {};
-  // The labels of the text hold the label of the schedule, which the builder always writes.
+  // The labels of the text of a backup asked from a schedule hold the label of the schedule, which the builder always
+  // writes.
   const ours =
     Number.isFinite(created) &&
     created >= confirmedAt - CREATION_MARGIN &&
     labels !== undefined &&
-    Object.entries(labels).every(([key, value]) => key === LOCATION_LABEL || carried[key] === value);
+    Object.entries(labels).every(([key, value]) => key === LOCATION_LABEL || carried[key] === value) &&
+    (Object.keys(labels).length > 0 || keptAsSent(text, found));
 
   if (!ours) return failure("submission-unknown", "creation", false, BACKUP_NOW_WORDS.other(backup));
   return readAfter(dependencies, adapter, request.namespace, found, signal, write, true);
@@ -324,42 +378,60 @@ export async function runBackupNow(
     // What would be sent now is what the review showed, or nothing is sent.
     if (!text || !again || bodyText(again) !== text)
       return failure("conflict", "read", false, BACKUP_NOW_WORDS.reviewChanged);
-    // A frame that went, or a write stopped, before anything was sent leaves nothing to look for: the frame is
-    // looked at here, and not only at the tick of its watch.
-    if (signal.aborted) return failure("cancelled", "creation", true, BACKUP_NOW_WORDS.cancelled);
-    if (!still()) return failure("forbidden", "frame", false, BACKUP_NOW_WORDS.frameGone);
-    write.status = { step: "creating the backup" };
-    // Every end of a request that was sent is kept for the cluster, and is answered to the frame that asked when it is
-    // still there: it says it showed the end, or the target bar of the cluster shows it.
-    const ended = (end: Answer<BackupCreated>): Answer<BackupCreated> => {
-      // What keeps the end does not end the run otherwise.
-      try {
-        dependencies.keep?.(request, end, adapter.binding?.contextName ?? "");
-      } catch {
-        /* the end is answered all the same */
-      }
-      return still() ? end : failure("forbidden", "frame", false, BACKUP_NOW_WORDS.frameGoneAfter);
-    };
-    let created: DiagnosticObject;
-
-    try {
-      created = await adapter.createBackup(request.namespace, text, signal);
-    } catch (error) {
-      // No answer, or one dropped on this side once the request had left: the backup may be there. It is looked for,
-      // with reads of their own, which the frame that went does not stop.
-      if (error instanceof DiagnosticError && (error.code === "submission-unknown" || error.code === "cancelled"))
-        return ended(
-          await reconcile(dependencies, adapter, request, text, confirmedAt, new AbortController().signal, write),
-        );
-      const end = endOf(error, "creation", request.namespace, backup);
-
-      return sent(error) ? ended(end) : end;
-    }
-    if (created.metadata.name !== backup || !created.metadata.uid)
-      return ended(failure("submission-unknown", "creation", false, BACKUP_NOW_WORDS.unknown(backup)));
-    return ended(await readAfter(dependencies, adapter, request.namespace, created, signal, write, false));
+    return await createKept(dependencies, adapter, request, text, confirmedAt, write, still);
   } finally {
     stop();
     dependencies.gate.finish(request.cluster, request.request);
   }
+}
+
+// The creation of a backup whose text the confirmation kept, once what it depends on was read again: from a schedule
+// or from the form, the same POST of that text, the same reads after it, and, when its answer is not known, the same
+// look for the backup by its name (SPEC-0017, REQ-248 to REQ-250). Every end of a request that was sent is kept.
+export async function createKept(
+  dependencies: BackupNowDependencies,
+  adapter: DiagnosticKubernetes,
+  request: WriteRunRequest,
+  text: string,
+  confirmedAt: number,
+  write: Write,
+  still: () => boolean,
+): Promise<Answer<BackupCreated>> {
+  const backup = String(request.backup);
+  const signal = write.controller.signal;
+
+  // A frame that went, or a write stopped, before anything was sent leaves nothing to look for: the frame is looked at
+  // here, and not only at the tick of its watch.
+  if (signal.aborted) return failure("cancelled", "creation", true, BACKUP_NOW_WORDS.cancelled);
+  if (!still()) return failure("forbidden", "frame", false, BACKUP_NOW_WORDS.frameGone);
+  write.status = { step: "creating the backup" };
+  // Every end of a request that was sent is kept for the cluster, and is answered to the frame that asked when it is
+  // still there: it says it showed the end, or the target bar of the cluster shows it.
+  const ended = (end: Answer<BackupCreated>): Answer<BackupCreated> => {
+    // What keeps the end does not end the run otherwise.
+    try {
+      dependencies.keep?.(request, end, adapter.binding?.contextName ?? "");
+    } catch {
+      /* the end is answered all the same */
+    }
+    return still() ? end : failure("forbidden", "frame", false, BACKUP_NOW_WORDS.frameGoneAfter);
+  };
+  let created: DiagnosticObject;
+
+  try {
+    created = await adapter.createBackup(request.namespace, text, signal);
+  } catch (error) {
+    // No answer, or one dropped on this side once the request had left: the backup may be there. It is looked for,
+    // with reads of their own, which the frame that went does not stop.
+    if (error instanceof DiagnosticError && (error.code === "submission-unknown" || error.code === "cancelled"))
+      return ended(
+        await reconcile(dependencies, adapter, request, text, confirmedAt, new AbortController().signal, write),
+      );
+    const end = endOf(error, "creation", request.namespace, backup);
+
+    return sent(error) ? ended(end) : end;
+  }
+  if (created.metadata.name !== backup || !created.metadata.uid)
+    return ended(failure("submission-unknown", "creation", false, BACKUP_NOW_WORDS.unknown(backup)));
+  return ended(await readAfter(dependencies, adapter, request.namespace, created, signal, write, false));
 }

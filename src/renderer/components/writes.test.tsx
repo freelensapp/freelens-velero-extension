@@ -139,6 +139,7 @@ describe("the writes in the target bar", () => {
     expect(words.second).toContain("ServerStatusRequest");
     // The actions name themselves as each one lands (SPEC-0017, REQ-245).
     expect(words.second).toContain("a Backup from a schedule, asked from the view of the schedule");
+    expect(words.second).toContain("a Backup of the form, asked from the list of the Backups");
     // Nothing is on before the dialog is answered.
     expect(installation.writes).toEqual({ on: false });
     await act(async () => {

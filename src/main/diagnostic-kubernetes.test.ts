@@ -139,6 +139,17 @@ describe("the create-only adapter, through the client of the host", () => {
     expect(clients).toEqual(["cluster-a", "cluster-a", "cluster-a", "cluster-a", "cluster-a"]);
   });
 
+  it("reads a storage location and a snapshot location by their names, which a backup of the form names", async () => {
+    const { api, host, signal } = fixture();
+
+    await api.read("BackupStorageLocation", "velero", "default", signal);
+    await api.read("VolumeSnapshotLocation", "velero", "aws", signal);
+    expect(host.requests.map((item) => [item.method, item.path])).toEqual([
+      ["GET", `${API}/backupstoragelocations/default`],
+      ["GET", `${API}/volumesnapshotlocations/aws`],
+    ]);
+  });
+
   it("writes every header name in lowercase, sends a creation as JSON, and gives every request a signal of its own", async () => {
     const { api, host, signal } = fixture();
     const request = randomUUID();

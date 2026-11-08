@@ -422,19 +422,23 @@ of that body beside the token and its expiry, written once by the main process, 
 the run of that write carries the token and the identifier of the request, and
 nothing of the body: the main process sends the text it kept with the token. A
 confirmation is for its kind, its namespace, its target and, for a backup asked from
-a schedule, the name of the backup, and its token runs for nothing else. The first
-kind of a body is `backup-from-schedule`, with the first pull request of T4.2; the
-rest of this spec is read with the amendment, and is not changed by it. The text
+a schedule or of the form, the name of the backup, and its token runs for nothing
+else. The first
+kind of a body is `backup-from-schedule`, with the first pull request of T4.2, and
+the second `backup`, the backup of the form, with the first pull request of T4.3: its
+confirmation carries the name of the backup and the fields of its template, and its
+run the name alone; the rest of this spec is read with the amendment, and is not
+changed by it. The text
 travels in the answer of the confirmation, within the bound of a request: one the
 answer cannot carry is not confirmed, and no token is given for it.
 
 ### 2026-11-08: The Ends Kept For A Cluster (T4.2 Of SPEC-0017)
 
 As REQ-250 of [SPEC-0017](SPEC-0017-write-actions.md#requirements) says, approved
-with it, after REQ-243 of SPEC-0016: the end of a backup asked from a schedule whose
-request was sent is kept by the main process for its cluster, with what to look for
-and where, until a frame of that cluster has shown it or the extension is
-deactivated; each action of SPEC-0017 adds its kind with its slice. REQ-113 and
+with it, after REQ-243 of SPEC-0016: the end of a backup, asked from a schedule or of
+the form, whose request was sent is kept by the main process for its cluster, with
+what to look for and where, until a frame of that cluster has shown it or the
+extension is deactivated; each action of SPEC-0017 adds its kind with its slice. REQ-113 and
 GATE-06 are read with it: what a write is at and its cancel stay for the frame that
 asked it, and the ends kept for a cluster are given to every frame of that cluster,
 which may say it showed one. Two procedures come with the third pull request of T4.2:

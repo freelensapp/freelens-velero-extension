@@ -4,7 +4,8 @@
 import type { KeptEnd } from "./ipc";
 
 export function keptEndWords(end: KeptEnd): string {
-  const what = `The backup ${end.name}, asked from the schedule ${end.schedule} in ${end.namespace} (context ${end.context}),`;
+  const source = end.schedule === undefined ? "asked with the form" : `asked from the schedule ${end.schedule}`;
+  const what = `The backup ${end.name}, ${source} in ${end.namespace} (context ${end.context}),`;
 
   if (!end.outcome.created) return `${what} ended while no view of it was open: ${end.outcome.text}`;
   const found = end.outcome.found ? ", found by its name after the answer of its creation was lost" : "";

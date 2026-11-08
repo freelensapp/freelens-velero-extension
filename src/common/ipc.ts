@@ -5,6 +5,7 @@
 
 import { type AllowanceFor, readAllowanceFor } from "./allowances";
 import { backupNameProblem, scheduleRefused } from "./backup-from-schedule";
+import { type BackupTemplate, BOOLEAN_FIELDS, DURATION_FIELDS, LIST_FIELDS, TEMPLATE_BOUNDS } from "./backup-template";
 
 import type { DiagnosticCode } from "./diagnostic-code";
 
@@ -28,7 +29,7 @@ export const CHANNELS = {
 
 // The writes of the extension: the two requests of the tabs and of the band of the server, and the actions of
 // SPEC-0017, each named by what it does, as they land.
-export const WRITE_KINDS = ["DownloadRequest", "ServerStatusRequest", "backup-from-schedule"] as const;
+export const WRITE_KINDS = ["DownloadRequest", "ServerStatusRequest", "backup-from-schedule", "backup"] as const;
 export type WriteKind = (typeof WRITE_KINDS)[number];
 
 // The artifacts of an operation a DownloadRequest is created for: eight of the fourteen kinds of target
@@ -187,8 +188,12 @@ export interface WriteConfirmRequest {
   // What the kind of the write needs beside its target: the artifact a DownloadRequest is for. It is a
   // part of what is confirmed: a confirmation of the log of a backup is not one of its results.
   artifact?: ArtifactTarget;
-  // The name of the backup a schedule is asked for by hand (SPEC-0017, REQ-255), a part of what is confirmed.
+  // The name of the backup a schedule is asked for by hand (SPEC-0017, REQ-255), or of the backup of the form
+  // (REQ-262), a part of what is confirmed.
   backup?: string;
+  // The fields of the form of the template of a backup of the form (SPEC-0017, REQ-260): the body is built of them,
+  // and the run carries none of them.
+  template?: BackupTemplate;
 }
 export interface WriteConfirmAnswer {
   token: string;
@@ -229,13 +234,13 @@ export type KeptOutcome =
 export interface KeptEnd {
   // The identifier of the request of the write.
   request: string;
-  kind: "backup-from-schedule";
+  kind: "backup-from-schedule" | "backup";
   namespace: string;
   // The context of the entry of the cluster in the catalog of the host.
   context: string;
-  // What to look for: the backup, by its name, and the schedule it was asked from.
+  // What to look for: the backup, by its name, and the schedule it was asked from, for a backup asked from one.
   name: string;
-  schedule: string;
+  schedule?: string;
   outcome: KeptOutcome;
   // When it ended, by the clock of the main process.
   at: number;
@@ -393,24 +398,90 @@ export function readGateDisableRequest(value: unknown): GateDisableRequest | und
   return readGateStateRequest(value);
 }
 
+// The fields of the form of a template as the contract carries them (SPEC-0017, REQ-260): each one it knows, of its type
+// and within its bounds, and none it does not know. What the release refuses of them is not read here: the main
+// process says it, with the words of the release, before it builds a body.
+function readTemplate(value: unknown): BackupTemplate | undefined {
+  const known = [
+    ...LIST_FIELDS,
+    ...BOOLEAN_FIELDS,
+    ...DURATION_FIELDS,
+    "labelSelector",
+    "orLabelSelectors",
+    "storageLocation",
+  ];
+
+  if (!isRecord(value) || !hasKeys(value, [], known)) return;
+  const template: Record<string, unknown> = {};
+
+  for (const field of LIST_FIELDS) {
+    if (!(field in value)) continue;
+    const items = value[field];
+
+    if (!Array.isArray(items) || items.length > TEMPLATE_BOUNDS.items) return;
+    if (!items.every((item) => isText(item, TEMPLATE_BOUNDS.item))) return;
+    template[field] = [...items];
+  }
+  for (const field of BOOLEAN_FIELDS) {
+    if (!(field in value)) continue;
+    if (typeof value[field] !== "boolean") return;
+    template[field] = value[field];
+  }
+  for (const field of DURATION_FIELDS) {
+    if (!(field in value)) continue;
+    if (!isText(value[field], TEMPLATE_BOUNDS.duration)) return;
+    template[field] = value[field];
+  }
+  if ("labelSelector" in value) {
+    if (!isText(value.labelSelector, TEMPLATE_BOUNDS.selector)) return;
+    template.labelSelector = value.labelSelector;
+  }
+  if ("orLabelSelectors" in value) {
+    const selectors = value.orLabelSelectors;
+
+    if (!Array.isArray(selectors) || selectors.length > TEMPLATE_BOUNDS.selectors) return;
+    if (!selectors.every((selector) => isText(selector, TEMPLATE_BOUNDS.selector))) return;
+    template.orLabelSelectors = [...selectors];
+  }
+  if ("storageLocation" in value) {
+    if (!isText(value.storageLocation, TEMPLATE_BOUNDS.item)) return;
+    template.storageLocation = value.storageLocation;
+  }
+  return template as BackupTemplate;
+}
+
 export function readWriteConfirmRequest(value: unknown): WriteConfirmRequest | undefined {
+  return readWriteParameters(value, false);
+}
+
+// The parameters of a write, as the confirmation carries them, or as the run does: the run of a backup of the form
+// carries its name and none of the fields of its template, which the text kept with the token is made of, and its
+// reader refuses them.
+function readWriteParameters(value: unknown, run: boolean): WriteConfirmRequest | undefined {
   if (
     !withinBound(value) ||
     !isRecord(value) ||
-    !hasKeys(value, ["cluster", "namespace", "kind"], ["target", "artifact", "backup"])
+    !hasKeys(value, ["cluster", "namespace", "kind"], ["target", "artifact", "backup", "template"])
   )
     return;
   if (!isCluster(value.cluster) || !isNamespace(value.namespace) || !isWriteKind(value.kind)) return;
   if ("target" in value && !isTarget(value.target)) return;
   // A DownloadRequest is of a backup or of a restore, and for one artifact of it; a backup asked from a schedule
-  // is of the schedule, with the name of the backup; a ServerStatusRequest is of none.
+  // is of the schedule, with the name of the backup; a backup of the form is of no object, with its name and, at the
+  // confirmation, its template; a ServerStatusRequest is of none.
   const ofSchedule = value.kind === "backup-from-schedule";
+  const ofForm = value.kind === "backup";
 
   if ((value.kind === "DownloadRequest" || ofSchedule) !== "target" in value) return;
   if ((value.kind === "DownloadRequest") !== "artifact" in value) return;
-  if (ofSchedule !== "backup" in value) return;
+  if ((ofSchedule || ofForm) !== "backup" in value) return;
+  if (!run && ofForm !== "template" in value) return;
   if ("target" in value && ((value.target as WriteTarget).kind === "Schedule") !== ofSchedule) return;
-  if (ofSchedule && (typeof value.backup !== "string" || backupNameProblem(value.backup) !== undefined)) return;
+  if ((ofSchedule || ofForm) && (typeof value.backup !== "string" || backupNameProblem(value.backup) !== undefined))
+    return;
+  const template = "template" in value ? readTemplate(value.template) : undefined;
+
+  if ("template" in value && !template) return;
   // A schedule whose name a label does not take is asked for no backup, here as in the confirmation.
   if (ofSchedule && scheduleRefused((value.target as WriteTarget).name) !== undefined) return;
   // One of the eight artifacts, and of the kind of its target: the log of a restore is not asked of a
@@ -426,6 +497,7 @@ export function readWriteConfirmRequest(value: unknown): WriteConfirmRequest | u
     ...(value.target ? { target: { ...(value.target as WriteTarget) } } : {}),
     ...(isArtifactTarget(value.artifact) ? { artifact: value.artifact } : {}),
     ...(typeof value.backup === "string" ? { backup: value.backup } : {}),
+    ...(template ? { template } : {}),
   };
 }
 
@@ -437,14 +509,17 @@ export function readWriteRunRequest(value: unknown): WriteRunRequest | undefined
   )
     return;
   // What is run is what was confirmed, with the token of its confirmation and the identifier of the request.
-  const confirm = readWriteConfirmRequest({
-    cluster: value.cluster,
-    namespace: value.namespace,
-    kind: value.kind,
-    ...("target" in value ? { target: value.target } : {}),
-    ...("artifact" in value ? { artifact: value.artifact } : {}),
-    ...("backup" in value ? { backup: value.backup } : {}),
-  });
+  const confirm = readWriteParameters(
+    {
+      cluster: value.cluster,
+      namespace: value.namespace,
+      kind: value.kind,
+      ...("target" in value ? { target: value.target } : {}),
+      ...("artifact" in value ? { artifact: value.artifact } : {}),
+      ...("backup" in value ? { backup: value.backup } : {}),
+    },
+    true,
+  );
 
   if (!confirm || !isUuid(value.token) || !isUuid(value.request)) return;
   return { ...confirm, token: value.token, request: value.request };
@@ -665,13 +740,15 @@ export function readKeptEnds(value: unknown): KeptEnd[] | undefined {
   for (const item of value) {
     if (
       !isRecord(item) ||
-      !hasKeys(item, ["request", "kind", "namespace", "context", "name", "schedule", "outcome", "at"]) ||
+      !hasKeys(item, ["request", "kind", "namespace", "context", "name", "outcome", "at"], ["schedule"]) ||
       !isUuid(item.request) ||
-      item.kind !== "backup-from-schedule" ||
+      (item.kind !== "backup-from-schedule" && item.kind !== "backup") ||
+      // A backup asked from a schedule names it, and one of the form names none.
+      (item.kind === "backup-from-schedule") !== "schedule" in item ||
+      ("schedule" in item && !isName(item.schedule)) ||
       !isNamespace(item.namespace) ||
       !isText(item.context) ||
       !isName(item.name) ||
-      !isName(item.schedule) ||
       typeof item.at !== "number" ||
       !Number.isFinite(item.at)
     )
@@ -686,7 +763,7 @@ export function readKeptEnds(value: unknown): KeptEnd[] | undefined {
       namespace: item.namespace,
       context: item.context,
       name: item.name,
-      schedule: item.schedule,
+      ...(typeof item.schedule === "string" ? { schedule: item.schedule } : {}),
       outcome,
       at: item.at,
     });

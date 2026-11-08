@@ -72,6 +72,7 @@ const resources = {
   Restore: "restores",
   Schedule: "schedules",
   BackupStorageLocation: "backupstoragelocations",
+  VolumeSnapshotLocation: "volumesnapshotlocations",
   DownloadRequest: "downloadrequests",
   ServerStatusRequest: "serverstatusrequests",
   DeleteBackupRequest: "deletebackuprequests",

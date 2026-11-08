@@ -42,6 +42,7 @@ import {
   type WriteTarget,
 } from "../common/ipc";
 import { ArtifactHolder } from "./artifact-holder";
+import { confirmBackupCreate, runBackupCreate } from "./backup-create";
 import { confirmBackupNow, runBackupNow } from "./backup-now";
 import { type CatalogEntry, refusalOf } from "./catalog";
 import { DiagnosticKubernetes, type HostClient } from "./diagnostic-kubernetes";
@@ -252,13 +253,14 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
   // What a kept end says: what to look for, in which namespace of which context, and how it ended.
   const keptEnd = (request: WriteRunRequest, end: Answer<BackupCreated>, context: string): KeptEnd => ({
     request: request.request,
-    kind: "backup-from-schedule",
+    kind: request.kind === "backup" ? "backup" : "backup-from-schedule",
     namespace: request.namespace,
     // The context of the entry the request was sent to, which the adapter was made for: not the one the catalog may
     // have now.
     context: context || request.cluster,
     name: String(request.backup),
-    schedule: request.target?.name ?? "",
+    // A backup asked from a schedule names it; one of the form names none.
+    ...(request.kind === "backup" ? {} : { schedule: request.target?.name ?? "" }),
     outcome: end.ok
       ? {
           created: true,
@@ -292,7 +294,7 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
   };
 
   procedure(CHANNELS.writeConfirm, readWriteConfirmRequest, async (sender, request, still) => {
-    if (request.kind !== "backup-from-schedule")
+    if (request.kind !== "backup-from-schedule" && request.kind !== "backup")
       return gate.confirm(
         sender.key,
         request.cluster,
@@ -301,12 +303,15 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
         request.target,
         request.artifact,
       );
-    // The schedule is read for the review while the frame that asks it is there.
+    // What the backup depends on is read for the review while the frame that asks it is there: the schedule, or the
+    // locations the template names.
     const controller = new AbortController();
     const watching = watchFrame(still, controller);
 
     try {
-      return await confirmBackupNow(actions, sender.key, request, controller.signal);
+      return request.kind === "backup"
+        ? await confirmBackupCreate(actions, sender.key, request, controller.signal)
+        : await confirmBackupNow(actions, sender.key, request, controller.signal);
     } finally {
       clearInterval(watching);
     }
@@ -495,8 +500,8 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
     }
   };
 
-  // The backups asked from a schedule that run, by their cluster and the identifier of their request: the same
-  // request of the same frame, sent again while it runs, joins it and creates nothing (SPEC-0017, REQ-249).
+  // The backups that run, asked from a schedule or with the form, by their cluster and the identifier of their request:
+  // the same request of the same frame, sent again while it runs, joins it and creates nothing (SPEC-0017, REQ-249).
   const backupsNow = new Map<string, { fingerprint: string; promise: Promise<Answer<BackupCreated>> }>();
 
   procedure<WriteRunRequest, ServerStatusValue | ArtifactValue | BackupCreated>(
@@ -504,7 +509,7 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
     readWriteRunRequest,
     (sender, request, still) => {
       if (request.kind === "ServerStatusRequest") return serverStatus(sender, request, still);
-      if (request.kind === "backup-from-schedule") {
+      if (request.kind === "backup-from-schedule" || request.kind === "backup") {
         const key = `${request.cluster}/${request.request}`;
         const fingerprint = JSON.stringify([
           sender.key,
@@ -517,7 +522,8 @@ export function registerHandlers(registrar: Registrar, dependencies: HandlersDep
           return running.fingerprint === fingerprint
             ? running.promise
             : failure("forbidden", "request", false, "No write of this frame has this identifier.");
-        const promise = runBackupNow(
+        const run = request.kind === "backup" ? runBackupCreate : runBackupNow;
+        const promise = run(
           actions,
           sender.key,
           request,

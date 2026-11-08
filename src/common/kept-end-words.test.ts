@@ -31,4 +31,12 @@ describe("what the target bar says of an end no view showed", () => {
       "The backup nightly-20261108043015, asked from the schedule nightly in velero (context kind-demo), ended while no view of it was open: A backup named nightly-20261108043015 is already there.",
     );
   });
+
+  it("says a backup of the form as one asked with the form", () => {
+    const { schedule: _schedule, ...form } = { ...end, kind: "backup" as const, name: "shop-by-hand" };
+
+    expect(keptEndWords(form)).toBe(
+      "The backup shop-by-hand, asked with the form in velero (context kind-demo), was created while no view of it was open. Velero wrote its phase: Completed.",
+    );
+  });
 });

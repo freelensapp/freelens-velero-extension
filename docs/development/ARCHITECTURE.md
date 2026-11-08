@@ -892,8 +892,9 @@ by the identifier of the request; nothing of a write is broadcast. The main proc
 broadcasts only that the gate of a cluster changed for a reason of its own, the entry
 of the catalog, the connection or the frame that turned writes on, and looks at the
 catalog and at that frame every five seconds while writes are on somewhere. The end
-of a backup asked from a schedule whose request was sent is kept for its cluster
-until a frame of that cluster has shown it, or the extension is deactivated: the
+of a backup, asked from a schedule or with the form, whose request was sent is kept
+for its cluster until a frame of that cluster has shown it, or the extension is
+deactivated: the
 views ask for the ends of their cluster at every read, and the target bar of the
 pages of the extension says each one that no view showed (REQ-250 of
 [SPEC-0017](../specs/SPEC-0017-write-actions.md)); each action adds its kind with its
@@ -913,8 +914,10 @@ of the host does, credential plugins included: the extension runs no plugin and
 refuses no kind of authentication, and what the identity may not do is what the
 cluster refuses. The writes the gate lets through are a ServerStatusRequest, a
 DownloadRequest and, since the first pull request of T4.2 of
-[SPEC-0017](../specs/SPEC-0017-write-actions.md), a Backup asked from a schedule;
-each action of SPEC-0017 adds its kind with its slice.
+[SPEC-0017](../specs/SPEC-0017-write-actions.md), a Backup asked from a schedule,
+and since the first pull request of T4.3 a Backup of the form, whose confirmation
+reads the storage location and each snapshot location its template names; each
+action of SPEC-0017 adds its kind with its slice.
 
 The trust model of Freelens v2 (D5 of SPEC-0015), which the binding lives in: the
 boundary of v2 is between the extensions and the application, not between
