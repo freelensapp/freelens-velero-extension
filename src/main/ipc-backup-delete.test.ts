@@ -425,7 +425,7 @@ describe("the run of the deletion of a backup", () => {
     const confirmed = await token();
     // The first wait lasts all but the last second of the thirty: the read that hangs then ends with them.
     state.jump = 28_000;
-    adapter.read.mockImplementation(async (kind, namespace, name, signal) =>
+    adapter.read.mockImplementation(async (kind, _namespace, _name, signal) =>
       kind === "DeleteBackupRequest"
         ? hanging<DiagnosticObject>(signal)
         : structuredClone(state.backup as DiagnosticObject),
