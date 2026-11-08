@@ -110,7 +110,7 @@ describe("the index of the operations of an installation of the long lists", { t
       backups: BACKUPS,
       restores: RESTORES,
       podVolumeBackups: OPERATIONS,
-      ofTheBackup: band.operations.length,
+      ofTheBackup: band.halves[0].operations.length,
       budget: BUDGET,
       index: { ...series(measured.map((call) => call.ms)), warm: warm.map(hundredths) },
       band: { ...series(bands.map((call) => call.ms)), warm: bandWarm.map(hundredths) },
@@ -124,10 +124,12 @@ describe("the index of the operations of an installation of the long lists", { t
     expect(tick.value).toBe(index);
     expect(volumesOf(installation)).toBe(index);
     // The band holds the 200 of the backup, from the newest, each counted once in its group.
-    expect(band.operations).toHaveLength(OF_ONE);
-    expect(band.operations[0].metadata.name).toBe("operation-0");
-    expect(band.groups.reduce((sum, group) => sum + group.count, 0)).toBe(OF_ONE);
-    expect(bands.every((call) => call.value.operations === band.operations)).toBe(true);
+    const [pods] = band.halves;
+
+    expect(pods.operations).toHaveLength(OF_ONE);
+    expect(pods.operations[0].metadata.name).toBe("operation-0");
+    expect(pods.groups.reduce((sum, group) => sum + group.count, 0)).toBe(OF_ONE);
+    expect(bands.every((call) => call.value.halves[0].operations === pods.operations)).toBe(true);
     // Every other backup holds its own, found in one look of the index.
     expect(index.ofBackup.size).toBe(BACKUPS);
     // Both series answer within their budget at the 95th percentile.

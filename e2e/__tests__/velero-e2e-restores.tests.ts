@@ -429,7 +429,7 @@ describe("views of the restores", () => {
         kind: "PodVolumeRestore",
         state: "none",
         sentence:
-          "The pod volume restores of a restore are made while it is InProgress: this one failed its validation, and did not run.",
+          "The pod volume restores and the data downloads of a restore are made once it runs: this one failed its validation, and did not run.",
         words: NO_POD_VOLUME_RESTORE,
         count: "",
         groups: [],

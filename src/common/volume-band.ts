@@ -2,7 +2,9 @@
 // of the Volumes tab (SPEC-0014, REQ-187 and REQ-188): each found in the index of the operations of the
 // installation, never by a search of the items, and never by a name.
 
-import { ownerKey, repositoryKey } from "./volume-index";
+import { resolveReference } from "./references";
+import { LABELS } from "./types";
+import { ownerKey, READ_OF, repositoryKey, snapshotKey } from "./volume-index";
 import { volumeOperationState } from "./volume-phases";
 import { OWNER_KIND, operationOwner } from "./volume-references";
 import { bandSentence, volumePhaseText } from "./volume-words";
@@ -10,7 +12,13 @@ import { bandSentence, volumePhaseText } from "./volume-words";
 import type { OperationKind, OperationState } from "./phases";
 import type { FamilyRead } from "./read-state";
 import type { Reference } from "./references";
-import type { BackupRepositoryResource, BackupResource, ObjectMetadata, RestoreResource } from "./types";
+import type {
+  BackupRepositoryResource,
+  BackupResource,
+  DataDownloadResource,
+  ObjectMetadata,
+  RestoreResource,
+} from "./types";
 import type { ViewKind, ViewTarget } from "./views";
 import type { VolumeIndex } from "./volume-index";
 import type { VolumeKind, VolumeOperationState } from "./volume-phases";
@@ -74,8 +82,10 @@ export interface VolumeHalf {
   groups: PhaseGroup[];
 }
 
-export interface VolumeBand extends VolumeHalf {
-  // What the release does with the operations of this kind, by the phase of the backup or the restore.
+export interface VolumeBand {
+  // The operations of the owner, one half for each kind: the pod volume operations first, then the data movement.
+  halves: VolumeHalf[];
+  // What the release does with the operations of the owner, by the phase of the backup or the restore.
   sentence: string;
 }
 
@@ -92,27 +102,52 @@ function half(
   return { kind, read, operations: found, groups: phaseGroups(kind, order, found) };
 }
 
-function ownedBy(index: VolumeIndex, kind: OperationKind, metadata: ObjectMetadata): readonly VolumeOperation[] {
+// The map of the operations of each kind by their owner.
+const OWNED: Record<VolumeKind, "ofBackup" | "ofRestore" | "ofUpload" | "ofDownload"> = {
+  PodVolumeBackup: "ofBackup",
+  PodVolumeRestore: "ofRestore",
+  DataUpload: "ofUpload",
+  DataDownload: "ofDownload",
+};
+
+function ownedBy(index: VolumeIndex, kind: VolumeKind, metadata: ObjectMetadata): readonly VolumeOperation[] {
   if (!metadata.uid) return NONE;
-  const key = ownerKey(metadata.namespace ?? "", metadata.uid);
-
-  return (kind === "Backup" ? index.ofBackup.get(key) : index.ofRestore.get(key)) ?? NONE;
+  return (
+    (index[OWNED[kind]] as ReadonlyMap<string, VolumeOperation[]>).get(
+      ownerKey(metadata.namespace ?? "", metadata.uid),
+    ) ?? NONE
+  );
 }
 
-// The band of a backup: its pod volume backups, found by the label of its UID in its namespace (REQ-187).
+// The kinds of the operations of a backup and of a restore, in the order of the halves of the band.
+export const BAND_KINDS: Record<OperationKind, readonly VolumeKind[]> = {
+  Backup: ["PodVolumeBackup", "DataUpload"],
+  Restore: ["PodVolumeRestore", "DataDownload"],
+};
+
+function band(
+  index: VolumeIndex,
+  order: OperationKind,
+  owner: BackupResource | RestoreResource,
+  state: OperationState,
+): VolumeBand {
+  return {
+    halves: BAND_KINDS[order].map((kind) =>
+      half(kind, order, index.reads[READ_OF[kind]] as FamilyRead<unknown>, ownedBy(index, kind, owner.metadata)),
+    ),
+    sentence: bandSentence(order, state),
+  };
+}
+
+// The band of a backup: its pod volume backups and its data uploads, found by the label of its UID in its namespace
+// (REQ-187).
 export function backupBand(index: VolumeIndex, backup: BackupResource, state: OperationState): VolumeBand {
-  return {
-    ...half("PodVolumeBackup", "Backup", index.reads.podVolumeBackups, ownedBy(index, "Backup", backup.metadata)),
-    sentence: bandSentence("Backup", state),
-  };
+  return band(index, "Backup", backup, state);
 }
 
-// The band of a restore: its pod volume restores, the same way.
+// The band of a restore: its pod volume restores and its data downloads, the same way.
 export function restoreBand(index: VolumeIndex, restore: RestoreResource, state: OperationState): VolumeBand {
-  return {
-    ...half("PodVolumeRestore", "Restore", index.reads.podVolumeRestores, ownedBy(index, "Restore", restore.metadata)),
-    sentence: bandSentence("Restore", state),
-  };
+  return band(index, "Restore", restore, state);
 }
 
 // How many rows a band shows at first, and how many more at each command of it.
@@ -129,16 +164,11 @@ export interface OwnerReads {
   restores: FamilyRead<RestoreResource>;
 }
 
-const ORDER_OF_KIND: Record<VolumeKind, OperationKind> = {
-  PodVolumeBackup: "Backup",
-  PodVolumeRestore: "Restore",
-};
-
 // The owners of the operations, once each, from the one of the newest operation: resolved as the view of an
 // operation resolves its owner, by the labels and the owner reference.
 function ownersOf(kind: VolumeKind, operations: readonly VolumeOperation[], reads: OwnerReads): Reference[] {
   const owners = new Map<string, Reference>();
-  const read = kind === "PodVolumeBackup" ? reads.backups : reads.restores;
+  const read = OWNER_KIND[kind] === "Backup" ? reads.backups : reads.restores;
 
   for (const operation of operations) {
     const owner = operationOwner(operation, OWNER_KIND[kind], read).reference;
@@ -158,15 +188,13 @@ export function repositoryUses(
   const key = repositoryKey(repository);
   const found = key ? (index.usedBy.get(key) ?? []) : [];
 
-  return (
-    [
-      ["PodVolumeBackup", index.reads.podVolumeBackups],
-      ["PodVolumeRestore", index.reads.podVolumeRestores],
-    ] as const
-  ).map(([kind, read]) => {
+  return (["PodVolumeBackup", "PodVolumeRestore", "DataUpload", "DataDownload"] as const).map((kind) => {
     const operations = found.filter((entry) => entry.kind === kind).map((entry) => entry.operation);
 
-    return { ...half(kind, ORDER_OF_KIND[kind], read, operations), owners: ownersOf(kind, operations, reads) };
+    return {
+      ...half(kind, OWNER_KIND[kind], index.reads[READ_OF[kind]] as FamilyRead<unknown>, operations),
+      owners: ownersOf(kind, operations, reads),
+    };
   });
 }
 
@@ -174,17 +202,26 @@ export function repositoryUses(
 export const OPERATION_VIEW: Record<VolumeKind, ViewKind> = {
   PodVolumeBackup: "pod-volume-backup",
   PodVolumeRestore: "pod-volume-restore",
+  DataUpload: "data-upload",
+  DataDownload: "data-download",
 };
 
-// The way of each row of the Volumes tab of a backup or a restore, by the namespace of its pod, its pod and its
-// volume, among the pod volume operations of that owner (REQ-188), the newest when more than one names the same. A
-// row that no operation matches has none, and none has one while the family is denied, as the table of the states
-// says. A read that failed, or of a kind no longer served, keeps the ways of the read before, as the band keeps its
-// rows (REQ-191): the notice over the view says that the family is of an earlier read, and when.
+// The way of each row of the Volumes tab of a backup or a restore (REQ-188): by the namespace of its pod, its pod and
+// its volume, among the pod volume operations of that owner; by its operation ID, among the data uploads or the data
+// downloads of that owner, whose label carries it. The newest when more than one names the same. A row that no
+// operation matches has none, and none has one while its family is denied, as the table of the states says. A read
+// that failed, or of a kind no longer served, keeps the ways of the read before, as the band keeps its rows
+// (REQ-191): the notice over the view says that the family is of an earlier read, and when.
 export type VolumeWays = ReadonlyMap<string, ViewTarget>;
 
 export function rowKey(podNamespace: string, pod: string, volume: string): string {
   return `${podNamespace}\u0000${pod}\u0000${volume}`;
+}
+
+// The key of a row of a moved volume, by the operation ID it carries: never the key of a pod volume, which has three
+// parts.
+export function movedKey(operationId: string): string {
+  return `\u0001${operationId}`;
 }
 
 export function volumeWays(
@@ -193,18 +230,43 @@ export function volumeWays(
   owner: { namespace?: string; uid?: string },
 ): VolumeWays {
   const ways = new Map<string, ViewTarget>();
-  const of: VolumeKind = kind === "Backup" ? "PodVolumeBackup" : "PodVolumeRestore";
-  const read = kind === "Backup" ? index.reads.podVolumeBackups : index.reads.podVolumeRestores;
+  const [pods, moved] = BAND_KINDS[kind];
+  const of = { name: "", namespace: owner.namespace, uid: owner.uid };
 
-  if (read.status === "forbidden") return ways;
-  for (const operation of ownedBy(index, kind, { name: "", namespace: owner.namespace, uid: owner.uid })) {
-    const pod = operation.spec?.pod;
-    const volume = operation.spec?.volume;
+  if (index.reads[READ_OF[pods]].status !== "forbidden") {
+    for (const operation of ownedBy(index, pods, of)) {
+      const pod = (operation as { spec?: { pod?: { namespace?: string; name?: string } | null } }).spec?.pod;
+      const volume = (operation as { spec?: { volume?: string } }).spec?.volume;
 
-    if (!pod?.namespace || !pod.name || !volume) continue;
-    const key = rowKey(pod.namespace, pod.name, volume);
+      if (!pod?.namespace || !pod.name || !volume) continue;
+      const key = rowKey(pod.namespace, pod.name, volume);
 
-    if (!ways.has(key)) ways.set(key, { kind: OPERATION_VIEW[of], name: operation.metadata.name });
+      if (!ways.has(key)) ways.set(key, { kind: OPERATION_VIEW[pods], name: operation.metadata.name });
+    }
+  }
+  if (index.reads[READ_OF[moved]].status !== "forbidden") {
+    for (const operation of ownedBy(index, moved, of)) {
+      const id = operation.metadata.labels?.[LABELS.asyncOperationId];
+
+      if (typeof id !== "string" || !id) continue;
+      const key = movedKey(id);
+
+      if (!ways.has(key)) ways.set(key, { kind: OPERATION_VIEW[moved], name: operation.metadata.name });
+    }
   }
   return ways;
+}
+
+// The data upload whose snapshot a data download restores, among the ones of its installation (REQ-186): found in the
+// index by the snapshot, the newest when more than one names it. Nothing when none does, or when the data uploads were
+// not read: the data upload goes with its backup, and its absence says nothing of the data download.
+export function uploadOf(index: VolumeIndex, download: DataDownloadResource): Reference | undefined {
+  const snapshot = download.spec?.snapshotID;
+
+  if (typeof snapshot !== "string" || !snapshot) return undefined;
+  const namespace = download.metadata.namespace ?? "";
+  const found = index.bySnapshot.get(snapshotKey(namespace, snapshot))?.[0];
+
+  if (!found) return undefined;
+  return resolveReference("DataUpload", found.metadata.name, namespace, { ...index.reads.dataUploads, items: [found] });
 }

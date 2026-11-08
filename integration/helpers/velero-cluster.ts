@@ -244,6 +244,16 @@ export const POD_VOLUME_RESTORES: ListOf = {
   kind: "pod-volume-restore",
   menu: "velero-pod-volume-restores",
 };
+export const DATA_UPLOADS: ListOf = {
+  id: "data-uploads",
+  kind: "data-upload",
+  menu: "velero-data-uploads",
+};
+export const DATA_DOWNLOADS: ListOf = {
+  id: "data-downloads",
+  kind: "data-download",
+  menu: "velero-data-downloads",
+};
 
 /**
  * A table of lines of a page that is not a list of the host, as the lines of
@@ -2061,9 +2071,9 @@ export async function notices(frame: Frame, expected?: string[]): Promise<Record
   }
 }
 
-/** What the band of the volume operations of the view of a backup or of a restore shows. */
+/** What a half of the band of the volume operations of the view of a backup or of a restore shows. */
 export interface VolumeBandShown {
-  // The kind of the operations of the band: PodVolumeBackup or PodVolumeRestore.
+  // The kind of the operations of the half: PodVolumeBackup or PodVolumeRestore, DataUpload or DataDownload.
   kind: string;
   // `rows` when it has rows, or the state its words say: none, loading, denied, failed, not-served, not-read.
   state: string;
@@ -2082,43 +2092,44 @@ export interface VolumeBandShown {
 }
 
 /**
- * The band of the volume operations of the view that is shown, once its family
- * is not being read for the first time: the view asks it when it opens, and
- * says until then that it is being read. With the state that is expected, the
- * band is waited for until it is in that state; the one it is in when the time
- * is over is answered.
+ * A half of the band of the volume operations of the view that is shown, by
+ * default the first, of the pod volume operations, once its family is not being
+ * read for the first time: the view asks it when it opens, and says until then
+ * that it is being read. With the state that is expected, the half is waited for
+ * until it is in that state; the one it is in when the time is over is
+ * answered. The sentence is the one of the whole band.
  */
-export async function volumeBand(frame: Frame, expected?: string): Promise<VolumeBandShown> {
-  await frame
-    .locator("[data-testid=velero-volume-band]")
-    .first()
-    .waitFor({ state: "visible", timeout: ELEMENT_TIMEOUT });
+export async function volumeBand(frame: Frame, expected?: string, kind?: string): Promise<VolumeBandShown> {
+  const half = `[data-testid=velero-volume-band] [data-testid=velero-volume-half]${kind ? `[data-kind=${kind}]` : ""}`;
+
+  await frame.locator(half).first().waitFor({ state: "visible", timeout: ELEMENT_TIMEOUT });
   await frame
     .waitForFunction(
-      (wanted) => {
-        const root = document.querySelector("[data-testid=velero-volume-band]");
+      ({ selector, wanted }) => {
+        const root = document.querySelector(selector);
         const state = root
           ? (root.querySelector("[data-testid=velero-volume-state]")?.getAttribute("data-state") ?? "rows")
           : "";
 
         return wanted ? state === wanted : state !== "" && state !== "loading" && state !== "not-read";
       },
-      expected,
+      { selector: half, wanted: expected },
       { timeout: ELEMENT_TIMEOUT, polling: 100 },
     )
     .catch(() => undefined);
 
-  return frame.evaluate(() => {
-    const root = document.querySelector<HTMLElement>("[data-testid=velero-volume-band]");
+  return frame.evaluate((selector) => {
+    const band = document.querySelector<HTMLElement>("[data-testid=velero-volume-band]");
+    const root = document.querySelector<HTMLElement>(selector);
 
-    if (!root) throw new Error("The band of the volume operations went while it was read");
-    const said = (id: string) =>
-      (root.querySelector<HTMLElement>(`[data-testid=${id}]`)?.textContent ?? "").replace(/\s+/g, " ").trim();
+    if (!band || !root) throw new Error("The band of the volume operations went while it was read");
+    const said = (id: string, within: HTMLElement = root) =>
+      (within.querySelector<HTMLElement>(`[data-testid=${id}]`)?.textContent ?? "").replace(/\s+/g, " ").trim();
 
     return {
       kind: root.getAttribute("data-kind") ?? "",
       state: root.querySelector("[data-testid=velero-volume-state]")?.getAttribute("data-state") ?? "rows",
-      sentence: said("velero-volume-sentence"),
+      sentence: said("velero-volume-sentence", band),
       words: said("velero-volume-state"),
       count: said("velero-volume-count"),
       groups: [...root.querySelectorAll<HTMLElement>("[data-testid=velero-volume-groups] > li")].map(
@@ -2131,7 +2142,7 @@ export async function volumeBand(frame: Frame, expected?: string): Promise<Volum
       more: root.querySelector("[data-testid=velero-volume-more]") !== null,
       stale: said("velero-volume-stale"),
     };
-  });
+  }, half);
 }
 
 /** Asks the views to read again, and waits for the read to end. */

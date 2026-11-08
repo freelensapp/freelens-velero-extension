@@ -14,6 +14,7 @@ import {
   NOT_KNOWN_WORDS,
   REPOSITORY_RULE_WORDS,
 } from "../../common/overview";
+import { PATHS } from "../../common/paths";
 import { emptyRead, failed } from "../../common/read-state";
 import { SIGNAL_WORDS, scheduleSignal } from "../../common/schedule-signal";
 import { adherenceTip } from "../components/adherence";
@@ -31,6 +32,8 @@ import type { ScheduleResource } from "../../common/types";
 process.env.TZ = "Pacific/Kiritimati";
 
 const DISCOVERY = "/apis/velero.io/v1";
+// The discovery of the second version of the group, which serves the data movement.
+const SECOND = "/apis/velero.io/v2alpha1";
 const LOCATIONS = "/apis/velero.io/v1/backupstoragelocations";
 const A = "velero-a";
 const B = "velero-b";
@@ -45,7 +48,7 @@ const extension = { name: "@freelensapp/velero-extension" };
 type Answers = Record<string, Answer | (() => Promise<Answer>)>;
 
 function path(family: Family, namespace: string): string {
-  return `/apis/velero.io/v1/namespaces/${namespace}/${RESOURCES[family]}`;
+  return PATHS.family(family, namespace);
 }
 
 function list(...items: unknown[]): Answer {
@@ -141,6 +144,7 @@ const served: Answer = { status: 200, body: { resources: Object.values(RESOURCES
 function answers(more: Answers = {}): Answers {
   return {
     [DISCOVERY]: served,
+    [SECOND]: { status: 200, body: { resources: [{ name: "datauploads" }, { name: "datadownloads" }] } },
     // No repository in either installation: what the cases below say of the other families holds with them read.
     [path("backupRepositories", A)]: list(),
     [path("backupRepositories", B)]: list(),
@@ -261,7 +265,7 @@ describe("what was read", () => {
     // The page asks what every other view asks at every read, and nothing of its own: none of the families read on
     // demand, which only a view that shows them holds.
     expect([...new Set(asked)].sort()).toEqual(
-      [DISCOVERY, LOCATIONS, ...ALWAYS.map((family) => path(family, A))].sort(),
+      [DISCOVERY, SECOND, LOCATIONS, ...ALWAYS.map((family) => path(family, A))].sort(),
     );
     expect(asked.filter((at) => ON_DEMAND.some((family) => at === path(family, A)))).toEqual([]);
     expect(screen.getByTestId("velero-overview-page")).toBeTruthy();

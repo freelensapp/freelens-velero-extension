@@ -5,6 +5,8 @@ import {
   Backup,
   BackupRepository,
   BackupStorageLocation,
+  DataDownload,
+  DataUpload,
   PodVolumeBackup,
   PodVolumeRestore,
   Restore,
@@ -23,6 +25,10 @@ import { VolumeOperationDetails } from "./details/volume-operation-details";
 import {
   BACKUPS_MENU_ID,
   BACKUPS_PAGE_ID,
+  DATA_DOWNLOADS_MENU_ID,
+  DATA_DOWNLOADS_PAGE_ID,
+  DATA_UPLOADS_MENU_ID,
+  DATA_UPLOADS_PAGE_ID,
   OVERVIEW_MENU_ID,
   OVERVIEW_PAGE_ID,
   POD_VOLUME_BACKUPS_MENU_ID,
@@ -42,6 +48,8 @@ import {
   STORAGE_LOCATIONS_PAGE_ID,
 } from "./navigation";
 import { BackupsPage } from "./pages/backups-page";
+import { DataDownloadsPage } from "./pages/data-downloads-page";
+import { DataUploadsPage } from "./pages/data-uploads-page";
 import { OverviewPage } from "./pages/overview-page";
 import { PodVolumeBackupsPage } from "./pages/pod-volume-backups-page";
 import { PodVolumeRestoresPage } from "./pages/pod-volume-restores-page";
@@ -67,6 +75,8 @@ export default class VeleroRenderer extends Renderer.LensExtension {
     { id: REPOSITORIES_PAGE_ID, components: { Page: () => <RepositoriesPage /> } },
     { id: POD_VOLUME_BACKUPS_PAGE_ID, components: { Page: () => <PodVolumeBackupsPage /> } },
     { id: POD_VOLUME_RESTORES_PAGE_ID, components: { Page: () => <PodVolumeRestoresPage /> } },
+    { id: DATA_UPLOADS_PAGE_ID, components: { Page: () => <DataUploadsPage /> } },
+    { id: DATA_DOWNLOADS_PAGE_ID, components: { Page: () => <DataDownloadsPage /> } },
   ].map((registration) => withPageErrorBoundary(this, registration));
 
   // The host gives a page the tabs of its group when the first entry that leads to it is an entry of the
@@ -137,10 +147,24 @@ export default class VeleroRenderer extends Renderer.LensExtension {
       target: { pageId: POD_VOLUME_RESTORES_PAGE_ID },
       components: {},
     },
+    {
+      id: DATA_UPLOADS_MENU_ID,
+      parentId: ROOT_MENU_ID,
+      title: DataUpload.crd.title,
+      target: { pageId: DATA_UPLOADS_PAGE_ID },
+      components: {},
+    },
+    {
+      id: DATA_DOWNLOADS_MENU_ID,
+      parentId: ROOT_MENU_ID,
+      title: DataDownload.crd.title,
+      target: { pageId: DATA_DOWNLOADS_PAGE_ID },
+      components: {},
+    },
     { id: ROOT_MENU_ID, title: "Velero", target: { pageId: OVERVIEW_PAGE_ID }, components: { Icon: VeleroIcon } },
   ];
 
-  // The sections of the details of the eight kinds, each tied to its kind by `detailsFor`, which takes the
+  // The sections of the details of the ten kinds, each tied to its kind by `detailsFor`, which takes the
   // kind and the versions from the class and checks the section against it. The host renders a section with
   // the object alone: the extension is given by the registration. The host has no boundary around its drawer
   // of the details: every section is drawn inside one of the extension, which keeps an error in the section
@@ -178,6 +202,14 @@ export default class VeleroRenderer extends Renderer.LensExtension {
       priority: 10,
       Details: (props) => <VolumeOperationDetails {...props} volume="PodVolumeRestore" extension={this} />,
     }),
+    Renderer.K8sApi.detailsFor(DataUpload, {
+      priority: 10,
+      Details: (props) => <VolumeOperationDetails {...props} volume="DataUpload" extension={this} />,
+    }),
+    Renderer.K8sApi.detailsFor(DataDownload, {
+      priority: 10,
+      Details: (props) => <VolumeOperationDetails {...props} volume="DataDownload" extension={this} />,
+    }),
   ].map((registration) => withDetailsErrorBoundary(this, registration));
 
   // The kinds with pages of their own in the group of Velero: the Custom Resources tree of the cluster leaves
@@ -191,6 +223,8 @@ export default class VeleroRenderer extends Renderer.LensExtension {
     BackupRepository,
     PodVolumeBackup,
     PodVolumeRestore,
+    DataUpload,
+    DataDownload,
   ];
 
   // What the activation does is to open the store of the preferences and the way to the main process.

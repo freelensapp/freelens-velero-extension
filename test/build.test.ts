@@ -215,13 +215,13 @@ describe("the bundle of the renderer", () => {
         extension.kubeObjectDetailItems as { kind: string; components: { Details(props: object): Drawn } }[]
       ).map((item) => item.components.Details({ object }));
 
-      expect(pages).toHaveLength(9);
-      expect(sections).toHaveLength(8);
+      expect(pages).toHaveLength(11);
+      expect(sections).toHaveLength(10);
       for (const drawn of [...pages, ...sections]) {
         expect(typeof drawn.type.getDerivedStateFromError).toBe("function");
         expect(drawn.props.extension).toBe(extension);
       }
-      expect(sections.map((drawn) => drawn.props.resetKey)).toEqual(Array(8).fill(object));
+      expect(sections.map((drawn) => drawn.props.resetKey)).toEqual(Array(10).fill(object));
       expect(
         (extension.customResources as { kind: string }[]).map((kind) => [
           kind.kind,
@@ -237,6 +237,8 @@ describe("the bundle of the renderer", () => {
           "BackupRepository",
           "PodVolumeBackup",
           "PodVolumeRestore",
+          "DataUpload",
+          "DataDownload",
         ].map((kind) => [kind, true]),
       );
     });

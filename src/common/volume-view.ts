@@ -4,14 +4,44 @@
 import { timestamp } from "./duration";
 import { timeText } from "./operation-text";
 import { bytesProgress } from "./progress";
-import { LIFECYCLE_RANK, phaseRank, volumeOperationState } from "./volume-phases";
-import { OWNER_KIND, operationNode, operationOwner, operationPod } from "./volume-references";
+import {
+  builtInMover,
+  dataMovement,
+  LIFECYCLE_RANK,
+  phaseRank,
+  volumeOperationState,
+  writtenType,
+} from "./volume-phases";
+import {
+  acceptedBy,
+  OWNER_KIND,
+  operationClaim,
+  operationNode,
+  operationOwner,
+  operationPod,
+} from "./volume-references";
 import { spanValue, volumeTimes } from "./volume-time";
-import { bytesText, POD_NOT_NAMED, spanText, uploaderText, VOLUME_WORDS, volumePhaseText } from "./volume-words";
+import {
+  bytesText,
+  CLAIM_NOT_NAMED,
+  moverText,
+  POD_NOT_NAMED,
+  spanText,
+  uploaderText,
+  VOLUME_WORDS,
+  volumePhaseText,
+} from "./volume-words";
 
 import type { ItemProgress } from "./progress";
 import type { FamilyRead } from "./read-state";
-import type { BackupResource, PodVolumeBackupResource, PodVolumeRestoreResource, RestoreResource } from "./types";
+import type {
+  BackupResource,
+  DataDownloadResource,
+  DataUploadResource,
+  PodVolumeBackupResource,
+  PodVolumeRestoreResource,
+  RestoreResource,
+} from "./types";
 import type { VolumeKind, VolumeOperationState } from "./volume-phases";
 import type { Owner, PodOf, VolumeOperation } from "./volume-references";
 import type { VolumeTimes } from "./volume-time";
@@ -27,17 +57,23 @@ export interface VolumeView {
   owner: Owner;
   pod: PodOf;
   volume?: string;
-  // The pod and the volume, as the list shows them.
+  // What the list shows of the volume: the pod and the volume of a pod volume operation, the source claim of a data
+  // upload, the target claim of a data download.
   source: string;
   node?: string;
+  // The node whose node agent accepted a data movement, when it is not its node.
+  acceptedBy?: string;
   progress: ItemProgress;
-  // Of a pod volume backup alone, which carries it: the value as the object carries it.
+  // Of a pod volume backup and of a data upload, which carry it: the value as the object carries it.
   incremental?: { value: unknown };
-  // Of a pod volume restore alone: the logical size of its snapshot, as the object carries it.
+  // Of a pod volume restore and of a data download: the logical size of its snapshot, as the object carries it.
   snapshotSize?: { value: unknown };
   times: VolumeTimes;
   location?: string;
+  // The uploader of a pod volume operation, or the data mover of a data movement, as the object carries it.
   uploader?: string;
+  // What the list says of the uploader or of the data mover, and whether the reviewed release writes it.
+  mover: { text: string; known: boolean };
   created?: number;
 }
 
@@ -52,16 +88,37 @@ export interface VolumeReads {
   restores: FamilyRead<RestoreResource>;
 }
 
+// The uploader of a pod volume operation, or the data mover of a data movement.
+function moverOf(kind: VolumeKind, operation: VolumeOperation): string | undefined {
+  return dataMovement(kind)
+    ? text((operation as DataUploadResource | DataDownloadResource).spec?.datamover)
+    : text((operation as PodVolumeBackupResource | PodVolumeRestoreResource).spec?.uploaderType);
+}
+
+// The claim of a data movement by its namespace and its name: the source claim of a data upload, in the namespace it
+// was backed up from; the target claim of a data download, in the namespace it is restored into.
+export function claimSource(kind: "DataUpload" | "DataDownload", operation: VolumeOperation): string {
+  const claim = operationClaim(kind, operation).name;
+  const namespace =
+    kind === "DataUpload"
+      ? text((operation as DataUploadResource).spec?.sourceNamespace)
+      : text((operation as DataDownloadResource).spec?.targetVolume?.namespace);
+
+  return claim ? `${namespace ? `${namespace}/` : ""}${claim}` : CLAIM_NOT_NAMED;
+}
+
 export function volumeView(kind: VolumeKind, operation: VolumeOperation, now: number, reads: VolumeReads): VolumeView {
   const state = volumeOperationState(kind, operation.status?.phase);
   const pod = operationPod(operation);
-  const volume = text(operation.spec?.volume);
+  const volume = dataMovement(kind) ? undefined : text((operation as PodVolumeBackupResource).spec?.volume);
   const node = operationNode(kind, operation);
-  const owners = kind === "PodVolumeBackup" ? reads.backups : reads.restores;
+  const accepted = acceptedBy(kind, operation);
+  const owners = OWNER_KIND[kind] === "Backup" ? reads.backups : reads.restores;
   const created = timestamp(operation.metadata.creationTimestamp);
   const message = text(operation.status?.message);
   const location = text(operation.spec?.backupStorageLocation);
-  const uploader = text(operation.spec?.uploaderType);
+  const uploader = moverOf(kind, operation);
+  const backs = kind === "PodVolumeBackup" || kind === "DataUpload";
 
   return {
     kind,
@@ -73,15 +130,19 @@ export function volumeView(kind: VolumeKind, operation: VolumeOperation, now: nu
     owner: operationOwner(operation, OWNER_KIND[kind], owners),
     pod,
     ...(volume ? { volume } : {}),
-    source: sourceText(pod, volume),
+    source: dataMovement(kind) ? claimSource(kind, operation) : sourceText(pod, volume),
     ...(node ? { node } : {}),
+    ...(accepted ? { acceptedBy: accepted } : {}),
     progress: bytesProgress(operation.status?.progress),
-    ...(kind === "PodVolumeBackup"
-      ? { incremental: { value: (operation as PodVolumeBackupResource).status?.incrementalBytes } }
-      : { snapshotSize: { value: (operation as PodVolumeRestoreResource).spec?.snapshotSize } }),
+    ...(backs
+      ? { incremental: { value: (operation as PodVolumeBackupResource | DataUploadResource).status?.incrementalBytes } }
+      : { snapshotSize: { value: (operation as PodVolumeRestoreResource | DataDownloadResource).spec?.snapshotSize } }),
     times: volumeTimes(state, operation.status, now),
     ...(location ? { location } : {}),
     ...(uploader ? { uploader } : {}),
+    mover: dataMovement(kind)
+      ? { text: moverText(uploader), known: builtInMover(uploader) }
+      : { text: uploaderText(uploader), known: writtenType(uploader) },
     ...(created === undefined ? {} : { created }),
   };
 }
@@ -108,7 +169,7 @@ export function volumeSearch(view: VolumeView): string[] {
     view.times.started === undefined ? VOLUME_WORDS.notStarted : timeText(view.times.started),
     spanText(view.times.span),
     view.location ?? "",
-    uploaderText(view.uploader),
+    view.mover.text,
   ].filter(Boolean);
 }
 
@@ -125,7 +186,7 @@ export const VOLUME_SORTING = {
   started: (view: VolumeView) => (view.times.started === undefined ? [1, 0] : [0, view.times.started]),
   duration: (view: VolumeView) => spanValue(view.times.span),
   storage: (view: VolumeView) => view.location ?? "",
-  uploader: (view: VolumeView) => uploaderText(view.uploader),
+  uploader: (view: VolumeView) => view.mover.text,
   age: (view: VolumeView) => -(view.created ?? 0),
 };
 
@@ -170,6 +231,58 @@ const KNOWN: Record<VolumeKind, { spec: string[]; status: string[] }> = {
       "cancel",
     ],
     status: ["phase", "message", "startTimestamp", "completionTimestamp", "progress", "acceptedTimestamp", "node"],
+  },
+  DataUpload: {
+    spec: [
+      "snapshotType",
+      "csiSnapshot",
+      "sourcePVC",
+      "datamover",
+      "backupStorageLocation",
+      "sourceNamespace",
+      "dataMoverConfig",
+      "cancel",
+      "operationTimeout",
+    ],
+    status: [
+      "phase",
+      "path",
+      "snapshotID",
+      "dataMoverResult",
+      "message",
+      "startTimestamp",
+      "completionTimestamp",
+      "progress",
+      "incrementalBytes",
+      "node",
+      "nodeOS",
+      "acceptedByNode",
+      "acceptedTimestamp",
+    ],
+  },
+  DataDownload: {
+    spec: [
+      "targetVolume",
+      "backupStorageLocation",
+      "datamover",
+      "snapshotID",
+      "sourceNamespace",
+      "dataMoverConfig",
+      "cancel",
+      "operationTimeout",
+      "nodeOS",
+      "snapshotSize",
+    ],
+    status: [
+      "phase",
+      "message",
+      "startTimestamp",
+      "completionTimestamp",
+      "progress",
+      "node",
+      "acceptedByNode",
+      "acceptedTimestamp",
+    ],
   },
 };
 

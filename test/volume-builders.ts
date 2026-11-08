@@ -1,6 +1,6 @@
-// The objects of the backup repositories and of the pod volume operations, and of their owners, as the reviewed
-// release writes them (SPEC-0014, what the release does), for the tests of every layer. Every name, namespace,
-// node and identifier is synthetic.
+// The objects of the backup repositories, of the pod volume operations and of the data movement, and of their owners,
+// as the reviewed release writes them (SPEC-0014, what the release does), for the tests of every layer. Every name,
+// namespace, node and identifier is synthetic.
 
 import type { FamilyRead, ReadStatus } from "../src/common/read-state";
 import type {
@@ -8,6 +8,12 @@ import type {
   BackupRepositorySpec,
   BackupRepositoryStatus,
   BackupResource,
+  DataDownloadResource,
+  DataDownloadSpec,
+  DataDownloadStatus,
+  DataUploadResource,
+  DataUploadSpec,
+  DataUploadStatus,
   PodVolumeBackupResource,
   PodVolumeBackupSpec,
   PodVolumeBackupStatus,
@@ -120,6 +126,75 @@ export function podVolumeRestore(
       snapshotID: "f3c1d2e4a5b6c7d8",
       snapshotSize: 1_048_576,
       sourceNamespace: "shop",
+      ...made.spec,
+    },
+    ...(status ? { status } : {}),
+  };
+}
+
+// The labels the CSI plugin writes on a data movement besides the ones of its owner: the operation ID, prefixed `du-`
+// for an upload and `dd-` for a download, and the UID of the claim of an upload.
+export function moved(
+  kind: "Backup" | "Restore",
+  owner: { metadata: { name: string; uid?: string } },
+  id: string,
+): Made {
+  const made = ownedBy(kind, owner);
+
+  return {
+    ...made,
+    labels: {
+      ...made.labels,
+      "velero.io/async-operation-id": id,
+      ...(kind === "Backup" ? { "velero.io/pvc-uid": `pvc-${id}` } : {}),
+    },
+  };
+}
+
+export function dataUpload(
+  name: string,
+  status: DataUploadStatus | undefined,
+  made: Made & { spec?: Partial<DataUploadSpec> } = {},
+): DataUploadResource {
+  return {
+    apiVersion: "velero.io/v2alpha1",
+    kind: "DataUpload",
+    metadata: metadata("DataUpload", name, made),
+    spec: {
+      snapshotType: "CSI",
+      csiSnapshot: {
+        volumeSnapshot: "velero-orders-0-x7k2p",
+        storageClass: "standard",
+        snapshotClass: "csi-snapclass",
+        driver: "hostpath.csi.k8s.io",
+      },
+      sourcePVC: "orders-0",
+      backupStorageLocation: "default",
+      sourceNamespace: "shop",
+      operationTimeout: "10m0s",
+      ...made.spec,
+    },
+    ...(status ? { status } : {}),
+  };
+}
+
+export function dataDownload(
+  name: string,
+  status: DataDownloadStatus | undefined,
+  made: Made & { spec?: Partial<DataDownloadSpec> } = {},
+): DataDownloadResource {
+  return {
+    apiVersion: "velero.io/v2alpha1",
+    kind: "DataDownload",
+    metadata: metadata("DataDownload", name, made),
+    spec: {
+      targetVolume: { pvc: "orders-0", pv: "", namespace: "shop-restored" },
+      backupStorageLocation: "default",
+      snapshotID: "9a8b7c6d5e4f3a2b",
+      sourceNamespace: "shop",
+      operationTimeout: "10m0s",
+      nodeOS: "linux",
+      snapshotSize: 2_097_152,
       ...made.spec,
     },
     ...(status ? { status } : {}),

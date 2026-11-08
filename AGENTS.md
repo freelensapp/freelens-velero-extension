@@ -400,15 +400,16 @@ test environment and of the process of this repository.
 - A family that is asked again keeps the status of its last read, with
   `reading` beside it. Do not show a state from `loading` alone: it is the state
   of a family that was never answered.
-- The pod volume backups and the pod volume restores are read only while a view
-  that shows them is open: a holder says what it needs in one call that replaces
+- The pod volume backups, the pod volume restores, the data uploads and the data
+  downloads are read only while a view that shows them is open, the data movement
+  under `velero.io/v2alpha1` and never where the API does not serve that version: a holder says what it needs in one call that replaces
   what it needed before, the frame of a page with what its page and every view of
   the way that is open read, and lets go when it is gone. A family needed and never
   read is asked at once, alone, in the generation; one no holder needs is not asked
   at the read after, and what was read of it goes then. The views of a backup and of
-  a restore hold their family, the view of a repository both; the Overview, the
-  other lists and the sections of the details hold none: a test of what a page asks
-  counts them.
+  a restore hold their two families, the view of a repository the four, the view of
+  a data download the data uploads beside its own; the Overview, the other lists and
+  the sections of the details hold none: a test of what a page asks counts them.
 - The list layout of the host takes its rows from the `items` it is given, or from
   the `contextItems` of its store, and not from the `getItems` it is given, as read
   in the source at the target
@@ -771,7 +772,8 @@ the same helpers. So:
 
 - **Metadata**: `static readonly` `kind`, `namespaced`, `apiBase` and `crd`, with
   `crd.apiVersions` listing every version the cluster serves, `velero.io/v1` for
-  the eight kinds of today.
+  eight kinds of today and `velero.io/v2alpha1` for the data uploads and the data
+  downloads.
 - **Instance type**: `declare kind` and `declare apiVersion`, with the kind and the
   version as literals, which tie a section of the details made with `detailsFor`,
   and a menu item made with `menuItemFor`, to its kind. `declare` emits nothing: a

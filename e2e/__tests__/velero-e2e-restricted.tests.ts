@@ -84,12 +84,13 @@ describe("views with restricted access", () => {
     "keeps the backup and says which of its references cannot be read",
     async () => {
       await cluster.openWorkspace(frame, SCHEDULED);
-      // The view of a backup shows the band of its pod volume backups, which this identity may not read: their
-      // family is denied over it as well, the moment the view asked it.
-      const shown = await cluster.notices(frame, ["podVolumeBackups", "restores", "snapshotLocations"]);
+      // The view of a backup shows the band of its pod volume backups and of its data uploads, which this identity
+      // may not read: their families are denied over it as well, the moment the view asked them.
+      const shown = await cluster.notices(frame, ["dataUploads", "podVolumeBackups", "restores", "snapshotLocations"]);
 
-      expect(Object.keys(shown).sort()).toEqual(["podVolumeBackups", "restores", "snapshotLocations"]);
+      expect(Object.keys(shown).sort()).toEqual(["dataUploads", "podVolumeBackups", "restores", "snapshotLocations"]);
       expect(shown.podVolumeBackups).toContain("access is denied");
+      expect(shown.dataUploads).toContain("access is denied");
       expect(shown.restores).toContain("access is denied");
       expect(shown.snapshotLocations).toContain("access is denied");
       expect(await frame.locator("[data-testid=velero-backup-status]").innerText()).toContain("Completed");
@@ -270,14 +271,16 @@ describe("views with restricted access", () => {
   );
 
   it(
-    "says that the backup repositories, the pod volume backups and the pod volume restores are denied, and not that there are none",
+    "says that the backup repositories and the operations of the volumes are denied, and not that there are none",
     async () => {
-      // The identity reads the backups, the schedules and the storage locations: each list of the three kinds of
+      // The identity reads the backups, the schedules and the storage locations: each list of the five kinds of
       // the volumes says that it is denied, with no row and no count, and the notice of its family says the same.
       for (const [of, family, plural] of [
         [cluster.REPOSITORIES, "backupRepositories", "backup repositories"],
         [cluster.POD_VOLUME_BACKUPS, "podVolumeBackups", "pod volume backups"],
         [cluster.POD_VOLUME_RESTORES, "podVolumeRestores", "pod volume restores"],
+        [cluster.DATA_UPLOADS, "dataUploads", "data uploads"],
+        [cluster.DATA_DOWNLOADS, "dataDownloads", "data downloads"],
       ] as const) {
         await cluster.openPage(frame, of);
         await frame.waitForSelector(`[data-testid=velero-${of.id}-unavailable]`, { timeout: 60_000 });

@@ -16,7 +16,8 @@ import {
   repository,
   restore,
 } from "../../../test/volume-builders";
-import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
+import { emptyPreferences, FAMILIES, heldPreferences, RESOURCES, versionOf } from "../../common/discovery";
+import { PATHS } from "../../common/paths";
 import { operationState } from "../../common/phases";
 import { BAND_WORDS, bandSentence, REPOSITORY_WORDS, USED_BY_WORDS } from "../../common/volume-words";
 import { UsedBy, VolumeBand } from "../components/volume-band";
@@ -33,13 +34,14 @@ import type { ReadStatus } from "../../common/read-state";
 import type { Resource } from "../state/installation";
 
 const DISCOVERY = "/apis/velero.io/v1";
+const SECOND = "/apis/velero.io/v2alpha1";
 const LOCATIONS = "/apis/velero.io/v1/backupstoragelocations";
 const A = "velero";
 
 type Answers = Record<string, Answer | (() => Promise<Answer>)>;
 
 function path(family: Family, namespace = A): string {
-  return `/apis/velero.io/v1/namespaces/${namespace}/${RESOURCES[family]}`;
+  return PATHS.family(family, namespace);
 }
 
 function list(...items: unknown[]): Answer {
@@ -78,7 +80,15 @@ const finished = podVolumeRestore("monday-b", { phase: "Completed" }, ownedBy("R
 
 function answers(more: Answers = {}): Answers {
   return {
-    [DISCOVERY]: { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } },
+    [DISCOVERY]: {
+      status: 200,
+      body: {
+        resources: FAMILIES.filter((family) => versionOf(family) === "v1").map((family) => ({
+          name: RESOURCES[family],
+        })),
+      },
+    },
+    [SECOND]: { status: 200, body: { resources: [{ name: "datauploads" }, { name: "datadownloads" }] } },
     [LOCATIONS]: list(location("default")),
     [path("backups")]: list(nightly, failing),
     [path("restores")]: list(monday),
@@ -88,6 +98,8 @@ function answers(more: Answers = {}): Answers {
     [path("backupRepositories")]: list(kopia),
     [path("podVolumeBackups")]: list(...many),
     [path("podVolumeRestores")]: list(restored, finished),
+    [path("dataUploads")]: list(),
+    [path("dataDownloads")]: list(),
     ...more,
   };
 }
@@ -116,7 +128,9 @@ function mount(table: Answers, page: (installation: Installation) => ReactNode) 
   return made;
 }
 
-const band = () => screen.getByTestId("velero-volume-band");
+// The band of the volume operations, and its half of the pod volume operations, which is the first.
+const section = () => screen.getByTestId("velero-volume-band");
+const band = () => within(section()).getAllByTestId("velero-volume-half")[0];
 const rows = () => [...band().querySelectorAll("tbody tr")].map((row) => row.getAttribute("data-operation"));
 const count = (asked: string[], family: Family) => asked.filter((one) => one === path(family)).length;
 // The counts of the groups as they are read, each beside its mark, whose name the host draws as an icon.
@@ -149,11 +163,16 @@ describe("the band of the volume operations of a backup", () => {
     const summary = screen.getByTestId("velero-backup-workspace");
 
     // After the status and its stale notice, before the current stage.
-    expect(band().previousElementSibling?.getAttribute("data-testid")).toBe("velero-backup-status");
-    expect(band().nextElementSibling?.textContent).toBe("Current stage");
-    expect(within(band()).getByRole("heading").textContent).toBe("Volumes");
-    expect(within(band()).getByTestId("velero-volume-sentence").textContent).toBe(
-      "The pod volume backups run while the backup is InProgress: it waits for all of them, and at its own timeout asks the ones that have not ended to cancel.",
+    expect(section().previousElementSibling?.getAttribute("data-testid")).toBe("velero-backup-status");
+    expect(section().nextElementSibling?.textContent).toBe("Current stage");
+    // The band under its title, then each kind of the operations under its own: the pod volume backups first.
+    expect(within(section()).getAllByRole("heading").map((heading) => heading.textContent)).toEqual([
+      "Volumes",
+      "Pod Volume Backups",
+      "Data Uploads",
+    ]);
+    expect(within(section()).getByTestId("velero-volume-sentence").textContent).toBe(
+      "The pod volume backups run while the backup is InProgress: it waits for all of them, and at its own timeout asks the ones that have not ended to cancel. Its data uploads run while it waits for its plugin operations.",
     );
     expect(within(band()).getByTestId("velero-volume-count").textContent).toBe(
       "23 pod volume backups, from the newest",
@@ -332,9 +351,9 @@ describe("the band in each state of the read of its family", () => {
       <VolumeBand installation={made} kind="Backup" owner={owner} state={operationState("Backup", "Completed")} />,
     );
     expect(band().getAttribute("data-state")).toBe(state);
-    expect(screen.queryByTestId("velero-volume-state")?.textContent).toBe(words);
+    expect(within(band()).queryByTestId("velero-volume-state")?.textContent).toBe(words);
     // A family of an earlier read keeps its rows and says when.
-    expect([screen.queryByTestId("velero-volume-stale") !== null, rows()]).toEqual(
+    expect([within(band()).queryByTestId("velero-volume-stale") !== null, rows()]).toEqual(
       lastSuccess === NOW - MINUTE ? [true, ["nightly-a"]] : [false, []],
     );
     expect(screen.getByTestId("velero-volume-sentence").textContent).toBe(
@@ -349,8 +368,8 @@ describe("the band of the volume operations of a restore", () => {
     await opened("restore", "monday");
 
     expect(band().getAttribute("data-kind")).toBe("PodVolumeRestore");
-    expect(within(band()).getByTestId("velero-volume-sentence").textContent).toBe(
-      "The node agent of the node of each restored pod takes its pod volume restore when the init container restore-wait of that pod runs.",
+    expect(within(section()).getByTestId("velero-volume-sentence").textContent).toBe(
+      "The node agent of the node of each restored pod takes its pod volume restore when the init container restore-wait of that pod runs. Its data downloads run while it waits for its plugin operations.",
     );
     expect(groups(band())).toEqual([
       ["Completed", "Completed: 1"],
@@ -578,7 +597,13 @@ describe("what used a repository in each state of the read of its families", () 
     const made = installation({}).installation;
 
     runInAction(() => {
-      made.reads = { ...made.reads, podVolumeBackups: backups as never, podVolumeRestores: read([]) };
+      made.reads = {
+        ...made.reads,
+        podVolumeBackups: backups as never,
+        podVolumeRestores: read([]),
+        dataUploads: read([]),
+        dataDownloads: read([]),
+      };
     });
     render(<UsedBy installation={made} repository={kopia} />);
   }
@@ -631,10 +656,10 @@ describe("what used a repository in each state of the read of its families", () 
     expect(screen.queryByTestId("velero-used-by-nothing")).toBeNull();
   });
 
-  it("says that no pod volume operation of the installation used it only when each kind was read now and none names it", () => {
+  it("says that no operation of the volumes of the installation used it only when each kind was read now and none names it", () => {
     shown(read([]));
     expect(screen.getByTestId("velero-used-by-nothing").textContent).toBe(
-      "No pod volume operation of the installation used it.",
+      "No pod volume operation and no data movement of the installation used it.",
     );
     expect(screen.queryByTestId("velero-used-by-pod-volume-backup")).toBeNull();
   });

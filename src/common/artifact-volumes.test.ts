@@ -307,6 +307,33 @@ describe("the volume information of an operation", () => {
     ).toBeUndefined();
   });
 
+  it("reads the operation ID of a moved volume, of a backup and of a restore, and none that is not a text", () => {
+    const entry = (of: "Backup" | "Restore", movement: unknown) =>
+      parseVolumes(
+        JSON.stringify([
+          {
+            [of === "Backup" ? "backupMethod" : "restoreMethod"]: "CSISnapshot",
+            snapshotDataMoved: true,
+            snapshotDataMovementInfo: movement,
+          },
+        ]),
+        of,
+      )?.[0];
+
+    expect(entry("Backup", { dataMover: "velero", operationID: "du-backup-uid.pvc-uid" })?.operationId).toBe(
+      "du-backup-uid.pvc-uid",
+    );
+    expect(entry("Restore", { dataMover: "velero", operationID: "dd-restore-uid.pvc-uid" })?.operationId).toBe(
+      "dd-restore-uid.pvc-uid",
+    );
+    // What the release leaves out when it is empty, or a value that is not a text, names no operation: the row is
+    // shown as it is, with its detail.
+    for (const movement of [{ operationID: "" }, { operationID: 7 }, {}]) {
+      expect(entry("Backup", movement)?.operationId).toBeUndefined();
+      expect(entry("Backup", movement)?.details.map((detail) => detail.key)).toEqual(["snapshotDataMovementInfo"]);
+    }
+  });
+
   it("keeps the text of a method and of a result the release does not write, marked as not known", () => {
     const rows = parseVolumes(
       JSON.stringify([

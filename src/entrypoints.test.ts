@@ -29,6 +29,8 @@ import {
   Backup,
   BackupRepository,
   BackupStorageLocation,
+  DataDownload,
+  DataUpload,
   PodVolumeBackup,
   PodVolumeRestore,
   Restore,
@@ -45,6 +47,8 @@ import { StorageLocationDetails } from "./renderer/details/storage-location-deta
 import { VolumeOperationDetails } from "./renderer/details/volume-operation-details";
 import { PAGES } from "./renderer/navigation";
 import { BackupsPage } from "./renderer/pages/backups-page";
+import { DataDownloadsPage } from "./renderer/pages/data-downloads-page";
+import { DataUploadsPage } from "./renderer/pages/data-uploads-page";
 import { OverviewPage } from "./renderer/pages/overview-page";
 import { PodVolumeBackupsPage } from "./renderer/pages/pod-volume-backups-page";
 import { PodVolumeRestoresPage } from "./renderer/pages/pod-volume-restores-page";
@@ -122,6 +126,8 @@ describe("what the extension registers", () => {
       "backup-repositories",
       "pod-volume-backups",
       "pod-volume-restores",
+      "data-uploads",
+      "data-downloads",
     ]);
     // The Overview is the first entry under Velero, and the page the entry of Velero names: the host
     // opens a group from its entry, and marks the entry when the page it names is shown.
@@ -135,6 +141,8 @@ describe("what the extension registers", () => {
       ["velero-backup-repositories", "velero", "backup-repositories"],
       ["velero-pod-volume-backups", "velero", "pod-volume-backups"],
       ["velero-pod-volume-restores", "velero", "pod-volume-restores"],
+      ["velero-data-uploads", "velero", "data-uploads"],
+      ["velero-data-downloads", "velero", "data-downloads"],
       ["velero", undefined, "overview"],
     ]);
     // The host takes the first entry that leads to a page to know whether the page is of a group, and
@@ -159,30 +167,34 @@ describe("what the extension registers", () => {
       ["BackupRepository", ["velero.io/v1"]],
       ["PodVolumeBackup", ["velero.io/v1"]],
       ["PodVolumeRestore", ["velero.io/v1"]],
+      ["DataUpload", ["velero.io/v2alpha1"]],
+      ["DataDownload", ["velero.io/v2alpha1"]],
     ]);
   });
 
   it("is each kind of Velero as one class of the host, with its metadata on the class and the literals of its objects", () => {
     for (const [Kind, kind, plural, singular, shortNames, title] of KINDS) {
+      const version = versionOfKind(kind);
+
       expect(Object.getPrototypeOf(Kind)).toBe(Renderer.K8sApi.LensExtensionKubeObject);
       expect([kind, Kind.kind, Kind.namespaced, Kind.apiBase, Kind.crd]).toEqual([
         kind,
         kind,
         true,
-        `/apis/velero.io/v1/${plural}`,
-        { apiVersions: ["velero.io/v1"], plural, singular, shortNames, title },
+        `/apis/${version}/${plural}`,
+        { apiVersions: [version], plural, singular, shortNames, title },
       ]);
       // No method of an instance: the objects the host hands over are its own, without one.
       expect([kind, Object.getOwnPropertyNames(Kind.prototype)]).toEqual([kind, ["constructor"]]);
       // The literals of an object are declared and not defined: an object made by the constructor of the host
       // keeps the kind and the version of its data.
       const object = hostObject<{ kind?: string; apiVersion?: string }>(Kind, {
-        apiVersion: "velero.io/v1",
+        apiVersion: version,
         kind,
         metadata: { name: "one", namespace: "velero", uid: "uid" },
       });
 
-      expect([kind, object.kind, object.apiVersion]).toEqual([kind, kind, "velero.io/v1"]);
+      expect([kind, object.kind, object.apiVersion]).toEqual([kind, kind, version]);
     }
     expectTypeOf<Backup["kind"]>().toEqualTypeOf<"Backup">();
     expectTypeOf<Restore["kind"]>().toEqualTypeOf<"Restore">();
@@ -192,6 +204,8 @@ describe("what the extension registers", () => {
     expectTypeOf<BackupRepository["kind"]>().toEqualTypeOf<"BackupRepository">();
     expectTypeOf<PodVolumeBackup["kind"]>().toEqualTypeOf<"PodVolumeBackup">();
     expectTypeOf<PodVolumeRestore["kind"]>().toEqualTypeOf<"PodVolumeRestore">();
+    expectTypeOf<DataUpload["kind"]>().toEqualTypeOf<"DataUpload">();
+    expectTypeOf<DataDownload["kind"]>().toEqualTypeOf<"DataDownload">();
     for (const version of [
       expectTypeOf<Backup["apiVersion"]>(),
       expectTypeOf<Restore["apiVersion"]>(),
@@ -203,9 +217,11 @@ describe("what the extension registers", () => {
       expectTypeOf<PodVolumeRestore["apiVersion"]>(),
     ])
       version.toEqualTypeOf<"velero.io/v1">();
+    expectTypeOf<DataUpload["apiVersion"]>().toEqualTypeOf<"velero.io/v2alpha1">();
+    expectTypeOf<DataDownload["apiVersion"]>().toEqualTypeOf<"velero.io/v2alpha1">();
   });
 
-  it("is no API and no store of its own for a kind: the module of the kinds is the eight classes", async () => {
+  it("is no API and no store of its own for a kind: the module of the kinds is the ten classes", async () => {
     const kinds = await import("./renderer/api/kinds");
 
     expect(Object.keys(kinds).sort()).toEqual(
@@ -218,6 +234,8 @@ describe("what the extension registers", () => {
         "BackupRepository",
         "PodVolumeBackup",
         "PodVolumeRestore",
+        "DataUpload",
+        "DataDownload",
       ].sort(),
     );
     for (const value of Object.values(kinds)) {
@@ -227,7 +245,7 @@ describe("what the extension registers", () => {
     }
   });
 
-  it("is the eight kinds as the custom resources the Custom Resources tree leaves out, and nothing else", () => {
+  it("is the ten kinds as the custom resources the Custom Resources tree leaves out, and nothing else", () => {
     const extension = Reflect.construct(VeleroRenderer, []) as HostExtensionStub & { customResources: unknown[] };
 
     expect(extension.customResources).toHaveLength(KINDS.length);
@@ -236,7 +254,7 @@ describe("what the extension registers", () => {
     });
   });
 
-  it("is the eight sections of the details, each made with detailsFor for its kind, drawn inside a boundary of the extension with the object alone", () => {
+  it("is the ten sections of the details, each made with detailsFor for its kind, drawn inside a boundary of the extension with the object alone", () => {
     const extension = Reflect.construct(VeleroRenderer, []) as HostExtensionStub;
     const items = extension.kubeObjectDetailItems as {
       kind: string;
@@ -246,7 +264,7 @@ describe("what the extension registers", () => {
     }[];
 
     expect(items.map((item) => [item.kind, item.apiVersions, item.priority])).toEqual(
-      KINDS.map(([, kind]) => [kind, ["velero.io/v1"], 10]),
+      KINDS.map(([, kind]) => [kind, [versionOfKind(kind)], 10]),
     );
     const object = { metadata: { name: "one", namespace: "velero" } };
 
@@ -310,11 +328,13 @@ describe("what the extension registers", () => {
       ["backup-repositories", ErrorBoundary, true, undefined, true, RepositoriesPage, {}],
       ["pod-volume-backups", ErrorBoundary, true, undefined, true, PodVolumeBackupsPage, {}],
       ["pod-volume-restores", ErrorBoundary, true, undefined, true, PodVolumeRestoresPage, {}],
+      ["data-uploads", ErrorBoundary, true, undefined, true, DataUploadsPage, {}],
+      ["data-downloads", ErrorBoundary, true, undefined, true, DataDownloadsPage, {}],
     ]);
   });
 });
 
-// The eight kinds of Velero, with their kind, plural, singular, short names and title.
+// The ten kinds of Velero, with their kind, plural, singular, short names and title.
 const KINDS = [
   [Backup, "Backup", "backups", "backup", [], "Backups"],
   [Restore, "Restore", "restores", "restore", [], "Restores"],
@@ -338,10 +358,17 @@ const KINDS = [
   [BackupRepository, "BackupRepository", "backuprepositories", "backuprepository", [], "Backup Repositories"],
   [PodVolumeBackup, "PodVolumeBackup", "podvolumebackups", "podvolumebackup", [], "Pod Volume Backups"],
   [PodVolumeRestore, "PodVolumeRestore", "podvolumerestores", "podvolumerestore", [], "Pod Volume Restores"],
+  [DataUpload, "DataUpload", "datauploads", "dataupload", [], "Data Uploads"],
+  [DataDownload, "DataDownload", "datadownloads", "datadownload", [], "Data Downloads"],
 ] as const;
 
+// The version of the group a kind is served under: the data movement under the second.
+function versionOfKind(kind: string): string {
+  return kind === "DataUpload" || kind === "DataDownload" ? "velero.io/v2alpha1" : "velero.io/v1";
+}
+
 // The sections of the details, in the order of the kinds, with what the registration gives each beside the object
-// and the extension: the one section of the two kinds of the pod volume operations is given its kind.
+// and the extension: the one section of the four kinds of the operations of the volumes is given its kind.
 const SECTIONS: [unknown, object][] = [
   [BackupDetails, {}],
   [RestoreDetails, {}],
@@ -351,6 +378,8 @@ const SECTIONS: [unknown, object][] = [
   [RepositoryDetails, {}],
   [VolumeOperationDetails, { volume: "PodVolumeBackup" }],
   [VolumeOperationDetails, { volume: "PodVolumeRestore" }],
+  [VolumeOperationDetails, { volume: "DataUpload" }],
+  [VolumeOperationDetails, { volume: "DataDownload" }],
 ];
 
 // An element a registration draws: a boundary of the extension, what it holds, or a page or a section.

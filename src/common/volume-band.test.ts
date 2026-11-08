@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   backup,
   before,
+  dataDownload,
+  dataUpload,
   MINUTE,
+  moved,
   NOW,
   ownedBy,
   podVolumeBackup,
@@ -12,12 +15,27 @@ import {
   restore,
 } from "../../test/volume-builders";
 import { operationState } from "./phases";
-import { backupBand, phaseGroups, repositoryUses, restoreBand, rowKey, volumeWays } from "./volume-band";
+import {
+  backupBand,
+  movedKey,
+  phaseGroups,
+  repositoryUses,
+  restoreBand,
+  rowKey,
+  uploadOf,
+  volumeWays,
+} from "./volume-band";
 import { volumeIndex } from "./volume-index";
 import { bandSentence } from "./volume-words";
 
 import type { ReadStatus } from "./read-state";
-import type { PodVolumeBackupResource, PodVolumeRestoreResource } from "./types";
+import type {
+  DataDownloadResource,
+  DataUploadResource,
+  PodVolumeBackupResource,
+  PodVolumeRestoreResource,
+} from "./types";
+import type { VolumeBand } from "./volume-band";
 
 const nightly = backup("nightly", "InProgress", { uid: "backup-nightly-2" });
 const monday = restore("monday", "InProgress", { uid: "restore-monday-1" });
@@ -25,13 +43,20 @@ const monday = restore("monday", "InProgress", { uid: "restore-monday-1" });
 function index(
   backups: PodVolumeBackupResource[],
   restores: PodVolumeRestoreResource[] = [],
-  status: { backups?: ReadStatus; restores?: ReadStatus } = {},
+  status: { backups?: ReadStatus; restores?: ReadStatus; uploads?: ReadStatus; downloads?: ReadStatus } = {},
+  movement: { uploads?: DataUploadResource[]; downloads?: DataDownloadResource[] } = {},
 ) {
   return volumeIndex({
     podVolumeBackups: read(backups, status.backups),
     podVolumeRestores: read(restores, status.restores),
+    dataUploads: read(movement.uploads ?? [], status.uploads),
+    dataDownloads: read(movement.downloads ?? [], status.downloads),
   });
 }
+
+// The half of the pod volume operations of a band, and the one of the data movement.
+const pods = (band: VolumeBand) => band.halves[0];
+const data = (band: VolumeBand) => band.halves[1];
 
 const phased = (phase: string | undefined, name: string) =>
   podVolumeBackup(name, phase === undefined ? undefined : { phase }, ownedBy("Backup", nightly));
@@ -124,32 +149,34 @@ describe("the band of a backup and of a restore", () => {
     );
     const band = backupBand(made, nightly, operationState("Backup", "InProgress"));
 
-    expect([band.kind, band.operations.map((operation) => operation.metadata.name)]).toEqual([
+    expect([pods(band).kind, pods(band).operations.map((operation) => operation.metadata.name)]).toEqual([
       "PodVolumeBackup",
       ["nightly-new", "nightly-cut", "nightly-old"],
     ]);
     // The groups of backup describe: Failed before Canceled.
-    expect(band.groups.map((group) => [group.phase, group.count])).toEqual([
+    expect(pods(band).groups.map((group) => [group.phase, group.count])).toEqual([
       ["Completed", 1],
       ["Failed", 1],
       ["Canceled", 1],
     ]);
     // The read of the family is the one the band says the state of.
-    expect(band.read).toBe(made.reads.podVolumeBackups);
+    expect(pods(band).read).toBe(made.reads.podVolumeBackups);
     const ofRestore = restoreBand(made, monday, operationState("Restore", "Completed"));
 
-    expect([ofRestore.kind, ofRestore.operations.map((operation) => operation.metadata.name)]).toEqual([
+    expect([pods(ofRestore).kind, pods(ofRestore).operations.map((operation) => operation.metadata.name)]).toEqual([
       "PodVolumeRestore",
       ["monday-a", "monday-b", "monday-c"],
     ]);
     // The groups of restore describe: Canceled before Failed.
-    expect(ofRestore.groups.map((group) => group.phase)).toEqual(["Completed", "Canceled", "Failed"]);
+    expect(pods(ofRestore).groups.map((group) => group.phase)).toEqual(["Completed", "Canceled", "Failed"]);
     // A restore is not counted in the groups of a backup, nor a backup in the ones of a restore.
     expect(
-      backupBand(
-        made,
-        backup("monday", "Completed", { uid: "restore-monday-1" }),
-        operationState("Backup", "Completed"),
+      pods(
+        backupBand(
+          made,
+          backup("monday", "Completed", { uid: "restore-monday-1" }),
+          operationState("Backup", "Completed"),
+        ),
       ).operations,
     ).toEqual([]);
   });
@@ -163,51 +190,55 @@ describe("the band of a backup and of a restore", () => {
     ]);
     const band = backupBand(made, synced, operationState("Backup", "Completed"));
 
-    expect(band.operations.map((operation) => operation.metadata.name)).toEqual(["nightly-k2"]);
+    expect(pods(band).operations.map((operation) => operation.metadata.name)).toEqual(["nightly-k2"]);
     expect(band.sentence).toBe(
-      "The pod volume backups the installation holds of this backup are the ones its run made, or the ones a sync from the store made, in the phase they were stored in.",
+      "The pod volume backups the installation holds of this backup are the ones its run made, or the ones a sync from the store made, in the phase they were stored in. Its data uploads are the ones its run made: a sync makes none.",
     );
   });
 
-  it("says what the release does with the pod volume operations by the phase of the backup or the restore", () => {
+  it("says what the release does with the volume operations by the phase of the backup or the restore", () => {
     const backups = (phase: string | undefined) => bandSentence("Backup", operationState("Backup", phase));
     const restores = (phase: string | undefined) => bandSentence("Restore", operationState("Restore", phase));
 
     expect(backups("InProgress")).toBe(
-      "The pod volume backups run while the backup is InProgress: it waits for all of them, and at its own timeout asks the ones that have not ended to cancel.",
+      "The pod volume backups run while the backup is InProgress: it waits for all of them, and at its own timeout asks the ones that have not ended to cancel. Its data uploads run while it waits for its plugin operations.",
     );
     expect(backups("WaitingForPluginOperations")).toBe(
       "The pod volume backups ran while the backup was InProgress. It waits for its plugin operations, which is when its data uploads run.",
     );
     expect(backups("WaitingForPluginOperationsPartiallyFailed")).toBe(backups("WaitingForPluginOperations"));
-    expect(backups("FinalizingPartiallyFailed")).toBe("The pod volume backups ran while the backup was InProgress.");
+    expect(backups("FinalizingPartiallyFailed")).toBe(
+      "The pod volume backups ran while the backup was InProgress, and its data uploads while it waited for its plugin operations.",
+    );
     expect(backups("New")).toBe(
-      "The pod volume backups of a backup are made while it is InProgress: this one has not started.",
+      "The pod volume backups of a backup are made while it is InProgress, and its data uploads run while it waits for its plugin operations: this one has not started.",
     );
     expect(backups(undefined)).toBe(backups("New"));
     expect(backups("Queued")).toBe(backups("New"));
     expect(backups("FailedValidation")).toBe(
-      "The pod volume backups of a backup are made while it is InProgress: this one failed its validation, and did not run.",
+      "The pod volume backups and the data uploads of a backup are made once it runs: this one failed its validation, and did not run.",
     );
     for (const ended of ["Completed", "PartiallyFailed", "Failed"]) expect(backups(ended)).toBe(backups("Completed"));
-    expect(backups("Deleting")).toBe("The backup is being deleted: its pod volume backups go with it.");
+    expect(backups("Deleting")).toBe(
+      "The backup is being deleted: its pod volume backups go with it, and its data uploads are deleted.",
+    );
     expect(backups("Paused")).toBe(
-      "The backup reports a phase the release does not write: what the release does with its pod volume backups is not known.",
+      "The backup reports a phase the release does not write: what the release does with its pod volume backups and its data uploads is not known.",
     );
     expect(restores("InProgress")).toBe(
-      "The node agent of the node of each restored pod takes its pod volume restore when the init container restore-wait of that pod runs.",
+      "The node agent of the node of each restored pod takes its pod volume restore when the init container restore-wait of that pod runs. Its data downloads run while it waits for its plugin operations.",
     );
     expect(restores("WaitingForPluginOperations")).toBe(
       "The restore waits for its plugin operations, which is when its data downloads run.",
     );
     expect(restores("Completed")).toBe(
-      "The pod volume restores the installation holds of this restore are the ones its run made.",
+      "The pod volume restores and the data downloads the installation holds of this restore are the ones its run made.",
     );
     expect(restores("New")).toBe(
-      "The pod volume restores of a restore are made while it is InProgress: this one has not started.",
+      "The pod volume restores of a restore are made while it is InProgress, and its data downloads run while it waits for its plugin operations: this one has not started.",
     );
     expect(restores("Paused")).toBe(
-      "The restore reports a phase the release does not write: what the release does with its pod volume restores is not known.",
+      "The restore reports a phase the release does not write: what the release does with its pod volume restores and its data downloads is not known.",
     );
     // The release writes no phase Deleting for a restore.
     expect(restores("Deleting")).toBe(restores("Paused"));
@@ -273,6 +304,8 @@ describe("what used a repository", () => {
         ],
       ],
       ["PodVolumeRestore", ["monday-a"], [["InProgress", 1]], [["monday", "resolved"]]],
+      ["DataUpload", [], [], []],
+      ["DataDownload", [], [], []],
     ]);
   });
 
@@ -283,6 +316,8 @@ describe("what used a repository", () => {
     expect(uses.map((use) => [use.kind, use.read.status, use.operations.length])).toEqual([
       ["PodVolumeBackup", "ready", 1],
       ["PodVolumeRestore", "forbidden", 0],
+      ["DataUpload", "ready", 0],
+      ["DataDownload", "ready", 0],
     ]);
   });
 
@@ -290,6 +325,8 @@ describe("what used a repository", () => {
     const made = index([], []);
 
     expect(repositoryUses(made, kopia, reads).map((use) => [use.read.status, use.operations.length])).toEqual([
+      ["ready", 0],
+      ["ready", 0],
       ["ready", 0],
       ["ready", 0],
     ]);
@@ -344,6 +381,8 @@ describe("the ways of the rows of the Volumes tab", () => {
       volumeIndex({
         podVolumeBackups: { ...read(mine, status, NOW - MINUTE), reading },
         podVolumeRestores: read([]),
+        dataUploads: read([]),
+        dataDownloads: read([]),
       });
 
     expect(volumeWays(after("ready"), "Backup", nightly.metadata).size).toBe(1);
@@ -356,11 +395,159 @@ describe("the ways of the rows of the Volumes tab", () => {
     }
     for (const status of ["forbidden", "failed", "not-served"] as const) {
       expect(
-        backupBand(after(status), nightly, operationState("Backup", "Completed")).operations.map(
+        pods(backupBand(after(status), nightly, operationState("Backup", "Completed"))).operations.map(
           (operation) => operation.metadata.name,
         ),
         status,
       ).toEqual(["nightly-a"]);
     }
+  });
+});
+
+describe("the data movement of a backup and of a restore", () => {
+  const upload = (name: string, status: Parameters<typeof dataUpload>[1], id: string, owner = nightly) =>
+    dataUpload(name, status, moved("Backup", owner, id));
+  const download = (name: string, status: Parameters<typeof dataDownload>[1], id: string, owner = monday) =>
+    dataDownload(name, status, moved("Restore", owner, id));
+
+  it("is the second half of the band, found by the label of the UID of the owner and counted by phase", () => {
+    const made = index(
+      [phased("Completed", "nightly-pv")],
+      [restored("Completed", "monday-pv")],
+      {},
+      {
+        uploads: [
+          upload("nightly-du-a", { phase: "Completed", startTimestamp: before(5 * MINUTE) }, "du-a"),
+          upload("nightly-du-b", { phase: "InProgress", startTimestamp: before(MINUTE) }, "du-b"),
+          upload("weekly-du", { phase: "Completed" }, "du-c", backup("weekly", "Completed", { uid: "backup-weekly" })),
+        ],
+        downloads: [download("monday-dd", { phase: "Accepted" }, "dd-a")],
+      },
+    );
+    const band = backupBand(made, nightly, operationState("Backup", "WaitingForPluginOperations"));
+
+    expect(band.halves.map((half) => half.kind)).toEqual(["PodVolumeBackup", "DataUpload"]);
+    expect(data(band).operations.map((operation) => operation.metadata.name)).toEqual(["nightly-du-b", "nightly-du-a"]);
+    expect(data(band).groups.map((group) => [group.phase, group.count])).toEqual([
+      ["Completed", 1],
+      ["InProgress", 1],
+    ]);
+    expect(data(band).read).toBe(made.reads.dataUploads);
+    expect(band.sentence).toBe(bandSentence("Backup", operationState("Backup", "WaitingForPluginOperations")));
+    const ofRestore = restoreBand(made, monday, operationState("Restore", "InProgress"));
+
+    expect(
+      ofRestore.halves.map((half) => [half.kind, half.operations.map((operation) => operation.metadata.name)]),
+    ).toEqual([
+      ["PodVolumeRestore", ["monday-pv"]],
+      ["DataDownload", ["monday-dd"]],
+    ]);
+  });
+
+  it("keeps each half with the state of its own read: a denied data movement takes nothing from the pod volumes", () => {
+    const made = index([phased("Completed", "nightly-pv")], [], { uploads: "forbidden" });
+    const band = backupBand(made, nightly, operationState("Backup", "Completed"));
+
+    expect(band.halves.map((half) => [half.kind, half.read.status, half.operations.length])).toEqual([
+      ["PodVolumeBackup", "ready", 1],
+      ["DataUpload", "forbidden", 0],
+    ]);
+  });
+
+  it("is counted among what used a kopia repository by its source namespace, whatever its data mover", () => {
+    const kopiaShop = repository("shop-default-kopia", { phase: "Ready" });
+    const made = index(
+      [],
+      [],
+      {},
+      {
+        uploads: [
+          upload("nightly-du", { phase: "Completed" }, "du-a"),
+          dataUpload(
+            "nightly-du-other",
+            { phase: "Completed" },
+            { ...moved("Backup", nightly, "du-b"), spec: { sourceNamespace: "billing" } },
+          ),
+        ],
+        downloads: [download("monday-dd", { phase: "Completed" }, "dd-a")],
+      },
+    );
+    const uses = repositoryUses(made, kopiaShop, { backups: read([nightly]), restores: read([monday]) });
+
+    expect(uses.map((use) => [use.kind, use.operations.map((operation) => operation.metadata.name)])).toEqual([
+      ["PodVolumeBackup", []],
+      ["PodVolumeRestore", []],
+      ["DataUpload", ["nightly-du"]],
+      ["DataDownload", ["monday-dd"]],
+    ]);
+    expect(uses[2].owners.map((owner) => [owner.name, owner.state])).toEqual([["nightly", "resolved"]]);
+  });
+
+  it("gives the moved rows of the Volumes tab a way by their operation ID, among the operations of the owner", () => {
+    const made = index(
+      [],
+      [],
+      {},
+      {
+        uploads: [
+          upload("nightly-du-a", { phase: "Completed" }, "du-a"),
+          upload("weekly-du", { phase: "Completed" }, "du-w", backup("weekly", "Completed", { uid: "backup-weekly" })),
+        ],
+        downloads: [download("monday-dd", { phase: "Completed" }, "dd-a")],
+      },
+    );
+    const ways = volumeWays(made, "Backup", nightly.metadata);
+
+    expect([...ways]).toEqual([[movedKey("du-a"), { kind: "data-upload", name: "nightly-du-a" }]]);
+    // The operation ID of the upload of another backup is not one of this backup's.
+    expect(ways.get(movedKey("du-w"))).toBeUndefined();
+    expect([...volumeWays(made, "Restore", monday.metadata)]).toEqual([
+      [movedKey("dd-a"), { kind: "data-download", name: "monday-dd" }],
+    ]);
+    // The key of a moved row is never the key of a pod volume.
+    expect(movedKey("du-a")).not.toBe(rowKey("", "", "du-a"));
+    expect(
+      volumeWays(
+        index([], [], { uploads: "forbidden" }, { uploads: [upload("x", undefined, "du-x")] }),
+        "Backup",
+        nightly.metadata,
+      ).size,
+    ).toBe(0);
+  });
+
+  it("finds the data upload a data download restores by its snapshot, the newest of the namespace, or none", () => {
+    const restoring = download("monday-dd", { phase: "InProgress" }, "dd-a");
+    const snapshot = restoring.spec?.snapshotID ?? "";
+    const made = index(
+      [],
+      [],
+      {},
+      {
+        uploads: [
+          upload(
+            "nightly-du-old",
+            { phase: "Completed", snapshotID: snapshot, startTimestamp: before(60 * MINUTE) },
+            "du-o",
+          ),
+          upload(
+            "nightly-du-new",
+            { phase: "Completed", snapshotID: snapshot, startTimestamp: before(MINUTE) },
+            "du-n",
+          ),
+          dataUpload("elsewhere", { phase: "Completed", snapshotID: snapshot }, { namespace: "velero-b" }),
+        ],
+        downloads: [restoring],
+      },
+    );
+
+    expect(uploadOf(made, restoring)).toMatchObject({ kind: "DataUpload", name: "nightly-du-new", state: "resolved" });
+    expect(
+      uploadOf(made, dataDownload("other", undefined, { spec: { snapshotID: "not-moved-here" } })),
+    ).toBeUndefined();
+    expect(uploadOf(made, dataDownload("none", undefined, { spec: { snapshotID: "" } }))).toBeUndefined();
+    // An upload in progress has no snapshot yet, and is not the one restored.
+    expect(
+      uploadOf(index([], [], {}, { uploads: [upload("running", { phase: "InProgress" }, "du-r")] }), restoring),
+    ).toBeUndefined();
   });
 });

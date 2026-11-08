@@ -67,6 +67,18 @@ vi.mock(import("./pages/pod-volume-restores-page"), async (original) => ({
     throw new Error("the page of the pod volume restores");
   },
 }));
+vi.mock(import("./pages/data-uploads-page"), async (original) => ({
+  ...(await original()),
+  DataUploadsPage: () => {
+    throw new Error("the page of the data uploads");
+  },
+}));
+vi.mock(import("./pages/data-downloads-page"), async (original) => ({
+  ...(await original()),
+  DataDownloadsPage: () => {
+    throw new Error("the page of the data downloads");
+  },
+}));
 
 // A section that cannot read an object named `broken`, and says the name of any other. It is made before the
 // modules are, as the mocks that use it are.
@@ -105,11 +117,17 @@ vi.mock(import("./details/repository-details"), async (original) => ({
   ...(await original()),
   RepositoryDetails: section("a backup repository") as never,
 }));
-// One section for the two kinds of the pod volume operations, told apart by the kind it is given.
+// One section for the four kinds of the operations of the volumes, told apart by the kind it is given.
 vi.mock(import("./details/volume-operation-details"), async (original) => ({
   ...(await original()),
-  VolumeOperationDetails: section(({ volume }) =>
-    volume === "PodVolumeBackup" ? "a pod volume backup" : "a pod volume restore",
+  VolumeOperationDetails: section(
+    ({ volume }) =>
+      ({
+        PodVolumeBackup: "a pod volume backup",
+        PodVolumeRestore: "a pod volume restore",
+        DataUpload: "a data upload",
+        DataDownload: "a data download",
+      })[volume ?? ""] ?? "an operation",
   ) as never,
 }));
 
@@ -148,6 +166,8 @@ describe("what the renderer registers, drawn by the host", () => {
       ["backup-repositories", "the page of the backup repositories"],
       ["pod-volume-backups", "the page of the pod volume backups"],
       ["pod-volume-restores", "the page of the pod volume restores"],
+      ["data-uploads", "the page of the data uploads"],
+      ["data-downloads", "the page of the data downloads"],
     ];
 
     expect(extension.clusterPages.map((page) => page.id)).toEqual(pages.map(([id]) => id));
@@ -185,6 +205,8 @@ describe("what the renderer registers, drawn by the host", () => {
       "a backup repository",
       "a pod volume backup",
       "a pod volume restore",
+      "a data upload",
+      "a data download",
     ];
 
     expect(extension.kubeObjectDetailItems).toHaveLength(sections.length);

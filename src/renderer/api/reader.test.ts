@@ -187,7 +187,12 @@ describe("reader of the cluster of a frame", () => {
 
   it("is given the paths of the kinds of Velero, and asks no other", async () => {
     // Every path the views have is under the group of Velero: none leads to a Secret.
-    const paths = [PATHS.discovery, PATHS.locations, ...FAMILIES.map((family) => PATHS.family(family, "velero-demo"))];
+    const paths = [
+      PATHS.discovery,
+      PATHS.dataMovementDiscovery,
+      PATHS.locations,
+      ...FAMILIES.map((family) => PATHS.family(family, "velero-demo")),
+    ];
 
     for (const path of paths) {
       expect(path.startsWith("/apis/velero.io/")).toBe(true);
@@ -218,6 +223,18 @@ describe("reader of the cluster of a frame", () => {
       "apis/velero.io/v1/backups",
       " /apis/velero.io/v1/backups",
       "/apis/velero.io/v1/backups\n",
+      // The second version is asked for the lists of its two kinds in one namespace and for its discovery alone: not
+      // for a kind of the first, not in the whole cluster, not one object, and no third version.
+      "/apis/velero.io/v2alpha1/namespaces/velero-demo/backups",
+      "/apis/velero.io/v2alpha1/datauploads",
+      "/apis/velero.io/v2alpha1/namespaces/velero-demo/datauploads/one",
+      "/apis/velero.io/v2alpha1/namespaces/velero-demo/datauploads?watch=true",
+      "/apis/velero.io/v2alpha1/namespaces/velero-demo/podvolumebackups",
+      "/apis/velero.io/v2alpha1/../v1/namespaces/velero-demo/backups",
+      "/apis/velero.io/v2alpha1/namespaces/velero-demo/secrets",
+      "/apis/velero.io/v2alpha2/namespaces/velero-demo/datauploads",
+      "/apis/velero.io/v2beta1",
+      "/apis/velero.io/v1/namespaces/velero-demo/datauploads/../../../../v2alpha1",
       "",
     ]) {
       expect(await reader(path)).toEqual({});
@@ -240,6 +257,23 @@ describe("reader of the cluster of a frame", () => {
         PATHS.family(family, "velero-demo"),
       ),
     ).toEqual(paths);
+    for (const path of paths) await reader(path);
+    expect(asked.map(({ args }) => args[1])).toEqual(paths);
+  });
+
+  it("takes the paths of the two kinds of the data movement under velero.io/v2alpha1, and the discovery of the version", async () => {
+    const reader = clusterReader("cluster-a");
+    const paths = [
+      "/apis/velero.io/v2alpha1",
+      "/apis/velero.io/v2alpha1/namespaces/velero-demo/datauploads",
+      "/apis/velero.io/v2alpha1/namespaces/velero-demo/datadownloads",
+    ];
+
+    // The paths of their families are under the version that serves them.
+    expect([
+      PATHS.dataMovementDiscovery,
+      ...(["dataUploads", "dataDownloads"] as const).map((family) => PATHS.family(family, "velero-demo")),
+    ]).toEqual(paths);
     for (const path of paths) await reader(path);
     expect(asked.map(({ args }) => args[1])).toEqual(paths);
   });

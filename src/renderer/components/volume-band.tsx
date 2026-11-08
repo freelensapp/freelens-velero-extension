@@ -5,8 +5,9 @@ import { bytesProgress } from "../../common/progress";
 import { isStale } from "../../common/read-state";
 import { VIEWS } from "../../common/views";
 import { backupBand, OPERATION_VIEW, PAGE, repositoryUses, restoreBand } from "../../common/volume-band";
-import { volumeOperationState } from "../../common/volume-phases";
-import { operationNode, operationPod } from "../../common/volume-references";
+import { dataMovement, volumeOperationState } from "../../common/volume-phases";
+import { OWNER_KIND, operationNode, operationPod } from "../../common/volume-references";
+import { claimSource } from "../../common/volume-view";
 import { BAND_WORDS, NOT_REPORTED, POD_NOT_NAMED, USED_BY_WORDS } from "../../common/volume-words";
 import { openView } from "../navigation";
 import { volumesOf } from "../state/volumes";
@@ -38,7 +39,10 @@ export function halfState(read: FamilyRead<unknown>): HalfState {
   return read.status === "forbidden" ? "denied" : read.status;
 }
 
-const OWNER_NOUN: Record<VolumeKind, string> = { PodVolumeBackup: "backup", PodVolumeRestore: "restore" };
+// The owner of the operations of each kind, as a half names it.
+function ownerNoun(kind: VolumeKind): "backup" | "restore" {
+  return OWNER_KIND[kind] === "Backup" ? "backup" : "restore";
+}
 
 function plural(kind: VolumeKind): string {
   return VIEWS[OPERATION_VIEW[kind]].plural;
@@ -77,19 +81,21 @@ function GroupMark({ state }: { state: VolumeOperationState }) {
   );
 }
 
-// The rows of a half, ten at a time, from the newest: each the pod and the volume, the phase, the bytes and the node,
-// the volume a way to the view of the operation, which returns to where it was opened from.
+// The rows of a half, ten at a time, from the newest: each the pod and the volume of a pod volume operation, or the
+// claim of a data movement, the phase, the bytes and the node, the volume or the claim a way to the view of the
+// operation, which returns to where it was opened from.
 function Rows({ kind, operations }: { kind: VolumeKind; operations: readonly VolumeOperation[] }) {
   const { shown, more, within } = usePages(operations, "velero-volume-more");
   const view = OPERATION_VIEW[kind];
+  const moved = dataMovement(kind);
 
   return (
     <>
       <table className={styles.references} data-testid="velero-volume-rows">
         <thead>
           <tr>
-            <th scope="col">Volume</th>
-            <th scope="col">Pod</th>
+            <th scope="col">{moved ? "Claim" : "Volume"}</th>
+            {moved ? null : <th scope="col">Pod</th>}
             <th scope="col">Phase</th>
             <th scope="col">Bytes</th>
             <th scope="col">Node</th>
@@ -99,8 +105,12 @@ function Rows({ kind, operations }: { kind: VolumeKind; operations: readonly Vol
           {shown.map((operation) => {
             const name = operation.metadata.name;
             const pod = operationPod(operation);
-            const volume =
-              typeof operation.spec?.volume === "string" && operation.spec.volume ? operation.spec.volume : undefined;
+            const named = (operation.spec as { volume?: unknown } | undefined)?.volume;
+            const volume = moved
+              ? claimSource(kind as "DataUpload" | "DataDownload", operation)
+              : typeof named === "string" && named
+                ? named
+                : undefined;
             const message =
               typeof operation.status?.message === "string" && operation.status.message
                 ? operation.status.message
@@ -121,18 +131,20 @@ function Rows({ kind, operations }: { kind: VolumeKind; operations: readonly Vol
                     {volume ?? NOT_REPORTED}
                   </button>
                 </td>
-                <td>
-                  <span
-                    className={styles.cellWords}
-                    data-pod={pod.name && pod.namespace ? `${pod.namespace}/${pod.name}` : "not-named"}
-                  >
-                    {pod.name && pod.namespace ? (
-                      <LinkToPod name={pod.name} namespace={pod.namespace} />
-                    ) : (
-                      <WithTooltip>{pod.name ?? POD_NOT_NAMED}</WithTooltip>
-                    )}
-                  </span>
-                </td>
+                {moved ? null : (
+                  <td>
+                    <span
+                      className={styles.cellWords}
+                      data-pod={pod.name && pod.namespace ? `${pod.namespace}/${pod.name}` : "not-named"}
+                    >
+                      {pod.name && pod.namespace ? (
+                        <LinkToPod name={pod.name} namespace={pod.namespace} />
+                      ) : (
+                        <WithTooltip>{pod.name ?? POD_NOT_NAMED}</WithTooltip>
+                      )}
+                    </span>
+                  </td>
+                )}
                 <td>
                   <VolumePhaseCell state={phaseOf(kind, operation)} message={message} />
                 </td>
@@ -265,8 +277,9 @@ export interface VolumeBandProps {
 }
 
 // The band of the volume operations in the summary of a backup or of a restore (SPEC-0014, REQ-187): what the release
-// does with them by the phase of the owner, then its pod volume operations, counted by phase, from the newest. It says
-// nothing of the items of the owner, whose progress is in its status.
+// does with them by the phase of the owner, then its pod volume operations and its data movement, each kind in a half
+// of its own, counted by phase, from the newest. It says nothing of the items of the owner, whose progress is in its
+// status.
 export const VolumeBand = observer(({ installation, kind, owner, state }: VolumeBandProps) => {
   const index = volumesOf(installation);
   const band =
@@ -275,13 +288,24 @@ export const VolumeBand = observer(({ installation, kind, owner, state }: Volume
       : restoreBand(index, owner as RestoreResource, state);
 
   return (
-    <section data-testid="velero-volume-band" data-kind={band.kind} data-state={halfState(band.read)}>
+    <section data-testid="velero-volume-band" data-kind={kind}>
       <h3 className={styles.sectionTitle}>{BAND_WORDS.title}</h3>
       <p className={styles.factNote} data-testid="velero-volume-sentence">
         {band.sentence}
       </p>
-      {/* The rows are of the owner that was read: another one under the same name has its own. */}
-      <BandHalf key={owner.metadata.uid ?? owner.metadata.name} half={band} owner={OWNER_NOUN[band.kind]} />
+      {band.halves.map((half) => (
+        <div
+          key={half.kind}
+          className={styles.volumeHalf}
+          data-testid="velero-volume-half"
+          data-kind={half.kind}
+          data-state={halfState(half.read)}
+        >
+          <h4 className={styles.factName}>{VIEWS[OPERATION_VIEW[half.kind]].title}</h4>
+          {/* The rows are of the owner that was read: another one under the same name has its own. */}
+          <BandHalf key={owner.metadata.uid ?? owner.metadata.name} half={half} owner={ownerNoun(half.kind)} />
+        </div>
+      ))}
     </section>
   );
 });
@@ -353,9 +377,7 @@ function Use({ use }: { use: ReturnType<typeof repositoryUses>[number] }) {
               </div>
             </div>
             <div className={styles.fact}>
-              <div className={styles.factName}>
-                {USED_BY_WORDS.owners(VIEWS[OWNER_NOUN[kind] as "backup" | "restore"].plural)}
-              </div>
+              <div className={styles.factName}>{USED_BY_WORDS.owners(VIEWS[ownerNoun(kind)].plural)}</div>
               <div className={styles.factValue}>
                 <Owners owners={use.owners} />
               </div>

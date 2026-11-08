@@ -20,7 +20,9 @@ export type ReferenceKind =
   | "Backup"
   | "BackupRepository"
   | "PodVolumeBackup"
-  | "PodVolumeRestore";
+  | "PodVolumeRestore"
+  | "DataUpload"
+  | "DataDownload";
 
 export type ReferenceState =
   // The object is there, in the same installation.
@@ -75,6 +77,8 @@ const NAMES: Record<ReferenceKind, { noun: string; plural: string }> = {
   BackupRepository: { noun: "backup repository", plural: "backup repositories" },
   PodVolumeBackup: { noun: "pod volume backup", plural: "pod volume backups" },
   PodVolumeRestore: { noun: "pod volume restore", plural: "pod volume restores" },
+  DataUpload: { noun: "data upload", plural: "data uploads" },
+  DataDownload: { noun: "data download", plural: "data downloads" },
 };
 
 // What is known of a target whose kind was not read now, and was not read before either.

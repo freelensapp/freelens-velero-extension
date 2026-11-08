@@ -40,6 +40,8 @@ import type {
   BackupRepositoryResource,
   BackupResource,
   BackupStorageLocationResource,
+  DataDownloadResource,
+  DataUploadResource,
   PodVolumeBackupResource,
   PodVolumeRestoreResource,
   RestoreResource,
@@ -66,6 +68,8 @@ export interface FamilyItems {
   backupRepositories: BackupRepositoryResource;
   podVolumeBackups: PodVolumeBackupResource;
   podVolumeRestores: PodVolumeRestoreResource;
+  dataUploads: DataUploadResource;
+  dataDownloads: DataDownloadResource;
 }
 
 export interface ClusterIdentity {
@@ -347,13 +351,14 @@ export class Installation {
         if (this.api.state === "unknown") this.api = { state: "asking" };
         if (this.found.state === "unknown") this.found = { state: "asking" };
       });
-      const [discovery, locations] = await Promise.all([
+      const [discovery, dataMovement, locations] = await Promise.all([
         this.dependencies.read(PATHS.discovery),
+        this.dependencies.read(PATHS.dataMovementDiscovery),
         this.dependencies.read(PATHS.locations),
       ]);
 
       runInAction(() => {
-        this.api = apiAvailability(discovery);
+        this.api = apiAvailability(discovery, dataMovement);
         this.found = suggestions(locations);
         this.target();
       });

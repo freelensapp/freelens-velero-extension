@@ -11,7 +11,7 @@ import { WorkspaceLink } from "./workspace-link";
 
 import type { VolumeKind } from "../../common/volume-phases";
 import type { VolumeOperation } from "../../common/volume-references";
-import type { PodVolumeBackup, PodVolumeRestore } from "../api/kinds";
+import type { DataDownload, DataUpload, PodVolumeBackup, PodVolumeRestore } from "../api/kinds";
 import type { Installation } from "../state/installation";
 
 const {
@@ -19,7 +19,7 @@ const {
 } = Renderer;
 
 export interface VolumeOperationDetailsProps
-  extends Renderer.Component.KubeObjectDetailsProps<PodVolumeBackup | PodVolumeRestore> {
+  extends Renderer.Component.KubeObjectDetailsProps<PodVolumeBackup | PodVolumeRestore | DataUpload | DataDownload> {
   volume: VolumeKind;
   extension: Renderer.LensExtension;
   installation?: Installation;
@@ -28,9 +28,11 @@ export interface VolumeOperationDetailsProps
 const OF = {
   PodVolumeBackup: { kind: "pod-volume-backup", owner: "backups", noun: "Backup" },
   PodVolumeRestore: { kind: "pod-volume-restore", owner: "restores", noun: "Restore" },
+  DataUpload: { kind: "data-upload", owner: "backups", noun: "Backup" },
+  DataDownload: { kind: "data-download", owner: "restores", noun: "Restore" },
 } as const;
 
-// What the details of the host show of a PodVolumeBackup or a PodVolumeRestore, where the host opens them: the same
+// What the details of the host show of an operation of the volumes, where the host opens them: the same
 // reading of the object the views give, in short, and the way to the workspace. It asks nothing of the cluster and
 // holds no family: the backup or the restore it belongs to is found among what the views last read of the
 // installation of its namespace, with how old that read is when no view keeps it fresh. Its clock is its own, and

@@ -107,12 +107,13 @@ const BANDS: Record<artifacts.Operation, { kind: string; sentence: string; words
   backup: {
     kind: "PodVolumeBackup",
     sentence:
-      "The pod volume backups the installation holds of this backup are the ones its run made, or the ones a sync from the store made, in the phase they were stored in.",
+      "The pod volume backups the installation holds of this backup are the ones its run made, or the ones a sync from the store made, in the phase they were stored in. Its data uploads are the ones its run made: a sync makes none.",
     words: "This backup has no pod volume backup among the ones the installation holds.",
   },
   restore: {
     kind: "PodVolumeRestore",
-    sentence: "The pod volume restores the installation holds of this restore are the ones its run made.",
+    sentence:
+      "The pod volume restores and the data downloads the installation holds of this restore are the ones its run made.",
     words: "This restore has no pod volume restore among the ones the installation holds.",
   },
 };
