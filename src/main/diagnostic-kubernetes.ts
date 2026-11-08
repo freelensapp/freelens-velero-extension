@@ -17,6 +17,7 @@ import { X509Certificate } from "node:crypto";
 import { backupNameProblem } from "../common/backup-from-schedule";
 import { type ArtifactTarget, DIAGNOSTIC_REQUEST_LABEL, isArtifactTarget } from "../common/ipc";
 import { labelOf } from "../common/name-label";
+import { scheduleNameProblem } from "../common/schedule-form";
 import { type CatalogEntry, refusalOf, sameEntry } from "./catalog";
 import { DiagnosticError } from "./diagnostic-transport";
 
@@ -215,6 +216,10 @@ async function bodyOf(
 
 // The adapter is one for each cluster, made for the entry of the catalog writes were turned on with, and
 // asks the cluster for reads and for creations, and for nothing else.
+// The keys of an object the actions create, and no other: no status, which the API server would keep for a kind with
+// no subresource of it, and nothing it does not know.
+const OBJECT_KEYS = "apiVersion,kind,metadata,spec";
+
 export class DiagnosticKubernetes {
   // The entry the adapter was made for: its cluster, and the kubeconfig and the context the catalog named.
   readonly binding: Readonly<Omit<CatalogEntry, "status">>;
@@ -444,17 +449,45 @@ export class DiagnosticKubernetes {
     }
     if (
       !isRecord(body) ||
+      Object.keys(body).sort().join() !== OBJECT_KEYS ||
       body.apiVersion !== "velero.io/v1" ||
       body.kind !== "Backup" ||
       !isRecord(body.metadata) ||
       body.metadata.namespace !== namespace ||
       typeof body.metadata.name !== "string" ||
       "generateName" in body.metadata ||
-      "status" in body
+      !isRecord(body.spec)
     )
       throw new DiagnosticError("validation");
     if (backupNameProblem(body.metadata.name) !== undefined) throw new DiagnosticError("validation");
     return this.send("POST", this.path("Backup", namespace), signal, { text });
+  }
+
+  // The Schedule of the form, sent as the text the review showed, byte for byte (SPEC-0016, REQ-223, REQ-224): a text
+  // that is not a Schedule of this namespace with its name and its namespace alone, a name every backup of it can
+  // carry in its label, and a spec, is refused before anything leaves.
+  createSchedule(namespace: string, text: string, signal: AbortSignal): Promise<DiagnosticObject> {
+    let body: unknown;
+
+    try {
+      body = JSON.parse(text);
+    } catch {
+      throw new DiagnosticError("validation");
+    }
+    if (
+      !isRecord(body) ||
+      Object.keys(body).sort().join() !== OBJECT_KEYS ||
+      body.apiVersion !== "velero.io/v1" ||
+      body.kind !== "Schedule" ||
+      !isRecord(body.metadata) ||
+      Object.keys(body.metadata).sort().join() !== "name,namespace" ||
+      body.metadata.namespace !== namespace ||
+      typeof body.metadata.name !== "string" ||
+      !isRecord(body.spec)
+    )
+      throw new DiagnosticError("validation");
+    if (scheduleNameProblem(body.metadata.name) !== undefined) throw new DiagnosticError("validation");
+    return this.send("POST", this.path("Schedule", namespace), signal, { text });
   }
 
   createGenerated(

@@ -303,16 +303,16 @@ is the submission of REQ-228. A synthetic example of a reviewed text:
     "namespace": "velero"
   },
   "spec": {
-    "schedule": "CRON_TZ=Europe/Rome 0 3 * * *",
     "paused": false,
+    "schedule": "CRON_TZ=Europe/Rome 0 3 * * *",
     "skipImmediately": false,
-    "useOwnerReferencesInBackup": false,
     "template": {
       "includedNamespaces": [
         "shop"
       ],
       "storageLocation": "default"
-    }
+    },
+    "useOwnerReferencesInBackup": false
   }
 }
 ```
@@ -528,9 +528,149 @@ needs a decision before the approval, and each has its first step in the slice.
 
 ## Evidence And Deviations
 
-None yet: no implementation, tests or runtime evidence. The facts of the reviewed
-release above were read in its source, each at the lines it links; nothing was run,
-and no cluster was contacted for this draft.
+The facts of the reviewed release above were read in its source, each at the lines
+it links; nothing was run, and no cluster was contacted for the draft.
+
+T4.7, the first of its pull requests, on 2026-11-08: the schedule of the form in the
+contract and in the main process. The evidence, by check:
+
+- CRSCH-02, the main contract part: with writes off, and on for another namespace,
+  the confirmation is refused before anything is read; the run takes only a token of
+  the frame that asked, for the name it was confirmed for, once, and neither a token of
+  another frame nor one that expired; a run of another name sent with the identifier of
+  one in flight is not joined to it
+  ([`ipc-schedule-create.test.ts`](../../src/main/ipc-schedule-create.test.ts)).
+- CRSCH-03: the builder, every field of the form to its JSON name and type, the three
+  flags always written, the template of the fields set alone, no label, no annotation
+  and no status; the contract refuses a request with a field it does not know, one
+  without its wrapper or its template at the confirmation, and one with them at the
+  run ([`schedule-form.test.ts`](../../src/common/schedule-form.test.ts),
+  [`ipc.test.ts`](../../src/common/ipc.test.ts)).
+- CRSCH-04: one POST to the schedules of the namespace of the gate, its body the text
+  of the confirmation byte for byte; the storage location and each snapshot location
+  read before it, at the confirmation and again at the run, one that is not there
+  named and nothing created; the adapter refuses a text that is not a Schedule of the
+  namespace, of its name and its namespace alone, with a spec and no key beside
+  `apiVersion`, `kind`, `metadata` and `spec`
+  ([`diagnostic-kubernetes.test.ts`](../../src/main/diagnostic-kubernetes.test.ts)).
+- CRSCH-05, the main part: names of 1 and 63 characters taken, one of 64 refused, and
+  capitals, a leading or trailing `-` or `.`, two dots and a `.` beside a `-` refused.
+- CRSCH-06, the main part: an empty expression, one longer than the parser takes, one
+  with a tab, a line break or a no-break space, the three descriptors with no instant
+  and expressions with none within five years, refused with their words; one the
+  parser refuses is left to Velero, as D11 decides. An expression of 1,024 bytes is
+  taken and one of 1,025 refused, counted as the parser counts them; the instants are
+  counted from the clock of the main process, so that a February 29 that is a Sunday is
+  refused in 2026 and taken in 2028; and a zone the runtime does not know does not give
+  an expression with no instant one.
+- CRSCH-07: a 409 is a conflict, with the words that a schedule of that name is there
+  and was not changed; the adapter is asked nothing more.
+- CRSCH-08: an answer lost, the schedule read by its name: not there; there with the
+  spec that was sent, `skipImmediately` set back by the controller, and created since
+  the confirmation, taken by its UID and read; another spec, or an earlier creation, a
+  conflict; a read that fails, not known, with the name to look for. Never a second
+  POST. The spec is compared whole: another expression, `paused`, owner or field of the
+  template is another schedule; one created 59 seconds before the confirmation is
+  taken, and one created 61 seconds before is not; one found paused is read once; and
+  the look is a read of its own, which the write that stopped does not end.
+- CRSCH-18, the main part: the reads after a 201, every second until a phase,
+  Enabled, and FailedValidation with two errors as written; none after thirty
+  seconds, in thirty reads; a paused schedule read once; a schedule of that name that
+  is not the one created stops the reads, and an answer of another name or with no UID
+  is not taken for the schedule.
+- CRSCH-19, the main part: forbidden, with the words that the identity may not create
+  schedules in the namespace; a credential the cluster does not take, a refusal of the
+  API server, a body the adapter would not send, a namespace or a kind not served, a
+  failure of another kind and an API server not reached, each with its code, its stage
+  and its safety, never the body of an answer; a run sent again with the same
+  identifier joined, nothing created twice.
+- CRSCH-23, the main part: writes turned off before the POST create nothing, and so do
+  writes turned off while the locations are read again, though the reads answered; a
+  frame that goes while they are read sends nothing and leaves no end; a frame that goes
+  after the POST is not answered, and the end is kept; a creation dropped on this side
+  once its POST was sent ends as submission-unknown, looked for by its name, and its end
+  is kept for the cluster, said by the target bar, with the words of a paused schedule
+  when it is one, and the way to the schedule, as a schedule, when it was created
+  ([`kept-end-words.test.ts`](../../src/common/kept-end-words.test.ts),
+  [`backup-now-workspace.test.tsx`](../../src/renderer/pages/backup-now-workspace.test.tsx));
+  the ends of a creation the API server refused are kept, and none of one that never
+  left.
+- CRSCH-17, the main part: each of the twelve fields of the template the form does not
+  offer is refused by the contract.
+
+The words of the gate that list what the extension creates name the Schedule of the
+form (REQ-222).
+
+Each new case was seen failing on a change made on purpose, twenty-six in all: a name
+of 64 characters taken; an expression with no instant, one with a character that is
+not printable, one the parser refuses refused in the main process, and one whose zone
+the runtime does not know refused; `skipImmediately` always false; a text with no
+template read as a schedule; no read of the locations at the confirmation, and none at
+the run; a paused schedule read until a phase, and the reads stopped after one; the
+spec of a schedule found by its name compared with `skipImmediately`; another schedule
+of that name not a conflict, and its creation time not looked at; a 409 not a conflict;
+the wrapper taken at the run, and the confirmation taken without it; a flag that is
+not a boolean taken; a label let through by the adapter; the end of a schedule kept as
+the one of a backup, and kept without its pause; the words of a paused schedule
+dropped; a text kept for another name sent; the errors of the validation not carried;
+the words of the gate without the Schedule; and a credential the cluster does not take
+said as a permission it refuses. After the independent review of the pull request,
+twenty-three more, on the creation the actions share and on the schedule: no look at
+the frame before the POST, and the end answered to a frame that went after it; no look
+at the signal before the POST; a margin of the clocks of none, and one of ten minutes;
+no check of the UID in the reads after; the ends of a request that was answered not
+kept, and the ends of one that never left kept; an answer of another name or with no
+UID taken; a paused schedule read until a phase, by the rule and by the flag; the look
+by name made with the signal of the write; another schedule of the name taken; the spec
+compared by its expression alone, and without `paused` and the owner; a cluster that
+changed after the answer said as one that changed before; the instants counted from
+the start of 1970; a zone the runtime does not know taking an expression with no
+instant; the bound of the expression one byte lower and one higher; a run of another
+name joined; and a key beside the four of an object let through by the adapter, for a
+Schedule and for a Backup.
+
+Decided while implementing, on 2026-11-08:
+
+- The request of a confirmation names the schedule in `schedule` and carries its
+  expression and its three flags in `wrapper`, beside the `template` of the form of
+  T4.3; the run carries the name alone, as the run of a backup of the form does. The
+  gate keeps the name of the object a write creates, a backup or a schedule.
+- The text of a Schedule is written as every text of the extension, the keys of a
+  Kubernetes object first and the others by their characters: its spec reads
+  `paused`, `schedule`, `skipImmediately`, `template` and
+  `useOwnerReferencesInBackup`, the order the example of the design now shows.
+- Whether an expression has an instant within five years is counted from the time of
+  the confirmation, as the controller counts from the creation, in the zone the
+  expression names, or in UTC when it names none or the runtime does not know it:
+  whether an instant comes hangs on the zone only within hours of the end of a year,
+  since the five years of the controller end with the year in the zone.
+- A character that is not printable is one Go does not print as it is: letters,
+  marks, numbers, punctuation, symbols and the space of ASCII are printable; a tab, a
+  line break and a no-break space are not. The contract carries an expression of 4,096
+  characters at most, so that the main process says with its words what it refuses
+  beyond the 1,024 bytes the parser takes, counted as the parser counts them.
+- The main process looks for a schedule whose answer was lost once, when the run
+  ends, as REQ-250 of SPEC-0017 has it for every action, and the end kept for the
+  cluster carries what that read found, which the target bar says with the time of the
+  end: REQ-243 has the views read the named Schedule, and the main process makes that
+  read in their place, by the rule of REQ-243 and with its words. A schedule the API
+  server creates after that read is not seen by it: the end says that it is not there
+  as far as the read shows, and a new review of the name ends as a conflict, whose words
+  lead to the schedule that has it. Reading again until the end is known is left to a
+  later change, for every kind.
+- The creations of the actions share one course in the main process,
+  [`creation.ts`](../../src/main/creation.ts): the POST of the text kept, the reads
+  after it and the look by the name, with the rule and the words of each kind. The
+  backup asked from a schedule and the backup of the form moved onto it, their suites
+  passing unchanged, so that those suites prove it for the schedule as well.
+- The adapter creates an object of the four keys `apiVersion`, `kind`, `metadata` and
+  `spec`, and no other, for a Backup as for a Schedule.
+- The end kept of an object created whose phase no read gave says that Velero had
+  written no phase of it when it was last read, for every kind: the reads may have
+  stopped before the thirty seconds.
+- A paused schedule is read once, as soon as it is created.
+- The reads of the locations, and the words of a location that is not there and of two
+  snapshot locations of one provider, are the ones of the backup of the form.
 
 What this draft could not verify, and what the implementation establishes first:
 

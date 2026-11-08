@@ -39,7 +39,7 @@ function utf8(character: string): number[] {
   return [0xf0 | (code >> 18), 0x80 | ((code >> 12) & 0x3f), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f)];
 }
 
-function bytesOf(text: string): number {
+export function bytesOf(text: string): number {
   let bytes = 0;
 
   for (const character of text) bytes += utf8(character).length;
@@ -545,8 +545,10 @@ interface ZoneFacts {
   days: Map<number, DayOffsets>;
 }
 
-// The zones the runtime was asked about, by name: nothing kept for a name it does not know.
+// The zones the runtime was asked about, by name: nothing kept for a name it does not know. The names come from the
+// expressions read and typed, so that the oldest go once there are more than a bound.
 const ZONES = new Map<string, ZoneFacts | null>();
+const ZONES_BOUND = 256;
 const DAYS_BOUND = 8192;
 
 function zoneFacts(name: string): ZoneFacts | null {
@@ -570,6 +572,7 @@ function zoneFacts(name: string): ZoneFacts | null {
     } catch {
       facts = null;
     }
+    if (ZONES.size >= ZONES_BOUND) ZONES.delete(ZONES.keys().next().value as string);
     ZONES.set(name, facts);
   }
   return facts;

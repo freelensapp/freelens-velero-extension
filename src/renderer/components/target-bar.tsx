@@ -46,7 +46,7 @@ export function writesDialogWords(
   return {
     first: `Turn writes on for the installation ${namespace} of the cluster ${cluster} (context ${context})?`,
     second:
-      "Until they are turned off, or another installation is selected, the extension may create in that namespace the requests the views ask for on purpose: a DownloadRequest for the log, the results, the resources or the volumes of an operation, a ServerStatusRequest for the version of the server, a Backup from a schedule, asked from the view of the schedule, and a Backup of the form, asked from the list of the Backups. Each one is confirmed where it is asked for. Nothing else is written.",
+      "Until they are turned off, or another installation is selected, the extension may create in that namespace the requests the views ask for on purpose: a DownloadRequest for the log, the results, the resources or the volumes of an operation, a ServerStatusRequest for the version of the server, a Backup from a schedule, asked from the view of the schedule, a Backup of the form, asked from the list of the Backups, and a Schedule of the form, asked from the list of the Schedules. Each one is confirmed where it is asked for. Nothing else is written.",
   };
 }
 
@@ -319,8 +319,8 @@ export const TargetBar = observer(({ installation }: { installation: Installatio
 });
 
 // The ends of the writes of this cluster whose request was sent and that no view showed, wherever the operator is in
-// the cluster, until each is dismissed (SPEC-0017, REQ-250): what to look for, where, and how it ended, with the way to
-// the backup when it was created in the installation that is shown.
+// the cluster, until each is dismissed (SPEC-0017, REQ-250; SPEC-0016, REQ-243): what to look for, where, and how it
+// ended, with the way to the backup or the schedule when it was created in the installation that is shown.
 const KeptEnds = observer(({ installation }: { installation: Installation }) => {
   const ends = installation.ends;
 
@@ -344,11 +344,13 @@ const KeptEnds = observer(({ installation }: { installation: Installation }) => 
             <span>{keptEndWords(end)}</span>
             <span className={styles.muted}>at {new Date(end.at).toLocaleTimeString()}</span>
             {end.outcome.created && installation.namespace === end.namespace ? (
-              <ViewLink target={{ kind: "backup", name: end.name }}>Open the backup {end.name}</ViewLink>
+              <ViewLink target={{ kind: end.kind === "schedule" ? "schedule" : "backup", name: end.name }}>
+                Open the {end.kind === "schedule" ? "schedule" : "backup"} {end.name}
+              </ViewLink>
             ) : null}
             <Button
               plain
-              aria-label={`Dismiss what is said of the backup ${end.name}`}
+              aria-label={`Dismiss what is said of the ${end.kind === "schedule" ? "schedule" : "backup"} ${end.name}`}
               data-testid="velero-kept-end-dismiss"
               onClick={() => installation.showEnd(end.request)}
             >

@@ -916,8 +916,11 @@ cluster refuses. The writes the gate lets through are a ServerStatusRequest, a
 DownloadRequest and, since the first pull request of T4.2 of
 [SPEC-0017](../specs/SPEC-0017-write-actions.md), a Backup asked from a schedule,
 and since the first pull request of T4.3 a Backup of the form, whose confirmation
-reads the storage location and each snapshot location its template names; each
-action of SPEC-0017 adds its kind with its slice.
+reads the storage location and each snapshot location its template names; since the
+first pull request of T4.7 of [SPEC-0016](../specs/SPEC-0016-create-a-schedule.md) a
+Schedule of the form, its name and namespace its only metadata, whose confirmation
+reads the locations of its template the same way; each action of SPEC-0017 adds its
+kind with its slice.
 
 The trust model of Freelens v2 (D5 of SPEC-0015), which the binding lives in: the
 boundary of v2 is between the extensions and the application, not between

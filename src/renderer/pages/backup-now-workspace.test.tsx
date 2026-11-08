@@ -626,6 +626,36 @@ describe("back up now, from the view of a schedule", () => {
     expect(screen.queryByTestId("velero-kept-ends")).toBeNull();
   });
 
+  it("leads to a schedule of the form the target bar says, as a schedule, and to nothing when none was created", async () => {
+    const main = mainProcess();
+    const end = (request: string, name: string, outcome: KeptEnd["outcome"]): KeptEnd => ({
+      request,
+      kind: "schedule",
+      namespace: A,
+      context: "kind-local-demo",
+      name,
+      outcome,
+      at: NOW,
+    });
+
+    main.kept.push(
+      end("00000000-0000-4000-8000-0000000000c1", "nightly-shop", { created: true, phase: "Enabled" }),
+      end("00000000-0000-4000-8000-0000000000c2", "weekly-shop", {
+        created: false,
+        code: "conflict",
+        text: "A schedule named weekly-shop is already there.",
+      }),
+    );
+    mount(main);
+    await screen.findByTestId("velero-kept-ends");
+    expect(screen.getByTestId("velero-open-schedule-nightly-shop").textContent).toBe("Open the schedule nightly-shop");
+    expect(screen.queryByTestId("velero-open-backup-nightly-shop")).toBeNull();
+    expect(screen.queryByTestId("velero-open-schedule-weekly-shop")).toBeNull();
+    expect(screen.getAllByTestId("velero-kept-end-dismiss").map((button) => button.getAttribute("aria-label"))).toEqual(
+      ["Dismiss what is said of the schedule nightly-shop", "Dismiss what is said of the schedule weekly-shop"],
+    );
+  });
+
   it("says no end again above a form once the operator dismissed it in the target bar", async () => {
     const main = mainProcess();
     const { installation } = mount(main);

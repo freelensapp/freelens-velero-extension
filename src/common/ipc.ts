@@ -6,6 +6,7 @@
 import { type AllowanceFor, readAllowanceFor } from "./allowances";
 import { backupNameProblem, scheduleRefused } from "./backup-from-schedule";
 import { type BackupTemplate, BOOLEAN_FIELDS, DURATION_FIELDS, LIST_FIELDS, TEMPLATE_BOUNDS } from "./backup-template";
+import { EXPRESSION_BOUND, type ScheduleWrapper, scheduleNameProblem } from "./schedule-form";
 
 import type { DiagnosticCode } from "./diagnostic-code";
 
@@ -29,7 +30,13 @@ export const CHANNELS = {
 
 // The writes of the extension: the two requests of the tabs and of the band of the server, and the actions of
 // SPEC-0017, each named by what it does, as they land.
-export const WRITE_KINDS = ["DownloadRequest", "ServerStatusRequest", "backup-from-schedule", "backup"] as const;
+export const WRITE_KINDS = [
+  "DownloadRequest",
+  "ServerStatusRequest",
+  "backup-from-schedule",
+  "backup",
+  "schedule",
+] as const;
 export type WriteKind = (typeof WRITE_KINDS)[number];
 
 // The artifacts of an operation a DownloadRequest is created for: eight of the fourteen kinds of target
@@ -191,9 +198,14 @@ export interface WriteConfirmRequest {
   // The name of the backup a schedule is asked for by hand (SPEC-0017, REQ-255), or of the backup of the form
   // (REQ-262), a part of what is confirmed.
   backup?: string;
-  // The fields of the form of the template of a backup of the form (SPEC-0017, REQ-260): the body is built of them,
-  // and the run carries none of them.
+  // The fields of the form of the template of a backup of the form (SPEC-0017, REQ-260), or of a schedule of the form
+  // (SPEC-0016, REQ-235): the body is built of them, and the run carries none of them.
   template?: BackupTemplate;
+  // The name of the schedule of the form (SPEC-0016, REQ-225), a part of what is confirmed.
+  schedule?: string;
+  // The expression and the three flags of the schedule of the form (SPEC-0016, REQ-223), at the confirmation only, as
+  // the template.
+  wrapper?: ScheduleWrapper;
 }
 export interface WriteConfirmAnswer {
   token: string;
@@ -209,6 +221,7 @@ export interface WriteRunRequest {
   target?: WriteTarget;
   artifact?: ArtifactTarget;
   backup?: string;
+  schedule?: string;
   token: string;
   request: string;
 }
@@ -230,8 +243,23 @@ export interface BackupCreated {
   found?: true;
 }
 
+// What a schedule of the form is once it was created: its name and its UID, and what Velero wrote of it within the
+// reads after the creation (SPEC-0016, REQ-238): its phase, and the errors of a validation as written, within the
+// bounds of the contract; that it is paused, which Velero does not read, so that it was read once; and that it was
+// found by its name after an answer that was lost (REQ-228).
+export interface ScheduleCreated {
+  name: string;
+  uid: string;
+  phase?: string;
+  errors?: string[];
+  // How many errors Velero wrote beyond the ones carried, which the view of the schedule shows.
+  errorsLeft?: number;
+  paused?: true;
+  found?: true;
+}
+
 // The errors of a validation an answer carries: a few, each as written, within a total that leaves the answer within
-// its bound; the others are counted, and read in the view of the backup.
+// its bound; the others are counted, and read in the view of the backup, or of the schedule.
 export const ERRORS_BOUND = { items: 16, item: 4096, total: 32_768 } as const;
 
 // The errors of a validation as an answer carries them: in the order Velero wrote them, each whole, until one does not
@@ -255,7 +283,7 @@ export function carriedErrors(errors: unknown): { errors?: string[]; errorsLeft?
 // How a write whose request was sent ended: the backup created, with the phase Velero wrote and whether it was found
 // by its name after an answer that was lost; or the code and the words of the failure.
 export type KeptOutcome =
-  | { created: true; phase?: string; found?: true }
+  | { created: true; phase?: string; found?: true; paused?: true }
   | { created: false; code: FailureCode; text: string };
 
 // The end of a write whose request was sent, kept for its cluster until a frame of that cluster has shown it, or the
@@ -263,11 +291,12 @@ export type KeptOutcome =
 export interface KeptEnd {
   // The identifier of the request of the write.
   request: string;
-  kind: "backup-from-schedule" | "backup";
+  kind: "backup-from-schedule" | "backup" | "schedule";
   namespace: string;
   // The context of the entry of the cluster in the catalog of the host.
   context: string;
-  // What to look for: the backup, by its name, and the schedule it was asked from, for a backup asked from one.
+  // What to look for: the backup, or the schedule of the form, by its name, and the schedule a backup was asked from,
+  // for a backup asked from one.
   name: string;
   schedule?: string;
   outcome: KeptOutcome;
@@ -483,28 +512,64 @@ export function readWriteConfirmRequest(value: unknown): WriteConfirmRequest | u
   return readWriteParameters(value, false);
 }
 
-// The parameters of a write, as the confirmation carries them, or as the run does: the run of a backup of the form
-// carries its name and none of the fields of its template, which the text kept with the token is made of, and its
-// reader refuses them.
+// The characters of an expression the contract carries: the main process says, with its words, what it refuses of
+// one within them (SPEC-0016, REQ-226).
+const EXPRESSION_CARRIED = 4 * EXPRESSION_BOUND;
+
+// The wrapper of a schedule of the form: the expression, and each of the three flags set to true or to false.
+function readWrapper(value: unknown): ScheduleWrapper | undefined {
+  if (
+    !isRecord(value) ||
+    !hasKeys(value, ["expression", "paused", "skipImmediately", "useOwnerReferencesInBackup"]) ||
+    typeof value.expression !== "string" ||
+    value.expression.length > EXPRESSION_CARRIED ||
+    typeof value.paused !== "boolean" ||
+    typeof value.skipImmediately !== "boolean" ||
+    typeof value.useOwnerReferencesInBackup !== "boolean"
+  )
+    return;
+  return {
+    expression: value.expression,
+    paused: value.paused,
+    skipImmediately: value.skipImmediately,
+    useOwnerReferencesInBackup: value.useOwnerReferencesInBackup,
+  };
+}
+
+// The parameters of a write, as the confirmation carries them, or as the run does: the run of a backup or of a
+// schedule of the form carries its name and none of the fields of its form, which the text kept with the token is made
+// of, and its reader refuses them.
 function readWriteParameters(value: unknown, run: boolean): WriteConfirmRequest | undefined {
   if (
     !withinBound(value) ||
     !isRecord(value) ||
-    !hasKeys(value, ["cluster", "namespace", "kind"], ["target", "artifact", "backup", "template"])
+    !hasKeys(
+      value,
+      ["cluster", "namespace", "kind"],
+      ["target", "artifact", "backup", "template", "schedule", "wrapper"],
+    )
   )
     return;
   if (!isCluster(value.cluster) || !isNamespace(value.namespace) || !isWriteKind(value.kind)) return;
   if ("target" in value && !isTarget(value.target)) return;
   // A DownloadRequest is of a backup or of a restore, and for one artifact of it; a backup asked from a schedule
   // is of the schedule, with the name of the backup; a backup of the form is of no object, with its name and, at the
-  // confirmation, its template; a ServerStatusRequest is of none.
+  // confirmation, its template; a schedule of the form is of none, with its name and, at the confirmation, its wrapper
+  // and its template; a ServerStatusRequest is of none.
   const ofSchedule = value.kind === "backup-from-schedule";
   const ofForm = value.kind === "backup";
+  const newSchedule = value.kind === "schedule";
 
   if ((value.kind === "DownloadRequest" || ofSchedule) !== "target" in value) return;
   if ((value.kind === "DownloadRequest") !== "artifact" in value) return;
   if ((ofSchedule || ofForm) !== "backup" in value) return;
-  if (!run && ofForm !== "template" in value) return;
+  if (newSchedule !== "schedule" in value) return;
+  if (!run && (ofForm || newSchedule) !== "template" in value) return;
+  if (!run && newSchedule !== "wrapper" in value) return;
+  if (newSchedule && (typeof value.schedule !== "string" || scheduleNameProblem(value.schedule) !== undefined)) return;
+  const wrapper = "wrapper" in value ? readWrapper(value.wrapper) : undefined;
+
+  if ("wrapper" in value && !wrapper) return;
   if ("target" in value && ((value.target as WriteTarget).kind === "Schedule") !== ofSchedule) return;
   if ((ofSchedule || ofForm) && (typeof value.backup !== "string" || backupNameProblem(value.backup) !== undefined))
     return;
@@ -527,6 +592,8 @@ function readWriteParameters(value: unknown, run: boolean): WriteConfirmRequest 
     ...(isArtifactTarget(value.artifact) ? { artifact: value.artifact } : {}),
     ...(typeof value.backup === "string" ? { backup: value.backup } : {}),
     ...(template ? { template } : {}),
+    ...(typeof value.schedule === "string" ? { schedule: value.schedule } : {}),
+    ...(wrapper ? { wrapper } : {}),
   };
 }
 
@@ -534,7 +601,7 @@ export function readWriteRunRequest(value: unknown): WriteRunRequest | undefined
   if (
     !withinBound(value) ||
     !isRecord(value) ||
-    !hasKeys(value, ["cluster", "namespace", "kind", "token", "request"], ["target", "artifact", "backup"])
+    !hasKeys(value, ["cluster", "namespace", "kind", "token", "request"], ["target", "artifact", "backup", "schedule"])
   )
     return;
   // What is run is what was confirmed, with the token of its confirmation and the identifier of the request.
@@ -546,6 +613,7 @@ export function readWriteRunRequest(value: unknown): WriteRunRequest | undefined
       ...("target" in value ? { target: value.target } : {}),
       ...("artifact" in value ? { artifact: value.artifact } : {}),
       ...("backup" in value ? { backup: value.backup } : {}),
+      ...("schedule" in value ? { schedule: value.schedule } : {}),
     },
     true,
   );
@@ -758,16 +826,50 @@ export function readBackupCreated(value: unknown): BackupCreated | undefined {
   };
 }
 
+export function readScheduleCreated(value: unknown): ScheduleCreated | undefined {
+  if (
+    !isRecord(value) ||
+    !hasKeys(value, ["name", "uid"], ["phase", "errors", "errorsLeft", "paused", "found"]) ||
+    !isName(value.name) ||
+    !isText(value.uid)
+  )
+    return;
+  if ("phase" in value && !isText(value.phase, PHASE_BOUND)) return;
+  if (
+    "errors" in value &&
+    (!Array.isArray(value.errors) ||
+      value.errors.length === 0 ||
+      value.errors.length > ERRORS_BOUND.items ||
+      !value.errors.every((error) => isText(error, ERRORS_BOUND.item)) ||
+      (value.errors as string[]).reduce((total, error) => total + error.length, 0) > ERRORS_BOUND.total)
+  )
+    return;
+  if ("errorsLeft" in value && (!Number.isSafeInteger(value.errorsLeft) || (value.errorsLeft as number) < 1)) return;
+  if ("paused" in value && value.paused !== true) return;
+  if ("found" in value && value.found !== true) return;
+  return {
+    name: value.name,
+    uid: value.uid,
+    ...(typeof value.phase === "string" ? { phase: value.phase } : {}),
+    ...(Array.isArray(value.errors) ? { errors: [...(value.errors as string[])] } : {}),
+    ...(typeof value.errorsLeft === "number" ? { errorsLeft: value.errorsLeft } : {}),
+    ...(value.paused === true ? { paused: true } : {}),
+    ...(value.found === true ? { found: true } : {}),
+  };
+}
+
 function readKeptOutcome(value: unknown): KeptOutcome | undefined {
   if (!isRecord(value) || typeof value.created !== "boolean") return;
   if (value.created) {
-    if (!hasKeys(value, ["created"], ["phase", "found"])) return;
+    if (!hasKeys(value, ["created"], ["phase", "found", "paused"])) return;
     if ("phase" in value && !isText(value.phase, PHASE_BOUND)) return;
     if ("found" in value && value.found !== true) return;
+    if ("paused" in value && value.paused !== true) return;
     return {
       created: true,
       ...(typeof value.phase === "string" ? { phase: value.phase } : {}),
       ...(value.found === true ? { found: true } : {}),
+      ...(value.paused === true ? { paused: true } : {}),
     };
   }
   if (!hasKeys(value, ["created", "code", "text"]) || !isText(value.code, 64) || !isText(value.text, 1024)) return;
@@ -785,7 +887,7 @@ export function readKeptEnds(value: unknown): KeptEnd[] | undefined {
       !isRecord(item) ||
       !hasKeys(item, ["request", "kind", "namespace", "context", "name", "outcome", "at"], ["schedule"]) ||
       !isUuid(item.request) ||
-      (item.kind !== "backup-from-schedule" && item.kind !== "backup") ||
+      (item.kind !== "backup-from-schedule" && item.kind !== "backup" && item.kind !== "schedule") ||
       // A backup asked from a schedule names it, and one of the form names none.
       (item.kind === "backup-from-schedule") !== "schedule" in item ||
       ("schedule" in item && !isName(item.schedule)) ||

@@ -10,21 +10,17 @@ import {
   type BackupCreated,
   carriedErrors,
   failure,
-  PHASE_BOUND,
   textWithinBound,
   type WriteConfirmAnswer,
   type WriteConfirmRequest,
   type WriteRunRequest,
 } from "../common/ipc";
+import { type CreationDependencies, canonical, createKept } from "./creation";
 import { DiagnosticError } from "./diagnostic-transport";
 
 import type { DiagnosticKubernetes, DiagnosticObject } from "./diagnostic-kubernetes";
-import type { Write, WriteGate } from "./write-gate";
+import type { Write } from "./write-gate";
 
-// How long after its creation the backup is read for the phase Velero writes, and how often (SPEC-0017, REQ-248).
-export const READ_AFTER = { everyMs: 1000, forMs: 30_000 };
-// The margin of the clocks within which a backup found by its name is taken for the one created (SPEC-0016).
-export const CREATION_MARGIN = 60_000;
 // The label Velero adds to a backup when it starts it: a backup found by its name may carry it beside the labels of
 // the text.
 const LOCATION_LABEL = "velero.io/storage-location";
@@ -67,34 +63,6 @@ export const BACKUP_NOW_WORDS = {
     `The API server did not answer the creation, and the backup ${name} could not be read: it may have been created. It is not sent again by itself: look for it among the backups.`,
   failed: "The backup could not be asked: nothing is known to have been created.",
 };
-
-// What the main process gives the procedures of this write.
-export interface BackupNowDependencies {
-  gate: WriteGate<DiagnosticKubernetes>;
-  now(): number;
-  // Waits, or ends with the signal.
-  sleep(milliseconds: number, signal: AbortSignal): Promise<void>;
-  // Keeps the end of a run whose request was sent, for the cluster, until a frame of it has shown it (REQ-250), with
-  // the context of the entry the request was sent to.
-  keep?(request: WriteRunRequest, end: Answer<BackupCreated>, context: string): void;
-}
-
-// Whether a creation that failed reached the API server: what the adapter refused to send, a cluster that changed
-// before anything was sent and a client of the host that could not be had did not. A request that left and got no
-// answer is not known, and is looked for.
-function sent(error: unknown): boolean {
-  if (!(error instanceof DiagnosticError)) return true;
-  if (error.code === "validation") return error.verdict === "refused";
-  if (error.code === "target-changed") return error.verdict === "answered";
-  return error.code !== "transport-unreachable";
-}
-
-// The phase Velero wrote, when it is one: a longer word is none the release writes, and is not carried.
-function phaseOf(object: DiagnosticObject): string | undefined {
-  const phase = (object as { status?: { phase?: unknown } }).status?.phase;
-
-  return typeof phase === "string" && phase && phase.length <= PHASE_BOUND ? phase : undefined;
-}
 
 // Where a backup is in the queue of the server, and the errors of the validation Velero refused it with, as written:
 // what the contract cannot carry is counted, and read in the view of the backup.
@@ -162,7 +130,7 @@ function endOf(error: unknown, stage: "read" | "creation", namespace: string, ba
 // The confirmation: the gate is open for the namespace, the schedule is the one the view read, and the backup it
 // makes is written as the text that the review shows and the run sends.
 export async function confirmBackupNow(
-  dependencies: BackupNowDependencies,
+  dependencies: CreationDependencies,
   sender: string,
   request: WriteConfirmRequest,
   signal: AbortSignal,
@@ -200,50 +168,10 @@ export async function confirmBackupNow(
     request.kind,
     target,
     undefined,
-    { backup, text },
+    { name: backup, text },
   );
 
   return confirmed.ok ? { ok: true, value: { ...confirmed.value, text } } : confirmed;
-}
-
-// The reads after the creation: every second for thirty seconds at most, a read that hangs included, until Velero
-// writes a phase of the backup that was created, by its UID. What is read is what is answered; a phase not written
-// yet is none.
-async function readAfter(
-  dependencies: BackupNowDependencies,
-  adapter: DiagnosticKubernetes,
-  namespace: string,
-  created: DiagnosticObject,
-  signal: AbortSignal,
-  write: Write,
-  found: boolean,
-): Promise<Answer<BackupCreated>> {
-  const name = created.metadata.name;
-  const uid = created.metadata.uid;
-  let phase = phaseOf(created);
-  let last = created;
-  const until = dependencies.now() + READ_AFTER.forMs;
-
-  write.status = { step: "waiting for Velero" };
-  while (!phase && !signal.aborted && until - dependencies.now() >= READ_AFTER.everyMs) {
-    try {
-      await dependencies.sleep(READ_AFTER.everyMs, signal);
-      // A read that does not answer ends with the thirty seconds.
-      const bounded = AbortSignal.any([signal, AbortSignal.timeout(Math.max(until - dependencies.now(), 1))]);
-      const read = await adapter.read("Backup", namespace, name, bounded);
-
-      // Another backup of that name is not the one created: nothing more is read of it.
-      if (read.metadata.uid !== uid) break;
-      last = read;
-      phase = phaseOf(read);
-    } catch {
-      break;
-    }
-  }
-  return {
-    ok: true,
-    value: { name, uid, ...(phase ? { phase } : {}), ...detailsOf(last), ...(found ? { found: true } : {}) },
-  };
 }
 
 // The labels the text gives the backup, which a backup found by its name carries when it is the one created: none for a
@@ -279,17 +207,6 @@ const KEPT_AS_SENT = [
   "itemOperationTimeout",
 ];
 
-// A value written with its keys in one order, whatever order a writer gave them.
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-  if (value && typeof value === "object")
-    return `{${Object.keys(value)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`)
-      .join(",")}}`;
-  return JSON.stringify(value) ?? "undefined";
-}
-
 // Whether a backup found by its name carries the fields of the text that Velero keeps as they were sent. A backup of
 // the form has no label and no source: what tells it from one another hand made with its name is its spec.
 function keptAsSent(text: string, found: DiagnosticObject): boolean {
@@ -308,52 +225,26 @@ function keptAsSent(text: string, found: DiagnosticObject): boolean {
   );
 }
 
-// A creation whose answer is not known: the backup is read by its name, and is the one created when its creation is
-// not earlier than a minute before the confirmation and it carries every label of the text, the label of the schedule
-// among them for a backup asked from one; the label of the storage location is the one Velero adds (SPEC-0017,
-// REQ-250). A backup of the form, which has no label, carries the fields Velero keeps as they were sent.
-async function reconcile(
-  dependencies: BackupNowDependencies,
-  adapter: DiagnosticKubernetes,
-  request: WriteRunRequest,
-  text: string,
-  confirmedAt: number,
-  signal: AbortSignal,
-  write: Write,
-): Promise<Answer<BackupCreated>> {
-  const backup = String(request.backup);
-
-  write.status = { step: "looking for the backup" };
-  let found: DiagnosticObject;
-
-  try {
-    found = await adapter.read("Backup", request.namespace, backup, signal);
-  } catch (error) {
-    if (error instanceof DiagnosticError && error.code === "not-found")
-      return failure("submission-unknown", "creation", false, BACKUP_NOW_WORDS.notDone(backup));
-    return failure("submission-unknown", "creation", false, BACKUP_NOW_WORDS.unknown(backup));
-  }
-  const created = Date.parse(String((found.metadata as { creationTimestamp?: unknown }).creationTimestamp));
+// Whether a backup found by its name after an answer that was lost is the one created: it carries every label of the
+// text, the label of the schedule among them for a backup asked from one, and the label of the storage location is the
+// one Velero adds (SPEC-0017, REQ-250); a backup of the form, which has no label, carries the fields Velero keeps as
+// they were sent.
+function sameBackup(text: string, found: DiagnosticObject): boolean {
   const labels = labelsOf(text);
   const carried = found.metadata.labels ?? {};
-  // The labels of the text of a backup asked from a schedule hold the label of the schedule, which the builder always
-  // writes.
-  const ours =
-    Number.isFinite(created) &&
-    created >= confirmedAt - CREATION_MARGIN &&
+
+  return (
     labels !== undefined &&
     Object.entries(labels).every(([key, value]) => key === LOCATION_LABEL || carried[key] === value) &&
-    (Object.keys(labels).length > 0 || keptAsSent(text, found));
-
-  if (!ours) return failure("submission-unknown", "creation", false, BACKUP_NOW_WORDS.other(backup));
-  return readAfter(dependencies, adapter, request.namespace, found, signal, write, true);
+    (Object.keys(labels).length > 0 || keptAsSent(text, found))
+  );
 }
 
 // The run: the token of the confirmation, the schedule read again and the same backup built of it, the frame that
 // asked still there, the text sent byte for byte, and the reads after the creation. The caller watches the frame and
 // ends the write.
 export async function runBackupNow(
-  dependencies: BackupNowDependencies,
+  dependencies: CreationDependencies,
   sender: string,
   request: WriteRunRequest,
   watch: (write: Write) => () => void,
@@ -396,7 +287,7 @@ export async function runBackupNow(
     // What would be sent now is what the review showed, or nothing is sent.
     if (!text || !again || bodyText(again) !== text)
       return failure("conflict", "read", false, BACKUP_NOW_WORDS.reviewChanged);
-    return await createKept(dependencies, adapter, request, text, confirmedAt, write, still);
+    return await createBackupKept(dependencies, adapter, request, text, confirmedAt, write, still);
   } finally {
     stop();
     dependencies.gate.finish(request.cluster, request.request);
@@ -406,8 +297,8 @@ export async function runBackupNow(
 // The creation of a backup whose text the confirmation kept, once what it depends on was read again: from a schedule
 // or from the form, the same POST of that text, the same reads after it, and, when its answer is not known, the same
 // look for the backup by its name (SPEC-0017, REQ-248 to REQ-250). Every end of a request that was sent is kept.
-export async function createKept(
-  dependencies: BackupNowDependencies,
+export function createBackupKept(
+  dependencies: CreationDependencies,
   adapter: DiagnosticKubernetes,
   request: WriteRunRequest,
   text: string,
@@ -416,40 +307,37 @@ export async function createKept(
   still: () => boolean,
 ): Promise<Answer<BackupCreated>> {
   const backup = String(request.backup);
-  const signal = write.controller.signal;
 
-  // A frame that went, or a write stopped, before anything was sent leaves nothing to look for: the frame is looked at
-  // here, and not only at the tick of its watch.
-  if (signal.aborted) return failure("cancelled", "creation", true, BACKUP_NOW_WORDS.cancelled);
-  if (!still()) return failure("forbidden", "frame", false, BACKUP_NOW_WORDS.frameGone);
-  write.status = { step: "creating the backup" };
-  // Every end of a request that was sent is kept for the cluster, and is answered to the frame that asked when it is
-  // still there: it says it showed the end, or the target bar of the cluster shows it.
-  const ended = (end: Answer<BackupCreated>): Answer<BackupCreated> => {
-    // What keeps the end does not end the run otherwise.
-    try {
-      dependencies.keep?.(request, end, adapter.binding?.contextName ?? "");
-    } catch {
-      /* the end is answered all the same */
-    }
-    return still() ? end : failure("forbidden", "frame", false, BACKUP_NOW_WORDS.frameGoneAfter);
-  };
-  let created: DiagnosticObject;
-
-  try {
-    created = await adapter.createBackup(request.namespace, text, signal);
-  } catch (error) {
-    // No answer, or one dropped on this side once the request had left: the backup may be there. It is looked for,
-    // with reads of their own, which the frame that went does not stop.
-    if (error instanceof DiagnosticError && (error.code === "submission-unknown" || error.code === "cancelled"))
-      return ended(
-        await reconcile(dependencies, adapter, request, text, confirmedAt, new AbortController().signal, write),
-      );
-    const end = endOf(error, "creation", request.namespace, backup);
-
-    return sent(error) ? ended(end) : end;
-  }
-  if (created.metadata.name !== backup || !created.metadata.uid)
-    return ended(failure("submission-unknown", "creation", false, BACKUP_NOW_WORDS.unknown(backup)));
-  return ended(await readAfter(dependencies, adapter, request.namespace, created, signal, write, false));
+  return createKept(
+    {
+      kind: "Backup",
+      noun: "backup",
+      name: backup,
+      create: (to, namespace, body, signal) => to.createBackup(namespace, body, signal),
+      endOf: (error) => endOf(error, "creation", request.namespace, backup),
+      same: (found) => sameBackup(text, found),
+      value: (read, phase, found) => ({
+        name: read.metadata.name,
+        uid: read.metadata.uid,
+        ...(phase ? { phase } : {}),
+        ...detailsOf(read),
+        ...(found ? { found: true } : {}),
+      }),
+      words: {
+        cancelled: BACKUP_NOW_WORDS.cancelled,
+        frameGone: BACKUP_NOW_WORDS.frameGone,
+        frameGoneAfter: BACKUP_NOW_WORDS.frameGoneAfter,
+        notDone: BACKUP_NOW_WORDS.notDone(backup),
+        unknown: BACKUP_NOW_WORDS.unknown(backup),
+      },
+      other: failure("submission-unknown", "creation", false, BACKUP_NOW_WORDS.other(backup)),
+    },
+    dependencies,
+    adapter,
+    request,
+    text,
+    confirmedAt,
+    write,
+    still,
+  );
 }
