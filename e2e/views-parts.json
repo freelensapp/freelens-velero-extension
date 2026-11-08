@@ -31,7 +31,7 @@
       "suites": ["velero-e2e-volumes", "velero-e2e-server", "velero-e2e-repositories"],
       "paths": [
         "^src/renderer/components/(volume-|views-frame|write-confirmation|target-bar)",
-        "^src/renderer/pages/(server-band|volume-|pod-volume-|repositor)",
+        "^src/renderer/pages/(server-band|volume-|pod-volume-|repositor|data-)",
         "^src/renderer/details/(repository|volume-operation)-details\\.",
         "^src/renderer/(state|api)/",
         "^src/common/(volume-|server-version|repository-view|allowances|ipc|frame)",

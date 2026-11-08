@@ -235,6 +235,11 @@ describe("reader of the cluster of a frame", () => {
       "/apis/velero.io/v2alpha2/namespaces/velero-demo/datauploads",
       "/apis/velero.io/v2beta1",
       "/apis/velero.io/v1/namespaces/velero-demo/datauploads/../../../../v2alpha1",
+      // A kind of the second version under the first, and the namespaces, which are no kind of the group.
+      "/apis/velero.io/v1/namespaces/velero-demo/datauploads",
+      "/apis/velero.io/v1/namespaces/velero-demo/datadownloads",
+      "/apis/velero.io/v1/datauploads",
+      "/apis/velero.io/v1/namespaces",
       "",
     ]) {
       expect(await reader(path)).toEqual({});

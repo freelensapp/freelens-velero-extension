@@ -299,8 +299,13 @@ export const VOLUME_WORDS = {
   none: "None",
   notStarted: "Not started",
   noOwner: (noun: string) => `The operation names no ${noun}: neither its labels nor an owner reference do`,
-  repositoryNote:
-    "Found by the three labels the release names a repository with: the namespace of the volume, the storage location and the type of the uploader.",
+  // How the repository of an operation is found: by the type of its uploader for a pod volume operation, and by the
+  // type kopia for a data movement, whatever its data mover.
+  repositoryNote: {
+    pod: "Found by the three labels the release names a repository with: the namespace of the volume, the storage location and the type of the uploader.",
+    moved:
+      "Found by the three labels the release names a repository with: the namespace the volume was backed up from, the storage location and the type kopia, the one of the data movement.",
+  },
   hostResolves:
     "The details of the host read the pod when they open: the extension does not read it, and does not say whether it is there.",
   nodeNote: {
@@ -358,15 +363,15 @@ type BandSentence = "waiting" | "validation" | "running" | "plugins" | "finalizi
 const BAND_SENTENCES: { Backup: Record<BandSentence | "deleting", string>; Restore: Record<BandSentence, string> } = {
   Backup: {
     waiting:
-      "The pod volume backups of a backup are made while it is InProgress, and its data uploads run while it waits for its plugin operations: this one has not started.",
+      "The pod volume backups and the data uploads of a backup are made while it is InProgress, the data uploads as the CSI plugin snapshots each claim: this one has not started.",
     validation:
       "The pod volume backups and the data uploads of a backup are made once it runs: this one failed its validation, and did not run.",
     running:
-      "The pod volume backups run while the backup is InProgress: it waits for all of them, and at its own timeout asks the ones that have not ended to cancel. Its data uploads run while it waits for its plugin operations.",
+      "The pod volume backups run while the backup is InProgress: it waits for all of them, and at its own timeout asks the ones that have not ended to cancel. Its data uploads are made as the CSI plugin snapshots each claim, and it waits for them in its plugin operations.",
     plugins:
-      "The pod volume backups ran while the backup was InProgress. It waits for its plugin operations, which is when its data uploads run.",
+      "The pod volume backups ran while the backup was InProgress, and its data uploads were made then. It waits for its plugin operations, among them its data uploads.",
     finalizing:
-      "The pod volume backups ran while the backup was InProgress, and its data uploads while it waited for its plugin operations.",
+      "The pod volume backups ran while the backup was InProgress, and it waited for its data uploads among its plugin operations.",
     ended:
       "The pod volume backups the installation holds of this backup are the ones its run made, or the ones a sync from the store made, in the phase they were stored in. Its data uploads are the ones its run made: a sync makes none.",
     deleting: "The backup is being deleted: its pod volume backups go with it, and its data uploads are deleted.",
@@ -375,12 +380,13 @@ const BAND_SENTENCES: { Backup: Record<BandSentence | "deleting", string>; Resto
   },
   Restore: {
     waiting:
-      "The pod volume restores of a restore are made while it is InProgress, and its data downloads run while it waits for its plugin operations: this one has not started.",
+      "The pod volume restores and the data downloads of a restore are made while it is InProgress, the data downloads as the CSI plugin restores each claim: this one has not started.",
     validation:
       "The pod volume restores and the data downloads of a restore are made once it runs: this one failed its validation, and did not run.",
     running:
-      "The node agent of the node of each restored pod takes its pod volume restore when the init container restore-wait of that pod runs. Its data downloads run while it waits for its plugin operations.",
-    plugins: "The restore waits for its plugin operations, which is when its data downloads run.",
+      "The node agent of the node of each restored pod takes its pod volume restore when the init container restore-wait of that pod runs. Its data downloads are made as the CSI plugin restores each claim, and it waits for them in its plugin operations.",
+    plugins:
+      "The data downloads of the restore were made while it was InProgress. It waits for its plugin operations, among them its data downloads.",
     finalizing:
       "The pod volume restores and the data downloads the installation holds of this restore are the ones its run made.",
     ended:

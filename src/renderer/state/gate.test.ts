@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { anExtension, ipcHandlers, resetIpc, Main as StubMain } from "../../../test/freelens-extensions";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
 import { CHANNELS } from "../../common/ipc";
@@ -26,7 +27,7 @@ function path(family: Family, namespace: string): string {
 }
 
 const answers: Record<string, Answer> = {
-  [DISCOVERY]: { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } },
+  [DISCOVERY]: { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } },
   [LOCATIONS]: list(object("default", "velero-a"), object("default", "velero-b")),
   ...Object.fromEntries(
     ["velero-a", "velero-b"].flatMap((namespace) => [

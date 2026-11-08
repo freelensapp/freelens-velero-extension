@@ -17,15 +17,19 @@ import {
   repository,
   restore,
 } from "../../../test/volume-builders";
-import { emptyPreferences, FAMILIES, heldPreferences, RESOURCES, versionOf } from "../../common/discovery";
+import { emptyPreferences, FAMILIES, heldPreferences, RESOURCES, TITLES, versionOf } from "../../common/discovery";
 import { PATHS } from "../../common/paths";
+import { VIEWS } from "../../common/views";
 import {
+  BAND_WORDS,
   LIST_NOTES,
   LIST_WORDS,
   MOVER_NOTE,
   NODE_AGENT_WORDS,
   NOT_WRITTEN,
+  USED_BY_WORDS,
   VOLUME_WORDS,
+  WORKSPACE_WORDS,
 } from "../../common/volume-words";
 import { DataDownload, DataUpload } from "../api/kinds";
 import { VolumeOperationDetails } from "../details/volume-operation-details";
@@ -35,6 +39,7 @@ import { BackupsPage } from "./backups-page";
 import { DataDownloadsPage } from "./data-downloads-page";
 import { DataUploadsPage } from "./data-uploads-page";
 import { OverviewPage } from "./overview-page";
+import { RepositoriesPage } from "./repositories-page";
 import { RestoresPage } from "./restores-page";
 
 import type { Renderer } from "@freelensapp/extensions";
@@ -251,11 +256,16 @@ describe("the lists of the data movement", () => {
 
     expect((props.renderTableHeader as { title: string }[]).map((column) => column.title)).toContain("Restore");
     expect(cell("data-download", "monday-r2t6v", "volume").textContent).toBe("shop-restored/orders-0");
-    expect(cell("data-download", "monday-r2t6v", "operation").textContent).toBe("monday");
     expect(cell("data-download", "monday-r2t6v", "phase").textContent).toContain("Prepared");
     expect(screen.getAllByTestId("velero-data-downloads-note").map((one) => one.textContent)).toEqual([
       `info_outline${LIST_NOTES.DataDownload}`,
     ]);
+    const way = cell("data-download", "monday-r2t6v", "operation").querySelector("button") as HTMLButtonElement;
+
+    expect(way.textContent).toBe("monday");
+    fireEvent.click(way);
+    await screen.findByTestId("velero-restore-workspace");
+    expect(openViews()).toEqual([{ kind: "restore", name: "monday" }]);
   });
 
   it("say that the cluster does not serve them where the second version is not served, and nothing else changes", async () => {
@@ -282,6 +292,17 @@ describe("the lists of the data movement", () => {
 
 describe("the families of the data movement, read where they are shown", () => {
   it("are read under the second version while their list or a view that shows them is open, and not by the Overview", async () => {
+    // Each list reads its own family, and not the other.
+    const uploads = mount(answers(), (installation) => <DataUploadsPage installation={installation} />);
+
+    await waitFor(() => expect(uploads.asked).toContain(path("dataUploads")));
+    expect(uploads.asked).not.toContain(path("dataDownloads"));
+    cleanup();
+    const downloads = mount(answers(), (installation) => <DataDownloadsPage installation={installation} />);
+
+    await waitFor(() => expect(downloads.asked).toContain(path("dataDownloads")));
+    expect(downloads.asked).not.toContain(path("dataUploads"));
+    cleanup();
     const { asked } = mount(answers(), (installation) => (
       <OverviewPage extension={extension} installation={installation} />
     ));
@@ -365,6 +386,223 @@ describe("the band of a backup and of a restore", () => {
   });
 });
 
+describe("what the data movement says of its reads", () => {
+  it.each([
+    ["data-uploads", "data-upload", "dataUploads", 3, (made: Installation) => <DataUploadsPage installation={made} />],
+    [
+      "data-downloads",
+      "data-download",
+      "dataDownloads",
+      2,
+      (made: Installation) => <DataDownloadsPage installation={made} />,
+    ],
+  ] as const)("in its list, in each state: %s", async (id, kind, family, count, page) => {
+    const { plural, noun } = VIEWS[kind];
+
+    for (const [status, words] of [
+      [403, LIST_WORDS.denied(plural)],
+      [404, LIST_WORDS["not-served"](plural)],
+      [500, LIST_WORDS.failed(plural)],
+    ] as const) {
+      mount(answers({ [path(family)]: { status } }), page);
+      const unavailable = await screen.findByTestId(`velero-${id}-unavailable`);
+
+      expect([status, unavailable.textContent]).toEqual([status, `${LIST_WORDS.notShown(plural, A)}${words}`]);
+      cleanup();
+    }
+    mount(answers({ [path(family)]: list() }), page);
+    expect((await screen.findByTestId(`velero-${id}-empty`)).textContent).toBe(
+      `info_outline${LIST_WORDS.empty(noun, A, "local-demo")}`,
+    );
+    cleanup();
+    // Never answered: no rows, no count.
+    mount(answers({ [path(family)]: () => new Promise<Answer>(() => undefined) }), page);
+    expect((await screen.findByTestId(`velero-${id}-not-counted`)).textContent).toBe(LIST_WORDS.notCounted);
+    cleanup();
+    // Read, then failed: the rows of the read that succeeded stay, and the list says when they were read.
+    const table = answers();
+    const { installation } = mount(table, page);
+
+    await waitFor(() => expect(rows(kind)).toHaveLength(count));
+    table[path(family)] = { status: 500 };
+    await act(async () => {
+      await installation.refresh();
+    });
+    expect(rows(kind)).toHaveLength(count);
+    expect(screen.queryByTestId(`velero-${id}-unavailable`)).toBeNull();
+    expect(screen.getByTestId(`velero-notice-${family}`).textContent).toBe(
+      `error_outline${TITLES[family]} could not be read. What is shown was read at ${new Date(NOW).toLocaleTimeString()}.`,
+    );
+  });
+
+  it.each([
+    ["data-upload", "dataUploads", (made: Installation) => <DataUploadsPage installation={made} />],
+    ["data-download", "dataDownloads", (made: Installation) => <DataDownloadsPage installation={made} />],
+  ] as const)(
+    "in its view, that one of that name is not there, and what is not known of one that cannot be read: %s",
+    async (kind, family, page) => {
+      const { plural, noun } = VIEWS[kind];
+
+      mount(answers(), page);
+      act(() => openView({ kind, name: "gone" }));
+      expect((await screen.findByTestId(`velero-${kind}-missing`)).textContent).toBe(WORKSPACE_WORDS.missing(noun, A));
+      cleanup();
+      mount(answers({ [path(family)]: { status: 403 } }), page);
+      act(() => openView({ kind, name: "gone" }));
+      expect((await screen.findByTestId(`velero-${kind}-unknown`)).textContent).toBe(
+        `${WORKSPACE_WORDS.denied(plural, A)}${WORKSPACE_WORDS.unknownAfter}`,
+      );
+      expect(screen.queryByTestId(`velero-${kind}-missing`)).toBeNull();
+    },
+  );
+
+  it.each([
+    ["data-upload", "dataUploads", uploaded, (made: Installation) => <DataUploadsPage installation={made} />],
+    ["data-download", "dataDownloads", restoring, (made: Installation) => <DataDownloadsPage installation={made} />],
+  ] as const)(
+    "in its view, one created again under the name told from the one that was open, and what was read before: %s",
+    async (kind, family, operation, page) => {
+      const name = operation.metadata.name;
+      let table = answers();
+      const made = new Installation({
+        cluster: { id: "cluster-a", name: "local-demo" },
+        read: async (address) => {
+          const answer = table[address] ?? { status: 404 };
+
+          return typeof answer === "function" ? answer() : answer;
+        },
+        now: () => NOW,
+        storage: heldPreferences({ ...emptyPreferences(), selected: { "cluster-a": A } }),
+      });
+
+      render(page(made));
+      act(() => openView({ kind, name }));
+      await screen.findByTestId(`velero-${kind}-workspace`);
+      await waitFor(() => expect(screen.getByTestId(`velero-${kind}-name`).textContent).toBe(name));
+      expect(screen.queryByTestId(`velero-${kind}-replaced`)).toBeNull();
+      table = answers({ [path(family)]: list({ ...operation, metadata: { ...operation.metadata, uid: "again" } }) });
+      await act(async () => {
+        await made.refresh();
+      });
+      expect(await screen.findByTestId(`velero-${kind}-replaced`)).toBeTruthy();
+      table = answers({ [path(family)]: { status: 500 } });
+      await act(async () => {
+        await made.refresh();
+      });
+      expect(screen.getByTestId(`velero-${kind}-stale`).textContent).toContain(
+        WORKSPACE_WORDS.stale(VIEWS[kind].plural),
+      );
+    },
+  );
+
+  it("in the band, keeps the rows of the data uploads read before and says when, and leaves the other half as it is", async () => {
+    const table = answers();
+    const { installation } = mount(table, (made) => <BackupsPage installation={made} />);
+
+    act(() => openView({ kind: "backup", name: "nightly" }));
+    await screen.findByTestId("velero-backup-workspace");
+    await waitFor(() =>
+      expect(halves()).toEqual([
+        ["PodVolumeBackup", "rows"],
+        ["DataUpload", "rows"],
+      ]),
+    );
+    table[path("dataUploads")] = { status: 500 };
+    await act(async () => {
+      await installation.refresh();
+    });
+    const [pods, data] = within(screen.getByTestId("velero-volume-band")).getAllByTestId("velero-volume-half");
+
+    expect(halves()).toEqual([
+      ["PodVolumeBackup", "rows"],
+      ["DataUpload", "rows"],
+    ]);
+    expect(data.querySelectorAll("tbody tr")).toHaveLength(3);
+    expect(within(data).getByTestId("velero-volume-stale").textContent).toBe(
+      BAND_WORDS.stale("data uploads", new Date(NOW).toLocaleTimeString()),
+    );
+    expect(within(pods).queryByTestId("velero-volume-stale")).toBeNull();
+  });
+});
+
+describe("what used a repository, among the data movement", () => {
+  const groups = (of: HTMLElement) =>
+    [...within(of).getByTestId("velero-volume-groups").querySelectorAll("li")].map((group) => [
+      group.getAttribute("data-phase"),
+      group.lastElementChild?.textContent,
+    ]);
+  const opened = async (table: Answers) => {
+    mount(table, (made) => <RepositoriesPage installation={made} />);
+    act(() => openView({ kind: "backup-repository", name: "shop-default-kopia" }));
+
+    return screen.findByTestId("velero-backup-repository-workspace");
+  };
+
+  it("counts the data uploads and the data downloads of its namespace by phase, the newest a way, and their owners", async () => {
+    const workspace = await opened(answers());
+
+    await waitFor(() =>
+      expect(within(workspace).getByTestId("velero-used-by-data-download").getAttribute("data-state")).toBe("rows"),
+    );
+    const uploads = within(workspace).getByTestId("velero-used-by-data-upload");
+    const downloads = within(workspace).getByTestId("velero-used-by-data-download");
+
+    expect(within(uploads).getByTestId("velero-used-by-count").textContent).toBe("3 data uploads");
+    // One with no phase is counted as New, as the release takes it.
+    expect(groups(uploads)).toEqual([
+      ["Completed", "Completed: 1"],
+      ["InProgress", "In progress: 1"],
+      ["New", "New: 1"],
+    ]);
+    expect(within(uploads).getByTestId("velero-used-by-owners").textContent).toBe("nightly");
+    expect(within(downloads).getByTestId("velero-used-by-count").textContent).toBe("2 data downloads");
+    expect(groups(downloads)).toEqual([
+      ["Prepared", "Prepared: 1"],
+      ["New", "New: 1"],
+    ]);
+    expect(within(downloads).getByTestId("velero-used-by-owners").textContent).toBe("monday");
+    const newest = within(downloads)
+      .getAllByRole("button")
+      .find((button) => button.getAttribute("data-testid")?.startsWith("velero-open-data-download-")) as HTMLElement;
+
+    fireEvent.click(newest);
+    await screen.findByTestId("velero-data-download-workspace");
+    expect(openViews().map((view) => view.kind)).toEqual(["backup-repository", "data-download"]);
+  });
+
+  it("names the kind of the data movement it could not read or the cluster does not serve, and never says that nothing used it then", async () => {
+    const none = {
+      [path("podVolumeBackups")]: list(),
+      [path("podVolumeRestores")]: list(),
+      [path("dataUploads")]: list(),
+    };
+    let workspace = await opened(answers({ ...none, [path("dataDownloads")]: { status: 403 } }));
+
+    await waitFor(() =>
+      expect(within(workspace).getByTestId("velero-used-by-data-download").getAttribute("data-state")).toBe("denied"),
+    );
+    expect(within(workspace).getByTestId("velero-used-by-data-download").textContent).toBe(
+      `Data Downloads${USED_BY_WORDS.denied("data downloads")}`,
+    );
+    expect(within(workspace).queryByTestId("velero-used-by-nothing")).toBeNull();
+    act(() => closeViews());
+    cleanup();
+    workspace = await opened(answers({ ...none, [SECOND]: { status: 404 } }));
+    await waitFor(() =>
+      expect(within(workspace).getByTestId("velero-used-by-data-upload").getAttribute("data-state")).toBe("not-served"),
+    );
+    expect(within(workspace).getByTestId("velero-used-by-data-download").textContent).toBe(
+      `Data Downloads${USED_BY_WORDS["not-served"]("data downloads")}`,
+    );
+    expect(within(workspace).queryByTestId("velero-used-by-nothing")).toBeNull();
+    act(() => closeViews());
+    cleanup();
+    // Each of the four kinds read, and none names it.
+    workspace = await opened(answers({ ...none, [path("dataDownloads")]: list() }));
+    expect((await within(workspace).findByTestId("velero-used-by-nothing")).textContent).toBe(USED_BY_WORDS.nothing);
+  });
+});
+
 describe("the view of a data movement", () => {
   it("of a data upload says what it moves, from which snapshot, where its data path runs, and how it was made", async () => {
     mount(answers(), (made) => <DataUploadsPage installation={made} />);
@@ -379,6 +617,7 @@ describe("the view of a data movement", () => {
 
     expect(value(belongs, "Backup")).toBe("nightly (Waiting for plugin operations)");
     expect(value(belongs, "Repository")).toBe("shop-default-kopia");
+    expect(note(belongs, "Repository")).toBe(VOLUME_WORDS.repositoryNote.moved);
     const of = within(workspace).getByTestId("velero-volume-of");
 
     expect([

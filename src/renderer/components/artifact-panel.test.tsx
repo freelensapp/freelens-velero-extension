@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { observer } from "mobx-react";
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { confirmDialogs } from "../../../test/host-components";
 import {
   ASKING,
@@ -114,7 +115,7 @@ const restore = (name: string, phase: string, source?: string, metadata?: object
 
 function answers(more: Record<string, Answer> = {}): Record<string, Answer> {
   return {
-    [DISCOVERY]: { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } },
+    [DISCOVERY]: { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } },
     [LOCATIONS]: list({ metadata: { name: "default", namespace: A } }),
     [path("backups", A)]: list(
       // The release writes no counter of zero: this one reports its errors, and no warning.

@@ -3,6 +3,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { submissionOf } from "../../../test/adherence-builders";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { repository } from "../../../test/volume-builders";
 import { ALWAYS, emptyPreferences, heldPreferences, ON_DEMAND, RESOURCES, TITLES } from "../../common/discovery";
 import { formatDuration } from "../../common/duration";
@@ -139,7 +140,7 @@ const locations = [
   location("archive", { accessMode: "ReadOnly" }),
   location("broken", {}, { phase: "Unavailable", message: "no bucket", lastValidationTime: ago(2 * DAY) }),
 ];
-const served: Answer = { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } };
+const served: Answer = { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } };
 
 function answers(more: Answers = {}): Answers {
   return {
@@ -275,9 +276,9 @@ describe("what was read", () => {
     const partly: Answer = {
       status: 200,
       body: {
-        resources: Object.values(RESOURCES)
-          .filter((name) => name !== "volumesnapshotlocations")
-          .map((name) => ({ name })),
+        resources: FIRST_VERSION_RESOURCES.filter((name) => name !== "volumesnapshotlocations").map((name) => ({
+          name,
+        })),
       },
     };
     const { installation, table, clock } = mount(
@@ -613,9 +614,7 @@ describe("what is in flight and what completed", () => {
     const partly: Answer = {
       status: 200,
       body: {
-        resources: Object.values(RESOURCES)
-          .filter((name) => name !== "backups")
-          .map((name) => ({ name })),
+        resources: FIRST_VERSION_RESOURCES.filter((name) => name !== "backups").map((name) => ({ name })),
       },
     };
     const { asked } = mount(answers({ [DISCOVERY]: partly }));
@@ -1199,9 +1198,7 @@ describe("each band in its own state", () => {
       const partly: Answer = {
         status: 200,
         body: {
-          resources: Object.values(RESOURCES)
-            .filter((name) => name !== RESOURCES[family])
-            .map((name) => ({ name })),
+          resources: FIRST_VERSION_RESOURCES.filter((name) => name !== RESOURCES[family]).map((name) => ({ name })),
         },
       };
 

@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { DATA_DOWNLOADS } from "../pages/data-downloads-page";
+import { DATA_UPLOADS } from "../pages/data-uploads-page";
 import { POD_VOLUME_BACKUPS } from "../pages/pod-volume-backups-page";
 import { POD_VOLUME_RESTORES } from "../pages/pod-volume-restores-page";
 import { REPOSITORIES } from "../pages/repositories-page";
@@ -141,12 +143,14 @@ describe("room of the list of the backup repositories", () => {
 describe.each([
   ["pod volume backups", POD_VOLUME_BACKUPS],
   ["pod volume restores", POD_VOLUME_RESTORES],
+  ["data uploads", DATA_UPLOADS],
+  ["data downloads", DATA_DOWNLOADS],
 ])("room of the list of the %s", (_, definition) => {
   const classes = definition.columns.map((column) => column.className);
   const shownAt = shownIn(classes);
   const gone = (width: number) => classes.filter((name) => !shownAt(width).includes(name));
 
-  it("gives the installation at 1,200, the age at 1,000, the duration, the location and the uploader at 760, the node and the start at 640", () => {
+  it("gives the installation at 1,200, the age at 1,000, the duration, the location and the uploader or the data mover at 760, the node and the start at 640", () => {
     expect(shownAt(1201)).toEqual(classes);
     expect(gone(1200)).toEqual(["installation"]);
     expect(gone(1000)).toEqual(["installation", "age"]);
@@ -154,7 +158,7 @@ describe.each([
     expect(gone(640)).toEqual(["installation", "node", "started", "duration", "storage", "uploader", "age"]);
   });
 
-  it("never hides the name, the phase, the backup or the restore, the source and the progress", () => {
+  it("never hides the name, the phase, the backup or the restore, the volume or the claim and the progress", () => {
     for (const width of [320, 520, 640]) {
       expect(shownAt(width)).toEqual(["name", "phase", "operation", "volume", "progress"]);
     }

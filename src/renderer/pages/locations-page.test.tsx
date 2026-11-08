@@ -2,6 +2,7 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { hostObject } from "../../../test/freelens-extensions";
 import { drawerValue, listProps } from "../../../test/host-components";
 import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
@@ -198,7 +199,7 @@ const schedules = [
     { phase: "Enabled" },
   ),
 ];
-const served: Answer = { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } };
+const served: Answer = { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } };
 
 function answers(more: Answers = {}): Answers {
   return {
@@ -520,9 +521,7 @@ describe("list of the backup storage locations", () => {
       const partly: Answer = {
         status: 200,
         body: {
-          resources: Object.values(RESOURCES)
-            .filter((name) => name !== resource)
-            .map((name) => ({ name })),
+          resources: FIRST_VERSION_RESOURCES.filter((name) => name !== resource).map((name) => ({ name })),
         },
       };
       const { asked } = mount(

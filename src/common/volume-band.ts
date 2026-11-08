@@ -25,7 +25,9 @@ import type { VolumeKind, VolumeOperationState } from "./volume-phases";
 import type { VolumeOperation } from "./volume-references";
 
 // The groups of the phases in the order `backup describe` prints them for a backup and `restore describe` for a
-// restore (SPEC-0014, what the release does): none and New together, and no Canceling for a restore.
+// restore (SPEC-0014, what the release does): none and New together, and no Canceling for a restore. The data
+// movement, which neither groups, follows the order of its owner: a phase out of it, as Canceling of a data download,
+// comes after the others, as Canceling of a pod volume restore does.
 const GROUPS: Record<OperationKind, readonly string[]> = {
   Backup: ["Completed", "Failed", "Canceled", "InProgress", "Canceling", "Prepared", "Accepted", "New"],
   Restore: ["Completed", "Canceled", "Failed", "InProgress", "Prepared", "Accepted", "New"],

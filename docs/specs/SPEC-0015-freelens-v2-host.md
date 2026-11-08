@@ -1760,17 +1760,18 @@ Decided while implementing, on 2026-11-07:
   every merge, and recorded, while the target stays at its release.
 
 **Amendment of 2026-11-08: the kinds of the data movement** (REQ-210, D7, HOST-15).
-The first pull request of T5.2 of [SPEC-0014](SPEC-0014-repositories-and-data-movement.md)
-registers two kinds more, the data uploads and the data downloads, served under
-`velero.io/v2alpha1`, each a class of the pattern of D7 whose `crd.apiVersions` and
-`apiVersion` name that version, with a page of its own and a section of the details,
-and lists the ten in `customResources`. REQ-210, D7 and HOST-15 are rewritten in place
-for the ten, as the amendment of 2026-10-27 was made; they ask of the two what they
-ask of the others, and nothing else of this spec changes. HOST-15 holds on the ten:
-the test of the entry points and the build test pin the ten classes and their
-literals, the eleven pages and the ten sections made with `detailsFor`, and the
-journey suite reads the ten kinds out of the Custom Resources tree while the
-extension is enabled and back once it is disabled. Decided while implementing, on
-2026-11-08: REQ-215 and HOST-20 keep the eight sessions of the integration test, and
-the two kinds of the data movement get their sessions with their fixtures, in the
-second pull request of T5.2.
+The first pull request of T5.2 of
+[SPEC-0014](SPEC-0014-repositories-and-data-movement.md) registers two kinds more, the
+data uploads and the data downloads, served under `velero.io/v2alpha1`, each a class of
+the pattern of D7 whose `crd.apiVersions` and `apiVersion` name that version, with a
+page of its own and a section of the details, and lists the ten in `customResources`.
+REQ-210, D7 and HOST-15 are rewritten in place for the ten, as the amendment of
+2026-10-27 was made; they ask of the two what they ask of the others, and nothing else
+of this spec changes. HOST-15 holds on the ten: the test of the entry points and the
+build test pin the ten classes and their literals, the eleven pages and the ten sections
+made with `detailsFor`, and the journey suite reads the ten kinds out of the Custom
+Resources tree while the extension is enabled and back once it is disabled, as its
+hosted run in the part `static-views-1` passed at the head `80bcddb` of that pull
+request (run 42431786999). Decided while implementing, on 2026-11-08: REQ-215 and
+HOST-20 keep the eight sessions of the integration test, and the two kinds of the data
+movement get their sessions with their fixtures, in the second pull request of T5.2.

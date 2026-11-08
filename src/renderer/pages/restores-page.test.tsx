@@ -2,9 +2,10 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { FIRST_VERSION_RESOURCES } from "../../../test/discovery";
 import { addressChanges, hostObject } from "../../../test/freelens-extensions";
 import { drawerNames, drawerValue, listProps } from "../../../test/host-components";
-import { emptyPreferences, heldPreferences, RESOURCES } from "../../common/discovery";
+import { emptyPreferences, heldPreferences } from "../../common/discovery";
 import { PATHS } from "../../common/paths";
 import { RESTORE_PHASES } from "../../common/phases";
 import { Restore } from "../api/kinds";
@@ -101,7 +102,7 @@ const backup = object(
   { storageLocation: "default" },
   { phase: "Completed", startTimestamp: "2026-09-01T09:00:00Z", completionTimestamp: "2026-09-01T09:01:00Z" },
 );
-const served: Answer = { status: 200, body: { resources: Object.values(RESOURCES).map((name) => ({ name })) } };
+const served: Answer = { status: 200, body: { resources: FIRST_VERSION_RESOURCES.map((name) => ({ name })) } };
 
 function answers(more: Answers = {}): Answers {
   return {
@@ -385,9 +386,7 @@ describe("list of the restores", () => {
     const partly: Answer = {
       status: 200,
       body: {
-        resources: Object.values(RESOURCES)
-          .filter((name) => name !== "restores")
-          .map((name) => ({ name })),
+        resources: FIRST_VERSION_RESOURCES.filter((name) => name !== "restores").map((name) => ({ name })),
       },
     };
     const { asked } = mount(answers({ [DISCOVERY]: partly }), chosen(A));

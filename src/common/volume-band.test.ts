@@ -201,17 +201,17 @@ describe("the band of a backup and of a restore", () => {
     const restores = (phase: string | undefined) => bandSentence("Restore", operationState("Restore", phase));
 
     expect(backups("InProgress")).toBe(
-      "The pod volume backups run while the backup is InProgress: it waits for all of them, and at its own timeout asks the ones that have not ended to cancel. Its data uploads run while it waits for its plugin operations.",
+      "The pod volume backups run while the backup is InProgress: it waits for all of them, and at its own timeout asks the ones that have not ended to cancel. Its data uploads are made as the CSI plugin snapshots each claim, and it waits for them in its plugin operations.",
     );
     expect(backups("WaitingForPluginOperations")).toBe(
-      "The pod volume backups ran while the backup was InProgress. It waits for its plugin operations, which is when its data uploads run.",
+      "The pod volume backups ran while the backup was InProgress, and its data uploads were made then. It waits for its plugin operations, among them its data uploads.",
     );
     expect(backups("WaitingForPluginOperationsPartiallyFailed")).toBe(backups("WaitingForPluginOperations"));
     expect(backups("FinalizingPartiallyFailed")).toBe(
-      "The pod volume backups ran while the backup was InProgress, and its data uploads while it waited for its plugin operations.",
+      "The pod volume backups ran while the backup was InProgress, and it waited for its data uploads among its plugin operations.",
     );
     expect(backups("New")).toBe(
-      "The pod volume backups of a backup are made while it is InProgress, and its data uploads run while it waits for its plugin operations: this one has not started.",
+      "The pod volume backups and the data uploads of a backup are made while it is InProgress, the data uploads as the CSI plugin snapshots each claim: this one has not started.",
     );
     expect(backups(undefined)).toBe(backups("New"));
     expect(backups("Queued")).toBe(backups("New"));
@@ -226,16 +226,16 @@ describe("the band of a backup and of a restore", () => {
       "The backup reports a phase the release does not write: what the release does with its pod volume backups and its data uploads is not known.",
     );
     expect(restores("InProgress")).toBe(
-      "The node agent of the node of each restored pod takes its pod volume restore when the init container restore-wait of that pod runs. Its data downloads run while it waits for its plugin operations.",
+      "The node agent of the node of each restored pod takes its pod volume restore when the init container restore-wait of that pod runs. Its data downloads are made as the CSI plugin restores each claim, and it waits for them in its plugin operations.",
     );
     expect(restores("WaitingForPluginOperations")).toBe(
-      "The restore waits for its plugin operations, which is when its data downloads run.",
+      "The data downloads of the restore were made while it was InProgress. It waits for its plugin operations, among them its data downloads.",
     );
     expect(restores("Completed")).toBe(
       "The pod volume restores and the data downloads the installation holds of this restore are the ones its run made.",
     );
     expect(restores("New")).toBe(
-      "The pod volume restores of a restore are made while it is InProgress, and its data downloads run while it waits for its plugin operations: this one has not started.",
+      "The pod volume restores and the data downloads of a restore are made while it is InProgress, the data downloads as the CSI plugin restores each claim: this one has not started.",
     );
     expect(restores("Paused")).toBe(
       "The restore reports a phase the release does not write: what the release does with its pod volume restores and its data downloads is not known.",
@@ -444,6 +444,33 @@ describe("the data movement of a backup and of a restore", () => {
     ]);
   });
 
+  it("groups the data movement in the order of its owner, a data download Canceling after the others", () => {
+    const made = index(
+      [],
+      [],
+      {},
+      {
+        uploads: [
+          upload("nightly-du-new", { phase: "New" }, "du-a"),
+          upload("nightly-du-canceling", { phase: "Canceling" }, "du-b"),
+          upload("nightly-du-done", { phase: "Completed" }, "du-c"),
+        ],
+        downloads: [
+          download("monday-dd-canceling", { phase: "Canceling" }, "dd-a"),
+          download("monday-dd-none", undefined, "dd-b"),
+          download("monday-dd-done", { phase: "Completed" }, "dd-c"),
+        ],
+      },
+    );
+
+    expect(
+      data(backupBand(made, nightly, operationState("Backup", "InProgress"))).groups.map(({ phase }) => phase),
+    ).toEqual(["Completed", "Canceling", "New"]);
+    expect(
+      data(restoreBand(made, monday, operationState("Restore", "InProgress"))).groups.map(({ phase }) => phase),
+    ).toEqual(["Completed", "New", "Canceling"]);
+  });
+
   it("keeps each half with the state of its own read: a denied data movement takes nothing from the pod volumes", () => {
     const made = index([phased("Completed", "nightly-pv")], [], { uploads: "forbidden" });
     const band = backupBand(made, nightly, operationState("Backup", "Completed"));
@@ -468,16 +495,26 @@ describe("the data movement of a backup and of a restore", () => {
             { phase: "Completed" },
             { ...moved("Backup", nightly, "du-b"), spec: { sourceNamespace: "billing" } },
           ),
+          // The data mover of the release written out, and one of its own, which the release does not run.
+          dataUpload(
+            "nightly-du-velero",
+            { phase: "Completed" },
+            { ...moved("Backup", nightly, "du-c"), spec: { datamover: "velero" } },
+          ),
+          dataUpload("nightly-du-own", undefined, {
+            ...moved("Backup", nightly, "du-d"),
+            spec: { datamover: "own-mover" },
+          }),
         ],
         downloads: [download("monday-dd", { phase: "Completed" }, "dd-a")],
       },
     );
     const uses = repositoryUses(made, kopiaShop, { backups: read([nightly]), restores: read([monday]) });
 
-    expect(uses.map((use) => [use.kind, use.operations.map((operation) => operation.metadata.name)])).toEqual([
+    expect(uses.map((use) => [use.kind, use.operations.map((operation) => operation.metadata.name).sort()])).toEqual([
       ["PodVolumeBackup", []],
       ["PodVolumeRestore", []],
-      ["DataUpload", ["nightly-du"]],
+      ["DataUpload", ["nightly-du", "nightly-du-own", "nightly-du-velero"]],
       ["DataDownload", ["monday-dd"]],
     ]);
     expect(uses[2].owners.map((owner) => [owner.name, owner.state])).toEqual([["nightly", "resolved"]]);

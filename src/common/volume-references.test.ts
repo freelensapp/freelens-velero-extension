@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   backup,
+  dataDownload,
+  dataUpload,
   ownedBy,
   podVolumeBackup,
   podVolumeRestore,
@@ -9,12 +11,14 @@ import {
   restore,
 } from "../../test/volume-builders";
 import {
+  acceptedBy,
   operationClaim,
   operationLocation,
   operationNode,
   operationOwner,
   operationPod,
   operationRepository,
+  operationType,
   repositoryType,
   volumeNamespace,
 } from "./volume-references";
@@ -331,6 +335,36 @@ describe("the repository of an operation", () => {
     });
   });
 
+  it("is of the type kopia for a data movement, whatever its data mover, and of its source namespace", () => {
+    const own = dataUpload("x", undefined, { spec: { datamover: "own-mover" } });
+
+    expect([
+      operationType("DataUpload", dataUpload("x", undefined)),
+      operationType("DataUpload", own),
+      operationType("DataDownload", dataDownload("x", undefined)),
+    ]).toEqual(["kopia", "kopia", "kopia"]);
+    expect(operationType("PodVolumeBackup", podVolumeBackup("x", undefined, { spec: { uploaderType: "" } }))).toBe(
+      "restic",
+    );
+    expect(volumeNamespace("DataUpload", dataUpload("x", undefined, { spec: { sourceNamespace: "billing" } }))).toBe(
+      "billing",
+    );
+    // The namespace a data download restores into is not the one of its repository: its source namespace is.
+    expect(volumeNamespace("DataDownload", dataDownload("x", undefined))).toBe("shop");
+    expect(
+      volumeNamespace("DataUpload", dataUpload("x", undefined, { spec: { sourceNamespace: "" } })),
+    ).toBeUndefined();
+    expect(operationRepository("DataUpload", own, read([kopia, restic]))).toMatchObject({
+      state: "found",
+      reference: { name: "shop-default-kopia" },
+    });
+    expect(operationRepository("DataDownload", dataDownload("x", undefined), read([restic]))).toEqual({
+      state: "none",
+      names: [],
+      reason: "No repository of this installation names the volumes of shop, the location default and the type kopia",
+    });
+  });
+
   it("is none, or more than one, which the release refuses, each said", () => {
     const twin = repository("shop-default-kopia-2", { phase: "Ready" }, { labels: kopia.metadata.labels });
 
@@ -415,5 +449,42 @@ describe("the pod, the node and the claim of an operation", () => {
       uid: "claim-1",
     });
     expect(operationClaim("PodVolumeBackup", podVolumeBackup("x", undefined))).toEqual({});
+  });
+
+  it("are, for a data movement, the node of its data path from its status and the claim of its spec", () => {
+    const upload = dataUpload(
+      "x",
+      { phase: "InProgress", node: "worker-2", acceptedByNode: "worker-1" },
+      { labels: { "velero.io/pvc-uid": "claim-1" } },
+    );
+
+    expect(operationNode("DataUpload", upload)).toBe("worker-2");
+    expect(operationNode("DataDownload", dataDownload("x", { phase: "Accepted", acceptedByNode: "worker-1" }))).toBe(
+      undefined,
+    );
+    expect(operationClaim("DataUpload", upload)).toEqual({ name: "orders-0", uid: "claim-1" });
+    expect(operationClaim("DataDownload", dataDownload("x", undefined))).toEqual({ name: "orders-0" });
+    expect(operationClaim("DataUpload", dataUpload("x", undefined, { spec: { sourcePVC: "" } }))).toEqual({});
+    expect(
+      operationClaim("DataDownload", dataDownload("x", undefined, { spec: { targetVolume: null } } as never)),
+    ).toEqual({});
+  });
+
+  it("say the node agent that accepted a data movement only when it is not the node of its data path", () => {
+    expect(
+      acceptedBy("DataUpload", dataUpload("x", { phase: "Prepared", node: "worker-2", acceptedByNode: "worker-1" })),
+    ).toBe("worker-1");
+    expect(
+      acceptedBy("DataUpload", dataUpload("x", { phase: "Prepared", node: "worker-1", acceptedByNode: "worker-1" })),
+    ).toBe(undefined);
+    // Accepted, its data path not placed yet: the node agent that accepted it is the one node known.
+    expect(acceptedBy("DataDownload", dataDownload("x", { phase: "Accepted", acceptedByNode: "worker-3" }))).toBe(
+      "worker-3",
+    );
+    expect(acceptedBy("DataDownload", dataDownload("x", { phase: "New" }))).toBeUndefined();
+    // A pod volume operation is accepted by the node agent of its node: nothing is said.
+    expect(
+      acceptedBy("PodVolumeRestore", podVolumeRestore("x", { phase: "Accepted", node: "worker-2" })),
+    ).toBeUndefined();
   });
 });
