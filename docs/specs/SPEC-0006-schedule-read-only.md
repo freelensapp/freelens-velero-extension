@@ -346,4 +346,7 @@ proven at the component layer by the view of a schedule whose controls are the w
 back, Back up now, the ways to the other views and the marks of the line, and by the
 workspace of the action, with writes off and on, in
 [`backup-now-workspace.test.tsx`](../../src/renderer/pages/backup-now-workspace.test.tsx);
-the packaged suites of the action come with the last pull request of T4.2.
+the packaged suites of the action came with the fourth pull request of T4.2: the
+suite of the actions,
+[`velero-e2e-actions.tests.ts`](../../e2e/__tests__/velero-e2e-actions.tests.ts), and
+the views of the workspace in the pre-review.

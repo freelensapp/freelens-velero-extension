@@ -2422,6 +2422,7 @@ export function createStaticFixtures(runtime: FixtureRuntime, run: string, contr
 // volume it backed up.
 export const WITHOUT_A_CONTROLLER = [
   "extensions",
+  "velero-e2e-actions",
   "velero-e2e-adherence",
   "velero-e2e-data-movement",
   "velero-e2e-gate",

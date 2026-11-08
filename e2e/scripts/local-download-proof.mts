@@ -135,13 +135,13 @@ export function tlsProofResources(
 
 // The entry of the cluster of a proof in a catalog of the proof, connected: the kubeconfig and the context
 // of the environment, which the main process does not read.
-function proofEntry(id: string, kubeconfig: string): CatalogEntry {
+export function proofEntry(id: string, kubeconfig: string): CatalogEntry {
   return { id, name: "proof", kubeConfigPath: kubeconfig, contextName: DEMO_CONTEXT, status: "connected" };
 }
 
 // The adapter of the main process for the cluster of a proof, through the client of the host the proof
 // stands in for. The target of the environment is checked before every request, as the catalog is.
-function proofAdapter(main: Main, entry: CatalogEntry, host: ProofHost, assertCurrent: () => void, labels = {}) {
+export function proofAdapter(main: Main, entry: CatalogEntry, host: ProofHost, assertCurrent: () => void, labels = {}) {
   return new main.DiagnosticKubernetes(
     entry,
     {
@@ -160,7 +160,7 @@ function proofAdapter(main: Main, entry: CatalogEntry, host: ProofHost, assertCu
 // entry of a catalog of the proof, over the kubeconfig it is given, and the requests carry the labels of
 // the environment beside the ones of the extension, so that the environment knows them as its own. The
 // route to the store is the one the main process finds by itself.
-function proofProcedures(
+export function proofProcedures(
   main: Main,
   context: Pick<DownloadProofContext, "owner" | "run" | "assertCurrent">,
   kubeconfig: string,
