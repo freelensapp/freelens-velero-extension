@@ -507,25 +507,6 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
   );
 
   it(
-    "offers Create schedule in the header of the list of the Schedules, and with writes off fills the form and writes nothing",
-    async () => {
-      const earlier = cluster.apiRequests();
-
-      await openScheduleCreate(frame);
-      await frame.click("[data-testid=velero-writes-off]");
-      await frame.waitForSelector("[data-testid=velero-writes][data-writes=off]", { timeout: 60_000 });
-      await frame.locator(scheduleField("field")).first().fill(`${FORM}-schedule-off`);
-      await frame.locator(scheduleField("expression")).first().fill(SCHEDULE_FORM.expression);
-      await frame.locator(scheduleField("expression")).first().press("Enter");
-      await frame.waitForTimeout(NOTHING);
-      expect(await frame.locator(newSchedule("review")).count()).toBe(0);
-      expect(await frame.locator(newSchedule("writes-off")).count()).toBe(1);
-      expect(writesSince(earlier)).toEqual({});
-    },
-    TIMEOUT,
-  );
-
-  it(
     "opens Create schedule over the list, named in the address, leaves the list as it was when it closes, and drops a review when writes go off before the creation, which creates nothing",
     async () => {
       await writesOn();
@@ -560,7 +541,28 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
       await frame.waitForTimeout(NOTHING);
       expect(cluster.requestWrites("schedules", codes, cluster.requestCodes("schedules"))).toEqual({});
       expect(writesSince(earlier)).toEqual({});
+      // Writes on again, as the next case takes them.
+      await writesOn();
       await cluster.closeWorkspace(frame);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "offers Create schedule in the header of the list of the Schedules, and with writes off fills the form and writes nothing",
+    async () => {
+      const earlier = cluster.apiRequests();
+
+      await openScheduleCreate(frame);
+      await frame.click("[data-testid=velero-writes-off]");
+      await frame.waitForSelector("[data-testid=velero-writes][data-writes=off]", { timeout: 60_000 });
+      await frame.locator(scheduleField("field")).first().fill(`${FORM}-schedule-off`);
+      await frame.locator(scheduleField("expression")).first().fill(SCHEDULE_FORM.expression);
+      await frame.locator(scheduleField("expression")).first().press("Enter");
+      await frame.waitForTimeout(NOTHING);
+      expect(await frame.locator(newSchedule("review")).count()).toBe(0);
+      expect(await frame.locator(newSchedule("writes-off")).count()).toBe(1);
+      expect(writesSince(earlier)).toEqual({});
     },
     TIMEOUT,
   );
