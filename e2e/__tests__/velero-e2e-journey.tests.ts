@@ -274,7 +274,7 @@ describe("views of the first milestone", () => {
 
       expect(later[DISCOVERY]).toBe(earlier[DISCOVERY] + 1);
       // The six families read at every read of the namespace that is shown were read, which the counters see; the
-      // list of the backups shows none of the pod volume operations, which are not asked.
+      // list of the backups shows none of the pod volume operations and of the data movement, which are not asked.
       for (const kind of READ_ALWAYS) {
         const key = `LIST ${kind} namespace`;
 

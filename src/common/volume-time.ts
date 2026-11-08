@@ -17,7 +17,7 @@ export type VolumeSpan =
   | { state: "instant"; at: number }
   // Ended with a completion and no start: it ended before its data path began.
   | { state: "no-start"; at: number }
-  // Ended with no time at all, as one the preparing timeout failed.
+  // Ended with no start and no completion, as one the preparing timeout failed, which keeps the time it was accepted.
   | { state: "no-time" }
   // New, or with no phase: it has no time but its creation.
   | { state: "not-started" }

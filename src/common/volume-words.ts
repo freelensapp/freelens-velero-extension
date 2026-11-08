@@ -109,7 +109,7 @@ export function phaseSentence(state: VolumeOperationState): string {
     case "Completed":
       return "The data path ended.";
     case "Failed":
-      return "The operation failed: the message says why. A start equal to the completion is one the failure wrote; no time at all is one the preparing timeout wrote.";
+      return "The operation failed: the message says why. A start equal to the completion is one the failure wrote; no start and no completion is one the preparing timeout wrote.";
     default:
       return "The operation was canceled: neither a success nor a failure. The release cancels one when its backup or restore times out, when the server or the node agent restarts, or when its pod cannot run.";
   }

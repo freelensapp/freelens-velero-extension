@@ -233,7 +233,7 @@ pnpm demo:up              # The cluster with the fixtures left in place
 pnpm demo:views           # What the views need beside them, and where the kubeconfigs of the demo are
 pnpm e2e:views            # The suites of the views in the Freelens FREELENS_APP names, against the fixtures
 pnpm pre-review           # Both themes, the sizes of the window, the zoom and the keyboard
-pnpm e2e:integration      # FND-10 and a session for each of the eight kinds, in the Freelens FREELENS_APP names
+pnpm e2e:integration      # FND-10 and a session for each of the ten kinds, in the Freelens FREELENS_APP names
 
 # Build
 pnpm build                # Both Vite runs, renderer then main, without the type check
@@ -265,7 +265,7 @@ src/
   common/                   # Pure helpers on plain data, and the store of the preferences
 build/                      # Vite plugins of the template: modules of the host, standard decorators, CSS module declarations
 environment-tests/          # Probes of the programs of each process, which fail on an API of another environment
-integration/                # FND-10, a session for each of the eight kinds, and the helpers of the suites of the views
+integration/                # FND-10, a session for each of the ten kinds, and the helpers of the suites of the views
 test/                       # The stub of the SDK, the doubles of the host, the build and environment tests, the measures
 e2e/scripts/                # Disposable kind cluster with Velero and S3, fixtures, transport proof, stand-ins of the host
 e2e/__tests__/              # The suites of the views, run in the Freelens that FREELENS_APP names
@@ -816,7 +816,7 @@ export class Backup extends Renderer.K8sApi.LensExtensionKubeObject<Metadata, Ba
 `src/renderer/index.tsx` registers the section of the details of each kind with
 `Renderer.K8sApi.detailsFor(<class>, { priority, Details })`, which takes the kind
 and the versions from the class and checks the section against it, and lists the
-eight classes in `customResources`: while the extension is enabled the Custom
+ten classes in `customResources`: while the extension is enabled the Custom
 Resources tree of the cluster leaves them out, where they would be listed a second
 time beside the pages of the group of Velero, and lists them again once it is
 disabled. A kind with a page of its own joins `customResources` with its page; a
@@ -940,7 +940,7 @@ for the changes that reach them:
 - `trunk-check.yaml`: Trunk on every file.
 - `unit-tests.yaml`: `pnpm test:unit`, the build first, then the tests and the
   measures alone.
-- `integration-tests.yaml`: FND-10 and the eight sessions of the integration test,
+- `integration-tests.yaml`: FND-10 and the ten sessions of the integration test,
   in Freelens built from source at the commit of the validation target, on the
   disposable kind cluster with the CRDs of the release alone that
   `pnpm e2e:cluster:up:definitions` makes, taken down whatever happens.
@@ -953,7 +953,7 @@ for the changes that reach them:
   each then with the cleanup of the fixtures and the verification of the
   environment; and two on the CRDs of the release alone with the static fixtures
   and the counterparts of what the controllers leave in the installation, for the
-  ten other suites and FND-10. A first job decides the parts by the rules of
+  eleven other suites and FND-10. A first job decides the parts by the rules of
   `e2e/views-parts.json`: every part on main, every night and on demand; on a pull
   request, the parts its changed files reach, every part for a file no rule knows
   and none for documents and unit tests alone. The job `views in Freelens v2`

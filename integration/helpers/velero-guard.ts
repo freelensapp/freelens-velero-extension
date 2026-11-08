@@ -178,3 +178,22 @@ export function workloadReadsOf(counts: Record<string, number>): Record<string, 
     }),
   );
 }
+
+/**
+ * What the API server counts of a request the window sent to the API of Velero, in its words: the verb, the
+ * kind and the scope, as `apiRequests()` gives them, under either version of the group, as the API server counts
+ * a kind of the group whatever its version. The read of a version itself, which says what it serves, is of no kind,
+ * and is counted as none of them.
+ */
+export function countedAs(request: { url: string }): string | undefined {
+  const address = new URL(request.url);
+  const path = /\/apis\/velero\.io\/(?:v1|v2alpha1)\/(.+)$/.exec(address.pathname)?.[1];
+
+  if (!path) return undefined;
+  const parts = path.split("/");
+  const namespaced = parts[0] === "namespaces";
+  const [kind, name] = namespaced ? parts.slice(2) : parts;
+  const verb = address.searchParams.get("watch") ? "WATCH" : name ? "GET" : "LIST";
+
+  return `${verb} ${kind} ${name ? "resource" : namespaced ? "namespace" : "cluster"}`;
+}
