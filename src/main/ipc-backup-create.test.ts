@@ -154,6 +154,15 @@ function fixture() {
   return { state, adapter, gate, call, enable, confirm, run, locationReads };
 }
 
+describe("the words of a template refused", () => {
+  it("says each problem as a sentence, in a text the views take", () => {
+    expect(BACKUP_CREATE_WORDS.refused(["excludes list cannot contain '*'", "The name is taken."])).toBe(
+      "The template is refused, and nothing was sent: excludes list cannot contain '*'. The name is taken.",
+    );
+    expect(BACKUP_CREATE_WORDS.refused(Array(40).fill("x".repeat(60))).length).toBeLessThanOrEqual(1024);
+  });
+});
+
 describe("the confirmation of a backup of the form", () => {
   it("is refused with writes off, and reads nothing", async () => {
     const { confirm, adapter } = fixture();

@@ -122,8 +122,8 @@ function namespaceProblems(namespace: string): string[] {
 }
 
 // `ValidateIncludesExcludes` of the release: `*` alone or not at all among the included, never among the excluded,
-// and no item in both lists.
-function listProblems(included: string[], excluded: string[]): { included: string[]; excluded: string[] } {
+// and no item in both lists. The restore of a backup checks its lists with it as well.
+export function listProblems(included: string[], excluded: string[]): { included: string[]; excluded: string[] } {
   const includes = new Set(included);
   const excludes = new Set(excluded);
   const problems = { included: [] as string[], excluded: [] as string[] };
@@ -148,7 +148,7 @@ export function durationOf(text: string): { written: string } | { problem: strin
 }
 
 // The items of a list, each once, in the order they were given.
-function once(items: string[] | undefined): string[] {
+export function once(items: string[] | undefined): string[] {
   return [...new Set(items ?? [])];
 }
 

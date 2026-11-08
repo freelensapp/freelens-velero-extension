@@ -1268,3 +1268,193 @@ Decided while implementing, on 2026-11-08:
 
 With this pull request the work of T4.3 is complete: its row of the roadmap moves to Done
 after the merge, with the follow-up that PROCESS.md asks for.
+
+T4.4, the first of its pull requests, on 2026-11-08: the restore of a backup in the
+main process and in the contract, with the form a restore is made of, and no surface
+of the renderer yet. The evidence, by check:
+
+- RESTORE-02 and ACT-08: the builder writes a `velero.io/v1` Restore with its name and
+  its namespace alone, no label, no annotation and no status; `backupName` always and
+  `scheduleName` never; `existingResourcePolicy` always; the cluster-scoped resources as
+  chosen, every one written true, none written false, and the ones the restored resources
+  need left out; a list with each item once; the mapping as an object of its pairs; a
+  selector as the API takes it; `restorePVs` written when it is set, false included; a
+  field not set left out. Nothing is written for a name or a form refused, or with no
+  backup; the text is written as every text of the extension and read back, and a text
+  that names a schedule is not one of a restore
+  ([`restore-form.test.ts`](../../src/common/restore-form.test.ts)).
+- RESTORE-04, the domain part: the lists checked as the restore controller checks them,
+  the included namespaces not taken for every one, with its words, and the resources
+  Velero never restores refused by their names; one of the two selectors, each one
+  Kubernetes reads; a mapping refused for a source that no namespace or pattern of the
+  backup holds, one it excludes and a name no namespace can have, a target that is not a
+  name of a namespace, a source twice and a target twice, a source the lists of the
+  restore leave out, and a pair with a side not typed, each said once in the words of
+  the form; kept with the words of a warning under a backup that took every namespace,
+  of no included namespace or of `*`; the patterns read as the lexer of the glob package
+  of the release reads them, `*` of no character, one or many, `?`, one range or one
+  list, `!` that turns either, `^` a character of a list, `\` that takes the next one and
+  `**` as `*`, a pattern the package does not compile ending the match of its list, the
+  patterns of a list in the order of their characters, and a pattern of many stars
+  matched in a time bounded by the lengths; the nine resources Velero never restores
+  pinned in its order, each refused with its words and with the conflict of the lists
+  the controller makes of it; the four sentences of the controller pinned as the
+  release writes them; every field the form offers written as it is set, by a case of
+  its own, and an empty list of selectors refused.
+- RESTORE-01, RESTORE-02, RESTORE-07, RESTORE-09 and ACT-01 to ACT-07, the main part
+  ([`ipc-restore-create.test.ts`](../../src/main/ipc-restore-create.test.ts)): the
+  confirmation refused with writes off, reading nothing, and with writes on for another
+  namespace; the backup read by its name, taken Completed or PartiallyFailed, a
+  conflict in each of the eleven other phases of the release and with none, and with
+  another UID, not found when it went, forbidden with the words of the read; the form
+  checked against the namespaces of the backup the main process read; a form whose text
+  the answer cannot carry confirmed with no token; a form of many problems said in a
+  text the views take, with how many more there are; the answer the text of the
+  Restore with the token. The contract refuses a field of a restore the form does not
+  offer, each of them, the source the form never writes, a target that is not a backup
+  and a name the API server refuses, and reads a form with all its fields as it was
+  sent ([`ipc.test.ts`](../../src/common/ipc.test.ts)). The run carries the name of the backup
+  as it was typed: another one, or an empty one, runs nothing and keeps the review, and a
+  run with none is not one the contract carries; it runs only for the restore and the
+  backup it was confirmed for, once, and carries none of the form; the backup read again,
+  a change of its UID or of its phase, each of the eleven, or its absence, sends nothing;
+  the text sent byte for byte, once, and the restore read until Velero writes a phase,
+  with the errors of a validation as written, and none after thirty seconds; each end of
+  the read of the backup and of the creation with its code, its stage, its safety and
+  its words, a credential the cluster does not take, a 400 the adapter ends as
+  request-failed, a body the adapter refused to send and a cluster that changed after it
+  answered among them, and the ends of what was sent kept for the cluster; a token of
+  another frame, an expired one, one of another namespace and writes turned off after
+  the confirmation refused; the frame gone while the backup is read again, and after the
+  creation, which is kept for the cluster; writes turned off while the backup is read
+  again; a creation dropped on this side once it was sent ends as not known, and is
+  looked for with a read the write that stopped does not end; seventeen restores in a
+  row; a run sent again with the same identifier joined, and none of another frame, of
+  another token or of another restore; a restore of that name that is not the one
+  created no longer read, and no answer of another name or with no UID taken; a
+  creation whose answer was lost looked for by its name, found when its spec is the one
+  of the text with what the controller writes into a restore it starts, and not known
+  to be this one when it is of another backup, of another spec, of another schedule,
+  with a field the text does not write, or older than the minute of the margin; a run
+  of another name typed with the identifier of one in flight not joined to it; a text
+  kept with the token of another restore, of another backup or of another namespace,
+  and a run that names no backup typed, send nothing; the end kept for the cluster with
+  the restore and its backup.
+- ACT-01, the adapter part
+  ([`diagnostic-kubernetes.test.ts`](../../src/main/diagnostic-kubernetes.test.ts)): one
+  POST to the restores of the namespace, its body the text byte for byte; a text that is
+  not a Restore of the namespace, of its name and its namespace alone, with a spec that
+  names a backup and no schedule and no key beside the four of an object, a field of a
+  restore the form does not offer and a policy it does not offer, refused before
+  anything leaves; a restore with every field the form offers sent; the methods of the
+  adapter pinned, `createRestore` among them.
+- REQ-245 and REQ-250: the words of the gate name the Restore of a backup
+  ([`writes.test.tsx`](../../src/renderer/components/writes.test.tsx)); the target bar says
+  the end of a restore with its backup and leads to the view of the restore
+  ([`kept-end-words.test.ts`](../../src/common/kept-end-words.test.ts),
+  [`backup-now-workspace.test.tsx`](../../src/renderer/pages/backup-now-workspace.test.tsx)).
+
+Each new case was seen failing on a change made on purpose, twenty-six in all: the name
+typed not compared, the UID and the phase of the backup not looked at, a phase in progress
+taken, the backup not read again at the run, the backup of the text not compared with the
+one of the run, any restore of the name taken for the one created, the form not refused,
+and checked against no namespace of the backup; the cluster-scoped resources written for
+the ones the restored ones need, the policy left out; a source that is no name, one the
+backup excludes and a target twice taken; a restore asked of what is not a backup, a run
+with no name typed, a policy the release does not have, a mapping beyond its bound, a name
+typed of any length taken by the contract; an end of a restore with no backup taken; a text
+naming a schedule and one with no backup let through by the adapter; a run of another name
+typed joined; the end kept without its backup, said without it, and led to a backup.
+After the independent review, forty more, each seen failing: the problems of a refusal
+said without their bound, without their full stops, or with none said when the first is
+too long, and the bound of the text the views take raised; the refusal of a template of
+a backup said as before; a restore found by its name compared by its backup alone, with
+any field beside the ones of the text, with the schedule of another backup, with the
+excluded resources not compared, with the fields of the text compared but its backup;
+the words of a request that is not of a restore changed; a pattern matched with no
+character taken, `^` read as `!`, a pattern not compiled skipped in its list, the list
+in the order it was given, a range of its ends inverted taken, `\` not read, braces
+read; the conflict the controller makes of a resource it never restores not said, a
+source the lists of the restore leave out taken, the lists of the restore read with no
+included namespace taking none, with the excluded ones not read, a pair with no source
+or no target not said, an empty target said as no name; the adapter sending a field the
+form does not offer and a policy it does not offer; the namespace of the kept text not
+compared, the place of a write never freed, a phase in progress taken, a text no answer
+carries confirmed, a credential the cluster does not take, a cluster that changed after
+it answered, a deadline and a body refused to send said as others; a run of another
+restore or of another frame joined; the look for a lost answer stopped with the write;
+and the words of the gate.
+
+What the release does with the restore, which the review of the second pull request
+says, read in its source: the restore controller writes into the spec of a restore it
+starts the schedule of its backup, from its label, and the default timeout of the item
+operations, and adds the resources Velero never restores to its excluded resources
+([the schedule](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/restore_controller.go#L403-L406),
+[the timeout](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/restore_controller.go#L249-L252),
+[the excluded](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/restore_controller.go#L308-L314)), and
+nothing else: a restore found by its name is the one created when its spec is the one
+of the text with these three, and nothing more. The restore matches its own lists of
+namespaces with the glob package, as a backup does, with no expansion
+([its lists](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/restore/restore.go#L237-L239),
+[a namespace left out](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/restore/restore.go#L2579-L2582)),
+and the glob package of the release, gobwas/glob v0.2.3, reads one range or one list in
+brackets, `!` that turns it, and `\` that takes the next character, and compiles no other
+class.
+
+Decided while implementing, on 2026-11-08:
+
+- The request of a confirmation names the backup as its target, by its name and its
+  UID, the restore in `restore` and its fields in `restoreForm`; the run carries the
+  backup, the name of the restore and the name of the backup typed in `typed`, which the
+  main process compares with the backup before the token is taken, so that a name typed
+  wrong leaves the review as it is.
+- The mapping is carried as the pairs of the form, in their order, and written as an
+  object; a source that is no name of a namespace is refused as one Velero would use for
+  nothing, under a backup of every namespace as well.
+- The confirmation checks the form against the namespaces the spec of the backup names
+  as the main process reads it, and the run reads the backup again for its UID and its
+  phase.
+- A restore whose answer was lost is the one created when its spec is the one of the
+  text, with what the restore controller writes into a restore it starts, and when it
+  was created since a minute before the confirmation; one of the name that is not is
+  said as not known to be this one, as for a backup.
+- The problems of a refusal are said each as a sentence, as many as the text of a
+  failure carries, in their order, with how many more there are, for a backup and a
+  schedule of the form as well; a problem too long to be said is left out and counted.
+- The patterns of a list of namespaces are read as the glob package reads them, with no
+  regular expression, so that no pattern a backup carries takes longer than the lengths
+  allow; braces, which the release refuses in a pattern of a namespace, match nothing.
+- A mapping of a namespace the lists of the restore leave out is refused as one Velero
+  would use for nothing, under a backup of every namespace as well, and a pair with a
+  side not typed says what it lacks.
+- The adapter sends a restore only with the fields the form offers and one of its two
+  policies, beside the checks of every object it creates.
+
+The independent review of this pull request, read-only, found no blocker: the gate, the
+binding of the token, the one POST of the kept text, the backup read again for its UID
+and its phase, and the name typed compared before the token is taken hold. What it found
+was applied:
+
+- A refusal of many problems was longer than the text the views take, and was said as
+  nothing; the problems ran together: each is a sentence now, within the bound.
+- A restore found by its name was taken for the one created when it was of the same
+  backup, whatever its spec: its spec is compared now, with what the controller writes.
+- Cases were missing for most ends of the read and of the creation, the tokens, the
+  frames, the place of a write, the phases and the fingerprint of a run: all written,
+  and the forty changes above seen failing.
+- Words: the cluster-scoped resources asked for, a target that is not a name said in the
+  words of the form, two namespaces into one said as what the form does not offer, the
+  namespace the backup does not hold, and the words of a request that is not of a
+  restore; a word nothing said removed; the words of the gate name the view of the
+  schedule that made the backup.
+- The conflict of the lists the controller makes of a resource it never restores is
+  said as well.
+- The adapter took any field of a spec beside the backup: it takes the ones the form
+  offers.
+- The patterns were matched with a regular expression a pattern of many stars could
+  hold for seconds: they are read as the glob package reads them.
+- The evidence said more than the cases proved: it says what they prove now.
+
+The review of the second pull request found as well that a mapping of a namespace the
+lists of the restore leave out was taken and said as restored, while Velero skips that
+namespace: the form refuses it now.

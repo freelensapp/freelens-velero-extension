@@ -140,7 +140,10 @@ describe("the writes in the target bar", () => {
     // The actions name themselves as each one lands (SPEC-0017, REQ-245).
     expect(words.second).toContain("a Backup from a schedule, asked from the view of the schedule");
     expect(words.second).toContain("a Backup of the form, asked from the list of the Backups");
-    expect(words.second).toContain("and a Schedule of the form, asked from the list of the Schedules");
+    expect(words.second).toContain("a Schedule of the form, asked from the list of the Schedules");
+    expect(words.second).toContain(
+      "and a Restore of a backup, asked from the view of that backup or from the view of the schedule that made it. Each one is confirmed",
+    );
     // Nothing is on before the dialog is answered.
     expect(installation.writes).toEqual({ on: false });
     await act(async () => {

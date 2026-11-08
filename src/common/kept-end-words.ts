@@ -8,7 +8,9 @@ export function keptEndWords(end: KeptEnd): string {
   const what =
     end.kind === "schedule"
       ? `The schedule ${end.name}, asked with the form in ${end.namespace} (context ${end.context}),`
-      : `The backup ${end.name}, ${source} in ${end.namespace} (context ${end.context}),`;
+      : end.kind === "restore"
+        ? `The restore ${end.name} of the backup ${end.backup ?? ""}, in ${end.namespace} (context ${end.context}),`
+        : `The backup ${end.name}, ${source} in ${end.namespace} (context ${end.context}),`;
 
   if (!end.outcome.created) return `${what} ended while no view of it was open: ${end.outcome.text}`;
   const found = end.outcome.found ? ", found by its name after the answer of its creation was lost" : "";

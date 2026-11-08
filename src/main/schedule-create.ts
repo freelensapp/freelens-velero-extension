@@ -11,6 +11,7 @@ import {
   carriedErrors,
   failure,
   type ScheduleCreated,
+  saidProblems,
   textWithinBound,
   type WriteConfirmAnswer,
   type WriteConfirmRequest,
@@ -36,7 +37,7 @@ export const SCHEDULE_CREATE_WORDS = {
     "A schedule of the form is asked with its name and, at the confirmation, its expression, its three flags and its template, of no other object.",
   name: (problem: string) => `The name is refused, and nothing was sent: ${problem}`,
   expression: (problem: string) => `The expression is refused, and nothing was sent: ${problem}`,
-  refused: (problems: string[]) => `The template is refused, and nothing was sent: ${problems.join(" ")}`,
+  refused: (problems: readonly string[]) => saidProblems("The template is refused, and nothing was sent: ", problems),
   unbuilt: "The schedule could not be written from the form: nothing was sent.",
   tooLarge: (characters: number) =>
     `The schedule of this form is written in ${characters} characters, more than a review carries: nothing was confirmed.`,

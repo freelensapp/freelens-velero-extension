@@ -6,8 +6,10 @@ import {
   carriedErrors,
   downloadRequestName,
   ERRORS_BOUND,
+  FAILURE_TEXT_BOUND,
   KEPT_ENDS_BOUND,
   PAGE_BOUND,
+  PROBLEMS_WORDS,
   REQUEST_BOUND,
   REQUEST_STAGES,
   readAllowanceRequest,
@@ -23,6 +25,7 @@ import {
   readGateState,
   readGateStateRequest,
   readKeptEnds,
+  readRestoreCreated,
   readScheduleCreated,
   readServerStatusValue,
   readWriteCancelRequest,
@@ -33,6 +36,7 @@ import {
   readWriteShownRequest,
   readWriteStatus,
   readWriteStatusRequest,
+  saidProblems,
   savedFileName,
   TEXT_BOUND,
 } from "./ipc";
@@ -188,6 +192,161 @@ describe("the requests between the processes", () => {
 
     expect(readWriteRunRequest(run)).toEqual(run);
     expect(readWriteRunRequest({ ...run, template })).toBeUndefined();
+  });
+
+  it("reads a confirmation of a restore: its backup, its name and its form, and a run with the name of its backup typed", () => {
+    const target = { kind: "Backup", name: "nightly", uid: "nightly-uid" };
+    const restoreForm = {
+      includedNamespaces: ["shop"],
+      excludedResources: ["secrets"],
+      namespaceMapping: [["shop", "shop-restored"]],
+      clusterResources: "needed",
+      labelSelector: "app=web",
+      restorePVs: false,
+      existingResourcePolicy: "update",
+    };
+    const form = { cluster, namespace: "velero", kind: "restore", target, restore: "nightly-1", restoreForm };
+
+    expect(readWriteConfirmRequest(form)).toEqual(form);
+    expect(readWriteConfirmRequest({ ...form, restoreForm: { existingResourcePolicy: "none" } })).toMatchObject({
+      restoreForm: { existingResourcePolicy: "none" },
+    });
+    // Every field of the form, each read as it was sent: none is taken and dropped.
+    const whole = {
+      includedNamespaces: ["shop", "web-*"],
+      excludedNamespaces: ["web-test"],
+      namespaceMapping: [
+        ["shop", "shop-restored"],
+        ["web-a", "web-restored"],
+      ],
+      includedResources: ["configmaps"],
+      excludedResources: ["secrets"],
+      clusterResources: "every",
+      orLabelSelectors: ["app=web", "tier=db"],
+      restorePVs: true,
+      existingResourcePolicy: "none",
+    };
+    const { orLabelSelectors: _selectors, ...withOne } = whole;
+    const wholeWithSelector = { ...withOne, labelSelector: "app=web" };
+
+    expect(readWriteConfirmRequest({ ...form, restoreForm: whole })).toEqual({ ...form, restoreForm: whole });
+    expect(readWriteConfirmRequest({ ...form, restoreForm: wholeWithSelector })).toEqual({
+      ...form,
+      restoreForm: wholeWithSelector,
+    });
+    // What the restore controller refuses of the form is said by the main process with its words, not refused here.
+    expect(
+      readWriteConfirmRequest({ ...form, restoreForm: { ...restoreForm, includedResources: ["nodes"] } }),
+    ).toMatchObject({ restoreForm: { includedResources: ["nodes"] } });
+    const many = (count: number) => Array.from({ length: count }, (_, at) => [`n${at}`, `t${at}`]);
+
+    expect(
+      readWriteConfirmRequest({ ...form, restoreForm: { ...restoreForm, namespaceMapping: many(64) } }),
+    ).toBeTruthy();
+    for (const [what, value] of [
+      ["no form", { cluster, namespace: "velero", kind: "restore", target, restore: "nightly-1" }],
+      ["no name", { cluster, namespace: "velero", kind: "restore", target, restoreForm }],
+      ["no backup", { cluster, namespace: "velero", kind: "restore", restore: "nightly-1", restoreForm }],
+      ["a schedule as its target", { ...form, target: { ...target, kind: "Schedule" } }],
+      ["a restore as its target", { ...form, target: { ...target, kind: "Restore" } }],
+      ["a name the API server refuses", { ...form, restore: "Nightly-1" }],
+      ["a name longer than 216 characters", { ...form, restore: "a".repeat(217) }],
+      ["no policy", { ...form, restoreForm: { includedNamespaces: ["shop"] } }],
+      [
+        "a policy the release does not have",
+        { ...form, restoreForm: { ...restoreForm, existingResourcePolicy: "replace" } },
+      ],
+      [
+        "a choice of the cluster-scoped resources it does not have",
+        { ...form, restoreForm: { ...restoreForm, clusterResources: "all" } },
+      ],
+      [
+        "a mapping that is not pairs",
+        { ...form, restoreForm: { ...restoreForm, namespaceMapping: { shop: "shop-2" } } },
+      ],
+      ["a pair of three", { ...form, restoreForm: { ...restoreForm, namespaceMapping: [["a", "b", "c"]] } }],
+      ["a mapping beyond the bound", { ...form, restoreForm: { ...restoreForm, namespaceMapping: many(65) } }],
+      [
+        "a choice of the volumes that is not a boolean",
+        { ...form, restoreForm: { ...restoreForm, restorePVs: "true" } },
+      ],
+      [
+        "a list beyond the bound",
+        { ...form, restoreForm: { ...restoreForm, includedNamespaces: Array(257).fill("a") } },
+      ],
+      ["a field the form does not offer", { ...form, restoreForm: { ...restoreForm, resourcePolicy: {} } }],
+      ["the name of a backup typed", { ...form, typed: "nightly" }],
+      ["a form of a backup of the form", { cluster, namespace: "velero", kind: "backup", backup: "b", restoreForm }],
+      [
+        "the name of a restore of another kind",
+        { cluster, namespace: "velero", kind: "ServerStatusRequest", restore: "r" },
+      ],
+    ] as const) {
+      expect([what, readWriteConfirmRequest(value)]).toEqual([what, undefined]);
+    }
+    const run = {
+      cluster,
+      namespace: "velero",
+      kind: "restore",
+      target,
+      restore: "nightly-1",
+      typed: "nightly",
+      token: randomUUID(),
+      request: randomUUID(),
+    };
+
+    expect(readWriteRunRequest(run)).toEqual(run);
+    // What was typed is carried as it was typed, to be compared: an empty name or another one is the main process's.
+    expect(readWriteRunRequest({ ...run, typed: "" })).toMatchObject({ typed: "" });
+    for (const [what, value] of [
+      ["no name typed", { ...run, typed: undefined }],
+      ["a name typed that is not text", { ...run, typed: 3 }],
+      ["a name typed longer than a name", { ...run, typed: "a".repeat(254) }],
+      ["the form", { ...run, restoreForm }],
+      [
+        "a name typed for a backup of the form",
+        {
+          cluster,
+          namespace: "velero",
+          kind: "backup",
+          backup: "b",
+          typed: "b",
+          token: run.token,
+          request: run.request,
+        },
+      ],
+    ] as const) {
+      const { typed: _typed, ...rest } = value as Record<string, unknown>;
+
+      expect([what, readWriteRunRequest("typed" in value && value.typed === undefined ? rest : value)]).toEqual([
+        what,
+        undefined,
+      ]);
+    }
+  });
+
+  it("reads what a restore is once created, within the bounds of its errors", () => {
+    const created = {
+      name: "nightly-1",
+      uid: "u",
+      phase: "FailedValidation",
+      errors: ["one"],
+      errorsLeft: 2,
+      found: true,
+    };
+
+    expect(readRestoreCreated(created)).toEqual(created);
+    expect(readRestoreCreated({ name: "nightly-1", uid: "u" })).toEqual({ name: "nightly-1", uid: "u" });
+    for (const value of [
+      { ...created, paused: true },
+      { ...created, position: 1 },
+      { ...created, errors: [] },
+      { ...created, errorsLeft: 0 },
+      { ...created, found: false },
+      { ...created, phase: "x".repeat(65) },
+      { ...created, name: "Nightly" },
+    ])
+      expect(readRestoreCreated(value)).toBeUndefined();
   });
 
   it("reads a confirmation of a schedule of the form: its name, its wrapper and its template, of no object", () => {
@@ -582,6 +741,18 @@ describe("the ends kept for a cluster, between the processes", () => {
     expect(readKeptEnds([{ ...created, schedule: "daily" }])).toEqual([]);
   });
 
+  it("reads the end of a restore, which names its backup and no schedule", () => {
+    const { schedule: _schedule, ...restore } = { ...end, kind: "restore", name: "nightly-1", backup: "nightly" };
+
+    expect(readKeptEnds([restore])).toEqual([restore]);
+    const { backup: _backup, ...unnamed } = restore;
+
+    expect(readKeptEnds([unnamed])).toEqual([]);
+    expect(readKeptEnds([{ ...restore, schedule: "daily" }])).toEqual([]);
+    // Only a restore names a backup.
+    expect(readKeptEnds([{ ...end, backup: "nightly" }])).toEqual([]);
+  });
+
   it("reads the end of a backup of the form, which names no schedule", () => {
     const { schedule: _schedule, ...form } = { ...end, kind: "backup" };
 
@@ -684,6 +855,51 @@ describe("what the operator allows, between the processes", () => {
       [],
     ])
       expect([needs, read(needs)]).toEqual([needs, expect.objectContaining({ code: "validation", stage: "answer" })]);
+  });
+});
+
+describe("the problems a failure says", () => {
+  const LEAD = "The form is refused, and nothing was sent: ";
+
+  it("says each problem as a sentence that ends with its full stop, in its order", () => {
+    expect(saidProblems(LEAD, ["nodes are non-restorable resources", "The name is taken."])).toBe(
+      `${LEAD}nodes are non-restorable resources. The name is taken.`,
+    );
+  });
+
+  it("says as many as the text of a failure carries, and how many more, in a text the views take", () => {
+    // Twenty-five conflicts of the lists, as many names in both.
+    const problems = Array.from(
+      { length: 25 },
+      (_, at) =>
+        `Invalid included/excluded namespace lists: excludes list cannot contain an item in the includes list: namespace-of-the-shop-${at}`,
+    );
+    const text = saidProblems(LEAD, problems);
+
+    expect(text.length).toBeLessThanOrEqual(FAILURE_TEXT_BOUND);
+    expect(text.startsWith(`${LEAD}${problems[0]}. ${problems[1]}.`)).toBe(true);
+    const said = (text.match(/namespace-of-the-shop-/g) ?? []).length;
+
+    expect(said).toBeGreaterThan(0);
+    expect(text.endsWith(` ${PROBLEMS_WORDS.more(25 - said)}`)).toBe(true);
+    expect(
+      readAnswer({ ok: false, code: "validation", stage: "request", retry: false, text }, readWriteConfirmAnswer),
+    ).toEqual({ ok: false, code: "validation", stage: "request", retry: false, text });
+    // The bound of the views, and a text one character longer is not one they take.
+    expect(
+      readAnswer(
+        { ok: false, code: "validation", stage: "request", retry: false, text: "x".repeat(FAILURE_TEXT_BOUND + 1) },
+        readWriteConfirmAnswer,
+      ),
+    ).toMatchObject({ code: "validation", stage: "answer" });
+  });
+
+  it("leaves out a problem too long to be said and says the next ones, and says how many it left", () => {
+    const long = "x".repeat(FAILURE_TEXT_BOUND);
+
+    expect(saidProblems(LEAD, [long, "The name is taken"])).toBe(`${LEAD}The name is taken. ${PROBLEMS_WORDS.more(1)}`);
+    expect(saidProblems(LEAD, [long, long])).toBe(`${LEAD}${PROBLEMS_WORDS.unsaid(2)}`);
+    expect(saidProblems(LEAD, [long])).toBe(`${LEAD}${PROBLEMS_WORDS.unsaid(1)}`);
   });
 });
 

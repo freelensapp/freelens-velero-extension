@@ -919,8 +919,14 @@ and since the first pull request of T4.3 a Backup of the form, whose confirmatio
 reads the storage location and each snapshot location its template names; since the
 first pull request of T4.7 of [SPEC-0016](../specs/SPEC-0016-create-a-schedule.md) a
 Schedule of the form, its name and namespace its only metadata, whose confirmation
-reads the locations of its template the same way; each action of SPEC-0017 adds its
-kind with its slice.
+reads the locations of its template the same way; since the first pull request of
+T4.4 a Restore of a backup, its name and namespace its only metadata, whose
+confirmation and run read the backup by its name, and run only when the name of the
+backup the operator typed is the one of the review; each action of SPEC-0017 adds its
+kind with its slice. The creations share one course in the main process,
+[`creation.ts`](../../src/main/creation.ts): the POST of the text kept, the reads
+after it until Velero writes a phase, and, when the answer is not known, the look for
+the object by its name, with the rule and the words of each kind.
 
 The trust model of Freelens v2 (D5 of SPEC-0015), which the binding lives in: the
 boundary of v2 is between the extensions and the application, not between
