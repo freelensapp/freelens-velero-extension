@@ -1,7 +1,12 @@
 import { Renderer } from "@freelensapp/extensions";
 import { observer } from "mobx-react";
 import React from "react";
-import { BACKUP_CREATE_VIEW_WORDS, backupCreateMeaning, phaseWords } from "../../common/backup-create-words";
+import {
+  BACKUP_CREATE_VIEW_WORDS,
+  backupCreateMeaning,
+  locationsReadWords,
+  phaseWords,
+} from "../../common/backup-create-words";
 import { readFormBody } from "../../common/backup-form";
 import { accessMode, availabilityState } from "../../common/location-view";
 import { hostNamespaces } from "../api/host-namespaces";
@@ -12,6 +17,7 @@ import { focusFirst } from "../components/views-frame";
 import { Fact, ViewLink, Workspace } from "../components/workspace";
 import { replaceView } from "../navigation";
 
+import type { TemplateField } from "../../common/backup-template";
 import type { BackupResource, BackupStorageLocationResource, VolumeSnapshotLocationResource } from "../../common/types";
 import type { LocationChoice, TemplateChoices } from "../components/backup-template-form";
 import type { Installation } from "../state/installation";
@@ -71,17 +77,10 @@ export const BackupCreateWorkspace = observer(({ installation, back, onBack }: B
   const backupsRead = installation.read("backups");
   const namespaces = hostNamespaces();
   const locations = locationChoices(locationsRead.items as BackupStorageLocationResource[]);
-  const choices: TemplateChoices = {
-    locations,
-    ...(locationsRead.status === "ready"
-      ? {}
-      : { locationsUnknown: BACKUP_CREATE_VIEW_WORDS.locationsUnknown(locationsRead.status) }),
-    snapshotLocations: (snapshotsRead.items as VolumeSnapshotLocationResource[]).map((location) => ({
-      name: location.metadata.name,
-      provider: String((location.spec as { provider?: unknown } | undefined)?.provider ?? ""),
-    })),
-    namespaces,
-  };
+  const snapshotLocations = (snapshotsRead.items as VolumeSnapshotLocationResource[]).map((location) => ({
+    name: location.metadata.name,
+    provider: String((location.spec as { provider?: unknown } | undefined)?.provider ?? ""),
+  }));
   const busy =
     step.state === "asking"
       ? BACKUP_CREATE_VIEW_WORDS.asking
@@ -127,14 +126,38 @@ export const BackupCreateWorkspace = observer(({ installation, back, onBack }: B
 
   const nameProblem = state.nameProblem;
   const taken = (backupsRead.items as BackupResource[]).some((backup) => backup.metadata.name === state.name);
-  // What the form says is wrong of what the cluster holds, which holds the review back with the rest.
-  const blockers = [
-    ...(state.template.includedNamespaces ?? [])
+  // What the form says is wrong of what the cluster holds, at the field it is of, which holds the review back with the
+  // rest: an included namespace the host lists with the label that excludes it; and a storage location that cannot be
+  // chosen, none, not read, or the one chosen, which is refused or gone since.
+  const chosen = state.template.storageLocation;
+  const chosenLocation = locations.find((location) => location.name === chosen);
+  const fieldBlockers: Partial<Record<TemplateField, string[]>> = {
+    includedNamespaces: (state.template.includedNamespaces ?? [])
       .filter((included) => namespaces.some((listed) => listed.name === included && listed.excluded))
       .map(BACKUP_CREATE_VIEW_WORDS.labelledExcluded),
-    ...(locationsRead.status === "ready" && !first ? [BACKUP_CREATE_VIEW_WORDS.noLocation] : []),
-    ...(locationsRead.status !== "ready" ? [BACKUP_CREATE_VIEW_WORDS.locationsUnknown(locationsRead.status)] : []),
-  ];
+    storageLocation:
+      locationsRead.status !== "ready"
+        ? [locationsReadWords(locationsRead.status, "storage")]
+        : !first
+          ? [BACKUP_CREATE_VIEW_WORDS.noLocation]
+          : chosen === undefined
+            ? []
+            : !chosenLocation
+              ? [BACKUP_CREATE_VIEW_WORDS.chosenGone(chosen)]
+              : chosenLocation.refused
+                ? [BACKUP_CREATE_VIEW_WORDS.chosenRefused(chosenLocation.refused)]
+                : [],
+  };
+  const blockers = Object.values(fieldBlockers).flat();
+  const choices: TemplateChoices = {
+    locations,
+    snapshotLocations,
+    ...(snapshotsRead.status === "ready"
+      ? {}
+      : { snapshotLocationsUnknown: locationsReadWords(snapshotsRead.status, "snapshot") }),
+    namespaces,
+    blockers: fieldBlockers,
+  };
   const refusedTemplate = Object.keys(state.problems).length > 0;
   const holdBack = Boolean(nameProblem) || refusedTemplate || blockers.length > 0;
   const noWay = !gate && installation.gateFailure !== undefined && !installation.gateUnknown;
@@ -157,13 +180,17 @@ export const BackupCreateWorkspace = observer(({ installation, back, onBack }: B
             cluster={cluster}
             context={context}
             accessMode={(() => {
-              const chosen = (locationsRead.items as BackupStorageLocationResource[]).find(
-                (location) => location.metadata.name === state.template.storageLocation,
+              const location = (locationsRead.items as BackupStorageLocationResource[]).find(
+                (item) => item.metadata.name === state.template.storageLocation,
               );
+              const access = location ? accessMode(location) : undefined;
 
-              return chosen ? accessMode(chosen).label : undefined;
+              // An access mode that is not written is said as nothing: Velero refuses a backup for it only when it is
+              // ReadOnly.
+              return access && access.mode !== "not-set" ? access.label : undefined;
             })()}
             listed={namespaces.map((listed) => listed.name)}
+            snapshotLocations={snapshotLocations}
             onCreate={by(() => void state.create())}
             onBack={by(() => state.leave())}
           />
@@ -187,11 +214,16 @@ export const BackupCreateWorkspace = observer(({ installation, back, onBack }: B
                 : BACKUP_CREATE_VIEW_WORDS.unread}
             </p>
             {step.backup.errors ? (
-              <ul className={styles.stateText} data-testid={`${ID}-errors`}>
+              <ul className={`${styles.stateText} ${styles.preLine}`} data-testid={`${ID}-errors`}>
                 {step.backup.errors.map((error) => (
                   <li key={error}>{error}</li>
                 ))}
               </ul>
+            ) : null}
+            {step.backup.errorsLeft ? (
+              <p className={styles.factNote} data-testid={`${ID}-errors-left`}>
+                {BACKUP_CREATE_VIEW_WORDS.errorsLeft(step.backup.errorsLeft)}
+              </p>
             ) : null}
             <p className={styles.factNote}>{BACKUP_CREATE_VIEW_WORDS.resolved}</p>
             <div className={styles.writeActions}>
@@ -266,14 +298,13 @@ export const BackupCreateWorkspace = observer(({ installation, back, onBack }: B
                 </p>
               ) : null}
             </div>
-            <BackupTemplateForm state={state} choices={choices} disabled={!editing} id={ID} />
-            {blockers.length ? (
-              <ul className={styles.formError} data-testid={`${ID}-blockers`}>
-                {blockers.map((blocker) => (
-                  <li key={blocker}>{blocker}</li>
-                ))}
-              </ul>
-            ) : null}
+            <BackupTemplateForm
+              state={state}
+              choices={choices}
+              disabled={!editing}
+              id={ID}
+              onSubmit={by(() => void state.review(blockers))}
+            />
             <div
               ref={status}
               role="status"
@@ -316,11 +347,17 @@ export const BackupCreateWorkspace = observer(({ installation, back, onBack }: B
                   primary
                   data-testid={`${ID}-ask`}
                   disabled={holdBack}
+                  aria-describedby={holdBack ? `${ID}-held` : undefined}
                   onClick={by(() => void state.review(blockers))}
                 >
                   <Icon material="fact_check" small aria-hidden />
                   Review the backup
                 </Button>
+                {holdBack ? (
+                  <p id={`${ID}-held`} className={styles.factNote} data-testid={`${ID}-held`}>
+                    {state.name ? BACKUP_CREATE_VIEW_WORDS.held : BACKUP_CREATE_VIEW_WORDS.heldName}
+                  </p>
+                ) : null}
               </div>
             )}
           </>
@@ -339,6 +376,7 @@ interface ReviewProps {
   context: string;
   accessMode?: string;
   listed: string[];
+  snapshotLocations: { name: string; provider: string }[];
   onCreate: () => void;
   onBack: () => void;
 }
@@ -355,11 +393,12 @@ function Review({
   context,
   accessMode,
   listed,
+  snapshotLocations,
   onCreate,
   onBack,
 }: ReviewProps) {
   const body = readFormBody(text);
-  const meaning = body ? backupCreateMeaning(body, { accessMode, listed }) : [];
+  const meaning = body ? backupCreateMeaning(body, { accessMode, listed, snapshotLocations }) : [];
 
   return (
     <section

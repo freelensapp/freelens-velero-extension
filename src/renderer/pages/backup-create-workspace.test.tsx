@@ -9,8 +9,10 @@ import { confirmDialogs } from "../../../test/host-components";
 import {
   BACKUP_CREATE_VIEW_WORDS,
   backupCreateMeaning,
+  locationsReadWords,
   NOT_OFFERED,
   phaseWords,
+  TEMPLATE_FIELD_WORDS,
 } from "../../common/backup-create-words";
 import { backupFromForm, formBodyText } from "../../common/backup-form";
 import { TEMPLATE_WORDS } from "../../common/backup-template";
@@ -169,10 +171,11 @@ function mainProcess() {
   };
 }
 
-function mount(main = mainProcess()) {
+// The answers of the cluster, and what a case answers in their place, which it may change while it runs.
+function mount(main = mainProcess(), table: Record<string, Answer> = {}) {
   const installation = new Installation({
     cluster: { id: "cluster-a", name: "local-demo" },
-    read: async (address) => answers()[address] ?? { status: 404 },
+    read: async (address) => table[address] ?? answers()[address] ?? { status: 404 },
     now: () => Date.now(),
     storage: heldPreferences({ ...emptyPreferences(), selected: { "cluster-a": A } }),
     gate: main.gate,
@@ -296,8 +299,12 @@ describe("create backup, from the list of the Backups", () => {
     expect(installation.backupCreate.template.includedNamespaces).toEqual(["shop", "web-*", "shop-2"]);
     expect((part("ask") as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(part("includedNamespaces-legacy"));
-    expect(words(part("blockers"))).toBe(BACKUP_CREATE_VIEW_WORDS.labelledExcluded("legacy"));
+    // Said at the field it is of, tied to it, and the review held back with the words of why.
+    expect(words(part("includedNamespaces-problem"))).toBe(BACKUP_CREATE_VIEW_WORDS.labelledExcluded("legacy"));
+    expect(part("includedNamespaces").getAttribute("aria-describedby")).toContain(`${ID}-includedNamespaces-problem`);
     expect((part("ask") as HTMLButtonElement).disabled).toBe(true);
+    expect(part("ask").getAttribute("aria-describedby")).toBe(`${ID}-held`);
+    expect(words(part("held"))).toBe(BACKUP_CREATE_VIEW_WORDS.held);
   });
 
   it("refuses what the release refuses, field by field, with its words tied to the field, and holds the review back", async () => {
@@ -350,11 +357,20 @@ describe("create backup, from the list of the Backups", () => {
     expect(part("text").textContent).toBe(text);
     const body = backupFromForm(A, "shop-by-hand", template);
 
+    const snapshotLocations = [
+      { name: "aws-east", provider: "aws" },
+      { name: "aws-west", provider: "aws" },
+      { name: "gcp", provider: "gcp" },
+    ];
+
     expect([...part("meaning").querySelectorAll("li")].map((item) => item.textContent)).toEqual(
-      (body ? backupCreateMeaning(body, { accessMode: "Not set", listed: ["shop", "web"] }) : []).map(
-        (one) => one.words,
-      ),
+      (body ? backupCreateMeaning(body, { listed: ["shop", "web"], snapshotLocations }) : []).map((one) => one.words),
     );
+    // The access mode of the location is not written, and is not said; the provider with two locations and none
+    // chosen is (SPEC-0016, REQ-236).
+    expect(part("meaning").textContent).not.toContain("access mode");
+    expect(part("meaning").querySelector('[data-part="provider-aws"]')).toBeTruthy();
+    expect(part("meaning").querySelector('[data-part="provider-gcp"]')).toBeNull();
     // The review has the focus, not the command that creates; Escape leaves it, and the form is as it was.
     expect(focused()).toBe(`${ID}-review`);
     fireEvent.keyDown(part("review"), { key: "Escape" });
@@ -487,5 +503,305 @@ describe("create backup, from the list of the Backups", () => {
     fireEvent.keyDown(field(), { key: "Escape" });
     expect(field().value).toBe("");
     expect(maybe("workspace")).toBeTruthy();
+  });
+});
+
+// What is typed key by key, as the operator types it: each change is the field as it is now and one key more.
+function typeByKey(element: HTMLElement, text: string) {
+  for (const key of text) {
+    const input = element as HTMLInputElement;
+
+    fireEvent.change(input, { target: { value: `${input.value}${key}` } });
+  }
+}
+
+describe("the form of the template, typed key by key and read by assistive technology", () => {
+  it("keeps a selector as it is typed, key by key, its spaces among it, one or several", async () => {
+    const { installation } = mount();
+
+    await createBackup();
+    fireEvent.change(choice("labelSelector-mode"), { target: { value: "one" } });
+    typeByKey(part("labelSelector"), "app in (web,api)");
+    expect([
+      (part("labelSelector") as HTMLInputElement).value,
+      installation.backupCreate.template.labelSelector,
+    ]).toEqual(["app in (web,api)", "app in (web,api)"]);
+    fireEvent.change(choice("labelSelector-mode"), { target: { value: "several" } });
+    typeByKey(part("labelSelector"), " or tier=db");
+    expect((part("labelSelector") as HTMLInputElement).value).toBe("app in (web,api) or tier=db");
+    expect(installation.backupCreate.template).toMatchObject({ orLabelSelectors: ["app in (web,api)", "tier=db"] });
+    expect(installation.backupCreate.template.labelSelector).toBeUndefined();
+    // Escape takes back what was typed: no selector.
+    fireEvent.keyDown(part("labelSelector"), { key: "Escape" });
+    expect((part("labelSelector") as HTMLInputElement).value).toBe("");
+    expect(installation.backupCreate.template.orLabelSelectors).toBeUndefined();
+  });
+
+  it("keeps the namespaces as they are typed, key by key, a name the host lists among the beginning of a pattern", async () => {
+    const { installation } = mount();
+    const typed = () => part("includedNamespaces-typed") as HTMLInputElement;
+    const shop = () => part("includedNamespaces-shop") as HTMLInputElement;
+
+    await createBackup();
+    typeByKey(typed(), "shop-*");
+    expect([typed().value, installation.backupCreate.template.includedNamespaces, shop().checked]).toEqual([
+      "shop-*",
+      ["shop-*"],
+      false,
+    ]);
+    typeByKey(typed(), ", payments, payments-staging");
+    expect(installation.backupCreate.template.includedNamespaces).toEqual(["shop-*", "payments", "payments-staging"]);
+    // A checkbox chosen beside what is typed, and taken back.
+    fireEvent.click(shop());
+    expect(installation.backupCreate.template.includedNamespaces).toEqual([
+      "shop",
+      "shop-*",
+      "payments",
+      "payments-staging",
+    ]);
+    fireEvent.click(shop());
+    expect(installation.backupCreate.template.includedNamespaces).toEqual(["shop-*", "payments", "payments-staging"]);
+    // Escape takes back what was typed, and the checkboxes stay.
+    fireEvent.click(shop());
+    fireEvent.keyDown(typed(), { key: "Escape" });
+    expect([typed().value, installation.backupCreate.template.includedNamespaces]).toEqual(["", ["shop"]]);
+    // A name the host lists, typed whole, is its checkbox as well: taken back there, it goes from what was typed.
+    fireEvent.click(shop());
+    typeByKey(typed(), "shop");
+    expect([shop().checked, installation.backupCreate.template.includedNamespaces]).toEqual([true, ["shop"]]);
+    fireEvent.click(shop());
+    expect([typed().value, installation.backupCreate.template.includedNamespaces]).toEqual(["", undefined]);
+  });
+
+  it("takes back with Escape what was typed in a list of resources and in a duration", async () => {
+    const { installation } = mount();
+
+    await createBackup();
+    typeByKey(part("excludedResources"), "secrets, configmaps");
+    typeByKey(part("ttl"), "48h");
+    expect(installation.backupCreate.template).toMatchObject({
+      excludedResources: ["secrets", "configmaps"],
+      ttl: "48h",
+    });
+    fireEvent.keyDown(part("excludedResources"), { key: "Escape" });
+    fireEvent.keyDown(part("ttl"), { key: "Escape" });
+    expect(installation.backupCreate.template).toEqual({ storageLocation: "default" });
+  });
+
+  it("asks for the review with Enter in a field that is typed, and keeps the focus there", async () => {
+    const { main } = mount();
+
+    await createBackup();
+    await writesOn();
+    type(field(), "shop-by-hand");
+    act(() => part("ttl").focus());
+    typeByKey(part("ttl"), "48h");
+    fireEvent.keyDown(part("ttl"), { key: "Enter" });
+    await waitFor(() => expect(main.confirms).toHaveLength(1));
+    expect(main.confirms[0].args[3]).toEqual({ storageLocation: "default", ttl: "48h" });
+  });
+
+  it("ties every note of a field to it, the choices by a group around them, and names no description that is not there", async () => {
+    mount();
+    await createBackup();
+    type(part("excludedNamespaces-typed"), "*");
+    const workspace = part("workspace");
+    const named = [...workspace.querySelectorAll("[aria-describedby]")].flatMap((element) =>
+      (element.getAttribute("aria-describedby") ?? "").split(" ").filter(Boolean),
+    );
+
+    expect(named.length).toBeGreaterThan(10);
+    expect(named.filter((id) => !document.getElementById(id))).toEqual([]);
+    expect(part("snapshotVolumes-group").getAttribute("aria-describedby")).toBe(`${ID}-snapshotVolumes-not-set`);
+    expect(
+      words(
+        screen.getByTestId(`${ID}-snapshotVolumes-group`).querySelector(`#${ID}-snapshotVolumes-not-set`) as Element,
+      ),
+    ).toBe(`Not set: ${TEMPLATE_FIELD_WORDS.snapshotVolumes.notSet}`);
+    expect(part("storageLocation-group").getAttribute("aria-describedby")).toBe(`${ID}-storageLocation-refused`);
+    expect(part("excludedNamespaces-typed").getAttribute("aria-describedby")).toBe(
+      `${ID}-excludedNamespaces-not-set ${ID}-excludedNamespaces-problem`,
+    );
+    expect(part("excludedNamespaces-typed").getAttribute("aria-invalid")).toBe("true");
+  });
+
+  it("says snapshot locations it may not read as not known, never as none, and holds the review back for storage locations it may not read", async () => {
+    const denied: Answer = { status: 403, body: { kind: "Status", code: 403, reason: "Forbidden" } };
+
+    mount(mainProcess(), {
+      [path("snapshotLocations", A)]: denied,
+      [path("storageLocations", A)]: denied,
+    });
+    await screen.findByTestId("velero-backups-create");
+    fireEvent.click(screen.getByTestId("velero-backups-create"));
+    await screen.findByTestId(`${ID}-workspace`);
+    await writesOn();
+    type(field(), "shop-by-hand");
+    await waitFor(() =>
+      expect(words(part("volumeSnapshotLocations-unknown"))).toBe(locationsReadWords("forbidden", "snapshot")),
+    );
+    expect(part("volumeSnapshotLocations").textContent).not.toContain("The installation has no snapshot location.");
+    expect(words(part("storageLocation-problem"))).toBe(locationsReadWords("forbidden", "storage"));
+    expect((part("ask") as HTMLButtonElement).disabled).toBe(true);
+    expect(words(part("held"))).toBe(BACKUP_CREATE_VIEW_WORDS.held);
+  });
+
+  it("holds the review back when the location chosen cannot be chosen any more, and chooses none first when none is the default", async () => {
+    const table: Record<string, Answer> = {};
+    const { installation } = mount(mainProcess(), table);
+
+    await createBackup();
+    await writesOn();
+    type(field(), "shop-by-hand");
+    expect((part("ask") as HTMLButtonElement).disabled).toBe(false);
+    table[path("storageLocations", A)] = list(
+      storage("default", { spec: { default: true }, status: { phase: "Unavailable" } }),
+      storage("second"),
+    );
+    await act(async () => {
+      await installation.refresh();
+    });
+    await waitFor(() =>
+      expect(words(part("storageLocation-problem"))).toBe(
+        BACKUP_CREATE_VIEW_WORDS.chosenRefused(BACKUP_CREATE_VIEW_WORDS.unavailable("default")),
+      ),
+    );
+    expect((part("ask") as HTMLButtonElement).disabled).toBe(true);
+    // Another location chosen: the review opens.
+    fireEvent.change(choice("storageLocation"), { target: { value: "second" } });
+    expect((part("ask") as HTMLButtonElement).disabled).toBe(false);
+    // The location chosen gone from the read.
+    table[path("storageLocations", A)] = list(storage("default", { spec: { default: true } }));
+    await act(async () => {
+      await installation.refresh();
+    });
+    await waitFor(() =>
+      expect(words(part("storageLocation-problem"))).toBe(BACKUP_CREATE_VIEW_WORDS.chosenGone("second")),
+    );
+  });
+
+  it("chooses no location first when none is marked default, and asks for one", async () => {
+    const { installation } = mount(mainProcess(), {
+      [path("storageLocations", A)]: list(storage("first"), storage("second")),
+    });
+
+    await screen.findByTestId("velero-backups-create");
+    fireEvent.click(screen.getByTestId("velero-backups-create"));
+    await screen.findByTestId(`${ID}-workspace`);
+    await waitFor(() =>
+      expect([...choice("storageLocation").options].map((option) => option.value)).toContain("first"),
+    );
+    expect(installation.backupCreate.template.storageLocation).toBeUndefined();
+    expect(words(part("storageLocation-problem"))).toBe(TEMPLATE_WORDS.noStorageLocation);
+  });
+
+  it("keeps one snapshot location for each provider, the one chosen last", async () => {
+    const { installation } = mount();
+
+    await createBackup();
+    fireEvent.change(choice("volumeSnapshotLocations-aws"), { target: { value: "aws-east" } });
+    fireEvent.change(choice("volumeSnapshotLocations-aws"), { target: { value: "aws-west" } });
+    fireEvent.change(choice("volumeSnapshotLocations-gcp"), { target: { value: "gcp" } });
+    expect(installation.backupCreate.template.volumeSnapshotLocations).toEqual(["aws-west", "gcp"]);
+    fireEvent.change(choice("volumeSnapshotLocations-aws"), { target: { value: "" } });
+    expect(installation.backupCreate.template.volumeSnapshotLocations).toEqual(["gcp"]);
+  });
+
+  it("ties the name to its rule and to the backup that has it, with the whole rule in words", async () => {
+    mount();
+    await createBackup();
+    expect(words(screen.getByText(BACKUP_CREATE_VIEW_WORDS.nameRule))).toBe(BACKUP_CREATE_VIEW_WORDS.nameRule);
+    expect(BACKUP_CREATE_VIEW_WORDS.nameRule).toContain("216 characters at most");
+    expect(field().getAttribute("aria-describedby")).toBe(`${ID}-name-rule`);
+    type(field(), "taken");
+    await waitFor(() => expect(field().getAttribute("aria-describedby")).toBe(`${ID}-name-rule ${ID}-name-taken`));
+  });
+
+  it("disables the fields while the review is asked and the backup created, and moves the focus to what follows each step", async () => {
+    const { main } = mount();
+
+    await createBackup();
+    await writesOn();
+    type(field(), "shop-by-hand");
+    press("ask");
+    await waitFor(() => expect(main.confirms).toHaveLength(1));
+    expect([field().disabled, (part("ttl") as HTMLInputElement).disabled]).toEqual([true, true]);
+    expect(focused()).toBe(`${ID}-status`);
+    await main.confirm(textOf("shop-by-hand", { storageLocation: "default" }));
+    await waitFor(() => expect(focused()).toBe(`${ID}-review`));
+    press("create");
+    await waitFor(() => expect(main.runs).toHaveLength(1));
+    expect(focused()).toBe(`${ID}-status`);
+    // A failure is said to who does not see as it appears, and the focus goes to the command that asks again.
+    await main.run({ ok: false, code: "conflict", stage: "creation", retry: false, text: "Taken." });
+    await waitFor(() => expect(focused()).toBe(`${ID}-ask`));
+    expect(part("failure").getAttribute("role")).toBe("alert");
+    expect(field().disabled).toBe(false);
+    press("ask");
+    await waitFor(() => expect(main.confirms).toHaveLength(2));
+    await main.confirm(textOf("shop-by-hand", { storageLocation: "default" }));
+    await waitFor(() => expect(maybe("review")).toBeTruthy());
+    press("create");
+    await waitFor(() => expect(main.runs).toHaveLength(2));
+    await main.run({ ok: true, value: { name: "shop-by-hand", uid: "u" } });
+    await waitFor(() => expect(focused()).toBe(`${ID}-result`));
+  });
+
+  it("says the review with its context and namespace, and the namespaces typed that the host does not list", async () => {
+    const { main } = mount();
+
+    await createBackup();
+    await writesOn();
+    type(field(), "shop-by-hand");
+    type(part("includedNamespaces-typed"), "web-*");
+    press("ask");
+    await waitFor(() => expect(main.confirms).toHaveLength(1));
+    await main.confirm(textOf("shop-by-hand", { storageLocation: "default", includedNamespaces: ["web-*"] }));
+    await waitFor(() => expect(maybe("review")).toBeTruthy());
+    expect(words(part("review"))).toContain(`Namespace${A}`);
+    expect(words(part("review"))).toContain("local-demo (context kind-local-demo)");
+    expect(words(part("meaning").querySelector('[data-part="not-listed"]') as Element)).toBe(
+      BACKUP_CREATE_VIEW_WORDS.notListed(["web-*"]),
+    );
+  });
+
+  it("says a backup found by its name, one that may be there, a review that took the place of another, the errors left, and what Velero has not read", async () => {
+    const { main } = mount();
+    const ask = async (text: string) => {
+      press("ask");
+      await waitFor(() => expect(main.confirms.length).toBeGreaterThan(0));
+      await main.confirm(text);
+      await waitFor(() => expect(maybe("review")).toBeTruthy());
+      press("create");
+    };
+    const text = textOf("shop-by-hand", { storageLocation: "default" });
+
+    await createBackup();
+    await writesOn();
+    type(field(), "shop-by-hand");
+    await ask(text);
+    await waitFor(() => expect(main.runs).toHaveLength(1));
+    await main.run({
+      ok: true,
+      value: { name: "shop-by-hand", uid: "u", found: true, phase: "FailedValidation", errors: ["e"], errorsLeft: 3 },
+    });
+    await waitFor(() => expect(maybe("result")).toBeTruthy());
+    expect(words(part("found"))).toBe(BACKUP_CREATE_VIEW_WORDS.found);
+    expect(words(part("errors-left"))).toBe(BACKUP_CREATE_VIEW_WORDS.errorsLeft(3));
+    expect(words(part("result"))).toContain(BACKUP_CREATE_VIEW_WORDS.resolved);
+    // The way to the backup takes the place of the workspace.
+    press("open");
+    await waitFor(() => expect(openViews()).toEqual([{ kind: "backup", name: "shop-by-hand" }]));
+    act(() => closeViews());
+    await createBackup();
+    type(field(), "shop-by-hand");
+    await ask(text);
+    await waitFor(() => expect(main.runs).toHaveLength(2));
+    await main.run({ ok: false, code: "submission-unknown", stage: "creation", retry: false, text: "Not known." });
+    await waitFor(() => expect(words(part("failure-left"))).toBe(BACKUP_CREATE_VIEW_WORDS.unknownLeft));
+    await ask(text);
+    await waitFor(() => expect(main.runs).toHaveLength(3));
+    await main.run({ ok: true, value: { name: "shop-by-hand", uid: "u" } });
+    await waitFor(() => expect(words(part("phase"))).toBe(BACKUP_CREATE_VIEW_WORDS.unread));
   });
 });

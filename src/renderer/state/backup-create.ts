@@ -75,8 +75,6 @@ export class BackupCreate {
   name = "";
   // The fields of the template, as the form holds them.
   template: BackupTemplate = {};
-  // Whether a workspace showed the end of the step.
-  seen = false;
   private readonly dependencies: BackupCreateDependencies;
 
   constructor(dependencies: BackupCreateDependencies) {
@@ -85,14 +83,12 @@ export class BackupCreate {
       step: observableRef,
       name: observable,
       template: observableRef,
-      seen: observable,
       nameProblem: computed,
       problems: computed,
       type: action,
       set: action,
       start: action,
       see: action,
-      letGoOf: action,
       leave: action,
       drop: action,
     });
@@ -138,24 +134,15 @@ export class BackupCreate {
     this.step = { state: "form" };
     this.name = "";
     this.template = {};
-    this.seen = false;
   }
 
   // A workspace showed the end of the step: the main process is told, when the end is of a run and is its end.
   see(): void {
-    this.seen = true;
     const step = this.step;
 
     if (step.state === "created" && step.request) this.dependencies.shown?.(step.request);
     if (step.state === "failed" && step.request && !NOT_KNOWN.includes(step.failure.stage))
       this.dependencies.shown?.(step.request);
-  }
-
-  // The operator let an end go in the target bar: it is seen.
-  letGoOf(request: string): void {
-    const step = this.step;
-
-    if ((step.state === "created" || step.state === "failed") && step.request === request) this.seen = true;
   }
 
   // The first gesture: the main process is asked for the review of the backup, which it builds from the fields and the
@@ -259,7 +246,6 @@ export class BackupCreate {
     this.step = { state: "form" };
     this.name = "";
     this.template = {};
-    this.seen = false;
   }
 
   // A field changed: what is shown is the form again, but for a backup that is being created.
@@ -274,7 +260,6 @@ export class BackupCreate {
   private take<Step extends BackupCreateStep>(step: Step): Step {
     runInAction(() => {
       this.step = step;
-      if (step.state === "created" || step.state === "failed") this.seen = false;
     });
     return step;
   }

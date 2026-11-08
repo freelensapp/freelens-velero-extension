@@ -184,6 +184,11 @@
   min-width: 0;
 }
 
+/* Words written on several lines, as Velero writes some of its errors, keep their lines. */
+.preLine {
+  white-space: pre-line;
+}
+
 .formError {
   flex: 1 0 100%;
   color: var(--colorError);

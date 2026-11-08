@@ -400,6 +400,9 @@ interface Option {
 // that can be taken back, `isClearable`, is the option of its words, which gives nothing for a change, as the cross
 // of react-select does. The menu of react-select, its search and its keys are not drawn.
 function Select({ options, value, onChange, placeholder, isDisabled, id, themeName, className, ...rest }: Passed) {
+  // react-select gives its field the notes of its own, and takes no aria-describedby of the props (Select of
+  // react-select 5.10.2, the props of its input): the double drops it as well, so that a field described only that
+  // way is not described here either.
   const {
     inputId: _taken,
     isMulti,
@@ -407,6 +410,7 @@ function Select({ options, value, onChange, placeholder, isDisabled, id, themeNa
     menuClass: _menuClass,
     menuPortalTarget: _portal,
     menuPlacement: _placement,
+    "aria-describedby": _described,
     ...passed
   } = rest;
 

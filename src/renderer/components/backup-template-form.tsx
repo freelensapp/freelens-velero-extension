@@ -2,7 +2,7 @@ import { Renderer } from "@freelensapp/extensions";
 import { observer } from "mobx-react";
 import React from "react";
 import { NOT_OFFERED, TEMPLATE_FIELD_WORDS } from "../../common/backup-create-words";
-import { durationOf } from "../../common/backup-template";
+import { durationOf, TEMPLATE_WORDS } from "../../common/backup-template";
 import { escapeOfField } from "./artifact-viewer";
 import styles from "./views.module.css";
 
@@ -30,10 +30,13 @@ export interface LocationChoice {
 // installation, and the namespaces the host lists.
 export interface TemplateChoices {
   locations: LocationChoice[];
-  // What the read of the locations is at, in words, while they are not known.
-  locationsUnknown?: string;
   snapshotLocations: { name: string; provider: string }[];
+  // What the read of the snapshot locations is at, in words, while they are not known: unknown, not absent.
+  snapshotLocationsUnknown?: string;
   namespaces: HostNamespace[];
+  // What holds the review back at a field, of what the cluster holds, beside what the release refuses of the field:
+  // said at the field, tied to it.
+  blockers?: Partial<Record<TemplateField, string[]>>;
 }
 
 // What the form edits: the fields, what the release refuses of them, and the change of one.
@@ -81,21 +84,26 @@ function describedBy(id: string, problems?: string[]): string {
 }
 
 // A text field of the items of a list. What is typed stays as it is typed while it reads as the items of the field; a
-// change from elsewhere, a choice of the host or a form that was emptied, writes the items again.
+// change from elsewhere, a form started anew or emptied, writes the items again. The notes it is described by are the
+// ones of its field.
 function ItemsField({
   id,
   label,
   items,
   disabled,
-  problems,
+  describedBy: notes,
+  invalid,
   onItems,
+  onSubmit,
 }: {
   id: string;
   label: string;
   items: string[];
   disabled: boolean;
-  problems?: string[];
+  describedBy: string;
+  invalid: boolean;
   onItems(items: string[]): void;
+  onSubmit?(): void;
 }) {
   const [text, setText] = React.useState(items.join(", "));
 
@@ -105,15 +113,17 @@ function ItemsField({
       <span id={`${id}-label`} className={styles.factName}>
         {label}
       </span>
-      {/* Escape in the field takes back what was typed in it, and goes no further. */}
+      {/* Escape in the field takes back what was typed in it, and goes no further; Enter asks for the review. */}
       <Input
         theme="round-black"
         aria-labelledby={`${id}-label`}
-        aria-describedby={describedBy(id, problems)}
-        aria-invalid={problems?.length ? true : undefined}
+        aria-describedby={notes}
+        aria-invalid={invalid ? true : undefined}
         data-testid={id}
         value={text}
         disabled={disabled}
+        blurOnEnter={false}
+        onSubmit={() => onSubmit?.()}
         onChange={(next) => {
           setText(next);
           onItems(itemsOf(next));
@@ -129,6 +139,25 @@ function ItemsField({
   );
 }
 
+// What the operator chose of a list of namespaces by a checkbox, and what was typed, kept apart while the field is
+// edited: a name the host lists, typed as the beginning of a pattern, is not taken for its checkbox.
+interface NamespaceParts {
+  checked: string[];
+  typed: string[];
+}
+
+function partsOf(items: string[], listed: Set<string>): NamespaceParts {
+  return { checked: items.filter((item) => listed.has(item)), typed: items.filter((item) => !listed.has(item)) };
+}
+
+function mergedOf(parts: NamespaceParts): string[] {
+  return [...new Set([...parts.checked, ...parts.typed])];
+}
+
+function sameItems(one: string[], other: string[]): boolean {
+  return [...new Set(one)].sort().join(",") === [...new Set(other)].sort().join(",");
+}
+
 // The namespaces of a list: the ones the host lists, each a checkbox, and the patterns and the names it does not list,
 // typed. The list is both.
 const NamespacesField = observer(
@@ -138,21 +167,32 @@ const NamespacesField = observer(
     id,
     namespaces,
     disabled,
+    blockers,
+    onSubmit,
   }: {
     state: TemplateState;
     field: "includedNamespaces" | "excludedNamespaces";
     id: string;
     namespaces: HostNamespace[];
     disabled: boolean;
+    blockers?: string[];
+    onSubmit?(): void;
   }) => {
     const items = state.template[field] ?? [];
     const listed = new Set(namespaces.map((namespace) => namespace.name));
-    const typed = items.filter((item) => !listed.has(item));
-    const problems = state.problems[field];
-    const write = (next: string[]) => state.set(field, [...new Set(next)]);
+    const [parts, setParts] = React.useState<NamespaceParts>(() => partsOf(items, listed));
+    const problems = [...(state.problems[field] ?? []), ...(blockers ?? [])];
+    const notes = describedBy(id, problems);
+
+    // A change of the template from elsewhere, a form started anew or emptied, is taken as it is.
+    if (!sameItems(mergedOf(parts), items)) setParts(partsOf(items, listed));
+    const write = (next: NamespaceParts) => {
+      setParts(next);
+      state.set(field, mergedOf(next));
+    };
 
     return (
-      <fieldset className={styles.templateField} data-testid={id} aria-describedby={describedBy(id, problems)}>
+      <fieldset className={styles.templateField} data-testid={id} aria-describedby={notes}>
         <legend className={styles.factName}>{TEMPLATE_FIELD_WORDS[field].label}</legend>
         {namespaces.length ? (
           <ul
@@ -170,8 +210,11 @@ const NamespacesField = observer(
                     onChange={(event) =>
                       write(
                         event.target.checked
-                          ? [...items, namespace.name]
-                          : items.filter((item) => item !== namespace.name),
+                          ? { checked: [...parts.checked, namespace.name], typed: parts.typed }
+                          : {
+                              checked: parts.checked.filter((item) => item !== namespace.name),
+                              typed: parts.typed.filter((item) => item !== namespace.name),
+                            },
                       )
                     }
                   />
@@ -186,9 +229,12 @@ const NamespacesField = observer(
         <ItemsField
           id={`${id}-typed`}
           label="Patterns, and names the host does not list, separated by commas"
-          items={typed}
+          items={parts.typed}
           disabled={disabled}
-          onItems={(next) => write([...items.filter((item) => listed.has(item)), ...next])}
+          describedBy={notes}
+          invalid={problems.length > 0}
+          onItems={(next) => write({ checked: parts.checked, typed: next })}
+          onSubmit={onSubmit}
         />
         <FieldNotes id={id} field={field} problems={problems} />
       </fieldset>
@@ -202,16 +248,23 @@ const BooleanField = observer(
     const value = state.template[field];
     const problems = state.problems[field];
 
+    // The select of the host gives the field the notes of its own: the group around it carries the ones of the field.
     return (
-      <div className={styles.templateField}>
-        <label className={styles.factName} htmlFor={id}>
+      <fieldset
+        className={styles.templateField}
+        aria-describedby={describedBy(id, problems)}
+        data-testid={`${id}-group`}
+      >
+        <legend id={`${id}-label`} className={styles.factName}>
           {TEMPLATE_FIELD_WORDS[field].label}
-        </label>
+        </legend>
         <Select<string, Option, false>
           id={id}
           inputId={id}
           themeName="lens"
-          aria-describedby={describedBy(id, problems)}
+          aria-labelledby={`${id}-label`}
+          aria-invalid={problems?.length ? true : undefined}
+          aria-errormessage={problems?.length ? `${id}-problem` : undefined}
           placeholder={NOT_SET}
           isClearable
           isDisabled={disabled}
@@ -222,7 +275,7 @@ const BooleanField = observer(
           }
         />
         <FieldNotes id={id} field={field} problems={problems} />
-      </div>
+      </fieldset>
     );
   },
 );
@@ -234,11 +287,13 @@ const DurationField = observer(
     field,
     id,
     disabled,
+    onSubmit,
   }: {
     state: TemplateState;
     field: "ttl" | "csiSnapshotTimeout" | "itemOperationTimeout";
     id: string;
     disabled: boolean;
+    onSubmit?(): void;
   }) => {
     const value = state.template[field] ?? "";
     const problems = state.problems[field];
@@ -257,6 +312,8 @@ const DurationField = observer(
           data-testid={id}
           value={value}
           disabled={disabled}
+          blurOnEnter={false}
+          onSubmit={() => onSubmit?.()}
           onChange={(next) => state.set(field, next.trim() === "" ? undefined : next.trim())}
           onKeyDown={(event) => {
             escapeOfField(event, () => state.set(field, undefined));
@@ -275,82 +332,102 @@ const DurationField = observer(
 
 type SelectorMode = "none" | "one" | "several";
 
-// The selectors: none, one, or any of several, separated by " or " as the command line of the release takes them.
-const SelectorField = observer(({ state, id, disabled }: { state: TemplateState; id: string; disabled: boolean }) => {
-  const one = state.template.labelSelector;
-  const several = state.template.orLabelSelectors;
-  const mode: SelectorMode = one !== undefined ? "one" : several !== undefined ? "several" : "none";
-  const problems = [...(state.problems.labelSelector ?? []), ...(state.problems.orLabelSelectors ?? [])];
-  const text = mode === "one" ? (one ?? "") : mode === "several" ? (several ?? []).join(" or ") : "";
-  const write = (next: SelectorMode, words: string) => {
-    const selectors = words
-      .split(" or ")
-      .map((selector) => selector.trim())
-      .filter((selector) => selector !== "");
+// What a selector typed writes: one selector as it is typed, without the spaces around it; several, separated by
+// " or " as the command line of the release takes them, each without the spaces around it.
+function selectorsOf(mode: SelectorMode, words: string): { one?: string; several?: string[] } {
+  if (mode === "one") return words.trim() === "" ? {} : { one: words.trim() };
+  if (mode !== "several") return {};
+  const selectors = words
+    .split(" or ")
+    .map((selector) => selector.trim())
+    .filter((selector) => selector !== "");
 
-    state.set("labelSelector", next === "one" && words.trim() !== "" ? words.trim() : undefined);
-    state.set("orLabelSelectors", next === "several" && selectors.length > 0 ? selectors : undefined);
-  };
-  const [chosen, setChosen] = React.useState<SelectorMode>(mode);
-  const shown: SelectorMode = mode === "none" ? chosen : mode;
+  return selectors.length > 0 ? { several: selectors } : {};
+}
 
-  return (
-    <div className={styles.templateField}>
-      <label className={styles.factName} htmlFor={`${id}-mode`}>
-        Label selector, or any of several
-      </label>
-      <Select<string, Option, false>
-        id={`${id}-mode`}
-        inputId={`${id}-mode`}
-        themeName="lens"
-        placeholder="No filter"
-        isDisabled={disabled}
-        options={[
-          { value: "one", label: "One selector" },
-          { value: "several", label: "Any of several selectors, separated by or" },
-        ]}
-        value={shown === "none" ? null : shown}
-        onChange={(option) => {
-          const next = (option?.value ?? "none") as SelectorMode;
+// The selectors: none, one, or any of several. What is typed stays as it is typed while it reads as the selectors of
+// the template, a space at its end among it; a change from elsewhere, a form started anew or emptied, writes it again.
+const SelectorField = observer(
+  ({ state, id, disabled, onSubmit }: { state: TemplateState; id: string; disabled: boolean; onSubmit?(): void }) => {
+    const one = state.template.labelSelector;
+    const several = state.template.orLabelSelectors;
+    const mode: SelectorMode = one !== undefined ? "one" : several !== undefined ? "several" : "none";
+    const problems = [...(state.problems.labelSelector ?? []), ...(state.problems.orLabelSelectors ?? [])];
+    const written = mode === "one" ? (one ?? "") : mode === "several" ? (several ?? []).join(" or ") : "";
+    const [chosen, setChosen] = React.useState<SelectorMode>(mode);
+    const [text, setText] = React.useState(written);
+    const shown: SelectorMode = mode === "none" ? chosen : mode;
+    const read = selectorsOf(shown, text);
 
-          setChosen(next);
-          write(next, text);
-        }}
-      />
-      {shown === "none" ? null : (
-        <>
-          <span id={`${id}-label`} className={styles.factName}>
-            {shown === "one" ? TEMPLATE_FIELD_WORDS.labelSelector.label : TEMPLATE_FIELD_WORDS.orLabelSelectors.label}
-          </span>
-          <Input
-            theme="round-black"
-            aria-labelledby={`${id}-label`}
-            aria-describedby={`${id}-rule${problems.length ? ` ${id}-problem` : ""}`}
-            aria-invalid={problems.length ? true : undefined}
-            data-testid={id}
-            value={text}
-            disabled={disabled}
-            onChange={(next) => write(shown, next)}
-            onKeyDown={(event) => {
-              escapeOfField(event, () => write(shown, ""));
-            }}
-          />
-          <p id={`${id}-rule`} className={styles.factNote}>
-            In the selector syntax of Kubernetes: key=value, key!=value, key in (a,b), key notin (a,b), key and !key,
-            separated by commas{shown === "several" ? "; the selectors separated by or" : ""}.
-          </p>
-        </>
-      )}
-      {problems.length ? (
-        <ul id={`${id}-problem`} className={styles.formError} data-testid={`${id}-problem`}>
-          {problems.map((problem) => (
-            <li key={problem}>{problem}</li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
-  );
-});
+    if (read.one !== one || JSON.stringify(read.several) !== JSON.stringify(several)) setText(written);
+    const write = (next: SelectorMode, words: string) => {
+      const selectors = selectorsOf(next, words);
+
+      setText(words);
+      state.set("labelSelector", selectors.one);
+      state.set("orLabelSelectors", selectors.several);
+    };
+
+    return (
+      <div className={styles.templateField}>
+        <label className={styles.factName} htmlFor={`${id}-mode`}>
+          Label selector, or any of several
+        </label>
+        <Select<string, Option, false>
+          id={`${id}-mode`}
+          inputId={`${id}-mode`}
+          themeName="lens"
+          placeholder="No filter"
+          isDisabled={disabled}
+          options={[
+            { value: "one", label: "One selector" },
+            { value: "several", label: "Any of several selectors, separated by or" },
+          ]}
+          value={shown === "none" ? null : shown}
+          onChange={(option) => {
+            const next = (option?.value ?? "none") as SelectorMode;
+
+            setChosen(next);
+            write(next, next === "none" ? "" : text);
+          }}
+        />
+        {shown === "none" ? null : (
+          <>
+            <span id={`${id}-label`} className={styles.factName}>
+              {shown === "one" ? TEMPLATE_FIELD_WORDS.labelSelector.label : TEMPLATE_FIELD_WORDS.orLabelSelectors.label}
+            </span>
+            <Input
+              theme="round-black"
+              aria-labelledby={`${id}-label`}
+              aria-describedby={`${id}-rule${problems.length ? ` ${id}-problem` : ""}`}
+              aria-invalid={problems.length ? true : undefined}
+              data-testid={id}
+              value={text}
+              disabled={disabled}
+              blurOnEnter={false}
+              onSubmit={() => onSubmit?.()}
+              onChange={(next) => write(shown, next)}
+              onKeyDown={(event) => {
+                escapeOfField(event, () => write(shown, ""));
+              }}
+            />
+            <p id={`${id}-rule`} className={styles.factNote}>
+              In the selector syntax of Kubernetes: key=value, key!=value, key in (a,b), key notin (a,b), key and !key,
+              separated by commas{shown === "several" ? "; the selectors separated by or" : ""}.
+            </p>
+          </>
+        )}
+        {problems.length ? (
+          <ul id={`${id}-problem`} className={styles.formError} data-testid={`${id}-problem`}>
+            {problems.map((problem) => (
+              <li key={problem}>{problem}</li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    );
+  },
+);
 
 // The storage location, among the ones of the installation, always written: the default first when it can be chosen,
 // and the ones Velero refuses every backup for shown with the reason, which cannot be chosen.
@@ -366,7 +443,14 @@ const StorageLocationField = observer(
     choices: TemplateChoices;
     disabled: boolean;
   }) => {
-    const problems = state.problems.storageLocation;
+    const blockers = choices.blockers?.storageLocation ?? [];
+    // What holds the choice back says why none is chosen: the words that one is asked for go with it.
+    const problems = [
+      ...blockers,
+      ...(state.problems.storageLocation ?? []).filter(
+        (problem) => !blockers.length || problem !== TEMPLATE_WORDS.noStorageLocation,
+      ),
+    ];
     const offered = choices.locations.filter((location) => !location.refused);
     const refused = choices.locations.filter((location) => location.refused);
     const options = offered.map((location) => ({
@@ -374,16 +458,23 @@ const StorageLocationField = observer(
       label: location.isDefault ? `${location.name}, marked default` : location.name,
     }));
 
+    // The select of the host gives the field the notes of its own: the group around it carries the ones of the field.
     return (
-      <div className={styles.templateField}>
-        <label className={styles.factName} htmlFor={id}>
+      <fieldset
+        className={styles.templateField}
+        aria-describedby={`${id}-refused${problems.length ? ` ${id}-problem` : ""}`}
+        data-testid={`${id}-group`}
+      >
+        <legend id={`${id}-label`} className={styles.factName}>
           {TEMPLATE_FIELD_WORDS.storageLocation.label}
-        </label>
+        </legend>
         <Select<string, Option, false>
           id={id}
           inputId={id}
           themeName="lens"
-          aria-describedby={`${id}-refused${problems?.length ? ` ${id}-problem` : ""}`}
+          aria-labelledby={`${id}-label`}
+          aria-invalid={problems.length ? true : undefined}
+          aria-errormessage={problems.length ? `${id}-problem` : undefined}
           placeholder={options.length ? "Choose a location" : "None to choose"}
           isDisabled={disabled || options.length === 0}
           options={options}
@@ -391,25 +482,20 @@ const StorageLocationField = observer(
           onChange={(option) => state.set("storageLocation", option?.value)}
         />
         <div id={`${id}-refused`}>
-          {choices.locationsUnknown ? (
-            <p className={styles.factNote} data-testid={`${id}-unknown`}>
-              {choices.locationsUnknown}
-            </p>
-          ) : null}
           {refused.map((location) => (
             <p key={location.name} className={styles.factNote} data-testid={`${id}-refused-${location.name}`}>
               {location.refused}
             </p>
           ))}
         </div>
-        {problems?.length ? (
+        {problems.length ? (
           <ul id={`${id}-problem`} className={styles.formError} data-testid={`${id}-problem`}>
             {problems.map((problem) => (
               <li key={problem}>{problem}</li>
             ))}
           </ul>
         ) : null}
-      </div>
+      </fieldset>
     );
   },
 );
@@ -435,7 +521,13 @@ const SnapshotLocationsField = observer(
     return (
       <fieldset className={styles.templateField} data-testid={id} aria-describedby={describedBy(id, problems)}>
         <legend className={styles.factName}>{TEMPLATE_FIELD_WORDS.volumeSnapshotLocations.label}</legend>
-        {providers.length === 0 ? <p className={styles.factNote}>The installation has no snapshot location.</p> : null}
+        {choices.snapshotLocationsUnknown ? (
+          <p className={styles.factNote} data-testid={`${id}-unknown`}>
+            {choices.snapshotLocationsUnknown}
+          </p>
+        ) : providers.length === 0 ? (
+          <p className={styles.factNote}>The installation has no snapshot location.</p>
+        ) : null}
         {providers.map((provider) => {
           const ofProvider = choices.snapshotLocations.filter((location) => location.provider === provider);
           const current = ofProvider.find((location) => chosen.includes(location.name));
@@ -475,30 +567,30 @@ export interface BackupTemplateFormProps {
   disabled: boolean;
   // The prefix of the identifiers of the fields, the workspace that holds the form.
   id: string;
+  // What Enter in a field that is typed asks: the review, as Enter in the name does.
+  onSubmit?(): void;
 }
 
 // The form of the template of a backup (SPEC-0016, the form; SPEC-0017, REQ-260), which the creation of a backup and
 // the creation of a schedule share: each field with its label, what Velero does when it is not set and what is wrong
 // with it, tied to it; and under it what this version does not offer.
-export const BackupTemplateForm = observer(({ state, choices, disabled, id }: BackupTemplateFormProps) => {
+export const BackupTemplateForm = observer(({ state, choices, disabled, id, onSubmit }: BackupTemplateFormProps) => {
   const field = (name: TemplateField) => `${id}-${name}`;
 
   return (
     <div className={styles.templateForm} data-testid={`${id}-template`}>
-      <NamespacesField
-        state={state}
-        field="includedNamespaces"
-        id={field("includedNamespaces")}
-        namespaces={choices.namespaces}
-        disabled={disabled}
-      />
-      <NamespacesField
-        state={state}
-        field="excludedNamespaces"
-        id={field("excludedNamespaces")}
-        namespaces={choices.namespaces}
-        disabled={disabled}
-      />
+      {(["includedNamespaces", "excludedNamespaces"] as const).map((name) => (
+        <NamespacesField
+          key={name}
+          state={state}
+          field={name}
+          id={field(name)}
+          namespaces={choices.namespaces}
+          disabled={disabled}
+          blockers={choices.blockers?.[name]}
+          onSubmit={onSubmit}
+        />
+      ))}
       {(["includedResources", "excludedResources"] as const).map((name) => (
         <div key={name} className={styles.templateField}>
           <ItemsField
@@ -506,8 +598,10 @@ export const BackupTemplateForm = observer(({ state, choices, disabled, id }: Ba
             label={`${TEMPLATE_FIELD_WORDS[name].label}, separated by commas`}
             items={state.template[name] ?? []}
             disabled={disabled}
-            problems={state.problems[name]}
+            describedBy={describedBy(field(name), state.problems[name])}
+            invalid={Boolean(state.problems[name]?.length)}
             onItems={(items) => state.set(name, items)}
+            onSubmit={onSubmit}
           />
           <FieldNotes id={field(name)} field={name} problems={state.problems[name]} />
         </div>
@@ -518,7 +612,7 @@ export const BackupTemplateForm = observer(({ state, choices, disabled, id }: Ba
         id={field("includeClusterResources")}
         disabled={disabled}
       />
-      <SelectorField state={state} id={field("labelSelector")} disabled={disabled} />
+      <SelectorField state={state} id={field("labelSelector")} disabled={disabled} onSubmit={onSubmit} />
       <StorageLocationField state={state} id={field("storageLocation")} choices={choices} disabled={disabled} />
       <SnapshotLocationsField
         state={state}
@@ -530,7 +624,7 @@ export const BackupTemplateForm = observer(({ state, choices, disabled, id }: Ba
         <BooleanField key={name} state={state} field={name} id={field(name)} disabled={disabled} />
       ))}
       {(["ttl", "csiSnapshotTimeout", "itemOperationTimeout"] as const).map((name) => (
-        <DurationField key={name} state={state} field={name} id={field(name)} disabled={disabled} />
+        <DurationField key={name} state={state} field={name} id={field(name)} disabled={disabled} onSubmit={onSubmit} />
       ))}
       <p className={styles.factNote} data-testid={`${id}-not-offered`}>
         {NOT_OFFERED}
