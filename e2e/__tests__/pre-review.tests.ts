@@ -37,7 +37,7 @@ const OPENED = "backup-finalizingpartiallyfailed";
 const RESTORES = cluster.RESTORES;
 const RESTORED = "restore-mapped";
 const LONG_RESTORE = cluster.LONG_RESTORE_NAME;
-// The views that are checked, each in both themes at every size: eight of the tabs, then the forty-four
+// The views that are checked, each in both themes at every size: eight of the tabs, then the forty-six
 // of the pages, four of them of the adherence of the schedules, ten of the backup repositories, of the pod
 // volume operations and of the data movement, two of Back up now and two of Create backup.
 const VIEWS = 54;
@@ -1993,7 +1993,8 @@ describe("pre-review of the views", () => {
       if ((await cluster.writesState(frame)) !== "on") await cluster.turnWritesOn(frame);
       await frame.click("[data-testid=velero-backups-create]");
       await frame.waitForSelector(createBackup("workspace"), { timeout: 30_000 });
-      await frame.locator(CREATE_FIELD).first().fill("views-by-hand");
+      // A name as long as a backup of the form may have, which the field, the review and the result carry whole.
+      await frame.locator(CREATE_FIELD).first().fill("views-by-hand-".padEnd(216, "x"));
       await everyLayout("backup-create-form", top, cluster.BACKUPS, undefined, inSight(CREATE_FIELD));
       await frame.click(createBackup("ask"));
       await frame.waitForSelector(createBackup("review"), { timeout: 30_000 });

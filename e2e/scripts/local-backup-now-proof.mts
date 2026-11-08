@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
+import { isDeepStrictEqual } from "node:util";
 import {
   compiledDiagnostics,
   type DownloadProofContext,
@@ -252,10 +253,25 @@ export async function runBackupCreateProof(
     storageLocation: "default",
     snapshotVolumes: false,
     defaultVolumesToFsBackup: false,
+    snapshotMoveData: false,
     ttl: "1h",
+    csiSnapshotTimeout: "10m",
+    itemOperationTimeout: "4h",
   };
-  // The fields of the text the server keeps as they were sent.
-  const kept = ["includedNamespaces", "includeClusterResources", "labelSelector", "storageLocation", "ttl"];
+  // The fields of the text the server keeps as they were sent, which the main process looks for a backup of the form by
+  // when the answer of its creation was lost: each one is set, and compared whole.
+  const kept = [
+    "storageLocation",
+    "includedNamespaces",
+    "labelSelector",
+    "snapshotVolumes",
+    "includeClusterResources",
+    "defaultVolumesToFsBackup",
+    "snapshotMoveData",
+    "ttl",
+    "csiSnapshotTimeout",
+    "itemOperationTimeout",
+  ];
   const backup = `proof-form-${context.run}-${stamp()}`;
 
   return proveCreation(context, {
@@ -271,6 +287,12 @@ export async function runBackupCreateProof(
       });
 
       requireCondition(confirmed.text, "The confirmation of a backup of the form answered no text");
+      const { metadata } = JSON.parse(confirmed.text) as { metadata: { name: string; namespace: string } };
+
+      requireCondition(
+        metadata.name === backup && metadata.namespace === DEMO_NAMESPACE,
+        "The text of the confirmation is not of the backup asked",
+      );
       const answer = await session.call<BackupCreated>("write.run", {
         cluster: session.cluster,
         namespace: DEMO_NAMESPACE,
@@ -290,7 +312,7 @@ export async function runBackupCreateProof(
         "The text of a backup of the form carries more than its name and its namespace",
       );
       const keptAsSent = kept.every(
-        (field) => JSON.stringify(backup.spec?.[field]) === JSON.stringify(sent.spec[field]),
+        (field) => sent.spec[field] !== undefined && isDeepStrictEqual(backup.spec?.[field], sent.spec[field]),
       );
 
       requireCondition(keptAsSent, "The backup does not carry the fields of its text that Velero keeps as sent");

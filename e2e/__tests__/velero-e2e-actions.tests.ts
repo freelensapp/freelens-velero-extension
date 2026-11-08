@@ -5,12 +5,12 @@
 
 // The actions of SPEC-0017 in a packaged Freelens, on the CRDs of the release alone, where no controller runs
 // (REQ-254, ACT-11): Back up now from the view of a schedule (T4.2), and Create backup from the list of the Backups
-// (T4.3). With writes off the command writes nothing; a
-// review that is not confirmed, nothing; a confirmed one, exactly one POST of a Backup, whose every field is the one of
-// the text the review showed, and no other write. The backup stays without a phase, as the result says, and the view
-// of the schedule lists it at its next read (NOW-05). A name already taken is a conflict (NOW-04). The reader of a part
-// is refused at the creation. What the suite created it removes, and the objects of Velero are as they were. The
-// workspace in both themes, at every size and with the keyboard alone, is in the pre-review (ACT-10).
+// (T4.3). With writes off the command writes nothing; a review that is not confirmed, nothing; a confirmed one,
+// exactly one POST of a Backup, whose every field is the one of the text the review showed, and no other write. The
+// backup stays without a phase, as the result says, and the view of the schedule lists it at its next read (NOW-05). A
+// name already taken is a conflict (NOW-04). The reader of a part is refused at the creation. What the suite created
+// it removes, and the objects of Velero are as they were. The workspace in both themes, at every size and with the
+// keyboard alone, is in the pre-review (ACT-10).
 
 import { readFile, writeFile } from "node:fs/promises";
 import * as path from "node:path";
@@ -326,8 +326,25 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
           words,
         ]);
       }
-      // The namespaces the host lists are offered.
-      expect(await frame.locator(create("includedNamespaces-default")).count()).toBe(1);
+      // The locations a backup can go to are offered, the one marked default first and the others by their names, and
+      // none of the ones refused; the default is chosen again, which closes the menu.
+      await frame.click(`${choiceOf("storageLocation")} .Select__control`);
+      expect(await frame.locator(optionsOf("storageLocation")).allTextContents()).toEqual([
+        "views-available, marked default",
+        ...[cluster.LONG_LOCATION_NAME, "views-with-credential"].sort(),
+      ]);
+      await frame.locator(optionsOf("storageLocation")).first().click();
+      // The namespaces the host lists are offered, each one.
+      const listed = String(cluster.kubectlE2E("get", "namespaces", "-o", "jsonpath={.items[*].metadata.name}").stdout)
+        .trim()
+        .split(/\s+/);
+
+      expect(listed).toContain("default");
+      for (const namespace of listed)
+        expect([namespace, await frame.locator(create(`includedNamespaces-${namespace}`)).count()]).toEqual([
+          namespace,
+          1,
+        ]);
       await frame.locator(formField("field")).first().fill(`${FORM}-off`);
       await frame.locator(formField("field")).first().press("Enter");
       await frame.waitForTimeout(NOTHING);
@@ -367,6 +384,10 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
       const body = backupFromForm(cluster.E2E_VIEWS_NAMESPACE, name, template);
 
       expect(await frame.locator(create("text")).textContent()).toBe(body && formBodyText(body));
+      // What the text means is said beside it: the time to live that was set, as the text writes it.
+      expect(await cluster.wordsOf(frame, create("meaning"))).toContain(
+        `It is kept for ${String(body?.spec.ttl)}, from when Velero starts it.`,
+      );
       // Left by Escape: the form again, as it was, and nothing written.
       await frame.locator(create("review")).focus();
       await started?.window.keyboard.press("Escape");
@@ -415,6 +436,7 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
         ...metadata
       } = backup.metadata as Record<string, unknown>;
 
+      expect(Object.keys(sent.metadata).sort()).toEqual(["name", "namespace"]);
       expect(metadata).toEqual(sent.metadata);
       expect(backup.spec).toEqual(sent.spec);
       expect(backup.status?.phase).toBeUndefined();
@@ -423,6 +445,8 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
       await frame.waitForSelector("[data-testid=velero-backup-workspace]", { timeout: 30_000 });
       await cluster.closeWorkspace(frame);
       await frame.waitForSelector(create("workspace"), { state: "detached", timeout: 30_000 });
+      expect(await cluster.shownView(frame)).toBeUndefined();
+      await cluster.waitForList(frame, cluster.BACKUPS);
     },
     TIMEOUT,
   );
@@ -517,6 +541,8 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
         await other.locator(formField("field")).first().fill(formName);
         await other.click(create("ask"));
         await other.waitForSelector(create("review"), { timeout: 30_000 });
+        // Removed after the suite should the reader ever create it.
+        created.push({ namespace: cluster.E2E_VIEWS_NAMESPACE, name: formName });
         await other.click(create("create"));
         await other.waitForSelector(create("failure"), { timeout: 60_000 });
         expect([
@@ -524,10 +550,14 @@ describe("the actions of Velero, on the CRDs of the release alone", () => {
           await other.locator(create("failure")).getAttribute("data-stage"),
           await cluster.wordsOf(other, create("failure-text")),
         ]).toEqual(["forbidden", "creation", BACKUP_NOW_WORDS.forbiddenCreate(cluster.E2E_VIEWS_NAMESPACE)]);
+        // Writes stay on here as well, and nothing is in the namespace.
+        await other.waitForTimeout(NOTHING);
+        expect(await cluster.writesState(other)).toBe("on");
         expect(
           cluster.kubectlE2E("get", "backups.velero.io", formName, "--namespace", cluster.E2E_VIEWS_NAMESPACE).status,
         ).not.toBe(0);
         expect(writesSince(earlier)).toEqual({});
+        expect(await cluster.layoutProblems(other, cluster.BACKUPS)).toEqual([]);
       } finally {
         // The cases after this one look at the first entry of the catalog, which is shown again.
         await velero.navigateToCatalog(running.app);
