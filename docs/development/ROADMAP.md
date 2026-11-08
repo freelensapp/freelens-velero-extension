@@ -217,7 +217,7 @@ the accuracy of the adherence signal, including its uncertainty states.
 | Feature | Task | Spec | Status |
 | --- | --- | --- | --- |
 | Ground rules of the write actions | | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | Approved |
-| Backup now from a schedule | T4.2 | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | In PR |
+| Backup now from a schedule | T4.2 | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | Done |
 | Create backup form, followed by a review of the exact request | T4.3 | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | In PR |
 | Create schedule form, followed by a review of the exact request | T4.7 | [SPEC-0016](../specs/SPEC-0016-create-a-schedule.md) | Approved |
 | Restore from backup or schedule, with namespace mappings and existing-resource policy | T4.4 | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | Approved |
