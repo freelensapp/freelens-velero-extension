@@ -33,11 +33,10 @@ is a from-scratch MIT implementation and it is not a Velero product.
 
 ### Status
 
-The prereleases of 1.0.0 are published on npm under the tag `next`, each with
-a GitHub release marked as a prerelease, and 1.0.0 is not released yet: until it
-is, install the extension by the tag `next` or by a version, as
-[Install](#install) says. What each version brings is in the
-[changelog](CHANGELOG.md). What 1.0.0 covers, by milestone:
+1.0.0, the first release of the extension, is being prepared. Until it is
+published, install the extension from the source, as
+[Build from the source](#build-from-the-source) says. What each version brings is
+in the [changelog](CHANGELOG.md). What 1.0.0 covers, by milestone:
 
 <!-- markdownlint-disable MD013 -->
 
@@ -121,27 +120,20 @@ tarball, or the path to a tarball or a directory.
 
 ### From the registry
 
-Enter one of these and press Install:
-
-<!-- markdownlint-disable MD013 -->
-
-| Entered | What Freelens installs |
-| --- | --- |
-| `@freelensapp/velero-extension` | The newest version that is not a prerelease, whatever an npm tag names. Until 1.0.0 is published every version is a prerelease, and Freelens answers `No versions found for @freelensapp/velero-extension` |
-| `@freelensapp/velero-extension@next` | The version the npm tag `next` names: the newest prerelease, which can be older than the newest release |
-| `@freelensapp/velero-extension@<version>` | That version, for instance `@freelensapp/velero-extension@1.0.0-0` |
-
-<!-- markdownlint-enable MD013 -->
+Enter `@freelensapp/velero-extension` and press Install. Freelens installs the
+newest version that is not a prerelease, whatever an npm tag names. To install
+another version, enter it after the name, for instance
+`@freelensapp/velero-extension@1.0.0`.
 
 Freelens reads the package from the registry its preferences name, the npm
 registry unless they name another, checks the download against the integrity
 the registry gives for that version, then installs the extension, enables it
 and lists it as verified.
 
-Alternatively, open the following URL in the browser to install the version the
-tag `next` names directly, once Freelens has asked you to confirm it:
+Alternatively, open the following URL in the browser to install directly, once
+Freelens has asked you to confirm the version:
 
-[freelens://app/extensions/install/@freelensapp/velero-extension?version=next](freelens://app/extensions/install/@freelensapp/velero-extension?version=next)
+[freelens://app/extensions/install/%40freelensapp%2Fvelero-extension](freelens://app/extensions/install/%40freelensapp%2Fvelero-extension)
 
 ### From a release tarball
 
@@ -174,7 +166,7 @@ it is verified. This is how you work on the extension: see
 ### Verify a release
 
 The GitHub release of a version carries four files, where `<version>` is the
-version, for instance `1.0.0-0`:
+version, for instance `1.0.0`:
 
 <!-- markdownlint-disable MD013 -->
 

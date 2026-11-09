@@ -256,7 +256,7 @@ describe("the documents of the package", () => {
   const readme = read("README.md");
   const changelog = read("CHANGELOG.md");
 
-  it("says in Requirements the range of Freelens of the manifest and the versions of the API the code reads, lists in Supported APIs each kind the code reads under its version, and says no more that there is no release", () => {
+  it("says in Requirements the range of Freelens of the manifest and the versions of the API the code reads, lists in Supported APIs each kind the code reads under its version, and names neither a release that is not there nor the tag next", () => {
     const requirements = sectionOf(readme, "Requirements", 2);
     const supported = sectionOf(readme, "Supported APIs", 2);
     const rows = KINDS_READ.flatMap((kind) =>
@@ -288,9 +288,12 @@ describe("the documents of the package", () => {
           .sort(),
       ]);
     }
-    // The section Status of before the first prerelease said that there was no release to install.
+    // The section Status of the README before this one said that there was no release to install.
     expect(sectionOf(readme, "Status", 3)).not.toMatch(/\bno release\b/i);
     expect(squeezed(readme)).not.toMatch(/no release to install/i);
+    // No npm tag but the one of a release: 1.0.0 is the first publication, and Freelens installs the newest release by
+    // its name.
+    expect(readme).not.toMatch(/`next`|@next\b|version=next/);
   });
 
   it("says in Compatibility the target of SPEC-0015 and the versions the test environment pins, and that any other is untested", () => {
