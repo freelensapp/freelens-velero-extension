@@ -129,6 +129,23 @@ that:
   each download in their order, and counts one request, the verified one: nothing
   is sent over a connection that was not verified, and nothing is asked again
   without the verification;
+- the route to the store of a signed URL is resolved inside the main process
+  ([REQ-290](../specs/SPEC-0018-release-readiness.md)) by `resolveRoute`, which the
+  main bundle exports for it, for a storage location whose URL names 198.18.250.10,
+  an address literal of 198.18.0.0/15, a range the extension counts as private,
+  outside the subnets the environment takes from it, where nothing listens. Without
+  the allowance of private addresses for the cluster the route is refused,
+  `destination-denied` with what the operator may allow, a private address for the
+  origin of the store, and the words the views show of it, made of it as the main
+  process makes them, say so with nothing of the path or the signature of the URL;
+  with the allowance the route is direct to that address, at the port of the URL.
+  The cluster, the resolver of the machine and kubectl are stand-ins that refuse
+  what they are asked, and the route asks the allowance alone. While the routes are
+  resolved no socket of the process is asked for a connection and no server of it
+  listens, which the case records on the classes of the sockets and of the servers
+  of Node: a resolution of an address literal reads nothing and resolves nothing,
+  so it takes no turn of the loop of the process, and no other code of the host
+  runs meanwhile;
 - the files of the log of the host hold the activation of the extension, and no
   line at the level of an error, nor does what either process wrote.
 
@@ -1102,6 +1119,14 @@ include child-process refusal checks with an empty executable path, proving that
 wrong targets and malformed journals stop without external tools. Co-locate future pure/main
 tests with their modules and reuse the integration directory convention for packaged
 journeys. No actual Electron installation result is implied by stubbed bundle tests.
+
+The build test holds each file the host loads, `dist/main.js`, `dist/renderer.js`
+and `dist/renderer.css`, under a ceiling of bytes, set a quarter above its size when
+the ceiling was set ([REQ-317](../specs/SPEC-0018-release-readiness.md)), with that
+size and its date written beside it. A change that passes a ceiling fails the unit
+run until the ceiling is moved, in the pull request that needs it, with its reason
+written beside it in place of the size and said in that pull request. No other file
+of the build has one: the host loads these three alone.
 
 Mock the host boundary for unit tests; use a transport interface for Kubernetes
 status codes and cancellation. Small local HTTP/TLS servers exercise streaming and

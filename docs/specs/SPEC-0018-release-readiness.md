@@ -1125,3 +1125,151 @@ Decided while implementing, on 2026-11-09:
   makes anything: on macOS `/usr/bin/openssl` is LibreSSL, which does not know
   `-copy_extensions`, so REL-02 runs with an OpenSSL 3 first on the PATH. TESTING.md
   says so.
+
+T6.1, the case of FND-10 of REQ-290 and the ceilings of REQ-317, on 2026-11-09: the
+direct route in the main process of the host, and a ceiling on the bytes of each file
+the host loads, in one pull request. The evidence, by check:
+
+- REG-06, in FND-10
+  ([`extensions.tests.ts`](../../integration/__tests__/extensions.tests.ts)), a case
+  of its own after the download over HTTPS, which makes eight cases of FND-10. In the
+  main process of the host, `resolveRoute` of the module the host loaded, which the
+  main bundle now exports beside the transport, resolves the route of the log of a
+  backup at its signed URL,
+  `https://198.18.250.10:9000/fnd-10/backups/fnd-10/fnd-10-logs.gz?X-Amz-Signature=synthetic`,
+  for a storage location of the plugin of AWS whose `s3Url` is that origin, with the
+  bucket in the path: the origin is one the location gives, and the path is the key
+  of the file asked. 198.18.250.10 is an address literal of 198.18.0.0/15, a range
+  `classifyAddress` of `src/common/artifact-address.ts` counts as private.
+  - Without the allowance of private addresses for the cluster, the route is
+    refused: a `DiagnosticError` of the bundle, `destination-denied` at the step
+    `route` by the rule `allowance`, with what the operator may allow,
+    `{ what: "private", origin: "https://198.18.250.10:9000" }`. The words the views
+    show of it, made of what it carries by `downloadFailure` of
+    `src/common/diagnostic-text.ts` as `downloadFailureOf` of the main process
+    makes them, say that the store of that origin is at a private address and that
+    a connection to it is made only after it is allowed, carry the same `needs` for
+    the views to offer it, and hold nothing of the path or the signature of the URL.
+  - With the allowance, given for that origin as the operator gives it, the route is
+    direct to that address: its origin, the path of the file, 198.18.250.10, the
+    port 9000, `mode: "direct"`, `allowHttp: false` and `allowPrivate: true`.
+  - Each time, the route asked the allowance of the cluster for that origin and the
+    location `velero/default`, and nothing else: the stand-ins of the cluster, of the
+    resolver of this machine and of kubectl, which record what they are asked and
+    refuse it, were asked nothing.
+  - No listener and no connection. The case opens no listener. While the two routes
+    are resolved, it records in the main process of the host every connection a
+    socket of the process is asked for, on `net.Socket.prototype.connect`, which the
+    clients of Node go through, `net`, `tls`, `http`, `https` and `fetch` among them,
+    and every listener a server of the process opens, on
+    `net.Server.prototype.listen`: none of either. A resolution of an address
+    literal reads nothing of the cluster and resolves nothing, so it takes no turn
+    of the loop of the process: no other code of the host runs between the spies
+    and their removal, and what they record is of the route. Why the resolution
+    cannot connect, besides: `resolveRoute` reaches outside the process only through
+    the client of the cluster, the resolver and kubectl it is given, and through
+    `lookup` of `node:dns/promises` when it is given no resolver and the host is a
+    name; the rest of it, beside the allowances it is given, is the pure functions
+    of common. The case gives all of them, and the host of its URL is an address.
+- REG-06, in the build test ([`build.test.ts`](../../test/build.test.ts)): the
+  exports of the main bundle loaded under Node list `resolveRoute`, and FND-10 lists
+  it among the exports of the module the host loaded.
+- REG-09, in the build test: each file the host loads under a ceiling a quarter above
+  its size at the head of the slice, rounded up to the byte, with that size and its
+  date beside it.
+
+  | File | Size, bytes | Ceiling, bytes |
+  | --- | --- | --- |
+  | `dist/main.js` | 265,486 | 331,858 |
+  | `dist/renderer.js` | 932,411 | 1,165,514 |
+  | `dist/renderer.css` | 61,044 | 76,305 |
+
+  The sizes are of `pnpm build` with Node 24.21.0 and the lockfile; the bundles name
+  no path of the machine that built them. The main bundle grew by 14 bytes with the
+  export, from 265,472 on main.
+- Seen failing, each change made on purpose and put back: the build test, with
+  `resolveRoute` taken out of the exports of the main entry and the bundle built
+  again, at the list of the exports of the case that loads the main bundle, the one
+  case of the 13 that failed; and each ceiling set one byte below the size of its
+  file, at the case of the ceilings, which named that file with its size and its
+  ceiling, the one case that failed. Every ceiling set to the size of its file
+  passed.
+- The function the case evaluates in the host, run outside Electron: a probe, never
+  committed, made of the module part of the test file and of the case as written,
+  under a stand-in of the application whose `evaluate` calls the text of the function
+  with its argument, as Playwright does, in a process of Node 24.21.0 with a
+  stand-in of the API of the host, against the main bundle of the head. Vitest ran
+  the assertions of the case as written: every one held. It is a check of the slice
+  outside Electron, and not the packaged run.
+- The packaged run of FND-10 on the head: {RUN-ROUTE-FND10}.
+- The gates of the slice, on its head: `pnpm type:check`, `pnpm lint:check`,
+  `pnpm knip:check` and `pnpm build`, green; the unit files that hold or read its
+  changes, `test/build.test.ts`, `src/entrypoints.test.ts` and
+  `src/main/diagnostic-route.test.ts`, 56 tests passed; Trunk on the changed files,
+  green. The unit run of the head, `pnpm test:unit`: {RUN-ROUTE-UNIT}. The checks of
+  its pull request: {RUN-ROUTE-CI}.
+
+Five changes made on purpose, each one commit on the head on a branch of its own,
+`mut-m6-route-1` to `mut-m6-route-5`, kept apart for the packaged runs, which the case
+must see failing. The log of a packaged run shows the first assertion that fails, so
+each change is named with the assertion the probe saw fail first, in the order of the
+case:
+
+- `mut-m6-route-1`, 198.18.0.0/15 counted as public: the refusal without the
+  allowance, which is a direct route, with no allowance asked.
+- `mut-m6-route-2`, the allowance of a private address ignored, the address refused
+  whatever was allowed: the direct route with the allowance, which is the refusal.
+- `mut-m6-route-3`, with the allowance, the store reached through the cluster, its
+  Service read in the namespace of the installation, in place of directly: the
+  direct route with the allowance, which is the refusal of the stand-in of the
+  cluster.
+- `mut-m6-route-4`, the refusal of a private address without what may be allowed:
+  the refusal, with no `needs`, whose words are then "The address of the store is
+  not one the extension connects to.".
+- `mut-m6-route-5`, the address probed with a connection, closed before it is made,
+  before the direct route is given: the connections recorded, one to
+  198.18.250.10:9000, the only assertion it fails.
+
+The packaged runs of the five branches: {RUN-ROUTE-MUTATIONS}. Five more changes, for
+the probe alone and with no branch, were each seen failing an assertion that no
+branch fails first: a listener opened on the loopback and closed before the direct
+route is given, the record of the listeners; the words of the allowance of a private
+address without its origin and what may be allowed, the words; the failure of an
+allowance without its `needs`, what the failure carries for the views; the words with
+the folder of the file in the bucket, the words without the path; and the host of the
+URL resolved on this machine before its addresses are read, what the route asked.
+
+Decided while implementing, on 2026-11-09:
+
+- The address is 198.18.250.10, of 198.18.0.0/15, outside the subnets the environment
+  of the tests takes from that range, 198.18.64.0/24 for its network of Docker and
+  198.19.0.0/18 and 198.19.64.0/24 for the pods and the services of its cluster, and
+  not the first address of a /24, where Docker puts the gateway of a network: nothing
+  listens there on a machine that runs the tests, with the environment up or not. The
+  ranges of RFC 1918 are where the networks of the runners and of the machines of the
+  contributors usually are.
+- The URL is of HTTPS, so that the one allowance the route asks is the one of a
+  private address: a URL of HTTP asks first the allowance of a connection that is not
+  encrypted.
+- The words are made in the process of the test, by the function of the words of
+  common, of what the refusal the host gave carries: the main bundle exports
+  `resolveRoute` alone for this case, as REQ-290 says, and the function of the words
+  is a pure function of common that the bundle carries as it is. The case reads the
+  sentence of the allowance, and not the one after it, which says what becomes of the
+  request.
+- The allowances of the cluster are a stand-in that answers as `isAllowed` of the
+  store does for a private address, by its kind and its origin; the cluster, the
+  resolver and kubectl are stand-ins that refuse what they are asked, since no
+  cluster takes part in FND-10.
+- Nothing connected is read on the classes of Node in the main process, since no
+  store can count what is never sent to it: an address nothing listens on counts
+  nothing, and a listener on it would be one beyond loopback. The spies are put back
+  however the case ends, and a socket or a server they saw is closed.
+- The fifth branch closes its socket before the connection is made, which Node makes
+  for an address at the next tick: the spy sees it asked for, and nothing leaves the
+  machine.
+- The ceilings are one case that lists every file above its ceiling with its size and
+  its ceiling, so that a change that passes two says both. Each is a quarter above the
+  size, rounded up to the byte, with the size and the date beside it, and a ceiling is
+  moved with its reason written in their place. The maps and what else the build
+  writes have none: the host loads the three files alone.

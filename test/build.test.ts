@@ -4,7 +4,7 @@
 // one of the main process in a process of its own, where nothing of the tests is, as the host loads it.
 
 import { spawnSync } from "node:child_process";
-import { type Dirent, readdirSync, readFileSync } from "node:fs";
+import { type Dirent, readdirSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import * as Mobx from "mobx";
@@ -129,6 +129,30 @@ describe("the files of the build", () => {
       .sort();
 
     expect(files).toEqual(["main.js", "main.js.map", "renderer.css", "renderer.js", "renderer.js.map"]);
+  });
+});
+
+// The ceiling of the bytes of each file the host loads, a quarter above its size when the ceiling was set (REQ-317 of
+// SPEC-0018). A change that passes a ceiling fails here until the ceiling is moved, with its reason written beside
+// it, in the pull request that needs it. No other file of the build has one: the host loads these three alone.
+const CEILINGS: Record<string, number> = {
+  // 265,486 bytes when it was set, on 2026-11-09.
+  "dist/main.js": 331_858,
+  // 932,411 bytes when it was set, on 2026-11-09.
+  "dist/renderer.js": 1_165_514,
+  // 61,044 bytes when it was set, on 2026-11-09.
+  "dist/renderer.css": 76_305,
+};
+
+describe("the size of what the host loads", () => {
+  it("holds the bundle of the main process, the bundle of the renderer and the stylesheet each under its ceiling of bytes", () => {
+    const sizes = Object.entries(CEILINGS).map(([file, ceiling]) => ({
+      file,
+      bytes: statSync(resolve(file)).size,
+      ceiling,
+    }));
+
+    expect(sizes.filter(({ bytes, ceiling }) => bytes > ceiling)).toEqual([]);
   });
 });
 
@@ -369,6 +393,9 @@ describe("the bundle of the main process", () => {
         "downloadArtifact",
         "expressionRefused",
         "registerHandlers",
+        // The route to the store of a signed URL, which FND-10 resolves in the main process of the host (REQ-290 of
+        // SPEC-0018).
+        "resolveRoute",
       ],
       dispatchers: [true, true],
     });
