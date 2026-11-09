@@ -12,7 +12,8 @@ T0.8, and amended on 2026-10-27 for the eight kinds of the extension and on
 2026-11-08 for the ten; SPEC-0016,
 drafted on 2026-10-23 and Approved on 2026-10-25, and SPEC-0017, the ground rules of
 the write actions and five of them, Approved on 2026-11-07, are Verified since
-2026-11-09, when the lead maintainer approved the review of the fifth milestone.
+2026-11-09, when the lead maintainer approved the review of the fifth milestone; SPEC-0018, the release readiness of the sixth
+milestone, is Approved since 2026-11-09.
 
 The [roadmap](../development/ROADMAP.md) owns scope and progress; the
 [process](../development/PROCESS.md) owns approvals and review gates.
@@ -41,8 +42,9 @@ slice per task even when a spec covers several closely related tasks.
 | [SPEC-0015: The Freelens v2 host](SPEC-0015-freelens-v2-host.md) | T0.7, T0.8 | REQ-196 through REQ-220 | Implemented | T0.7 and T0.8 on main: CI on main at `b5834444` green in every job, on Freelens built at the validation target, the unit run of 83 files and 2,591 tests, the packaged suites, the pre-review and FND-10, the five sessions of the integration test and the transport proof in its four modes (HOST-02); the headers and the evidence of the specs of M1 to M3 and SPEC-0013 on v2 with #89 (HOST-24); the review of the lead maintainer on 2026-10-22 (HOST-25); HOST-01 on the nightly of the validation target and once on Freelens 1.10.3; HOST-21 at the first prerelease |
 | [SPEC-0016: Create a Schedule](SPEC-0016-create-a-schedule.md) | T4.7 | REQ-221 through REQ-243 | Verified | T4.7 is three pull requests, each with its evidence in the spec: the first, the schedule of the form in the main process, its text, the creation and the reads after it, with the template shared with the backup of the form; the second, the workspace of Create schedule over the list of the Schedules, its form, its review and its result, with the zones the controller loads and the refused ones said with its words; the third, the proof in the packaged application, the suite of the actions on the CRDs of the release alone, the pre-review of the form and of the review in both themes at every size and with the keyboard alone, and `pnpm e2e`, whose proof creates through the compiled main process, against the controller of the release, a schedule that makes its backup, one the controller refuses with the words the form says, and one paused; Implemented since 2026-11-08, with the third; Verified since 2026-11-09, with the review of the milestone |
 | [SPEC-0017: The write actions](SPEC-0017-write-actions.md) | The ground rules of the write actions, T4.2, T4.3, T4.4, T4.5, T4.6 separately | REQ-244 through REQ-284 | Verified | The ground rules and five actions, each action a task in pull requests of its own, each with its evidence in the spec: T4.2, Back up now from a schedule, four (the main process, the workspace, the end kept for the cluster, the proof in the packaged application); T4.3, Create backup, three; T4.4, Restore from a backup or from a schedule, three; T4.5, Pause and Resume of a schedule, three; T4.6, Delete backup through a DeleteBackupRequest, three. Each action has its review of the exact request, the suite of the actions on the CRDs of the release alone, where no controller runs, the pre-review of its form and of its review in both themes at every size and with the keyboard alone, and its proof in `pnpm e2e` against the server of the release; Implemented since 2026-11-09, with the third pull request of T4.6; Verified the same day, with the review of the milestone |
+| [SPEC-0018: Release readiness](SPEC-0018-release-readiness.md) | T6.1, T6.2, T6.3, T6.4, T6.5 separately | REQ-285 through REQ-317 | Approved | None yet |
 
-Next unallocated requirement ID: REQ-285. IDs are unique across this project;
+Next unallocated requirement ID: REQ-318. IDs are unique across this project;
 references in test tables do not redefine a requirement. Do not allocate IDs to
 unwritten future specs or reuse an ID for a different requirement after approval.
 
