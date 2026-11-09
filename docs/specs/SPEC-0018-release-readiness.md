@@ -723,8 +723,8 @@ before the approval.
 
 ## Evidence And Deviations
 
-None yet: the draft has no implementation, tests or runtime evidence. The facts
-above were read at `b7dd522` of this repository, with the gaps of the inventory
+The draft had no implementation, tests or runtime evidence. The facts above
+were read at `b7dd522` of this repository, with the gaps of the inventory
 read again in the code; the installer of the host at `b9b53e16`; issues #144 and
 #145 read on 2026-11-09; the releases of Velero and of its AWS plugin, the
 environment `publishing` and the secrets this repository can read, by name, on
@@ -736,3 +736,77 @@ majors, fourteen minors and five nits; this text takes them in, with the release
 workflow in two jobs, the rules of the tag, the credential of the first version as
 a decision, the line between what gates 1.0.0-0 and what gates 1.0.0, and the
 narrowing of T6.1 as a decision.
+
+The evidence of the slices follows, each by its task and its date.
+
+T6.1, the case of FND-10 of REQ-289, on 2026-11-09: HTTPS in the main process of
+the host. The evidence, by check:
+
+- REG-05, in FND-10
+  ([`extensions.tests.ts`](../../integration/__tests__/extensions.tests.ts)), a case
+  of its own after the download over HTTP, which makes seven cases of FND-10: the
+  certificates made before the case, outside the host, by the helper of the unit
+  tests, [`tls-fixture.ts`](../../test/tls-fixture.ts), an authority made for the
+  test and the certificate it signed for `storage.example.invalid`; in the main
+  process of the host, a store on 127.0.0.1 alone with that certificate, and three
+  downloads of a log at its signed URL by the bundled transport of the module the
+  host loaded, which the case of the main entry point proves. The authority given
+  inline as a storage location gives it, its PEM in base64, read by the adapter of
+  the bundle as the download of a log reads it: the file decoded whole. The same
+  store with no authority given, and the authority given for
+  `wrong.example.invalid`, a name the certificate is not for: each `tls-invalid`,
+  with the verdict of a certificate refused, `untrusted`, and nothing of the URL,
+  its host, its path or its signature in its message, its text or any of its fields.
+  The store counts three connections, one for each download, and one request, the
+  one of the store that was verified, with the Host and the server name of the URL:
+  nothing was sent over a connection that was not verified, and nothing was asked
+  again without the verification. The store is closed at the end of the case. Each
+  step has its own time, the certificates 45 seconds, the downloads 60 and each of
+  them 12, within the 150 of the case. The packaged run, in the integration test of
+  `integration-tests.yaml` and in the part `static-views-1` of `views-tests.yaml`:
+  {RUN-M6-HTTPS-FND10}.
+- The function the case evaluates in the host, taken from the test file as written
+  and run in a process of Node 24.21.0 with a stand-in of the host, against the
+  main bundle of the head: every assertion of the case held. It is a check of the
+  slice outside Electron, and not the packaged run.
+
+Six changes made on purpose, each one commit on the head on a branch of its own,
+`mut-m6-https-1` to `mut-m6-https-6`, kept apart for the packaged runs, which the
+case must see failing: the authority of the location dropped from the connection;
+the name of the certificate not verified; the verification of the certificate
+turned off; a download whose certificate was refused asked again without the
+verification; the inline authority of a location taken without its base64
+decoded; and the signed URL kept on the failure of a certificate refused. The
+check outside Electron saw the case fail on each: the file not decoded and no
+request; the download for the other name decoded, with a second request; both
+refusals decoded, with three requests; both refusals decoded, with five
+connections and three requests; the authority not read, `tls-invalid`, and the
+file not decoded; and the URL in the words of both refusals. The packaged runs:
+{RUN-M6-HTTPS-MUTANTS}.
+
+Decided while implementing, on 2026-11-09:
+
+- The store is opened in the main process of the host, as the store of the case
+  over HTTP is, on 127.0.0.1 alone, and closed by the case; the certificates are
+  made in the process of the test, since the helper runs `openssl`, and given to
+  the host as text.
+- The authority is given as a storage location gives it inline,
+  `spec.objectStorage.caCert`, its PEM in base64, and read by `certificate` of
+  `DiagnosticKubernetes`, which the main bundle exports, as the download of a log
+  reads it before it gives it to the transport: no export is added to the main
+  bundle, and the build test is unchanged.
+- A certificate for another name is the certificate of the same store, asked for
+  by a URL whose host is a name the certificate is not for, with the authority
+  given: one store and one authority for the three downloads, as the unit cases of
+  the transport do it.
+- The case reads the verdict beside the code: both refusals are a certificate
+  refused, `untrusted`, which chooses the words of the views.
+- No connection without verification is read as what the store can count: one
+  TCP connection for each download, so nothing was asked again, and one request,
+  so nothing was sent over a connection that was not verified. Whether the store
+  ends the handshake of a refused download is not asserted: under Node, the store
+  ended none, and saw a failure of the client for each.
+- FND-10 now runs `openssl`, which must be OpenSSL 3 on the PATH of the machine
+  that runs it, as for the unit tests of the transport: on macOS `/usr/bin/openssl`
+  is LibreSSL, which does not know `-copy_extensions`, so REL-02 runs with an
+  OpenSSL 3 first on the PATH. TESTING.md says so.

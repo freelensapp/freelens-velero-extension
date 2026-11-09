@@ -112,10 +112,24 @@ that:
 - the bundled transport downloads and decodes an artifact inside the main process,
   keeps the signed query and the Host header, turns a 404 into a missing artifact
   without the URL in its message, and refuses a URL of another origin;
+- the bundled transport downloads and decodes an artifact over HTTPS inside the
+  main process ([REQ-289](../specs/SPEC-0018-release-readiness.md)), from a store
+  on the loopback of that process whose certificate an authority made for the test
+  signed, the authority given inline as a storage location gives it, its PEM in
+  base64, and read by the adapter of the bundle; the same store with no authority
+  given, and the authority given for a name the certificate of the store is not
+  for, each end as `tls-invalid`, a certificate refused, with nothing of the URL in
+  the words of the failure; the store counts one connection for each of the three
+  downloads and one request, the verified one: nothing is sent over a connection
+  that was not verified, and nothing is asked again without the verification;
 - the files of the log of the host hold the activation of the extension, and no
   line at the level of an error, nor does what either process wrote.
 
-No cluster takes part in FND-10. Beside it, the integration test of the template
+No cluster takes part in FND-10. Its certificates are made outside the host, by
+the helper of the unit tests, [`tls-fixture.ts`](../../test/tls-fixture.ts), with
+the `openssl` of the PATH, which must be OpenSSL 3, as for the unit tests of the
+transport: the LibreSSL of macOS at `/usr/bin/openssl` does not know
+`-copy_extensions`. Beside it, the integration test of the template
 has a session for each of the ten kinds the extension shows: the five of the first
 milestones, the three of SPEC-0014 under `velero.io/v1`, which the last pull request
 of T5.1 added, as the amendment of 2026-10-27 of SPEC-0015 says, and the two of the
