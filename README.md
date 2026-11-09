@@ -225,8 +225,9 @@ signs a URL for the request, which the main process uses and never shows. The
 file comes from the store at the address of that URL: through the cluster, by
 a port-forward to the Pod of the store opened through the API server, when the
 address names a Service of the cluster, and directly from this machine
-otherwise, where the store must answer at that address. The tab says which way
-the file came, when it was loaded and its size.
+otherwise, where the store must answer at that address, which is never one of
+this machine, of the link or of a metadata service. The tab says which way the
+file came, when it was loaded and its size.
 
 - **Log**: the lines with their numbers, a search that counts its matches, a
   filter by level with the count of each, the choice to wrap long lines, and
@@ -243,9 +244,11 @@ most after it was loaded. A file Velero did not write is said with what the
 phase of the operation means for it: an operation that failed its validation
 has none. A store at a private address, a store reached from this machine
 without encryption, and an origin the storage location does not give are
-reached only once you allow them, in the tab, for that cluster; the target bar
-lists what was allowed and takes it back. The extension deletes no request:
-Velero removes each about ten minutes after it signed its URL.
+reached only once you allow them, in the tab, for that cluster. What you allow
+is kept, after a restart of Freelens too, until you take it back in the target
+bar, which lists it. The extension deletes no request: Velero removes one about
+ten minutes after it signed its URL, and one that no server of Velero processes
+stays.
 
 ### The server and its plugins
 
@@ -255,7 +258,8 @@ created once you confirm it, with writes on. It shows the version, and how it
 compares with the release the extension was reviewed against; the plugins by
 kind; and the provider of each storage location, marked when no object store
 plugin of that provider is loaded. A server that does not process the request
-in ten seconds is said not to have answered, which is not said to be down.
+in ten seconds is said not to have answered, which is not said to be down. The
+request stays until the server processes it: the extension deletes none.
 
 ### The adherence of the schedules
 
@@ -304,8 +308,10 @@ the API is never taken for a success.
 - **Pause** and **Resume**, in the view of a schedule, with whether the run
   that is due at the resume is skipped.
 - **Delete backup**, in the view of a backup: one `DeleteBackupRequest`, with
-  what Velero deletes with the backup. A backup is deleted only this way, one
-  at a time, and never by a deletion of the `Backup` itself.
+  what Velero deletes with the backup, which cannot be undone: its snapshots,
+  the data it moved, its files in the store and its restores. A backup is
+  deleted only this way, one at a time, and never by a deletion of the `Backup`
+  itself.
 
 What the extension writes to a cluster is this, through the main process, and
 nothing else. A tab and the band of the server show the request they would
@@ -331,8 +337,8 @@ The rules the extension keeps beside them, binding for every contributor in
 - Signed URLs stay in the main process and are never logged, stored or shown.
   The content of a backup is never downloaded.
 - TLS is verified by default, with the certificate authority the storage
-  location declares. Skipping the verification is never an automatic
-  fallback.
+  location declares, and this version never skips the verification, on
+  request or as a fallback.
 - Missing or unreadable data is shown as unknown, never as healthy.
 
 ## Limits
@@ -372,7 +378,7 @@ The rules the extension keeps beside them, binding for every contributor in
   daylight saving time, and says that the next run is not known without one. A
   zone named in the expression, with `CRON_TZ=`, makes it known.
 - **One object store plugin tested.** The tabs were tested with the plugin of
-  [Compatibility](#compatibility). With another one, a tab may ask you once to
+  [Compatibility](#compatibility). With another one, a tab asks you once to
   allow downloads from the origin of the URLs it signs, for that storage
   location.
 - **Denied, or a credential not taken.** A list says that access is denied

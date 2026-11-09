@@ -1675,8 +1675,22 @@ The evidence, by check:
 - The gates of the slice, on its head: `pnpm type:check`, `pnpm lint:check`, with
   one information in a file the slice does not touch, `pnpm knip:check`, and Trunk
   on the changed files, green; `pnpm exec vitest run test/documents.test.ts`, 4
-  cases of 4. For the coordinator: the unit run of the head, `pnpm test:unit`,
-  {RUN-UNIT}; the checks of the pull request, {RUN-CHECKS}.
+  cases of 4. The unit run of the head, with main merged, `pnpm test:unit`, on
+  macOS with Node 24.21.0: 135 files and 3,820 tests passed, and the three
+  measures. The checks of its pull request, green before its merge: the unit
+  tests, the check, Trunk, the integration test and OSV-Scanner.
+- An independent review of the accuracy of Features, Write actions and Limits
+  against the code found eight statements to correct, none a blocker. Seven are
+  corrected in the text: the direct way to the store, which is never an address
+  of this machine, of the link or of a metadata service; what is allowed in a tab,
+  kept after a restart until it is taken back; a `DownloadRequest` no server
+  processes, which stays; the `ServerStatusRequest`, which stays until the server
+  processes it; what Velero deletes with a backup, its restores included, which
+  cannot be undone; the verification of TLS, never skipped; and the origin of a
+  storage location of another plugin, which a tab always asks to allow. The
+  eighth is of the code, not of the text: the band of the server says that the
+  identity needs the verb create for a credential the cluster did not take as
+  well, and this slice does not change it.
 
 Seen failing, on changes made on purpose and put back each time, DOC-04 in its new
 place, 11 in all, each failing the case alone but the heading renamed, which DOC-10
