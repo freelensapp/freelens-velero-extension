@@ -974,10 +974,8 @@ and cache the build by it and by nothing else; a unit test ties that line to the
 header of [SPEC-0015](docs/specs/SPEC-0015-freelens-v2-host.md), so the pin moves
 in both places when the target moves with a release of Freelens. A release is
 `npm-version.yaml`, which opens the pull request of the version, `tag.yaml`, which
-tags the version `X.Y.Z` or `X.Y.Z-N` on the merge commit of that pull request,
-never on main as it is when the job runs, at its merge or, once it is merged, on
-the comment `/tag` of an author with write access to the repository who is an
-owner, a member of the organization or a collaborator, and
+tags the version `X.Y.Z`, or a prerelease `X.Y.Z-` followed by letters, digits,
+dots and hyphens, once that pull request is merged, and
 `release.yaml`, which builds the tag and publishes a version with a hyphen on the
 npm tag `next`, released on GitHub as a prerelease, and any other on `latest`. The
 daily maintenance workflows open their pull requests on branches named
