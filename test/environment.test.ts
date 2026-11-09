@@ -10637,6 +10637,22 @@ function readdirNames(directory: string): string[] {
   return readdirSync(directory).sort();
 }
 
+// What a workflow of this repository runs, without what it says of itself in its comments: its text, then the text of
+// each action of this repository it uses, the steps it shares with other workflows, indented by two more spaces so
+// that the steps of the action stand where the steps of a job stand.
+function workflowAsRun(name: string): string {
+  const read = (path: string) =>
+    readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
+      .split("\n")
+      .filter((line) => !line.trimStart().startsWith("#"));
+  const workflow = read(`.github/workflows/${name}`);
+  const actions = [...workflow.join("\n").matchAll(/uses: \.\/(\.github\/actions\/[^\s]+)/g)].map((match) =>
+    read(`${match[1]}/action.yaml`).map((line) => (line === "" ? line : `  ${line}`)),
+  );
+
+  return [workflow, ...actions].map((lines) => lines.join("\n")).join("\n");
+}
+
 function fixture(shape: NetworkShape = "internal") {
   const published = shape === "loopback";
   const identity: DemoIdentity = {
@@ -11288,11 +11304,8 @@ describe("platform of the test environment", () => {
   });
 
   it("uploads from the run of the views their screenshots and reports, and nothing of the state", () => {
-    // What the workflow does, without what it says of itself in its comments.
-    const workflow = readFileSync(new URL("../.github/workflows/views-tests.yaml", import.meta.url), "utf8")
-      .split("\n")
-      .filter((line) => !line.trimStart().startsWith("#"))
-      .join("\n");
+    // What the workflow does, with the action that builds Freelens, without what they say of themselves in comments.
+    const workflow = workflowAsRun("views-tests.yaml");
     const uploads = [...workflow.matchAll(/uses: actions\/upload-artifact@[^\n]+\n\s+with:\n((?:\s{10,}[^\n]+\n)+)/g)];
     const saved = [...workflow.matchAll(/uses: actions\/cache\/save@[^\n]+\n\s+with:\n\s+path: ([^\n]+)/g)];
 
@@ -11600,11 +11613,8 @@ describe("platform of the test environment", () => {
   });
 
   it("uploads from the integration tests their screenshots, and nothing of the state", () => {
-    // What the workflow does, without what it says of itself in its comments.
-    const workflow = readFileSync(new URL("../.github/workflows/integration-tests.yaml", import.meta.url), "utf8")
-      .split("\n")
-      .filter((line) => !line.trimStart().startsWith("#"))
-      .join("\n");
+    // What the workflow does, with the action that builds Freelens, without what they say of themselves in comments.
+    const workflow = workflowAsRun("integration-tests.yaml");
     const uploads = [...workflow.matchAll(/uses: actions\/upload-artifact@[^\n]+\n\s+with:\n((?:\s{10,}[^\n]+\n)+)/g)];
     const saved = [...workflow.matchAll(/uses: actions\/cache\/save@[^\n]+\n\s+with:\n\s+path: ([^\n]+)/g)];
 
@@ -11647,21 +11657,64 @@ describe("platform of the test environment", () => {
     const target = /^- \*\*Freelens validation target:\*\* freelensapp\/freelens `([0-9a-f]{40})`/m.exec(spec)?.[1];
 
     expect(target).toMatch(/^[0-9a-f]{40}$/);
-    for (const name of ["views-tests.yaml", "integration-tests.yaml"]) {
-      const workflow = readFileSync(new URL(`../.github/workflows/${name}`, import.meta.url), "utf8");
+    const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+    const action = read(".github/actions/build-freelens/action.yaml");
 
-      // The commit is written in one line of each workflow, and every step that needs it names that line.
+    // The workflows that build Freelens build it through the action, and no other workflow uses it without this case.
+    expect(
+      readdirNames(fileURLToPath(new URL("../.github/workflows", import.meta.url))).filter((name) =>
+        read(`.github/workflows/${name}`).includes("uses: ./.github/actions/build-freelens"),
+      ),
+    ).toEqual(["integration-tests.yaml", "views-tests.yaml"]);
+    for (const name of ["views-tests.yaml", "integration-tests.yaml"]) {
+      const workflow = read(`.github/workflows/${name}`);
+
+      // The commit is written in one line of each workflow, and the one step that needs it, the action, names that
+      // line.
       expect([name, workflow.match(/\b[0-9a-f]{40}\b/g)]).toEqual([name, [target]]);
       expect([name, workflow.match(/^ {2}freelens_ref: ([0-9a-f]{40})$/m)?.[1]]).toEqual([name, target]);
-      expect([name, workflow]).toEqual([
-        name,
-        expect.stringMatching(/repository: freelensapp\/freelens\n\s+ref: \$\{\{ env\.freelens_ref \}\}\n/),
-      ]);
-      // The build is cached by that commit, and by nothing else: not a version and not a branch.
-      const keys = [...workflow.matchAll(/key: ubuntu-24\.04-arm-electron-dist-([^\n]*)/g)].map((match) => match[1]);
+      const given = [
+        ...workflow.matchAll(/uses: \.\/\.github\/actions\/build-freelens\n\s+with:\n\s+ref: ([^\n]*)\n/g),
+      ];
 
-      expect([name, keys]).toEqual([name, [expect.stringMatching(/^\$\{\{ env\.freelens_ref \}\}$/)]]);
+      expect([name, given.map((match) => match[1])]).toEqual([
+        name,
+        [expect.stringMatching(/^\$\{\{ env\.freelens_ref \}\}$/)],
+      ]);
+      expect([name, workflow.match(/uses: \.\/\.github\/actions\//g)]).toEqual([name, [expect.any(String)]]);
+      // Nothing of Freelens is checked out, built or cached by the workflow itself.
+      expect([
+        name,
+        workflow.match(/freelensapp\/freelens\b|electron-dist|electron-builder|freelens\/freelens\/dist/g),
+      ]).toEqual([name, null]);
     }
+    // The action names no commit: it checks out freelensapp/freelens at the one it is given, which it requires, and
+    // caches the build by that commit, and by nothing else: not a version, not a branch and not a partial match. The
+    // build it saves is saved under the key it restored.
+    expect(action.match(/\b[0-9a-f]{40}\b/g)).toBeNull();
+    expect(action).toMatch(/\ninputs:\n {2}ref:\n(?: {4}(?!default:)[^\n]*\n)* {4}required: true\n\n/);
+    expect(action).toMatch(
+      /\n {6}uses: actions\/checkout@[^\n]+\n {6}with:\n {8}repository: freelensapp\/freelens\n {8}ref: \$\{\{ inputs\.ref \}\}\n {8}path: freelens\n/,
+    );
+    expect(action.match(/repository: /g)).toHaveLength(1);
+    const keys = [...action.matchAll(/key: ubuntu-24\.04-arm-electron-dist-([^\n]*)/g)].map((match) => match[1]);
+
+    expect(keys).toEqual([expect.stringMatching(/^\$\{\{ inputs\.ref \}\}$/)]);
+    expect(action).toMatch(
+      /\n {6}id: electron-build-cache\n {6}uses: actions\/cache\/restore@[^\n]+\n {6}with:\n {8}path: freelens\/freelens\/dist\n {8}key: ubuntu-24\.04-arm-electron-dist-\$\{\{ inputs\.ref \}\}\n\n/,
+    );
+    expect(action).toMatch(
+      /\n {8}path: freelens\/freelens\/dist\n {8}key: \$\{\{ steps\.electron-build-cache\.outputs\.cache-primary-key \}\}\n/,
+    );
+    // The caches it keys and the build it makes are of the runner of the jobs that call it, which the cases of their
+    // uploads read.
+    const named = [...action.matchAll(/\n\s+(?:key|restore-keys): \|?\n?\s*([^\n]+)/g)]
+      .map((match) => match[1])
+      .filter((key) => !/^\$\{\{ steps\.[a-z-]+\.outputs\.cache-primary-key \}\}$/.test(key));
+
+    expect(named.length).toBeGreaterThan(0);
+    expect(named.filter((key) => !key.startsWith("ubuntu-24.04-arm-"))).toEqual([]);
+    expect(action).toContain("--publish never --linux dir --arm64");
   });
 
   it("keeps the internal network wherever the host reaches the address of the node", () => {
