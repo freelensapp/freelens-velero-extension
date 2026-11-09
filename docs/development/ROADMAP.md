@@ -254,20 +254,25 @@ deletion of backups, no way around the confirmation.
 
 [SPEC-0018](../specs/SPEC-0018-release-readiness.md), drafted on 2026-11-09 for
 the lead maintainer to approve, is the one spec of the milestone; its first slice
-comes once T4.6 is Done. The order of the slices it proposes, its D15: first what
-the page of the package and its proof need, T6.4 with
-[#144](https://github.com/freelensapp/freelens-velero-extension/issues/144), then
-the bill of materials and the provenance of the publication, and T6.3 with
-[#145](https://github.com/freelensapp/freelens-velero-extension/issues/145), then
-the other sections of the README; then T6.1, first FND-10 in the release workflow
-on the tarball it publishes, then the identities of the actions, the two cases of
-FND-10 over HTTPS and by the direct route, the second cluster and the actions with
-the real controller, with T6.2, the accessibility scan of the pre-review, beside
-it; then T6.5: the prerelease 1.0.0-0 when the lead maintainer asks for it, the
-proof of its assets and its check by version in Freelens 2.0.0; then the
-screenshots, the video and the notes of 1.0.0, the review of the milestone, and
-1.0.0 on `latest` on the lead maintainer's go. Each slice is its own pull
-request; the row of a task is In PR from its first and Done with its last.
+comes once M5 is closed with its review, as the process asks. The order of the
+slices it proposes, its D15, with the line between what gates the prerelease
+1.0.0-0 and what gates 1.0.0. For 1.0.0-0: T6.4, with
+[#144](https://github.com/freelensapp/freelens-velero-extension/issues/144), the
+release workflow in two jobs with FND-10 on the tarball it publishes, the bill of
+materials of the packed file, the provenance of the publication and the list of
+what the package contains, and the tag on the merge commit of the pull request of
+the version; then the sections of the README a prerelease is installed with; then
+1.0.0-0 when the lead maintainer asks for it, the proof of its assets and its
+check by version in Freelens 2.0.0. For 1.0.0: the identities of the actions, then
+[#145](https://github.com/freelensapp/freelens-velero-extension/issues/145), the
+second cluster, the case of FND-10 by the direct route, the actions with the real
+controller and the ceilings of the bundles, with T6.2, the accessibility scan of
+the pre-review, beside them; a prerelease through the trusted publisher of npm;
+then the screenshots, the video and the notes of 1.0.0, the review of the
+milestone, and 1.0.0 on `latest` on the lead maintainer's go. Its D16 proposes
+what T6.1 takes and what it defers: the row of T6.1 is narrowed with the approval.
+Each slice is its own pull request; the row of a task is In PR from its first and
+Done with its last.
 
 ## Deferred after v1.0.0
 

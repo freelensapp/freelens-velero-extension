@@ -45,9 +45,9 @@ slice per task even when a spec covers several closely related tasks.
 | [SPEC-0015: The Freelens v2 host](SPEC-0015-freelens-v2-host.md) | T0.7, T0.8 | REQ-196 through REQ-220 | Implemented | T0.7 and T0.8 on main: CI on main at `b5834444` green in every job, on Freelens built at the validation target, the unit run of 83 files and 2,591 tests, the packaged suites, the pre-review and FND-10, the five sessions of the integration test and the transport proof in its four modes (HOST-02); the headers and the evidence of the specs of M1 to M3 and SPEC-0013 on v2 with #89 (HOST-24); the review of the lead maintainer on 2026-10-22 (HOST-25); HOST-01 on the nightly of the validation target and once on Freelens 1.10.3; HOST-21 at the first prerelease |
 | [SPEC-0016: Create a Schedule](SPEC-0016-create-a-schedule.md) | T4.7 | REQ-221 through REQ-243 | Approved | None yet |
 | [SPEC-0017: The write actions](SPEC-0017-write-actions.md) | The ground rules of the write actions, T4.2, T4.3, T4.4, T4.5, T4.6 separately | REQ-244 through REQ-284 | Approved | None yet |
-| [SPEC-0018: Release readiness](SPEC-0018-release-readiness.md) | T6.1, T6.2, T6.3, T6.4, T6.5 separately | REQ-285 through REQ-313 | Draft | None yet |
+| [SPEC-0018: Release readiness](SPEC-0018-release-readiness.md) | T6.1, T6.2, T6.3, T6.4, T6.5 separately | REQ-285 through REQ-317 | Draft | None yet |
 
-Next unallocated requirement ID: REQ-314. IDs are unique across this project;
+Next unallocated requirement ID: REQ-318. IDs are unique across this project;
 references in test tables do not redefine a requirement. Do not allocate IDs to
 unwritten future specs or reuse an ID for a different requirement after approval.
 
