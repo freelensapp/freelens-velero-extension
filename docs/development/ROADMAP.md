@@ -274,7 +274,7 @@ their tests green in CI on main.
 | Installation, permissions, safety, compatibility and troubleshooting documentation, screenshots, demonstration video, release notes | T6.3 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | In PR |
 | Tarball, checksums and software bill of materials from the release workflow | T6.4 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | In PR |
 | With Freelens 2.0.0: the pin of the SDK a range of versions, the integration at the tag v2.0.0, the host drift watch ended | | [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#d10-the-version-and-the-release) | Done |
-| Release through the organization's flow, on the lead maintainer's go | T6.5 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Approved |
+| Release through the organization's flow, on the lead maintainer's go | T6.5 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | In PR |
 
 [SPEC-0018](../specs/SPEC-0018-release-readiness.md), approved by the lead
 maintainer on 2026-11-09 with D1 to D19 as proposed, is the one spec of the
