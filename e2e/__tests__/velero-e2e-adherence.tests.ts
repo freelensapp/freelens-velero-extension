@@ -1504,6 +1504,14 @@ describe("adherence of the schedules on its fixtures", () => {
       };
 
       await cluster.openPage(frame, SCHEDULES);
+      // The last submission gives its room under 1,200 pixels of the list (REQ-168), which the list of a window of
+      // 1440 by 900 is: the orders by every column are asked in a window wide enough to show it, on the screen of
+      // 1920 by 1200 of the runs, and the window of 1440 by 900 is given back before the Overview.
+      await velero.setWindowSize(started.app, 1680, 900);
+      await frame.waitForSelector("[data-testid=velero-schedules] .TableHead .TableCell.submitted", {
+        state: "visible",
+        timeout: 60_000,
+      });
       await cluster.configureInstallation(frame, cluster.E2E_ADHERENCE_SCALE_NAMESPACE);
       await frame.waitForSelector('[data-testid=velero-schedules] >> text="300 items"', { timeout: 60_000 });
       // Warm: the first interactions load what the ones after find loaded.
@@ -1569,6 +1577,10 @@ describe("adherence of the schedules on its fixtures", () => {
 
       console.log(`ADH-16 ${JSON.stringify(list)}`);
       await cluster.writeReport("adh-16-list-performance", list);
+      const wide = await frame.evaluate(() => window.innerWidth);
+
+      await velero.setWindowSize(started.app, 1440, 900);
+      await frame.waitForFunction((before) => window.innerWidth < before, wide, { timeout: 60_000 });
       // The Overview of the same installation, twenty changes of the window after three that warm it.
       await cluster.openPage(frame, OVERVIEW);
       await frame.waitForSelector("[data-testid=velero-overview-read-backups][data-read=read] >> text=300", {

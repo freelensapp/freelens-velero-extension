@@ -1293,12 +1293,13 @@ newest one and to the one that holds; the line
 of time of the history is the one of the tests of the view, unchanged.
 [The test of the stylesheet](../../src/renderer/components/views.module.test.ts)
 reads the rules of the room of a list and holds the columns each gives up at 1,200,
-1,000, 760 and 640 pixels, none of the name, paused, the next run, the adherence and
-the validation at any width, and a width of their own for paused, the next run, the
-adherence, the last submission and the age from 1,000 pixels. The reader is held to
-the header Date, read with the middle of the request, absent, not a date and on a
-refused answer, and to no path that is not of the kinds of Velero, a Deployment
-among them; the state, to the offset kept, carried and dropped with the installation
+1,000 and 640 pixels, the installation, the last submission and the newest backup at
+1,200 since 2026-10-26, and none at 760, none of the name, paused, the next run, the
+adherence and the validation at any width, and a width of their own for paused, the
+next run, the adherence, the last submission and the age from 1,000 pixels. The
+reader is held to the header Date, read with the middle of the request, absent, not
+a date and on a refused answer, and to no path that is not of the kinds of Velero,
+a Deployment among them; the state, to the offset kept, carried and dropped with the installation
 and the time of the API server taken from the newest answer that listed.
 
 The second pull request of the third slice of the adherence puts the signal in the

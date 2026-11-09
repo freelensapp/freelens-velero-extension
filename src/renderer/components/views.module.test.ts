@@ -55,24 +55,24 @@ describe("room of the list of the schedules", () => {
     return classes.filter((name) => !hidden.has(name));
   };
 
-  it("gives the installation at 1,200, the age at 1,000, the two times at 760 and the expression at 640", () => {
+  // Decided by the lead maintainer on 2026-10-26 (REQ-168 of SPEC-0013): the last submission and the newest backup
+  // give their room with the installation, so that what the list shows in a window of 1440 by 900 is read whole.
+  it("gives the installation, the last submission and the newest backup at 1,200, the age at 1,000 and the expression at 640", () => {
     const all = classes;
+    const gone = (width: number) => all.filter((name) => !shownAt(width).includes(name));
 
     expect(shownAt(1201)).toEqual(all);
-    expect(all.filter((name) => !shownAt(1200).includes(name))).toEqual(["installation"]);
-    expect(all.filter((name) => !shownAt(1000).includes(name))).toEqual(["installation", "age"]);
-    expect(all.filter((name) => !shownAt(760).includes(name))).toEqual(["installation", "submitted", "newest", "age"]);
-    expect(all.filter((name) => !shownAt(640).includes(name))).toEqual([
-      "installation",
-      "schedule",
-      "submitted",
-      "newest",
-      "age",
-    ]);
+    for (const width of [1200, 1199, 1001]) {
+      expect([width, gone(width)]).toEqual([width, ["installation", "submitted", "newest"]]);
+    }
+    for (const width of [1000, 999, 761, 760, 759, 641]) {
+      expect([width, gone(width)]).toEqual([width, ["installation", "submitted", "newest", "age"]]);
+    }
+    expect(gone(640)).toEqual(["installation", "schedule", "submitted", "newest", "age"]);
   });
 
   it("never hides the name, paused, the next run, the adherence or the validation", () => {
-    for (const width of [320, 520, 640, 760, 1000, 1200]) {
+    for (const width of [320, 520, 640, 760, 1000, 1199, 1200, 1440]) {
       expect(shownAt(width)).toEqual(expect.arrayContaining(["name", "paused", "next", "adherence", "phase"]));
     }
   });
