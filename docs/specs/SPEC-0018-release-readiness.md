@@ -2062,7 +2062,7 @@ in the README. The evidence, by check:
 - The unit run of the head, `pnpm test:unit`, on a second machine: 135 files and
   3,825 tests passed at the head before the review, and 3,823 at the head after it,
   and the three measures; with main merged, on macOS with Node 24.21.0, 135 files
-  and 3,824 tests passed, and the three measures.
+  and 3,828 tests passed, and the three measures.
 
 Seen failing, on changes made on purpose and put back each time, 47 in all, each
 failing its case: DOC-03 on a family left out of the reader of the README, a verb
