@@ -770,7 +770,11 @@ evidence, by check:
   certificates 45 seconds, removed when they end if they end later, the downloads 60
   and each of them 12, within the 150 of the case. The packaged run, in the
   integration test of `integration-tests.yaml` and in the part `static-views-1` of
-  `views-tests.yaml`: {RUN-M6-HTTPS-FND10}.
+  `views-tests.yaml`: on a second Linux machine, in Freelens 2.0.0 built at the
+  target, FND-10 passed on the head, 7 cases of 7, and `pnpm test:unit` passed,
+  134 files and 3,812 tests, and the three measures; on the hosted runner, the
+  checks of its pull request, the integration test and the two parts of the
+  views it reaches, green before its merge.
 - The function the case evaluates in the host, taken from the test file as written
   and run in a process of Node 24.21.0 with a stand-in of the host, against the main
   bundle of the head: every assertion of the case held, after each of the two
@@ -808,11 +812,13 @@ fail first, in the order of the case:
   when the socket says it was not authorized, which still ends as `tls-invalid`: the
   requests the store saw, three.
 
-The packaged runs: {RUN-M6-HTTPS-MUTANTS}. Two more changes, for the check outside
-Electron alone and with no branch, were seen failing the two assertions the review
-asked for: the error of the socket kept on the failure as a cause that is not
-enumerable, which names the other name, fails the words of the refusal of the other
-name; and no server name sent in the ClientHello fails the names the store recorded.
+The packaged runs, on the second Linux machine in Freelens 2.0.0: each of the eight
+branches failed the new case alone, first at the assertion its line names, and the
+six other cases of FND-10 passed. Two more changes, for the check outside Electron
+alone and with no branch, were seen failing the two assertions the review asked for:
+the error of the socket kept on the failure as a cause that is not enumerable, which
+names the other name, fails the words of the refusal of the other name; and no
+server name sent in the ClientHello fails the names the store recorded.
 
 An independent review of the first commit, on 2026-11-09, found no blocker, no
 major, one minor and eight nits. The minor: no change made on purpose was caught
