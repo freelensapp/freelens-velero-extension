@@ -289,6 +289,7 @@ The files the slices change beside the specs and the documents above:
 | File | Change | Requirements |
 | --- | --- | --- |
 | `.github/workflows/npm-version.yaml`, `tag.yaml` and `release.yaml` | The files of the template of the organization, byte for byte, as amended on 2026-11-09 | REQ-307, REQ-308, REQ-315 |
+| `.trunk/trunk.yaml` | The definition of actionlint of the template, the version 1.17.0 from the fork it downloads it from, which knows the runner of the three workflows, as amended on 2026-11-09 | REQ-307, REQ-308, REQ-315 |
 | `.github/workflows/integration-tests.yaml`, with a new reusable workflow or composite action under `.github/` | The steps that make the Freelens of the target, shared with the workflow of the views, with the line of its commit | REQ-286 |
 | `e2e/scripts/local-demo.mts` | The runner by version of D14 | REQ-311 |
 | `test/environment.test.ts`, or files of their own under `test/` | The case of the target extended to the action that builds Freelens (REG-02), beside the case of the tags (REL-05); the cases that read the README | REQ-286, REQ-296 to REQ-299, REQ-304, REQ-315 |
@@ -1405,17 +1406,23 @@ check:
   to the checks that stay, and what the amendments do not take is under Deferred
   after v1.0.0. SPEC-0015 records the form of the tag of the template in an
   amendment of its own.
-- The gates of the change, on its head: `pnpm exec vitest run test/environment.test.ts test/build.test.ts`,
-  the two files that read what it changes, 2 files and 285 tests passed, 273 of
-  them in the first, one case fewer than before; `pnpm type:check`,
-  `pnpm lint:check` and `pnpm knip:check`, green. Trunk on the ten changed files:
-  seven green, and on the three workflows one issue each of
-  `actionlint/runner-label`, since actionlint 1.7.12, the version
-  `.trunk/trunk.yaml` pins, does not know the label `ubuntu-26.04-arm` of the
-  runner of the template; the template runs actionlint 1.17.0 of a maintained fork,
-  whose Trunk Check on every file is green on `e599f13f`, and this change does not
-  take it: {RUN-TRUNK}. The unit run of the head, `pnpm test:unit`: {RUN-UNIT}.
-  The checks of its pull request: {RUN-PR-CHECKS}.
+- The gates of the change, on its head: `pnpm exec vitest run test/environment.test.ts test/build.test.ts test/documents.test.ts`,
+  the files that read what it changes, 3 files and 289 tests passed, 273 of them
+  in the first, one case fewer than before; `pnpm type:check`, `pnpm lint:check`
+  and `pnpm knip:check`, green. Trunk on the changed files, green, with the
+  definition of actionlint of the template taken in `.trunk/trunk.yaml`:
+  actionlint 1.7.12, the version it pinned, does not know the label
+  `ubuntu-26.04-arm` of the runner of the template and gave one issue of
+  `actionlint/runner-label` on each of the three workflows; the template runs
+  actionlint 1.17.0 from a maintained fork, whose Trunk Check on every file is
+  green on `e599f13f`, and with it actionlint finds no issue in the seventeen
+  workflows of this repository, while the label of the runner of `tag.yaml`,
+  changed on purpose to one that does not exist, gave one issue of
+  `actionlint/runner-label`. The unit run of the head, `pnpm test:unit`, on macOS
+  with Node 24.21.0: 135 files and 3,817 tests passed, and the three measures.
+  The checks of its pull request, green before its merge: the unit tests, the
+  check, Trunk, the integration test and OSV-Scanner. Its files reach no part of
+  the views and no end to end run.
 
 Decided while implementing, on 2026-11-09:
 
@@ -1423,6 +1430,11 @@ Decided while implementing, on 2026-11-09:
   stay, each with the words that it is not taken and a link to its amendment, so
   that their identifiers keep naming what they were; the text as approved is the
   one of this spec at `801dfc3`, which the amendments link.
+- The definition of actionlint of the template is taken in `.trunk/trunk.yaml`,
+  the version 1.17.0 from the fork the template downloads it from, since the three
+  workflows of the template run on a runner the version pinned before does not
+  know and Trunk Check is required on main; the rest of `.trunk/trunk.yaml` is
+  unchanged.
 - The case of the tags keeps the versions the template still refuses and loses the
   three only the form of T0.7 refused, rather than being removed whole, so that
   what the template holds stays checked.
