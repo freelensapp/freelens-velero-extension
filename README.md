@@ -89,9 +89,10 @@ extension is not said to work with it, nor to fail with it.
 
 The kinds of Velero the extension reads, each namespaced, with its page in the
 sidebar, a view of each object, and a section in the details Freelens shows of
-it. What the extension writes, once writes are on, is in [Safety](#safety): it
-reads back the requests it creates there, a `DownloadRequest`, a
-`ServerStatusRequest` and a `DeleteBackupRequest`, which have no page.
+it. What the extension writes, once writes are on, is in
+[Write actions](#write-actions): it reads back the requests it creates there, a
+`DownloadRequest`, a `ServerStatusRequest` and a `DeleteBackupRequest`, which
+have no page.
 
 ### velero.io/v1
 
@@ -220,9 +221,12 @@ restore is its workspace, in five tabs. Each tab after the summary shows a file
 Velero wrote of the operation into its storage, and only when you ask for it:
 opening the tab creates nothing, and shows the `DownloadRequest` its command
 would create, which is created once you confirm it, with writes on. Velero
-signs a URL for the request, which the main process uses and never shows; the
-tab then says when the file was loaded, its size, and whether it came through
-the cluster or directly from this machine.
+signs a URL for the request, which the main process uses and never shows. The
+file comes from the store at the address of that URL: through the cluster, by
+a port-forward to the Pod of the store opened through the API server, when the
+address names a Service of the cluster, and directly from this machine
+otherwise, where the store must answer at that address. The tab says which way
+the file came, when it was loaded and its size.
 
 - **Log**: the lines with their numbers, a search that counts its matches, a
   filter by level with the count of each, the choice to wrap long lines, and
@@ -267,11 +271,24 @@ one Velero refused, has no run, and says why. Where the extension cannot know,
 as when the expression names no time zone and no backup of the installation
 gives the one of the server, it says that it does not know, and why.
 
-### Actions
+### Write actions
+
+**Off until you turn them on.** Writes are off for every cluster when Freelens
+starts, and the views only read. **Turn writes on**, in the target bar, turns
+them on for the installation that is selected, the namespace of Velero in that
+cluster, after a dialog that names it, its cluster and the context of the
+cluster, and lists what the extension may then create. They go off with **Turn
+writes off**, when another installation is selected, and when the cluster is
+not connected any more. The main process refuses every write while writes are
+off, and every write for another cluster or another namespace.
 
 **One object at a time, after a review.** Each action opens its workspace over
 the view it is asked from: its form, then the review of the exact request,
-then what Velero made of it.
+then what Velero made of it. The review shows the text the main process sends,
+byte for byte, beside what it means; a restore and a deletion also ask for the
+name of the backup, typed. After the confirmation, the workspace reads what
+Velero made of the request and leads to the view of the object: the answer of
+the API is never taken for a success.
 
 - **Back up now**, in the view of a schedule: a backup made from the template
   of the schedule, as the command line of Velero makes it.
@@ -286,25 +303,37 @@ then what Velero made of it.
   the resources that exist.
 - **Pause** and **Resume**, in the view of a schedule, with whether the run
   that is due at the resume is skipped.
-- **Delete backup**, in the view of a backup: a `DeleteBackupRequest`, with
-  what Velero deletes with the backup.
+- **Delete backup**, in the view of a backup: one `DeleteBackupRequest`, with
+  what Velero deletes with the backup. A backup is deleted only this way, one
+  at a time, and never by a deletion of the `Backup` itself.
 
-The review shows the text the main process sends, byte for byte, beside what
-it means; a restore and a deletion also ask for the name of the backup, typed.
-Then the workspace reads what Velero made of the request and leads to the view
-of the object: the answer of the API is never taken for a success.
+What the extension writes to a cluster is this, through the main process, and
+nothing else. A tab and the band of the server show the request they would
+create, and create it once you confirm it, as an action does:
 
-### Writes, off by default
+<!-- markdownlint-disable MD013 -->
 
-Writes are off for every cluster when Freelens starts, and the views only
-read. **Turn writes on**, in the target bar, turns them on for the
-installation that is selected, after a dialog that names it, its cluster and
-the context of the cluster, and lists what the extension may then create. They
-go off with **Turn writes off**, when another installation is selected, and
-when the cluster is not connected any more. Each write is still confirmed
-where it is asked for, and the main process refuses any write while writes are
-off, or for another installation: [Safety](#safety) lists what the extension
-writes.
+| Write | Kind | Asked from |
+| --- | --- | --- |
+| Create | `DownloadRequest` | The Log, Results, Resources and Volumes tabs of a backup or of a restore |
+| Create | `ServerStatusRequest` | The version of the server and its plugins, in the Overview |
+| Create | `Backup` | Back up now, in the view of a schedule, and Create backup, from the list of the Backups |
+| Create | `Schedule` | Create schedule, from the list of the Schedules |
+| Create | `Restore` | Restore, in the view of a backup or of the schedule that made it |
+| Create | `DeleteBackupRequest` | Delete backup, in the view of a backup |
+| Patch of `spec.paused` and `spec.skipImmediately` | `Schedule` | Pause and Resume, in the view of a schedule |
+
+<!-- markdownlint-enable MD013 -->
+
+The rules the extension keeps beside them, binding for every contributor in
+[AGENTS.md](AGENTS.md):
+
+- Signed URLs stay in the main process and are never logged, stored or shown.
+  The content of a backup is never downloaded.
+- TLS is verified by default, with the certificate authority the storage
+  location declares. Skipping the verification is never an automatic
+  fallback.
+- Missing or unreadable data is shown as unknown, never as healthy.
 
 ## Limits
 
@@ -332,8 +361,10 @@ writes.
   at a time, and a third waits for its turn.
 - **TLS always verified.** A storage location that asks, with
   `insecureSkipTLSVerify`, that its certificate is not verified is verified
-  all the same: give it the certificate of its authority, as
-  [A certificate is refused](#a-certificate-is-refused) says.
+  all the same. Give the storage location the certificate of the authority
+  that signed the certificate of its store instead: in a Secret of its
+  namespace that `spec.objectStorage.caCertRef` names, or inline in
+  `spec.objectStorage.caCert`, the older form.
 - **The time zone of the server is not read.** A schedule whose expression
   names no time zone runs in the zone of the server of Velero, which the
   extension does not read: it derives an offset from the backup of the latest
@@ -344,194 +375,10 @@ writes.
   [Compatibility](#compatibility). With another one, a tab may ask you once to
   allow downloads from the origin of the URLs it signs, for that storage
   location.
-
-## Safety
-
-The extension reads first. What it writes to a cluster is this, through the
-main process, and nothing else:
-
-<!-- markdownlint-disable MD013 -->
-
-| Write | Kind | Asked from |
-| --- | --- | --- |
-| Create | `DownloadRequest` | The Log, Results, Resources and Volumes tabs of a backup or of a restore |
-| Create | `ServerStatusRequest` | The version of the server and its plugins, in the Overview |
-| Create | `Backup` | Back up now, in the view of a schedule, and Create backup, from the list of the Backups |
-| Create | `Schedule` | Create schedule, from the list of the Schedules |
-| Create | `Restore` | Restore, in the view of a backup or of the schedule that made it |
-| Create | `DeleteBackupRequest` | Delete backup, in the view of a backup |
-| Patch of `spec.paused` and `spec.skipImmediately` | `Schedule` | Pause and Resume, in the view of a schedule |
-
-<!-- markdownlint-enable MD013 -->
-
-The rules every write follows, and the ones the extension keeps, binding for
-every contributor in [AGENTS.md](AGENTS.md):
-
-- Each write is refused unless writes are on for that cluster and that Velero
-  namespace, which they are not until they are turned on in the target bar, and
-  its review is confirmed: the review shows the exact request before it is
-  sent. The main process enforces both.
-- A restore and a deletion ask for the name of the backup, typed.
-- A backup is deleted only through a `DeleteBackupRequest`, one at a time, and
-  never by a deletion of the `Backup` itself.
-- Signed URLs stay in the main process and are never logged, stored or shown.
-  The content of a backup is never downloaded.
-- TLS is verified by default, with the certificate authority the storage
-  location declares. Skipping the verification is never an automatic
-  fallback.
-- Missing or unreadable data is shown as unknown, never as healthy.
-
-## Troubleshooting
-
-The words quoted below are the ones the extension shows, where `<namespace>`
-stands for the namespace of the installation and `<request>` for the name of a
-`DownloadRequest`. A tab that ended without its file can ask for it again,
-which creates another `DownloadRequest`.
-
-### A list or an action is refused
-
-The API server refused to the identity of the connection Freelens has to the
-cluster what the extension asked. A list the identity may not read says so in
-the place of its rows, the list of the Backups for instance:
-
-> The backups of `<namespace>` are not shown
->
-> Access to the backups of this namespace is denied. How many there are is not
-> known.
-
-The other lists, and what was read before, are shown all the same. An action,
-a tab or the band of the server ends with what the identity may not do, and
-writes nothing:
-
-<!-- markdownlint-disable MD013 -->
-
-| Asked from | The words |
-| --- | --- |
-| Back up now, Create backup | The identity of this cluster may not create a backup in `<namespace>`: nothing was created. |
-| Restore | The identity of this cluster may not create restores in `<namespace>`: nothing was created. |
-| Create schedule | The identity of this cluster may not create schedules in `<namespace>`: nothing was created. |
-| Pause, Resume | The identity of this cluster may not patch schedules in `<namespace>`: nothing was patched. The velero command line replaces the whole schedule, with the verb update; this extension patches it, and needs the verb patch. |
-| Delete backup | The identity of this cluster may not create a DeleteBackupRequest in `<namespace>`: nothing was created. |
-| The Log, Results, Resources and Volumes tabs | The cluster refused the creation of a DownloadRequest: the identity needs the verb create on downloadrequests of the namespace. |
-| Server, in the Overview | The cluster refused the creation of a ServerStatusRequest: the identity needs the verb create on serverstatusrequests of the namespace. |
-
-<!-- markdownlint-enable MD013 -->
-
-What to do: give the identity what it lacks, the verb the words name for an
-action, in the namespace of the installation. [Permissions](#permissions)
-lists the verbs of each feature, with a role that reads the views and a role
-for the actions.
-
-A list is said denied as well when the cluster did not take the credential of
-the context, as a token that expired. An action tells it apart:
-
-> The cluster did not take the credential of the context: it may have expired.
-> Sign in again, then ask again. Nothing was created.
-
-What to do then: renew the credential of the context, as its kubeconfig and
-its provider say, and ask again.
-
-### A port-forward is refused
-
-When the URL Velero signs for a file names a Service of the cluster, as for a
-store that runs in the cluster, the extension reaches the store through the
-cluster: it reads the Service, its endpoint slices and the Pod behind it, then
-opens a port-forward to that Pod through the API server, with the kubectl of
-Freelens and the identity of the connection. When the identity may not, the
-tab says:
-
-> The cluster refused the port-forward to the Pod of the store: the route
-> through the cluster needs the verb create on pods/portforward. The
-> DownloadRequest `<request>` stays in `<namespace>` until Velero removes it.
-
-A read before it that is refused is said the same way, with the verb it
-needs: `get` on `services`, `list` on `endpointslices` or `get` on `pods`.
-
-What to do: grant `create` on `pods/portforward` in the namespace of the Pod
-of the store, as [Permissions](#permissions) says, then load the tab again.
-kubectl 1.31 and later asks for `get` on `pods/portforward` first, and falls
-back to `create` when it is refused: grant `get` as well to keep that refusal
-out of the audit log of the cluster.
-
-### A certificate is refused
-
-The extension verifies TLS with the certificates Freelens trusts and the
-certificate authority the storage location names, and never connects without
-the verification. When the certificate of the store is not trusted, the tab
-says:
-
-> The certificate of the store is not trusted. The storage location can name
-> the certificate of its authority; the verification is never turned off. The
-> DownloadRequest `<request>` stays in `<namespace>` until Velero removes it.
-
-When the storage location asks, with `insecureSkipTLSVerify` in its
-configuration, that its certificate is not verified, the tab says instead:
-
-> The certificate of the store is not trusted. The storage location asks, with
-> insecureSkipTLSVerify, that the certificate is not verified: the extension
-> verifies it all the same. The storage location can name the certificate of
-> its authority. The DownloadRequest `<request>` stays in `<namespace>` until
-> Velero removes it.
-
-A handshake that failed with no certificate refused is told apart:
-
-> The handshake of TLS with the store failed, and no certificate was refused:
-> the store may not speak TLS at the port of its URL, or a version of it the
-> extension does not, or the connection was closed while it was made. The
-> DownloadRequest `<request>` stays in `<namespace>` until Velero removes it.
-
-What to do: give the storage location the certificate of the authority that
-signed the certificate of the store, in a Secret of its namespace that
-`spec.objectStorage.caCertRef` names, which the identity needs `get` on, or in
-the older inline `spec.objectStorage.caCert`; then load the tab again. For a
-handshake that failed, check the scheme and the port of the URL of the store.
-TLS is verified by default, as [Safety](#safety) says.
-
-### The cluster is not connected
-
-The extension reads the state of the cluster in Freelens before every
-request, asks nothing of a cluster that is not connected, and never connects
-one. A tab, the band of the server, an action or **Turn writes on** then ends
-with these words, which a tab and the band may follow with what became of
-their request:
-
-> The cluster is not connected in Freelens: the extension asks nothing of a
-> cluster that is not connected, and does not connect it.
-
-Writes go off for that cluster. What to do: connect the cluster in Freelens,
-turn writes on again if you need them, and ask again.
-
-### The store does not answer
-
-A file comes from the store of the storage location, at the address of the URL
-Velero signs for it: directly from this machine, or through the cluster when
-that address names a Service of the cluster. When the store does not answer
-there, the tab says one of these:
-
-> The store could not be reached. The DownloadRequest `<request>` stays in
-> `<namespace>` until Velero removes it.
->
-> The store did not answer in time. The DownloadRequest `<request>` stays in
-> `<namespace>` until Velero removes it.
-
-For a store that runs in the cluster with no Pod ready:
-
-> The Service of the store has no Pod that is ready, among the ones it
-> selects, to send the request to. The DownloadRequest `<request>` stays in
-> `<namespace>` until Velero removes it.
-
-Before the store is asked, Velero signs the URL, and a server that does not is
-said apart:
-
-> Velero did not sign a URL in thirty seconds: its server may be stopped or
-> busy, or it could not open the storage location. The DownloadRequest
-> `<request>` stays in `<namespace>` until Velero removes it.
-
-What to do: open the view of the storage location, which says what Velero
-reports of it and where it points; check that the store answers at that
-address from this machine, or that its Pods are ready in the cluster, and that
-the server of Velero runs, which the band Server of the Overview asks. Then
-load the tab again.
+- **Denied, or a credential not taken.** A list says that access is denied
+  both when the identity may not read it and when the cluster did not take the
+  credential of the context, as a token that expired. An action or a tab tells
+  the two apart, and says to sign in again for the second.
 
 ## Development
 
