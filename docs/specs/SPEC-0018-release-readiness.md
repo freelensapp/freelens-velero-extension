@@ -1351,6 +1351,221 @@ REQ-306 and the others of the release flow, among them REQ-295 of the tag `next`
 the end of Status of REQ-296, D15 and REQ-309 to REQ-311 and REQ-313, are made by
 another pull request.
 
+T6.1, the case of FND-10 of REQ-290 and the ceilings of REQ-317, on 2026-11-09: the
+direct route in the main process of the host, and a ceiling on the bytes of each file
+the host loads, in one pull request of two commits, the second after the independent
+review of the first. The evidence, by check:
+
+- REG-06, in FND-10
+  ([`extensions.tests.ts`](../../integration/__tests__/extensions.tests.ts)), a case
+  of its own after the download over HTTPS, which makes eight cases of FND-10. In the
+  main process of the host, `resolveRoute` of the module the host loaded, which the
+  main bundle now exports beside the transport, resolves the route of the log of a
+  backup at its signed URL,
+  `https://198.18.250.10:9000/fnd-10/backups/fnd-10/fnd-10-logs.gz?X-Amz-Signature=synthetic`,
+  for a storage location of the plugin of AWS whose `s3Url` is that origin, with the
+  bucket in the path: the origin is one the location gives, and the path is the key
+  of the file asked. 198.18.250.10 is an address literal of 198.18.0.0/15, a range
+  `classifyAddress` of `src/common/artifact-address.ts` counts as private; the case
+  and a unit case of the environment read it from
+  [`velero-route.ts`](../../integration/helpers/velero-route.ts).
+  - Without the allowance of private addresses for the cluster, the route is
+    refused: a `DiagnosticError` of the bundle, `destination-denied` at the step
+    `route` by the rule `allowance`, with what the operator may allow,
+    `{ what: "private", origin: "https://198.18.250.10:9000" }`. The words of that
+    very error are made in the host by `downloadFailureOf`, with which the main
+    process says to the views how a download failed, and which the main bundle now
+    exports as well: a failure `destination-denied` at the step `route`, not to be
+    asked again as it was, whose text says that the store of that origin is at a
+    private address and that a connection to it is made only after it is allowed,
+    which carries the same `needs` for the views to offer it, and which holds
+    nothing of the path or the signature of the URL.
+  - With the allowance, given for that origin as the operator gives it, the route is
+    direct to that address: its origin, the path of the file, 198.18.250.10, the
+    port 9000, `mode: "direct"`, `allowHttp: false` and `allowPrivate: true`.
+  - Each time, the route asked the allowance of the cluster for that origin and the
+    location `velero/default`, and nothing else: the stand-ins of the cluster, of the
+    resolver of this machine and of kubectl, which record what they are asked and
+    refuse it, were asked nothing. What is thrown that is not a `DiagnosticError` is
+    kept with its message, which says what was asked.
+  - Each resolution ends within eight seconds of its own, the two well within the 30
+    of the evaluation, so that the case puts the classes of Node back before it gives
+    up on the evaluation.
+  - No listener and no connection. The case opens no listener. While the two routes
+    are resolved, and for a turn of the loop and a tenth of a second after them, it
+    records in the main process of the host, on `net.Socket.prototype.connect`, which
+    the clients of Node go through, `net`, `tls`, `http`, `https`, `http2` and
+    `fetch` among them, and on `net.Server.prototype.listen`, every connection and
+    every listener whose stack, read with all its frames, names the build the host
+    made of the extension, by its folder as a path or as a URL, and every connection
+    to 198.18.250.10: none. What else the host opens in that time is neither recorded
+    nor closed, since the case closes only what it recorded. Why the resolution
+    cannot connect, besides: `resolveRoute` reaches outside the process only through
+    the client of the cluster, the resolver and kubectl it is given, and through
+    `lookup` of `node:dns/promises` when it is given no resolver and the host is a
+    name; the rest of it, beside the allowances it is given, is the pure functions of
+    common. The case gives all of them, and the host of its URL is an address.
+- REG-06, in the build test ([`build.test.ts`](../../test/build.test.ts)): the exports
+  of the main bundle loaded under Node list `resolveRoute` and `downloadFailureOf`,
+  and FND-10 lists both among the exports of the module the host loaded.
+- The address, in the environment test
+  ([`environment.test.ts`](../../test/environment.test.ts)): 198.18.250.10 is an
+  address `classifyAddress` counts as private, outside every subnet of `SUBNETS` of
+  `e2e/scripts/local-kind.mts`, 198.18.64.0/24 for the network of Docker and
+  198.19.0.0/18 and 198.19.64.0/24 for the pods and the services of the cluster,
+  from which the second cluster of REQ-287 will take more.
+- REG-09, in the build test: each file the host loads under a ceiling a quarter above
+  its size at the head of the slice, rounded up to the byte, with that size and its
+  date beside it. A file that passes its ceiling fails the case with its size and its
+  ceiling, and with words that say to move the ceiling, with its reason, in the pull
+  request that needs it.
+
+  | File | Size, bytes | Ceiling, bytes |
+  | --- | --- | --- |
+  | `dist/main.js` | 265,505 | 331,882 |
+  | `dist/renderer.js` | 932,411 | 1,165,514 |
+  | `dist/renderer.css` | 61,044 | 76,305 |
+
+  The sizes are of `pnpm build` with Node 24.21.0 and the lockfile; the bundles name
+  no path of the machine that built them, and the build of the first commit in CI,
+  on Linux ARM64, printed sizes that agree with those of the same commit here to the
+  ten bytes Vite prints. The main bundle grew by 33 bytes with the two exports, from
+  265,472 on main. A rebase onto a main whose bundles changed measures them again at
+  the head that merges, the commit REQ-317 names.
+- Seen failing, each change made on purpose and put back:
+  - the build test: `resolveRoute`, then `downloadFailureOf`, taken out of the
+    exports of the main entry and the bundle built again, each at the list of the
+    exports of the case that loads the main bundle, the one case of the 13 that
+    failed; and each ceiling set one byte below the size of its file, at the case of
+    the ceilings, which named that file with its size and its ceiling and said to
+    move the ceiling, the one case that failed. Every ceiling set to the size of its
+    file passed;
+  - the environment test: the address of the route moved into each of the three
+    subnets, which the case named, and to a public address, 203.0.113.7, at the
+    class of the address.
+- The function the case evaluates in the host, run outside Electron: a probe, never
+  committed, made of the module part of the test file and of the case as written,
+  under a stand-in of the application whose `evaluate` calls the text of the function
+  with its argument, as Playwright does, in a process of Node 24.21.0 with a
+  stand-in of the API of the host, against the main bundle of the head. Vitest ran
+  the assertions of the case as written: every one held. With the stand-in of the
+  host connecting to a server of its own on the loopback while the case ran, the case
+  passed, and that socket was neither recorded nor closed; with every connection
+  recorded instead, the same run failed the record of the connections and closed
+  that socket. It is a check of the slice outside Electron, and not the packaged run.
+- The packaged run of FND-10: on the first commit, the integration test of its pull
+  request,
+  [run 42666045242](https://github.com/freelensapp/freelens-velero-extension/actions/runs/42666045242),
+  green, FND-10 eight cases of eight in Freelens 2.0.0 on Linux ARM64; on the head:
+  on a second Linux machine, in Freelens 2.0.0 built at the target with no
+  cluster, eight cases of eight; on the hosted runner, the checks of its pull
+  request, green before its merge.
+- The gates of the slice, on its head: `pnpm type:check`, `pnpm lint:check`,
+  `pnpm knip:check` and `pnpm build`, green; the unit files that hold or read its
+  changes, `test/build.test.ts`, `test/environment.test.ts`,
+  `src/entrypoints.test.ts`, `src/main/diagnostic-route.test.ts` and
+  `src/main/ipc-download.test.ts`, 358 tests passed; Trunk on the changed files,
+  green. The unit run of the head, `pnpm test:unit`, on the second machine: 134 files
+  and 3,816 tests passed, and the three measures. The checks of its pull
+  request, every part of the views among them, green before its merge.
+
+Seven changes made on purpose, each one commit on the head on a branch of its own,
+`mut-m6-route-1` to `mut-m6-route-7`, kept apart for the packaged runs, which the case
+must see failing. The log of a packaged run shows the first assertion that fails, so
+each change is named with the assertion the probe saw fail first, in the order of the
+case:
+
+- `mut-m6-route-1`, 198.18.0.0/15 counted as public: the refusal without the
+  allowance, which is a direct route, with no allowance asked.
+- `mut-m6-route-2`, the allowance of a private address ignored, the address refused
+  whatever was allowed: the direct route with the allowance, which is the refusal.
+- `mut-m6-route-3`, with the allowance, the store reached through the cluster, its
+  Service read in the namespace of the installation, in place of directly: the
+  direct route with the allowance, which is the refusal of the stand-in of the
+  cluster, with its message.
+- `mut-m6-route-4`, the refusal of a private address without what may be allowed:
+  the refusal, with no `needs`, whose words are then "The address of the store is
+  not one the extension connects to.".
+- `mut-m6-route-5`, the address probed with a connection, closed before it is made,
+  before the direct route is given: the connections recorded, one to
+  198.18.250.10:9000, the only assertion it fails.
+- `mut-m6-route-6`, the same probe asked at the next turn of the loop, once the
+  direct route was given: the connections recorded, the same one, the only assertion
+  it fails.
+- `mut-m6-route-7`, a listener opened on the loopback and closed before the direct
+  route is given: the listeners recorded, one on 127.0.0.1, the only assertion it
+  fails, so that a server opened in the main process of the host is seen going
+  through `net.Server.prototype.listen`.
+
+The packaged runs of the seven branches, on the second machine in Freelens 2.0.0
+with no cluster: each failed the new case alone, first at the assertion its line
+names, and the seven other cases of FND-10 passed. On the first commit,
+as its pull request records, in the packaged application on a second Linux machine
+with no cluster, FND-10 passed on the head, eight cases of eight, and each of the
+first five branches failed the new case alone, first at the assertion its line names,
+the seven other cases passing. More changes, for the probe alone and with no branch,
+were each seen failing first at the assertion named: the words of the allowance of a
+private address without its origin and what may be allowed, the text of the words;
+the failure of an allowance without its `needs`, and the words of `downloadFailureOf`
+made without the `needs` of the error or at another step, what the failure carries;
+the words with the folder of the file in the bucket, the words without the path; the
+host of the URL resolved on this machine before its addresses are read, what the
+route asked; the probe of the address asked at the next tick or 50 milliseconds after
+the direct route, and a connection to the loopback asked at the next turn, found by
+its stack alone, the connections recorded; and a resolution that never ends, the
+direct route, which is the end of its eight seconds, the case ending in nine. A probe
+asked half a second after the direct route was not seen: it is outside the window of
+the case.
+
+An independent review of the first commit, on 2026-11-09, found no blocker, no major,
+three minors and five nits; the second commit takes them in. The minors: a connection
+the route asked after it answered escaped the spies, which were put back in the
+microtask after the second resolution; the window assumed that no code of the host
+runs between the spies and their removal, which an evaluation that the inspector
+starts inside a running task of the host breaks, so that a connection of the host
+would fail the case and be closed by it, and a resolution that does not end would
+leave the spies in the host after the case gave up; and the words were made in the
+process of the test by a copy of `downloadFailureOf`, and not by the code that ships.
+The nits: what is thrown that is not a `DiagnosticError` kept with its message, and
+the label of a connection to a pipe; the sentence on the address, which now says what
+holds, and the unit case of the environment; ARCHITECTURE.md brought along; the words
+of the ceilings; and a branch that opens a listener.
+
+Decided while implementing, on 2026-11-09:
+
+- The address is 198.18.250.10, of 198.18.0.0/15: nothing of the tests listens there,
+  and the runners do not route it. The environment of the tests takes its subnets from
+  that range, and the unit case keeps the address outside every one of them.
+- The URL is of HTTPS, so that the one allowance the route asks is the one of a
+  private address: a URL of HTTP asks first the allowance of a connection that is not
+  encrypted.
+- The main bundle exports `downloadFailureOf` beside `resolveRoute`, as it exports
+  `deleteRequestOf`, `deleteRequestText` and `expressionRefused` for the proofs: a
+  function of an error and of the request it was for, which reaches nothing. The case
+  gives it the very error `resolveRoute` threw, so that the class of the error is the
+  one of the bundle, and the request of the views as the IPC gives it.
+- The allowances of the cluster are a stand-in that answers as `isAllowed` of the
+  store does for a private address, by its kind and its origin; the cluster, the
+  resolver and kubectl are stand-ins that refuse what they are asked, since no
+  cluster takes part in FND-10.
+- Nothing connected is read on the classes of Node in the main process, since no
+  store can count what is never sent to it: an address nothing listens on counts
+  nothing, and a listener on it would be one beyond loopback. What is recorded is
+  what the stack names the build of the extension in, with all its frames, and every
+  connection to the address of the store, for a client whose connection the stack of
+  the route does not reach. The folder of the build names the bundle, and the sources
+  its map gives as well, so that a stack the host maps to the sources names it too.
+  The spies stay a turn of the loop and a tenth of a second after the second
+  resolution, and are put back however the case ends.
+- The fifth, sixth and seventh branches close their socket or their server at once:
+  Node makes the connection to an address at the next tick, and the server listens on
+  the loopback, so nothing leaves the machine.
+- The ceilings are one case that lists every file above its ceiling with its size and
+  its ceiling, so that a change that passes two says both. Each is a quarter above the
+  size, rounded up to the byte, with the size and the date beside it, and a ceiling is
+  moved with its reason written in their place. The maps and what else the build
+  writes have none: the host loads the three files alone.
+
 T6.3, the second of its pull requests, on 2026-11-09: the rest of the README of
 1.0.0 in the layout of the other extensions of the organization, Features and
 Limits after Getting started, with what the section Safety said as the subsection
