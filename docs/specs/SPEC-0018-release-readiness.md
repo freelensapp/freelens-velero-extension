@@ -1848,26 +1848,29 @@ in the README. The evidence, by check:
   and the kubeconfig of the environment for the kubectl of the proofs, which reads
   the metrics, the ConfigMaps and the namespace of a restore, makes the backups of
   the proof of a deletion, changes a schedule as another hand, and deletes. The
-  proof adapter of a proof reads what the session created with the kubeconfig of
-  the operator, which the role allows; its teardown, a backup removed through a
+  proof adapter of a proof reads what the session created with the kubeconfig of the
+  operator, which the role allows; its teardown, a backup removed through a
   `DeleteBackupRequest` as the extension writes it and read until it is gone, runs
   with the kubeconfig of the environment, so that it does not depend on the role the
-  run proves. The proof
-  over HTTP asks the version of the server as a frame does, through the procedures
-  and the gate, beside the request it makes with a generated name. The modes over
-  TLS and the direct mode keep the kubeconfig of the environment. `pnpm e2e` on the
-  environment of the demo: {RUN-E2E}. The runner of the suites applies the reader in
-  the installation of the views and gives its kubeconfig in
-  `E2E_README_READER_KUBECONFIG`; the restricted suite starts an application of its
-  own with it, in the part `static-views-1`: every namespace that holds a storage
-  location suggested, the ten lists of the installation with their rows and nothing
-  denied, the six cells of the Overview read; Back up now ends as forbidden at the
-  read of the schedule, before any review, with the words of
+  run proves. The proof over HTTP asks the version of the server as a frame does,
+  through the procedures and the gate, beside the request it makes with a generated
+  name. The modes over TLS and the direct mode keep the kubeconfig of the
+  environment. `pnpm e2e` on the environment of the demo: green on a second Linux
+  machine, with the line of the operator, at the head before the review in 739 s and
+  at the head after it in 639 s, and in the end to end run of its pull request. The
+  runner of the suites applies the reader in the installation of the views and gives
+  its kubeconfig in `E2E_README_READER_KUBECONFIG`; the restricted suite starts an
+  application of its own with it, in the part `static-views-1`: every namespace that
+  holds a storage location suggested, the ten lists of the installation with their
+  rows and nothing denied, the six cells of the Overview read; Back up now ends as
+  forbidden at the read of the schedule, before any review, with the words of
   `BACKUP_NOW_WORDS.forbiddenRead`, and Pause at the patch, with the words of
   `SCHEDULE_PATCH_WORDS.forbidden`; writes stay on, no backup of the name is there,
   the schedule keeps its UID and its version, and the API server counts no write of
-  any kind of Velero: {RUN-STATIC-VIEWS-1}. Each identity is removed with its run,
-  its ClusterRole and its binding by the paths of the whole cluster
+  any kind of Velero: on a second Linux machine at the head before the review, the
+  two restricted suites passed 23 cases of 23, and on the head the part
+  `static-views-1` of the views of its pull request passed. Each identity is removed
+  with its run, its ClusterRole and its binding by the paths of the whole cluster
   (`accountPath`); the transport proof removes its identities first in its cleanup,
   before it restores the store, and a removal that fails is said at once and fails
   the run once the rest of the cleanup ran, unless a proof failed before it.
@@ -1878,10 +1881,15 @@ in the README. The evidence, by check:
   and compares the text with the two YAML blocks of the section, each under its own
   heading; nothing parses the YAML of the README. Each row of the table checked with
   `kubectl auth can-i`, granted and one verb not granted, for both identities, with
-  the commands of the pull request: {RUN-CAN-I}.
+  the commands of the pull request: 71 checks, 42 granted and 29 refused, each as
+  the table says, on a second Linux machine at the head before the review, whose
+  roles the review did not change.
 - DOC-02: the case of Requirements finds the sentence of the identity, a link to
   Permissions; DOC-10 resolves its anchor.
-- The unit run of the head, `pnpm test:unit`, on a second machine: {RUN-UNIT}.
+- The unit run of the head, `pnpm test:unit`, on a second machine: 135 files and
+  3,825 tests passed at the head before the review, and 3,823 at the head after it,
+  and the three measures; with main merged, on macOS with Node 24.21.0, 135 files
+  and 3,824 tests passed, and the three measures.
 
 Seen failing, on changes made on purpose and put back each time, 47 in all, each
 failing its case: DOC-03 on a family left out of the reader of the README, a verb
@@ -1916,7 +1924,13 @@ without `create` on `backups`, `mut-m6-identities-5`, without `patch` on
 `mut-m6-identities-7`, and without `create` on `serverstatusrequests`,
 `mut-m6-identities-8`, which fail `pnpm e2e` at the proof of Back up now, of the
 pause, of the download over HTTP and of its request of the version of the server.
-Each changes the fixtures alone, so DOC-03 fails on it as well: {RUN-MUT}.
+Each changes the fixtures alone, so DOC-03 fails on it as well: on a second Linux
+machine, the branches 1 to 4, on the restricted suites, failed 1, 3, 1 and 2 cases
+of 23, the cases from before the slice passing; the branches 5 to 8, made again on
+the head after the review, each failed `pnpm e2e` at its proof, Back up now refused
+at the creation, the pause refused at the patch, the download refused at the
+port-forward, and the request of the version of the server refused, with the cleanup
+of the fixtures passed after the failure and no identity left.
 
 Decided while implementing, on 2026-11-09:
 
@@ -1964,8 +1978,8 @@ Decided while implementing, on 2026-11-09:
   stays proven by the reader of a part in the suite of the actions, which reads what
   the confirmation reads.
 - SPEC-0004 writes no identity: the amendment of the identities is the one of
-  TESTING.md, which this slice restates; the second cluster of REQ-287 amends
-  SPEC-0004 with its own slice.
+  TESTING.md, which this slice restates; REQ-287, whose second cluster would have
+  amended SPEC-0004, is not taken.
 
 An independent review of the head of the slice, on 2026-11-09, found no blocker, one
 major, three minors and seven nits. Taken in, as fixes of defects: the major, the
