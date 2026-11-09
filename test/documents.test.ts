@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { readmeIdentity, rolesAsWritten } from "../e2e/scripts/local-fixtures.mts";
 import { IMAGES } from "../e2e/scripts/local-manifests.mts";
 import { pausePatch, resumePatch } from "../src/common/schedule-patch";
 import * as kinds from "../src/renderer/api/kinds";
@@ -33,6 +34,33 @@ function linesOf(markdown: string): { text: string; fenced: boolean }[] {
 
     return { text, fenced: fence !== undefined };
   });
+}
+
+/** The fenced blocks of a document whose fence names a language, each as the text between its fences. */
+function blocksOf(markdown: string, language: string): string[] {
+  const blocks: { language: string; lines: string[] }[] = [];
+  let open: { fence: string; language: string; lines: string[] } | undefined;
+
+  for (const line of markdown.split("\n")) {
+    const fence = /^ {0,3}(`{3,}|~{3,})\s*(.*?)\s*$/.exec(line);
+
+    if (open === undefined && fence) {
+      open = { fence: fence[1], language: fence[2], lines: [] };
+      blocks.push(open);
+    } else if (
+      open !== undefined &&
+      fence &&
+      fence[2] === "" &&
+      fence[1][0] === open.fence[0] &&
+      fence[1].length >= open.fence.length
+    ) {
+      open = undefined;
+    } else {
+      open?.lines.push(line);
+    }
+  }
+
+  return blocks.filter((block) => block.language === language).map((block) => block.lines.join("\n"));
 }
 
 interface Heading {
@@ -167,7 +195,7 @@ const KINDS_READ = (Object.values(kinds) as unknown[]).filter(
 describe("the documents of the package", () => {
   const readme = read("README.md");
 
-  it("says in Requirements the range of Freelens of the manifest and the versions of the API the code reads, lists in Supported APIs each kind the code reads under its version, and names neither a release that is not there nor the tag next", () => {
+  it("says in Requirements the range of Freelens of the manifest, the versions of the API the code reads and where the permissions of the identity are, lists in Supported APIs each kind the code reads under its version, and names neither a release that is not there nor the tag next", () => {
     const requirements = sectionOf(readme, "Requirements", 2);
     const supported = sectionOf(readme, "Supported APIs", 2);
     const rows = KINDS_READ.flatMap((kind) =>
@@ -177,6 +205,8 @@ describe("the documents of the package", () => {
 
     expect(versions.length).toBeGreaterThan(0);
     expect(squeezed(requirements)).toContain(`\`engines.freelens\` as \`${manifest.engines.freelens}\``);
+    // The identity of the connection has the permissions of the section Permissions, whose roles the next case reads.
+    expect(squeezed(requirements)).toContain("**An identity with the permissions of [Permissions](#permissions).**");
     expect([...new Set([...requirements.matchAll(/`(velero\.io\/[^`]+)`/g)].map((match) => match[1]))].sort()).toEqual(
       versions,
     );
@@ -205,6 +235,28 @@ describe("the documents of the package", () => {
     // No npm tag but the one of a release: 1.0.0 is the first publication, and Freelens installs the newest release by
     // its name.
     expect(readme).not.toMatch(/`next`|@next\b|version=next/);
+  });
+
+  it("shows in Permissions the two roles the identities of the test environment hold, text for text as the fixtures render them", () => {
+    // The roles of the reader and of the operator of the fixtures, which the runner binds for the suites and for the
+    // proofs, rendered for the namespace and the names the README gives them: the rendering reads the rules of each
+    // identity, and nothing parses the YAML of the README.
+    const rendered = (["reader", "operator"] as const).map((role) =>
+      rolesAsWritten(
+        readmeIdentity(role, "synthetic-owner", "0123abcd", "velero"),
+        `freelens-velero-${role}`,
+        "velero",
+      ),
+    );
+    const permissions = sectionOf(readme, "Permissions", 2);
+
+    expect(rendered.every((roles) => roles.includes("kind: Role\n") && roles.includes("kind: ClusterRole\n"))).toBe(
+      true,
+    );
+    expect(blocksOf(permissions, "yaml")).toEqual(rendered);
+    // Each under its own heading: the role that reads, then the role of the actions.
+    expect(blocksOf(sectionOf(permissions, "The role that reads the views", 3), "yaml")).toEqual([rendered[0]]);
+    expect(blocksOf(sectionOf(permissions, "The role of the actions", 3), "yaml")).toEqual([rendered[1]]);
   });
 
   it("says in Compatibility the target of SPEC-0015 and the versions the test environment pins, and that any other is untested", () => {

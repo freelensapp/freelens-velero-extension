@@ -1350,3 +1350,150 @@ REQ-306. The amendments of the requirements these decisions bring, REQ-303,
 REQ-306 and the others of the release flow, among them REQ-295 of the tag `next`,
 the end of Status of REQ-296, D15 and REQ-309 to REQ-311 and REQ-313, are made by
 another pull request.
+
+T6.1 and T6.3, the roles of the README proven both ways (REQ-288, with REQ-297 and
+[#145](https://github.com/freelensapp/freelens-velero-extension/issues/145)), on
+2026-11-09: two identities of the test environment hold the two roles of the
+README; the session of the extension runs as the operator in the proof of the
+download through the cluster, with its request of the version of the server, and in
+the proofs of the actions; the reader runs a part of the restricted suite; the
+README has its section Permissions, with the table of what each feature asks and the
+two roles, and the sentence of Requirements that REQ-296 left for it; and the case of
+DOC-03 keeps the README and the identities equal. Every request the code makes, by
+its group, its resource, its verb and its scope, with the line of the code and the
+requirement that asks for it, is listed in the pull request, as #145 asks, and not
+in the README. The evidence, by check:
+
+- REG-04, the identities. `readmeIdentity` of
+  [`local-fixtures.mts`](../../e2e/scripts/local-fixtures.mts) makes the reader or
+  the operator of a run: a service account of the namespace of an installation, the
+  Role of that namespace with the rules of its role, `ROLE_RULES`, and the
+  ClusterRole with `CLUSTER_RULES`, each bound to the account alone, all with the
+  labels of the run. The reader lists the ten families of the installation, and the
+  case checks them against the plurals the views read (`src/common/discovery.ts`);
+  both list the storage locations of the whole cluster, the one path of the whole
+  cluster the views ask (`PATHS.locations`). The operator reads by name, lists,
+  creates and patches what the main process does: every write of the adapter of the
+  main process, read in its source as the case of DOC-04 reads it, the creations of
+  a `DownloadRequest`, a `ServerStatusRequest`, a `Backup`, a `Schedule`, a
+  `Restore` and a `DeleteBackupRequest` and the patch of a `Schedule`, is a grant of
+  the operator and of no rule of the reader. Neither role has a verb the code does
+  not send, `watch` among them, nor a Secret, nor a word that names them all
+  (`test/environment.test.ts`).
+- REG-04, the end to end layer, for the coordinator's runs. The transport proof
+  applies the operator in the namespace of the installation, with a credential of
+  two hours, and its context holds the kubeconfig of the operator for the session
+  and the kubeconfig of the environment for the kubectl of the proofs, which reads
+  the metrics, the ConfigMaps and the namespace of a restore, makes the backups of
+  the proof of a deletion, changes a schedule as another hand, and deletes; the
+  proof adapter of a proof, which reads what the session created and removes a
+  backup through a `DeleteBackupRequest`, asks only what the role allows. The proof
+  over HTTP asks the version of the server as a frame does, through the procedures
+  and the gate, beside the request it makes with a generated name. The modes over
+  TLS and the direct mode keep the kubeconfig of the environment. `pnpm e2e` on the
+  environment of the demo: {RUN-E2E}. The runner of the suites applies the reader in
+  the installation of the views and gives its kubeconfig in
+  `E2E_README_READER_KUBECONFIG`; the restricted suite starts an application of its
+  own with it, in the part `static-views-1`: every namespace that holds a storage
+  location suggested, the ten lists of the installation with their rows and nothing
+  denied, the six cells of the Overview read; Back up now ends as forbidden at the
+  read of the schedule, before any review, with the words of
+  `BACKUP_NOW_WORDS.forbiddenRead`, and Pause at the patch, with the words of
+  `SCHEDULE_PATCH_WORDS.forbidden`; writes stay on, no backup of the name is there,
+  the schedule keeps its UID and its version, and the API server counts no write of
+  any kind of Velero: {RUN-STATIC-VIEWS-1}. Each identity is removed with its run,
+  its ClusterRole and its binding by the paths of the whole cluster
+  (`accountPath`).
+- DOC-03: the case "shows in Permissions the two roles the identities of the test
+  environment hold, text for text as the fixtures render them"
+  (`test/documents.test.ts`) renders the Role and the ClusterRole of each identity
+  with `rolesAsWritten`, under the names and the namespace the README gives them,
+  and compares the text with the two YAML blocks of the section, each under its own
+  heading; nothing parses the YAML of the README. Each row of the table checked with
+  `kubectl auth can-i`, granted and one verb not granted, for both identities, with
+  the commands of the pull request: {RUN-CAN-I}.
+- DOC-02: the case of Requirements finds the sentence of the identity, a link to
+  Permissions; DOC-10 resolves its anchor.
+- The unit run of the head, `pnpm test:unit`, on a second machine: {RUN-UNIT}.
+
+Seen failing, on changes made on purpose and put back each time, 47 in all, each
+failing its case: DOC-03 on a family left out of the reader of the README, a verb
+added to the operator of the README, a verb added to the operator of the fixtures
+and to their ClusterRole, a third YAML block in the section, each heading renamed,
+the verbs written otherwise by the rendering, the namespace of the README changed,
+and the two blocks in the other order; DOC-02 on the sentence of the identity
+without its link; the case of the identities on an identity that shares the rules of
+its role or of the cluster, the reader without a family, the operator without the
+patch, the reader given the creation, the binding of the ClusterRole to another
+account, the operator given `watch` and given a Secret, any namespace taken, and the
+adapter patching another kind; the case of the rendering on the ClusterRole first,
+no separator, any word, a role with no rule, an empty list, an empty resource, two
+Roles and the namespace of the Role left out; the case of the paths on a
+ClusterRole with a namespace, another kind, any name, any namespace and a binding
+removed as a role; the case of the wiring on the session of the proofs and the proof
+over HTTP given the kubeconfig of the environment, the modes over TLS given the
+operator, the kubectl of each of the three proofs given the operator, the version of
+the server not asked through the procedures, the operator not applied and its
+kubeconfig left in the state, the reader in another namespace, not given to the
+suites, not removed, and the restricted suite started as the reader of a part.
+
+The changes the packaged runs and the end to end runs must see failing are one
+commit each on the head, on branches of their own, for the coordinator: the reader
+given `get` on `schedules`, `mut-m6-identities-1`, which shows the review of Back up
+now and fails the case of the two writes; the reader given `patch` on `schedules`,
+`mut-m6-identities-2`, which pauses the schedule; the reader without `list` on
+`datadownloads`, `mut-m6-identities-3`, and without the ClusterRole of the storage
+locations, `mut-m6-identities-4`, which fail the case of the views; and the operator
+without `create` on `backups`, `mut-m6-identities-5`, without `patch` on
+`schedules`, `mut-m6-identities-6`, without `create` on `pods/portforward`,
+`mut-m6-identities-7`, and without `create` on `serverstatusrequests`,
+`mut-m6-identities-8`, which fail `pnpm e2e` at the proof of Back up now, of the
+pause, of the download over HTTP and of its request of the version of the server.
+Each changes the fixtures alone, so DOC-03 fails on it as well: {RUN-MUT}.
+
+Decided while implementing, on 2026-11-09:
+
+- The reader has `list` alone: the views list each family and read no object by its
+  name, and never watch. The operator has `get`, `list`, `create` and `patch` where
+  the code sends them, and no `watch`, `update` or `delete`; its rules are grouped
+  by the verbs of each resource, nine in all. Both ClusterRoles hold the one list of
+  the whole cluster. The roles grant `get` and `list` on `deletebackuprequests` and
+  the list of the storage locations of the whole cluster, which the README calls
+  optional with what goes without them.
+- `get` on `secrets` is not in the role of the actions: it is needed only for a
+  storage location whose certificate authority is in a Secret, and is granted for
+  that Secret alone, by its name, which the README says. The mode of a referenced
+  authority stays proven with the kubeconfig of the environment, as the decision of
+  what T6.1 defers says of it. `get` on `pods/portforward` is not in the role
+  either: the kubectl of the host falls back to `create`, and the README says what
+  granting `get` changes.
+- The identities are made by the runner for its run, the operator by the transport
+  proof and the reader by the runner of the suites, and removed when it ends, as the
+  identity of the views that may not port-forward is: their ClusterRole and its
+  binding are of the whole cluster, which no removal of the namespaces of a run
+  reaches. The removal of the accounts of a run takes each by the path of its kind,
+  of its namespace or of the whole cluster.
+- The README names the roles `freelens-velero-reader` and `freelens-velero-operator`
+  and the namespace `velero`, the one of `velero install`; the identities of the
+  environment are named by the run and bound in its namespaces. The rendering takes
+  the rules from the identity, and the names and the namespace from the README.
+- The session of the extension is the procedures, the client of the host they use
+  and the tunnel; the proof adapter of a proof stays on the kubeconfig of the
+  operator, since what it asks, the reads of what the session created and the
+  `DeleteBackupRequest` of a removal, is in the role. The kubectl of the proofs goes
+  through the kubeconfig of the environment, which the context of a proof holds as
+  `environment`.
+- "The restricted suite of the views passes" with the reader is a second describe of
+  `velero-e2e-restricted.tests.ts`, with an application started with the kubeconfig
+  of the reader alone: the cases of the first describe prove what an identity that
+  reads a part is shown, which a reader of every family cannot see, and stay as
+  they are.
+- The creation of a Backup the reader is refused is Back up now, in the view of the
+  schedule with a history of the installation of the views: its confirmation reads
+  the schedule by its name, the first step whose verb, `get`, the role lacks, so the
+  refusal comes at the read and before any review. The refusal of the POST itself
+  stays proven by the reader of a part in the suite of the actions, which reads what
+  the confirmation reads.
+- SPEC-0004 writes no identity: the amendment of the identities is the one of
+  TESTING.md, which this slice restates; the second cluster of REQ-287 amends
+  SPEC-0004 with its own slice.
