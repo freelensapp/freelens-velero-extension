@@ -401,3 +401,31 @@ describe("the bundle of the main process", () => {
     }
   });
 });
+
+// axe-core, which the accessibility scan of the pre-review alone loads, into the frame it scans, from where the
+// package manager installed it (REQ-294 of SPEC-0018, VIS-03): a devDependency at an exact version, and nothing of
+// it in what the package ships. Knip finds it used by the helper of the scan, `integration/helpers/velero-axe.ts`.
+describe("axe-core, which the pre-review alone loads into the frame it scans", () => {
+  it("is a devDependency at an exact version, and a dependency of no other kind", () => {
+    expect(manifest.devDependencies?.["axe-core"]).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(
+      [manifest.dependencies, manifest.peerDependencies, manifest.optionalDependencies].map(
+        (dependencies) => dependencies?.["axe-core"],
+      ),
+    ).toEqual([undefined, undefined, undefined]);
+  });
+
+  it("is in neither bundle: no module of it in the map of either, and nothing of its text", () => {
+    for (const bundle of [MAIN, RENDERER]) {
+      const { packages, folders } = sourcesOf(bundle);
+
+      expect({
+        bundle,
+        modules: [...packages, ...folders].filter((source) => /(^|[/+])axe-core([@/]|$)/.test(source)),
+        // What any module of axe-core carries, whatever the build makes of it: its name, and the address of the help
+        // of its rules.
+        text: [...new Set(readFileSync(bundle, "utf8").match(/axe-core|dequeuniversity\.com\/rules/g))],
+      }).toEqual({ bundle, modules: [], text: [] });
+    }
+  });
+});
