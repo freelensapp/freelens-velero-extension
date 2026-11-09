@@ -36,7 +36,8 @@ is a from-scratch MIT implementation and it is not a Velero product.
 1.0.0, the first release of the extension, is being prepared. Until it is
 published, install the extension from the source, as
 [Build from the source](#build-from-the-source) says. What each version brings is
-in the [changelog](CHANGELOG.md). What 1.0.0 covers, by milestone:
+in the [releases](https://github.com/freelensapp/freelens-velero-extension/releases)
+of the repository on GitHub. What 1.0.0 covers, by milestone:
 
 <!-- markdownlint-disable MD013 -->
 
@@ -139,20 +140,14 @@ Freelens has asked you to confirm the version:
 
 Each [release](https://github.com/freelensapp/freelens-velero-extension/releases)
 has the extension as `freelensapp-velero-extension-<version>.tgz`, with its
-checksum in `freelensapp-velero-extension-<version>.tgz.sha256`.
+checksum in `freelensapp-velero-extension-<version>.tgz.sha256`. Every release
+is for Freelens 2.x.
 
 - Enter the URL of the `.tgz` asset and press Install. Freelens downloads the
   `.tgz.sha256` next to it and checks the tarball against it.
-- Or download both files into one directory, check them as
-  [Verify a release](#verify-a-release) says, and enter the path to the `.tgz`,
+- Or download both files into one directory and enter the path to the `.tgz`,
   or choose it with Browse, the folder icon of the field. Freelens checks it
   against the `.tgz.sha256` next to it.
-
-Freelens refuses a tarball that does not match its `.tgz.sha256`, and lists one
-that matches as verified. A tarball with no `.tgz.sha256` next to it is
-installed with a notice that nothing vouches for its integrity, and listed as
-unverified, and so is one whose `.tgz.sha256` names another file, as after a
-rename.
 
 ### From a directory
 
@@ -162,70 +157,6 @@ press Install. Once you confirm, Freelens runs the extension from that
 directory, from the files in `dist/`, and lists it as development: nothing of
 it is verified. This is how you work on the extension: see
 [Development loop](#development-loop).
-
-### Verify a release
-
-The GitHub release of a version carries four files, where `<version>` is the
-version, for instance `1.0.0`:
-
-<!-- markdownlint-disable MD013 -->
-
-| File | What it is |
-| --- | --- |
-| `freelensapp-velero-extension-<version>.tgz` | The package |
-| `freelensapp-velero-extension-<version>.tgz.sha256` | The SHA-256 checksum of the package |
-| `freelensapp-velero-extension-<version>-spdx.json` | The software bill of materials of the package, in SPDX JSON |
-| `freelensapp-velero-extension-<version>-spdx.json.sha256` | The SHA-256 checksum of the bill of materials |
-
-<!-- markdownlint-enable MD013 -->
-
-Download a file and its `.sha256` into one directory, and check one against the
-other in that directory. On Linux:
-
-```sh
-sha256sum -c freelensapp-velero-extension-<version>.tgz.sha256
-```
-
-On macOS:
-
-```sh
-shasum -a 256 -c freelensapp-velero-extension-<version>.tgz.sha256
-```
-
-Both print the name of the file followed by `OK` when it matches. On Windows,
-in PowerShell, this line prints `True` when it matches:
-
-<!-- markdownlint-disable MD013 -->
-
-```powershell
-(Get-FileHash -Algorithm SHA256 freelensapp-velero-extension-<version>.tgz).Hash -eq ((Get-Content freelensapp-velero-extension-<version>.tgz.sha256) -split '\s+')[0]
-```
-
-<!-- markdownlint-enable MD013 -->
-
-The same commands check the bill of materials, with
-`freelensapp-velero-extension-<version>-spdx.json.sha256` and
-`freelensapp-velero-extension-<version>-spdx.json`.
-
-The package on npm carries a provenance attestation, which states the workflow
-of this repository that built and published it, its tag and its commit. Check it
-in a new directory, with a project that installs the package:
-
-```sh
-npm init -y
-npm install @freelensapp/velero-extension@<version>
-npm audit signatures
-```
-
-`npm audit signatures` says how many of the installed packages have verified
-registry signatures and how many have verified attestations, and lists any that
-does not verify.
-
-The bill of materials lists what the package carries: the extension, and the
-libraries its bundles carry, react-window alone, at the versions of the lockfile
-of the release. It lists no devDependency, since none is in the package, and no
-peer dependency: react and react-dom, which react-window asks for, are the ones
-of Freelens.
 
 ## Getting started
 

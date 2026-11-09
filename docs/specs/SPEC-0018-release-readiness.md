@@ -1134,15 +1134,14 @@ Decided while implementing, on 2026-11-09:
   `-copy_extensions`, so REL-02 runs with an OpenSSL 3 first on the PATH. TESTING.md
   says so.
 
-T6.3, the first of its pull requests, with REQ-306 of T6.4, on 2026-11-09: what the
-first published version is installed and checked with, since npm shows the README
-of the version it publishes. The README in the layout of the other extensions of
-the organization, with Status, Requirements and its Compatibility, Supported
-APIs, Install, its Verify a release, Getting started and Safety; the notes of
-1.0.0 in a new `CHANGELOG.md`; the drift watch before the first release; and six
-unit cases in
-[`test/documents.test.ts`](../../test/documents.test.ts). Permissions (#145),
-Features, Limits and Troubleshooting are not written, and nothing links to them.
+T6.3, the first of its pull requests, on 2026-11-09: what the first published
+version is installed with, since npm shows the README of the version it
+publishes. The README in the layout of the other extensions of the organization,
+with Status, Requirements and its Compatibility, Supported APIs, Install,
+Getting started and Safety; the drift watch before the first release; and four
+unit cases in [`test/documents.test.ts`](../../test/documents.test.ts).
+Permissions (#145), Features, Limits and Troubleshooting are not written, and
+nothing links to them.
 
 Amended on 2026-11-09 at the request of the lead maintainer: the README follows the
 layout of the other extensions of the organization, which replaces the order of the
@@ -1157,8 +1156,7 @@ sections the paragraph of the Documentation gave at the approval. The mapping:
 - Requirements: Requirements, with Compatibility (REQ-299) as its subsection.
 - Supported APIs, new: the kinds the extension reads, by API version.
 - Permissions: after Supported APIs, with #145.
-- Verify a release: the last subsection of Install, where #144 asked for a section
-  after Safety and before Development; ASSET-02 reads the subsection.
+- Verify a release: not written, by the later decision at the end of this block.
 - Getting started, new: after Install. Safety: after Getting started.
 - Troubleshooting, Features and Limits: with the slices that write them.
 - Development, as it was; Build from the source, with the subsections of the other
@@ -1253,42 +1251,12 @@ The evidence, by check:
   untested, said neither to work nor to fail. The case reads the version and the
   commit of the target in the header of SPEC-0015 and the versions of the images
   of Velero, of its plugin and of the node in `e2e/scripts/local-manifests.mts`.
-- ASSET-02: the case reads `release.yaml` without its comments: the checksums made
-  by `sha256sum "$f" | tee "$f.sha256"` in a loop over files of the directory, by
-  their names alone, which writes the digest, two spaces and the name, the line the
-  two commands `-c` check in the directory of a download and whose first word the
-  line of PowerShell compares. It reads the command lines of the blocks of
-  Verify a release: `sha256sum -c` and `shasum -a 256 -c` each of exactly the
-  `.sha256` of the tarball, the one line of PowerShell that compares the hash of
-  the tarball with the first word of its `.sha256`, the install of the package by
-  its name, and `npm audit signatures`. It finds a file named in Install for each
-  pattern of the block `files` of the step of the release, and no file of the
-  package the release does not attach; no name of a file of the package in the
-  README but the one `pnpm pack` gives; and each library of `dependencies`, which
-  the bill of materials lists beside the extension (REQ-307). `sha256sum -c` and
-  `shasum -a 256 -c` were run on macOS on a synthetic file and its `.sha256`
-  written as the workflow writes it: OK, then FAILED once the file changed. No
-  PowerShell is on the machine of the slice: its line is run with the others on the
-  assets of the first published version, at ASSET-05.
-- DOC-09: `CHANGELOG.md`, with a preface and the section of 1.0.0 under
-  `## v1.0.0 - 2026-11-16`, the notes REQ-303 asks for 1.0.0, what it covers by
-  milestone under `### Added`, as the changelog of another extension of the
-  organization writes them, its requirements and compatibility, its safety in one
-  paragraph, how to install and verify it, and its known limits. The case finds each heading of
-  a version of the form `## v<version> - <YYYY-MM-DD>`, the version of the form the
-  tag workflow tags, read from `tag.yaml`, the date a real one, each version once,
-  the newest first, each with notes beyond its headings; and the section of the
-  version of `package.json` once it is of that form. Today the version is
-  `0.1.0-alpha.0`, which the tag workflow does not tag, so the case asks for no
-  section until the pull request of the version, where it asks for the section of
-  `v1.0.0`; with the version set to `1.0.0` on purpose the case passed, and with
-  `1.0.1` it failed.
 - DOC-10: the case resolves each relative link, image and definition of a link of
-  the README and of `CHANGELOG.md`, out of their code, against the files Git holds
-  for the repository, without the query of a link, and each anchor against the
-  headings of its document by the slug GitHub makes; and finds in both no character
-  outside ASCII, no em dash and no shortcode of an emoji in the prose. The external
-  links are opened at REL-03.
+  the README, out of its code, against the files Git holds for the repository,
+  without the query of a link, and each anchor against the headings of its
+  document by the slug GitHub makes; and finds in it no character outside ASCII,
+  no em dash and no shortcode of an emoji in the prose. The external links are
+  opened at REL-03.
 - REL-01, its drift watch: the entry "Before The First Release, 2026-11-09" of
   [RECON-T0.1](../development/RECON-T0.1.md#before-the-first-release-2026-11-09):
   Velero v1.18.4 and the AWS plugin v1.14.4 still the latest stable releases, the
@@ -1307,38 +1275,15 @@ Velero said to be written, the patch said of one field, a write of the adapter
 changed from a POST to a PATCH, and each of the three rules reworded; DOC-05 on
 the pin of Velero, of its plugin and of the node moved, the commit and the version
 of the target moved in SPEC-0015, and the sentence of what is untested removed;
-ASSET-02 on a wrong file in the command of Linux, the line of PowerShell without
-its comparison or with the second word, a name without the prefix in the prose,
-the command of macOS without `-c`, the checksums written with a directory in the
-name of the file, a fifth file attached by the release, the bill of materials
-named otherwise, and `npm audit signatures` and react-window taken out; DOC-09 on
-the version of `package.json` set to `1.0.1`, a heading without the `v` of the
-tag, an older version above a newer one, a date that is not one, a section with
-no notes and one with a heading alone; DOC-10 on a link to a file the repository
-does not hold, an anchor no heading of the README has, an anchor no heading of
-TESTING.md has, a link of the changelog to a missing file, a character outside
+DOC-10 on a link to a file the repository does not hold, an anchor no heading of
+the README has, an anchor no heading of TESTING.md has, a character outside
 ASCII, an em dash and a shortcode of an emoji. Beside them, what the cases must
 let pass passed: the range of Freelens wrapped to the next line, a constant
 beside the classes of the kinds, the words "no release" in another section, cells
-aligned with spaces, a link with a query, and the version of `package.json` set
-to `1.0.0`.
+aligned with spaces, and a link with a query.
 
 Decided while implementing, on 2026-11-09:
 
-- The heading of a version is `## v<version> - <date>`, the tag of the version, and
-  its notes are the lines after it up to the next line that starts with `##` and a
-  space, which the preface of the file says. The step of the notes of the job
-  `package` (REQ-303) can cut them with
-  `awk -v tag="$GITHUB_REF_NAME" 'index($0, "## " tag " - ") == 1 { found = 1; next } found && /^## / { exit } found { print }' CHANGELOG.md`,
-  and fail when they are empty.
-- The section of 1.0.0 is dated 2026-11-16, a day planned that the case accepts:
-  the pull request of the version sets the day, as the preface of the file says.
-- `CHANGELOG.md` is not in `files` of `package.json`: npm adds the manifest, the
-  README and the license alone, and the notes of a version travel as the body of
-  its GitHub release. The list of the contents of REQ-316 comes later.
-- This pull request is merged after the one of the release workflow, which makes
-  true what Verify a release and the preface of the changelog say of the bill of
-  materials, the provenance and the notes.
 - The sentence of the permissions of REQ-296 waits for the section Permissions,
   with #145.
 - DOC-02 reads the API versions in Requirements and in Supported APIs, and the
@@ -1361,37 +1306,47 @@ host, to report to Freelens.
 
 The independent review of this pull request, read only, found no blocker, one
 major, seven minors and ten nits, all applied: Safety lists every write the adapter
-allows, with DOC-04; Compatibility is written, with DOC-05; the order of the merge
-and its window are decided above; ASSET-02 reads the commands themselves; DOC-02
-takes the harmless edits; the drift watch says what Node and the release
-candidate are; and the nits, among them `### Added`, the words of a restore, one
-list of the gates, the package of the validation target, the version put back
-after `pnpm pack:dev`, and no placeholder of a run after the first publication.
+allows, with DOC-04; Compatibility is written, with DOC-05; DOC-02 takes the
+harmless edits; the drift watch says what Node and the release candidate are; the
+order of the merge was decided and ASSET-02 read the commands themselves, both
+gone with the later decisions below; and the nits, among them the words of a
+restore, one list of the gates, the package of the validation target, the version
+put back after `pnpm pack:dev`, and no placeholder of a run after the first
+publication.
 
-The full unit run, `pnpm test:unit`, on a second Linux machine: 135 files and
-3,818 tests passed, and the three measures. The checks of its pull request, the
-unit tests, the check, Trunk and the integration test, green before its merge;
-its files reach no part of the views and no end to end run.
+The full unit run, `pnpm test:unit`, on a second Linux machine, at the head after
+the review: 135 files and 3,818 tests passed, and the three measures. The checks
+of its pull request, the unit tests, the check, Trunk and the integration test,
+green before its merge; its files reach no part of the views and no end to end
+run.
 
 Decided by the lead maintainer on 2026-11-09, after the review of this pull
 request: there is no prerelease, and 1.0.0 is the first publication, made once the
-rest of the milestone is done. This slice follows it:
+rest of the milestone is done. Status says that 1.0.0, the first release, is being
+prepared, and that until it is published the extension is installed from the
+source, which is true from the merge of this pull request; a later pull request,
+right before the one of the version, turns it into the Status of the README of
+1.0.0. Install gives the name, `@freelensapp/velero-extension`, which installs the
+newest version that is not a prerelease, the one 1.0.0 will be, a version after
+the name, the link of the template without a version, a release tarball and a
+directory, and no tag `next`, on which DOC-02 fails. The drift watch of
+RECON-T0.1 is the one before the first release, read again before 1.0.0
+(REQ-313).
 
-- Status says that 1.0.0, the first release, is being prepared, and that until it
-  is published the extension is installed from the source, which is true from the
-  merge of this pull request. A later pull request, right before the one of the
-  version, turns it into the Status of the README of 1.0.0.
-- Install gives the name, `@freelensapp/velero-extension`, which installs the
-  newest version that is not a prerelease, the one 1.0.0 will be, a version after
-  the name, the link of the template without a version, a release tarball and a
-  directory, with Verify a release; the tag `next` is gone, and DOC-02 fails on it.
-- `CHANGELOG.md` holds the section of 1.0.0, with the notes REQ-303 asks for it,
-  in place of the one of 1.0.0-0; DOC-09 asks for it once `package.json` says
-  1.0.0.
-- The drift watch of RECON-T0.1 is the one before the first release, read again
-  before 1.0.0 (REQ-313).
-
-The amendments of the requirements of this spec that the decision brings, among
-them REQ-295 of the tag `next`, the end of Status of REQ-296, the notes of 1.0.0-0
-of REQ-303 and the prerelease of D15, REQ-309 to REQ-311 and REQ-313, are made by
-the slice of the release workflow.
+Decided by the lead maintainer on 2026-11-09, the same day: the release flow of
+the extension is the one of the template of the organization,
+freelensapp/freelens-example-extension, and the README stays as the template and
+the other extensions have it, with nothing more. This slice follows it:
+`CHANGELOG.md` is removed, its section of 1.0.0 kept outside the repository for
+the body of the GitHub release, which is written as the other extensions write
+theirs; Verify a release is removed, and From a release tarball says what the
+template says, with the names of this package, but the drop, which the source of
+the target does not support (the deviation above), and with the releases said to
+be for Freelens 2.x where the template says that the major versions match;
+Status names the releases of the repository on GitHub in place of the changelog;
+DOC-09 and ASSET-02 are removed with what they read, and DOC-10 reads the README
+alone. The row of T6.4 is Approved again: this pull request no longer carries its
+REQ-306. The amendments of the requirements these decisions bring, REQ-303,
+REQ-306 and the others of the release flow, among them REQ-295 of the tag `next`,
+the end of Status of REQ-296, D15 and REQ-309 to REQ-311 and REQ-313, are made by
+another pull request.

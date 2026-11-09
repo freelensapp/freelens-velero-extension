@@ -7,28 +7,13 @@ import { IMAGES } from "../e2e/scripts/local-manifests.mts";
 import { pausePatch, resumePatch } from "../src/common/schedule-patch";
 import * as kinds from "../src/renderer/api/kinds";
 
-// The documents npm and GitHub show: the README, which is the page of the package, and the changelog, whose section of a
-// version is the body of its GitHub release. What in them can go stale without anyone seeing it is read here against
-// what makes it true: the manifest, the code, the workflows, the pins of the test environment and the files of the
-// repository.
+// The README, which npm and GitHub show as the page of the package. What in it can go stale without anyone seeing it
+// is read here against what makes it true: the manifest, the code, the pins of the test environment and the files of
+// the repository.
 
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const read = (path: string) => readFileSync(join(ROOT, path), "utf8");
-const manifest = JSON.parse(read("package.json")) as {
-  name: string;
-  version: string;
-  engines: { freelens: string };
-  dependencies: Record<string, string>;
-};
-// The name `pnpm pack` gives the tarball of the package, before its version.
-const PREFIX = `${manifest.name.replace(/^@/, "").replace("/", "-")}-`;
-
-/** A workflow without its comments: what it does, without what it says of itself. */
-const workflow = (name: string) =>
-  read(`.github/workflows/${name}`)
-    .split("\n")
-    .filter((line) => !line.trimStart().startsWith("#"))
-    .join("\n");
+const manifest = JSON.parse(read("package.json")) as { engines: { freelens: string } };
 
 /** The words of a text with every run of white space as one space, as Markdown draws them. */
 const squeezed = (text: string) => text.replace(/\s+/g, " ");
@@ -49,13 +34,6 @@ function linesOf(markdown: string): { text: string; fenced: boolean }[] {
     return { text, fenced: fence !== undefined };
   });
 }
-
-/** The lines of the fenced blocks of a document, without the fences, each trimmed. */
-const commandsOf = (markdown: string) =>
-  linesOf(markdown)
-    .filter(({ text, fenced }) => fenced && !/^ {0,3}(`{3,}|~{3,})/.test(text))
-    .map(({ text }) => text.trim())
-    .filter(Boolean);
 
 interface Heading {
   level: number;
@@ -180,72 +158,6 @@ function unresolved(
   return undefined;
 }
 
-/** The notes of a version as the release workflow takes them: the lines after its heading, up to the next one. */
-function notesOf(changelog: string, version: string): string {
-  const lines = changelog.split("\n");
-  const start = lines.findIndex((line) => line.startsWith(`## v${version} - `));
-  const end = lines.findIndex((line, index) => index > start && line.startsWith("## "));
-
-  return start < 0
-    ? ""
-    : lines
-        .slice(start + 1, end < 0 ? undefined : end)
-        .join("\n")
-        .trim();
-}
-
-/** Whether notes say something: a line that is neither blank nor a heading. */
-const sayNothing = (notes: string) => !notes.split("\n").some((line) => line.trim() !== "" && !/^#{1,6}\s/.test(line));
-
-/** The parts of a version of the form the tag workflow tags, a release after each of its prereleases. */
-function partsOf(version: string): number[] {
-  const [, major, minor, patch, prerelease] = /^(\d+)\.(\d+)\.(\d+)(?:-(\d+))?$/.exec(version) ?? [];
-
-  return [major, minor, patch, prerelease ?? `${Number.MAX_SAFE_INTEGER}`].map(Number);
-}
-
-function newestFirst(one: string, other: string): number {
-  const [a, b] = [partsOf(one), partsOf(other)];
-  const at = a.findIndex((part, index) => part !== b[index]);
-
-  return at < 0 ? 0 : b[at] - a[at];
-}
-
-/** The release file names a text gives in its code spans, with a version in place of `<version>`. */
-function releaseFilesOf(markdown: string): string[] {
-  return linesOf(markdown)
-    .filter(({ fenced }) => !fenced)
-    .flatMap(({ text }) => [...text.matchAll(/`([^`\s]+)`/g)].map((match) => match[1]))
-    .filter((name) => name.startsWith(`${PREFIX}<version>`))
-    .map((name) => name.replace("<version>", "1.0.0-0"));
-}
-
-/** The patterns of the files the step of the release attaches, as its block `files` lists them. */
-function attachedPatterns(release: string): string[] {
-  const lines = release.split("\n");
-  const indent = (line: string) => line.length - line.trimStart().length;
-  const step = lines.findIndex((line) => /^\s+uses: softprops\/action-gh-release@/.test(line));
-  const files = lines.findIndex((line, index) => step >= 0 && index > step && /^\s+files: \|-?$/.test(line));
-  const patterns: string[] = [];
-
-  for (const line of files < 0 ? [] : lines.slice(files + 1)) {
-    if (line.trim() === "" || indent(line) <= indent(lines[files])) {
-      break;
-    }
-    patterns.push(line.trim());
-  }
-
-  return patterns;
-}
-
-const matchesPattern = (pattern: string, name: string) =>
-  new RegExp(
-    `^${pattern
-      .split("*")
-      .map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
-      .join(".*")}$`,
-  ).test(name);
-
 /** The classes of the kinds the extension reads, which the host reads: each with its kind, its versions and its page. */
 const KINDS_READ = (Object.values(kinds) as unknown[]).filter(
   (value): value is { kind: string; crd: { apiVersions: string[]; title: string } } =>
@@ -254,7 +166,6 @@ const KINDS_READ = (Object.values(kinds) as unknown[]).filter(
 
 describe("the documents of the package", () => {
   const readme = read("README.md");
-  const changelog = read("CHANGELOG.md");
 
   it("says in Requirements the range of Freelens of the manifest and the versions of the API the code reads, lists in Supported APIs each kind the code reads under its version, and names neither a release that is not there nor the tag next", () => {
     const requirements = sectionOf(readme, "Requirements", 2);
@@ -355,97 +266,27 @@ describe("the documents of the package", () => {
     }
   });
 
-  it("says in Verify a release the commands the release workflow makes true, with the names of its files, and names a file for each pattern the release attaches, and no other", () => {
-    const verify = sectionOf(sectionOf(readme, "Install", 2), "Verify a release", 3);
-    const release = workflow("release.yaml");
-    const patterns = attachedPatterns(release);
-    const named = releaseFilesOf(sectionOf(readme, "Install", 2));
-    const commands = commandsOf(verify);
-    const tarball = `${PREFIX}<version>.tgz`;
-    const powershell = commands.filter((line) => line.includes("Get-FileHash"));
-    // The line of PowerShell compares the hash of the tarball with the first word of its checksum.
-    const [, hashed, compared] =
-      /^\(Get-FileHash -Algorithm SHA256 (\S+)\)\.Hash -eq \(\(Get-Content (\S+)\) -split '\\s\+'\)\[0\]$/.exec(
-        powershell[0] ?? "",
-      ) ?? [];
-    // Every name of a file of the package in the README, in its code and in its commands, is the name pack gives it.
-    const strangers = [...readme.matchAll(/[\w@<>.:/-]*velero-extension-[\w<>.*-]*/g)]
-      .map((match) => match[0])
-      .filter((name) => !name.startsWith(PREFIX));
-
-    // Each checksum is written beside its file, in the directory of the files, by `sha256sum "$f" | tee
-    // "$f.sha256"`: the digest, two spaces and the name of the file, the line `sha256sum -c` and `shasum -a 256 -c`
-    // check in the directory of a download, and whose first word the line of PowerShell compares.
-    expect(release).toMatch(/\n\s+for f in [^\n/;]+; do\n\s+sha256sum "\$f" \| tee "\$f\.sha256"\n\s+done\n/);
-    expect(commands.filter((line) => line.startsWith("sha256sum"))).toEqual([`sha256sum -c ${tarball}.sha256`]);
-    expect(commands.filter((line) => line.startsWith("shasum"))).toEqual([`shasum -a 256 -c ${tarball}.sha256`]);
-    expect([powershell.length, hashed, compared]).toEqual([1, tarball, `${tarball}.sha256`]);
-    expect(commands).toContain(`npm install ${manifest.name}@<version>`);
-    expect(commands).toContain("npm audit signatures");
-    expect(strangers).toEqual([]);
-    expect(patterns.length).toBeGreaterThan(0);
-    expect(patterns.filter((pattern) => !named.some((name) => matchesPattern(pattern, name)))).toEqual([]);
-    expect(named.filter((name) => !patterns.some((pattern) => matchesPattern(pattern, name)))).toEqual([]);
-    // What the bill of materials lists beside the extension: the libraries the bundles carry, which the manifest
-    // declares as its dependencies.
-    expect(Object.keys(manifest.dependencies).filter((library) => !verify.includes(library))).toEqual([]);
-  });
-
-  it("holds the notes of the version of package.json once it is a version the tag workflow tags, each version once, newest first", () => {
-    // The expression the tag workflow matches the version of package.json with, as bash reads it.
-    const tagged = new RegExp(/ =~ (\^\S+\$) \]\]/.exec(workflow("tag.yaml"))?.[1] ?? "(?!)");
-    const versions = headingsOf(changelog)
-      .filter(({ level }) => level === 2)
-      .map(({ text }) => {
-        const [, version = "", date = ""] = /^v(\S+) - (\d{4}-\d{2}-\d{2})$/.exec(text) ?? [];
-        const real = !Number.isNaN(Date.parse(date)) && new Date(date).toISOString().startsWith(date);
-
-        expect([text, tagged.test(version) && real]).toEqual([text, true]);
-
-        return version;
-      });
-
-    expect(tagged.source).not.toBe("(?!)");
-    expect(versions.length).toBeGreaterThan(0);
-    expect(new Set(versions).size).toBe(versions.length);
-    expect([...versions].sort(newestFirst)).toEqual(versions);
-    expect(versions.filter((version) => sayNothing(notesOf(changelog, version)))).toEqual([]);
-    // The version of main is 0.1.0-alpha.0 until the pull request of the first prerelease, a form the tag workflow
-    // does not tag; from that pull request on, the version has its notes, or the pull request fails.
-    const required = tagged.test(manifest.version) ? [manifest.version] : [];
-
-    expect(required.filter((version) => sayNothing(notesOf(changelog, version)))).toEqual([]);
-  });
-
-  it("resolves every relative link, image and anchor of the README and of the changelog, and holds both to ASCII with no em dash and no emoji", () => {
+  it("resolves every relative link, image and anchor of the README, and holds it to ASCII with no em dash and no emoji", () => {
     const repository = repositoryFiles();
+    const broken = targetsOf(readme).flatMap(({ target, line }) => {
+      const why = unresolved("README.md", target, repository);
 
-    for (const [document, text] of [
-      ["README.md", readme],
-      ["CHANGELOG.md", changelog],
-    ]) {
-      const broken = targetsOf(text).flatMap(({ target, line }) => {
-        const why = unresolved(document, target, repository);
-
-        return why === undefined ? [] : [`${line}: ${why}`];
-      });
-      const outside = text
-        .split("\n")
-        .flatMap((line, index) =>
-          [...line].some((character) => (character.codePointAt(0) ?? 0) > 0x7f) ? [`${index + 1}: ${line}`] : [],
-        );
-      // GitHub draws a shortcode of its prose, as `:rocket:`, as an emoji.
-      const shortcodes = proseOf(text).flatMap((prose, index) =>
-        [...prose.replace(/\]\([^)]*\)/g, "](").matchAll(/:[a-z0-9_+-]+:/g)].map(
-          (match) => `${index + 1}: ${match[0]}`,
-        ),
+      return why === undefined ? [] : [`${line}: ${why}`];
+    });
+    const outside = readme
+      .split("\n")
+      .flatMap((line, index) =>
+        [...line].some((character) => (character.codePointAt(0) ?? 0) > 0x7f) ? [`${index + 1}: ${line}`] : [],
       );
+    // GitHub draws a shortcode of its prose, as `:rocket:`, as an emoji.
+    const shortcodes = proseOf(readme).flatMap((prose, index) =>
+      [...prose.replace(/\]\([^)]*\)/g, "](").matchAll(/:[a-z0-9_+-]+:/g)].map((match) => `${index + 1}: ${match[0]}`),
+    );
 
-      expect([document, broken]).toEqual([document, []]);
-      expect([document, outside]).toEqual([document, []]);
-      expect([document, shortcodes]).toEqual([document, []]);
-      // The em dash, written by its code point: the formatter writes the escape as the character.
-      expect([document, text.includes(String.fromCodePoint(0x2014))]).toEqual([document, false]);
-    }
+    expect(broken).toEqual([]);
+    expect(outside).toEqual([]);
+    expect(shortcodes).toEqual([]);
+    // The em dash, written by its code point: the formatter writes the escape as the character.
+    expect(readme.includes(String.fromCodePoint(0x2014))).toBe(false);
   });
 });
