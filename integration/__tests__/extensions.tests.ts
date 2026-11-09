@@ -7,7 +7,9 @@
 // profile and listed as Enabled; each entry point reached as the host loaded it, and extending the
 // classes of the host; the dispatcher of the host process as it was; the bundle of the main process
 // downloading an artifact inside that process, over HTTP and over HTTPS from a store whose certificate it
-// verified; and no error in what the host writes, on its output, in its console or in the files of its log.
+// verified, and resolving there the route to a store at a private address, refused without its allowance and
+// direct with it, with no connection; and no error in what the host writes, on its output, in its console or
+// in the files of its log.
 //
 // The host imports the main entry point, an ES module, from its file, and the renderer one from a URL of
 // its own scheme. A module is held by the loader of its process under its URL, so the case asks the
@@ -21,6 +23,7 @@ import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTlsFixture } from "../../test/tls-fixture";
 import * as velero from "../helpers/velero-extension";
+import { PRIVATE_STORE_ADDRESS } from "../helpers/velero-route";
 
 import type { ElectronApplication, Page } from "playwright";
 
@@ -30,6 +33,9 @@ const DISPATCHERS = ["undici.globalDispatcher.1", "undici.globalDispatcher.2"];
 // The name of the store the certificate of the test is for, and a name it is not for.
 const STORE_NAME = "storage.example.invalid";
 const OTHER_NAME = "wrong.example.invalid";
+// The origin the storage location of the route gives: the store at a private address, where nothing of the tests
+// listens and which the runners do not route.
+const PRIVATE_ORIGIN = `https://${PRIVATE_STORE_ADDRESS}:9000`;
 // The name the extension gives its store of the preferences, which each entry point opens when it is activated.
 const STORE = "[VELERO-PREFERENCES]: LOADED";
 const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
@@ -54,6 +60,35 @@ function dispatchersOf(app: ElectronApplication): Promise<string[]> {
       }),
     DISPATCHERS,
   );
+}
+
+// What the operator may allow, as a refusal carries it.
+interface AllowanceNeeded {
+  what: string;
+  origin: string;
+  location?: string;
+}
+
+// How a resolution of a route ended in the main process of the host: the route; the refusal by its class, its code,
+// its step, its rule and what the operator may allow; or what else was thrown, by its class and its message.
+interface RouteEnded {
+  route?: Record<string, unknown>;
+  name?: string;
+  message?: string;
+  code?: string;
+  stage?: string;
+  verdict?: string;
+  needs?: AllowanceNeeded;
+}
+
+// The words the main process gives the views of a download that failed.
+interface FailureWords {
+  ok?: boolean;
+  code?: string;
+  stage?: string;
+  retry?: boolean;
+  text?: string;
+  needs?: AllowanceNeeded;
 }
 
 describe("extensions page tests", () => {
@@ -177,7 +212,9 @@ describe("extensions page tests", () => {
         "KubectlTunnels",
         "WriteGate",
         "downloadArtifact",
+        "downloadFailureOf",
         "registerHandlers",
+        "resolveRoute",
       ]),
     );
   });
@@ -528,6 +565,234 @@ describe("extensions page tests", () => {
       await certificates.dispose();
     }
   }, 150_000);
+
+  it("resolves inside the main process of the host the route to a store at a private address: refused without its allowance, with the words of what may be allowed, direct to that address with it, and nothing connected", async () => {
+    // The request of the views the route is for: the log of a backup of the installation in `velero`.
+    const request = "0e7c5b7a-1111-4111-8111-000000000290";
+    // The build the host made of the tarball in the profile, as its modules name it.
+    const folder = realpathSync(build.folder);
+    const outcome = await velero.within(
+      "The routes resolved in the main process of the host",
+      30_000,
+      app.evaluate(
+        async (_electron, given) => {
+          const main = process.mainModule;
+
+          if (!main) throw new Error("The main module of the host is not reachable");
+          // The module the host loaded, as the case of the main entry point proved: the route, and the words the main
+          // process gives the views of a download that failed.
+          const { resolveRoute, downloadFailureOf } = main.require(given.file) as {
+            resolveRoute(
+              url: string,
+              input: object,
+              storage: object,
+              signal: AbortSignal,
+              dependencies: object,
+            ): Promise<{ route: Record<string, unknown>; close(): void | Promise<void> }>;
+            downloadFailureOf(error: unknown, context: object): FailureWords;
+          };
+          const net = main.require("node:net") as typeof import("node:net");
+          // What the route asks of what it is given, in its order: the allowances of the cluster, which hold nothing,
+          // then the private address for the origin of the store, as the operator gives it; and stand-ins of the
+          // cluster, of the resolver of this machine and of kubectl, which refuse what they are asked: no cluster
+          // takes part, nothing is resolved and no tunnel is opened.
+          const asked: string[] = [];
+          const allowances: { what: string; origin: string }[] = [];
+          const refuse = (what: string) => {
+            asked.push(what);
+            return Promise.reject(new Error(`The case gives the route no ${what}`));
+          };
+          const dependencies = {
+            allowed: (what: string, origin: string, location: string) => {
+              asked.push(`allowed ${what} ${origin} ${location}`);
+              return allowances.some((entry) => entry.what === what && entry.origin === origin);
+            },
+            api: {
+              assertCurrent: () => {
+                asked.push("catalog");
+              },
+              read: (kind: string, namespace: string, name: string) => refuse(`read ${kind} ${namespace}/${name}`),
+              list: (kind: string, namespace: string, name: string) => refuse(`list ${kind} ${namespace}/${name}`),
+            },
+            lookup: (host: string) => refuse(`lookup ${host}`),
+            tunnel: (pod: { name?: string; port?: number }) => refuse(`kubectl ${pod.name}:${pod.port}`),
+          };
+          // What the route may have opened: every connection a socket of the process is asked for, and every listener
+          // a server of it opens, whose stack, with all its frames, names the build the host made of the extension,
+          // and every connection to the address of the store. What else the host opens meanwhile is neither recorded
+          // nor touched.
+          const opened: string[] = [];
+          const sockets: import("node:net").Socket[] = [];
+          const servers: import("node:net").Server[] = [];
+          const { connect } = net.Socket.prototype;
+          const { listen } = net.Server.prototype;
+          const ofTheExtension = () => {
+            const limit = Error.stackTraceLimit;
+
+            Error.stackTraceLimit = Number.POSITIVE_INFINITY;
+            try {
+              const stack = new Error("Asked").stack ?? "";
+
+              return stack.includes(given.folder) || stack.includes(given.folderUrl);
+            } finally {
+              Error.stackTraceLimit = limit;
+            }
+          };
+          // Where a socket is asked to connect, or a server to listen, by the arguments it is given: its options, which
+          // `net.connect` passes as the first of an array, a port and a host, or the path of a pipe.
+          const where = (args: unknown[]): { host?: string; label: string } => {
+            const [first, second] = (Array.isArray(args[0]) ? args[0] : args) as unknown[];
+
+            if (typeof first === "object" && first !== null) {
+              const { host, port, path } = first as { host?: unknown; port?: unknown; path?: unknown };
+
+              if (typeof path === "string") return { label: path };
+              return { host: typeof host === "string" ? host : undefined, label: `${String(host)}:${String(port)}` };
+            }
+            if (typeof first === "string" && !/^\d+$/.test(first)) return { label: first };
+            const host = typeof second === "string" ? second : undefined;
+
+            return { host, label: `${String(host)}:${String(first)}` };
+          };
+          // Each resolution ends within a time of its own, the two well within the bound of the evaluation, so that the
+          // spies are put back before the case gives up on it. A refusal is kept with the words the main process makes
+          // of that very error, and what else is thrown with its message.
+          const resolve = async (): Promise<{ ended: RouteEnded; words?: FailureWords }> => {
+            let timer: ReturnType<typeof setTimeout> | undefined;
+
+            try {
+              const resolved = await Promise.race([
+                resolveRoute(given.url, given.input, given.storage, new AbortController().signal, dependencies),
+                new Promise<never>((_resolve, reject) => {
+                  timer = setTimeout(() => reject(new Error("The resolution did not end in 8 s")), 8_000);
+                }),
+              ]);
+
+              // A direct route holds nothing to close.
+              await resolved.close();
+              return { ended: { route: resolved.route } };
+            } catch (error) {
+              const { name, message, code, stage, verdict, needs } = error as RouteEnded;
+
+              return {
+                ended: name === "DiagnosticError" ? { name, code, stage, verdict, needs } : { name, message },
+                words: downloadFailureOf(error, given.context),
+              };
+            } finally {
+              clearTimeout(timer);
+            }
+          };
+          const ended: {
+            refused?: RouteEnded;
+            words?: FailureWords;
+            direct?: RouteEnded;
+            asked: string[][];
+            opened: string[];
+          } = { asked: [], opened };
+
+          net.Socket.prototype.connect = function (this: import("node:net").Socket, ...args: unknown[]) {
+            const { host, label } = where(args);
+
+            if (host === given.address || ofTheExtension()) {
+              opened.push(`connect ${label}`);
+              sockets.push(this);
+            }
+            return connect.apply(this, args as never);
+          } as typeof connect;
+          net.Server.prototype.listen = function (this: import("node:net").Server, ...args: unknown[]) {
+            if (ofTheExtension()) {
+              opened.push(`listen ${where(args).label}`);
+              servers.push(this);
+            }
+            return listen.apply(this, args as never);
+          } as typeof listen;
+          try {
+            // Without the allowance of private addresses for the cluster, then with it.
+            const refused = await resolve();
+
+            ended.refused = refused.ended;
+            ended.words = refused.words;
+            ended.asked.push(asked.splice(0));
+            allowances.push({ what: "private", origin: given.origin });
+            ended.direct = (await resolve()).ended;
+            ended.asked.push(asked.splice(0));
+            // A turn of the loop and a tenth of a second more, for what the route may ask once it has answered.
+            await new Promise<void>((done) => setImmediate(done));
+            await new Promise<void>((done) => setTimeout(done, 100));
+          } finally {
+            net.Socket.prototype.connect = connect;
+            net.Server.prototype.listen = listen;
+            for (const socket of sockets) socket.destroy();
+            for (const server of servers) server.close();
+          }
+          return ended;
+        },
+        {
+          file: realpathSync(path.join(build.folder, build.main)),
+          folder,
+          folderUrl: pathToFileURL(folder).href,
+          // The log of the backup at its signed URL, in the bucket of the location, which is in the path.
+          url: `${PRIVATE_ORIGIN}/fnd-10/backups/fnd-10/fnd-10-logs.gz?X-Amz-Signature=synthetic`,
+          origin: PRIVATE_ORIGIN,
+          address: PRIVATE_STORE_ADDRESS,
+          input: { requestId: request, namespace: "velero", target: "BackupLog", name: "fnd-10", uid: "fnd-10-backup" },
+          // A storage location of the plugin of AWS whose URL names the address, as Velero reads one.
+          storage: {
+            metadata: { name: "default", namespace: "velero", uid: "fnd-10-location" },
+            spec: {
+              provider: "aws",
+              objectStorage: { bucket: "fnd-10" },
+              config: { region: "minio", s3ForcePathStyle: "true", s3Url: PRIVATE_ORIGIN },
+            },
+          },
+          // What the main process says a failed download of that request with.
+          context: { artifact: "BackupLog", name: "fnd-10", namespace: "velero", request: `fnd-10-${request}` },
+        },
+      ),
+    );
+
+    // Without the allowance: refused, with what the operator may allow, a private address for the origin of the store.
+    expect(outcome.refused).toEqual({
+      name: "DiagnosticError",
+      code: "destination-denied",
+      stage: "route",
+      verdict: "allowance",
+      needs: { what: "private", origin: PRIVATE_ORIGIN },
+    });
+    // The words the main process makes of that very refusal say what may be allowed, for that origin, and nothing of the
+    // path or the signature of the URL; the failure carries it for the views to offer.
+    expect(outcome.words).toMatchObject({
+      ok: false,
+      code: "destination-denied",
+      stage: "route",
+      retry: false,
+      needs: { what: "private", origin: PRIVATE_ORIGIN },
+    });
+    expect(outcome.words?.text).toContain(
+      `The store of ${PRIVATE_ORIGIN} is at a private address: a connection to it is made only after it is allowed.`,
+    );
+    expect(outcome.words?.text).not.toMatch(/\/backups\/|-logs\.gz|X-Amz-Signature/);
+    // With it, the route is direct to that address, at the port of the URL, for the file asked, encrypted.
+    expect(outcome.direct).toEqual({
+      route: {
+        origin: PRIVATE_ORIGIN,
+        pathname: "/fnd-10/backups/fnd-10/fnd-10-logs.gz",
+        address: PRIVATE_STORE_ADDRESS,
+        port: 9000,
+        mode: "direct",
+        allowHttp: false,
+        allowPrivate: true,
+      },
+    });
+    // Each time the route asked the allowance of the cluster, for that origin and that location, and nothing of the
+    // cluster, of the resolver of this machine or of kubectl.
+    expect(outcome.asked).toEqual([
+      [`allowed private ${PRIVATE_ORIGIN} velero/default`],
+      [`allowed private ${PRIVATE_ORIGIN} velero/default`],
+    ]);
+    // And the route asked for no connection and opened no listener, while it was resolved and in the turns after it.
+    expect(outcome.opened).toEqual([]);
+  }, 60_000);
 
   it("logs the activation of each entry point, and no error, in the files of the log of the host", async () => {
     const directory = await velero.logDirectory(app);
