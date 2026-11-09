@@ -612,6 +612,39 @@ cluster `freelens-velero-dev-control-plane`:
 | The volume information of the backup and of the restore of the volume | Read on 2026-11-04 from the filer of the store in its own pod, at `127.0.0.1`, with no credentials and nothing written: the `<backup>-volumeinfo.json.gz` of the backup holds one entry, `backupMethod` `PodVolumeBackup`, `snapshotDataMoved`, `preserveLocalSnapshot` and `skipped` false, `result` `succeeded`, started and completed within two seconds, and a `pvbInfo` with the snapshot ID of the pod volume backup as its `snapshotHandle`, `size` and `incrementalSize` 1,048,641, `uploaderType` `kopia`, `volumeName` `data`, the pod, its namespace, the node and `Phase` `Completed`, and no claim or volume, which an `emptyDir` does not have; the `<restore>-volumeinfo.json.gz` of the restore is an empty list, since the release leaves out of it the pod volume restore of a volume bound to no claim (`internal/volume/volumes_information.go:771-800`) |
 | The layout of the kopia keys under the prefix of the location | The location has no prefix. At the root of the bucket, on 2026-11-04, the folders `backups`, `restores`, `kopia` and `.uploads`, where the store keeps its multipart uploads, and no key. Under `kopia/<volume namespace>/`, twelve keys and 1,069,433 bytes: `kopia.repository` (1,135 bytes), `kopia.blobcfg` (30) and `udmrepo.Repository` (59); two log blobs, whose keys start with `_log_`; one data pack, with `p`, of 1,052,908 bytes, the megabyte of the volume; three metadata packs, with `q`, and three index blobs, with `xn0_` |
 
+### Before The First Prerelease, 2026-11-09
+
+The watch the [process](PROCESS.md#upstream-drift-watch) asks before every release
+of the extension, read before the first prerelease, 1.0.0-0, as REQ-310 of
+[SPEC-0018](../specs/SPEC-0018-release-readiness.md) asks, from the releases of
+each repository on GitHub and the commit of each tag. Public upstream sources
+only; nothing was run.
+
+| Component | Latest release | Newer, a release candidate | Compared with |
+| --- | --- | --- | --- |
+| Velero | `v1.18.4`, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, released 2026-09-28 | `v1.19.0-rc.1`, `9338d275bbeac8226023e6fc269b9608ec160928`, published 2026-11-06 | `v1.18.4`, the reviewed one |
+| AWS object-store plugin | `v1.14.4`, `7373ae03525ce743a4f95f13a8fa9f56c7b8f551`, released 2026-09-28 | `v1.15.0-rc.1`, `bbb9bcdf6709aec46c78bb8d56b948a218690bae`, published 2026-11-07 | `v1.14.4`, the reviewed one |
+| Freelens | `v2.0.0`, `b9b53e16056578c5407312eba5823a089972f6d5`, released 2026-10-28 | None | `v2.0.0`, the validation target of [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md) |
+
+The latest stable releases of Velero and of its AWS plugin are the reviewed pair:
+there is nothing to compare, and the pair stays `v1.18.4` and `v1.14.4`, as D17 of
+SPEC-0018 decided for a Velero 1.19 released during the sixth milestone. The two
+release candidates are not a baseline. The notes of `v1.19.0-rc.1` announce a
+block data mover, the restore of the data of a volume in place, fine-grained
+filters and the selection of namespaces by label through ResourcePolicy
+ConfigMaps, global volume policies and a custom action of a volume policy: the
+watch before 1.0.0 reads them again if 1.19.0 is released by then, and the README
+says that 1.19 is untested (REQ-299).
+
+The host drift watch, as [the process](PROCESS.md#host-drift-watch) reads it since
+Freelens 2.0.0: no release of Freelens after `v2.0.0`, and the registry of npm
+names `@freelensapp/extensions` 2.0.0 under `latest`, beside two older versions
+under `nightly` and `next`. The pull request of Renovate of the group `Freelens
+dependencies` open on this date brings versions of the main branch of the host,
+Electron 44.10.1, Node 24.22.1 and Biome 2.6.4, and no release, so it waits for the
+release that brings them. The validation target stays the commit of the tag
+`v2.0.0`, as SPEC-0015 says.
+
 ## Verification And Remaining Work
 
 Completed checks:
