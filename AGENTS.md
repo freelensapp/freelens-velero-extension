@@ -945,18 +945,20 @@ for the changes that reach them:
   disposable kind cluster with the CRDs of the release alone that
   `pnpm e2e:cluster:up:definitions` makes, taken down whatever happens.
   Freelens is built through `.github/actions/build-freelens`, the composite
-  action it shares with `views-tests.yaml`; a change of that action runs every
-  part of the views.
-- `views-tests.yaml`: every suite of the views, the pre-review and FND-10, in five
+  action it shares with `views-tests.yaml` and the job `package` of
+  `release.yaml`; a change of that action runs every part of the views and that
+  job.
+- `views-tests.yaml`: every suite of the views, the pre-review and FND-10, in six
   parts side by side, each a job with an environment of its own and one run of the
   runner of `pnpm e2e:views`, in Freelens built at the same commit: three on the
   environment and the fixtures of `pnpm demo:up`, for the suites that read what
   only a server makes (the artifacts, the pre-review, the volumes, the server and
   the repositories),
   each then with the cleanup of the fixtures and the verification of the
-  environment; and two on the CRDs of the release alone with the static fixtures
-  and the counterparts of what the controllers leave in the installation, for the
-  eleven other suites and FND-10. A first job decides the parts by the rules of
+  environment; and three on the CRDs of the release alone with the static fixtures
+  and the counterparts of what the controllers leave in the installation: two for
+  the eleven other suites and FND-10, and one for the suite of the actions. A
+  first job decides the parts by the rules of
   `e2e/views-parts.json`: every part on main, every night and on demand; on a pull
   request, the parts its changed files reach, every part for a file no rule knows
   and none for documents and unit tests alone. The job `views in Freelens v2`
@@ -969,7 +971,7 @@ for the changes that reach them:
 - `osv-scanner.yaml`, and `mise-lock-check.yaml` for a pull request that changes
   `.nvmrc`, `mise.toml` or `mise.lock`.
 
-The two workflows that build Freelens name the commit once, in `freelens_ref`,
+The three workflows that build Freelens name the commit once, in `freelens_ref`,
 and cache the build by it and by nothing else; a unit test ties that line to the
 header of [SPEC-0015](docs/specs/SPEC-0015-freelens-v2-host.md), so the pin moves
 in both places when the target moves with a release of Freelens. A release is
@@ -978,10 +980,18 @@ tags the version `X.Y.Z` or `X.Y.Z-N` on the merge commit of that pull request,
 never on main as it is when the job runs, at its merge or, once it is merged, on
 the comment `/tag` of an author with write access to the repository who is an
 owner, a member of the organization or a collaborator, and
-`release.yaml`, which builds the tag and publishes a version with a hyphen on the
-npm tag `next`, released on GitHub as a prerelease, and any other on `latest`. The
-daily maintenance workflows open their pull requests on branches named
-`automated/*`, and Renovate on `renovate/*`.
+`release.yaml`, in two jobs. Its job `package`, which holds no credential, builds
+the tag, packs it once, runs FND-10 on that tarball in Freelens built at the
+validation target, and makes the bill of materials of the packed file, the
+checksums, the notes of the version from `CHANGELOG.md` and the list of what the
+package contains; it runs alone, and publishes nothing, on a pull request that
+changes `release.yaml`, `CHANGELOG.md` or the action that builds Freelens, and
+when started by hand. Its job `publish`, at a pushed tag alone and in the
+environment `publishing`, builds nothing: it verifies the sha256 of that tarball,
+publishes it with provenance, a version with a hyphen on the npm tag `next`,
+released on GitHub as a prerelease, and any other on `latest`, and creates the
+GitHub release. The daily maintenance workflows open their pull requests on
+branches named `automated/*`, and Renovate on `renovate/*`.
 
 ## Code Style
 

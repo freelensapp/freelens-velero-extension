@@ -1,6 +1,6 @@
 # Dependencies
 
-Updated: 2026-11-07
+Updated: 2026-11-09
 
 What the extension ships, what it only builds with, and how both are kept
 current, on Freelens v2 since T0.7
@@ -39,8 +39,20 @@ organization applies: a third-party library a bundle carries is declared in
 - The shim of the SDK is the module of `@freelensapp/extensions` that reads
   `Common`, `Main` and `Renderer` from the same global: it is bundled, and the
   rest of the SDK is never reached.
+- The license notice of each library a bundle carries travels in the package,
+  beside its bundle: the build writes `dist/renderer.js.LICENSE.txt`, with the
+  name, the version and the license file of react-window as its package ships
+  them, the MIT notice, through `build/vite-plugin-license-notices.mjs`, which
+  fails the build on a library that ships no license file. The main bundle
+  carries no library and has no notice. The build test reads the notice, and the
+  list of the contents of the release workflow finds it in the tarball (REQ-316
+  of SPEC-0018).
 
-The packed build is about 0.5 MB.
+The tarball is about 1 MB, more than two thirds of it the source maps of the two
+bundles. The bill of materials attached to each GitHub release is made from that
+tarball, installed in an empty directory with no devDependency, no peer, no script
+and no lockfile, so that it is of what the package carries, the extension and
+react-window, and not of the development graph (REQ-307 of SPEC-0018).
 
 ## Development Graph
 

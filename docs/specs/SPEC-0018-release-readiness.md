@@ -1125,3 +1125,238 @@ Decided while implementing, on 2026-11-09:
   makes anything: on macOS `/usr/bin/openssl` is LibreSSL, which does not know
   `-copy_extensions`, so REL-02 runs with an OpenSSL 3 first on the PATH. TESTING.md
   says so.
+
+T6.4 and the second half of REQ-286, on 2026-11-09: the release workflow in two
+jobs, which publishes the tarball FND-10 installed (REQ-286, REQ-303, REQ-305,
+REQ-307, REQ-308 with D11a, REQ-316). The job `package` builds the tag, packs it
+once, runs FND-10 on that file in Freelens built at the target through the
+action of the first half, and makes the bill of materials of the packed file,
+the checksums, the notes and the list of the contents; the job `publish`, at a
+pushed tag alone, verifies the sha256, publishes that file and creates the
+release. The evidence, by check:
+
+- REG-02: the case "releases in two jobs: package, with no credential, packs the
+  tarball once and runs FND-10 on it, and publish, at a pushed tag alone and in
+  publishing, builds nothing and publishes that file" reads `release.yaml`
+  without its comments. The triggers are the tag `v*`, a run by hand and the pull
+  requests that change `release.yaml`, `CHANGELOG.md` or the action; the workflow
+  reads the repository and nothing more. The jobs are `package` and `publish`
+  and no other. `package` has `contents: read` alone, no environment and no
+  secret, runs on `ubuntu-24.04-arm`, and has its steps in their order: at a tag
+  the check that the tag is the version of `package.json`; the install and the
+  build with their retries; one pack in the whole workflow, of one tarball, whose
+  name and sha256 are outputs of its step, taken before FND-10 starts the
+  application; the OS dependencies of Playwright; the action, given
+  `env.freelens_ref`; FND-10 as
+  `xvfb-run -a --server-args="-screen 0 1920x1200x24" pnpm test:integration integration/__tests__/extensions.tests.ts`
+  with `EXTENSION_PATH` the tarball of the pack, with no cluster and no runner;
+  then the bill of materials, the checksums, the notes, the list of the contents,
+  and, before the one upload of the job, a check that one file of each kind is
+  there, that the tarball has the bytes of the pack and that its checksum file
+  names them; the upload carries the four files and the notes. `publish` needs
+  `package`, runs when a tag was pushed and never by hand, in `publishing`, with
+  `contents: write` and `id-token: write` and nothing else, and its steps are the
+  checkout, Node.js and pnpm, the download of the artifact of `package`,
+  `sha256sum -c` of the two checksums, the publication and the release: no
+  install, no build, no pack, no Freelens and no test. The case of the target,
+  now "builds Freelens for the views, for the integration and for the release at
+  the validation target of SPEC-0015, named once", holds `release.yaml` as the
+  third workflow that calls the action, with its one line of the commit, the
+  action given that line, mise with `yq` before the call, `DO_NOT_TRACK: "1"` and
+  the runner. The case of the tags reads one publication (`test/environment.test.ts`).
+- ASSET-01 (#144, as REQ-305 amends it): the case "attaches to the release the
+  tarball, its bill of materials in SPDX JSON named after it and the checksums of
+  both, made in package before the publication (#144)". In `package`: the bill of
+  materials by `anchore/sbom-action`, `format: spdx-json`,
+  `output-file: sbom.spdx.json`, with no upload of its own and no release asset;
+  its rename after the tarball, `${f%.tgz}-spdx.json`; and the `sha256sum` of each
+  `*.tgz` and `*-spdx.json` into `"$f.sha256"`. In `publish`, after the
+  publication: the release by `softprops/action-gh-release` with
+  `fail_on_unmatched_files: true`, the prerelease flag of today, the notes as its
+  body, and exactly the four patterns `*.tgz`, `*.tgz.sha256`, `*-spdx.json`,
+  `*-spdx.json.sha256`, in that order. The bill of materials and the checksums
+  are made in `package`, which `publish` needs, so before the publication.
+- ASSET-03 (REQ-307, D10): the case "makes the bill of materials of the packed
+  file, installed in a new empty directory with no devDependency, no peer, no
+  script and no lockfile, and scans that directory alone": right after FND-10,
+  `mkdir bill-of-materials` and
+  `npm install --prefix bill-of-materials --omit=dev --omit=peer --ignore-scripts --no-package-lock`
+  of the tarball of the pack, never of the registry; then the scan of that
+  directory alone, with the cataloger of the installed npm packages, the root of
+  the document named after the tarball. Installed so
+  on this machine with the npm of Node.js 24.21.0, the directory held the
+  extension and react-window 2.3.4 and nothing else, react and react-dom, the
+  peers of react-window, left out. The list the scan gives on the run of the pull
+  request, which the step "Show the packages of the bill of materials" writes in
+  the log, the packages and then the root of the document:
+  {RUN-RELEASE-SBOM-LIST}.
+- ASSET-04 (REQ-308, D11a): the case "asks npm for the provenance of the one
+  publication of the packed file on both of its ways, with the token of
+  publishing and through the trusted publisher": the one step of the
+  publication, with no retry, runs
+  `pnpm --color=always publish <tarball> --no-git-checks --provenance --tag <next or latest>`
+  with the token of `publishing` when the environment has one and without it
+  otherwise, and nothing turns the provenance off.
+- ASSET-06 (REQ-316): the case "lists what the package contains, fails on a file
+  outside dist/ and the three the packer adds, on the name or the form of a
+  credential and on a path of the runner, and finds the notice of react-window"
+  pins the step and runs its script on synthetic packages it packs: it passes on
+  the package as packed, and fails on a `CHANGELOG.md` and a `src/` beside
+  `dist/`, on the notice removed and on a notice of another library, on five
+  files of `dist/` named as the Security section of AGENTS.md names a credential,
+  on the home of the runner and on the workspace written in a file, and on nine
+  forms of a credential, two private keys, three kubeconfigs, the token of an
+  `.npmrc`, a token of npm and two of GitHub, each made by the case so that no
+  file of the repository holds one; each failure names the file, never what
+  matched. The notice travels as `dist/renderer.js.LICENSE.txt`, which the build
+  writes beside the bundle that carries react-window: the build test lists it
+  among the files of the build and finds in it the license file of the package
+  the lockfile installed, react-window 2.3.4, its MIT notice
+  (`test/build.test.ts`). The list of the run of the pull request:
+  {RUN-RELEASE-CONTENTS}.
+- DOC-09, the part of REG-02: the case "makes the notes of the version in package
+  from its section of CHANGELOG.md, stops at a tag without them, and gives them to
+  the release as its body" runs the script of the step on a `CHANGELOG.md` of the
+  form of REQ-303. At a tag, the notes are the section of the version without its
+  heading, to the next heading of its level, blank lines trimmed; a version with
+  no section, a heading of another form, or no `CHANGELOG.md` stops the run with
+  an error and no notes. On a pull request or by hand, the section of the version,
+  or else the newest section with a warning, or else a line that says there is
+  none, so that the job runs on. The notes are uploaded with the four files and
+  are the body of the release.
+- The open question of `pnpm publish <file>`, answered from the documentation and
+  the source of pnpm 12.15.0, the `packageManager` of this repository, with no
+  publication and no write to the network: pnpm publishes natively since its
+  version 11 and no longer through the npm CLI
+  ([`pnpm/docs/cli/publish.md`](https://github.com/pnpm/pnpm/blob/91774e72a04d52ce61db06339696a433d383c764/pnpm/docs/cli/publish.md?plain=1#L15)).
+  For a path that ends in `.tgz` it reads the file and hands its bytes to the
+  registry as they are, with no repack and no script
+  ([`publish.rs`](https://github.com/pnpm/pnpm/blob/91774e72a04d52ce61db06339696a433d383c764/pnpm/crates/cli/src/cli_args/publish.rs#L211-L237)):
+  the publish document carries those bytes in base64, with the integrity and the
+  shasum of the same bytes
+  ([`document.rs`](https://github.com/pnpm/pnpm/blob/91774e72a04d52ce61db06339696a433d383c764/pnpm/crates/publish/src/publish_packed_pkg/document.rs#L17-L113)),
+  and the manifest read from `package/package.json` of the tarball, whose
+  `publishConfig` gives the access `public`
+  ([`extract_manifest_from_packed.rs`](https://github.com/pnpm/pnpm/blob/91774e72a04d52ce61db06339696a433d383c764/pnpm/crates/publish/src/extract_manifest_from_packed.rs#L1-L3));
+  the provenance statement names the sha512 of the same bytes
+  ([`provenance_gen.rs`](https://github.com/pnpm/pnpm/blob/91774e72a04d52ce61db06339696a433d383c764/pnpm/crates/publish/src/provenance_gen.rs#L70)).
+  So the job publishes with `pnpm publish <file>`, and no `npm publish`. The flag
+  `--provenance` is taken over the configuration and over what trusted
+  publishing would decide
+  ([`options.rs`](https://github.com/pnpm/pnpm/blob/91774e72a04d52ce61db06339696a433d383c764/pnpm/crates/cli/src/cli_args/publish/options.rs#L62-L72));
+  the exchange of the trusted publisher is tried first and, when the registry
+  refuses it, the token of the `.npmrc` that `setup-node` writes is used
+  ([`publish_options.rs`](https://github.com/pnpm/pnpm/blob/91774e72a04d52ce61db06339696a433d383c764/pnpm/crates/publish/src/publish_options.rs#L240-L255)),
+  which pnpm finds through `NPM_CONFIG_USERCONFIG`
+  ([`auth_sources.rs`](https://github.com/pnpm/pnpm/blob/91774e72a04d52ce61db06339696a433d383c764/pnpm/crates/config/src/auth_sources.rs#L298-L320)).
+  The third step of ASSET-05 compares the bytes on the registry with the asset.
+- The steps were run on this machine on synthetic fixtures, before the unit
+  cases: the notes on ten fixtures of `CHANGELOG.md`; the pack with one tarball
+  and with two; the check before the upload on eight changes of the files; the
+  list of the contents on the tarball packed from this branch and on twenty
+  changes of it; the publication with a stand-in for pnpm, at a tag of a
+  prerelease and of a release, with the token and without, each asking for the
+  provenance on `next` or `latest`. The packaged run of FND-10 in the job and the
+  scan are left to the run of the pull request.
+- The run of `package` on the pull request, and `publish` skipped:
+  {RUN-RELEASE-PACKAGE}. The first runs record what REQ-307 and REQ-316 ask:
+  the packages of the bill of materials, {RUN-RELEASE-SBOM-LIST}, and the list of
+  the contents, {RUN-RELEASE-CONTENTS}.
+
+Each new case was seen failing on a change made on purpose, fifty-five in all.
+FND-10 removed, moved into `publish`, given no tarball, which installs the
+package from the registry, and run by the runner on a cluster; `publish` that
+builds, and that packs; `package` given the environment `publishing`,
+`contents: write` and `id-token: write`, and the whole workflow given
+`contents: write`; `publish` without its condition, and run on a tag by hand; a
+second pack in `package`; the bytes before the upload not compared with the
+pack, the checksum file not compared, and the sha256 of the pack read from the
+environment of the job; the action not among the triggers; a second upload. The
+four changes of #144, the checksum of the bill of materials not attached,
+`fail_on_unmatched_files: false`, `cyclonedx-json` and the rename dropped, and the
+checksums made after the publication. The installation of the bill of materials
+without each of its four flags, from the registry, into the workspace with no
+`--prefix`, the scan of the workspace, the scan without the cataloger of the
+installed packages, and the document not named after the tarball. No provenance with the token, none through the trusted
+publisher, the provenance turned off by the environment, and the publication
+tried again. The list of the contents without the notice, taking a
+`CHANGELOG.md`, without the paths of the runner, without the tokens of GitHub,
+without the kubeconfigs, without the names of credentials, and never failing.
+The notes not required at a tag, taken from a heading of another form, running
+past the next section, not the body of the release, and not uploaded. The
+release workflow without mise, building Freelens main, and with the telemetry of
+Turborepo. A prerelease published on `latest`. The build with no notice, with
+the shim of the SDK counted as a library, and with the notice taken from another
+file of the package.
+
+Decided while implementing, on 2026-11-09:
+
+- FND-10 runs as `xvfb-run -a pnpm test:integration integration/__tests__/extensions.tests.ts`
+  with `EXTENSION_PATH`, and not through a mode of the runner of the integration
+  test: that runner takes the lock and the journal of the environment, asks
+  Docker when there is no journal, and checks the target before and after and the
+  namespaces of the sessions, none of which a run with no cluster has; a mode that
+  skipped them would be a second entry through a script whose every action is
+  bound to the environment. The command is the one the runner runs for the file,
+  with the screen it gives `xvfb-run`.
+- The bill of materials: npm takes the nearest folder above with a manifest or a
+  `node_modules` as its project, which in the job is the workspace, so
+  `--prefix` names the new directory; without it npm installed the tarball into
+  the folder above, on this machine, and wrote into its manifest. syft v1.42.3,
+  which `anchore/sbom-action@v0` runs, reads a directory by its lockfiles alone,
+  and the directory has none on purpose, so the step asks it for its cataloger of
+  installed npm packages, `SYFT_DEFAULT_CATALOGERS: javascript-package-cataloger`
+  ([`package_tasks.go`](https://github.com/anchore/syft/blob/v1.42.3/internal/task/package_tasks.go#L77));
+  the manifest npm writes at the root of the directory names no package, which
+  syft drops by default
+  ([`compliance.go`](https://github.com/anchore/syft/blob/v1.42.3/syft/cataloging/compliance.go#L22-L27)).
+  syft names the root of an SPDX document after the path it scanned, so
+  `SYFT_SOURCE_NAME` names it after the tarball: the document is of that file,
+  which holds the packages, and no path names it. `upload-artifact: false` leaves
+  one upload in the job. The packages are written in the log by their names and
+  versions.
+- The notice of react-window is a file beside the bundle that carries it,
+  `dist/renderer.js.LICENSE.txt`, which a plugin of the build,
+  `build/vite-plugin-license-notices.mjs`, writes from the license file of every
+  package of `node_modules` a bundle holds a module of, rather than the legal
+  comments of the bundle: react-window 2.3.4 ships its bundle with no comment of
+  its license, and a file leaves the bytes of the bundles as they were. The shim
+  of the SDK is not counted as a library, as DEPENDENCY-AUDIT.md counts it, and a
+  library that ships no license file fails the build. The change of the build
+  runs every part of the views on its pull request.
+- The notes are the section without its heading, which the release names by the
+  tag. On a pull request or by hand, the version of `package.json` can be one
+  that is never released, `0.1.0-alpha.0` today: the section of the version, or
+  else the newest section with a warning, or else a line that says there is none,
+  so that the cut runs on the file as it is and the job runs on. At a tag, a run
+  started by hand on a tag included, a missing section fails before anything is
+  published. The version is read with Node.js.
+- The publication is one attempt, and the three of today are gone: the registry
+  takes a version once, so an attempt after a publication it accepted fails on the
+  version and only repeats a failure that came before the upload; a failed
+  publication stops the job before the release, and a run of the job again needs
+  the approval of the required reviewer again. The upgrade of npm is gone, since
+  pnpm no longer publishes through it, and `NPM_CONFIG_PROVENANCE` gives way to
+  the flag `--provenance`, which pnpm 12 reads on both ways.
+- `publish` checks the repository out for `.nvmrc` and for the `packageManager`
+  of `package.json` with its hash, and installs, builds and packs nothing; both
+  checkouts keep no credential. `publish` runs only when a tag was pushed, since a
+  run started by hand can be on a tag.
+- The name and the sha256 of the tarball are outputs of the step of the pack,
+  taken before FND-10 starts the application the cache may have given, which a
+  process of a later step can no longer change, as it could change the
+  environment of the job; the check before the upload compares the bytes and the
+  checksum file with that sha256, as the review of the first half asked.
+- The list of the contents fails as well on a file named as the Security section
+  of AGENTS.md names a credential, since a binary keystore holds no form a search
+  of text finds.
+- DEPENDENCY-AUDIT.md says where the notice travels and what the bill of
+  materials is of, and its line of the size of the packed build, about 0.5 MB, is
+  now about 1 MB, the source maps more than two thirds of it. PROCESS.md says,
+  beside the tarball the release workflow publishes, the way back: a version
+  never published again, and `npm deprecate` and `npm dist-tag` by an owner of
+  the scope on the lead maintainer's go.
+
+Left to the runs: the job `package` on the pull request, green with FND-10 on its
+tarball, and `publish` skipped, above; the job `publish` at the first tag, with
+the proof of ASSET-05 and the first publication of D11b, at 1.0.0-0.

@@ -1,26 +1,69 @@
 name: Release
 
+# A version in two jobs (REQ-286 of SPEC-0018). The job `package` holds no
+# credential: it builds the tag, packs the tarball once, runs FND-10 on that
+# very file in Freelens built at the commit of the validation target, makes the
+# bill of materials of the packed file, the checksums, the notes of the version
+# and the list of what the package contains, and uploads them. The job
+# `publish`, at a tag alone and in the environment `publishing`, builds
+# nothing: it verifies the sha256 of that tarball, publishes it, and creates
+# the GitHub release. On a pull request that changes the files of `package`,
+# and when started by hand, `package` runs alone and nothing is published.
 on:
   push:
     tags:
       - v*
+  pull_request:
+    branches:
+      - "*"
+    paths:
+      - .github/workflows/release.yaml
+      - CHANGELOG.md
+      - .github/actions/build-freelens/**
+  workflow_dispatch: {}
 
 permissions:
-  contents: write
-  id-token: write
+  contents: read
+
+env:
+  # The commit of Freelens FND-10 runs on: the validation target of SPEC-0015.
+  # It moves only with that target, and this line is the one that names it
+  # here.
+  freelens_ref: b9b53e16056578c5407312eba5823a089972f6d5
 
 jobs:
-  release:
-    name: release
+  package:
+    name: package
 
     runs-on: ubuntu-24.04-arm
-    environment: publishing
+    timeout-minutes: 60
+
+    # The job installs packages with apt-get and sudo, builds or restores a
+    # third-party application and starts it: it reads the repository and
+    # nothing else, with no environment and no secret (D3 of SPEC-0018).
+    permissions:
+      contents: read
+
+    env:
+      DO_NOT_TRACK: "1"
 
     steps:
       - name: Checkout plugin
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # yq comes from mise so that its version has a single source (mise.toml)
+      # and the download is verified against mise.lock. The action that builds
+      # Freelens reads it too.
+      - name: Set up mise
+        uses: jdx/mise-action@v5
+        with:
+          version: 2026.11.5 # datasource=github-releases depName=jdx/mise
+          install_args: yq
 
       - name: Check if package version matches
+        if: github.ref_type == 'tag'
         run: test "${GITHUB_REF_NAME}" = "v$(yq -r .version package.json)"
 
       - name: Setup node
@@ -28,120 +71,158 @@ jobs:
         with:
           node-version-file: .nvmrc
           package-manager-cache: false
-          registry-url: https://registry.npmjs.org
-
-      - name: Upgrade npm
-        run: npm install -g npm@11
 
       - name: Setup pnpm
         run: corepack enable
 
       - name: Get pnpm cache directory
-        shell: bash
         run: echo "pnpm_cache_dir=$(pnpm store path)" >> ${GITHUB_ENV}
 
       - name: Use pnpm cache
         uses: actions/cache@v6
         with:
           path: ${{ env.pnpm_cache_dir }}
-          key: ubuntu-24.04-arm-node-${{ hashFiles('**/pnpm-lock.yaml') }}
+          key: node-freelens-${{ env.freelens_ref }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: |
-            ubuntu-24.04-arm-node-
+            node-freelens-${{ env.freelens_ref }}-
 
       - name: Install pnpm dependencies
         id: install-pnpm
         run: timeout 300 pnpm install --color=always --prefer-offline --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
         continue-on-error: true
 
       - name: Install pnpm dependencies (retry)
         if: steps.install-pnpm.outcome == 'failure'
         run: timeout 300 pnpm install --color=always --prefer-offline --frozen-lockfile
-
-      - name: Build packages
-        id: build-packages
-        run: pnpm --color=always --stream build
-        continue-on-error: true
-
-      - name: Build packages (retry)
-        id: build-packages-2
-        if: steps.build-packages.outcome == 'failure'
-        run: pnpm --color=always --stream build
-        continue-on-error: true
-
-      - name: Build packages (retry 2)
-        if: steps.build-packages-2.outcome == 'failure'
-        run: pnpm --color=always --stream build
-
-      - name: Pack packages
-        run: pnpm --color=always --stream pack
-
-      - name: Publish npm packages
-        id: publish-npm
-        run: |
-          case "${GITHUB_REF_NAME}" in
-            *-*) dist_tag=next;;
-            *) dist_tag=latest;;
-          esac
-          if [[ -n ${NPM_TOKEN:-} ]]; then
-            NODE_AUTH_TOKEN="${NPM_TOKEN}" pnpm --color=always publish -r \
-              --no-git-checks \
-              --tag ${dist_tag}
-          else
-            NPM_CONFIG_PROVENANCE=true pnpm --color=always publish -r \
-              --no-git-checks \
-              --tag ${dist_tag}
-          fi
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+
+      - name: Build plugin
+        id: build-plugin
+        run: pnpm build
         continue-on-error: true
 
-      - name: Publish npm packages (retry)
-        id: publish-npm-2
-        if: steps.publish-npm.outcome == 'failure'
-        run: |
-          case "${GITHUB_REF_NAME}" in
-            *-*) dist_tag=next;;
-            *) dist_tag=latest;;
-          esac
-          if [[ -n ${NPM_TOKEN:-} ]]; then
-            NODE_AUTH_TOKEN="${NPM_TOKEN}" pnpm --color=always publish -r \
-              --no-git-checks \
-              --tag ${dist_tag}
-          else
-            NPM_CONFIG_PROVENANCE=true pnpm --color=always publish -r \
-              --no-git-checks \
-              --tag ${dist_tag}
-          fi
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Build plugin (retry)
+        id: build-plugin-2
+        if: steps.build-plugin.outcome == 'failure'
+        run: pnpm build
         continue-on-error: true
 
-      - name: Publish npm packages (retry 2)
-        if: steps.publish-npm-2.outcome == 'failure'
+      - name: Build plugin (retry 2)
+        if: steps.build-plugin-2.outcome == 'failure'
+        run: pnpm build
+
+      # The one tarball of the run, packed once: FND-10 installs it, the bill
+      # of materials, the checksums and the list of the contents are of it, and
+      # the job `publish` publishes it. Its name and its sha256, taken before
+      # FND-10 starts the application the cache may have given, are outputs of
+      # this step, which no later step can change: the bytes are compared with
+      # that sha256 again before the upload.
+      - name: Pack plugin
+        id: pack
         run: |
-          case "${GITHUB_REF_NAME}" in
-            *-*) dist_tag=next;;
-            *) dist_tag=latest;;
-          esac
-          if [[ -n ${NPM_TOKEN:-} ]]; then
-            NODE_AUTH_TOKEN="${NPM_TOKEN}" pnpm --color=always publish -r \
-              --no-git-checks \
-              --tag ${dist_tag}
-          else
-            NPM_CONFIG_PROVENANCE=true pnpm --color=always publish -r \
-              --no-git-checks \
-              --tag ${dist_tag}
+          set -euo pipefail
+          pnpm clean:tgz
+          pnpm pack
+          shopt -s nullglob
+          tarballs=(*.tgz)
+          if [ "${#tarballs[@]}" -ne 1 ]; then
+            echo "::error::One tarball is expected after the pack, found ${#tarballs[@]}"
+            exit 1
           fi
+          sha256=$(sha256sum "${tarballs[0]}" | cut -d ' ' -f 1)
+          echo "${sha256}  ${tarballs[0]}"
+          echo "tarball=${tarballs[0]}" >> "${GITHUB_OUTPUT}"
+          echo "sha256=${sha256}" >> "${GITHUB_OUTPUT}"
+
+      # Cache the .deb archives and package lists that `playwright install-deps`
+      # downloads through apt, so re-runs reuse them instead of re-downloading.
+      # apt is pointed at this project-local directory via a global config file
+      # written in the install step below.
+      - name: Use APT cache
+        uses: actions/cache@v6
+        with:
+          path: .apt
+          key: ubuntu-24.04-arm-apt-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ubuntu-24.04-arm-apt-
+
+      # FND-10 drives the packaged application with `_electron` of Playwright,
+      # which uses the Chromium of Electron, so Playwright's browsers are never
+      # downloaded. `install-deps` still apt-installs the shared libraries that
+      # Chromium (and thus Electron) needs to launch under xvfb, and xvfb
+      # itself. It runs the playwright that pnpm-lock.yaml pins, the version of
+      # the catalog of Freelens.
+      - name: Install Playwright's OS dependencies
+        run: |
+          set -eo pipefail
+          # `playwright install-deps` runs its own `apt-get update`/`install`,
+          # so the archive/list redirect has to be a global apt config file it
+          # picks up rather than per-invocation `-o` flags. dpkg's status stays
+          # at the system default, so packages still install into the runner.
+          mkdir -p .apt/cache/archives/partial .apt/state/lists/partial
+          sudo tee /etc/apt/apt.conf.d/00freelens-cache >/dev/null <<EOF
+          Dir::Cache::archives "$PWD/.apt/cache/archives";
+          Dir::State::lists "$PWD/.apt/state/lists";
+          EOF
+          pnpm exec playwright install-deps chromium
+          # apt ran as root, so hand the cache dir back to the runner user for
+          # the cache-save post step to read.
+          sudo chown -R "$(id -u):$(id -g)" .apt
+
+      # Freelens built at the validation target, or the build the cache keeps
+      # for that commit, with its sandbox let start and its path in
+      # FREELENS_APP, by the action this workflow shares with the workflows of
+      # the integration tests and of the views.
+      - name: Build Freelens
+        uses: ./.github/actions/build-freelens
+        with:
+          ref: ${{ env.freelens_ref }}
+
+      # FND-10 on the packed file, with no cluster, as the integration workflow
+      # runs it beside the sessions of the kinds: the extension installed from
+      # EXTENSION_PATH, the tarball of this run, in a new profile of the
+      # application FREELENS_APP names, under xvfb with a screen that has room
+      # for its largest window. Without EXTENSION_PATH the helpers would
+      # install the package from the registry by its name. A failure is not
+      # retried, and stops the run before anything is published.
+      - name: Run FND-10 on the tarball
+        timeout-minutes: 30
+        run: xvfb-run -a --server-args="-screen 0 1920x1200x24" pnpm test:integration integration/__tests__/extensions.tests.ts
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          EXTENSION_PATH: ${{ github.workspace }}/${{ steps.pack.outputs.tarball }}
+
+      # The bill of materials is of what the package carries (REQ-307, D10 of
+      # SPEC-0018): the packed file installed, never from the registry, in a new
+      # empty directory, with no devDependency, no peer, no script and no
+      # lockfile, so the extension and the libraries its bundles carry, at the
+      # versions of the lockfile. `--prefix` names the directory npm installs
+      # into: in a directory with no manifest npm would take the nearest one
+      # above it, the workspace. The scan reads the manifests of the packages
+      # the directory holds, which the scan of a directory leaves to the
+      # lockfiles unless it is asked to, and the manifest npm writes at its
+      # root, which names no package, is not one of them. The root of the
+      # document, which holds the packages, is named after the tarball.
+      - name: Install the tarball for the bill of materials
+        run: |
+          mkdir bill-of-materials
+          npm install --prefix bill-of-materials --omit=dev --omit=peer --ignore-scripts --no-package-lock "${GITHUB_WORKSPACE}/${TARBALL}"
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
 
       - name: Create SBOM
         uses: anchore/sbom-action@v0
         with:
+          path: bill-of-materials
           format: spdx-json
           output-file: sbom.spdx.json
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          upload-artifact: false
           upload-release-assets: false
+        env:
+          SYFT_DEFAULT_CATALOGERS: javascript-package-cataloger
+          SYFT_SOURCE_NAME: ${{ steps.pack.outputs.tarball }}
 
       - name: Normalize SBOM filename
         shell: bash
@@ -150,6 +231,16 @@ jobs:
             mv sbom.spdx.json "${f%.tgz}-spdx.json"
           done
 
+      # What the bill of materials lists, by name and version, in the log.
+      - name: Show the packages of the bill of materials
+        run: |
+          node -e '
+            const { packages } = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
+            for (const { name, versionInfo } of packages) console.log(`${name} ${versionInfo ?? ""}`);
+          ' "${TARBALL%.tgz}-spdx.json"
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+
       - name: Make checksums
         shell: bash
         run: |
@@ -157,11 +248,221 @@ jobs:
             sha256sum "$f" | tee "$f.sha256"
           done
 
+      # The notes of the version (REQ-303, D12 of SPEC-0018): its section of
+      # CHANGELOG.md, headed `## v<version> - <YYYY-MM-DD>` and running to the
+      # next `## ` heading, without the heading, which the GitHub release names
+      # by the tag. At a tag a version with no section stops the run before
+      # anything is published. On a pull request or by hand, where the version
+      # can be one that is never released, the newest section stands in for a
+      # missing one, or a line that says there is none, with a warning.
+      - name: Make the notes of the version
+        run: |
+          set -euo pipefail
+          version=$(node -p 'require("./package.json").version')
+          # The lines of the first section whose heading starts with $1, without
+          # the heading and the blank lines around them.
+          section() {
+            [ -f CHANGELOG.md ] || return 0
+            awk -v prefix="$1" '
+              found && /^## / { exit }
+              found { lines[++n] = $0; next }
+              index($0, prefix) == 1 && /^## v[^ ]+ - [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/ { found = 1 }
+              END {
+                for (first = 1; first <= n && lines[first] ~ /^[[:space:]]*$/; first++) {}
+                for (last = n; last >= first && lines[last] ~ /^[[:space:]]*$/; last--) {}
+                for (i = first; i <= last; i++) print lines[i]
+              }
+            ' CHANGELOG.md
+          }
+          notes=$(section "## v${version} - ")
+          if [ -z "${notes}" ]; then
+            if [ "${GITHUB_REF_TYPE}" = tag ]; then
+              echo "::error::CHANGELOG.md has no section ## v${version} - <YYYY-MM-DD>: the notes of a version are written in a pull request before the one of the version"
+              exit 1
+            fi
+            echo "::warning::CHANGELOG.md has no section for ${version}, which stops a tag: the newest section stands in for it"
+            notes=$(section "## v")
+            notes=${notes:-No notes: CHANGELOG.md has no section of a version.}
+          fi
+          printf '%s\n' "${notes}" > release-notes.md
+          cat release-notes.md
+
+      # What the package contains (REQ-316 of SPEC-0018). The list of the
+      # tarball fails on a file outside the files of package.json, dist/, and
+      # what the packer always adds, the manifest, the README and the license;
+      # on a file named as the Security section of AGENTS.md names a
+      # credential; on an absolute path of the machine that built it, the home
+      # of the runner or the workspace, in any file; and on the form of a
+      # credential the private-data rules of AGENTS.md name in any file: a
+      # private key, a kubeconfig, a token of npm or of GitHub. The license
+      # notice of react-window, the library the renderer bundle carries,
+      # travels beside that bundle, and the list finds it. The words of a
+      # failure name the files, never what matched in them.
+      - name: List the contents of the package
+        run: |
+          set -euo pipefail
+          list="${RUNNER_TEMP}/contents.txt"
+          unpacked="${RUNNER_TEMP}/contents"
+          tar -tzf "${TARBALL}" | grep -v '/$' | LC_ALL=C sort >"${list}"
+          cat "${list}"
+          failed=0
+          fail() {
+            echo "::error::$1"
+            failed=1
+          }
+          outside=$(grep -Ev '^package/(package\.json|README\.md|LICENSE|dist/.+)$' "${list}" || true)
+          [ -z "${outside}" ] || fail "Files outside dist/, the manifest, the README and the license: ${outside//$'\n'/ }"
+          named=$(grep -E '/(\.env(\..*)?|\.envrc|\.npmrc|[^/]*\.(jks|keystore|p12|pfx|pem|key|kubeconfig)|kubeconfig|credentials\.json|velero-credentials)$' "${list}" || true)
+          [ -z "${named}" ] || fail "Files named as a credential: ${named//$'\n'/ }"
+          notice=package/dist/renderer.js.LICENSE.txt
+          grep -qxF "${notice}" "${list}" || fail "The notice of the license of react-window is not in the package: ${notice}"
+          mkdir "${unpacked}"
+          tar -xzf "${TARBALL}" -C "${unpacked}"
+          if [ -f "${unpacked}/${notice}" ] && ! { grep -qE '^react-window [0-9]' "${unpacked}/${notice}" && grep -qF 'Permission is hereby granted, free of charge' "${unpacked}/${notice}"; }; then
+            fail "${notice} holds no MIT notice of react-window"
+          fi
+          paths=$(grep -rlaF -e "${HOME}" -e "${GITHUB_WORKSPACE}" "${unpacked}" || true)
+          [ -z "${paths}" ] || fail "An absolute path of the runner in: ${paths//$'\n'/ }"
+          credentials=$(grep -rlaE \
+            -e '-----BEGIN ([A-Z0-9]+ )*PRIVATE KEY' \
+            -e 'client-key-data|client-certificate-data|certificate-authority-data|current-context|^kind: Config|"kind": *"Config"' \
+            -e '_authToken|npm_[A-Za-z0-9]{36}' \
+            -e '(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{22,}' \
+            "${unpacked}" || true)
+          [ -z "${credentials}" ] || fail "The form of a credential in: ${credentials//$'\n'/ }"
+          exit "${failed}"
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+
+      # Before the upload: one file of each kind the release attaches, the
+      # tarball the one of the pack with the bytes it had then, which its
+      # checksum names, and the notes.
+      - name: Check the files of the release
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          tarballs=(*.tgz)
+          sums=(*.tgz.sha256)
+          bills=(*-spdx.json)
+          bill_sums=(*-spdx.json.sha256)
+          found="${#tarballs[@]} ${#sums[@]} ${#bills[@]} ${#bill_sums[@]}"
+          if [ "${found}" != "1 1 1 1" ] || [ "${tarballs[0]}" != "${TARBALL}" ]; then
+            echo "::error::One tarball, ${TARBALL}, one bill of materials and their checksums are expected; found ${found} of them"
+            exit 1
+          fi
+          for file in "${TARBALL}.sha256" "${TARBALL%.tgz}-spdx.json" "${TARBALL%.tgz}-spdx.json.sha256" release-notes.md; do
+            if [ ! -s "${file}" ]; then
+              echo "::error::${file} is missing or empty"
+              exit 1
+            fi
+          done
+          if [ "$(sha256sum "${TARBALL}" | cut -d ' ' -f 1)" != "${PACKED}" ]; then
+            echo "::error::${TARBALL} changed after the pack: its bytes are not the ones FND-10 was given"
+            exit 1
+          fi
+          if [ "$(cut -d ' ' -f 1 "${TARBALL}.sha256")" != "${PACKED}" ]; then
+            echo "::error::${TARBALL}.sha256 is not the checksum of the tarball as it was packed"
+            exit 1
+          fi
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+          PACKED: ${{ steps.pack.outputs.sha256 }}
+
+      # The files the job `publish` takes, as the release attaches them, and
+      # the notes it gives the release as its body.
+      - name: Upload the files of the release
+        uses: actions/upload-artifact@v7
+        with:
+          name: release
+          path: |
+            *.tgz
+            *.tgz.sha256
+            *-spdx.json
+            *-spdx.json.sha256
+            release-notes.md
+          if-no-files-found: error
+
+  publish:
+    name: publish
+    needs: package
+    # A tag that was pushed: never a pull request, and never a run started by
+    # hand, even on a tag.
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+
+    # Its required reviewer approves the job once the runs of the merge commit
+    # are green (D11b of SPEC-0018). The identity of the run is what the trusted
+    # publisher of npm and the provenance take; the release needs the write.
+    environment: publishing
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      # The versions of Node.js and of pnpm, from .nvmrc and from the
+      # packageManager of package.json with its hash. Nothing is installed,
+      # built or packed.
+      - name: Checkout plugin
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+          registry-url: https://registry.npmjs.org
+
+      - name: Setup pnpm
+        run: corepack enable
+
+      - name: Download the files of the release
+        uses: actions/download-artifact@v8
+        with:
+          name: release
+
+      # The bytes FND-10 installed in the job `package` are the bytes the
+      # registry and the release receive.
+      - name: Verify the checksums
+        run: sha256sum -c ./*.tgz.sha256 ./*-spdx.json.sha256
+
+      # The packed file itself: pnpm hands a tarball to the registry as it is,
+      # with no repack and no script. The provenance is asked on both ways, with
+      # the token of `publishing` and through the trusted publisher (D11a). One
+      # attempt: the registry takes a version once, so a second one after a
+      # publication that it accepted fails on the version, and a failure stops
+      # the job before the release is created.
+      - name: Publish npm package
+        run: |
+          set -euo pipefail
+          case "${GITHUB_REF_NAME}" in
+            *-*) dist_tag=next;;
+            *) dist_tag=latest;;
+          esac
+          tarballs=(./*.tgz)
+          if [[ -n ${NPM_TOKEN:-} ]]; then
+            NODE_AUTH_TOKEN="${NPM_TOKEN}" pnpm --color=always publish "${tarballs[0]}" \
+              --no-git-checks \
+              --provenance \
+              --tag "${dist_tag}"
+          else
+            pnpm --color=always publish "${tarballs[0]}" \
+              --no-git-checks \
+              --provenance \
+              --tag "${dist_tag}"
+          fi
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Create release
         uses: softprops/action-gh-release@v3
         with:
           fail_on_unmatched_files: true
           prerelease: ${{ contains(github.ref_name, '-') }}
+          body_path: release-notes.md
           files: |-
             *.tgz
             *.tgz.sha256

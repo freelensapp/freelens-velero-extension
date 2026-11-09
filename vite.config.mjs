@@ -14,6 +14,7 @@ import react from "@vitejs/plugin-react";
 import { defaultServerConditions, defaultServerMainFields, defineConfig } from "vite";
 import { cssModuleDeclarations } from "./build/vite-plugin-css-module-declarations.mjs";
 import { hostModules } from "./build/vite-plugin-host-modules.mjs";
+import { licenseNotices } from "./build/vite-plugin-license-notices.mjs";
 import { standardDecorators } from "./build/vite-plugin-standard-decorators.mjs";
 
 const entryPoints = {
@@ -71,6 +72,9 @@ export default defineConfig(({ mode }) => {
       hostModules(name),
       // JSX with the automatic runtime, so it imports `react/jsx-runtime`.
       react(),
+      // The license notices of the libraries a bundle carries, beside it in
+      // `<bundle>.LICENSE.txt`: react-window's, beside the renderer.
+      licenseNotices(),
       // The committed `*.module.d.scss.ts` declarations of the CSS modules.
       ...(name === "renderer" ? [noNodeInRenderer, cssModuleDeclarations()] : []),
     ],

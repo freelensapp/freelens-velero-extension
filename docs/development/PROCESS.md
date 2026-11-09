@@ -175,9 +175,15 @@ target.
 - The version changes through the pull request of the version workflow only,
   never by hand in another pull request. The tag workflow tags a release
   version, `X.Y.Z`, and a prerelease of a line, `X.Y.Z-N`, and no other form
-  of a version. The release workflow publishes a version with a hyphen on the
-  npm tag `next` and marks its GitHub release as a prerelease, and any other on
-  `latest`.
+  of a version. The release workflow publishes, from a job that builds nothing,
+  the tarball its job without credentials packed and tested: a version with a
+  hyphen on the npm tag `next`, its GitHub release marked as a prerelease, and
+  any other on `latest`.
+- A version on the registry is never published again, and no workflow
+  unpublishes one. A version found bad is deprecated with `npm deprecate` and
+  followed by the next number; `npm deprecate` and `npm dist-tag` are the only
+  commands run by hand, by an owner of the scope on the lead maintainer's go,
+  each recorded by role and date.
 - External contributions follow the same spec-first loop; maintainers help
   contributors write the spec when needed.
 

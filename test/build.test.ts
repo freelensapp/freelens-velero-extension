@@ -122,13 +122,20 @@ describe("the manifest", () => {
 });
 
 describe("the files of the build", () => {
-  it("are the two entries, their maps and the one stylesheet the host links, and nothing else", () => {
+  it("are the two entries, their maps, the one stylesheet the host links and the notice of the library the renderer carries, and nothing else", () => {
     const files = (readdirSync(resolve("dist"), { recursive: true, withFileTypes: true }) as Dirent[])
       .filter((file) => !file.isDirectory())
       .map((file) => file.name)
       .sort();
 
-    expect(files).toEqual(["main.js", "main.js.map", "renderer.css", "renderer.js", "renderer.js.map"]);
+    expect(files).toEqual([
+      "main.js",
+      "main.js.map",
+      "renderer.css",
+      "renderer.js",
+      "renderer.js.LICENSE.txt",
+      "renderer.js.map",
+    ]);
   });
 });
 
@@ -145,6 +152,28 @@ describe("the bundle of the renderer", () => {
     ]);
     expect(own.length).toBeGreaterThan(40);
     expect(own.filter((source) => !/^src\/(renderer|common)\//.test(source) || /\.test\./.test(source))).toEqual([]);
+  });
+
+  it("has beside it the notice of the license of react-window, the one library it carries, as the package the lockfile installed ships it", () => {
+    // The packages the map names, but the shim of the SDK of the host, which is no library (DEPENDENCY-AUDIT.md),
+    // are the libraries the notices name, each with the license file of its package (REQ-316 of SPEC-0018).
+    const libraries = sourcesOf(RENDERER)
+      .packages.map((source) =>
+        source
+          .split("/")
+          .slice(0, source.startsWith("@") ? 2 : 1)
+          .join("/"),
+      )
+      .filter((name) => name !== "@freelensapp/extensions");
+    const license = readFileSync(resolve("node_modules/react-window/LICENSE.md"), "utf8").trim();
+
+    expect(libraries).toEqual(["react-window"]);
+    expect(readFileSync(resolve("dist/renderer.js.LICENSE.txt"), "utf8")).toBe(
+      `renderer.js carries these libraries, each with the notice of its license.\n\nreact-window ${REACT_WINDOW}\n\n${license}\n`,
+    );
+    expect(license).toMatch(
+      /^The MIT License \(MIT\)\n\nCopyright \(c\) .+\n\nPermission is hereby granted, free of charge/,
+    );
   });
 
   it("takes the libraries of the host from FreelensExtensionApi, and asks for no module of Node or Electron", () => {

@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
 import { describe, expect, it, vi } from "vitest";
@@ -10670,6 +10670,59 @@ function runScripts(text: string): string[] {
   });
 }
 
+// A workflow of this repository without what it says of itself in its comments.
+function workflowText(name: string): string {
+  return readFileSync(new URL(`../.github/workflows/${name}`, import.meta.url), "utf8")
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("#"))
+    .join("\n");
+}
+
+// The jobs of a workflow by their keys, each the text of its block.
+function jobsOf(workflow: string): Map<string, string> {
+  const jobs = workflow.slice(workflow.indexOf("\njobs:\n") + "\njobs:\n".length);
+
+  return new Map(
+    jobs
+      .split(/^(?= {2}[a-z][a-z0-9_-]*:$)/m)
+      .filter((block) => /^ {2}[a-z]/.test(block))
+      .map((block) => [/^ {2}([a-z][a-z0-9_-]*):$/m.exec(block)?.[1] ?? "", block]),
+  );
+}
+
+// The steps of a job in their order, each the text of its item, from its `- name:` to the next one.
+function stepsOf(job: string): { name: string; text: string }[] {
+  return job
+    .split(/^(?= {6}- name: )/m)
+    .slice(1)
+    .map((text) => ({ name: /^ {6}- name: (.+)$/m.exec(text)?.[1] ?? "", text }));
+}
+
+// The script a step gives bash in its `run: |` block, without the indentation of the block.
+function scriptOf(step: string): string {
+  const lines = step.split("\n");
+  const start = lines.findIndex((line) => /^ {8}run: \|-?$/.test(line));
+  const body: string[] = [];
+
+  if (start < 0) throw new Error(`No script in the step ${step.split("\n", 1)[0]}`);
+  for (const line of lines.slice(start + 1)) {
+    if (line.trim() !== "" && !line.startsWith(" ".repeat(10))) break;
+    body.push(line.slice(10));
+  }
+
+  return `${body.join("\n").trimEnd()}\n`;
+}
+
+// The jobs of the release workflow and their steps.
+function releaseJobs() {
+  const workflow = workflowText("release.yaml");
+  const jobs = jobsOf(workflow);
+  const steps = (job: string) => stepsOf(jobs.get(job) ?? "");
+  const step = (job: string, name: string) => steps(job).find((each) => each.name === name)?.text ?? "";
+
+  return { workflow, jobs, steps, step };
+}
+
 function fixture(shape: NetworkShape = "internal") {
   const published = shape === "loopback";
   const identity: DemoIdentity = {
@@ -11661,10 +11714,10 @@ describe("platform of the test environment", () => {
     expect(
       ["0.1.0-alpha.0", "1.0.0-rc.1", "1.0.0-1-2", "1.0.0-", "1.0", "v1.0.0"].filter((version) => tagged.test(version)),
     ).toEqual([]);
-    // The npm tag of the publication and of its two retries: a version with a hyphen goes to next.
+    // The npm tag of the one publication: a version with a hyphen goes to next.
     expect(
       release.match(/case "\$\{GITHUB_REF_NAME\}" in\n\s+\*-\*\) dist_tag=next;;\n\s+\*\) dist_tag=latest;;\n\s+esac/g),
-    ).toHaveLength(3);
+    ).toHaveLength(1);
     // And its release on GitHub is a prerelease.
     expect(release).toMatch(/\n\s+prerelease: \$\{\{ contains\(github\.ref_name, '-'\) \}\}\n/);
   });
@@ -11968,7 +12021,389 @@ describe("platform of the test environment", () => {
     }
   });
 
-  it("builds Freelens for the views and for the integration at the validation target of SPEC-0015, named once", () => {
+  it("releases in two jobs: package, with no credential, packs the tarball once and runs FND-10 on it, and publish, at a pushed tag alone and in publishing, builds nothing and publishes that file", () => {
+    const { workflow, jobs, steps, step } = releaseJobs();
+    const names = (job: string) => steps(job).map((each) => each.name);
+
+    // The tag, by hand, and the pull requests that change the files of the job package (REQ-286 of SPEC-0018).
+    expect(workflow).toMatch(
+      /^on:\n {2}push:\n {4}tags:\n {6}- v\*\n {2}pull_request:\n {4}branches:\n {6}- "\*"\n {4}paths:\n {6}- \.github\/workflows\/release\.yaml\n {6}- CHANGELOG\.md\n {6}- \.github\/actions\/build-freelens\/\*\*\n {2}workflow_dispatch: \{\}\n/m,
+    );
+    expect(workflow).toMatch(/^permissions:\n {2}contents: read\n/m);
+    expect([...jobs.keys()]).toEqual(["package", "publish"]);
+    // package reads the repository and nothing else: no environment, no secret, no other permission.
+    const pack = jobs.get("package") ?? "";
+
+    expect(pack).toMatch(/\n {4}permissions:\n {6}contents: read\n(?! {6})/);
+    expect(pack).not.toMatch(/environment:|secrets\.|id-token|: write|NODE_AUTH_TOKEN/);
+    expect(pack).toContain("    runs-on: ubuntu-24.04-arm\n");
+    expect(names("package")).toEqual([
+      "Checkout plugin",
+      "Set up mise",
+      "Check if package version matches",
+      "Setup node",
+      "Setup pnpm",
+      "Get pnpm cache directory",
+      "Use pnpm cache",
+      "Install pnpm dependencies",
+      "Install pnpm dependencies (retry)",
+      "Build plugin",
+      "Build plugin (retry)",
+      "Build plugin (retry 2)",
+      "Pack plugin",
+      "Use APT cache",
+      "Install Playwright's OS dependencies",
+      "Build Freelens",
+      "Run FND-10 on the tarball",
+      "Install the tarball for the bill of materials",
+      "Create SBOM",
+      "Normalize SBOM filename",
+      "Show the packages of the bill of materials",
+      "Make checksums",
+      "Make the notes of the version",
+      "List the contents of the package",
+      "Check the files of the release",
+      "Upload the files of the release",
+    ]);
+    // At a tag, the tag is the version of package.json.
+    expect(step("package", "Check if package version matches")).toMatch(
+      /\n {8}if: github\.ref_type == 'tag'\n {8}run: test "\$\{GITHUB_REF_NAME\}" = "v\$\(yq -r \.version package\.json\)"\n/,
+    );
+    // One pack in the workflow, of one tarball, whose name and sha256 are outputs of its step, taken before FND-10.
+    expect(workflow.match(/\bpnpm (?:--[a-z-]+ )*pack\b/g)).toEqual(["pnpm pack"]);
+    expect(step("package", "Pack plugin")).toMatch(
+      /\n {8}id: pack\n {8}run: \|\n {10}set -euo pipefail\n {10}pnpm clean:tgz\n {10}pnpm pack\n {10}shopt -s nullglob\n {10}tarballs=\(\*\.tgz\)\n {10}if \[ "\$\{#tarballs\[@\]\}" -ne 1 \]; then\n[\s\S]*?\n {10}sha256=\$\(sha256sum "\$\{tarballs\[0\]\}" \| cut -d ' ' -f 1\)\n[\s\S]*?\n {10}echo "tarball=\$\{tarballs\[0\]\}" >> "\$\{GITHUB_OUTPUT\}"\n {10}echo "sha256=\$\{sha256\}" >> "\$\{GITHUB_OUTPUT\}"\n/,
+    );
+    // FND-10 on that file with no cluster, in the Freelens of the target the action builds, which names the commit.
+    expect(step("package", "Build Freelens")).toMatch(
+      /\n {8}uses: \.\/\.github\/actions\/build-freelens\n {8}with:\n {10}ref: \$\{\{ env\.freelens_ref \}\}\n/,
+    );
+    expect(step("package", "Run FND-10 on the tarball")).toMatch(
+      /\n {8}run: xvfb-run -a --server-args="-screen 0 1920x1200x24" pnpm test:integration integration\/__tests__\/extensions\.tests\.ts\n {8}env:\n {10}EXTENSION_PATH: \$\{\{ github\.workspace \}\}\/\$\{\{ steps\.pack\.outputs\.tarball \}\}\n/,
+    );
+    expect(workflow.match(/test:integration|xvfb-run|E2E_KUBECONFIG|--context/g)).toEqual([
+      "xvfb-run",
+      "test:integration",
+    ]);
+    // Before the upload, the tarball is the one of the pack, with the bytes it had then, which its checksum names.
+    const checked = step("package", "Check the files of the release");
+
+    expect(checked).toMatch(
+      /\n {10}if \[ "\$\(sha256sum "\$\{TARBALL\}" \| cut -d ' ' -f 1\)" != "\$\{PACKED\}" \]; then\n {12}echo "::error::[^\n]+"\n {12}exit 1\n/,
+    );
+    expect(checked).toMatch(
+      /\n {10}if \[ "\$\(cut -d ' ' -f 1 "\$\{TARBALL\}\.sha256"\)" != "\$\{PACKED\}" \]; then\n {12}echo "::error::[^\n]+"\n {12}exit 1\n/,
+    );
+    expect(checked).toMatch(
+      /\n {8}env:\n {10}TARBALL: \$\{\{ steps\.pack\.outputs\.tarball \}\}\n {10}PACKED: \$\{\{ steps\.pack\.outputs\.sha256 \}\}\n/,
+    );
+    // One upload, of the files of the release and the notes, which publish downloads.
+    expect(workflow.match(/uses: actions\/upload-artifact@/g)).toHaveLength(1);
+    expect(step("package", "Upload the files of the release")).toMatch(
+      /\n {8}uses: actions\/upload-artifact@v\d+\n {8}with:\n {10}name: release\n {10}path: \|\n {12}\*\.tgz\n {12}\*\.tgz\.sha256\n {12}\*-spdx\.json\n {12}\*-spdx\.json\.sha256\n {12}release-notes\.md\n {10}if-no-files-found: error\n/,
+    );
+    // publish needs package, runs at a pushed tag alone, in publishing, with the two permissions of the publication.
+    const publish = jobs.get("publish") ?? "";
+
+    expect(publish).toMatch(
+      /^ {2}publish:\n {4}name: publish\n {4}needs: package\n {4}if: github\.event_name == 'push' && github\.ref_type == 'tag'\n/,
+    );
+    expect(publish).toMatch(
+      /\n {4}environment: publishing\n {4}permissions:\n {6}contents: write\n {6}id-token: write\n(?! {6})/,
+    );
+    expect(names("publish")).toEqual([
+      "Checkout plugin",
+      "Setup node",
+      "Setup pnpm",
+      "Download the files of the release",
+      "Verify the checksums",
+      "Publish npm package",
+      "Create release",
+    ]);
+    expect(step("publish", "Download the files of the release")).toMatch(
+      /\n {8}uses: actions\/download-artifact@v\d+\n {8}with:\n {10}name: release\n/,
+    );
+    expect(step("publish", "Verify the checksums")).toContain(
+      "run: sha256sum -c ./*.tgz.sha256 ./*-spdx.json.sha256\n",
+    );
+    // Nothing of the build in publish: no install, no build, no pack, no Freelens, no test.
+    expect(
+      publish.match(
+        /pnpm (?:--[a-z-]+ )*(?:install|build|pack|exec|test:[a-z]+|clean:[a-z]+)|npm install|xvfb-run|build-freelens|playwright|\bapt-get\b|\bsudo\b|sbom-action|upload-artifact|FREELENS_APP|EXTENSION_PATH/g,
+      ),
+    ).toBeNull();
+    // Nothing published or released by package.
+    expect(pack.match(/\bpublish\b|action-gh-release|download-artifact/g)).toBeNull();
+  });
+
+  it("attaches to the release the tarball, its bill of materials in SPDX JSON named after it and the checksums of both, made in package before the publication (#144)", () => {
+    const { step } = releaseJobs();
+
+    // The bill of materials, its name after the tarball, and the checksums, in package.
+    expect(step("package", "Create SBOM")).toMatch(
+      /\n {8}uses: anchore\/sbom-action@v0\n {8}with:\n {10}path: bill-of-materials\n {10}format: spdx-json\n {10}output-file: sbom\.spdx\.json\n {10}upload-artifact: false\n {10}upload-release-assets: false\n/,
+    );
+    expect(step("package", "Normalize SBOM filename")).toMatch(
+      /\n {10}for f in \*\.tgz; do\n {12}mv sbom\.spdx\.json "\$\{f%\.tgz\}-spdx\.json"\n {10}done\n/,
+    );
+    expect(step("package", "Make checksums")).toMatch(
+      /\n {10}for f in \*\.tgz \*-spdx\.json; do\n {12}sha256sum "\$f" \| tee "\$f\.sha256"\n {10}done\n/,
+    );
+    // The release, in publish after the publication: exactly the four files, which must all be there, in this order.
+    expect(step("publish", "Create release")).toMatch(
+      /\n {8}uses: softprops\/action-gh-release@v\d+\n {8}with:\n {10}fail_on_unmatched_files: true\n {10}prerelease: \$\{\{ contains\(github\.ref_name, '-'\) \}\}\n {10}body_path: release-notes\.md\n {10}files: \|-\n {12}\*\.tgz\n {12}\*\.tgz\.sha256\n {12}\*-spdx\.json\n {12}\*-spdx\.json\.sha256\n?$/,
+    );
+  });
+
+  it("makes the bill of materials of the packed file, installed in a new empty directory with no devDependency, no peer, no script and no lockfile, and scans that directory alone", () => {
+    const { steps, step } = releaseJobs();
+    const order = steps("package").map((each) => each.name);
+
+    // The packed file of the run, never the registry, after FND-10 and before the scan (REQ-307, D10 of SPEC-0018).
+    expect(step("package", "Install the tarball for the bill of materials")).toMatch(
+      /\n {8}run: \|\n {10}mkdir bill-of-materials\n {10}npm install --prefix bill-of-materials --omit=dev --omit=peer --ignore-scripts --no-package-lock "\$\{GITHUB_WORKSPACE\}\/\$\{TARBALL\}"\n {8}env:\n {10}TARBALL: \$\{\{ steps\.pack\.outputs\.tarball \}\}\n\s*$/,
+    );
+    expect(order.indexOf("Install the tarball for the bill of materials")).toBe(
+      order.indexOf("Run FND-10 on the tarball") + 1,
+    );
+    expect(order.indexOf("Create SBOM")).toBe(order.indexOf("Install the tarball for the bill of materials") + 1);
+    // The scan reads the manifests of the packages installed there, which the scan of a directory leaves to the
+    // lockfiles unless asked, and it uploads nothing of its own. The root of the document is named after the tarball.
+    expect(step("package", "Create SBOM")).toMatch(
+      /\n {10}path: bill-of-materials\n[\s\S]*\n {8}env:\n {10}SYFT_DEFAULT_CATALOGERS: javascript-package-cataloger\n {10}SYFT_SOURCE_NAME: \$\{\{ steps\.pack\.outputs\.tarball \}\}\n\s*$/,
+    );
+  });
+
+  it("asks npm for the provenance of the one publication of the packed file on both of its ways, with the token of publishing and through the trusted publisher", () => {
+    const { workflow, step } = releaseJobs();
+    const published = step("publish", "Publish npm package");
+
+    // D11a of SPEC-0018: the same command on both ways, the token given to the first alone.
+    expect(published).toMatch(
+      /\n {10}tarballs=\(\.\/\*\.tgz\)\n {10}if \[\[ -n \$\{NPM_TOKEN:-\} \]\]; then\n {12}NODE_AUTH_TOKEN="\$\{NPM_TOKEN\}" pnpm --color=always publish "\$\{tarballs\[0\]\}" \\\n {14}--no-git-checks \\\n {14}--provenance \\\n {14}--tag "\$\{dist_tag\}"\n {10}else\n {12}pnpm --color=always publish "\$\{tarballs\[0\]\}" \\\n {14}--no-git-checks \\\n {14}--provenance \\\n {14}--tag "\$\{dist_tag\}"\n {10}fi\n {8}env:\n {10}NPM_TOKEN: \$\{\{ secrets\.NPM_TOKEN \}\}\n\s*$/,
+    );
+    // No other publication, no retry, and nothing that turns the provenance off.
+    expect(workflow.match(/\bpublish "/g)).toHaveLength(2);
+    expect(workflow).not.toMatch(/no-provenance|provenance=false|PROVENANCE/);
+    expect(published).not.toContain("continue-on-error");
+  });
+
+  it("makes the notes of the version in package from its section of CHANGELOG.md, stops at a tag without them, and gives them to the release as its body", () => {
+    const { steps, step } = releaseJobs();
+    const order = steps("package").map((each) => each.name);
+    const directory = mkdtempSync(join(tmpdir(), "velero-release-notes-"));
+    const script = join(directory, "notes.sh");
+    // A CHANGELOG.md of the form of REQ-303 of SPEC-0018: a preface, then a section for each version, headed
+    // `## v<version> - <YYYY-MM-DD>` and running to the next heading of its level.
+    const changelog = [
+      "# Changelog",
+      "",
+      "The notes of each version.",
+      "",
+      "## v1.0.0-1 - 2026-11-20",
+      "",
+      "### Fixed",
+      "",
+      "- The second prerelease.",
+      "",
+      "",
+      "## v1.0.0-0 - 2026-11-10",
+      "",
+      "What the first prerelease covers.",
+      "## v1.0.0 - 2026-12-01, a heading of no version",
+      "",
+      "Never taken.",
+      "",
+    ].join("\n");
+    // The step as it runs, beside a manifest of the version and that CHANGELOG.md or none, at a tag or not: what it
+    // ends with, the kinds of the annotations it writes, and the notes.
+    const run = (version: string, refType: "tag" | "branch", withChangelog = true) => {
+      const folder = mkdtempSync(join(directory, "run-"));
+      const notes = join(folder, "release-notes.md");
+
+      writeFileSync(join(folder, "package.json"), JSON.stringify({ name: "synthetic", version }));
+      if (withChangelog) writeFileSync(join(folder, "CHANGELOG.md"), changelog);
+      const result = spawnSync("bash", ["-e", script], {
+        cwd: folder,
+        env: { PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ""}`, GITHUB_REF_TYPE: refType },
+        encoding: "utf8",
+        timeout: 10_000,
+      });
+
+      return {
+        status: result.status,
+        annotations: result.stdout
+          .split("\n")
+          .filter((line) => line.startsWith("::"))
+          .map((line) => line.split("::")[1]),
+        notes: existsSync(notes) ? readFileSync(notes, "utf8") : undefined,
+      };
+    };
+
+    try {
+      writeFileSync(script, scriptOf(step("package", "Make the notes of the version")));
+      // At a tag: the section of the version, without its heading, and nothing else; no section stops the run.
+      expect(run("1.0.0-0", "tag")).toEqual({
+        status: 0,
+        annotations: [],
+        notes: "What the first prerelease covers.\n",
+      });
+      expect(run("1.0.0-1", "tag")).toEqual({
+        status: 0,
+        annotations: [],
+        notes: "### Fixed\n\n- The second prerelease.\n",
+      });
+      expect(run("1.0.0", "tag")).toEqual({ status: 1, annotations: ["error"], notes: undefined });
+      expect(run("1.0.0-0", "tag", false)).toEqual({ status: 1, annotations: ["error"], notes: undefined });
+      // On a pull request or by hand the job goes on: the section of the version, or the newest one with a warning.
+      expect(run("1.0.0-0", "branch")).toEqual({
+        status: 0,
+        annotations: [],
+        notes: "What the first prerelease covers.\n",
+      });
+      expect(run("0.1.0-alpha.0", "branch")).toEqual({
+        status: 0,
+        annotations: ["warning"],
+        notes: "### Fixed\n\n- The second prerelease.\n",
+      });
+      expect(run("0.1.0-alpha.0", "branch", false)).toEqual({
+        status: 0,
+        annotations: ["warning"],
+        notes: "No notes: CHANGELOG.md has no section of a version.\n",
+      });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+    // Made in package before the upload, which carries them, and given to the release as its body.
+    expect(order.indexOf("Make the notes of the version")).toBeLessThan(
+      order.indexOf("Upload the files of the release"),
+    );
+    expect(step("package", "Upload the files of the release")).toContain("\n            release-notes.md\n");
+    expect(step("publish", "Create release")).toContain("\n          body_path: release-notes.md\n");
+  }, 60_000);
+
+  it("lists what the package contains, fails on a file outside dist/ and the three the packer adds, on the name or the form of a credential and on a path of the runner, and finds the notice of react-window", () => {
+    const { step } = releaseJobs();
+    const listed = step("package", "List the contents of the package");
+    const directory = mkdtempSync(join(tmpdir(), "velero-release-contents-"));
+    const script = join(directory, "contents.sh");
+    const home = join(directory, "home");
+    const workspace = join(directory, "workspace");
+    const name = "freelensapp-velero-extension-1.0.0-0.tgz";
+    const notice = [
+      "renderer.js carries these libraries, each with the notice of its license.",
+      "",
+      "react-window 2.3.4",
+      "",
+      "The MIT License (MIT)",
+      "",
+      "Permission is hereby granted, free of charge, to any person obtaining a copy",
+      "",
+    ].join("\n");
+    // A package of synthetic files, as pnpm packs one under package/, changed by `change`, then listed by the step:
+    // what it ends with, and the errors it reports, with `<run>` for the folder of the run.
+    const run = (change: (root: string) => void) => {
+      const folder = mkdtempSync(join(directory, "run-"));
+      const root = join(folder, "tree", "package");
+
+      mkdirSync(join(root, "dist"), { recursive: true });
+      mkdirSync(join(folder, "temp"));
+      writeFileSync(join(root, "package.json"), '{"name":"@freelensapp/velero-extension"}\n');
+      writeFileSync(join(root, "README.md"), "# Velero\n");
+      writeFileSync(join(root, "LICENSE"), "MIT\n");
+      writeFileSync(join(root, "dist", "main.js"), "export {};\n");
+      writeFileSync(join(root, "dist", "renderer.js.LICENSE.txt"), notice);
+      change(root);
+      expect(
+        spawnSync("tar", ["-czf", join(folder, name), "-C", join(folder, "tree"), "package"], { timeout: 10_000 })
+          .status,
+      ).toBe(0);
+      const result = spawnSync("bash", ["-e", script], {
+        cwd: folder,
+        env: {
+          PATH: process.env.PATH ?? "",
+          HOME: home,
+          GITHUB_WORKSPACE: workspace,
+          RUNNER_TEMP: join(folder, "temp"),
+          TARBALL: name,
+        },
+        encoding: "utf8",
+        timeout: 10_000,
+      });
+
+      return [
+        result.status,
+        result.stdout
+          .split("\n")
+          .filter((line) => line.startsWith("::error::"))
+          .map((line) => line.replaceAll(folder, "<run>")),
+      ];
+    };
+    const inMain = (text: string) => (root: string) => writeFileSync(join(root, "dist", "main.js"), `${text}\n`);
+    const credential = "::error::The form of a credential in: <run>/temp/contents/package/dist/main.js";
+
+    try {
+      writeFileSync(script, scriptOf(listed));
+      expect(run(() => undefined)).toEqual([0, []]);
+      // Beside dist/, the files of package.json, only what the packer always adds (REQ-316 of SPEC-0018).
+      expect(JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).files).toEqual([
+        "dist/**/*",
+      ]);
+      expect(run((root) => writeFileSync(join(root, "CHANGELOG.md"), "Notes.\n"))).toEqual([
+        1,
+        ["::error::Files outside dist/, the manifest, the README and the license: package/CHANGELOG.md"],
+      ]);
+      expect(
+        run((root) => {
+          mkdirSync(join(root, "src"));
+          writeFileSync(join(root, "src", "index.ts"), "");
+        }),
+      ).toEqual([1, ["::error::Files outside dist/, the manifest, the README and the license: package/src/index.ts"]]);
+      // The notice of the license of react-window beside the renderer bundle, and its words.
+      expect(run((root) => rmSync(join(root, "dist", "renderer.js.LICENSE.txt")))).toEqual([
+        1,
+        [
+          "::error::The notice of the license of react-window is not in the package: package/dist/renderer.js.LICENSE.txt",
+        ],
+      ]);
+      expect(
+        run((root) =>
+          writeFileSync(join(root, "dist", "renderer.js.LICENSE.txt"), notice.replace("react-window", "another")),
+        ),
+      ).toEqual([1, ["::error::package/dist/renderer.js.LICENSE.txt holds no MIT notice of react-window"]]);
+      // A file of dist/ named as the Security section of AGENTS.md names a credential.
+      for (const file of ["fixture.pem", "fixture.key", ".npmrc", "admin.kubeconfig", "credentials.json"])
+        expect([file, run((root) => writeFileSync(join(root, "dist", file), "synthetic\n"))]).toEqual([
+          file,
+          [1, [`::error::Files named as a credential: package/dist/${file}`]],
+        ]);
+      // The home of the runner or the workspace in any file.
+      for (const path of [home, workspace])
+        expect(run(inMain(`// built in ${path}/src`))).toEqual([
+          1,
+          ["::error::An absolute path of the runner in: <run>/temp/contents/package/dist/main.js"],
+        ]);
+      // The form of a credential in any file: a private key, a kubeconfig, a token of npm or of GitHub, each made
+      // here so that no file of the repository holds one.
+      for (const text of [
+        ["-----BEGIN", "OPENSSH", "PRIVATE", "KEY-----"].join(" "),
+        ["-----BEGIN", "PRIVATE", "KEY-----"].join(" "),
+        `users:\n- user:\n    ${["client", "key", "data"].join("-")}: c3ludGhldGlj`,
+        "apiVersion: v1\nkind: Config\nclusters: []",
+        `{"kind": "Config", "${["current", "context"].join("-")}": "synthetic"}`,
+        `//registry.npmjs.org/:${["_auth", "Token"].join("")}=synthetic`,
+        `npm_${"A".repeat(36)}`,
+        `ghp_${"A".repeat(36)}`,
+        `github_pat_${"A".repeat(22)}_${"B".repeat(59)}`,
+      ])
+        expect([text.slice(0, 16), run(inMain(text))]).toEqual([text.slice(0, 16), [1, [credential]]]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+    expect(listed).toMatch(/\n {8}env:\n {10}TARBALL: \$\{\{ steps\.pack\.outputs\.tarball \}\}\n/);
+  }, 60_000);
+
+  it("builds Freelens for the views, for the integration and for the release at the validation target of SPEC-0015, named once", () => {
     const spec = readFileSync(new URL("../docs/specs/SPEC-0015-freelens-v2-host.md", import.meta.url), "utf8");
     const target = /^- \*\*Freelens validation target:\*\* freelensapp\/freelens `([0-9a-f]{40})`/m.exec(spec)?.[1];
 
@@ -11979,9 +12414,10 @@ describe("platform of the test environment", () => {
       read(`.github/workflows/${name}`).includes("uses: ./.github/actions/build-freelens"),
     );
 
-    // The workflows that build Freelens build it through the action, and every workflow that calls the action is held
-    // below to what the action needs from it.
-    expect(callers).toEqual(["integration-tests.yaml", "views-tests.yaml"]);
+    // The workflows that build Freelens build it through the action, the integration tests, the views and the job
+    // package of the release, which runs FND-10 on its tarball, and every workflow that calls the action is held below
+    // to what the action needs from it.
+    expect(callers).toEqual(["integration-tests.yaml", "release.yaml", "views-tests.yaml"]);
     for (const name of callers) {
       const workflow = read(`.github/workflows/${name}`);
 

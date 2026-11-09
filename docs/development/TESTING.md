@@ -174,6 +174,22 @@ runner refuses any labelled namespace that is still there at the end. The views 
 driven by their own [suites](#suites-of-the-views), against the fixtures of the
 environment.
 
+FND-10 runs as well in the job `package` of the
+[release workflow](../../.github/workflows/release.yaml), on the tarball that job
+packs once and the job `publish` publishes (REQ-286 of SPEC-0018): in Freelens
+built at the validation target through the same action, with no cluster, and
+without the runner, which checks the target of an environment before and after
+and the namespaces of the sessions, as
+`xvfb-run -a pnpm test:integration integration/__tests__/extensions.tests.ts` with
+`EXTENSION_PATH` naming that tarball; without it the helpers install the package
+from the registry by its name. The job takes the sha256 of the tarball right after
+the pack, before the application starts, and fails when the bytes it uploads are
+not those. It runs at each tag, when started by hand, and on a pull request that
+changes the workflow, `CHANGELOG.md` or the action. The same command runs FND-10 on
+a machine with no cluster, after `pnpm build && pnpm clean:tgz && pnpm pack`, with
+`FREELENS_APP` naming the application and `EXTENSION_PATH` the absolute path of the
+tarball, under `xvfb-run -a` on a Linux without a display.
+
 ## End-To-End Tests
 
 The [scripts](../../e2e/scripts/) create a dedicated kind cluster,
