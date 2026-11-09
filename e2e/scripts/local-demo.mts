@@ -2494,6 +2494,48 @@ async function runTransportProof(): Promise<void> {
                 ? `, the last ended ${container.lastState.terminated.reason ?? "with no reason"} at ${container.lastState.terminated.finishedAt ?? "a time not known"}`
                 : ""),
           );
+      // Its volumes, without their contents: how many are writable, and how much of each was deleted.
+      const volumes = kubectl(
+        [
+          "exec",
+          "--namespace",
+          DEMO_NAMESPACE,
+          "deploy/seaweedfs",
+          "--",
+          "sh",
+          "-c",
+          "echo volume.list | weed shell -master=localhost:9333",
+        ],
+        undefined,
+        60_000,
+        false,
+      );
+
+      for (const line of volumes.split("\n").filter((line) => /Topology|volume Id:/.test(line)))
+        console.error(
+          `The store: ${line
+            .trim()
+            .replace(/, (Version|Ttl|ReplicaPlacement|ModifiedAtSecond):[^,]*/g, "")
+            .slice(0, 200)}`,
+        );
+      // What the store said of its volumes, the lines of space, of compaction and of writes it could not place.
+      const said = kubectl(
+        ["logs", "--namespace", DEMO_NAMESPACE, "deploy/seaweedfs", "--tail=5000"],
+        undefined,
+        60_000,
+        false,
+      )
+        .split("\n")
+        .filter((line) => /vacuum|compact|read.?only|no free|no writable|disk|space|leader|grow/i.test(line))
+        .map((line) =>
+          line
+            .replace(/(X-Amz-[A-Za-z-]+=)[^&\s"]+/g, "$1REDACTED")
+            .replace(/((?:access|secret)[_ -]?key|credential|token|password)(\W{1,3})\S+/gi, "$1$2REDACTED")
+            .slice(0, 240),
+        )
+        .slice(-30);
+
+      for (const line of said) console.error(`The store said: ${line}`);
     } catch {
       console.error("The state of the store could not be read.");
     }
