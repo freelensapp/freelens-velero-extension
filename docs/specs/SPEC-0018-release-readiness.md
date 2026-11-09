@@ -1631,8 +1631,8 @@ the other extensions; the scan is not kept (D8). The evidence, by check:
   with its 51 cases; the walk of a deletion reads the text of the request as the
   first stop after its review, which the region of the text makes.
 - VIS-01, the visual pass (REQ-292): on the head, the part `pre-review` of the run
-  of the views among the checks of its pull request, {RUN-VIS-CI}, with its report
-  and its gallery. The run the review of the milestone reads is the one on the
+  of the views among the checks of its pull request, green before its merge, with
+  its report and its gallery. The run the review of the milestone reads is the one on the
   commit of the prerelease, which this slice does not make.
 - The fixes, each read by a unit or a component test:
   - the colors of the words ([`views.module.test.ts`](../../src/renderer/components/views.module.test.ts),
@@ -1694,9 +1694,12 @@ the other extensions; the scan is not kept (D8). The evidence, by check:
   tests of the stylesheet, of the lines, of the log, of the panel and of the
   viewers of a tab, and of the workspace; the tests of the tabs, of the volumes and
   of the six workspaces of the actions. Trunk on the changed files, green. The unit
-  run of the head, `pnpm test:unit`: {RUN-VIS-UNIT}. The checks of its pull
-  request, read before the merge: {RUN-VIS-CI}. Its files reach every part of the
-  views, by the stylesheet and the components of the views, and the end to end run.
+  run of the head, with main merged, `pnpm test:unit`, on macOS with Node 24.21.0:
+  135 files and 3,824 tests passed, and the three measures. The checks of its pull
+  request, green before its merge: the unit tests, the check, Trunk, the
+  integration test, OSV-Scanner and the six parts of the views. Its files reach
+  every part of the views, by the stylesheet and the components of the views, and
+  no end to end run, which builds no file of the renderer.
 
 Decided while implementing, on 2026-11-09:
 
