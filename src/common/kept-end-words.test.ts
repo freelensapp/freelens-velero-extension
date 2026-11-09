@@ -100,15 +100,15 @@ describe("what the target bar says of an end no view showed", () => {
     ).toEqual({
       completed: `${what}: the backup is not there any more: Velero deleted it, with the request.`,
       replaced: `${what}: the request is not there any more, and the backup is: another request for the same backup, which Velero started after this one, replaced it.`,
-      refused: `${what}: Velero refused the request, and deleted nothing.`,
+      refused: `${what}: Velero refused the request, and deleted nothing of the backup.`,
       failed: `${what}: a step of the deletion failed: the backup stays Deleting, and a new request tries again.`,
       unread: `${what}: Velero had not started the deletion when it was last read.`,
       "in-progress": `${what}: Velero was at the deletion when it was last read: the view of the backup says how it goes.`,
     });
-    // Found after a lost answer: a request of the backup made since a minute before the confirmation, this one or
-    // another.
+    // Found after a lost answer: what the requests of the backup made since a minute before the confirmation and the
+    // backup showed, whether a request was read or the backup was gone with none.
     expect(keptEndWords({ ...base, outcome: { created: true, deletion: "completed", found: true } })).toBe(
-      `${what}, as a request of the backup made since a minute before the confirmation shows, this one or another, read after the answer of its creation was lost: the backup is not there any more: Velero deleted it, with the request.`,
+      `${what}, as the requests of the backup made since a minute before the confirmation and the backup show, read after the answer of its creation was lost: the backup is not there any more: Velero deleted it, with the request.`,
     );
     expect(keptEndWords({ ...base, outcome: { created: false, code: "conflict", text: "Taken." } })).toBe(
       "The deletion of the backup nightly, in velero (context kind-demo), ended while no view of it was open: Taken.",

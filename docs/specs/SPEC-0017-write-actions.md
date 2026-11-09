@@ -2175,3 +2175,171 @@ the backup; a request of another UID under the name taken; an answer of another
 namespace taken; the mark of the requests not read dropped from the end kept, or taken
 for another kind; the words of an end with the requests not read, or found, said as if
 they were read; and the way to the view of a backup whose deletion completed.
+
+T4.6, the second of its pull requests, on 2026-11-08: the workspace of the deletion of
+one backup, with the command of the view of a backup. The evidence, by check:
+
+- DELETE-01 and DELETE-07, the component part
+  ([`backup-delete-workspace.test.tsx`](../../src/renderer/pages/backup-delete-workspace.test.tsx)):
+  Delete backup in the view of a backup for a backup Completed, Deleting, New and with
+  no phase, and for one Queued that names no storage location, each with the words of
+  its phase where it has some, and disabled for one InProgress or Finalizing, with the
+  words why; no row of the list offers a deletion; the command opens the workspace of
+  the deletion of that backup over the view, named in the address, which with writes off
+  asks nothing; the workspace opened by the address for a backup in progress, or for one
+  the installation did not read, says why and asks nothing
+  ([`backup-delete-words.test.ts`](../../src/common/backup-delete-words.test.ts) for
+  every phase of the release, ReadyToStart and the phases of the plugins and of the
+  finalizing among them, with a location named and without one).
+- DELETE-03 and DELETE-06
+  ([`backup-delete-words.test.ts`](../../src/common/backup-delete-words.test.ts)): the
+  review says the one request and that no DELETE of the Backup is sent, what Velero
+  deletes in its order, what it deletes only when nothing failed and the restores it
+  deletes even after a failure, the location of the backup with what Velero refuses and,
+  when the views read it ReadOnly, not Available, without a phase or not there, that
+  Velero would refuse it, the other requests of a backup of its name Velero deletes
+  first, one or more, or that they could not be read, the other installations that sync
+  the location, and that it cannot be undone; the phase of a backup Deleting or not
+  started after the request, and of one not started that names no storage location,
+  which Velero refuses to delete until it starts it.
+- DELETE-04 and DELETE-05, the component part
+  ([`backup-delete-workspace.test.tsx`](../../src/renderer/pages/backup-delete-workspace.test.tsx),
+  [`backup-delete.test.ts`](../../src/renderer/state/backup-delete.test.ts)): the review
+  asked of the main process with the backup alone, shown with the text as it came beside
+  what it means, and taken only when the text is exactly the request of this backup in
+  this namespace; Delete backup disabled until the name is typed exactly, and again by
+  one character more, Escape in the field takes it back, Enter deletes once it is typed
+  and not before, and the run carries the name as it was typed; Delete backup held back,
+  with the words of the phase, while the backup is read in a phase Velero refuses to
+  delete, Enter included, and given back when it ended; each of the six ends with the
+  errors as Velero wrote them, an end in progress with the requests read and not read,
+  and an end found after a lost answer, with the way to the view of the backup but after
+  a deletion completed; a failure kept in sight with the way to the view of the backup
+  for an end not known; a review left by Escape and by its command with the focus on the
+  command that asks again, dropped when writes go off and with the workspace; the
+  workspace of a backup while the deletion of another one is being asked, which says so
+  and shows nothing of it, and gives the workspace of its own backup when it ends, its
+  review said by what is read of that backup; a backup created again under its name said
+  as another one; an expired token asked again once, and run only for the same text; the
+  client of the confirmation and of the run, with what each carries
+  ([`gate.test.ts`](../../src/renderer/state/gate.test.ts)).
+- REQ-283, the main part
+  ([`ipc-backup-delete.test.ts`](../../src/main/ipc-backup-delete.test.ts),
+  [`diagnostic-kubernetes.test.ts`](../../src/main/diagnostic-kubernetes.test.ts),
+  [`ipc.test.ts`](../../src/common/ipc.test.ts)): the confirmation answers how many
+  other requests of a backup of its name it read, by the label of the name alone, as
+  Velero deletes them, a request of an earlier backup of the same name among them, and
+  nothing when they cannot be read; the adapter selects by the label of the name alone
+  when no UID is given, and takes a list only when every request is of the namespace and
+  carries the labels asked for; the contract reads a count and nothing else.
+- REQ-245 ([`writes.test.tsx`](../../src/renderer/components/writes.test.tsx)): the
+  dialog that turns writes on names a DeleteBackupRequest of one backup, asked from the
+  view of that backup, among what the extension may create.
+- The pre-review ([`pre-review.tests.ts`](../../e2e/__tests__/pre-review.tests.ts)): the
+  walk of the tabs of a backup with the keyboard reaches Delete backup from the way back,
+  enabled for a backup that failed its validation, before the strip of the tabs.
+
+Thirty-eight changes made on purpose to the code before the review, each seen failing
+at least one case: the phases Velero refuses, Deleting and not started, in the words of
+the command; the location not there, ReadOnly and not Available; the other requests,
+one and more; the requests not read, the errors and the errors left in the result; the
+second gesture, a review left, the end told to the main process, the gate and the text
+of the review checked, the count of the other requests carried, the name typed, the
+renewal of a token and its text, a deletion asked while another is, the hold of the
+command, Escape on the review, the way to the backup, the words of an answer found, the
+location read for the review and the start of the workspace; the command of the view
+and its words; the client of the confirmation and of the run; the count of a list that
+fails; and the contract of the count. After the review, twenty more: the words of a
+backup not started that names no storage location, of a location read without a phase
+and of the other requests not read; the phase of the review said without its location;
+the workspace taking the deletion of another backup, or of one created again under its
+name, and not waiting for it; Delete backup and Enter not held back in the review; the
+UID not given to the workspace; the location read for the review dropped; the command
+of the view without the location; and the count of the other requests by the UID, the
+selector of the name alone, its check and its validation. A guard of the start of the
+workspace that changed nothing, since a deletion takes no start while one is being
+asked, is gone.
+
+Decided while implementing, on 2026-11-08:
+
+- The workspace of the deletion is named in the address as `backup-delete/<backup>`, on
+  the page of the Backups, and Delete backup stands after Restore on the line of the
+  name of the backup.
+- The confirmation lists the requests of a backup of its name by the label of the name
+  alone, as Velero deletes them before it starts a request
+  ([`backup_deletion_controller.go` L500-L522](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/backup_deletion_controller.go#L500-L522)),
+  and answers how many there are, which the review says as REQ-283 asks; a list that
+  fails or does not answer within the deadline of the adapter is said as not read, and
+  the review is confirmed all the same.
+- For a backup Velero has not started that names no storage location, the command and
+  the review say that Velero refuses a request to delete it until it starts it: Velero
+  writes the location of a backup when it starts it
+  ([`backup_controller.go` L431-L446](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/backup_controller.go#L431-L446)),
+  the deletion controller reads the location the backup names
+  ([L188-L198](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/controller/backup_deletion_controller.go#L188-L198)),
+  and the client of its manager reads through the cache
+  ([`server.go` L270-L277](https://github.com/velero-io/velero/blob/4ee1e79a7aed367fd9b767b8219ec65bd0c96892/pkg/cmd/server/server.go#L270-L277)),
+  which answers a name it does not hold, the empty one among them, as not found
+  ([controller-runtime v0.21.0, `cache_reader.go` L57-L76](https://github.com/kubernetes-sigs/controller-runtime/blob/v0.21.0/pkg/cache/internal/cache_reader.go#L57-L76)).
+  The command stays offered, as REQ-278 asks, and the refusal is said with the error of
+  Velero; whether to hold it back for such a backup is an open question. No run on a
+  server shows it: the server starts every backup it reads, and a proof cannot hold one
+  unstarted.
+- The workspace of a backup shows only the deletion of that backup, by its name and its
+  UID: while the deletion of another one is being asked it says so, and gives its own
+  once that ends, as the workspace of a pause and of a resume does.
+- Delete backup is held back in the review while the backup is read in a phase Velero
+  refuses to delete, with the words of the phase in place of the state of the name, as
+  the main process would refuse it at the run.
+- The words of an answer found after a loss say what was read, the requests of the
+  backup made since a minute before the confirmation and the backup, in the workspace
+  and in the target bar: a look that found no request, with the backup gone, ends
+  completed as well.
+- The review says the state of the location of the backup as the views read it when
+  Velero would refuse the request, beside what REQ-280 asks it to say of the location.
+- The result leads to the view of the backup, but after a deletion completed, whose
+  backup is gone.
+- An expired token is asked again once, and the run goes on only with the text of the
+  review: the request is written from the namespace and the backup alone, so a renewal
+  of the same backup has the same text, and another text is not shown in place of the
+  review.
+- The phases of a backup Velero refuses to delete are one list, which the command of the
+  views and the main process read.
+
+The independent review of this pull request, read-only, found two blockers and four
+points of medium weight, with others; all were applied, the hold of the command for a
+backup that names no storage location left as an open question:
+
+- The dialog that turns writes on did not name the deletion: it names a
+  DeleteBackupRequest of one backup, asked from the view of that backup, as REQ-245
+  asks of every kind as its slice lands.
+- The walk of the tabs of a backup with the keyboard in the pre-review would have
+  reached Delete backup, enabled for a backup that failed its validation, where it
+  expected the first tab: it passes Delete backup now.
+- The workspace of one backup could show the deletion of another and ask its review
+  with the phase and the location of its own: it shows only the deletion of its backup,
+  by its name and its UID, says when the deletion of another one is being asked, gives
+  its own once that ends, says the review by what is read of the backup it is of, and
+  says a backup created again under its name as another one.
+- A backup Velero has not started that names no storage location was said as one
+  Velero deletes before it starts it, which it refuses until it writes the location:
+  its words say so, from the source of the release and of controller-runtime.
+- The words of an answer found after a loss said a request found where the look found
+  none and the backup was gone: they say what was read, in the workspace and in the
+  target bar.
+- The other requests were counted by the labels of the name and of the UID, where
+  Velero deletes them by the label of the name: they are counted by the name, and a
+  list that fails is said as not read; a location read without a phase is said as one
+  Velero would refuse; a refusal says that nothing of the backup was deleted, since
+  Velero deletes the other requests first; an end in progress says a request Processed
+  with the backup still there; an end unread says when it was last read.
+- Enter that deletes once the name is typed, one character more that disables Delete
+  backup again, and an end in progress with the requests read had no case: each has
+  one; the evidence named the double of the tests where the adapter selects, a list
+  that does not answer where the case is of one that fails, and the component test
+  alone for phases the test of the words proves: it says each as it is; the title of a
+  case said the opposite of what it proves; the words of a backup not offered were not
+  used, and are gone; a backup that went into progress during its review was said not
+  offered beside a Delete backup enabled, which is held back now.
+- The line of the name of a backup with both commands and their notes, which wrap, is
+  looked at in the pictures of the pre-review of the third pull request.

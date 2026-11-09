@@ -169,6 +169,7 @@ describe("what the extension registers", () => {
       ["restore-schedule", "schedules"],
       ["schedule-pause", "schedules"],
       ["schedule-resume", "schedules"],
+      ["backup-delete", "backups"],
     ]);
     for (const menu of menus) expect(pages).toContain(menu.target.pageId);
     expect(

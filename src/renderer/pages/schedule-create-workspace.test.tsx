@@ -34,6 +34,7 @@ import type { ScheduleWrapper } from "../../common/schedule-form";
 import type {
   ArtifactClient,
   BackupCreateClient,
+  BackupDeleteClient,
   BackupNowClient,
   GateClient,
   KeptEndsClient,
@@ -143,7 +144,10 @@ function mainProcess() {
     BackupCreateClient &
     ScheduleCreateClient &
     RestoreCreateClient &
-    SchedulePatchClient = {
+    SchedulePatchClient &
+    BackupDeleteClient = {
+    confirmBackupDelete: async () => NOTHING,
+    runBackupDelete: async () => NOTHING,
     confirmRestoreCreate: async () => NOTHING,
     runRestoreCreate: async () => NOTHING,
     confirmBackupNow: async () => NOTHING,

@@ -1,6 +1,7 @@
 import { Renderer } from "@freelensapp/extensions";
 import { observer } from "mobx-react";
 import React from "react";
+import { deleteOffered } from "../../common/backup-delete-words";
 import { backupView } from "../../common/backup-view";
 import { writtenCounters } from "../../common/evidence";
 import {
@@ -33,10 +34,14 @@ const {
 
 // The commands of a backup (SPEC-0017, REQ-252), on the line of its name, where they take no room from its tabs: each
 // opens the workspace of its action over this view, which is as it was when the workspace closes, with writes on or
-// off. A restore is offered of a backup that ended well, and the command says why it is not for another (REQ-267).
+// off. A restore is offered of a backup that ended well, and the command says why it is not for another (REQ-267); the
+// deletion of this backup alone, of one Velero does not refuse to delete, with what Velero does for its phase
+// (REQ-278, REQ-284).
 function BackupCommands({ installation, backup }: { installation: Installation; backup: BackupResource }) {
   const offered = backupOffered(backup.status?.phase);
+  const deletable = deleteOffered(backup.status?.phase, backup.spec?.storageLocation);
   const name = backup.metadata.name;
+  const uid = backup.metadata.uid;
 
   return (
     <div className={styles.commands} data-testid="velero-backup-commands">
@@ -56,6 +61,25 @@ function BackupCommands({ installation, backup }: { installation: Installation; 
       {offered.words ? (
         <span id="velero-backup-restore-note" className={styles.factNote} data-testid="velero-backup-restore-note">
           {offered.words}
+        </span>
+      ) : null}
+      <Button
+        plain
+        data-testid="velero-backup-delete"
+        disabled={!deletable.offered || !uid}
+        aria-describedby={deletable.words ? "velero-backup-delete-note" : undefined}
+        onClick={() => {
+          if (!uid) return;
+          installation.backupDelete.start({ kind: "Backup", name, uid });
+          openView({ kind: "backup-delete", name });
+        }}
+      >
+        <Icon material="delete" small aria-hidden />
+        Delete backup
+      </Button>
+      {deletable.words ? (
+        <span id="velero-backup-delete-note" className={styles.factNote} data-testid="velero-backup-delete-note">
+          {deletable.words}
         </span>
       ) : null}
     </div>

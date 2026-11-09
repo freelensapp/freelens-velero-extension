@@ -24,6 +24,7 @@ export const VIEW_KINDS = [
   "restore-schedule",
   "schedule-pause",
   "schedule-resume",
+  "backup-delete",
 ] as const;
 export type ViewKind = (typeof VIEW_KINDS)[number];
 
@@ -160,6 +161,15 @@ export const VIEWS: Record<
     family: "backups",
     reads: BACKUPS_AND_LOCATIONS,
     title: "Restore",
+    noun: "backup",
+    plural: "backups",
+  },
+  // The workspace of the deletion of a backup is of the backup, by its name: it reads what the view of the backup
+  // reads, whose storage location the review names.
+  "backup-delete": {
+    family: "backups",
+    reads: BACKUPS_AND_LOCATIONS,
+    title: "Delete backup",
     noun: "backup",
     plural: "backups",
   },

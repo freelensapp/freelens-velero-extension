@@ -142,7 +142,7 @@ describe("the writes in the target bar", () => {
     expect(words.second).toContain("a Backup of the form, asked from the list of the Backups");
     expect(words.second).toContain("a Schedule of the form, asked from the list of the Schedules");
     expect(words.second).toContain(
-      "a Restore of a backup, asked from the view of that backup or from the view of the schedule that made it, and a patch of a Schedule that pauses or resumes it, asked from the view of the schedule. Each one is confirmed",
+      "a Restore of a backup, asked from the view of that backup or from the view of the schedule that made it, a patch of a Schedule that pauses or resumes it, asked from the view of the schedule, and a DeleteBackupRequest of one backup, asked from the view of that backup. Each one is confirmed",
     );
     // Nothing is on before the dialog is answered.
     expect(installation.writes).toEqual({ on: false });

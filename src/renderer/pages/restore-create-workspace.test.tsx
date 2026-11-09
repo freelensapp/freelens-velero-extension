@@ -26,6 +26,7 @@ import type { Failure, GateState, Answer as IpcAnswer, RestoreCreated, WriteConf
 import type {
   ArtifactClient,
   BackupCreateClient,
+  BackupDeleteClient,
   BackupNowClient,
   GateClient,
   KeptEndsClient,
@@ -161,7 +162,10 @@ function mainProcess() {
     BackupCreateClient &
     ScheduleCreateClient &
     RestoreCreateClient &
-    SchedulePatchClient = {
+    SchedulePatchClient &
+    BackupDeleteClient = {
+    confirmBackupDelete: async () => NOTHING,
+    runBackupDelete: async () => NOTHING,
     confirmBackupNow: async () => NOTHING,
     runBackupNow: async () => NOTHING,
     confirmBackupCreate: async () => NOTHING,
