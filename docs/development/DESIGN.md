@@ -127,10 +127,11 @@ with the installation, and the expression under 640, since the view of a schedul
 has all three, the band of its status the expression and the last submission, its
 history the newest backup: the name, paused, the next run, the adherence and the
 validation stay. The border of the two times is 1,200 pixels and not 760, decided by
-the lead maintainer on 2026-10-26, so that what the list shows in a window of 1440
-by 900 is read whole: with them its name, expression, newest backup and validation
-were cut there, and from 1,001 to 1,199 pixels the newest backup was cut in every
-row. Paused, the next run and the word of the adherence with its mark have the room
+the lead maintainer on 2026-10-26, so that the name and the validation are read
+whole in a window of 1440 by 900: with the two times its name, expression, newest
+backup and validation were cut there, and from 1,001 to 1,199 pixels the newest
+backup was cut in every row. An expression longer than its share still keeps its tip
+there. Paused, the next run and the word of the adherence with its mark have the room
 of their words in a list of 1,000 pixels or more, and the last submission where it
 is shown, from 1,201, as measured in the packaged application at each edge and in a
 window of 1440 by 900; in a narrower one they are cut at the end of their room, and
