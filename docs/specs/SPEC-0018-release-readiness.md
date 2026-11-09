@@ -7,7 +7,7 @@
 - **Reviewed main:** not relevant: the subject of this spec is the release of the extension, its checks and its documents
 - **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0
 - **Dependencies:** every spec of v1.0.0, SPEC-0001 to SPEC-0017; [D10 of SPEC-0015](SPEC-0015-freelens-v2-host.md#d10-the-version-and-the-release), the version line and its prereleases; the fifth milestone, done and reviewed: its review gate passed with the lead maintainer on 2026-11-09
-- **Approval:** Approved by the lead maintainer on 2026-11-09, with D1 to D19 as proposed; D11b is carried out with an owner of the npm scope `@freelensapp` when the first prerelease is asked for
+- **Approval:** Approved by the lead maintainer on 2026-11-09, with D1 to D19 as proposed; D11b is carried out with an owner of the npm scope `@freelensapp` when the first prerelease is asked for. D8 is not taken, decided by the lead maintainer on 2026-11-09: the pre-review stays the visual one of the other extensions; the scan is not kept
 
 Governed by [AGENTS.md](../../AGENTS.md). A completed draft is not approval to
 implement.
@@ -51,11 +51,11 @@ says how to verify a release, part of T6.4, and
 section of the README on the permissions with two example roles, part of T6.3.
 
 Included: the regression of 1.0.0 and the gaps of [the tests](#tests) that this
-spec takes (D16); the visual pass and an accessibility scan; the README of 1.0.0,
-its screenshots, a video and the release notes; the assets of the release, the
-workflow that makes them and their proof; the prerelease 1.0.0-0, its check, the
-review of the milestone, 1.0.0, and its listing in the marketplace of the
-organization (D19).
+spec takes (D16); the visual pass, and an accessibility scan, which is not taken
+(D8); the README of 1.0.0, its screenshots, a video and the release notes; the
+assets of the release, the workflow that makes them and their proof; the
+prerelease 1.0.0-0, its check, the review of the milestone, 1.0.0, and its
+listing in the marketplace of the organization (D19).
 
 Excluded, with their owners:
 
@@ -99,7 +99,7 @@ Excluded, with their owners:
    published and no GitHub release is created.
 8. **P2, a control with no name:** Given a view whose button loses its accessible
    name, when the pre-review runs, then the scan fails the case with the rule and
-   the element.
+   the element. Not taken with the scan (D8).
 
 ## Requirements
 
@@ -122,8 +122,8 @@ Excluded, with their owners:
 | ID | Contract | Acceptance check |
 | --- | --- | --- |
 | REQ-292 | The visual pass of 1.0.0 is the pre-review of the release candidate: every view of the extension, the workspace of each action among them, in both themes, at 1440 by 900, at 900 by 650 and at twice the zoom, with the journeys by the keyboard alone and its checks of what lies over something else or does not fit, run green on the commit of the prerelease the review of the milestone reads, with its report and its gallery. The lead maintainer judges the gallery at the review of the milestone (REQ-312); each finding is an issue, and the blocking ones are fixed before 1.0.0 | VIS-01 |
-| REQ-293 | The pre-review scans every view it checks with axe-core and the rules of WCAG 2.1 at the levels A and AA (D8), in both themes, at 1440 by 900 and at 900 by 650, inside the root of the view of the extension: the sidebar, the top bar, the status bar, and the menus, dialogs and drawers of the host are left out, and a section of the extension in the details of the host is scanned alone. The report of the pre-review lists every violation with its rule, its impact, its element and where it comes from. A violation of impact serious or critical on an element the extension renders fails its case, unless the list of the exceptions, a file of the repository the suite reads, names its rule, its element and the choice of a spec that keeps it. What comes from a component of the host is reported and does not fail | VIS-02 |
-| REQ-294 | axe-core is a devDependency at an exact version, loaded only by the pre-review into the frame it scans. No bundle carries it, and DEPENDENCY-AUDIT.md lists it among what only tests | VIS-03 |
+| REQ-293 | Not taken, decided by the lead maintainer on 2026-11-09: the pre-review stays the visual one of the other extensions; the scan is not kept (D8). As approved: the pre-review scans every view it checks with axe-core and the rules of WCAG 2.1 at the levels A and AA (D8), in both themes, at 1440 by 900 and at 900 by 650, inside the root of the view of the extension: the sidebar, the top bar, the status bar, and the menus, dialogs and drawers of the host are left out, and a section of the extension in the details of the host is scanned alone. The report of the pre-review lists every violation with its rule, its impact, its element and where it comes from. A violation of impact serious or critical on an element the extension renders fails its case, unless the list of the exceptions, a file of the repository the suite reads, names its rule, its element and the choice of a spec that keeps it. What comes from a component of the host is reported and does not fail | VIS-02 |
+| REQ-294 | Not taken, decided by the lead maintainer on 2026-11-09: the pre-review stays the visual one of the other extensions; the scan is not kept (D8). As approved: axe-core is a devDependency at an exact version, loaded only by the pre-review into the frame it scans. No bundle carries it, and DEPENDENCY-AUDIT.md lists it among what only tests | VIS-03 |
 
 ### Documentation (T6.3)
 
@@ -267,10 +267,10 @@ this spec covers.
 | SPEC-0009, the decision on the frame of a second entry, with REQ-314 | The second entry is the same cluster through another kubeconfig | Kept, and with it the proof of the gate between frames and of the count of their writes; the second cluster of REQ-287 beside it, for the lists and the selections |
 | SPEC-0015, HOST-21, with REQ-310 | The first prerelease leaves `latest` untouched | `next` names 1.0.0-0, and `latest` names nothing or 1.0.0-0, as the registry does with the first version of a package, recorded at the first prerelease. Freelens finds no version by name either way; a command line that installs the name alone takes what `latest` names, so the README says to install `@next` or a version until 1.0.0 |
 | SPEC-0015, REQ-216, with D18 | 1.0.0 on `latest` only after M6 is done | M6 done read as T6.1 to T6.4 Done and the review of the milestone passed |
-| TESTING.md, the identities, the fixture matrix and the integration tests | Isolation is "unit plus authorized local integration"; the actions run as the administrator of the kind cluster; FND-10 runs in the integration and views workflows | The two clusters of REQ-287 and REQ-314, the two identities of REQ-288 for the session, the two cases of FND-10 of REQ-289 and REQ-290, FND-10 in the job `package`, the scan of REQ-293 |
+| TESTING.md, the identities, the fixture matrix and the integration tests | Isolation is "unit plus authorized local integration"; the actions run as the administrator of the kind cluster; FND-10 runs in the integration and views workflows | The two clusters of REQ-287 and REQ-314, the two identities of REQ-288 for the session, the two cases of FND-10 of REQ-289 and REQ-290, FND-10 in the job `package`, and the scan of REQ-293, which is not taken (D8) |
 | ARCHITECTURE.md and AGENTS.md, the paragraphs of a release and of the workflows | The release workflow builds, packs, publishes, then makes the bill of materials and the checksums, in one job; the tag workflow tags main; AGENTS.md says the views run in five parts | The flow of [the release](#the-release-flow), in two jobs, and the tag of the merge commit; six parts |
 | PROCESS.md, the working agreements | Packages are published only by the release workflow, tags created only by the tag workflow | The same, the tag on the merge commit of the pull request of the version; and [the way back](#the-way-back), by an owner of the scope on the lead maintainer's go |
-| DEPENDENCY-AUDIT.md, with REQ-294 and REQ-316 | Testing Library and jsdom are for the tests alone; nothing says where the notice of react-window travels | axe-core joins Testing Library and jsdom among what only tests; the notice of react-window travels in the package |
+| DEPENDENCY-AUDIT.md, with REQ-294 and REQ-316 | Testing Library and jsdom are for the tests alone; nothing says where the notice of react-window travels | The notice of react-window travels in the package; axe-core, which would have joined Testing Library and jsdom among what only tests, is not taken (D8) |
 | RECON-T0.1.md, with REQ-310 and REQ-313 | The last entry of the drift watch at the start of a milestone is of 2026-10-13 | An entry before 1.0.0-0 and one before 1.0.0 |
 | ROADMAP.md, with D16 | The row of T6.1 names the packaged integration and the performance | At the approval, the row narrowed to what D16 takes, and what it defers recorded under Deferred after v1.0.0 |
 
@@ -286,7 +286,7 @@ The files the slices change beside the specs and the documents above:
 | `src/main/index.ts`, `test/build.test.ts` | `resolveRoute` exported by the main bundle and listed among the exports the build test pins; the ceilings of the bundles | REQ-290, REQ-317 |
 | `integration/__tests__/extensions.tests.ts` | The cases of REQ-289 and REQ-290 | REQ-289, REQ-290 |
 | `e2e/scripts/`, the fixtures and a suite of a part of the demo | The second cluster, the two identities, the two cases of REQ-291 | REQ-287, REQ-288, REQ-291, REQ-314 |
-| `e2e/__tests__/pre-review.tests.ts` and a file of the exceptions; `package.json` and the lockfile | The scan, and axe-core at an exact version | REQ-293, REQ-294 |
+| `e2e/__tests__/pre-review.tests.ts` and a file of the exceptions; `package.json` and the lockfile | The scan, and axe-core at an exact version: not taken (D8) | REQ-293, REQ-294 |
 | `README.md`, `CHANGELOG.md` (new), `docs/screenshots/` (new) | The sections of T6.3 and of REQ-306, the notes, the screenshots | REQ-295 to REQ-304, REQ-306 |
 | The packed files, `dist/` or `files` of `package.json` | The notice of react-window | REQ-316 |
 
@@ -304,8 +304,8 @@ The files the slices change beside the specs and the documents above:
 | REG-07 | Packaged application, end to end | REQ-291 | On the environment of the demo, two cases of a suite of a part that exists: Back up now on the real schedule, the phases read up to Completed in the workspace and in the view of the backup, the words of a backup not read yet gone; Delete backup followed until the backup is gone; one creation of each kind counted; nothing of the run left, which the verification of the environment after the part proves |
 | REG-09 | Unit | REQ-317 | The build test finds each bundle under its ceiling; seen failing with a ceiling set below the size of its bundle |
 | VIS-01 | Pre-review, manual | REQ-292 | The pre-review on the commit of the prerelease the review reads, every case green, its counts, report and gallery; the judgment of the lead maintainer at REL-03 |
-| VIS-02 | Pre-review | REQ-293 | The scan of every view in both themes at the two sizes, its report listing every violation, green with the exceptions of the file; seen failing when the case itself, in the DOM of the page it scans and never in the source of a view, removes the name of a button, removes the label of an input and lowers the contrast of a text below AA in one theme |
-| VIS-03 | Unit | REQ-294 | The build test finds no module of axe-core in either bundle and the manifest lists it among the devDependencies at an exact version; Knip finds it used |
+| VIS-02 | Pre-review | REQ-293 | Not taken, decided by the lead maintainer on 2026-11-09: the pre-review stays the visual one of the other extensions; the scan is not kept (D8). As approved: the scan of every view in both themes at the two sizes, its report listing every violation, green with the exceptions of the file; seen failing when the case itself, in the DOM of the page it scans and never in the source of a view, removes the name of a button, removes the label of an input and lowers the contrast of a text below AA in one theme |
+| VIS-03 | Unit | REQ-294 | Not taken, decided by the lead maintainer on 2026-11-09: the pre-review stays the visual one of the other extensions; the scan is not kept (D8). As approved: the build test finds no module of axe-core in either bundle and the manifest lists it among the devDependencies at an exact version; Knip finds it used |
 | DOC-01 | Manual | REQ-295 | The checklist of REL-03 reads the section: the name of `package.json`, the tag `next`, a version, the releases of the repository; each way tried at REL-02 and REL-04 |
 | DOC-02 | Unit | REQ-296 | A case finds in the section the range of `engines.freelens` of `package.json` and the API versions of the kinds the extension reads, and no section that says there is no release |
 | DOC-03 | Unit, end to end | REQ-297 | A case compares the two YAML blocks of the section, text for text, with a rendering of the roles of the two identities of REQ-288, with no YAML parser; it lands with #145, after the identities; each row of the table checked with `kubectl auth can-i` in the pull request of #145 |
@@ -334,9 +334,9 @@ their own under `test/`; the two cases of FND-10 in
 `integration/__tests__/extensions.tests.ts`, the main bundle exporting
 `resolveRoute` as it exports the transport, with the pin of its exports and the
 ceilings in `test/build.test.ts`; the second cluster in the scripts of
-`e2e/scripts/`; the two identities among the fixtures; the scan and its exceptions
-beside the pre-review and the parts of the views; the bill of materials and the
-list of the contents as steps of `package`.
+`e2e/scripts/`; the two identities among the fixtures; the scan and its
+exceptions beside the pre-review and the parts of the views, which are not taken
+(D8); the bill of materials and the list of the contents as steps of `package`.
 
 ## Success Criteria
 
@@ -348,9 +348,9 @@ list of the contents as steps of `package`.
 - One tarball: the one `package` packed, FND-10 installed and `publish` verified
   is the asset of the GitHub release and the tarball of the registry, byte for
   byte.
-- The scan of the views run with its report, and no violation of impact serious
-  or critical on an element of the extension but the exceptions a spec made; the
-  gallery judged at the review of the milestone.
+- The gallery of the pre-review judged at the review of the milestone. The scan of
+  the views with its report, and no violation of impact serious or critical on an
+  element of the extension but the exceptions a spec made, is not taken (D8).
 - Each statement of the README that the code can change without anyone seeing it
   is read by a unit case: the range of Freelens, the roles, the writes, the
   versions, the notes and the links; the installation, the words of the failures
@@ -405,7 +405,8 @@ One assumption, a risk to the time of T6.2: the views render components of the
 host whose markup the extension does not change, and how many violations they
 bring is not known before the first run of the scan. That run lists them in its
 report, their exceptions follow it, and the review of the milestone reads them;
-D8 bounds the risk by failing only on the elements of the extension.
+D8 bounds the risk by failing only on the elements of the extension. The scan ran
+once, on 2026-11-09, and is not kept (D8): the risk is gone with it.
 
 Each decision was proposed by the draft, with its reason and the ways not taken,
 and approved by the lead maintainer on 2026-11-09 as proposed. What a slice decides within these
@@ -497,7 +498,11 @@ date.
   review of the gallery alone, which judges the looks and cannot read names,
   labels or ratios; and a scan that fails on every violation and on every
   exception that matches nothing from its first run, which makes the components of
-  the host a list of findings with no bound before 1.0.0.
+  the host a list of findings with no bound before 1.0.0. Not taken, decided by the
+  lead maintainer on 2026-11-09: the pre-review stays the visual one of the other
+  extensions; the scan is not kept. It ran once, on 2026-11-09, and the views were
+  fixed for what it found, as [the evidence of T6.2](#evidence-and-deviations)
+  records.
 - **D9, the README of a public package.** The sections in the order of T6.3, for
   an operator who installs first and reads last. The screenshots are files of the
   repository, outside the files of the package; the video is linked from the
@@ -1126,258 +1131,166 @@ Decided while implementing, on 2026-11-09:
   `-copy_extensions`, so REL-02 runs with an OpenSSL 3 first on the PATH. TESTING.md
   says so.
 
-T6.2, the first of its pull requests, on 2026-11-09: the accessibility scan of the
-pre-review (REQ-293), and axe-core, a devDependency no bundle carries (REQ-294). The
-evidence, by check:
+T6.2, the first of its pull requests, on 2026-11-09: the visual pass of REQ-292
+stays the pre-review, and the views were fixed for what an accessibility scan found
+the one time it ran. REQ-293 and REQ-294, with VIS-02 and VIS-03, are not taken,
+decided by the lead maintainer on 2026-11-09: the pre-review stays the visual one of
+the other extensions; the scan is not kept (D8). The evidence, by check:
 
-- VIS-02, the scan ([`pre-review.tests.ts`](../../e2e/__tests__/pre-review.tests.ts)
-  and [`velero-axe.ts`](../../integration/helpers/velero-axe.ts)): every view the
-  pre-review checks, its 65, in both themes at 1440 by 900 and at 900 by 650, once its
-  picture is taken, 260 scans, which its last case counts. axe-core 4.14.0 runs the
-  rules of WCAG 2.1 at the levels A and AA, by the tags `wcag2a`, `wcag2aa`, `wcag21a`
-  and `wcag21aa`, and not the best practices, on the root of the view of the
-  extension, the page `velero-<id>-page`, with the menus, the dialogs, the drawers and
-  the tooltips of the host left out. A violation of impact serious or critical on an
-  element the extension renders fails the case of its view, unless the file of the
-  exceptions, `e2e/__tests__/pre-review.exceptions.json`, empty, keeps it: asserted
-  softly once every layout of the view was looked at, so that the case goes on to its
-  other views and fails at its end, each violation in one line by its rule, its impact
-  and its selector, with the colors and the ratios of a contrast or what axe-core says
-  is to be fixed. Every violation is in the report `pre-review-accessibility.json`:
-  its view, its theme, its size, its rule, its impact, the failure summary of axe-core,
-  for a contrast the color of the words, the color behind them, their ratio, the ratio
-  asked of their size and the font, its element by a selector and an excerpt of its
-  HTML, where it comes from and what decided it, and whether it fails or the spec that
-  keeps it; with the count of each rule by its impact and its origin, the rules
-  axe-core could not decide in each layout, and the exceptions no violation used.
-- VIS-02, the unit part ([`accessibility-scan.test.ts`](../../test/accessibility-scan.test.ts),
-  12 cases, of [`velero-accessibility.ts`](../../integration/helpers/velero-accessibility.ts)):
-  where an element comes from, an element of the extension, the root of the view,
-  every class of the host the helper names by its component, a child the extension
-  gave a component of the host that holds what it is given, and a part the host drew;
-  the file of the exceptions read, and refused with its words when it is not JSON or
-  not a list, or holds an exception with a key more or less, a value empty or with
-  spaces around it, a rule of no form of axe-core, a spec with no choice, or an
-  exception named twice; a violation that fails, one that is reported, one an exception
-  keeps, and the exceptions no violation used; the colors, the ratios and the font of a
-  contrast read from the data of its check, and nothing when the data does not say
-  them; and a violation said in one line, with its contrast or its failure summary.
-- VIS-02 in a browser: a probe, not kept in the repository, ran the helper of the scan
-  in a headless Chromium 151 under the Content-Security-Policy of the frame of the
-  host, on synthetic markup shaped as the views draw theirs. `addScriptTag` was refused
-  by the policy, and the file evaluated by the driver loaded axe-core 4.14.0, which ran
-  62 rules. The sidebar outside the root, and a menu, a drawer and a tooltip of the
-  host inside it, gave no violation, and each violation came from where the rule of the
-  origin says: a button of the host with no name, the host's, kept by an exception
-  written for it; the words of a badge of the host, the host's; a child with no class
-  of a cell, and words with no class in an element of the extension, the extension's,
-  failing. Each of the three breaks made its violation on the element of the extension
-  it names, `button-name` and `label` critical and `color-contrast` serious, and the
-  page was given back as it was after each scan; a selector the page cannot read, and a
-  root that is not one element, were said with their words.
-- VIS-02 in the packaged application, the first run of the pre-review with the scan,
-  on the environment of the demo: the run 42650892637 of the views, of the pull request
-  #156 at `b682b3e`, rebased on main at `b0607af`, the part `pre-review` red.
-  axe-core 4.14.0 ran 62 rules, and no exception was named. It scanned 220 layouts of
-  the 260: a case that shows several views asserted the problems of each before it
-  showed the next, and its first view with a violation stopped it, so that ten views
-  were never looked at, the snapshot locations, the lists of the pod volume backups,
-  the pod volume restores, the data uploads and the data downloads, the band of the
-  backup in progress, the view of a pod volume backup and of a data download, and the
-  form and the review of a resume. It found 492 violations, 428 of them failing:
-  - of the extension, each failing: `color-contrast`, serious, 402, the links of
-    `.link`, 170 buttons and 3 anchors, and the way back of a workspace, `.back`, 58,
-    in the light theme; the words of a status, `.statusText`, 151, 90 in the light
-    theme and 61 in the dark one, the dark ones all the words of a failure; a `code`
-    element, 17, and the words of a warning, `.warning`, 2, in the light theme; and
-    the words of the row of a kind of resources, `.resourcesText`, 1, in the dark
-    theme. `scrollable-region-focusable`, serious, 18: the text of the review of an
-    action, `.reviewText`. `aria-required-children`, critical, 8: the list of the
-    lines of a log, `.linesList`;
-  - of the host, reported: `color-contrast`, serious, 36, the `primary` Button of the
-    host, white on #00a7a0 in both themes, in nine views; `aria-required-children`,
-    critical, 28, the list of `KubeObjectListLayout`, in seven.
+- The scan that ran on 2026-11-09, which the pull request brought and then took
+  away: axe-core 4.14.0, a devDependency at an exact version, loaded into the frame
+  of the cluster by evaluating its file through the driver, since the
+  Content-Security-Policy of the frame refuses a script written into its page; the
+  rules of WCAG 2.1 at the levels A and AA by their tags, 62 rules, on the root of
+  each view of the pre-review, in both themes at 1440 by 900 and at 900 by 650.
+  - The first packaged run: the run 42650892637 of the views, of the pull request
+    #156 at `b682b3e`, rebased on main at `b0607af`, the part `pre-review` red. It
+    scanned 220 layouts of the 260, since a case that shows several views stopped at
+    its first view with a violation, and found 492 violations, 428 of them failing.
+    Of the extension, each failing: `color-contrast`, serious, 402, the links of
+    `.link`, 170 buttons and 3 anchors, and the way back of a workspace, `.back`,
+    58, in the light theme; the words of a status, `.statusText`, 151, 90 in the
+    light theme and 61 in the dark one, the dark ones all the words of a failure; a
+    `code` element, 17, and the words of a warning, `.warning`, 2, in the light
+    theme; and the words of the row of a kind of resources, `.resourcesText`, 1, in
+    the dark theme. `scrollable-region-focusable`, serious, 18: the text of the
+    review of an action, `.reviewText`. `aria-required-children`, critical, 8: the
+    list of the lines of a log, `.linesList`. Of the host, reported:
+    `color-contrast`, serious, 36, the `primary` Button of the host, white on
+    #00a7a0 in both themes, in nine views; `aria-required-children`, critical, 28,
+    the virtual list of `KubeObjectListLayout`, in seven.
+  - On the head with the fixes, `c7c82e6`: the run 42664477459 of the views, among
+    the checks of #156, green. The 260 layouts were scanned, with no violation of
+    the extension, and 120 of the host: `color-contrast`, serious, 40 on the
+    `primary` Button in both themes, in eleven views, and 32 on the link of the host
+    to the node of an operation, #00a7a0 on #ffffff, 2.98 to 1, in the cells of the
+    lists of the pod volume backups, of the pod volume restores, of the data uploads
+    and of the data downloads, in the light theme at 1440 by 900;
+    `aria-required-children`, critical, 48 on the virtual list of
+    `KubeObjectListLayout`, in twelve lists.
+  - Seen failing, on a second machine on `c7c82e6`, the run
+    `velero-out-20261109-182626`, with the file that broke three views on purpose,
+    for their scan alone: 3 cases failed and 48 passed, the three that were broken,
+    each by its rule on the element of its break, in the dark theme at 1440 by 900:
+    `color-contrast`, serious, 1.42 to 1, on the name of the first backup of the
+    list of the Backups; `button-name`, critical, on the way back of the workspace
+    of a backup; and `label`, critical, on the first namespace of the form of
+    Create backup. The unit run of `c7c82e6`, `pnpm test:unit`, on that machine:
+    135 files and 3,831 tests.
+  - The independent review of `c7c82e6` found the colors of the words undefined
+    outside a page, where the sections of the details of the host and the error
+    page are drawn, and below AA on the row of a dark list the pointer is on: both
+    are fixed below. What it found of the scan went with the scan.
 
-  Fixed in the views, each in a commit of its own and none by an exception: the scan
-  asserted softly at the end of each view, and the report with the colors, the ratios
-  and the failure summary; the colors of the words; the text of a review, a region the
-  keyboard reaches; and the lines of a log, a group around the list of their rows. The
-  violations of the host are listed by component, rule and view for the lead
-  maintainer, whose call an issue is.
-- VIS-02 in the packaged application, on the head with the fixes: {RUN-AXE-AFTER}. The
-  260 scans, the violations of the report by rule, impact and origin, and none of the
-  extension failing.
-- VIS-02 seen failing in the packaged application: {RUN-AXE-BROKEN}, the run with the
-  file `e2e-artifacts/break-the-scan-once`, in which the cases of the list of the
-  Backups, of the workspace of a backup and of Create backup fail by `color-contrast`,
-  `button-name` and `label`, each on the element its break names.
-- VIS-03 ([`build.test.ts`](../../test/build.test.ts)): axe-core is a devDependency at
-  an exact version, and a dependency of no other kind; neither bundle has a module of
-  it in its map, nor its name or the address of the help of its rules in its text.
-  Knip finds it used, by the resolution of its file in the helper of the scan.
+  Then the scan was taken away, with axe-core: the manifest and the lockfile are as
+  on main, by `pnpm remove axe-core`, after which `pnpm install --frozen-lockfile`
+  passed; its rule of Renovate, its two helpers and their unit cases, its report,
+  the file of its exceptions and the breaks of VIS-02 in the pre-review, the cases
+  of the build test for axe-core, and the scan in TESTING.md, AGENTS.md, TRY-IT.md
+  and DEPENDENCY-AUDIT.md went with it. The pre-review is the visual one it was,
+  with its 51 cases; the walk of a deletion reads the text of the request as the
+  first stop after its review, which the region of the text makes.
+- VIS-01, the visual pass (REQ-292): on the head, the part `pre-review` of the run
+  of the views among the checks of its pull request, {RUN-VIS-CI}, with its report
+  and its gallery. The run the review of the milestone reads is the one on the
+  commit of the prerelease, which this slice does not make.
 - The fixes, each read by a unit or a component test:
   - the colors of the words ([`views.module.test.ts`](../../src/renderer/components/views.module.test.ts),
-    3 cases): the words of a link, a success, a warning and a failure, which the pages
-    define once, at 4.5 to 1 or more in both themes on the background of the page, of a
-    list, of the target bar, of the rows of a kind of resources and of a field, from the
-    values of the two themes of the host at the target; no words written in a color of
-    the host that says something but through them; and a code element in the light
-    theme, and the rows of a kind of resources in both, at the same ratio;
-  - the text of a review: the component test of each of the six workspaces finds it by
-    its role, a region, and its name, What is sent, as it is sent, and as a stop of the
-    Tab key; the pre-review reads it as the first stop after the review of a deletion,
-    and the field of the name as the second;
-  - the lines of a log: the component tests of the lines and of the log read the group
-    that is the stop of the Tab key, with its name, and the part that scrolls as the
-    list of the rows, with nothing between them, out of the order of the Tab key.
-- The fixes in a browser: a second probe, not kept in the repository, wrote the built
-  stylesheet under the variables of each theme of the host, on the backgrounds the
-  views use, and axe-core found no word below AA in either; it measured the links of
-  the light theme at #0c7874, the successes at #337b36, the warnings at #976110 and
-  the failures at #c73832, the failures of the dark theme at #de7874, the code of the
-  light theme at #555555 and the rows of a kind of resources at #909ba6 in the dark
-  one. On the markup the lines had, a list around the part that scrolls, axe-core said
-  `Element has children which are not allowed: div[tabindex]`, the words of the
-  first run; on the group around the list it said nothing, nor of the text of a review
-  as a region with its name and its stop.
+    4 cases): the words of a link, a success, a warning and a failure, defined once
+    on the body, which the pages, the sections of the details of the host and the
+    error page are all under, and in no other block; at 4.5 to 1 or more in both
+    themes on the background of the page, of a list, of the target bar, of the rows
+    of a kind of resources, of a field and of the row of a list the pointer is on or
+    that is selected, from the values of the two themes of the host at the target;
+    no words written in a semantic color of the host but through them, any of its
+    seven, whatever follows the value; and a code element in the light theme, and
+    the rows of a kind of resources in both, at the same ratio, the color of the
+    words read and never a `background-color`;
+  - the text of a review: the component test of each of the six workspaces finds it
+    by its role, a region, and its name, What is sent, as it is sent, and as a stop
+    of the Tab key; the pre-review reads it as the first stop after the review of a
+    deletion, and the field of the name as the second;
+  - the lines of a log: the component tests of the lines and of the log read the
+    group that is the stop of the Tab key, with its name, and the part that scrolls
+    as the list of the rows, with nothing between them, out of the order of the Tab
+    key.
+- The fixes in a browser, by probes not kept in the repository, in a headless
+  Chromium: the built stylesheet under the variables of each theme of the host, on
+  the backgrounds the views use, the row the pointer is on among them, where
+  axe-core found no word below AA in either theme. It measured the links at #0c7874
+  in the light theme and at #33b9b3 in the dark one, the successes at #337b36 and
+  #65ba69, the warnings at #976110 and #ff9800, the failures at #c73832 and #e4928f,
+  the code of the light theme at #555555 and the rows of a kind of resources at
+  #909ba6 in the dark one. The words of a failure in a section of the details, in
+  the drawer of the host, and the message of the error page took the color of a
+  failure in both themes, and the grey around them with the colors defined on the
+  page alone, as the head of the review had them. On the markup the lines had, a
+  list around the part that scrolls, axe-core said `Element has children which are
+  not allowed: div[tabindex]`, the words of the first run; on the group around the
+  list it said nothing, nor of the text of a review as a region with its name and
+  its stop.
 - Seen failing, each change made on purpose and put back:
-  - the helper of the origin, of the exceptions and of the verdict, 31 changes, every
-    one of its first 10 cases at least once: a class of the extension beside one of the host
-    making the element the extension's; the form of the classes of the extension; the
-    element itself with a class of the host not taken as the host's; the cell of the
-    host holding nothing; the content of a cell, the value of a drawer item and the
-    list layout of Kubernetes objects dropped from the list; the checkbox and the
-    spinner of the host dropped; the select said to hold what it is given; every module
-    of the host said to hold, and the modules not read; the component named by the
-    element alone; an element with no class deciding; the root said of the host; an
-    empty way accepted; a text that is not JSON, a file that is not a list and an
-    exception that is not an object not said so; a key more, a value with spaces, a
-    rule of any form, a spec with no choice and an exception named twice accepted; the
-    exceptions read cut to the first, and the empty file refused; a moderate violation
-    failing, an exception of another rule keeping a violation, a violation of the host
-    failing, the used exceptions listed as unused, and the best practices among the
-    tags;
-  - the build test: the renderer and the main process each importing axe-core, which
-    both checks of the case found, its module in the map and its text in the bundle;
-    axe-core at a caret range, moved to `dependencies`, in `peerDependencies` beside
-    `devDependencies`, and no devDependency; the manifest and the lockfile put back as
-    they were;
-  - Knip: the resolution of the file and the import of its types taken away, axe-core
-    reported as an unused devDependency; the resolution alone kept, axe-core used;
-  - the case of the environment test that lists the suites of the views took the file
-    of the exceptions beside them for a suite: it now reads the files `*.tests.ts`
-    alone;
-  - the two cases of the report, 7 changes, each case at least once: a contrast read
-    with no color of its words, with a ratio that is not a number, with no weight of
-    its font, and from data that is no object; and in the line of a violation, its
-    selector said in place of its failure summary, no impact said null, and the ratio
-    asked left out;
-  - the colors of the words, 7 changes, each of the 3 cases at least once: the links of
-    the light theme and the failures of the dark one mixed with too little of the
-    accent, the warnings of the light theme left as the host writes them, the color of
-    the successes no longer defined, a link written in the primary color of the host, a
-    code element of the light theme below AA, and the rows of a kind of resources in
-    the words of the page;
-  - the text of a review, 3 changes, its role, its stop of the Tab key and its name each
-    taken away, each failing the 6 workspaces;
-  - the lines of a log, 3 changes: the group a list again, the role of a list taken from
-    the part that scrolls, and the part that scrolls a stop of the Tab key.
+  - the colors of the words, 16 changes, each of the 4 cases at least once: the
+    links of the light theme and the failures of the dark one mixed with too little
+    of the accent, the warnings of the light theme left as the host writes them, the
+    color of the successes no longer defined, a link written in the primary color of
+    the host, a code element of the light theme below AA, and the rows of a kind of
+    resources in the words of the page; the colors defined on the page again, the
+    light ones on the body of either theme, and a color defined again on the message
+    of an error; the links, the successes and the failures of the dark theme as the
+    head of the review had them, below AA on the row the pointer is on; and the
+    words of a status in the info color of the host with `!important`, and in its
+    soft error, which the earlier reading let through, and the color of a kind
+    written after a `background-color`, which the earlier reading took for the
+    background;
+  - the text of a review, 3 changes, its role, its stop of the Tab key and its name
+    each taken away, each failing the 6 workspaces;
+  - the lines of a log, 3 changes: the group a list again, the role of a list taken
+    from the part that scrolls, and the part that scrolls a stop of the Tab key.
 - The gates of the slice, on its head: `pnpm type:check`, `pnpm lint:check`,
   `pnpm knip:check` and `pnpm build`, green; the unit files that hold or read its
-  changes, 24 files and 711 tests passed: `test/environment.test.ts`,
-  `test/build.test.ts`, `test/accessibility-scan.test.ts`, `test/views-plan.test.ts`
-  and `test/host-stub.test.ts`; the tests of the stylesheet, of the lines, of the log,
-  of the panel and of the viewers of a tab, and of the workspace; the tests of the tabs,
-  of the volumes and of the six workspaces of the actions. Trunk on the changed files,
-  green. The
-  unit run of the head, `pnpm test:unit`: {RUN-AXE-UNIT}. The checks of its pull
-  request: {RUN-AXE-CI}. Its files reach every part of the views, by `package.json`,
-  `pnpm-lock.yaml` and the helpers of the suites, and the end to end run.
+  changes, 23 files and 698 tests passed: `test/environment.test.ts`,
+  `test/build.test.ts`, `test/views-plan.test.ts` and `test/host-stub.test.ts`; the
+  tests of the stylesheet, of the lines, of the log, of the panel and of the
+  viewers of a tab, and of the workspace; the tests of the tabs, of the volumes and
+  of the six workspaces of the actions. Trunk on the changed files, green. The unit
+  run of the head, `pnpm test:unit`: {RUN-VIS-UNIT}. The checks of its pull
+  request, read before the merge: {RUN-VIS-CI}. Its files reach every part of the
+  views, by the stylesheet and the components of the views, and the end to end run.
 
 Decided while implementing, on 2026-11-09:
 
-- axe-core 4.14.0: the newest release at least two weeks old, which is the newest
-  release, published on 2026-10-05; what was published after it is canaries, which are
-  prereleases. It has no dependency of its own. It was added with
-  `pnpm add -D -E axe-core@4.14.0`: `package.json` and `pnpm-lock.yaml` alone changed,
-  and `pnpm install --frozen-lockfile` passed after it.
-- Renovate looks up every dependency in the catalog of Freelens on main unless its rule
-  excludes it by name, and Freelens does not have axe-core: `.renovaterc.json5`
-  excludes it, so that it takes the newest release of npm.
-- The file is loaded by evaluating its text in the frame through the driver, not by
-  `addScriptTag`: the frame of a cluster has the Content-Security-Policy of the host,
-  `script-src 'unsafe-eval' 'self' freelens-extension:` (`freelens/package.json`, line
-  59, set by `freelens-proxy.ts`, line 536, at the target), which refuses a script
-  written into its page, as the probe showed. AGENTS.md records it among the facts of
-  the host.
-- The root of every view of the pre-review is its page, `velero-<id>-page`, which holds
-  the view that is open over its list. The menus, dialogs and drawers of the host are
-  drawn outside it, and the scan leaves them out by their classes wherever they are;
-  so are its tooltips, which REQ-293 does not name: one is there while the pointer
-  rests on what holds it, and the scan must not depend on where the pointer rests. The
-  pre-review shows no section of the details of the host; the helper takes the root as
-  a parameter, `velero-<kind>-details` for a section, which is then scanned alone.
-- Where a violation comes from. The views give their own elements the classes of the
-  stylesheet of the extension and no other, as the source reads: the plain names they
-  write go to the cells of the host, beside `TableCell`. So the first element, from the
-  element of the violation up to the root, that has a class decides: any class of the
-  host, and it is the host's, the element itself or a part the host drew; a class of
-  the extension alone, and it is the extension's. An element with no class is a child
-  the extension gave a component of the host that holds what it is given, and the
-  extension's; inside one that draws all it holds, it is the host's. The components and
-  whether they hold are read in the source of the host at the target, each class with
-  its file and its lines in the helper; the classes of the stylesheet modules of the
-  host by their form, `[name]__[local]--[hash]`, the badge of `WithTooltip` holding its
-  words.
-- What this rule cannot tell, which the report shows for the review: an element of a
-  component of the host whose name, label or colour the extension gives is the host's.
-  A label the extension forgot on the field of an `Input` of the host, or a colour its
-  stylesheet gives a `Button` of the host, is reported and does not fail: D8 fails on
-  the elements the extension renders, and the review of the milestone reads the rest.
-- An exception names its element by a selector the element matches, read in the page
-  with `Element.matches`, and its spec by its identifier and the choice; a selector the
-  page cannot read stops the scan with its text. A violation is kept by an exception
-  of its rule whose selector its element matches.
-- The breaks of VIS-02 come with a file the runner leaves beside the artifacts,
-  `e2e-artifacts/break-the-scan-once`, read once and removed, as the file that stalls
-  the host once: the runner gives the suites an environment of its own, which a
-  variable set for a run does not reach. Each break is made in the DOM of the page by
-  the scan of its case, just before it, and undone just after it, the attribute of the
-  style given back as it was or taken away when there was none; the contrast is a text
-  and a background of two greys, 1.4 to 1, so that it does not depend on how the theme
-  writes its colours.
-- The report keeps an excerpt of 200 characters of the HTML of an element, and goes
-  through the guard of the report of the tabs against a part of a signed URL.
-- After the first run: the violations of the scan are asserted softly at the end of each
-  view, and the problems of its layouts as before, so that a case looks at every view it
-  shows, and every view is scanned, before it fails. The report carries the failure
-  summary of axe-core for every violation, and for a contrast the data of its check, read
-  by `contrastOf`, which a reader needs to decide.
 - The colors of the words: each fix is in the stylesheet and the markup of the
-  extension, none by an exception. The pages define the words of a link, a success, a
-  warning and a failure once, `--veleroTextLink`, `--veleroTextOk`,
-  `--veleroTextWarning` and `--veleroTextError`, from the colors of the host they used.
-  A color of the host that does not reach 4.5 to 1 on every background the views write
-  words on, the page, a list, the target bar, the rows of a kind of resources and a
-  field, is mixed with the strongest words of its theme, `--textColorAccent`, by the
-  least share that reaches it with a margin of a tenth, which keeps its hue; the values
-  of the light theme are written under `body.theme-light`, the flag the host gives the
-  body for the styles of components (`apply-lens-theme.injectable.ts`, line 31, at the
-  target). In the dark theme the failures go from #ce3933 to #de7874, 32 parts of the
-  accent; in the light theme the links from #00a7a0 to #0c7874, 35 parts, the successes
-  from #399c3d to #337b36, 27, the warnings from #ff9800 to #976110, 47, and the failures
-  from #ce3933 to #c73832, 4; the others are the colors of the host. A code element of
-  the light theme is written in the words of the page, #555555, where the host writes
-  #b4b5b4 in both themes; the rows of a kind of resources take the third grey of the
-  host, #909ba6 in the dark theme, 4.88 to 1 on the stripe of a table. What is not a word
-  keeps the colors of the host: borders, outlines, the bar of a progress and the marks,
-  which the rules of the scan do not read. DESIGN.md says the rule.
-- The text of a review is a region the Tab key reaches whatever its length, named by its
-  title, one part of the six workspaces; a review whose text does not scroll has one stop
-  more. SPEC-0017 records it among its amendments.
-- The lines of a log are a group, the stop of the Tab key with the name and the keys, and
-  in it the list, which is the part that scrolls, with the role react-window writes on
-  it; the keyboard does not change. SPEC-0011 records it among its amendments.
-- The violations of the host fail nothing and have no exception: the report of the slice
-  lists them by component, rule and view, the `primary` Button of the host and the list
-  of `KubeObjectListLayout`, for the lead maintainer, whose call an issue is.
+  extension. The words of a link, a success, a warning and a failure are defined
+  once, `--veleroTextLink`, `--veleroTextOk`, `--veleroTextWarning` and
+  `--veleroTextError`, from the colors of the host they used, on the body, which the
+  pages, the sections of the details of the host, drawn in its drawer outside any
+  page, and the error page, drawn in place of either, are all under. The host sets
+  the colors of its theme on the root of the document and gives the body the flag of
+  the light theme, `body.theme-light`, for the styles of components
+  (`apply-lens-theme.injectable.ts`, lines 27 and 31, at the target): the values of
+  the light theme are written under the flag. A color of the host that does not
+  reach 4.5 to 1 on every background the views write words on, the page, a list,
+  the target bar, the rows of a kind of resources, a field and the row of a list
+  the pointer is on or that is selected, `--tableBgcSelected` (`table/table.scss`,
+  lines 30 to 35), is mixed with the strongest words of its theme,
+  `--textColorAccent`, by the least share that reaches it with a margin of a tenth,
+  which keeps its hue. In the dark theme the links go from #00a7a0 to #33b9b3, 20
+  parts of the accent, the successes from #4caf50 to #65ba69, 14, and the failures
+  from #ce3933 to #e4928f, 45; in the light theme the links go to #0c7874, 35
+  parts, the successes from #399c3d to #337b36, 27, the warnings from #ff9800 to
+  #976110, 47, and the failures to #c73832, 4; the warnings of the dark theme are
+  the color of the host. A code element of the light theme is written in the words
+  of the page, #555555, where the host writes #b4b5b4 in both themes; the rows of a
+  kind of resources take the third grey of the host, #909ba6 in the dark theme,
+  4.88 to 1 on the stripe of a table. What is not a word keeps the colors of the
+  host: borders, outlines, the bar of a progress and the marks. DESIGN.md says the
+  rule.
+- The text of a review is a region the Tab key reaches whatever its length, named by
+  its title, one part of the six workspaces; a review whose text does not scroll has
+  one stop more. SPEC-0017 records it among its amendments, and its evidence of T4.6
+  points to it.
+- The lines of a log are a group, the stop of the Tab key with the name and the
+  keys, and in it the list, which is the part that scrolls, with the role
+  react-window writes on it; the keyboard does not change. SPEC-0011 records it
+  among its amendments.

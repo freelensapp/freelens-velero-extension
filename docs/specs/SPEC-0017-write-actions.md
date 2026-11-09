@@ -2538,14 +2538,15 @@ fourth:
 
 ### 2026-11-09: The Text Of A Review
 
-Made by the first pull request of T6.2 of
-[SPEC-0018](SPEC-0018-release-readiness.md), whose accessibility scan of the
-pre-review (REQ-293) fails a case on a violation of impact serious or critical on an
-element the extension renders. Its first packaged run found the text of the review of
-each action, which scrolls past 480 pixels, a region that scrolls and that the
-keyboard does not reach, by the rule of axe-core for a region that scrolls (WCAG 2.1,
-2.1.1): Chromium gives the keyboard a scroller with nothing to focus in it, which the
-decision of T4.2 above left to it, but axe-core reads no such stop.
+Made by the first pull request of T6.2 of [SPEC-0018](SPEC-0018-release-readiness.md),
+for what an accessibility scan of the pre-review found the one time it ran, on
+2026-11-09, before the lead maintainer decided that the pre-review stays the visual
+one of the other extensions and that the scan is not kept (D8 of that spec). Its first
+packaged run found the text of the review of each action, which scrolls past 480
+pixels, a region that scrolls and that the keyboard does not reach, by the rule of
+axe-core for a region that scrolls (WCAG 2.1, 2.1.1): Chromium gives the keyboard a
+scroller with nothing to focus in it, which the decision of T4.2 above left to it, but
+axe-core reads no such stop.
 
 The text of the review of every action is now a region the Tab key reaches whatever
 its length, named by its title, What is sent, as it is sent: one part,

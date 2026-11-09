@@ -1967,14 +1967,15 @@ with T0.8.
 
 ### 2026-11-09: The Roles Of The Lines
 
-Made by the first pull request of T6.2 of
-[SPEC-0018](SPEC-0018-release-readiness.md), whose accessibility scan of the
-pre-review (REQ-293) fails a case on a violation of impact serious or critical on an
-element the extension renders. Its first packaged run found the list of the lines of
-a log holding a child a list may not hold, by the rule of axe-core for the children of
-a role (WCAG 2.1, 1.3.1): the list was the element the Tab key reaches, with the name
-and the keys, and between it and its items react-window draws the part that scrolls,
-which is focusable with no role, so that it is no stop of the Tab key.
+Made by the first pull request of T6.2 of [SPEC-0018](SPEC-0018-release-readiness.md),
+for what an accessibility scan of the pre-review found the one time it ran, on
+2026-11-09, before the lead maintainer decided that the pre-review stays the visual
+one of the other extensions and that the scan is not kept (D8 of that spec). Its first
+packaged run found the list of the lines of a log holding a child a list may not hold,
+by the rule of axe-core for the children of a role (WCAG 2.1, 1.3.1): the list was the
+element the Tab key reaches, with the name and the keys, and between it and its items
+react-window draws the part that scrolls, which is focusable with no role, so that it
+is no stop of the Tab key.
 
 The element the Tab key reaches keeps the name, the keys and its place: it is a group
 of the lines, and the part that scrolls is the list, with the role react-window writes
