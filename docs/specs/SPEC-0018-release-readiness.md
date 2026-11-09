@@ -723,8 +723,8 @@ before the approval.
 
 ## Evidence And Deviations
 
-The draft had no implementation, tests or runtime evidence. The facts above
-were read at `b7dd522` of this repository, with the gaps of the inventory
+The draft had no implementation, tests or runtime evidence. The facts
+above were read at `b7dd522` of this repository, with the gaps of the inventory
 read again in the code; the installer of the host at `b9b53e16`; issues #144 and
 #145 read on 2026-11-09; the releases of Velero and of its AWS plugin, the
 environment `publishing` and the secrets this repository can read, by name, on
@@ -737,7 +737,135 @@ workflow in two jobs, the rules of the tag, the credential of the first version 
 a decision, the line between what gates 1.0.0-0 and what gates 1.0.0, and the
 narrowing of T6.1 as a decision.
 
-The evidence of the slices follows, each by its task and its date.
+The evidence of the slices follows.
+
+T6.5, the first of its pull requests, on 2026-11-09: the tag on the merge commit
+of the pull request of the version (REQ-315), one of the rules of the tag that
+gate 1.0.0-0 (D15). The evidence, by check:
+
+- REL-05: the case "tags the merge commit of the pull request of the version, on
+  its merge and on /tag from an owner, a member or a collaborator with write
+  access", beside the case of the tags in `test/environment.test.ts`, reads
+  `tag.yaml` without its comments and pins its text where it does not run it:
+  - the condition of the job, read as the expression reads it whatever the style
+    of its scalar: two ways and no other, each with exactly its terms. The merge
+    of a pull request whose title starts with `Automated npm version`, from the
+    branch `automated/npm-version` of this repository; and the comment `/tag` on
+    a pull request, `github.event.issue.pull_request` set, of that title and
+    closed, whose `author_association` is OWNER, MEMBER or COLLABORATOR, the list
+    read as a set;
+  - the steps in their order: the write access of the author of `/tag`, the
+    merge commit, the checkout, the version, the check of its form and the tag.
+    The checkout takes the output of the step of the merge commit, with
+    `fetch-depth: 0` and `persist-credentials: false`; the version is read by the
+    one line of `yq -r .version package.json`; the check of its form reads the
+    version from its environment, and no step of bash has an expression in its
+    text; the tag is only for a version of the release form;
+  - the permissions of the token of the run, `contents: read` and
+    `pull-requests: read` and no other, given once; one secret, `GH_TOKEN`, given
+    to the step of the tag alone; and the environment `automated`.
+
+  It then runs the three scripts of the job with their expressions replaced, as
+  `actions/github-script` runs them, with stand-ins for the API, the context, the
+  core library and the environment of the process, on both ways. The commit of
+  the run and `GITHUB_SHA` name a third commit, and any request the stand-ins do
+  not answer is answered with it. Each result is compared whole: the step that
+  failed, the output of the step of the merge commit, and the requests in their
+  order with their arguments.
+  - On the merge: the merge commit of the event, and one request, the tag
+    `refs/tags/v1.0.0-0` on that commit. With no merge commit, nothing.
+  - On `/tag`, from an author whose permission is `admin` or `write`: the
+    permission of that author, then the pull request, then the tag on its merge
+    commit. From `read` or `none`, the permission alone, and the job stops there.
+    For a pull request closed without a merge, merged into another branch, with
+    no merge commit, from another branch or from another repository, the
+    permission and the pull request, and the job stops there.
+- Seen failing, on `tag.yaml` changed on purpose and put back each time: 65
+  changes, and every assertion of the case at least once.
+  - The insertions of the independent review of the pull request:
+    `sha = context.sha;` and `sha = process.env.GITHUB_SHA;` before the output,
+    the tip of main read through `getBranch` or `getCommit`, a second `sha` key
+    in `createRef`, the head of the pull request taken on `/tag`, the version
+    read from main before `yq`, and a term that turns the way of the merge off.
+  - The changes of the first commit that still apply: the workflow of main as it
+    was; `heads/main` put back as the commit of the tag, and read beside the merge
+    commit; the checkout of main, of the ref of the event, and without
+    `fetch-depth: 0`; the merge read from the commit of the run or from the head
+    of the pull request; on the comment, the head of its pull request taken, a
+    pull request closed without a merge or merged into another branch tagged, and
+    the pull request not read through the API; the step of the merge commit on
+    the merge alone, under another id, or giving the commit of the run; the way of
+    the comment without its pull request, its title, its state or its body; each
+    of the three associations dropped, CONTRIBUTOR added, and the associations
+    dropped from the comment or moved to the merge; the way of the merge without
+    `merged` or without its title; a third way; the tag with the token of the run,
+    without its `v`, or for any form of a version; the environment removed; a
+    second checkout, of main; and the checkout before the step of the merge
+    commit, the version before the checkout, the tag before the version.
+  - The changes of the review: the step of the write access removed, letting
+    `read` through, reading the permission without checking it, run on the merge
+    alone or on both ways, after the step of the merge commit, or asking the
+    permission of the author of the pull request; the version given to bash in
+    its text, or not through its environment; `id-token: write` or
+    `contents: write` given back, and permissions of the job beside those of the
+    workflow; the checkout keeping the token; the way of the merge without the
+    branch of the version or the repository of its head, and the script of `/tag`
+    without either; `GH_TOKEN` given to the step of the merge commit, and another
+    secret for the tag; and the merge commit not checked as a commit.
+- What the case does not run: the steps of bash and the checkout, whose text it
+  pins; and the condition, whose terms it pins and whose expression actionlint
+  parses under Trunk. GitHub's own evaluation of the condition is read by REL-01.
+- The gates of the slice, on its head: the cases of the tags in
+  `test/environment.test.ts`, `pnpm type:check`, `pnpm lint:check`,
+  `pnpm knip:check`, and Trunk on the changed files, green. The unit run of the
+  head, `pnpm test:unit`, on a second Linux machine: 134 files and 3,813 tests
+  passed, and the three measures. The checks of its pull request, green before
+  its merge: the unit tests, the check, Trunk, the integration test and
+  OSV-Scanner. Its files reach no part of the views and no end to end run.
+- The other amendments the table of the amendments lists for PROCESS.md,
+  ARCHITECTURE.md and AGENTS.md, the release in two jobs, the six parts of the
+  views and the way back, come with their own slices: this one restates the tag
+  alone.
+- The workflow at work is read by REL-01 at the merge of the pull request of
+  1.0.0-0: the tag and its commit, equal to the merge commit of that pull request.
+
+Decided while implementing, on 2026-11-09:
+
+- One step finds the commit for both ways, and the checkout and the tag take its
+  output: on the merge, the merge commit of the event, given to the step through
+  its environment; on `/tag`, the pull request read with the token of the run.
+  The token of the environment creates the tag alone, so that the tag starts the
+  release workflow.
+- On `/tag`, the pull request must have been merged into main from the branch
+  `automated/npm-version` of this repository, as the way of the merge requires of
+  its event: one closed without a merge, merged into another branch, or from
+  another branch or repository fails the job with its words and tags nothing.
+  The condition of the job keeps the closed state of the issue, so that a `/tag`
+  on an open pull request starts no job.
+- The step fails, and nothing is tagged, when the commit it found is not 40
+  hexadecimal characters; the script of the tag names that output as it names the
+  version, the output of a step that checked it.
+- After the independent review of the pull request, the gate of `/tag` is the
+  write access of the author of the comment: the first step asks the permission
+  API for it and fails unless it is `admin` or `write`, which the API reports for
+  maintain as well, as `claude.yaml` does. The list
+  `contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)`
+  that REQ-315 names stays in the condition as a cheap pre-filter, as in
+  `claude.yaml`: MEMBER is a member of the organization, and neither it nor
+  COLLABORATOR implies write access. REQ-315 says that the workflow acts only
+  when its author has one of the three associations, and this gate is narrower.
+- An open point, which the first `/tag` from such an account settles: the
+  pre-filter may skip, with no run, the `/tag` of a member of the organization
+  whose membership is private, if the association of the event is read without
+  that membership.
+- After the review as well: the way of the merge requires the branch of the
+  version of this repository; the token of the run has `contents: read` and
+  `pull-requests: read`, and no OIDC token, and the checkout does not keep it;
+  and the version reaches bash through the environment of its step.
+- The condition of the job is a literal block of YAML, one term to a line, as
+  `claude.yaml` writes a condition of several lines: the expression reads a new
+  line as a space. A folded block was refolded by the formatter of Trunk at 300
+  characters, in the middle of a term.
 
 T6.1, the case of FND-10 of REQ-289, on 2026-11-09: HTTPS in the main process of the
 host, in two commits, the second after the independent review of the first. The
