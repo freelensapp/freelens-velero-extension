@@ -230,8 +230,10 @@ describe("the documents of the package", () => {
     expect(squeezed(compatibility)).toMatch(/A version outside this table, .+?, is untested/);
   });
 
-  it("says in Safety each kind and verb the adapter of the main process allows, no other kind of Velero written, and the three rules it keeps", () => {
-    const safety = sectionOf(readme, "Safety", 2);
+  it("says in Write actions, under Features, each kind and verb the adapter of the main process allows, no other kind of Velero written, and the three rules it keeps", () => {
+    // The subsection of Features that says what the extension writes, as the other extensions of the organization have
+    // it: the README has no section Safety.
+    const writeActions = sectionOf(sectionOf(readme, "Features", 2), "Write actions", 3);
     const adapter = read("src/main/diagnostic-kubernetes.ts");
     // Each request of the adapter that writes, a POST or a PATCH, with the kind of its path: a kind its method takes as
     // a parameter is the literal type of that parameter.
@@ -244,14 +246,14 @@ describe("the documents of the package", () => {
     const fields = [...pausePatch("uid"), ...resumePatch("uid", { expression: "@daily", skipImmediately: false })]
       .filter(({ op }) => op !== "test")
       .map(({ path }) => path.slice(1).replace("/", "."));
-    const table = rowsOf(safety).filter(([write]) => /^(Create|Patch)\b/.test(write ?? ""));
+    const table = rowsOf(writeActions).filter(([write]) => /^(Create|Patch)\b/.test(write ?? ""));
     const said = table.map(([write, kind]) => `${write.split(" ")[0]} ${kind.replace(/`/g, "")}`);
     const patched = table
       .filter(([write]) => write.startsWith("Patch"))
       .flatMap(([write]) => [...write.matchAll(/`([^`]+)`/g)].map((match) => match[1]));
     const written = new Set(writes.map((write) => write.split(" ")[1]));
     const velero = new Set([...KINDS_READ.map(({ kind }) => kind), ...written]);
-    const named = [...safety.matchAll(/`(\w+)`/g)].map((match) => match[1]).filter((name) => velero.has(name));
+    const named = [...writeActions.matchAll(/`(\w+)`/g)].map((match) => match[1]).filter((name) => velero.has(name));
 
     expect(writes.length).toBeGreaterThan(0);
     expect([...new Set(said)].sort()).toEqual([...new Set(writes)].sort());
@@ -262,7 +264,7 @@ describe("the documents of the package", () => {
       "TLS is verified by default",
       "Missing or unreadable data is shown as unknown, never as healthy.",
     ]) {
-      expect([rule, squeezed(safety).includes(rule)]).toEqual([rule, true]);
+      expect([rule, squeezed(writeActions).includes(rule)]).toEqual([rule, true]);
     }
   });
 

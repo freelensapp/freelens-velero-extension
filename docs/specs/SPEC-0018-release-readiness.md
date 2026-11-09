@@ -1575,6 +1575,154 @@ Decided while implementing, on 2026-11-09:
   moved with its reason written in their place. The maps and what else the build
   writes have none: the host loads the three files alone.
 
+T6.3, the second of its pull requests, on 2026-11-09: the rest of the README of
+1.0.0 in the layout of the other extensions of the organization, Features and
+Limits after Getting started, with what the section Safety said as the subsection
+Write actions of Features. The branch starts from the one of the first pull
+request of T6.3, which was not merged when this slice started, and was rebased on
+its head at `08c9f01`, with its removals. Permissions, with
+[#145](https://github.com/freelensapp/freelens-velero-extension/issues/145), is a
+slice of its own: nothing of this slice links to it.
+
+Decided by the lead maintainer on 2026-11-09: the README has the sections of the
+other extensions, Overview, Requirements, Supported APIs, Permissions, Install,
+Getting started, Features, Limits, Development, Build from the source and License,
+and no other. REQ-300, the section Troubleshooting, and its check DOC-06 are not
+taken: the section is not written, and what one of its entries would say that an
+operator needs and no other section says is in Features or in Limits, as listed
+below. REQ-298 is written in Features, as its subsection Write actions, which
+DOC-04 reads. The amendments of the requirements this decision brings, REQ-298 and
+REQ-300 with DOC-04 and DOC-06, the order of the sections the paragraph of the
+Documentation gives, the words of the failures in the success criteria and in the
+checklist of REL-03, and the words of the row of T6.3 in the roadmap, are made by
+another pull request, with the ones of the decisions of the first pull request of
+T6.3. The first commits of the branch wrote Troubleshooting, with a case that held
+its quotes to the functions of the words, and two links to Permissions; its last
+commit removes them.
+
+The evidence, by check:
+
+- The sections of the README of the branch, in their order: Overview, with
+  Status; Requirements, with Compatibility; Supported APIs; Install; Getting
+  started; Features; Limits; Development; Build from the source; License.
+  Permissions comes after Supported APIs with #145.
+- Features, each statement read in the spec that asks for it and in the code at the
+  base of the branch:
+  - the installations: the cluster that is opened and no other (REQ-013 of
+    SPEC-0002); one installation read, several asked for with none chosen, one named
+    when it cannot be found by looking (`selection` and `entry` of
+    `src/common/discovery.ts`, REQ-015, REQ-016); the choice kept for each cluster
+    across a restart (REQ-022 of SPEC-0002, REQ-314);
+  - the Overview: REQ-093 to REQ-105 of SPEC-0008, its six families
+    (`src/common/overview.ts`), its three windows (`src/common/window.ts`), and the
+    band of the server of SPEC-0012;
+  - the views of the ten kinds: the pages, the views over the lists and the ways
+    between them of SPEC-0003, SPEC-0005, SPEC-0006, SPEC-0007 and SPEC-0014, the
+    sections in the details of the host, a name that leads nowhere said with its
+    reason, the phase and the failure as two facts, what is not reported
+    (`NOT_REPORTED` of `src/common/operation-text.ts`), and the band of the volume
+    operations of a backup and of a restore (`src/common/volume-band.ts`);
+  - the workspace: REQ-138 to REQ-149 of SPEC-0011; the way a file comes from the
+    store, through the cluster by a port-forward to its Pod when the URL names a
+    Service of the cluster, and directly from this machine otherwise (REQ-128 and
+    REQ-129 of SPEC-0010); a text saved for ten minutes at most (`savableUntil` of
+    `src/common/artifact-text.ts`); a file the store does not have said by the
+    phase (`missingFile`); the allowances of REQ-126, REQ-128, REQ-130 and REQ-132
+    of SPEC-0010; and the request Velero removes about ten minutes after its URL
+    (REQ-135, `wouldCreate`);
+  - the server: REQ-152 to REQ-155 of SPEC-0012, and the wait of ten seconds
+    (`serverStatusFailure` of `src/main/server-status.ts`);
+  - the adherence: REQ-160 to REQ-171 of SPEC-0013;
+  - Write actions: the writes off when Freelens starts and turned on for the
+    installation that is selected, through a dialog that names it, its cluster and
+    its context, and off when another installation is selected or the cluster is
+    not connected (REQ-108 to REQ-111 and REQ-118 of SPEC-0009, REQ-201 of
+    SPEC-0015, `writesDialogWords` of `src/renderer/components/target-bar.tsx`);
+    the review of the exact request (REQ-246 of SPEC-0017, REQ-229 of SPEC-0016),
+    and the request of a tab and of the band of the server shown before it is
+    created (REQ-139 of SPEC-0011, REQ-152 of SPEC-0012); the six actions, each
+    where REQ-252 puts it (REQ-244 to REQ-284 of SPEC-0017, REQ-221 to REQ-239 of
+    SPEC-0016); the name of the backup typed for a restore and for a deletion
+    (REQ-271, REQ-281); the deletion through one `DeleteBackupRequest` and never of
+    the `Backup` (REQ-279, REQ-284); and the table of every write of the adapter
+    and the three rules, as the section Safety wrote them (REQ-298).
+- DOC-04: the case reads the subsection Write actions of Features in place of the
+  section Safety, with the same assertions: a row for each write the adapter of
+  the main process sends, read in `src/main/diagnostic-kubernetes.ts`, each POST a
+  creation and the PATCH a patch, and for no other; the fields the patches of a
+  pause and of a resume write; no other kind of Velero named in the subsection;
+  and the three rules by their words (`test/documents.test.ts`).
+- Limits, each with what records it: the synthetic objects and the platforms,
+  Compatibility (REQ-299, D13); the drop of a tarball, the deviation of the first
+  pull request of T6.3; what is not in 1.0.0, the roadmap under Deferred after
+  v1.0.0, the exclusions of SPEC-0017, and the words of the fields the forms do not
+  offer (`NOT_OFFERED` and `NOT_OFFERED_OF_A_SCHEDULE` of
+  `src/common/backup-create-words.ts`, `NOT_OFFERED_OF_A_RESTORE` of
+  `src/common/restore-create-words.ts`); the contents of a backup, REQ-120 of
+  SPEC-0010; the bounds of a file and the two loads at a time, REQ-133 with the
+  words of `payload-too-large` and of the step `queue`; TLS always verified,
+  REQ-131, with the certificate of an authority in a Secret that
+  `spec.objectStorage.caCertRef` names or in the inline `spec.objectStorage.caCert`,
+  which the reviewed release keeps as the older form (`src/common/types.ts`); the
+  zone of the server, REQ-162, REQ-165 and REQ-231; the plugin, REQ-126 with
+  Compatibility; and a list said denied for a 401 as for a 403 (`failedStatus` of
+  `src/common/read-state.ts`), where an action and a tab tell a credential the
+  cluster did not take apart (REQ-249 of SPEC-0017, `downloadFailure` of
+  `src/common/diagnostic-text.ts`).
+- What the entries of Troubleshooting said that an operator needs and no other
+  section says, moved: the way a file comes from the store, into the workspace of
+  Features; how to give a storage location the certificate of its authority, into
+  the limit of TLS; and a list said denied for a credential the cluster did not
+  take, into a limit of its own. The rest went: the words of each failure, which
+  the views and the tabs show; the verbs to grant, which Permissions lists; and
+  what to look at for a store that does not answer, beside the way a file comes,
+  which Features says.
+- DOC-10: green. The README links to no anchor of Permissions, and Supported APIs
+  links to Write actions.
+- The plan of the views runs no part for the files of the slice (`partsToRun` of
+  `e2e/scripts/views-plan.mts`), and they reach no end to end run.
+- The gates of the slice, on its head: `pnpm type:check`, `pnpm lint:check`, with
+  one information in a file the slice does not touch, `pnpm knip:check`, and Trunk
+  on the changed files, green; `pnpm exec vitest run test/documents.test.ts`, 4
+  cases of 4. The unit run of the head, with main merged, `pnpm test:unit`, on
+  macOS with Node 24.21.0: 135 files and 3,820 tests passed, and the three
+  measures. The checks of its pull request, green before its merge: the unit
+  tests, the check, Trunk, the integration test and OSV-Scanner.
+- An independent review of the accuracy of Features, Write actions and Limits
+  against the code found eight statements to correct, none a blocker. Seven are
+  corrected in the text: the direct way to the store, which is never an address
+  of this machine, of the link or of a metadata service; what is allowed in a tab,
+  kept after a restart until it is taken back; a `DownloadRequest` no server
+  processes, which stays; the `ServerStatusRequest`, which stays until the server
+  processes it; what Velero deletes with a backup, its restores included, which
+  cannot be undone; the verification of TLS, never skipped; and the origin of a
+  storage location of another plugin, which a tab always asks to allow. The
+  eighth is of the code, not of the text: the band of the server says that the
+  identity needs the verb create for a credential the cluster did not take as
+  well, and this slice does not change it.
+
+Seen failing, on changes made on purpose and put back each time, DOC-04 in its new
+place, 11 in all, each failing the case alone but the heading renamed, which DOC-10
+fails as well, by the link of Supported APIs: the row of the creation of a Restore
+removed; a row of a write the adapter does not make; another kind of Velero named
+in the subsection; the patch said of one field; each of the three rules reworded;
+the subsection renamed; the subsection taken out of Features as a section of its
+own; the table of the writes moved into Limits; and a creation of the adapter made
+a PATCH in the code. Beside them, what the case must let pass passed: the cells of
+the table aligned with spaces, and a rule wrapped at another place.
+
+Decided while implementing, on 2026-11-09:
+
+- Features and Limits come after Getting started, as the READMEs of the latest
+  extensions of the organization have them. Write actions is the last subsection of
+  Features, and the subsections Actions and Writes, off by default, which the first
+  commits of the branch wrote, fold into it.
+- The table of the writes and the three rules are the ones of the section Safety,
+  with their link to AGENTS.md: DOC-04 reads them where they are now.
+- The text of the slice names no product but Freelens, Velero, Kubernetes, npm and
+  GitHub: Limits leads to Compatibility for the platforms.
+- The row of T6.3 in the roadmap stays In PR.
+
 T6.4 and T6.5, the release flow of the template, with the checks the amendments do
 not take, on 2026-11-09: the version, tag and release workflows of the template of
 the organization, the cases and the documents that described the ones before them,
