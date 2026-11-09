@@ -850,6 +850,8 @@ describe("views of the schedules", () => {
 
       // The work area of the screen, in the report of the case.
       let screen: unknown;
+      // The words of a schedule in every language, read at 1,201 pixels, where every column that holds them is shown.
+      let wordsWhereShown = ["not read"];
 
       // The window and the zoom are given back whatever happens: every later case reads the window of 1440 by 900.
       // The edges are the widths where a column gives its room: the installation, the last submission and the newest
@@ -862,6 +864,7 @@ describe("views of the schedules", () => {
             const columns = await cluster.columnsOf(SCHEDULES, frame);
 
             shown[room] = columns.shown;
+            if (room === 1201) wordsWhereShown = await cluster.tooWide(SCHEDULES, frame, cluster.WORDS_OF_A_SCHEDULE);
             read[room] = {
               cut: room >= 1000 ? columns.cut.filter((column) => whole.includes(column)) : [],
               clipped: columns.clipped,
@@ -875,6 +878,7 @@ describe("views of the schedules", () => {
         expect(read).toEqual(
           Object.fromEntries(Object.keys(read).map((room) => [room, { cut: [], clipped: [], misaligned: [] }])),
         );
+        expect(wordsWhereShown).toEqual([]);
         expect(shown).toEqual({
           1201: without(),
           1200: without("installation", "submitted", "newest"),
@@ -906,7 +910,13 @@ describe("views of the schedules", () => {
       expect(wide.cut.filter((column) => column !== "schedule")).toEqual([]);
       expect(wide.clipped).toEqual([]);
       expect(await cluster.misalignedWords(SCHEDULES, frame)).toEqual([]);
-      expect(await cluster.tooWide(SCHEDULES, frame, cluster.WORDS_OF_A_SCHEDULE)).toEqual([]);
+      // The words of the columns the list shows there: the last submission is not shown under 1,200 pixels.
+      const wordsShown = Object.fromEntries(
+        Object.entries(cluster.WORDS_OF_A_SCHEDULE).filter(([column]) => wide.shown.includes(column)),
+      );
+
+      expect(Object.keys(wordsShown)).toEqual(["paused", "next", "adherence", "age"]);
+      expect(await cluster.tooWide(SCHEDULES, frame, wordsShown)).toEqual([]);
     },
     TIMEOUT,
   );
