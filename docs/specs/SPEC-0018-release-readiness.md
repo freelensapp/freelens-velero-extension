@@ -996,3 +996,132 @@ Decided while implementing, on 2026-11-09:
 On a hit the action checks the commit, checks out Freelens, restores the build,
 sets up the Node.js of the repository again and lets the sandbox start; every
 other step is of a miss, which the run above proved.
+
+T6.1, the case of FND-10 of REQ-289, on 2026-11-09: HTTPS in the main process of the
+host, in two commits, the second after the independent review of the first. The
+evidence, by check:
+
+- REG-05, in FND-10
+  ([`extensions.tests.ts`](../../integration/__tests__/extensions.tests.ts)), a case
+  of its own after the download over HTTP, which makes seven cases of FND-10. The
+  certificates are made by the case, outside the host, before the downloads, by the
+  helper of the unit tests, [`tls-fixture.ts`](../../test/tls-fixture.ts): an
+  authority made for the test, and the certificate it signed for two names and two
+  addresses, `storage.example.invalid` and 127.0.0.1 among them. In the main process
+  of the host, a store on 127.0.0.1 alone with that certificate, and three downloads
+  of a log at its signed URL by the bundled transport of the module the host loaded,
+  which the case of the main entry point proves. The authority given inline as a
+  storage location gives it, its PEM in base64, read by the adapter of the bundle as
+  the download of a log reads it: the file decoded whole. The same store with no
+  authority given, and the authority given for `wrong.example.invalid`, a name the
+  certificate is not for: each `tls-invalid`, with the verdict of a certificate
+  refused, `untrusted`, and nothing of the URL, its host, its path, its signature or
+  its scheme, in its message, its text, its fields, enumerable or not, its stack or
+  its cause. The certificate is valid for 127.0.0.1, the address every download
+  connects to, so the refusal of the other name shows the name of the URL checked,
+  and not the address. The store counts three connections, records the name each
+  ClientHello asks for, the name of the URL of each download in their order, and
+  counts one request, the one of the store that was verified, with the Host and the
+  server name of the URL: nothing was sent over a connection that was not verified,
+  and nothing was asked again without the verification. The store is closed however
+  the case ends, from the moment it listens. Each step has its own time, the
+  certificates 45 seconds, removed when they end if they end later, the downloads 60
+  and each of them 12, within the 150 of the case. The packaged run, in the
+  integration test of `integration-tests.yaml` and in the part `static-views-1` of
+  `views-tests.yaml`: on a second Linux machine, in Freelens 2.0.0 built at the
+  target, FND-10 passed on the head, 7 cases of 7, and `pnpm test:unit` passed,
+  134 files and 3,812 tests, and the three measures; on the hosted runner, the
+  checks of its pull request, the integration test and the two parts of the
+  views it reaches, green before its merge.
+- The function the case evaluates in the host, taken from the test file as written
+  and run in a process of Node 24.21.0 with a stand-in of the host, against the main
+  bundle of the head: every assertion of the case held, after each of the two
+  commits. It is a check of the slice outside Electron, and not the packaged run.
+- The helper of the certificates, which FND-10 and the unit tests of the transport
+  share, reads `openssl version` before it makes anything: with the LibreSSL of
+  macOS first on the PATH, and with no `openssl` on it, it stopped with what it
+  found and that an OpenSSL 3 is needed, and made nothing; with an OpenSSL 3 first,
+  it made the certificates. The unit tests that use it, of the transport and of the
+  adapter, pass with it.
+
+Eight changes made on purpose, each one commit on the head on a branch of its own,
+`mut-m6-https-1` to `mut-m6-https-8`, kept apart for the packaged runs, which the
+case must see failing. The log of a packaged run shows the first assertion that
+fails, so each change is named with the assertion the check outside Electron saw
+fail first, in the order of the case:
+
+- `mut-m6-https-1`, the authority of the location dropped from the connection: the
+  trusted download, not decoded.
+- `mut-m6-https-2`, the name of the certificate not verified: the refusal of the
+  other name, which decodes.
+- `mut-m6-https-3`, the verification of the certificate turned off: the refusal with
+  no authority, which decodes.
+- `mut-m6-https-4`, a download whose certificate was refused asked again without the
+  verification: the refusal with no authority, which decodes, before the count of
+  the connections, five, and of the requests, three, which the case does not reach.
+- `mut-m6-https-5`, the inline authority of a location taken without its base64
+  decoded: the authority, not read, `tls-invalid`.
+- `mut-m6-https-6`, the signed URL kept on the failure of a certificate refused: the
+  words of the refusal with no authority.
+- `mut-m6-https-7`, a refused download probed again without the verification, with
+  `tls.connect` and `rejectUnauthorized` false and no request, which still ends as
+  `tls-invalid`: the connections, five.
+- `mut-m6-https-8`, the verification moved after the request, the answer refused
+  when the socket says it was not authorized, which still ends as `tls-invalid`: the
+  requests the store saw, three.
+
+The packaged runs, on the second Linux machine in Freelens 2.0.0: each of the eight
+branches failed the new case alone, first at the assertion its line names, and the
+six other cases of FND-10 passed. Two more changes, for the check outside Electron
+alone and with no branch, were seen failing the two assertions the review asked for:
+the error of the socket kept on the failure as a cause that is not enumerable, which
+names the other name, fails the words of the refusal of the other name; and no
+server name sent in the ClientHello fails the names the store recorded.
+
+An independent review of the first commit, on 2026-11-09, found no blocker, no
+major, one minor and eight nits. The minor: no change made on purpose was caught
+first by the two assertions of no connection without verification, the count of the
+connections and the request; the seventh and the eighth branches are. The nits,
+which the second commit takes in: the certificate said with its two names and two
+addresses, 127.0.0.1 among them; the name of each ClientHello recorded by the store
+and asserted, where the case asserted three connections in all; the words read with
+`util.inspect` as well, which reads the fields that are not enumerable, the stack
+and the cause; the certificates said to be made by the case; the store closed from
+the moment it listens; a fixture made after its time removed when it ends; a failure
+of the authority with no code kept by its name and its message; and the helper of
+the certificates stopping, before it makes anything, when the first `openssl` of the
+PATH is not OpenSSL 3.
+
+Decided while implementing, on 2026-11-09:
+
+- The store is opened in the main process of the host, as the store of the case over
+  HTTP is, on 127.0.0.1 alone, and closed by the case; the certificates are made in
+  the process of the test, since the helper runs `openssl`, and given to the host as
+  text.
+- The authority is given as a storage location gives it inline,
+  `spec.objectStorage.caCert`, its PEM in base64, and read by `certificate` of
+  `DiagnosticKubernetes`, which the main bundle exports, as the download of a log
+  reads it before it gives it to the transport: no export is added to the main
+  bundle, and the build test is unchanged.
+- A certificate for another name is the certificate of the same store, asked for by
+  a URL whose host is a name the certificate is not for, with the authority given:
+  one store and one authority for the three downloads, as the unit cases of the
+  transport do it. The trusted download comes first, so that an authority kept from
+  one download for the next would make the second one decode.
+- The case reads the verdict beside the code: both refusals are a certificate
+  refused, `untrusted`, which chooses the words of the views.
+- No connection without verification is read as what the store can count: three TCP
+  connections, the name each ClientHello asks for, so that nothing was asked again,
+  and one request, so that nothing was sent over a connection that was not verified.
+  Whether the store ends the handshake of a refused download is not asserted: under
+  Node, the store ended none, and saw a failure of the client for each.
+- The words of a refusal are its message, its text, its enumerable fields as JSON,
+  and `util.inspect` with the hidden fields at a depth of four. The URL is looked
+  for by its host, its path, its signature and its scheme followed by `//`, so that
+  a module of Node named in a frame of the stack is not taken for a URL.
+- FND-10 now runs `openssl`, the first on the PATH of the machine that runs it, as
+  the unit tests of the transport do. The helper takes an OpenSSL whose major
+  version is 3 or more, and stops on LibreSSL, on any other and on none, before it
+  makes anything: on macOS `/usr/bin/openssl` is LibreSSL, which does not know
+  `-copy_extensions`, so REL-02 runs with an OpenSSL 3 first on the PATH. TESTING.md
+  says so.

@@ -6,8 +6,8 @@
 // The extension in Freelens 2, with no cluster: the tarball installed from the Extensions page of a new
 // profile and listed as Enabled; each entry point reached as the host loaded it, and extending the
 // classes of the host; the dispatcher of the host process as it was; the bundle of the main process
-// downloading an artifact inside that process; and no error in what the host writes, on its output, in
-// its console or in the files of its log.
+// downloading an artifact inside that process, over HTTP and over HTTPS from a store whose certificate it
+// verified; and no error in what the host writes, on its output, in its console or in the files of its log.
 //
 // The host imports the main entry point, an ES module, from its file, and the renderer one from a URL of
 // its own scheme. A module is held by the loader of its process under its URL, so the case asks the
@@ -19,6 +19,7 @@ import { readdir, readFile } from "node:fs/promises";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createTlsFixture } from "../../test/tls-fixture";
 import * as velero from "../helpers/velero-extension";
 
 import type { ElectronApplication, Page } from "playwright";
@@ -26,6 +27,9 @@ import type { ElectronApplication, Page } from "playwright";
 const EXTENSION = velero.EXTENSION_NAME;
 const SANITIZED = EXTENSION.replace("@", "").replace("/", "--");
 const DISPATCHERS = ["undici.globalDispatcher.1", "undici.globalDispatcher.2"];
+// The name of the store the certificate of the test is for, and a name it is not for.
+const STORE_NAME = "storage.example.invalid";
+const OTHER_NAME = "wrong.example.invalid";
 // The name the extension gives its store of the preferences, which each entry point opens when it is activated.
 const STORE = "[VELERO-PREFERENCES]: LOADED";
 const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
@@ -324,6 +328,206 @@ describe("extensions page tests", () => {
     expect(outcome.missing.message).not.toMatch(/X-Sig|artifact\.invalid/);
     expect(outcome.foreign.code).toBe("destination-denied");
   });
+
+  it("downloads and decodes an artifact over HTTPS inside the main process of the host, from a store whose certificate it verified and from no other", async () => {
+    // Made by the case, outside the host, before the downloads, by the helper of the unit tests: an authority
+    // made for the test, and the certificate it signed for the store, for two names and two addresses,
+    // storage.example.invalid and 127.0.0.1 among them.
+    const making = createTlsFixture(STORE_NAME);
+    const certificates = await velero.within("The certificates of the test", 45_000, making).catch((error: unknown) => {
+      // Made after its time all the same: removed, with its keys, when it ends.
+      making.then((late) => late.dispose()).catch(() => undefined);
+      throw error;
+    });
+
+    try {
+      const outcome = await velero.within(
+        "The downloads over HTTPS in the main process of the host",
+        60_000,
+        app.evaluate(
+          async (_electron, given) => {
+            type Ended = { decoded?: boolean; code?: string; verdict?: string; words?: string };
+            const main = process.mainModule;
+
+            if (!main) throw new Error("The main module of the host is not reachable");
+            // The module the host loaded, as the case of the main entry point proved.
+            const { downloadArtifact, DiagnosticKubernetes } = main.require(given.file) as {
+              downloadArtifact(url: string, route: object, signal: AbortSignal): Promise<Buffer>;
+              DiagnosticKubernetes: new (
+                entry: { id: string; name: string; kubeConfigPath: string; contextName: string },
+                host: object,
+              ) => {
+                certificate(namespace: string, storage: { caCert?: string }, signal: AbortSignal): Promise<string>;
+              };
+            };
+            const load = main.require.bind(main);
+            const https = load("node:https") as typeof import("node:https");
+            const tls = load("node:tls") as typeof import("node:tls");
+            const util = load("node:util") as typeof import("node:util");
+            const zlib = load("node:zlib") as typeof import("node:zlib");
+            const payload = Buffer.from(`${"synthetic log line over TLS\n".repeat(2000)}end`);
+            const seen: { url?: string; host?: string; servername?: string }[] = [];
+            // The name each ClientHello asked for, in the order the connections came.
+            const hellos: string[] = [];
+            const ended: {
+              authority?: string;
+              trusted?: Ended;
+              untrusted?: Ended;
+              otherName?: Ended;
+              port?: number;
+            } = {};
+            let connections = 0;
+            let closed = false;
+            const context = tls.createSecureContext({ key: given.key, cert: given.cert });
+            // The store, on the loopback alone, with the certificate the authority of the test signed, which
+            // is valid for 127.0.0.1, the address every download connects to: a download refused for another
+            // name is refused for the name of its URL, and not for the address. The store counts the
+            // connections it is given, the name each asks for, and the requests it is sent.
+            const server = https.createServer(
+              {
+                key: given.key,
+                cert: given.cert,
+                SNICallback: (servername, callback) => {
+                  hellos.push(servername);
+                  callback(null, context);
+                },
+              },
+              (request, response) => {
+                const servername = (request.socket as import("node:tls").TLSSocket).servername;
+
+                seen.push({
+                  url: request.url,
+                  host: request.headers.host,
+                  servername: typeof servername === "string" ? servername : undefined,
+                });
+                response.writeHead(200, { "content-type": "application/gzip" });
+                response.end(zlib.gzipSync(payload));
+              },
+            );
+
+            server.on("connection", () => {
+              connections += 1;
+            });
+            await new Promise<void>((resolve, reject) => {
+              server.once("error", reject);
+              server.listen(0, "127.0.0.1", () => resolve());
+            });
+            // Listening: from here on the store is closed, however the case ends.
+            try {
+              const address = server.address();
+
+              if (!address || typeof address === "string") throw new Error("Missing loopback listener");
+              const port = address.port;
+              // The log of a backup at its signed URL, from the store by the name the URL gives it, within a
+              // time of its own: a download that does not end ends as cancelled.
+              const download = async (name: string, ca: string | undefined): Promise<Ended> => {
+                const origin = `https://${name}:${port}`;
+
+                try {
+                  const content = await downloadArtifact(
+                    `${origin}${given.target}`,
+                    { origin, pathname: given.pathname, address: "127.0.0.1", port, mode: "test", ca },
+                    AbortSignal.timeout(12_000),
+                  );
+
+                  return { decoded: content.equals(payload) };
+                } catch (error) {
+                  const { code, verdict, message } = error as { code?: string; verdict?: string; message?: string };
+                  let fields: string;
+
+                  try {
+                    fields = JSON.stringify(error);
+                  } catch {
+                    fields = "the enumerable fields of the failure cannot be written";
+                  }
+                  // What the failure says, in each form it has: its message, its text, its enumerable fields,
+                  // and every field of its own, enumerable or not, with its stack and its cause.
+                  return {
+                    code,
+                    verdict,
+                    words: [message, String(error), fields, util.inspect(error, { showHidden: true, depth: 4 })].join(
+                      "\n",
+                    ),
+                  };
+                }
+              };
+              // The authority as a storage location gives it inline, its PEM in base64, read by the adapter of
+              // the bundle as the download of a log reads it. A failure with no code is kept by its name and
+              // its message.
+              let ca: string | undefined;
+
+              ended.port = port;
+              try {
+                ca = await new DiagnosticKubernetes(
+                  { id: "fnd-10", name: "fnd-10", kubeConfigPath: "", contextName: "" },
+                  {},
+                ).certificate("velero", { caCert: given.caCert }, AbortSignal.timeout(5_000));
+                ended.authority = typeof ca === "string" ? "read" : "none";
+              } catch (error) {
+                const { code, name, message } = error as { code?: unknown; name?: unknown; message?: unknown };
+
+                ended.authority = typeof code === "string" ? code : `${String(name)}: ${String(message)}`;
+              }
+              // The download the store answers comes first: an authority kept from one download for the next
+              // would make the second one decode.
+              ended.trusted = await download(given.name, ca);
+              // The same store with no authority given, and the authority given for a name the certificate of
+              // the store is not for.
+              ended.untrusted = await download(given.name, undefined);
+              ended.otherName = await download(given.other, ca);
+            } finally {
+              let timer: ReturnType<typeof setTimeout> | undefined;
+
+              server.closeAllConnections();
+              closed = await Promise.race([
+                new Promise<boolean>((resolve) => server.close(() => resolve(true))),
+                new Promise<boolean>((resolve) => {
+                  timer = setTimeout(() => resolve(false), 10_000);
+                }),
+              ]);
+              clearTimeout(timer);
+            }
+            return { ...ended, connections, hellos, seen, closed };
+          },
+          {
+            file: realpathSync(path.join(build.folder, build.main)),
+            key: certificates.key,
+            cert: certificates.cert,
+            caCert: Buffer.from(certificates.ca).toString("base64"),
+            name: STORE_NAME,
+            other: OTHER_NAME,
+            pathname: "/logs/a.gz",
+            target: "/logs/a.gz?X-Amz-Signature=synthetic",
+          },
+        ),
+      );
+
+      // The authority read from what the location gives, and the file of the store it signed, decoded whole.
+      expect(outcome.authority).toBe("read");
+      expect(outcome.trusted).toEqual({ decoded: true });
+      // The same store with no authority, and a certificate that is not for the name of the URL: each a
+      // certificate refused, said without the URL, its host, its path or its signature.
+      for (const refused of [outcome.untrusted, outcome.otherName]) {
+        expect(refused).toMatchObject({ code: "tls-invalid", verdict: "untrusted" });
+        expect(refused?.words).not.toMatch(/example\.invalid|\/logs\/a\.gz|X-Amz-Signature|https?:\/\//);
+      }
+      // Three connections, each asking for the name of its URL, in the order of the downloads, and one request,
+      // over the connection that was verified: nothing is sent to a store whose certificate was refused, and
+      // nothing is asked again without the verification.
+      expect(outcome.connections).toBe(3);
+      expect(outcome.hellos).toEqual([STORE_NAME, STORE_NAME, OTHER_NAME]);
+      expect(outcome.seen).toEqual([
+        {
+          url: "/logs/a.gz?X-Amz-Signature=synthetic",
+          host: `${STORE_NAME}:${outcome.port}`,
+          servername: STORE_NAME,
+        },
+      ]);
+      expect(outcome.closed).toBe(true);
+    } finally {
+      await certificates.dispose();
+    }
+  }, 150_000);
 
   it("logs the activation of each entry point, and no error, in the files of the log of the host", async () => {
     const directory = await velero.logDirectory(app);
