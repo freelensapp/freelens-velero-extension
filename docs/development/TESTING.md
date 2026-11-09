@@ -119,17 +119,24 @@ that:
   base64, and read by the adapter of the bundle; the same store with no authority
   given, and the authority given for a name the certificate of the store is not
   for, each end as `tls-invalid`, a certificate refused, with nothing of the URL in
-  the words of the failure; the store counts one connection for each of the three
-  downloads and one request, the verified one: nothing is sent over a connection
-  that was not verified, and nothing is asked again without the verification;
+  the words of the failure, read in its message, its text, its fields, enumerable
+  or not, its stack and its cause. The certificate is valid for 127.0.0.1, the
+  address every download connects to, so the refusal of another name shows the
+  name of the URL checked, and not the address. The store counts three
+  connections, records the name each ClientHello asks for, the name of the URL of
+  each download in their order, and counts one request, the verified one: nothing
+  is sent over a connection that was not verified, and nothing is asked again
+  without the verification;
 - the files of the log of the host hold the activation of the extension, and no
   line at the level of an error, nor does what either process wrote.
 
-No cluster takes part in FND-10. Its certificates are made outside the host, by
-the helper of the unit tests, [`tls-fixture.ts`](../../test/tls-fixture.ts), with
-the `openssl` of the PATH, which must be OpenSSL 3, as for the unit tests of the
-transport: the LibreSSL of macOS at `/usr/bin/openssl` does not know
-`-copy_extensions`. Beside it, the integration test of the template
+No cluster takes part in FND-10. Its certificates are made by the case, outside
+the host, before the downloads, by the helper of the unit tests,
+[`tls-fixture.ts`](../../test/tls-fixture.ts), with the first `openssl` of the
+PATH, which must be OpenSSL 3 or later, as for the unit tests of the transport:
+the LibreSSL of macOS at `/usr/bin/openssl` does not know `-copy_extensions`. The
+helper reads `openssl version` before it makes anything, and stops with what it
+found and what is needed. Beside it, the integration test of the template
 has a session for each of the ten kinds the extension shows: the five of the first
 milestones, the three of SPEC-0014 under `velero.io/v1`, which the last pull request
 of T5.1 added, as the amendment of 2026-10-27 of SPEC-0015 says, and the two of the
