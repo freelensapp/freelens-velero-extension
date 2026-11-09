@@ -1125,3 +1125,150 @@ Decided while implementing, on 2026-11-09:
   makes anything: on macOS `/usr/bin/openssl` is LibreSSL, which does not know
   `-copy_extensions`, so REL-02 runs with an OpenSSL 3 first on the PATH. TESTING.md
   says so.
+
+T6.2, the first of its pull requests, on 2026-11-09: the accessibility scan of the
+pre-review (REQ-293), and axe-core, a devDependency no bundle carries (REQ-294). The
+evidence, by check:
+
+- VIS-02, the scan ([`pre-review.tests.ts`](../../e2e/__tests__/pre-review.tests.ts)
+  and [`velero-axe.ts`](../../integration/helpers/velero-axe.ts)): every view the
+  pre-review checks, its 65, in both themes at 1440 by 900 and at 900 by 650, once its
+  picture is taken, 260 scans, which its last case counts. axe-core 4.14.0 runs the
+  rules of WCAG 2.1 at the levels A and AA, by the tags `wcag2a`, `wcag2aa`, `wcag21a`
+  and `wcag21aa`, and not the best practices, on the root of the view of the
+  extension, the page `velero-<id>-page`, with the menus, the dialogs, the drawers and
+  the tooltips of the host left out. A violation of impact serious or critical on an
+  element the extension renders fails the case of its view, beside the problems of its
+  layouts, by its rule, its impact, its selector and its HTML, unless the file of the
+  exceptions, `e2e/__tests__/pre-review.exceptions.json`, empty, keeps it. Every
+  violation is in the report `pre-review-accessibility.json`: its view, its theme, its
+  size, its rule, its impact, its element by a selector and an excerpt of its HTML,
+  where it comes from and what decided it, and whether it fails or the spec that keeps
+  it; with the count of each rule by its impact and its origin, the rules axe-core
+  could not decide in each layout, and the exceptions no violation used.
+- VIS-02, the unit part ([`accessibility-scan.test.ts`](../../test/accessibility-scan.test.ts),
+  10 cases, of [`velero-accessibility.ts`](../../integration/helpers/velero-accessibility.ts)):
+  where an element comes from, an element of the extension, the root of the view,
+  every class of the host the helper names by its component, a child the extension
+  gave a component of the host that holds what it is given, and a part the host drew;
+  the file of the exceptions read, and refused with its words when it is not JSON or
+  not a list, or holds an exception with a key more or less, a value empty or with
+  spaces around it, a rule of no form of axe-core, a spec with no choice, or an
+  exception named twice; a violation that fails, one that is reported, one an exception
+  keeps, and the exceptions no violation used.
+- VIS-02 in a browser: a probe, not kept in the repository, ran the helper of the scan
+  in a headless Chromium 151 under the Content-Security-Policy of the frame of the
+  host, on synthetic markup shaped as the views draw theirs. `addScriptTag` was refused
+  by the policy, and the file evaluated by the driver loaded axe-core 4.14.0, which ran
+  62 rules. The sidebar outside the root, and a menu, a drawer and a tooltip of the
+  host inside it, gave no violation, and each violation came from where the rule of the
+  origin says: a button of the host with no name, the host's, kept by an exception
+  written for it; the words of a badge of the host, the host's; a child with no class
+  of a cell, and words with no class in an element of the extension, the extension's,
+  failing. Each of the three breaks made its violation on the element of the extension
+  it names, `button-name` and `label` critical and `color-contrast` serious, and the
+  page was given back as it was after each scan; a selector the page cannot read, and a
+  root that is not one element, were said with their words.
+- VIS-02 in the packaged application, the first run of the pre-review with the scan,
+  on the environment of the demo: {RUN-AXE-FIRST}. Its cases, its time beside the one
+  of a run before the scan, and the violations of its report by rule, impact and
+  origin, each then decided: an issue, or an exception of the file with the choice of
+  the spec that keeps it.
+- VIS-02 seen failing in the packaged application: {RUN-AXE-BROKEN}, the run with the
+  file `e2e-artifacts/break-the-scan-once`, in which the cases of the list of the
+  Backups, of the workspace of a backup and of Create backup fail by `color-contrast`,
+  `button-name` and `label`, each on the element its break names.
+- VIS-03 ([`build.test.ts`](../../test/build.test.ts)): axe-core is a devDependency at
+  an exact version, and a dependency of no other kind; neither bundle has a module of
+  it in its map, nor its name or the address of the help of its rules in its text.
+  Knip finds it used, by the resolution of its file in the helper of the scan.
+- Seen failing, each change made on purpose and put back:
+  - the helper of the origin, of the exceptions and of the verdict, 31 changes, every
+    one of the 10 cases at least once: a class of the extension beside one of the host
+    making the element the extension's; the form of the classes of the extension; the
+    element itself with a class of the host not taken as the host's; the cell of the
+    host holding nothing; the content of a cell, the value of a drawer item and the
+    list layout of Kubernetes objects dropped from the list; the checkbox and the
+    spinner of the host dropped; the select said to hold what it is given; every module
+    of the host said to hold, and the modules not read; the component named by the
+    element alone; an element with no class deciding; the root said of the host; an
+    empty way accepted; a text that is not JSON, a file that is not a list and an
+    exception that is not an object not said so; a key more, a value with spaces, a
+    rule of any form, a spec with no choice and an exception named twice accepted; the
+    exceptions read cut to the first, and the empty file refused; a moderate violation
+    failing, an exception of another rule keeping a violation, a violation of the host
+    failing, the used exceptions listed as unused, and the best practices among the
+    tags;
+  - the build test: the renderer and the main process each importing axe-core, which
+    both checks of the case found, its module in the map and its text in the bundle;
+    axe-core at a caret range, moved to `dependencies`, in `peerDependencies` beside
+    `devDependencies`, and no devDependency; the manifest and the lockfile put back as
+    they were;
+  - Knip: the resolution of the file and the import of its types taken away, axe-core
+    reported as an unused devDependency; the resolution alone kept, axe-core used;
+  - the case of the environment test that lists the suites of the views took the file
+    of the exceptions beside them for a suite: it now reads the files `*.tests.ts`
+    alone.
+- The gates of the slice, on its head: `pnpm type:check`, `pnpm lint:check`,
+  `pnpm knip:check` and `pnpm build`, green; the unit files that hold or read its
+  changes, `test/environment.test.ts`, `test/build.test.ts`,
+  `test/accessibility-scan.test.ts`, `test/views-plan.test.ts` and
+  `test/host-stub.test.ts`, 317 tests passed; Trunk on the changed files, green. The
+  unit run of the head, `pnpm test:unit`: {RUN-AXE-UNIT}. The checks of its pull
+  request: {RUN-AXE-CI}. Its files reach every part of the views, by `package.json`,
+  `pnpm-lock.yaml` and the helpers of the suites, and the end to end run.
+
+Decided while implementing, on 2026-11-09:
+
+- axe-core 4.14.0: the newest release at least two weeks old, which is the newest
+  release, published on 2026-10-05; what was published after it is canaries, which are
+  prereleases. It has no dependency of its own. It was added with
+  `pnpm add -D -E axe-core@4.14.0`: `package.json` and `pnpm-lock.yaml` alone changed,
+  and `pnpm install --frozen-lockfile` passed after it.
+- Renovate looks up every dependency in the catalog of Freelens on main unless its rule
+  excludes it by name, and Freelens does not have axe-core: `.renovaterc.json5`
+  excludes it, so that it takes the newest release of npm.
+- The file is loaded by evaluating its text in the frame through the driver, not by
+  `addScriptTag`: the frame of a cluster has the Content-Security-Policy of the host,
+  `script-src 'unsafe-eval' 'self' freelens-extension:` (`freelens/package.json`, line
+  59, set by `freelens-proxy.ts`, line 536, at the target), which refuses a script
+  written into its page, as the probe showed. AGENTS.md records it among the facts of
+  the host.
+- The root of every view of the pre-review is its page, `velero-<id>-page`, which holds
+  the view that is open over its list. The menus, dialogs and drawers of the host are
+  drawn outside it, and the scan leaves them out by their classes wherever they are;
+  so are its tooltips, which REQ-293 does not name: one is there while the pointer
+  rests on what holds it, and the scan must not depend on where the pointer rests. The
+  pre-review shows no section of the details of the host; the helper takes the root as
+  a parameter, `velero-<kind>-details` for a section, which is then scanned alone.
+- Where a violation comes from. The views give their own elements the classes of the
+  stylesheet of the extension and no other, as the source reads: the plain names they
+  write go to the cells of the host, beside `TableCell`. So the first element, from the
+  element of the violation up to the root, that has a class decides: any class of the
+  host, and it is the host's, the element itself or a part the host drew; a class of
+  the extension alone, and it is the extension's. An element with no class is a child
+  the extension gave a component of the host that holds what it is given, and the
+  extension's; inside one that draws all it holds, it is the host's. The components and
+  whether they hold are read in the source of the host at the target, each class with
+  its file and its lines in the helper; the classes of the stylesheet modules of the
+  host by their form, `[name]__[local]--[hash]`, the badge of `WithTooltip` holding its
+  words.
+- What this rule cannot tell, which the report shows for the review: an element of a
+  component of the host whose name, label or colour the extension gives is the host's.
+  A label the extension forgot on the field of an `Input` of the host, or a colour its
+  stylesheet gives a `Button` of the host, is reported and does not fail: D8 fails on
+  the elements the extension renders, and the review of the milestone reads the rest.
+- An exception names its element by a selector the element matches, read in the page
+  with `Element.matches`, and its spec by its identifier and the choice; a selector the
+  page cannot read stops the scan with its text. A violation is kept by an exception
+  of its rule whose selector its element matches.
+- The breaks of VIS-02 come with a file the runner leaves beside the artifacts,
+  `e2e-artifacts/break-the-scan-once`, read once and removed, as the file that stalls
+  the host once: the runner gives the suites an environment of its own, which a
+  variable set for a run does not reach. Each break is made in the DOM of the page by
+  the scan of its case, just before it, and undone just after it, the attribute of the
+  style given back as it was or taken away when there was none; the contrast is a text
+  and a background of two greys, 1.4 to 1, so that it does not depend on how the theme
+  writes its colours.
+- The report keeps an excerpt of 200 characters of the HTML of an element, and goes
+  through the guard of the report of the tabs against a part of a signed URL.

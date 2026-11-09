@@ -232,7 +232,7 @@ pnpm e2e:cluster:down     # Removes the cluster, its network and its state
 pnpm demo:up              # The cluster with the fixtures left in place
 pnpm demo:views           # What the views need beside them, and where the kubeconfigs of the demo are
 pnpm e2e:views            # The suites of the views in the Freelens FREELENS_APP names, against the fixtures
-pnpm pre-review           # Both themes, the sizes of the window, the zoom and the keyboard
+pnpm pre-review           # Both themes, the sizes of the window, the zoom, the keyboard and the accessibility scan
 pnpm e2e:integration      # FND-10 and a session for each of the ten kinds, in the Freelens FREELENS_APP names
 
 # Build
@@ -716,6 +716,12 @@ test environment and of the process of this repository.
   A viewer made to keep two thousand rows ready on each side showed why: the last
   row kept ready was the last line before and after a notch near the end of the
   list, and the gesture never ended by the rule before that one.
+- The frame of a cluster has the Content-Security-Policy of the host,
+  `script-src 'unsafe-eval' 'self' freelens-extension:`, as read in the source at
+  the target (`freelens/package.json`, line 59; `freelens-proxy.ts`, line 536): a
+  script written into its page does not run, as `addScriptTag` of Playwright
+  writes one, and what the driver evaluates in the frame does. The pre-review
+  loads axe-core into the frame so, from the file the package manager installed.
 
 ## Architecture And UI
 

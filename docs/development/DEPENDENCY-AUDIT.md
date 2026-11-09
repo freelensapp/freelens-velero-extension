@@ -1,6 +1,6 @@
 # Dependencies
 
-Updated: 2026-11-07
+Updated: 2026-11-09
 
 What the extension ships, what it only builds with, and how both are kept
 current, on Freelens v2 since T0.7
@@ -54,6 +54,19 @@ The packed build is about 0.5 MB.
   `strictPeerDependencies`, so a library shared with the host outside the peer
   range of the SDK fails the install. `@testing-library/react` 16.3.3, with
   `@testing-library/dom` 10.4.2, and `jsdom` are for the tests alone.
+- `axe-core` 4.14.0 is for the tests alone as well, at an exact version: the
+  accessibility scan of the pre-review reads its file `axe.min.js` where the
+  package manager installed it and loads it into the frame of the cluster it scans,
+  and nothing else loads it
+  ([TESTING.md](TESTING.md#the-accessibility-scan-of-the-pre-review)). It was the
+  newest release on 2026-11-09, published on 2026-10-05, and has no dependency of
+  its own. No bundle carries it: the build test finds no module of it in the map of
+  either bundle and none of its text in them, and the manifest lists it among the
+  devDependencies at an exact version and in no other field; Knip finds it used.
+  Its license, MPL-2.0, is a license of its files: it binds whoever distributes them,
+  as they are or modified, and the package distributes none of them, so it binds
+  nothing the extension distributes. Freelens does not have it, so Renovate takes it
+  from npm, as `.renovaterc.json5` says, and not from the catalog of the host.
 - Biome, Knip, Trunk and shx are not dependencies: the scripts run them through
   `pnpm dlx` at an exact version.
 - There is no dependency override and no patch.

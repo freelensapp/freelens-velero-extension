@@ -270,7 +270,7 @@ their tests green in CI on main.
 | Feature | Task | Spec | Status |
 | --- | --- | --- | --- |
 | Regression; the published tarball tested; isolation between two clusters; the roles of the README proven; HTTPS and the direct route in the host; two actions with the real controller; a ceiling on the bundles. The rest is deferred, D16 | T6.1 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | In PR |
-| Visual and accessibility pass on both themes and on narrow and large windows | T6.2 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Approved |
+| Visual and accessibility pass on both themes and on narrow and large windows | T6.2 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | In PR |
 | Installation, permissions, safety, compatibility and troubleshooting documentation, screenshots, demonstration video, release notes | T6.3 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Approved |
 | Tarball, checksums and software bill of materials from the release workflow | T6.4 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Approved |
 | With Freelens 2.0.0: the pin of the SDK a range of versions, the integration at the tag v2.0.0, the host drift watch ended | | [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#d10-the-version-and-the-release) | Done |
