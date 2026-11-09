@@ -1,13 +1,13 @@
 # SPEC-0018: Release Readiness
 
-- **Status:** Draft
+- **Status:** Approved
 - **Date:** 2026-11-09
 - **Milestone / tasks:** M6 / T6.1, T6.2, T6.3, T6.4, T6.5
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, with the AWS plugin v1.14.4, the reviewed pair of [RECON-T0.1](../development/RECON-T0.1.md): this spec reads no behavior of Velero beyond what the specs it depends on record. The [upstream drift watch](../development/PROCESS.md#upstream-drift-watch) was read on 2026-11-09: Velero v1.19.0-rc.1, published on 2026-11-06, and the AWS plugin v1.15.0-rc.1, published on 2026-11-07, are release candidates, and v1.18.4 and v1.14.4 are still the latest stable releases, so the reviewed pair does not move (D17)
 - **Reviewed main:** not relevant: the subject of this spec is the release of the extension, its checks and its documents
 - **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0
 - **Dependencies:** every spec of v1.0.0, SPEC-0001 to SPEC-0017; [D10 of SPEC-0015](SPEC-0015-freelens-v2-host.md#d10-the-version-and-the-release), the version line and its prereleases; the fifth milestone, done and reviewed: its review gate passed with the lead maintainer on 2026-11-09
-- **Approval:** Pending: the lead maintainer approves the spec and decides D1 to D19, each Proposed below, D11b with an owner of the npm scope `@freelensapp`; the approval is recorded here by role and date
+- **Approval:** Approved by the lead maintainer on 2026-11-09, with D1 to D19 as proposed; D11b is carried out with an owner of the npm scope `@freelensapp` when the first prerelease is asked for
 
 Governed by [AGENTS.md](../../AGENTS.md). A completed draft is not approval to
 implement.
@@ -407,23 +407,23 @@ bring is not known before the first run of the scan. That run lists them in its
 report, their exceptions follow it, and the review of the milestone reads them;
 D8 bounds the risk by failing only on the elements of the extension.
 
-Each decision is Proposed: the draft recommends it, with its reason and the ways
-not taken; the lead maintainer decides. What a slice decides within these
+Each decision was proposed by the draft, with its reason and the ways not taken,
+and approved by the lead maintainer on 2026-11-09 as proposed. What a slice decides within these
 requirements is recorded in its evidence as decided while implementing, with its
 date.
 
-- **D1, Proposed, one spec for the milestone.** The five tasks share the release they
+- **D1, one spec for the milestone.** The five tasks share the release they
   prepare; one spec states the flow once, and each task is a section reviewed and
   tested on its own, each slice its own pull request. Five specs would state the
   flow five times.
-- **D2, Proposed, the regression is what runs today, where it runs.** Every check of
+- **D2, the regression is what runs today, where it runs.** Every check of
   SPEC-0001 to SPEC-0017 stays in its layer and its workflow. No night run is added
   to the unit tests or to the integration test: both run on every pull request and
   every push to main, and the end to end tests and the views, which depend on
   images and a cluster, already run every night. The way not taken, night runs of
   both, runs again a commit its pull request and its push to main already ran,
   with nothing changed but the clock and the runner.
-- **D3, Proposed, the release tests the tarball it ships, in a job that cannot publish.**
+- **D3, the release tests the tarball it ships, in a job that cannot publish.**
   FND-10 needs no cluster, so the job `package` runs it on its own tarball, in
   Freelens built at the commit of the target through the steps the integration
   workflow shares with it, and uploads that file. That job installs packages with
@@ -443,7 +443,7 @@ date.
   release, an environment and six parts for a commit main already ran them on; and
   a comparison with the tarball of the integration job, which needs a build proven
   to be reproducible.
-- **D4, Proposed, a second cluster of the CRDs alone, for what two API servers add.** A
+- **D4, a second cluster of the CRDs alone, for what two API servers add.** A
   second cluster shows what only two API servers can: lists told apart by UID, and
   the selection of each frame kept under the identifier of its cluster and after a
   restart, which is G4.4. The gate of each frame and the count of the writes
@@ -454,7 +454,7 @@ date.
   for a second local kind target. Not taken: the decision of SPEC-0009 alone; and
   every assertion of the gate again on the second cluster, which proves twice what
   the second entry proves.
-- **D5, Proposed, the roles of the README are the identities of the tests, proven both ways.**
+- **D5, the roles of the README are the identities of the tests, proven both ways.**
   The operator runs the proofs of the actions, of the download and of the version
   of the server, and the reader runs a packaged suite of the views, so a verb the
   code starts to need fails a check before it reaches an operator, for the role
@@ -464,7 +464,7 @@ date.
   as #145 does once, which proves the bindings and not what the code asks; and the
   reader refused at each of the six actions, which repeats the two ways of the
   adapter.
-- **D6, Proposed, HTTPS and the direct route as cases of FND-10.** They run in the main
+- **D6, HTTPS and the direct route as cases of FND-10.** They run in the main
   process of the host, where the product runs, with no cluster: an HTTPS server on
   loopback and its authority made by the helper of the unit tests (REQ-289), and a
   route resolved for a private address literal nothing listens on, with no
@@ -475,7 +475,7 @@ date.
   there is none; and a store with TLS reached directly in the environment of the
   demo, whose address, on macOS, is published on loopback, which the route never
   connects to outside a tunnel.
-- **D7, Proposed, two actions with the real controller.** Back up now and Delete backup in
+- **D7, two actions with the real controller.** Back up now and Delete backup in
   the packaged application, on the real schedule of the demo, are the two whose
   result the workspace and the views follow across phases Velero writes later, and
   they need no fixture the environment does not have. The restore keeps its end to
@@ -485,7 +485,7 @@ date.
   wait for. The reason is the cost: each would be a case more in the slowest part,
   for a result its proof already reads from the controller. Not taken: all five
   actions, and none.
-- **D8, Proposed, an accessibility scan in the pre-review.** axe-core as a devDependency,
+- **D8, an accessibility scan in the pre-review.** axe-core as a devDependency,
   run on every view in both themes, with the rules of WCAG 2.1 A and AA and not its
   best practices, the markup of the host left out. For 1.0.0 it reports every
   violation and fails only on one of impact serious or critical on an element the
@@ -498,13 +498,13 @@ date.
   labels or ratios; and a scan that fails on every violation and on every
   exception that matches nothing from its first run, which makes the components of
   the host a list of findings with no bound before 1.0.0.
-- **D9, Proposed, the README of a public package.** The sections in the order of T6.3, for
+- **D9, the README of a public package.** The sections in the order of T6.3, for
   an operator who installs first and reads last. The screenshots are files of the
   repository, outside the files of the package; the video is linked from the
   README as an attachment of the repository on GitHub, as the other extensions of
   the organization link theirs, so that neither the repository nor the package
   carries it. Not taken: the video in the repository.
-- **D10, Proposed, the bill of materials of what ships.** Today the release scans the folder
+- **D10, the bill of materials of what ships.** Today the release scans the folder
   of the repository after the installation, so the document lists the
   devDependencies, which the tarball does not contain, and a scanner reads them as
   part of the package. The job `package` installs the packed file in an empty
@@ -520,12 +520,12 @@ date.
   a sentence, which leaves the readers of scanners with the devDependencies; and
   the scan of the packed file with the libraries the build test lists added to it,
   which needs code of the repository to write the document.
-- **D11a, Proposed, provenance on both ways of the publication.** The job `publish` asks
+- **D11a, provenance on both ways of the publication.** The job `publish` asks
   for the provenance with a token as it does through the trusted publisher: today
   the way of a token publishes with none, so asking it there gives 1.0.0-0 its
   attestation. A change of `release.yaml` alone. Not taken: the first prerelease
   without provenance, proven only on the next version.
-- **D11b, Proposed, for the lead maintainer and an owner of the npm scope, the credential of the first version.**
+- **D11b, for the lead maintainer and an owner of the npm scope, the credential of the first version.**
   The registry has no version of the package (it answered 404 on 2026-11-09), and
   npm configures a trusted publisher on a package that exists, as far as this
   draft read (the second open question). The environment `publishing` has no
@@ -552,13 +552,13 @@ date.
   for every version, a credential that lives as long as the package; and 1.0.0 as
   the first publication through the trusted publisher, which would show a mistake
   of its setting at the last step.
-- **D12, Proposed, the notes in `CHANGELOG.md`.** Notes reviewed in a pull request like the
+- **D12, the notes in `CHANGELOG.md`.** Notes reviewed in a pull request like the
   code, a unit case that fails the pull request of a version without them, and a
   release the workflow makes alone, with its notes as the body. Not taken: the body
   written by hand on GitHub after the workflow, and a check of the notes only by
   the release workflow, which finds them missing after the tag, when the number is
   spent.
-- **D13, Proposed, the platforms the README says were tested.** The hosted checks, the
+- **D13, the platforms the README says were tested.** The hosted checks, the
   packaged suites among them, run on Linux ARM64, `ubuntu-24.04-arm`; REL-02 runs
   on macOS; the contributors run the suites on macOS as well, which is evidence for
   their pull requests and not a status. The bundles are JavaScript that does not
@@ -567,12 +567,12 @@ date.
   says that Linux ARM64 and macOS were tested, and that any other platform, Windows
   among them, was not. Not taken: a README that says the extension runs wherever
   Freelens runs. What T6.1 defers of the platforms is in D16.
-- **D14, Proposed, the check of a prerelease is FND-10 by version.** The runner of the
+- **D14, the check of a prerelease is FND-10 by version.** The runner of the
   integration test takes a name and a version in place of a tarball, and FND-10
   checks what Freelens installed from npm with all its cases, the same way for
   each prerelease, in the release Freelens 2.0.0 for macOS copied out of its
   checked image. Not taken: the steps by hand of the success criteria.
-- **D15, Proposed, the order of the slices, and what gates 1.0.0-0 and what gates 1.0.0.**
+- **D15, the order of the slices, and what gates 1.0.0-0 and what gates 1.0.0.**
   The lead maintainer can ask for the prerelease early, once what gates it is
   Done; the rest gates 1.0.0.
   - Gates 1.0.0-0: the drift watch read (REQ-310); T6.4, REQ-305 with #144,
@@ -601,7 +601,7 @@ date.
   changes, so that the proof of REQ-309 is made again on a later prerelease; and
   1.0.0-0 at the end of T6.1 to T6.3, which leaves the workflow and the page of the
   package unproven until the end of the milestone.
-- **D16, Proposed, what T6.1 takes and what it defers.** The row of T6.1 in the roadmap
+- **D16, what T6.1 takes and what it defers.** The row of T6.1 in the roadmap
   names the regression, the packaged integration, the end to end tests with the
   real controller, the isolation between clusters, the permissions, the transport
   security and the performance. Of the 32 gaps of the inventory, this spec takes
@@ -622,7 +622,7 @@ date.
   datasets. With the approval, the row of T6.1 in the roadmap is narrowed to what
   this decision takes, and what it defers is recorded under Deferred after v1.0.0,
   as the roadmap asks of anything that moves out of v1.0.0.
-- **D17, Proposed, a Velero 1.19.0 released during M6.** The drift watch of 2026-11-09
+- **D17, a Velero 1.19.0 released during M6.** The drift watch of 2026-11-09
   found Velero v1.19.0-rc.1 and its AWS plugin v1.15.0-rc.1, with v1.18.4 and
   v1.14.4 still the latest stable releases, so a 1.19.0 before 1.0.0 is plausible.
   If it comes, 1.0.0 still ships for 1.18.x: the reviewed release stays v1.18.4,
@@ -631,12 +631,12 @@ date.
   specs it reaches. Not taken: moving the reviewed release inside M6, which reopens
   the review of the specs, the goldens and the pins of the environment, and the
   proof of every prerelease made before it.
-- **D18, Proposed, what "M6 is done" means for 1.0.0.** REQ-216 of SPEC-0015 publishes
+- **D18, what "M6 is done" means for 1.0.0.** REQ-216 of SPEC-0015 publishes
   1.0.0 on `latest` only after M6 is done, and T6.5 is that publication. This spec
   reads the condition as T6.1 to T6.4 Done and the review of the milestone passed
   (REQ-313): a reading of an approved requirement, which the approval of this spec
   records. Not taken: the words as they stand, under which 1.0.0 waits for itself.
-- **D19, Proposed, the marketplace of the organization after 1.0.0.** The organization
+- **D19, the marketplace of the organization after 1.0.0.** The organization
   lists extensions in freelensapp/freelens-marketplace, each with a manifest,
   `extensions/<name>/extension.yaml`, and an icon of 256 by 256 pixels, added by a
   pull request; Renovate moves the version after. Once 1.0.0 is on `latest`, a pull

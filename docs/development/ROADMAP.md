@@ -269,17 +269,17 @@ their tests green in CI on main.
 
 | Feature | Task | Spec | Status |
 | --- | --- | --- | --- |
-| Regression, packaged integration, end to end with the real controller, isolation between clusters, permissions, transport security, performance | T6.1 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Draft |
-| Visual and accessibility pass on both themes and on narrow and large windows | T6.2 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Draft |
-| Installation, permissions, safety, compatibility and troubleshooting documentation, screenshots, demonstration video, release notes | T6.3 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Draft |
-| Tarball, checksums and software bill of materials from the release workflow | T6.4 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Draft |
+| Regression; the published tarball tested; isolation between two clusters; the roles of the README proven; HTTPS and the direct route in the host; two actions with the real controller; a ceiling on the bundles. The rest is deferred, D16 | T6.1 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Approved |
+| Visual and accessibility pass on both themes and on narrow and large windows | T6.2 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Approved |
+| Installation, permissions, safety, compatibility and troubleshooting documentation, screenshots, demonstration video, release notes | T6.3 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Approved |
+| Tarball, checksums and software bill of materials from the release workflow | T6.4 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Approved |
 | With Freelens 2.0.0: the pin of the SDK a range of versions, the integration at the tag v2.0.0, the host drift watch ended | | [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#d10-the-version-and-the-release) | Done |
-| Release through the organization's flow, on the lead maintainer's go | T6.5 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Draft |
+| Release through the organization's flow, on the lead maintainer's go | T6.5 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Approved |
 
-[SPEC-0018](../specs/SPEC-0018-release-readiness.md), drafted on 2026-11-09 for
-the lead maintainer to approve, is the one spec of the milestone; its first slice
-comes once M5 is closed with its review, as the process asks. The order of the
-slices it proposes, its D15, with the line between what gates the prerelease
+[SPEC-0018](../specs/SPEC-0018-release-readiness.md), approved by the lead
+maintainer on 2026-11-09 with D1 to D19 as proposed, is the one spec of the
+milestone; its first slice comes after M5, closed with its review the same day.
+The order of the slices, its D15, with the line between what gates the prerelease
 1.0.0-0 and what gates 1.0.0. For 1.0.0-0: T6.4, with
 [#144](https://github.com/freelensapp/freelens-velero-extension/issues/144), the
 release workflow in two jobs with FND-10 on the tarball it publishes, the bill of
@@ -293,8 +293,9 @@ second cluster, the case of FND-10 by the direct route, the actions with the rea
 controller and the ceilings of the bundles, with T6.2, the accessibility scan of
 the pre-review, beside them; a prerelease through the trusted publisher of npm;
 then the screenshots, the video and the notes of 1.0.0, the review of the
-milestone, and 1.0.0 on `latest` on the lead maintainer's go. Its D16 proposes
-what T6.1 takes and what it defers: the row of T6.1 is narrowed with the approval.
+milestone, and 1.0.0 on `latest` on the lead maintainer's go. Its D16 says what
+T6.1 takes and what it defers: the row of T6.1 is narrowed to it, and what it
+defers is under Deferred after v1.0.0.
 Each slice is its own pull request; the row of a task is In PR from its first and
 Done with its last.
 
@@ -302,6 +303,13 @@ Done with its last.
 
 Work that is decided out of v1.0.0, each item with its decision:
 
+- **What T6.1 defers**, by D16 of [SPEC-0018](../specs/SPEC-0018-release-readiness.md#what-t61-defers),
+  approved by the lead maintainer on 2026-11-09: the performance but the ceiling on
+  the bytes of the bundles, that is guards relative to a baseline, ceilings of
+  memory and of the start, and larger datasets; FND-10 on hosted macOS and Windows
+  runners at each tag; and the other gaps of the inventory the spec lists, each
+  with its reason and the check or the statement of the README that keeps its
+  release signal.
 - **Editing a Schedule**, to the next minor: the adapter is create-only, and a
   patch of the spec needs the review of a diff, a different review model from the
   one of a creation. Decided by the lead maintainer on 2026-10-23.
