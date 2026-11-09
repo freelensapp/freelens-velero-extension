@@ -309,7 +309,7 @@ pnpm e2e:views
 pnpm pre-review
 ```
 
-They start the Freelens that `FREELENS_APP` names, the nightly of the
+They start the Freelens that `FREELENS_APP` names, the package of the
 validation target on a machine of a developer: see
 [TESTING.md](TESTING.md#suites-of-the-views). The first runs the suites of the
 views, the second every view, the tabs of an operation among them, in both themes,
