@@ -183,6 +183,30 @@ describe("the version of the server", () => {
     expect(JSON.stringify(serverStatusFailure(new Error("PRIVATE-SENTINEL")))).not.toContain("PRIVATE-SENTINEL");
   });
 
+  it("says of a credential the cluster did not take that it was not taken, not that a verb is missing", () => {
+    const credential = new DiagnosticError("forbidden", undefined, "credential");
+
+    expect(serverStatusFailure(credential)).toEqual({
+      ok: false,
+      code: "forbidden",
+      stage: "creation",
+      retry: true,
+      text: "The cluster did not take the credential of the context: it may have expired. Sign in again, then ask again. Nothing was created.",
+    });
+    expect(serverStatusFailure(credential, "x")).toEqual({
+      ok: false,
+      code: "forbidden",
+      stage: "wait",
+      retry: true,
+      text: "The cluster did not take the credential of the context: it may have expired. Sign in again, then ask again. The request stays until the server processes it.",
+    });
+    // A refusal of the cluster still names the kind and the verb the identity needs.
+    expect(serverStatusFailure(new DiagnosticError("forbidden"))).toMatchObject({
+      retry: false,
+      text: "The cluster refused the creation of a ServerStatusRequest: the identity needs the verb create on serverstatusrequests of the namespace.",
+    });
+  });
+
   it("says of the API server what a download says of it: the words are written once", () => {
     const context = { artifact: "BackupLog" as const, name: "nightly", namespace: "velero" };
 
