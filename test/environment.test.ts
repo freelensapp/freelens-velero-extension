@@ -209,6 +209,8 @@ import {
   veleroInstallArguments,
 } from "../e2e/scripts/local-manifests.mts";
 import {
+  ASKED_AGAIN_AFTER,
+  askAgain,
   assertBinary,
   assertIndexPlatforms,
   assertLogWithholds,
@@ -228,6 +230,7 @@ import {
   platformManifest,
   verifiedPins,
   withhold,
+  worthAskingAgain,
 } from "../e2e/scripts/local-platform.mts";
 import { type RunJournal, type StoreReach, storeRequest, tabRecord } from "../e2e/scripts/local-runtime.mts";
 import { assertOfficialImages, IMAGE_NAMES } from "../e2e/scripts/local-security.mts";
@@ -11707,6 +11710,76 @@ describe("platform of the test environment", () => {
       "does not match its pinned checksum",
     );
     expect(() => assertBinary("kubectl", "darwin-arm64", new Uint8Array())).toThrow();
+  });
+
+  it("asks a release or a registry again after each wait while it fails or answers what a wait may change, and no more", async () => {
+    const waited: number[] = [];
+    const sleep = async (milliseconds: number) => {
+      waited.push(milliseconds);
+    };
+    let times = 0;
+    // What each time answers, and what the time after the last one answers.
+    const answering = (answers: (number | Error)[]) => async () => {
+      times += 1;
+      const answer = answers[Math.min(times, answers.length) - 1];
+
+      if (answer instanceof Error) throw answer;
+      return answer;
+    };
+    const asked = async (answers: (number | Error)[]) => {
+      times = 0;
+      waited.length = 0;
+      return askAgain(answering(answers), worthAskingAgain, ASKED_AGAIN_AFTER, sleep);
+    };
+
+    expect(ASKED_AGAIN_AFTER).toEqual([10_000, 30_000, 60_000]);
+    // An answer is taken at once.
+    expect(await asked([200])).toBe(200);
+    expect([times, waited]).toEqual([1, []]);
+    // Too many requests, then a failure of the server, then the answer: three times, after the first two waits.
+    expect(await asked([429, 503, 200])).toBe(200);
+    expect([times, waited]).toEqual([3, [10_000, 30_000]]);
+    // A release that is not there is not asked again.
+    expect(await asked([404, 200])).toBe(404);
+    expect([times, waited]).toEqual([1, []]);
+    // A server that keeps failing is asked four times, and its last answer is the one given.
+    expect(await asked([500, 502, 503, 504, 200])).toBe(504);
+    expect([times, waited]).toEqual([4, [10_000, 30_000, 60_000]]);
+    // A request that throws is asked again, and an answer after it is taken.
+    expect(await asked([new Error("reset"), 200])).toBe(200);
+    expect([times, waited]).toEqual([2, [10_000]]);
+    // One that throws every time throws the error of the last time.
+    await expect(
+      asked([new Error("first"), new Error("second"), new Error("third"), new Error("last"), 200]),
+    ).rejects.toThrow("last");
+    expect([times, waited]).toEqual([4, [10_000, 30_000, 60_000]]);
+    // The answers a wait may change, and the ones it may not.
+    expect([408, 429, 500, 502, 503, 504].filter((status) => !worthAskingAgain(status))).toEqual([]);
+    expect([200, 201, 301, 400, 401, 403, 404, 410, 499].filter(worthAskingAgain)).toEqual([]);
+  });
+
+  it("asks the releases of the binaries and the registry of the images again, and checks what came", () => {
+    const source = (name: string) =>
+      readFileSync(new URL(`../e2e/scripts/${name}`, import.meta.url), "utf8")
+        .split("\n")
+        .filter((line) => !line.trimStart().startsWith("//"))
+        .join("\n");
+    const demo = source("local-demo.mts");
+    const images = source("local-images.mts");
+
+    // The binary and its body in one asking, asked again on what a wait may change, then its checksum.
+    expect(demo).toMatch(
+      /const answer = await askAgain\(\n\s+async \(\) => \{\n\s+const response = await fetch\(binaryUrl\(name, target\),/,
+    );
+    expect(demo).toMatch(/\(got\) => worthAskingAgain\(got\.status\),\n\s+ASKED_AGAIN_AFTER,/);
+    expect(demo).toMatch(/const content = answer\.content;\n\n\s+assertBinary\(name, target, content\);/);
+    expect(demo.match(/await fetch\(binaryUrl\(/g)).toHaveLength(1);
+    // The registry: the index of an image and its pull, each asked again, the identity checked after the pull.
+    expect(images).toContain('await dockerAgain(["manifest", "inspect", image])');
+    expect(images).toMatch(
+      /await dockerAgain\(\["pull", "--platform", platform, image\]\);\n\s+requireCondition\(present\(image, platform\)/,
+    );
+    expect(images).not.toMatch(/\bdocker\(\["(pull|manifest)"/);
   });
 
   it("uses a local Docker socket and nothing else", () => {

@@ -171,7 +171,11 @@ What a machine needs: Docker with four processors and 6 GiB of memory or more,
 and Node.js of `.nvmrc`. kind and kubectl are downloaded from their official
 releases, checked against the checksums pinned in
 [local-platform.mts](../../e2e/scripts/local-platform.mts) and kept under the
-private state: the binaries of the host are neither used nor changed.
+private state: the binaries of the host are neither used nor changed. A release
+that does not answer, or answers a timeout, too many requests or a failure of its
+server, is asked again after 10, 30 and 60 seconds, and so is the registry for the
+index and the pull of an image; what comes back is checked as before, and a
+checksum or an identity that does not match is never asked again.
 
 | Platform | Host | Network shape |
 | --- | --- | --- |
