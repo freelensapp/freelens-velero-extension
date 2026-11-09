@@ -127,14 +127,22 @@ Excluded, with their owners:
 
 ### Documentation (T6.3)
 
-The README of 1.0.0 is the page of the package on npm and on GitHub. Its sections
-come in this order: Overview, with what the version covers, the video and the
-screenshots; Installation; Requirements; Permissions; Compatibility; Safety;
-Verify a release; Troubleshooting; then Development, Build from the source and
-License, as they are. A unit case reads what can go stale without anyone seeing
-it, the range of Freelens, the roles, the writes, the versions, the notes and the
-links; the other sections are read by the checklist of the review of the
-milestone (REQ-312).
+The README of 1.0.0 is the page of the package on npm and on GitHub, in the
+layout of the other extensions of the organization (amended on 2026-11-09 at the
+request of the lead maintainer). Its sections come in this order: the title and
+the badges; Overview, with the entries of the extension in the sidebar, the write
+mode, the video and the screenshots, and under it Status, the state of the
+release the README is published with, and what the version covers by milestone;
+Requirements, with Compatibility as its subsection; Supported APIs, the kinds the
+extension reads by their API version; Permissions; Install, from the registry,
+from a release tarball and from a directory, with Verify a release as its last
+subsection; Getting started; Safety; then Development, Build from the source,
+with the subsections of the other extensions, and License. Features, Limits and
+Troubleshooting take their places with the slices that write them. Installation,
+in the requirements below, is the section Install. A unit case reads what can go
+stale without anyone seeing it, the range of Freelens, the roles, the writes, the
+versions, the notes and the links; the other sections are read by the checklist
+of the review of the milestone (REQ-312).
 
 | ID | Contract | Acceptance check |
 | --- | --- | --- |
@@ -1125,3 +1133,220 @@ Decided while implementing, on 2026-11-09:
   makes anything: on macOS `/usr/bin/openssl` is LibreSSL, which does not know
   `-copy_extensions`, so REL-02 runs with an OpenSSL 3 first on the PATH. TESTING.md
   says so.
+
+T6.3, the first of its pull requests, on 2026-11-09: what the first published
+version is installed with, since npm shows the README of the version it
+publishes. The README in the layout of the other extensions of the organization,
+with Status, Requirements and its Compatibility, Supported APIs, Install,
+Getting started and Safety; the drift watch before the first release; and four
+unit cases in [`test/documents.test.ts`](../../test/documents.test.ts).
+Permissions (#145), Features, Limits and Troubleshooting are not written, and
+nothing links to them.
+
+Amended on 2026-11-09 at the request of the lead maintainer: the README follows the
+layout of the other extensions of the organization, which replaces the order of the
+sections the paragraph of the Documentation gave at the approval. The mapping:
+
+- Overview, with what the version covers: the Overview, with the entries of the
+  sidebar in bold and the write mode in one sentence, and under it Status, which
+  holds the table of what 1.0.0 covers by milestone; the video and the
+  screenshots come with REQ-301 and REQ-302.
+- Installation: Install, with From the registry, From a release tarball and From a
+  directory.
+- Requirements: Requirements, with Compatibility (REQ-299) as its subsection.
+- Supported APIs, new: the kinds the extension reads, by API version.
+- Permissions: after Supported APIs, with #145.
+- Verify a release: not written, by the later decision at the end of this block.
+- Getting started, new: after Install. Safety: after Getting started.
+- Troubleshooting, Features and Limits: with the slices that write them.
+- Development, as it was; Build from the source, with the subsections of the other
+  extensions: Prerequisites, Build extension, Development loop, Check the code,
+  Integration tests, Testing the extension with unpublished Freelens; License.
+
+The badges are the ones of the other extensions of the organization, as the lead
+maintainer asked with the layout: the badges Home and GitHub draw an emoji their
+address encodes, the files staying ASCII, and the badge DeepWiki names a service
+outside the organization. Until 1.0.0 is published, the badge of the release and
+the badge of npm show no version.
+
+The evidence, by check:
+
+- DOC-01: each way Install gives was read in the source of
+  Freelens at the validation target, `b9b53e16`, with `git show`, as the checklist
+  of REL-03 reads the section. By name: the versions of the registry without a
+  prerelease, the newest by its numbers, deprecated or not, the tag `latest` not
+  read, and `No versions found for <name>` when there is none
+  (`packages/core/src/renderer/components/extensions/attempt-install-by-info.injectable.tsx`,
+  lines 140 to 156). By a version or a tag: the version itself, else the version
+  the tag names, else the words that the extension has no such version or tag
+  (lines 105 to 139), the download checked against the integrity of the registry
+  (lines 197 to 210, and `attempt-install/attempt-install.injectable.tsx`, lines 73
+  to 133); the field takes a name with an optional version or tag after an
+  `http(s)` URL and a path that exists (`install-extension-from-input.injectable.tsx`,
+  lines 26 to 75; `components/input/input_validators.ts`, line 194). The link
+  `freelens://app/extensions/install/%40freelensapp%2Fvelero-extension`, as the
+  template of the organization writes it: the name from the path, and a version or
+  a tag from `version` when a link has one
+  (`renderer/protocol-handler/bind-protocol-add-route-handlers/bind-protocol-add-route-handlers.tsx`,
+  lines 129 to 136; `common/protocol-handler/router.ts`, line 78 and lines 157 to
+  160), the name not decoded (`packages/routing/src/match-path.ts`, lines 128 and
+  129), so that the registry is asked for it percent-encoded, as by the links of
+  the other extensions; the whole address sent by the main process to the renderer
+  (`main/protocol-handler/lens-protocol-router-main/lens-protocol-router-main.ts`,
+  lines 117 to 130); and a confirmation of the version before the install
+  (`attempt-install-by-info.injectable.tsx`, lines 171 to 186). A path, typed or
+  chosen with Browse:
+  the tarball and the `.sha256` beside it, in the format `sha256sum` writes or as a
+  bare digest, a `.sha256` that names another file counting as none
+  (`attempt-install/install-from-file.injectable.tsx`, lines 40 to 75;
+  `packages/core/src/features/extensions/installer/common/checksums.ts`, lines 95
+  to 141; `install-from-select-file-dialog.injectable.ts`, lines 23 to 31;
+  `attempt-installs.injectable.ts`, lines 27 to 35); FND-10 installs by the path in
+  the field in every packaged run. A URL: the tarball and the `.sha256` at the same
+  address with `.sha256` added, the name of the asset of a release
+  (`attempt-install/install-from-url.injectable.tsx`, lines 41 to 86), downloaded
+  by the `fetch` of undici in the main process, which follows a redirect
+  (`main/fetch/proxy-fetch.injectable.ts`, lines 23 to 33;
+  `main/fetch/download-binary.injectable.ts`, lines 44 to 71). Then a tarball that
+  does not match is refused with the reason (`attempt-install.injectable.tsx`,
+  lines 115 to 133), one with no checksum is installed with the notice that nothing
+  vouches for its integrity (`attempt-install/unpack-extension.injectable.tsx`,
+  lines 120 to 128), the extension is enabled once installed (lines 160 to 172),
+  and the page lists it as verified, unverified or development
+  (`installed-extensions.tsx`, lines 140 to 158). A directory is loaded in place
+  after a confirmation, not verified, enabled, and listed as development, not as
+  unverified as the template of the organization says
+  (`attempt-install/install-from-directory.injectable.tsx`, lines 24 to 31, 135
+  and 175 to 193); the host reloads a development install after a rebuild
+  (`extensions/extension-discovery/extension-discovery.ts`, lines 72 to 93 and 253
+  to 260). Each way is tried by hand on the first published version, and
+  recorded, at the checks the slice of the release workflow restates for it.
+- DOC-02: the case finds in Requirements the range of `engines.freelens` of
+  `package.json` and, as a set, the API versions of the classes of
+  `src/renderer/api/kinds.ts` that have a `crd`, which the host reads; in Supported
+  APIs a subsection for each of those versions and for no other, each with exactly
+  the kinds of its version and the titles of their pages; and in Status no words
+  "no release", nor the sentence of before anywhere. It reads the words with their
+  white space as one space and the cells trimmed.
+- DOC-04: the case finds in Safety a row for each write the adapter of the main
+  process sends, read in `src/main/diagnostic-kubernetes.ts`, each POST a creation
+  and the one PATCH a patch, with its kind, and for no other: the creations of a
+  `DownloadRequest`, a `ServerStatusRequest`, a `Backup`, a `Schedule`, a `Restore`
+  and a `DeleteBackupRequest`, and the patch of a `Schedule`, whose row names
+  exactly the fields the patches of a pause and of a resume write
+  (`src/common/schedule-patch.ts`), `spec.paused` and `spec.skipImmediately`; no
+  other kind of Velero the code knows in the section; and the three rules by their
+  words, the signed URLs never logged, stored or shown, TLS verified by default,
+  and missing data shown as unknown, never as healthy. Safety also says that each
+  write is refused unless writes are on for that cluster and namespace and its
+  review is confirmed, that a restore and a deletion ask for the name of the
+  backup typed, and that a backup is deleted only through a `DeleteBackupRequest`,
+  one at a time.
+- DOC-05: Compatibility is the table of REQ-299 with D13 and D17: Freelens 2.0.x,
+  tested at 2.0.0 with the commit of the target; Velero 1.18.x with its AWS plugin
+  1.14.x, tested at v1.18.4 and v1.14.4; Kubernetes tested at 1.34.11; Linux ARM64
+  and macOS tested, any other platform, Windows among them, untested; the data
+  movement and the phases of a failure other than FailedValidation proven on
+  synthetic objects only; and a version outside the table, Velero 1.19 among them,
+  untested, said neither to work nor to fail. The case reads the version and the
+  commit of the target in the header of SPEC-0015 and the versions of the images
+  of Velero, of its plugin and of the node in `e2e/scripts/local-manifests.mts`.
+- DOC-10: the case resolves each relative link, image and definition of a link of
+  the README, out of its code, against the files Git holds for the repository,
+  without the query of a link, and each anchor against the headings of its
+  document by the slug GitHub makes; and finds in it no character outside ASCII,
+  no em dash and no shortcode of an emoji in the prose. The external links are
+  opened at REL-03.
+- REL-01, its drift watch: the entry "Before The First Release, 2026-11-09" of
+  [RECON-T0.1](../development/RECON-T0.1.md#before-the-first-release-2026-11-09):
+  Velero v1.18.4 and the AWS plugin v1.14.4 still the latest stable releases, the
+  release candidates v1.19.0-rc.1 and v1.15.0-rc.1 newer and not a baseline, with
+  the breaking changes of the first that touch the kinds the extension reads, and
+  the reviewed pair kept (D17); no release of Freelens after v2.0.0, and the target
+  kept.
+
+Each case was seen failing on changes made on purpose, one at a time, each failing
+its case alone, and put back: DOC-02 on the range of Freelens changed in
+Requirements, the version of the data movement changed in the code, a kind left
+out of Supported APIs, the Status of before put back and its sentence written
+elsewhere, and the tag `next` named again in Install; DOC-04 on a row of a
+creation removed, a row of a write the adapter does not make, another kind of
+Velero said to be written, the patch said of one field, a write of the adapter
+changed from a POST to a PATCH, and each of the three rules reworded; DOC-05 on
+the pin of Velero, of its plugin and of the node moved, the commit and the version
+of the target moved in SPEC-0015, and the sentence of what is untested removed;
+DOC-10 on a link to a file the repository does not hold, an anchor no heading of
+the README has, an anchor no heading of TESTING.md has, a character outside
+ASCII, an em dash and a shortcode of an emoji. Beside them, what the cases must
+let pass passed: the range of Freelens wrapped to the next line, a constant
+beside the classes of the kinds, the words "no release" in another section, cells
+aligned with spaces, and a link with a query.
+
+Decided while implementing, on 2026-11-09:
+
+- The sentence of the permissions of REQ-296 waits for the section Permissions,
+  with #145.
+- DOC-02 reads the API versions in Requirements and in Supported APIs, and the
+  kinds in Supported APIs.
+- The table of what 1.0.0 covers names Create schedule in M5, which it left out.
+
+A deviation, for the coordinator: REQ-295 says the tarball of a release is
+"dragged into the window or given by its path", and the template of the
+organization says a dropped tarball is checked as a path is. The source of the
+target does not support the drop: the page hands each dropped file to the
+installer by its `path` (`install-on-drop.injectable.ts`, line 28, with the files
+of the event, `components/input/drop-file-input.tsx`, line 70), a property of the
+`File` of Electron that Electron 32 removed for `webUtils.getPathForFile`, which the
+typings of the Electron 44.10.0 of the target say superseded it; the source calls
+`webUtils` nowhere, and declares the property itself since its move to Electron 39
+(`a09f0d866d52`). Install gives the path and Browse, and not the drop. A drop of
+the tarball of the first published version is tried by hand, and recorded: if it
+installs, the words come back to Install; if it does not, it is a defect of the
+host, to report to Freelens.
+
+The independent review of this pull request, read only, found no blocker, one
+major, seven minors and ten nits, all applied: Safety lists every write the adapter
+allows, with DOC-04; Compatibility is written, with DOC-05; DOC-02 takes the
+harmless edits; the drift watch says what Node and the release candidate are; the
+order of the merge was decided and ASSET-02 read the commands themselves, both
+gone with the later decisions below; and the nits, among them the words of a
+restore, one list of the gates, the package of the validation target, the version
+put back after `pnpm pack:dev`, and no placeholder of a run after the first
+publication.
+
+The full unit run, `pnpm test:unit`, on a second Linux machine, at the head after
+the review: 135 files and 3,818 tests passed, and the three measures. The checks
+of its pull request, the unit tests, the check, Trunk and the integration test,
+green before its merge; its files reach no part of the views and no end to end
+run.
+
+Decided by the lead maintainer on 2026-11-09, after the review of this pull
+request: there is no prerelease, and 1.0.0 is the first publication, made once the
+rest of the milestone is done. Status says that 1.0.0, the first release, is being
+prepared, and that until it is published the extension is installed from the
+source, which is true from the merge of this pull request; a later pull request,
+right before the one of the version, turns it into the Status of the README of
+1.0.0. Install gives the name, `@freelensapp/velero-extension`, which installs the
+newest version that is not a prerelease, the one 1.0.0 will be, a version after
+the name, the link of the template without a version, a release tarball and a
+directory, and no tag `next`, on which DOC-02 fails. The drift watch of
+RECON-T0.1 is the one before the first release, read again before 1.0.0
+(REQ-313).
+
+Decided by the lead maintainer on 2026-11-09, the same day: the release flow of
+the extension is the one of the template of the organization,
+freelensapp/freelens-example-extension, and the README stays as the template and
+the other extensions have it, with nothing more. This slice follows it:
+`CHANGELOG.md` is removed, its section of 1.0.0 kept outside the repository for
+the body of the GitHub release, which is written as the other extensions write
+theirs; Verify a release is removed, and From a release tarball says what the
+template says, with the names of this package, but the drop, which the source of
+the target does not support (the deviation above), and with the releases said to
+be for Freelens 2.x where the template says that the major versions match;
+Status names the releases of the repository on GitHub in place of the changelog;
+DOC-09 and ASSET-02 are removed with what they read, and DOC-10 reads the README
+alone. The row of T6.4 is Approved again: this pull request no longer carries its
+REQ-306. The amendments of the requirements these decisions bring, REQ-303,
+REQ-306 and the others of the release flow, among them REQ-295 of the tag `next`,
+the end of Status of REQ-296, D15 and REQ-309 to REQ-311 and REQ-313, are made by
+another pull request.
