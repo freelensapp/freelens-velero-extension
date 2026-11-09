@@ -1,6 +1,6 @@
 # SPEC-0017: The Write Actions
 
-- **Status:** Approved
+- **Status:** Implemented
 - **Date:** 2026-11-07
 - **Milestone / tasks:** M5 / the ground rules of the write actions, T4.2, T4.3, T4.4, T4.5, T4.6
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`
