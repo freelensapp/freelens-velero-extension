@@ -13,6 +13,32 @@
      again, at every frame. */
   scrollbar-gutter: stable;
   color: var(--textColorPrimary);
+  /* The words the views write in a color of the theme of the host that says something, a link, a success, a
+     warning or a failure, at the contrast of AA, 4.5 to 1 (WCAG 2.1, 1.4.3), on every background the views write
+     them on: the one of the page, of a list, of the target bar, of a field and of the rows of a kind of resources.
+     A color of the host that does not reach it there is mixed with the strongest words of the theme,
+     `--textColorAccent`, by the least share that reaches it, which keeps its hue: in the dark theme the failures,
+     #ce3933 made #de7874; the others are the colors of the host. */
+  --veleroTextLink: var(--primary);
+  --veleroTextOk: var(--colorOk);
+  --veleroTextWarning: var(--colorWarning);
+  --veleroTextError: color-mix(in srgb, var(--colorError) 68%, var(--textColorAccent));
+}
+
+/* In the light theme, the flag the host gives the body of a page for the styles of components: the links, #00a7a0
+   made #0c7874; the successes, #399c3d made #337b36; the warnings, #ff9800 made #976110; and the failures, #ce3933
+   made #c73832. */
+:global(body.theme-light) .page {
+  --veleroTextLink: color-mix(in srgb, var(--primary) 65%, var(--textColorAccent));
+  --veleroTextOk: color-mix(in srgb, var(--colorOk) 73%, var(--textColorAccent));
+  --veleroTextWarning: color-mix(in srgb, var(--colorWarning) 53%, var(--textColorAccent));
+  --veleroTextError: color-mix(in srgb, var(--colorError) 96%, var(--textColorAccent));
+}
+
+/* The host writes the text of a code element in one grey for both themes, #b4b5b4, which the light theme does not
+   read at the contrast of AA: there it is written in the words of the page. */
+:global(body.theme-light) .page code {
+  color: var(--textColorPrimary);
 }
 
 .targetBar {
@@ -126,7 +152,7 @@
 /* The error a page or a section of the details threw, in the place of the part that threw it. */
 .errorMessage {
   margin-bottom: 12px;
-  color: var(--colorError);
+  color: var(--veleroTextError);
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -191,7 +217,7 @@
 
 .formError {
   flex: 1 0 100%;
-  color: var(--colorError);
+  color: var(--veleroTextError);
 }
 
 .namespaces {
@@ -252,11 +278,11 @@
 }
 
 .signalFailure {
-  color: var(--colorError);
+  color: var(--veleroTextError);
 }
 
 .signalWarnings {
-  color: var(--colorWarning);
+  color: var(--veleroTextWarning);
 }
 
 /* What is said to who does not see a mark, and takes no room from who does. */
@@ -270,7 +296,7 @@
 }
 
 .signalNone {
-  color: var(--colorOk);
+  color: var(--veleroTextOk);
 }
 
 .signalUnknown {
@@ -299,7 +325,7 @@
   padding: 4px 8px 4px 0;
   border: 0;
   background: transparent;
-  color: var(--primary);
+  color: var(--veleroTextLink);
   font: inherit;
   cursor: pointer;
 }
@@ -607,7 +633,7 @@
 }
 
 .rowLink:hover {
-  color: var(--primary);
+  color: var(--veleroTextLink);
 }
 
 .rowLink:focus-visible {
@@ -621,7 +647,7 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--primary);
+  color: var(--veleroTextLink);
   font: inherit;
   text-align: left;
   overflow-wrap: anywhere;
@@ -801,7 +827,7 @@
   align-items: flex-start;
   gap: 6px;
   margin-top: 4px;
-  color: var(--colorWarning);
+  color: var(--veleroTextWarning);
   overflow-wrap: anywhere;
 }
 
@@ -851,7 +877,7 @@
 
 .stripFailing {
   border-color: var(--colorError);
-  color: var(--colorError);
+  color: var(--veleroTextError);
 }
 
 /* A failure is said by a shape as well: a mark of many, and one of an operation in flight, have the same
@@ -1281,11 +1307,11 @@
 
 .serverProviders li > :first-child {
   flex: 0 0 auto;
-  color: var(--colorOk);
+  color: var(--veleroTextOk);
 }
 
 .serverProviders li[data-loaded="false"] > :first-child {
-  color: var(--colorWarning);
+  color: var(--veleroTextWarning);
 }
 
 /* The tabs of a workspace and the panel of a diagnostic tab. The strip of the host is one line that is
@@ -1436,7 +1462,7 @@
 .artifactMark {
   flex: 0 0 auto;
   margin-top: 2px;
-  color: var(--colorError);
+  color: var(--veleroTextError);
 }
 
 /* A load the operator cancelled, and a file the store does not have, are no fault: their mark is another
@@ -1704,7 +1730,7 @@
 }
 
 .linesCopy:hover {
-  color: var(--primary);
+  color: var(--veleroTextLink);
 }
 
 .linesCopy:focus-visible {
@@ -2047,9 +2073,11 @@
   font-weight: 400;
 }
 
-/* The row of a resource, over the rows of its items. */
+/* The row of a resource, over the rows of its items. Its words are in the grey of the host that the dark theme reads at
+   the contrast of AA on the stripe of a table, 4.88 to 1, where the words of the page are 4.41 to 1. */
 .resourcesKind {
   background: var(--tableBgcStripe);
+  color: var(--textColorTertiary);
   font-weight: 600;
 }
 
@@ -2063,7 +2091,7 @@
 }
 
 .resourcesFailed {
-  color: var(--colorError);
+  color: var(--veleroTextError);
 }
 
 /* The volumes of an operation: how many there are, then a table of the host, one row for each volume,
@@ -2198,7 +2226,7 @@
 }
 
 .volumeOpen:hover {
-  color: var(--primary);
+  color: var(--veleroTextLink);
 }
 
 .volumeOpen:focus-visible {

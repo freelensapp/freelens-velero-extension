@@ -167,3 +167,127 @@ describe.each([
     }
   });
 });
+
+describe("colors of the words", () => {
+  // The colors of the two themes of the host at the validation target, as a page reads them: in
+  // packages/core/src/renderer/themes, lens-light.injectable.ts and lens-dark.injectable.ts, lines 30 to 121.
+  const HOST = {
+    light: {
+      primary: "#00a7a0",
+      colorOk: "#399c3d",
+      colorWarning: "#ff9800",
+      colorError: "#ce3933",
+      textColorPrimary: "#555555",
+      textColorTertiary: "#555555",
+      textColorAccent: "#222222",
+      mainBackground: "#f1f1f1",
+      contentColor: "#ffffff",
+      layoutTabsBackground: "#f8f8f8",
+      tableBgcStripe: "#f8f8f8",
+      inputControlBackground: "#f6f6f7",
+    },
+    dark: {
+      primary: "#00a7a0",
+      colorOk: "#4caf50",
+      colorWarning: "#ff9800",
+      colorError: "#ce3933",
+      textColorPrimary: "#8e9297",
+      textColorTertiary: "#909ba6",
+      textColorAccent: "#ffffff",
+      mainBackground: "#1e2124",
+      contentColor: "#262b2f",
+      layoutTabsBackground: "#252729",
+      tableBgcStripe: "#2a2d33",
+      inputControlBackground: "#1e2125",
+    },
+  };
+  type Theme = keyof typeof HOST;
+  // The backgrounds the views write words on: the page, a list, the target bar, the rows of a kind of resources and a
+  // field.
+  const BACKGROUNDS = [
+    "mainBackground",
+    "contentColor",
+    "layoutTabsBackground",
+    "tableBgcStripe",
+    "inputControlBackground",
+  ] as const;
+  const text = () => readFileSync(join(process.cwd(), "src", "renderer", "components", "views.module.css"), "utf8");
+  const rgb = (hex: string) => [1, 3, 5].map((at) => Number.parseInt(hex.slice(at, at + 2), 16));
+  // The relative luminance and the ratio of WCAG 2.1, and a mix of two colors in sRGB, as `color-mix` makes it.
+  const luminance = (color: number[]) =>
+    color
+      .map((part) => part / 255)
+      .map((part) => (part <= 0.04045 ? part / 12.92 : ((part + 0.055) / 1.055) ** 2.4))
+      .reduce((sum, part, at) => sum + part * [0.2126, 0.7152, 0.0722][at], 0);
+  const ratio = (one: number[], other: number[]) => {
+    const [high, low] = [luminance(one), luminance(other)].sort((a, b) => b - a);
+
+    return (high + 0.05) / (low + 0.05);
+  };
+  // A value of the stylesheet, `var(--name)` or `color-mix(in srgb, var(--name) N%, var(--other))`, in a theme.
+  const colorOf = (value: string, theme: Theme): number[] => {
+    const named = (name: string) => rgb(HOST[theme][name as keyof (typeof HOST)[Theme]]);
+    const plain = /^var\(--(\w+)\)$/.exec(value);
+    const mixed = /^color-mix\(in srgb, var\(--(\w+)\) (\d+)%, var\(--(\w+)\)\)$/.exec(value);
+
+    if (plain) return named(plain[1]);
+    if (!mixed) throw new Error(`A color of the words that is not read: ${value}`);
+    const share = Number(mixed[2]) / 100;
+    const [one, other] = [named(mixed[1]), named(mixed[3])];
+
+    return one.map((part, at) => Math.round(part * share + other[at] * (1 - share)));
+  };
+  // The colors of the words a page defines, by their names, in a block of the stylesheet.
+  const wordsIn = (selector: string) =>
+    Object.fromEntries(
+      [
+        ...(new RegExp(`^${selector.replace(/[.()]/g, "\\$&")} \\{([^}]*)\\}`, "m").exec(text())?.[1] ?? "").matchAll(
+          /--(veleroText\w+): ([^;]+);/g,
+        ),
+      ].map(([, name, value]) => [name, value]),
+    );
+
+  it("writes the words of a link, a success, a warning and a failure at the contrast of AA in both themes, on every background of the views", () => {
+    const dark = wordsIn(".page");
+    const light = { ...dark, ...wordsIn(":global(body.theme-light) .page") };
+
+    expect(Object.keys(dark).sort()).toEqual([
+      "veleroTextError",
+      "veleroTextLink",
+      "veleroTextOk",
+      "veleroTextWarning",
+    ]);
+    for (const [theme, words] of [
+      ["dark", dark],
+      ["light", light],
+    ] as const) {
+      for (const [name, value] of Object.entries(words)) {
+        const below = BACKGROUNDS.filter(
+          (background) => ratio(colorOf(value, theme), rgb(HOST[theme][background])) < 4.5,
+        );
+
+        expect([theme, name, value, below]).toEqual([theme, name, value, []]);
+      }
+    }
+  });
+
+  it("writes no words in a color of the host that says something but through the colors of the words of a page", () => {
+    const direct = [...text().matchAll(/^\s*color: var\(--(primary|colorOk|colorWarning|colorError)\);/gm)].map(
+      ([line]) => line.trim(),
+    );
+
+    expect(direct).toEqual([]);
+  });
+
+  it("writes the words of a code element in the light theme, and of the rows of a kind of resources in both, at the contrast of AA", () => {
+    const code = /^:global\(body\.theme-light\) \.page code \{\s*color: ([^;]+);\s*\}/m.exec(text())?.[1] ?? "";
+    const kind = /^\.resourcesKind \{[^}]*?\bcolor: ([^;]+);/m.exec(text())?.[1] ?? "";
+
+    expect(
+      BACKGROUNDS.filter((background) => ratio(colorOf(code, "light"), rgb(HOST.light[background])) < 4.5),
+    ).toEqual([]);
+    for (const theme of ["light", "dark"] as const) {
+      expect([theme, ratio(colorOf(kind, theme), rgb(HOST[theme].tableBgcStripe)) >= 4.5]).toEqual([theme, true]);
+    }
+  });
+});

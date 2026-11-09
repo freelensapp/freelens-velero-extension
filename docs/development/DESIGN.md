@@ -92,7 +92,14 @@ file the operator chooses in the dialog of the host.
 - Preserve unknown phases as unknown and retain their text. Missing progress is
   indeterminate, not zero or complete. Invalid or reversed timestamps are unavailable.
 - Show errors/warnings and validation messages near the status. Text and icons must
-  carry the meaning without color. Use host semantic tokens in both themes.
+  carry the meaning without color. Use host semantic tokens in both themes, with
+  their words at the contrast of AA, 4.5 to 1, on every background of the views: a
+  token that does not reach it there, the primary, the success and the warning of
+  the light theme and the failure of both, is mixed with the strongest words of the
+  theme, `--textColorAccent`, by the least share that reaches it, which keeps its
+  hue. The pages define the words of a link, a success, a warning and a failure
+  once, and a unit test reads them against the themes of the host
+  ([SPEC-0018](../specs/SPEC-0018-release-readiness.md), T6.2).
 - BSL availability and access mode are separate fields. VSL status can be absent;
   show that limitation instead of assuming a healthy provider.
 - Overview health includes the last-success time. The panels of the backup coverage,
