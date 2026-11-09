@@ -68,11 +68,30 @@ the [roadmap](docs/development/ROADMAP.md).
 - **Node.js**, only to build the extension from source: the package carries
   what it runs.
 
+### Compatibility
+
+<!-- markdownlint-disable MD013 -->
+
+| Component | Versions |
+| --- | --- |
+| Freelens | 2.0.x, tested at 2.0.0, the release built from freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5` |
+| Velero | 1.18.x with its AWS plugin 1.14.x, tested at Velero v1.18.4 and the AWS plugin v1.14.4 |
+| Kubernetes | Tested at 1.34.11, the node of the test clusters |
+| Platforms | Tested on Linux ARM64, where the hosted checks run, and on macOS; any other platform, Windows among them, is untested |
+| Proven on synthetic objects only | The data movement, and the phases of a failure other than FailedValidation |
+
+<!-- markdownlint-enable MD013 -->
+
+A version outside this table, Velero 1.19 among them, is untested: the
+extension is not said to work with it, nor to fail with it.
+
 ## Supported APIs
 
 The kinds of Velero the extension reads, each namespaced, with its page in the
 sidebar, a view of each object, and a section in the details Freelens shows of
-it. What the extension writes, once writes are on, is in [Safety](#safety).
+it. What the extension writes, once writes are on, is in [Safety](#safety): it
+reads back the requests it creates there, a `DownloadRequest`, a
+`ServerStatusRequest` and a `DeleteBackupRequest`, which have no page.
 
 ### velero.io/v1
 
@@ -140,7 +159,8 @@ checksum in `freelensapp-velero-extension-<version>.tgz.sha256`.
 Freelens refuses a tarball that does not match its `.tgz.sha256`, and lists one
 that matches as verified. A tarball with no `.tgz.sha256` next to it is
 installed with a notice that nothing vouches for its integrity, and listed as
-unverified.
+unverified, and so is one whose `.tgz.sha256` names another file, as after a
+rename.
 
 ### From a directory
 
@@ -230,18 +250,33 @@ of Freelens.
 
 ## Safety
 
-The rules the extension is built on, binding for every contributor in
-[AGENTS.md](AGENTS.md):
+The extension reads first. What it writes to a cluster is this, through the
+main process, and nothing else:
 
-- Reading comes first. Every write needs the write mode, which starts
-  disabled, belongs to one cluster and one Velero namespace, and is enforced
-  in the main process, and a confirmation that names the context and the
-  namespace.
-- Fetching a log or the server version creates a `DownloadRequest` or a
-  `ServerStatusRequest` in the cluster: it is a write and it is treated as
-  one.
-- A backup is deleted through a `DeleteBackupRequest` only, one at a time,
-  with a double confirmation.
+<!-- markdownlint-disable MD013 -->
+
+| Write | Kind | Asked from |
+| --- | --- | --- |
+| Create | `DownloadRequest` | The Log, Results, Resources and Volumes tabs of a backup or of a restore |
+| Create | `ServerStatusRequest` | The version of the server and its plugins, in the Overview |
+| Create | `Backup` | Back up now, in the view of a schedule, and Create backup, from the list of the Backups |
+| Create | `Schedule` | Create schedule, from the list of the Schedules |
+| Create | `Restore` | Restore, in the view of a backup or of the schedule that made it |
+| Create | `DeleteBackupRequest` | Delete backup, in the view of a backup |
+| Patch of `spec.paused` and `spec.skipImmediately` | `Schedule` | Pause and Resume, in the view of a schedule |
+
+<!-- markdownlint-enable MD013 -->
+
+The rules every write follows, and the ones the extension keeps, binding for
+every contributor in [AGENTS.md](AGENTS.md):
+
+- Each write is refused unless writes are on for that cluster and that Velero
+  namespace, which they are not until they are turned on in the target bar, and
+  its review is confirmed: the review shows the exact request before it is
+  sent. The main process enforces both.
+- A restore and a deletion ask for the name of the backup, typed.
+- A backup is deleted only through a `DeleteBackupRequest`, one at a time, and
+  never by a deletion of the `Backup` itself.
 - Signed URLs stay in the main process and are never logged, stored or shown.
   The content of a backup is never downloaded.
 - TLS is verified by default, with the certificate authority the storage
@@ -272,15 +307,7 @@ The repository is developed spec-first, with the specs in the repository:
 ### Local gates
 
 Node.js 24.21.0 (`.nvmrc` / `mise.toml`) and `corepack pnpm`, pnpm 12. Run the
-local gates after every change:
-
-```sh
-pnpm type:check
-pnpm lint:check     # biome (lint:fix to auto-format)
-pnpm test:unit      # builds first, then the tests, then the measures alone
-pnpm knip:check
-pnpm trunk:check
-```
+gates of [Check the code](#check-the-code) after every change.
 
 The build is one form, the one that gets packed: `pnpm build` writes
 `dist/main.js`, `dist/renderer.js`, their source maps and `dist/renderer.css`,
@@ -327,7 +354,7 @@ pnpm e2e:integration    # the integration test, a session for each of the ten ki
 <!-- markdownlint-enable MD013 -->
 
 They start the Freelens that `FREELENS_APP` names: on a machine of a
-developer, the nightly of the validation target, its download checked against
+developer, the package of the validation target, its download checked against
 the checksum the release publishes; in CI, Freelens built from source at that
 commit. See [TESTING.md](docs/development/TESTING.md#suites-of-the-views).
 
@@ -388,7 +415,8 @@ pnpm pack:dev
 The tarball, `freelensapp-velero-extension-<version>.tgz`, is placed in the
 root of the repository. The version bump makes Freelens treat each rebuild as
 an upgrade, so installing it again loads your changes. Install it as described
-in [From a release tarball](#from-a-release-tarball).
+in [From a release tarball](#from-a-release-tarball), then put the version back
+with `git checkout package.json`, so that the bump reaches no commit.
 
 ### Development loop
 
@@ -411,23 +439,24 @@ restarted once.
 
 ```sh
 pnpm type:check
-pnpm test:unit
-pnpm lint:check
+pnpm lint:check     # biome (lint:fix to auto-format)
+pnpm test:unit      # builds first, then the tests, then the measures alone
 pnpm knip:check
-```
-
-and, for the formats that Biome does not cover:
-
-```sh
-pnpm trunk:check
+pnpm trunk:check    # the formats Biome does not cover, on the changed files
 ```
 
 ### Integration tests
 
-The integration test, FND-10 and a session for each of the ten kinds, installs
-the packed extension in the Freelens that `FREELENS_APP` names, against a
-disposable kind cluster with the CRDs of the reviewed release of Velero alone.
-With Docker, in the extension repository:
+The integration test runs in the packaged Freelens that `FREELENS_APP` names,
+a bundle, a folder or an executable, never one installed in `/Applications`: on
+a machine of a developer, the package of the validation target, its download
+checked against the checksum its release publishes. Its first case installs the
+packed extension from the Extensions page and checks that it is listed as
+enabled, that both of its parts load and that its downloads work in the main
+process of Freelens; then a session for each of the ten kinds checks its page,
+its section in the details and its menu, against a disposable kind cluster with
+the CRDs of the reviewed release of Velero alone. With Docker, in the extension
+repository:
 
 ```sh
 pnpm e2e:cluster:up:definitions

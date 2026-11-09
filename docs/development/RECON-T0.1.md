@@ -632,18 +632,25 @@ SPEC-0018 decided for a Velero 1.19 released during the sixth milestone. The two
 release candidates are not a baseline. The notes of `v1.19.0-rc.1` announce a
 block data mover, the restore of the data of a volume in place, fine-grained
 filters and the selection of namespaces by label through ResourcePolicy
-ConfigMaps, global volume policies and a custom action of a volume policy: the
-watch before 1.0.0 reads them again if 1.19.0 is released by then, and the README
-says that 1.19 is untested (REQ-299).
+ConfigMaps, global volume policies, a custom action of a volume policy and a
+default restore resource modifier; of its breaking changes, the ones that touch
+the kinds the extension reads are the removal of the Restic path, after which a
+restore of a backup made with it is FailedValidation, the sync leaves such a
+backup out of the cluster and the deletion of one already there fails; the
+`spec.config.credentialsFile` of a BackupStorageLocation and of a
+VolumeSnapshotLocation ignored; a default prepare queue of five for the data
+movers; and another hashing algorithm for new Kopia repositories. The watch
+before 1.0.0 reads them again if 1.19.0 is released by then; the README says in
+its Compatibility that Velero 1.19 is untested (REQ-299).
 
 The host drift watch, as [the process](PROCESS.md#host-drift-watch) reads it since
 Freelens 2.0.0: no release of Freelens after `v2.0.0`, and the registry of npm
 names `@freelensapp/extensions` 2.0.0 under `latest`, beside two older versions
 under `nightly` and `next`. The pull request of Renovate of the group `Freelens
-dependencies` open on this date brings versions of the main branch of the host,
-Electron 44.10.1, Node 24.22.1 and Biome 2.6.4, and no release, so it waits for the
-release that brings them. The validation target stays the commit of the tag
-`v2.0.0`, as SPEC-0015 says.
+dependencies` open on this date brings Electron 44.10.1 and Biome 2.6.4 of the
+main branch of the host, which no release has, beside Node 24.22.1, which `v2.0.0`
+already names; it waits for the release that brings the first two. The validation
+target stays the commit of the tag `v2.0.0`, as SPEC-0015 says.
 
 ## Verification And Remaining Work
 

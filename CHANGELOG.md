@@ -16,7 +16,7 @@ view and every action of 1.0.0. It needs Freelens 2.0.0 or a later 2.x release
 disposable kind cluster with Kubernetes 1.34.11, Velero v1.18.4 and its AWS
 plugin v1.14.4.
 
-### New
+### Added
 
 - **Discovery and backups.** The Velero installations of a cluster, discovered
   or configured, with the choice among several, and the states of an
@@ -46,15 +46,14 @@ plugin v1.14.4.
   the Overview. The backup repositories, the pod volume backups and restores,
   and the data uploads and downloads of the data movement.
 - **Actions.** Back up now from a schedule, create a backup, create a schedule,
-  restore from a backup or a schedule with the mappings of the namespaces and
-  the policy for the resources that exist, pause and resume a schedule, and
-  delete one backup through a DeleteBackupRequest. Each action shows the exact
+  restore a backup, from its view or from the view of the schedule that made it,
+  with the mappings of the namespaces and the policy for the resources that
+  exist, pause and resume a schedule, and delete one backup through a
+  DeleteBackupRequest. Each action shows the exact
   request for review before it is sent, and a restore and a deletion ask for
   the name of the backup, typed.
 - **Release.** Each version is published on npm by the release workflow of the
   repository, with a provenance attestation, and attached to its GitHub release
   with its checksum and a software bill of materials.
 
-Not in this prerelease yet, and planned before 1.0.0: the sections of the
-README on the permissions, with two example roles, on the compatibility and on
-the troubleshooting, and the screenshots and the video of the views.
+Its README does not say yet which permissions each feature needs.
