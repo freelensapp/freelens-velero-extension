@@ -1242,4 +1242,7 @@ what it measured in the report `schedules-rooms.json`. The hosted run of 2026-11
 pixels, every column it shows whole but the expression of the zoned schedule of the views, `CRON_TZ=Europe/Rome 30 2
 * * *`, cut with its tip, which the case now allows; the case of the last submission and the newest backup as two
 values reads them in a window of 1680 by 900, where the list is wider than 1,200 pixels, and so does the case of
-ADH-16 its orders by the last submission, which the hosted run found not visible at 1440 by 900. {RUNS}
+ADH-16 its orders by the last submission, which the hosted run found not visible at 1440 by 900. The words of a schedule in every language are read at 1,201 pixels, where every
+column that holds them is shown, and at 1440 by 900 those of the columns shown there. On a second Linux machine,
+against Freelens 2.0.0, the suite of the schedules passed, 17 cases of 17; the hosted run of the views of the pull
+request passed the part of the adherence, with the case of ADH-16, and the pre-review.
