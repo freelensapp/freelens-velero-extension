@@ -690,20 +690,24 @@ The pre-review scans every view it checks, in both themes, at 1440 by 900 and at
   select or a checkbox, it is the host's. The classes of the components are read
   in the source of the host at the target, each named with its file and its lines.
 - **What fails.** A violation of impact serious or critical on an element the
-  extension renders fails the case of its view, beside the problems of its layouts,
-  by its rule, its impact, its selector and its HTML, unless the file of the
-  exceptions, [`pre-review.exceptions.json`](../../e2e/__tests__/pre-review.exceptions.json),
+  extension renders fails the case of its view, unless the file of the exceptions, [`pre-review.exceptions.json`](../../e2e/__tests__/pre-review.exceptions.json),
   names its rule, its element by a selector it matches, and the choice of a spec
   that keeps it. What comes from the host, and a violation moderate or minor, is
   reported and fails nothing; so is an exception no violation used (D8). The file is
   read before the application starts, and one that cannot be read stops the suite
   with its words. It started empty: its exceptions are written after the first run,
-  each decided on the report.
+  each decided on the report. The violations that fail are asserted once every
+  layout of the view was looked at, softly: the case goes on to its other views, so
+  that every view is looked at and scanned, and fails at its end, each violation in
+  one line, by its rule, its impact and its selector, with the colors and the ratios
+  of a contrast or what axe-core says is to be fixed.
 - **The report**, `pre-review-accessibility.json`, beside the others: the version
   of axe-core and the rules it ran; every violation with its view, its theme, its
-  size, its rule, its impact, its element by a selector and an excerpt of its HTML
-  of 200 characters at most, where it comes from and what decided it, and whether
-  it fails or the spec that keeps it; the count of each rule by its impact and its
+  size, its rule, its impact, what axe-core says is to be fixed, and for a contrast
+  the color of the words, the color behind them, their ratio, the ratio asked of
+  their size and their font, its element by a selector and an excerpt of its HTML of
+  200 characters at most, where it comes from and what decided it, and whether it
+  fails or the spec that keeps it; the count of each rule by its impact and its
   origin; the rules axe-core could not decide in each layout; and the exceptions no
   violation used. Like the report of the tabs, it is not written when it would carry
   a part of a signed URL.

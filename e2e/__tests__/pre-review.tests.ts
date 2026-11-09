@@ -128,9 +128,9 @@ interface Tab {
   kind: artifacts.Operation;
   tab: artifacts.WorkspaceTab;
 }
-// A violation the scan found, as the report lists it: the view, the theme and the size; the rule and its impact; the
-// element, by a selector and an excerpt of its HTML; where it comes from; and whether it fails, or the spec that keeps
-// it.
+// A violation the scan found, as the report lists it: the view, the theme and the size; the rule and its impact; what
+// axe-core says is to be fixed, and for a contrast the colors, their ratio and the ratio asked; the element, by a
+// selector and an excerpt of its HTML; where it comes from; and whether it fails, or the spec that keeps it.
 interface ScanRow {
   view: string;
   theme: string;
@@ -138,6 +138,8 @@ interface ScanRow {
   rule: string;
   impact: string | null;
   help: string;
+  summary: string;
+  contrast?: accessibility.Contrast;
   element: { selector: string; html: string };
   origin: accessibility.Origin["origin"];
   component?: string;
@@ -203,6 +205,7 @@ describe("pre-review of the views", () => {
     const rows = found.violations.map((violation): ScanRow => {
       const origin = accessibility.originOf(violation.chain);
       const verdict = accessibility.verdictOf({ ...violation, origin }, exceptions);
+      const contrast = accessibility.contrastOf(violation.contrast);
 
       verdicts.push(verdict);
       return {
@@ -212,6 +215,8 @@ describe("pre-review of the views", () => {
         rule: violation.rule,
         impact: violation.impact,
         help: violation.help,
+        summary: violation.summary,
+        ...(contrast ? { contrast } : {}),
         element: { selector: violation.selector, html: violation.html },
         origin: origin.origin,
         ...(origin.component ? { component: origin.component } : {}),
@@ -231,7 +236,8 @@ describe("pre-review of the views", () => {
   // zoom, is looked at from its top, where its target bar is, by the check of the page, and from its end,
   // where the view is whole, by the check of the tab, which is where it is left for the picture. What `more`
   // answers at each size is recorded with the problems of the layout. At the zoom of 1 the view is then scanned, once
-  // its picture is taken.
+  // its picture is taken. The violations of the scan that fail are asserted once every layout of the view was looked
+  // at, softly: the case goes on to its other views, so that each is looked at and scanned, and fails at its end.
   const everyLayout = async (
     view: string,
     prepare?: () => Promise<void>,
@@ -275,24 +281,24 @@ describe("pre-review of the views", () => {
     await velero.setWindowSize(started.app, 1440, 900);
     await velero.setColorTheme(started.app, started.window, "Dark");
     await frame.waitForTimeout(1000);
+    expect.soft({ view, failing: failingOf(view) }).toEqual({ view, failing: [] });
   };
-  // What the checks found of a view, at every size: the problems of its layouts, and the violations of the scan that
-  // fail, each by its rule, its impact and its element.
+  // The violations of the scan of a view that fail, in each layout it was scanned in, each in one line.
+  const failingOf = (view: string) =>
+    Object.entries(scans)
+      .filter(([name]) => SCANNED.some((size) => name.endsWith(`-${size.name}-${view}`)))
+      .flatMap(([name, { rows }]) =>
+        rows
+          .filter((row) => row.fails)
+          .map((row) => `${name}: ${accessibility.violationLine({ ...row, ...row.element })}`),
+      );
+  // What the check of the layout found of a view, at every size.
   const found = (view: string) =>
-    Object.fromEntries([
-      ...Object.entries(problems).filter(
+    Object.fromEntries(
+      Object.entries(problems).filter(
         ([name, list]) => SIZES.some((size) => name.endsWith(`-${size.name}-${view}`)) && list.length > 0,
       ),
-      ...Object.entries(scans)
-        .filter(([name]) => SCANNED.some((size) => name.endsWith(`-${size.name}-${view}`)))
-        .map(([name, { rows }]) => [
-          `${name}, the accessibility scan`,
-          rows
-            .filter((row) => row.fails)
-            .map((row) => `${row.rule} (${row.impact}) on ${row.element.selector}: ${row.element.html}`),
-        ])
-        .filter(([, failing]) => failing.length > 0),
-    ]);
+    );
   // What the guard is told of a load when its second gesture was given, whatever became of the load: the
   // request the panel named is one of the suite when the cluster holds it. A load that ended without its
   // text may have created its request all the same.

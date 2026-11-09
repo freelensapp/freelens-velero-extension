@@ -1,10 +1,11 @@
 // What the accessibility scan of the pre-review decides from what it read of a view (REQ-293 of SPEC-0018, the unit
 // part of VIS-02): where the element of a violation comes from, the file of the exceptions, and which violations fail
-// their case. The ways from an element up to the root of the view are written as the scan reads them in the frame,
-// with the classes the host gives its components at the validation target.
+// their case, and what the report says of each. The ways from an element up to the root of the view are written as the
+// scan reads them in the frame, with the classes the host gives its components at the validation target.
 
 import { describe, expect, it } from "vitest";
 import {
+  contrastOf,
   type ElementFacts,
   type Exception,
   type Found,
@@ -12,6 +13,7 @@ import {
   readExceptions,
   unusedExceptions,
   verdictOf,
+  violationLine,
   WCAG_TAGS,
 } from "../integration/helpers/velero-accessibility";
 
@@ -241,5 +243,66 @@ describe("what becomes of a violation", () => {
     expect(unusedExceptions(exceptions, verdicts)).toEqual([exceptions[1]]);
     expect(unusedExceptions(exceptions, [])).toEqual(exceptions);
     expect(unusedExceptions([], verdicts)).toEqual([]);
+  });
+});
+
+describe("what the report says of a violation", () => {
+  // The data of the check of a contrast, as axe-core 4.14.0 writes it.
+  const measured = {
+    fgColor: "#00a7a0",
+    bgColor: "#f1f1f1",
+    contrastRatio: 2.64,
+    fontSize: "9.8pt (13px)",
+    fontWeight: "normal",
+    expectedContrastRatio: "4.5:1",
+    shadowColor: undefined,
+  };
+
+  it("reads the colors of a contrast, their ratio, the ratio asked and the font, and nothing when the data does not say them", () => {
+    expect(contrastOf(measured)).toEqual({
+      foreground: "#00a7a0",
+      background: "#f1f1f1",
+      ratio: 2.64,
+      expected: "4.5:1",
+      font: "9.8pt (13px), normal",
+    });
+    expect(contrastOf({ ...measured, fontSize: undefined, fontWeight: undefined })).toEqual({
+      foreground: "#00a7a0",
+      background: "#f1f1f1",
+      ratio: 2.64,
+      expected: "4.5:1",
+    });
+    expect(contrastOf({ ...measured, fontWeight: "bold" })?.font).toBe("9.8pt (13px), bold");
+    for (const data of [
+      undefined,
+      null,
+      "2.64",
+      { ...measured, fgColor: undefined },
+      { ...measured, bgColor: 1 },
+      { ...measured, contrastRatio: "2.64" },
+      { ...measured, expectedContrastRatio: 4.5 },
+    ]) {
+      expect([data, contrastOf(data)]).toEqual([data, undefined]);
+    }
+  });
+
+  it("says a violation in one line: its rule, its impact and its element, then its contrast or what is to be fixed", () => {
+    const summary = "Fix any of the following: Element does not have inner text that is visible to screen readers";
+
+    expect(
+      violationLine({
+        rule: "color-contrast",
+        impact: "serious",
+        selector: "._link_akqzu_619",
+        summary: "Fix any of the following: Element has insufficient color contrast of 2.64",
+        contrast: contrastOf(measured),
+      }),
+    ).toBe("color-contrast (serious) on ._link_akqzu_619: #00a7a0 on #f1f1f1, 2.64 to 1 where 4.5:1 is asked");
+    expect(violationLine({ rule: "button-name", impact: "critical", selector: "._back_akqzu_295", summary })).toBe(
+      `button-name (critical) on ._back_akqzu_295: ${summary}`,
+    );
+    expect(violationLine({ rule: "region", impact: null, selector: "div", summary: "Fix it" })).toBe(
+      "region (no impact) on div: Fix it",
+    );
   });
 });

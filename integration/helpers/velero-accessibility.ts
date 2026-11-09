@@ -229,3 +229,66 @@ export function unusedExceptions(exceptions: Exception[], verdicts: Verdict[]): 
 
   return exceptions.filter((_, index) => !used.has(index));
 }
+
+/**
+ * What the check of a contrast measured, as a reader of the report needs it to decide: the color of the words and of
+ * what is behind them, their ratio, the ratio WCAG 2.1 asks of their size, 4.5 to 1 or 3 to 1 for large words, and the
+ * size and the weight of the font.
+ */
+export interface Contrast {
+  foreground: string;
+  background: string;
+  ratio: number;
+  expected: string;
+  font?: string;
+}
+
+/**
+ * The contrast axe-core measured on an element, from the data of its check `color-contrast` (`fgColor`, `bgColor`,
+ * `contrastRatio`, `expectedContrastRatio`, `fontSize` and `fontWeight` in axe-core 4.14.0), or nothing when the data
+ * does not say the four first.
+ */
+export function contrastOf(data: unknown): Contrast | undefined {
+  if (typeof data !== "object" || data === null) return undefined;
+  const { fgColor, bgColor, contrastRatio, expectedContrastRatio, fontSize, fontWeight } = data as Record<
+    string,
+    unknown
+  >;
+
+  if (
+    typeof fgColor !== "string" ||
+    typeof bgColor !== "string" ||
+    typeof contrastRatio !== "number" ||
+    typeof expectedContrastRatio !== "string"
+  ) {
+    return undefined;
+  }
+  const font = [fontSize, fontWeight].filter((part) => typeof part === "string").join(", ");
+
+  return {
+    foreground: fgColor,
+    background: bgColor,
+    ratio: contrastRatio,
+    expected: expectedContrastRatio,
+    ...(font ? { font } : {}),
+  };
+}
+
+/**
+ * A violation in one line, as a case that fails says it: its rule, its impact and its element, then the colors and the
+ * ratios of a contrast, or what axe-core says is to be fixed.
+ */
+export function violationLine(violation: {
+  rule: string;
+  impact: string | null;
+  selector: string;
+  summary: string;
+  contrast?: Contrast;
+}): string {
+  const { rule, impact, selector, summary, contrast } = violation;
+  const what = contrast
+    ? `${contrast.foreground} on ${contrast.background}, ${contrast.ratio} to 1 where ${contrast.expected} is asked`
+    : summary;
+
+  return `${rule} (${impact ?? "no impact"}) on ${selector}: ${what}`;
+}

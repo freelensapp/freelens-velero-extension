@@ -50,10 +50,14 @@ export interface ScannedViolation {
   rule: string;
   impact: string | null;
   help: string;
+  // What axe-core says is to be fixed on the element, in one line.
+  summary: string;
   selector: string;
   html: string;
   chain: ElementFacts[];
   matches: number[];
+  // What the check of a contrast measured, as axe-core gives it, which `contrastOf` reads.
+  contrast?: unknown;
 }
 
 /** What one scan of a view found. */
@@ -218,16 +222,21 @@ export async function scanView(
               rule.nodes.map((node) => {
                 const element = node.element;
 
+                // The check of a contrast says the colors it measured, their ratio and the ratio it expects.
+                const measured = node.any.find((check) => check.id === "color-contrast")?.data;
+
                 return {
                   rule: rule.id,
                   impact: node.impact ?? rule.impact ?? null,
                   help: rule.help,
+                  summary: (node.failureSummary ?? "").replace(/\s+/g, " ").trim(),
                   selector: node.target.map(String).join(" "),
                   html: node.html.replace(/\s+/g, " ").slice(0, excerpt),
                   chain: element ? chainOf(element) : [],
                   matches: element
                     ? exceptions.flatMap((selector, index) => (element.matches(selector) ? [index] : []))
                     : [],
+                  ...(measured === undefined ? {} : { contrast: measured as unknown }),
                 };
               }),
             ),
