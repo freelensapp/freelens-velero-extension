@@ -37,6 +37,10 @@ const WINDOW_MARGIN = 5_000;
 // How long after the main process read the backup gone the run says so at most: a read of the run every second, its
 // two reads, and room for a loaded machine.
 const SAID_WITHIN = 10_000;
+// What the server writes of a backup the store did not keep: a write of the store that failed, or an answer of 5xx.
+const STORE_FAILED = /error putting object|StatusCode: 5\d\d/;
+// How long the store is given before the backup is made again.
+const STORE_SETTLES = 30_000;
 
 interface Read {
   metadata: { name: string; uid: string; creationTimestamp?: string; labels?: Record<string, string> };
@@ -220,6 +224,8 @@ export async function runDeleteBackupProof(
   const { cluster, call, enable, release } = proofProcedures(main, context, context.kubeconfig, host, {});
   const controller = new AbortController();
   const deletedName = `proof-delete-${context.run}`;
+  // The name of the backup made again when the store did not keep the first one.
+  const againName = `proof-delete-again-${context.run}`;
   const refusedName = `proof-refused-${context.run}`;
   const missing = `proof-missing-${context.run}`;
   // A minute before the proof began, for the clocks.
@@ -404,26 +410,42 @@ export async function runDeleteBackupProof(
   const prove = async () => {
     await enable();
     // A backup Completed, deleted: completed once the run reads it gone.
-    const deleted = make(deletedName, "default");
-    const ended = await endedOf(context, deletedName);
+    // A backup the store did not keep, as a store whose master is choosing its leader again answers its writes with
+    // 500, is made once more under another name, once the location is Available: the proof is of the deletion, not of
+    // the store, and it says so.
+    let name = deletedName;
+    let deleted = make(name, "default");
+    let ended = await endedOf(context, name);
 
-    requireCondition(ended?.status?.phase === "Completed", `The backup ${deletedName} ended ${endOf(ended)}`);
+    if (ended?.status?.phase === "Failed" && STORE_FAILED.test(ended.status.failureReason ?? "")) {
+      console.log(
+        `NOTE: the store did not keep the backup ${name}, ${endOf(ended)}; it is made again as ${againName} in thirty seconds, once the location is Available.`,
+      );
+      // The location may stay Available while the master of the store chooses its leader, about twenty seconds.
+      await delay(STORE_SETTLES);
+      await availableOf(context, "default");
+      name = againName;
+      deleted = make(name, "default");
+      ended = await endedOf(context, name);
+    }
+
+    requireCondition(ended?.status?.phase === "Completed", `The backup ${name} ended ${endOf(ended)}`);
     await availableOf(context, "default");
-    const backup = { name: deletedName, uid: deleted.metadata.uid };
+    const backup = { name, uid: deleted.metadata.uid };
     const { deleted: completed, took, goneBefore } = await deletion(backup);
     // The run says completed once its reads show the backup gone, which they do within a read of the main process
     // reading it gone; a deletion the server is at, or has not read, only when the run used its thirty seconds and the
     // backup was there until their end.
     const said =
       completed.end === "completed"
-        ? readOf(context, BACKUPS, deletedName)?.metadata.uid !== backup.uid
+        ? readOf(context, BACKUPS, name)?.metadata.uid !== backup.uid
         : (completed.end === "in-progress" || completed.end === "unread") &&
           took >= READ_WINDOW - WINDOW_MARGIN &&
           (goneBefore === undefined || goneBefore <= SAID_WITHIN);
 
     requireCondition(
       said,
-      `The deletion of ${deletedName} ended ${completed.end} after ${seconds(took)}, the backup ${completed.phase ?? "gone"}, ` +
+      `The deletion of ${name} ended ${completed.end} after ${seconds(took)}, the backup ${completed.phase ?? "gone"}, ` +
         `${JSON.stringify(completed.errors ?? [])}` +
         (goneBefore === undefined ? "" : `, read gone through the main process ${seconds(goneBefore)} before`),
     );
@@ -433,14 +455,14 @@ export async function runDeleteBackupProof(
     let requestsLeft: Read[] = [];
 
     for (const until = Date.now() + WITHIN; ; await delay(2000)) {
-      backupThere = readOf(context, BACKUPS, deletedName) !== undefined;
+      backupThere = readOf(context, BACKUPS, name) !== undefined;
       requestsLeft = requestsOf(context, backup);
       if ((!backupThere && requestsLeft.length === 0) || Date.now() >= until) break;
     }
-    requireCondition(!backupThere, `The backup ${deletedName} is still there`);
+    requireCondition(!backupThere, `The backup ${name} is still there`);
     requireCondition(
       requestsLeft.length === 0,
-      `A request to delete ${deletedName} is still there, which the server deletes with the backup: ${stateOf(requestsLeft)}`,
+      `A request to delete ${name} is still there, which the server deletes with the backup: ${stateOf(requestsLeft)}`,
     );
     // A backup of a storage location that is not there: refused, with the one error of a refusal, its phase kept.
     const refusedBackup = make(refusedName, missing);
@@ -490,7 +512,7 @@ export async function runDeleteBackupProof(
   try {
     // The backup refused first, with its request, which the check before the suites stops at while it is there; then
     // the other.
-    for (const name of [refusedName, deletedName]) await removeMade(name, left);
+    for (const name of [refusedName, deletedName, againName]) await removeMade(name, left);
   } finally {
     controller.abort();
     release();

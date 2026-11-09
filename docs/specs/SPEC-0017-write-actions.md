@@ -2463,6 +2463,16 @@ Decided while implementing, on 2026-11-09:
   thirty seconds and the main process read the backup there until less than ten seconds
   before the run answered: the run reads every second, and says completed at its first
   read of the backup gone.
+- A backup of the proof the store did not keep is made once more, under another name,
+  once the location is Available, and the proof says so. In three hosted runs of the end
+  to end tests the store failed the writes of the run after the proof of the pause and of
+  the resume: the third said it of that backup, a write answered with 500 three times,
+  and the first two only through the cleanup that followed, whose own write failed too;
+  the second machine never met it. Its log there shows the master of the store without a
+  leader for about twenty seconds after the store restarts, a window in which the store
+  cannot place a write. The proof is of the deletion, not of the store. When the
+  transport proof fails, it says its failure before its cleanup, and how many times the
+  store restarted and why.
 
 The independent review of this pull request, read-only, found no blocker, one major and
 seven minors, with eleven nits; all were applied but three of the nits and a part of a

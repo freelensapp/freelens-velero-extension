@@ -2470,6 +2470,33 @@ async function runTransportProof(): Promise<void> {
     console.error(
       `The transport proof failed, before its cleanup: ${error instanceof Error ? error.message : String(error)}`,
     );
+    // How the store stood: a store that restarted, and whose master chose its leader again, answers writes with 500.
+    try {
+      const pods = (
+        JSON.parse(kubectl(["get", "pods", "--namespace", DEMO_NAMESPACE, "-o", "json"], undefined, 30_000, false)) as {
+          items: {
+            metadata: { name: string };
+            status?: {
+              containerStatuses?: {
+                restartCount?: number;
+                lastState?: { terminated?: { reason?: string; finishedAt?: string } };
+              }[];
+            };
+          }[];
+        }
+      ).items.filter((pod) => pod.metadata.name.startsWith("seaweedfs"));
+
+      for (const pod of pods)
+        for (const container of pod.status?.containerStatuses ?? [])
+          console.error(
+            `The store ${pod.metadata.name}: ${container.restartCount ?? 0} restarts` +
+              (container.lastState?.terminated
+                ? `, the last ended ${container.lastState.terminated.reason ?? "with no reason"} at ${container.lastState.terminated.finishedAt ?? "a time not known"}`
+                : ""),
+          );
+    } catch {
+      console.error("The state of the store could not be read.");
+    }
     throw error;
   } finally {
     // The location goes back once the store serves again, as above.
