@@ -129,6 +129,28 @@ that:
   each download in their order, and counts one request, the verified one: nothing
   is sent over a connection that was not verified, and nothing is asked again
   without the verification;
+- the route to the store of a signed URL is resolved inside the main process
+  ([REQ-290](../specs/SPEC-0018-release-readiness.md)) by `resolveRoute`, which the
+  main bundle exports for it, for a storage location whose URL names 198.18.250.10,
+  an address literal of 198.18.0.0/15, a range the extension counts as private:
+  nothing of the tests listens there, the runners do not route it, and a unit case
+  of the environment keeps it outside every subnet the environment takes from that
+  range, reading it where the case does, in
+  [`velero-route.ts`](../../integration/helpers/velero-route.ts). Without the
+  allowance of private addresses for the cluster the route is refused,
+  `destination-denied` with what the operator may allow, a private address for the
+  origin of the store, and the words the main process makes of that very refusal,
+  by `downloadFailureOf`, which the main bundle exports beside it, say so with
+  nothing of the path or the signature of the URL; with the allowance the route is
+  direct to that address, at the port of the URL. The cluster, the resolver of the
+  machine and kubectl are stand-ins that refuse what they are asked, and the route
+  asks the allowance alone. Each resolution has a time of its own, eight seconds,
+  well within the one of the evaluation, so that the case puts the classes of Node
+  back before it gives up. While the routes are resolved, and for a turn of the loop
+  and a tenth of a second after them, the case records on the classes of the sockets
+  and of the servers of Node every connection and every listener whose stack names
+  the build the host made of the extension, and every connection to that address:
+  none. What else the host opens meanwhile is neither recorded nor touched;
 - the files of the log of the host hold the activation of the extension, and no
   line at the level of an error, nor does what either process wrote.
 
@@ -1102,6 +1124,14 @@ include child-process refusal checks with an empty executable path, proving that
 wrong targets and malformed journals stop without external tools. Co-locate future pure/main
 tests with their modules and reuse the integration directory convention for packaged
 journeys. No actual Electron installation result is implied by stubbed bundle tests.
+
+The build test holds each file the host loads, `dist/main.js`, `dist/renderer.js`
+and `dist/renderer.css`, under a ceiling of bytes, set a quarter above its size when
+the ceiling was set ([REQ-317](../specs/SPEC-0018-release-readiness.md)), with that
+size and its date written beside it. A change that passes a ceiling fails the unit
+run until the ceiling is moved, in the pull request that needs it, with its reason
+written beside it in place of the size and said in that pull request. No other file
+of the build has one: the host loads these three alone.
 
 Mock the host boundary for unit tests; use a transport interface for Kubernetes
 status codes and cancellation. Small local HTTP/TLS servers exercise streaming and
