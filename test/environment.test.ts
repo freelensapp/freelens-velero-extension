@@ -242,6 +242,8 @@ import {
   storeLogLine,
   storeSettings,
 } from "../e2e/scripts/local-store.mts";
+import { PRIVATE_STORE_ADDRESS } from "../integration/helpers/velero-route";
+import { classifyAddress } from "../src/common/artifact-address";
 import { PINNED } from "./tab-pins";
 
 const HOUR = 3_600_000;
@@ -12305,6 +12307,14 @@ describe("demo network and resource ownership", () => {
     expect(subnetsOverlap(SUBNETS.pods, SUBNETS.services)).toBe(false);
     expect(() => subnetsOverlap("invalid", SUBNETS.docker)).toThrow();
     expect(() => subnetsOverlap("198.18.64.0/", SUBNETS.docker)).toThrow();
+  });
+
+  it("keeps the store of the route of FND-10 at an address the extension counts as private, outside every subnet the environment takes", () => {
+    // FND-10 resolves in the main process of the host the direct route to that address, on which nothing of the tests
+    // listens (REQ-290 of SPEC-0018). The environment takes its subnets from the same range, and the second cluster of
+    // REQ-287 will take more of them there.
+    expect(classifyAddress(PRIVATE_STORE_ADDRESS)).toBe("private");
+    expect(Object.entries(SUBNETS).filter(([, subnet]) => subnetsOverlap(subnet, PRIVATE_STORE_ADDRESS))).toEqual([]);
   });
 
   it("allows updates or cleanup only for an owned, unchanged resource", () => {

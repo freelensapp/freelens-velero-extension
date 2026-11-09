@@ -11,7 +11,7 @@ export { DiagnosticKubernetes } from "./diagnostic-kubernetes";
 export { resolveRoute } from "./diagnostic-route";
 export { DiagnosticError, downloadArtifact } from "./diagnostic-transport";
 export { KubectlTunnels } from "./diagnostic-tunnel";
-export { registerHandlers } from "./ipc";
+export { downloadFailureOf, registerHandlers } from "./ipc";
 export { WriteGate } from "./write-gate";
 
 export default class VeleroMain extends Main.LensExtension {

@@ -21,13 +21,11 @@ import { readdir, readFile } from "node:fs/promises";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { type DownloadContext, downloadFailure } from "../../src/common/diagnostic-text";
 import { createTlsFixture } from "../../test/tls-fixture";
 import * as velero from "../helpers/velero-extension";
+import { PRIVATE_STORE_ADDRESS } from "../helpers/velero-route";
 
 import type { ElectronApplication, Page } from "playwright";
-
-import type { FailureCode } from "../../src/common/ipc";
 
 const EXTENSION = velero.EXTENSION_NAME;
 const SANITIZED = EXTENSION.replace("@", "").replace("/", "--");
@@ -35,11 +33,9 @@ const DISPATCHERS = ["undici.globalDispatcher.1", "undici.globalDispatcher.2"];
 // The name of the store the certificate of the test is for, and a name it is not for.
 const STORE_NAME = "storage.example.invalid";
 const OTHER_NAME = "wrong.example.invalid";
-// The store of the route: an address literal of 198.18.0.0/15, a range the extension counts as private, outside the
-// subnets the environment of the tests takes from it and not the first address of a /24, where Docker puts the gateway
-// of a network, so that nothing listens there; and the origin its storage location gives.
-const PRIVATE_ADDRESS = "198.18.250.10";
-const PRIVATE_ORIGIN = `https://${PRIVATE_ADDRESS}:9000`;
+// The origin the storage location of the route gives: the store at a private address, where nothing of the tests
+// listens and which the runners do not route.
+const PRIVATE_ORIGIN = `https://${PRIVATE_STORE_ADDRESS}:9000`;
 // The name the extension gives its store of the preferences, which each entry point opens when it is activated.
 const STORE = "[VELERO-PREFERENCES]: LOADED";
 const ANSI_ESCAPE_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-9;]*m`, "g");
@@ -66,30 +62,33 @@ function dispatchersOf(app: ElectronApplication): Promise<string[]> {
   );
 }
 
-// How a resolution of a route ended in the main process of the host: the route, or the refusal by its class, its code,
-// its step, its rule and what the operator may allow.
+// What the operator may allow, as a refusal carries it.
+interface AllowanceNeeded {
+  what: string;
+  origin: string;
+  location?: string;
+}
+
+// How a resolution of a route ended in the main process of the host: the route; the refusal by its class, its code,
+// its step, its rule and what the operator may allow; or what else was thrown, by its class and its message.
 interface RouteEnded {
   route?: Record<string, unknown>;
   name?: string;
-  code?: FailureCode;
+  message?: string;
+  code?: string;
   stage?: string;
-  verdict?: DownloadContext["verdict"];
-  needs?: DownloadContext["needs"];
+  verdict?: string;
+  needs?: AllowanceNeeded;
 }
 
-// The words the views show of a refusal, made of what it carries as the main process makes the words of a download
-// that failed, `downloadFailureOf` of `src/main/ipc.ts`: what is not a DiagnosticError is said as a failure of the
-// handler.
-function refusalWords(refusal: RouteEnded | undefined, context: DownloadContext) {
-  if (refusal?.name !== "DiagnosticError" || !refusal.code)
-    return downloadFailure("request-failed", "handler", context);
-  const { code, stage, verdict, needs } = refusal;
-
-  return downloadFailure(
-    code,
-    stage ?? "request",
-    verdict ? { ...context, verdict, ...(needs ? { needs } : {}) } : context,
-  );
+// The words the main process gives the views of a download that failed.
+interface FailureWords {
+  ok?: boolean;
+  code?: string;
+  stage?: string;
+  retry?: boolean;
+  text?: string;
+  needs?: AllowanceNeeded;
 }
 
 describe("extensions page tests", () => {
@@ -213,6 +212,7 @@ describe("extensions page tests", () => {
         "KubectlTunnels",
         "WriteGate",
         "downloadArtifact",
+        "downloadFailureOf",
         "registerHandlers",
         "resolveRoute",
       ]),
@@ -569,6 +569,8 @@ describe("extensions page tests", () => {
   it("resolves inside the main process of the host the route to a store at a private address: refused without its allowance, with the words of what may be allowed, direct to that address with it, and nothing connected", async () => {
     // The request of the views the route is for: the log of a backup of the installation in `velero`.
     const request = "0e7c5b7a-1111-4111-8111-000000000290";
+    // The build the host made of the tarball in the profile, as its modules name it.
+    const folder = realpathSync(build.folder);
     const outcome = await velero.within(
       "The routes resolved in the main process of the host",
       30_000,
@@ -577,8 +579,9 @@ describe("extensions page tests", () => {
           const main = process.mainModule;
 
           if (!main) throw new Error("The main module of the host is not reachable");
-          // The module the host loaded, as the case of the main entry point proved.
-          const { resolveRoute } = main.require(given.file) as {
+          // The module the host loaded, as the case of the main entry point proved: the route, and the words the main
+          // process gives the views of a download that failed.
+          const { resolveRoute, downloadFailureOf } = main.require(given.file) as {
             resolveRoute(
               url: string,
               input: object,
@@ -586,6 +589,7 @@ describe("extensions page tests", () => {
               signal: AbortSignal,
               dependencies: object,
             ): Promise<{ route: Record<string, unknown>; close(): void | Promise<void> }>;
+            downloadFailureOf(error: unknown, context: object): FailureWords;
           };
           const net = main.require("node:net") as typeof import("node:net");
           // What the route asks of what it is given, in its order: the allowances of the cluster, which hold nothing,
@@ -613,65 +617,108 @@ describe("extensions page tests", () => {
             lookup: (host: string) => refuse(`lookup ${host}`),
             tunnel: (pod: { name?: string; port?: number }) => refuse(`kubectl ${pod.name}:${pod.port}`),
           };
-          // Every connection a socket of the process is asked for, and every listener a server of it opens, by where,
-          // while the routes are resolved. A resolution with no read and no lookup takes no turn of the loop of the
-          // process, so nothing else of the host runs between the spies and their removal.
+          // What the route may have opened: every connection a socket of the process is asked for, and every listener
+          // a server of it opens, whose stack, with all its frames, names the build the host made of the extension,
+          // and every connection to the address of the store. What else the host opens meanwhile is neither recorded
+          // nor touched.
           const opened: string[] = [];
           const sockets: import("node:net").Socket[] = [];
           const servers: import("node:net").Server[] = [];
           const { connect } = net.Socket.prototype;
           const { listen } = net.Server.prototype;
-          const where = (args: unknown[]) => {
-            const [first, second] = (Array.isArray(args[0]) ? args[0] : args) as unknown[];
-            const options = (typeof first === "object" && first !== null ? first : { port: first, host: second }) as {
-              host?: unknown;
-              port?: unknown;
-              path?: unknown;
-            };
+          const ofTheExtension = () => {
+            const limit = Error.stackTraceLimit;
 
-            return typeof options.path === "string" ? options.path : `${String(options.host)}:${String(options.port)}`;
-          };
-          const resolve = async (): Promise<RouteEnded> => {
+            Error.stackTraceLimit = Number.POSITIVE_INFINITY;
             try {
-              const resolved = await resolveRoute(
-                given.url,
-                given.input,
-                given.storage,
-                new AbortController().signal,
-                dependencies,
-              );
+              const stack = new Error("Asked").stack ?? "";
+
+              return stack.includes(given.folder) || stack.includes(given.folderUrl);
+            } finally {
+              Error.stackTraceLimit = limit;
+            }
+          };
+          // Where a socket is asked to connect, or a server to listen, by the arguments it is given: its options, which
+          // `net.connect` passes as the first of an array, a port and a host, or the path of a pipe.
+          const where = (args: unknown[]): { host?: string; label: string } => {
+            const [first, second] = (Array.isArray(args[0]) ? args[0] : args) as unknown[];
+
+            if (typeof first === "object" && first !== null) {
+              const { host, port, path } = first as { host?: unknown; port?: unknown; path?: unknown };
+
+              if (typeof path === "string") return { label: path };
+              return { host: typeof host === "string" ? host : undefined, label: `${String(host)}:${String(port)}` };
+            }
+            if (typeof first === "string" && !/^\d+$/.test(first)) return { label: first };
+            const host = typeof second === "string" ? second : undefined;
+
+            return { host, label: `${String(host)}:${String(first)}` };
+          };
+          // Each resolution ends within a time of its own, the two well within the bound of the evaluation, so that the
+          // spies are put back before the case gives up on it. A refusal is kept with the words the main process makes
+          // of that very error, and what else is thrown with its message.
+          const resolve = async (): Promise<{ ended: RouteEnded; words?: FailureWords }> => {
+            let timer: ReturnType<typeof setTimeout> | undefined;
+
+            try {
+              const resolved = await Promise.race([
+                resolveRoute(given.url, given.input, given.storage, new AbortController().signal, dependencies),
+                new Promise<never>((_resolve, reject) => {
+                  timer = setTimeout(() => reject(new Error("The resolution did not end in 8 s")), 8_000);
+                }),
+              ]);
 
               // A direct route holds nothing to close.
               await resolved.close();
-              return { route: resolved.route };
+              return { ended: { route: resolved.route } };
             } catch (error) {
-              const { name, code, stage, verdict, needs } = error as RouteEnded;
+              const { name, message, code, stage, verdict, needs } = error as RouteEnded;
 
-              return { name, code, stage, verdict, needs };
+              return {
+                ended: name === "DiagnosticError" ? { name, code, stage, verdict, needs } : { name, message },
+                words: downloadFailureOf(error, given.context),
+              };
+            } finally {
+              clearTimeout(timer);
             }
           };
-          const ended: { refused?: RouteEnded; direct?: RouteEnded; asked: string[][]; opened: string[] } = {
-            asked: [],
-            opened,
-          };
+          const ended: {
+            refused?: RouteEnded;
+            words?: FailureWords;
+            direct?: RouteEnded;
+            asked: string[][];
+            opened: string[];
+          } = { asked: [], opened };
 
           net.Socket.prototype.connect = function (this: import("node:net").Socket, ...args: unknown[]) {
-            opened.push(`connect ${where(args)}`);
-            sockets.push(this);
+            const { host, label } = where(args);
+
+            if (host === given.address || ofTheExtension()) {
+              opened.push(`connect ${label}`);
+              sockets.push(this);
+            }
             return connect.apply(this, args as never);
           } as typeof connect;
           net.Server.prototype.listen = function (this: import("node:net").Server, ...args: unknown[]) {
-            opened.push(`listen ${where(args)}`);
-            servers.push(this);
+            if (ofTheExtension()) {
+              opened.push(`listen ${where(args).label}`);
+              servers.push(this);
+            }
             return listen.apply(this, args as never);
           } as typeof listen;
           try {
             // Without the allowance of private addresses for the cluster, then with it.
-            ended.refused = await resolve();
+            const refused = await resolve();
+
+            ended.refused = refused.ended;
+            ended.words = refused.words;
             ended.asked.push(asked.splice(0));
             allowances.push({ what: "private", origin: given.origin });
-            ended.direct = await resolve();
+            ended.direct = (await resolve()).ended;
             ended.asked.push(asked.splice(0));
+            // A turn of the loop and a tenth of a second more, for what the route may ask once it has answered.
+            await new Promise<void>((done) => setImmediate(done));
+            await new Promise<void>((done) => setTimeout(done, 100));
           } finally {
             net.Socket.prototype.connect = connect;
             net.Server.prototype.listen = listen;
@@ -682,9 +729,12 @@ describe("extensions page tests", () => {
         },
         {
           file: realpathSync(path.join(build.folder, build.main)),
+          folder,
+          folderUrl: pathToFileURL(folder).href,
           // The log of the backup at its signed URL, in the bucket of the location, which is in the path.
           url: `${PRIVATE_ORIGIN}/fnd-10/backups/fnd-10/fnd-10-logs.gz?X-Amz-Signature=synthetic`,
           origin: PRIVATE_ORIGIN,
+          address: PRIVATE_STORE_ADDRESS,
           input: { requestId: request, namespace: "velero", target: "BackupLog", name: "fnd-10", uid: "fnd-10-backup" },
           // A storage location of the plugin of AWS whose URL names the address, as Velero reads one.
           storage: {
@@ -695,6 +745,8 @@ describe("extensions page tests", () => {
               config: { region: "minio", s3ForcePathStyle: "true", s3Url: PRIVATE_ORIGIN },
             },
           },
+          // What the main process says a failed download of that request with.
+          context: { artifact: "BackupLog", name: "fnd-10", namespace: "velero", request: `fnd-10-${request}` },
         },
       ),
     );
@@ -707,26 +759,25 @@ describe("extensions page tests", () => {
       verdict: "allowance",
       needs: { what: "private", origin: PRIVATE_ORIGIN },
     });
-    // The words the views show of it say what may be allowed, for that origin, and nothing of the path or the
-    // signature of the URL; the failure carries it for the views to offer.
-    const words = refusalWords(outcome.refused, {
-      artifact: "BackupLog",
-      name: "fnd-10",
-      namespace: "velero",
-      request: `fnd-10-${request}`,
+    // The words the main process makes of that very refusal say what may be allowed, for that origin, and nothing of the
+    // path or the signature of the URL; the failure carries it for the views to offer.
+    expect(outcome.words).toMatchObject({
+      ok: false,
+      code: "destination-denied",
+      stage: "route",
+      retry: false,
+      needs: { what: "private", origin: PRIVATE_ORIGIN },
     });
-
-    expect(words).toMatchObject({ code: "destination-denied", needs: { what: "private", origin: PRIVATE_ORIGIN } });
-    expect(words.text).toContain(
+    expect(outcome.words?.text).toContain(
       `The store of ${PRIVATE_ORIGIN} is at a private address: a connection to it is made only after it is allowed.`,
     );
-    expect(words.text).not.toMatch(/\/backups\/|-logs\.gz|X-Amz-Signature/);
+    expect(outcome.words?.text).not.toMatch(/\/backups\/|-logs\.gz|X-Amz-Signature/);
     // With it, the route is direct to that address, at the port of the URL, for the file asked, encrypted.
     expect(outcome.direct).toEqual({
       route: {
         origin: PRIVATE_ORIGIN,
         pathname: "/fnd-10/backups/fnd-10/fnd-10-logs.gz",
-        address: PRIVATE_ADDRESS,
+        address: PRIVATE_STORE_ADDRESS,
         port: 9000,
         mode: "direct",
         allowHttp: false,
@@ -739,7 +790,7 @@ describe("extensions page tests", () => {
       [`allowed private ${PRIVATE_ORIGIN} velero/default`],
       [`allowed private ${PRIVATE_ORIGIN} velero/default`],
     ]);
-    // And no socket of the process was asked for a connection, and no listener was opened, while they were resolved.
+    // And the route asked for no connection and opened no listener, while it was resolved and in the turns after it.
     expect(outcome.opened).toEqual([]);
   }, 60_000);
 
