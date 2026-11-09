@@ -1825,3 +1825,17 @@ of the details failed on it and the four others passed; with the rows of their l
 renamed and an item of the extension in their menus, the six failed, the lists and the
 details waiting for their rows, the menus holding the item. REQ-215, HOST-20 and the
 Design say the ten sessions since this pull request, rewritten in place.
+
+**Amendment of 2026-11-09: the tag of the template** (REQ-216, D10, HOST-21). Decided
+by the lead maintainer on 2026-11-09, with
+[the amendment of SPEC-0018](SPEC-0018-release-readiness.md#2026-11-09-the-release-flow-of-the-template):
+the version, tag and release workflows are the template's of the organization. The
+tag workflow tags `X.Y.Z` and a prerelease `X.Y.Z-` followed by letters, digits, dots
+and hyphens, as the one of the template does, so a version such as `0.1.0-alpha.0` is
+tagged as well. The choice of T0.7, recorded above as decided while implementing, that
+tagged `X.Y.Z` and `X.Y.Z-N` alone, stricter than the template's, is undone, and the
+case of the tags no longer asks that `0.1.0-alpha.0`, `1.0.0-rc.1` and `1.0.0-1-2` be
+left untagged; it still asks that `X.Y.Z` and `X.Y.Z-N` be tagged, and that `1.0.0-`,
+`1.0` and `v1.0.0` be not. REQ-216, D10 and HOST-21 pin no form of a version that the
+template does not tag: the prereleases of the line, `1.0.0-N`, are of a form it tags,
+and they stand as written.
