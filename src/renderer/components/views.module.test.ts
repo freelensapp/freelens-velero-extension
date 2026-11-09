@@ -289,16 +289,22 @@ describe("colors of the words", () => {
   });
 
   it("writes no words in a color of the host that says something but through the colors of the words", () => {
-    const direct = [...text().matchAll(/^\s*color: var\(--(primary|colorOk|colorWarning|colorError)\);/gm)].map(
-      ([line]) => line.trim(),
-    );
+    // The property of the color of the words alone, whatever follows the value, in the semantic colors of the themes of
+    // the host: neither `background-color` nor `border-color` is read.
+    const direct = [
+      ...text()
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .matchAll(
+          /(?<![-\w])color\s*:\s*var\(--(primary|colorOk|colorSuccess|colorInfo|colorWarning|colorError|colorSoftError)\)[^;}]*/g,
+        ),
+    ].map(([declaration]) => declaration.trim());
 
     expect(direct).toEqual([]);
   });
 
   it("writes the words of a code element in the light theme, and of the rows of a kind of resources in both, at the contrast of AA", () => {
     const code = /^:global\(body\.theme-light\) \.page code \{\s*color: ([^;]+);\s*\}/m.exec(text())?.[1] ?? "";
-    const kind = /^\.resourcesKind \{[^}]*?\bcolor: ([^;]+);/m.exec(text())?.[1] ?? "";
+    const kind = /^\.resourcesKind \{[^}]*?(?<![-\w])color: ([^;]+);/m.exec(text())?.[1] ?? "";
 
     expect(
       BACKGROUNDS.filter((background) => ratio(colorOf(code, "light"), rgb(HOST.light[background])) < 4.5),
