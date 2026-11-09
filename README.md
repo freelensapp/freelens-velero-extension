@@ -132,14 +132,14 @@ identity through the ClusterRole `system:discovery`, needs no rule of its own.
 | The views | `velero.io` | `list` on `backups`, `restores`, `schedules`, `backupstoragelocations`, `volumesnapshotlocations`, `backuprepositories`, `podvolumebackups`, `podvolumerestores`, `datauploads` and `datadownloads` | The namespace of the installation |
 | Where the installations are, optional | `velero.io` | `list` on `backupstoragelocations` | The whole cluster |
 | The Log, Results, Resources and Volumes tabs | `velero.io` | `get` on `backups`, `restores` and `backupstoragelocations`; `create` and `get` on `downloadrequests` | The namespace of the installation |
-| A download through the cluster | core and `discovery.k8s.io` | `get` on `services` and `pods`, and `create` on `pods/portforward`, of the core group; `list` on `endpointslices` | The namespace of the Service of the store |
+| A download through the cluster | core and `discovery.k8s.io` | `get` on `services` and `pods`, and `create` on `pods/portforward`, of the core group; `list` on `endpointslices` | The namespace of the Service of the store, or the one a host of one or two labels names, as below |
 | A certificate authority in a Secret, optional | core | `get` on `secrets`, for the Secret the storage location names | The namespace of the installation |
 | The version of the server | `velero.io` | `create` and `get` on `serverstatusrequests` | The namespace of the installation |
-| Back up now | `velero.io` | `get` on `schedules`; `create` and `get` on `backups` | The namespace of the installation |
-| Create backup | `velero.io` | `get` on `backupstoragelocations` and `volumesnapshotlocations`; `create` and `get` on `backups` | The namespace of the installation |
-| Create schedule | `velero.io` | `get` on `backupstoragelocations` and `volumesnapshotlocations`; `create` and `get` on `schedules` | The namespace of the installation |
-| Restore | `velero.io` | `get` on `backups`; `create` and `get` on `restores` | The namespace of the installation |
-| Pause and Resume | `velero.io` | `patch` and `get` on `schedules` | The namespace of the installation |
+| Back up now | `velero.io` | `get` on `schedules`; `create` on `backups`, and `get` on them, optional | The namespace of the installation |
+| Create backup | `velero.io` | `get` on `backupstoragelocations` and `volumesnapshotlocations`; `create` on `backups`, and `get` on them, optional | The namespace of the installation |
+| Create schedule | `velero.io` | `get` on `backupstoragelocations` and `volumesnapshotlocations`; `create` on `schedules`, and `get` on them, optional | The namespace of the installation |
+| Restore | `velero.io` | `get` on `backups`; `create` on `restores`, and `get` on them, optional | The namespace of the installation |
+| Pause and Resume | `velero.io` | `patch` on `schedules`, and `get` on them, optional | The namespace of the installation |
 | Delete backup | `velero.io` | `get` on `backups`; `create` on `deletebackuprequests`, and `get` and `list` on them, optional | The namespace of the installation |
 
 <!-- markdownlint-enable MD013 -->
@@ -152,11 +152,24 @@ What is optional, and what goes without it:
 - `get` and `list` on `deletebackuprequests`: without them the review of Delete
   backup says that the other requests of the backup could not be read, and the
   deletion is followed by the backup alone.
+- `get` on what an action creates or patches, for the reads after it:
+  `backups` after Back up now and Create backup, `schedules` after Create
+  schedule and after Pause and Resume, `restores` after Restore. Without it the
+  action is made all the same: its workspace does not follow the phase Velero
+  writes, a pause or a resume is shown as the answer of its patch, and a
+  creation or a patch whose answer was lost cannot be looked for.
 - `get` on `volumesnapshotlocations`: only for a template of Create backup or
-  Create schedule that names a volume snapshot location.
-- The rules of a download through the cluster: only when the URL the server
-  signs names a Service of the cluster. When that Service is in another
-  namespace than the installation, they go in a Role of that namespace.
+  Create schedule that names a volume snapshot location. Without it the write
+  of such a template ends at the read of the locations, and nothing is sent.
+- The rules of a download through the cluster: when the URL the server signs
+  names a Service of the cluster, in the namespace of that Service. A host of
+  one label or two, as `minio` or `minio.storage`, is looked for as a Service
+  first, whatever the store is: `get` on `services` is asked in the namespace
+  its second label names, or in the one of the installation when it has one
+  label, and a refusal ends the tab at the step of the Service. A store outside
+  the cluster named that way is reached with a longer name, or with `get` on
+  `services` where its second label points, through a ClusterRole when that
+  label is no namespace.
 - `get` on `pods/portforward`, which the roles below do not grant: kubectl 1.31
   and later asks for a port-forward with `get` first, over a WebSocket, and
   falls back to `create`. Grant `get` as well to keep the refused `get` out of
@@ -171,8 +184,13 @@ A family the identity may not list is shown as denied, never as empty, and the
 other families are shown all the same. A tab or an action the identity may not
 use ends at the step that is refused, with the words of what the identity may
 not do. Freelens itself asks for what its own views need beside this, among it
-the list of the namespaces, which the forms of Create backup and Create schedule
-offer: without it, the namespaces are typed in those forms.
+the list of the namespaces, which three forms use: Create backup and Create
+schedule offer the namespaces to include or to exclude, and stop before its
+review a template that includes one labelled `velero.io/exclude-from-backup`,
+which Velero would fail; Restore offers the targets of its mapping and says
+whether a target is listed. Without that list the namespaces are typed, such a
+template is not stopped before Velero fails it, and the review of a restore says
+that whether a target is listed is not known.
 
 The two roles below are written for an installation in the namespace `velero`,
 the one `velero install` uses unless told otherwise: put the namespace of yours

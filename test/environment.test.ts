@@ -1848,7 +1848,7 @@ describe("foundation fixture boundaries", () => {
     // The modes over TLS keep the kubeconfig of the environment: the authority of the second is read from a Secret.
     expect(demo).toMatch(/\n {4}const tlsContext = \{\n {6}\.\.\.proofContext,\n {6}kubeconfig: CONFIG,\n/);
     expect(demo).toMatch(
-      /\n {4}if \(operatorFile\) rmSync\(operatorFile, \{ force: true \}\);\n {4}removeAccounts\(accounts\);\n/,
+      /\n {4}try \{\n {6}if \(operatorFile\) rmSync\(operatorFile, \{ force: true \}\);\n {6}removeAccounts\(accounts\);\n {4}\} catch \(error\) \{\n/,
     );
     // The proof over HTTP asks the version of the server as a frame does, through the procedures and the gate.
     expect(source("e2e/scripts/local-download-proof.mts")).toMatch(

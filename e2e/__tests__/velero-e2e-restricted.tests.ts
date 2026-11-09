@@ -13,9 +13,11 @@
 // installation, in its namespace, and on the storage locations of the whole
 // cluster. The views find the installations and read every family of one,
 // none denied, so that a verb the views start to need fails here before it
-// reaches an operator; and the two ways the adapter writes, a creation and a
-// patch, end as forbidden at the step whose verb the role lacks, with the
-// words of what the identity may not do, and nothing written.
+// reaches an operator. Of the two ways the adapter writes, the creation of a
+// backup asked from a schedule is refused at its first step, the read of the
+// schedule, before any review and before a creation is sent, and the patch of
+// a schedule at the patch: each at the first step whose verb the role lacks,
+// with the words of what the identity may not do, and nothing written.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as cluster from "../../integration/helpers/velero-cluster";

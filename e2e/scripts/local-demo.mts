@@ -2236,6 +2236,8 @@ async function runTransportProof(): Promise<void> {
   const accounts: KubeResource[] = [];
   // The kubeconfig of the operator of the README, in the private state while the proofs run.
   let operatorFile: string | undefined;
+  // Why the identities of the proof were not all removed, when they were not: thrown once the rest of the cleanup ran.
+  let identitiesLeft: unknown;
   let certificates: Awaited<ReturnType<typeof createTlsFixture>> | undefined;
   let requestCleanupFailed = false;
   const report: Record<string, unknown> = { date: new Date().toISOString(), result: "running", cleanup: "pending" };
@@ -2557,6 +2559,18 @@ async function runTransportProof(): Promise<void> {
     }
     throw error;
   } finally {
+    // The identities of the proof go first, since they depend on nothing of the store, whatever becomes of it after:
+    // each by the identity the cluster gives of it, read as owned by this run, the operator of the README among them,
+    // and its kubeconfig with them. A removal that fails is said at once, and stops nothing of the rest of the cleanup.
+    try {
+      if (operatorFile) rmSync(operatorFile, { force: true });
+      removeAccounts(accounts);
+    } catch (error) {
+      identitiesLeft = error;
+      console.error(
+        `The identities of the proof were not all removed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
     // The location goes back once the store serves again, as above.
     for (const resource of originals.filter((item) => item.kind !== "BackupStorageLocation")) applyOwned(resource);
     if (originals.length) {
@@ -2595,10 +2609,6 @@ async function runTransportProof(): Promise<void> {
       journal.resources = journal.resources.filter((resource) => resource !== entry);
       save();
     }
-    // The identities of the proof go by the identity the cluster gives of each, read as owned by this run, the operator
-    // of the README among them, and its kubeconfig with them.
-    if (operatorFile) rmSync(operatorFile, { force: true });
-    removeAccounts(accounts);
     await certificates?.dispose();
 
     if (journal.fixtureRun) {
@@ -2676,6 +2686,8 @@ async function runTransportProof(): Promise<void> {
     }
     if (journal.fixtureRun) await cleanupFixtures();
   }
+  // Reached when every proof passed: an identity left in the cluster fails the run once the rest was cleaned.
+  if (identitiesLeft !== undefined) throw identitiesLeft;
   requireCondition(
     !requestCleanupFailed,
     "Diagnostic request cleanup was incomplete; private request identities retained",

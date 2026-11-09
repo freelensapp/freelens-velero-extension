@@ -166,11 +166,24 @@ export async function runScheduleCreateProof(context: ProofContext): Promise<{
 }> {
   const main = await compiledDiagnostics();
   const host = await startProofHost(context.kubeconfig, DEMO_CONTEXT, context.shell);
+  const environmentHost = await startProofHost(context.environment, DEMO_CONTEXT, context.shell).catch(
+    async (error: unknown) => {
+      await host.close();
+      throw error;
+    },
+  );
   const api = proofAdapter(main, proofEntry(context.owner, context.kubeconfig), host, context.assertCurrent, {
     "app.kubernetes.io/managed-by": "freelens-velero-extension",
     [OWNER_LABEL]: context.owner,
     [FIXTURE_LABEL]: context.run,
   });
+  // The adapter of the teardown, with the identity of the environment: the backups of the schedules are removed so.
+  const teardown = proofAdapter(
+    main,
+    proofEntry(context.owner, context.environment),
+    environmentHost,
+    context.assertCurrent,
+  );
   const { cluster, call, enable, release } = proofProcedures(main, context, context.kubeconfig, host, {});
   const controller = new AbortController();
   const names = fixtureNames(context.run);
@@ -280,7 +293,7 @@ export async function runScheduleCreateProof(context: ProofContext): Promise<{
         JSON.stringify(spec.includedResources) === JSON.stringify(template.includedResources),
       `The backup ${backup.name} is not of the template of the schedule ${every}`,
     );
-    const removed = await removeBackup(context, api, backup, controller.signal);
+    const removed = await removeBackup(context, teardown, backup, controller.signal);
 
     requireCondition(removed, `The backup ${backup.name} of the schedule ${every} was not deleted by the server`);
     removedBackups.add(backup.uid);
@@ -330,7 +343,7 @@ export async function runScheduleCreateProof(context: ProofContext): Promise<{
           continue;
         }
         const target = { name: item.metadata.name, uid: item.metadata.uid };
-        const gone = await removeBackup(context, api, target, new AbortController().signal).catch(() => false);
+        const gone = await removeBackup(context, teardown, target, new AbortController().signal).catch(() => false);
 
         if (!gone) left.push(`The backup ${item.metadata.name} the proof made was not removed`);
       }
@@ -339,6 +352,7 @@ export async function runScheduleCreateProof(context: ProofContext): Promise<{
     controller.abort();
     release();
     await host.close();
+    await environmentHost.close();
   }
   if (failure !== undefined) {
     if (left.length) console.error(`${left.join(". ")}.`);
@@ -366,11 +380,19 @@ export async function runSchedulePatchProof(context: ProofContext): Promise<{
 }> {
   const main = await compiledDiagnostics();
   const host = await startProofHost(context.kubeconfig, DEMO_CONTEXT, context.shell);
-  const api = proofAdapter(main, proofEntry(context.owner, context.kubeconfig), host, context.assertCurrent, {
-    "app.kubernetes.io/managed-by": "freelens-velero-extension",
-    [OWNER_LABEL]: context.owner,
-    [FIXTURE_LABEL]: context.run,
-  });
+  const environmentHost = await startProofHost(context.environment, DEMO_CONTEXT, context.shell).catch(
+    async (error: unknown) => {
+      await host.close();
+      throw error;
+    },
+  );
+  // The adapter of the teardown, with the identity of the environment: the backups of the schedules are removed so.
+  const teardown = proofAdapter(
+    main,
+    proofEntry(context.owner, context.environment),
+    environmentHost,
+    context.assertCurrent,
+  );
   const { cluster, call, enable, release } = proofProcedures(main, context, context.kubeconfig, host, {});
   const names = fixtureNames(context.run);
   const template: BackupTemplate = {
@@ -551,7 +573,7 @@ export async function runSchedulePatchProof(context: ProofContext): Promise<{
     removeSchedule(context, skips, asked, began);
     // The backup of the resume ends, and is deleted by the server.
     const backup = { name: backups[0].metadata.name, uid: backups[0].metadata.uid };
-    const removed = await removeBackup(context, api, backup, new AbortController().signal);
+    const removed = await removeBackup(context, teardown, backup, new AbortController().signal);
 
     requireCondition(removed, `The backup ${backup.name} of the schedule ${submits} was not deleted by the server`);
     removedBackups.add(backup.uid);
@@ -593,7 +615,7 @@ export async function runSchedulePatchProof(context: ProofContext): Promise<{
           continue;
         }
         const target = { name: item.metadata.name, uid: item.metadata.uid };
-        const gone = await removeBackup(context, api, target, new AbortController().signal).catch(() => false);
+        const gone = await removeBackup(context, teardown, target, new AbortController().signal).catch(() => false);
 
         if (!gone) left.push(`The backup ${item.metadata.name} the proof made was not removed`);
       }
@@ -601,6 +623,7 @@ export async function runSchedulePatchProof(context: ProofContext): Promise<{
   } finally {
     release();
     await host.close();
+    await environmentHost.close();
   }
   if (failure !== undefined) {
     if (left.length) console.error(`${left.join(". ")}.`);
@@ -655,10 +678,11 @@ async function endOf(context: ProofContext, name: string): Promise<Read | undefi
 }
 
 // A backup of a schedule of the proof: waited for until it ended, since the release deletes no backup in progress,
-// and deleted through a DeleteBackupRequest the server processes.
+// and deleted through a DeleteBackupRequest the server processes, sent by the adapter of the teardown, with the identity
+// of the environment, and read until it is gone with the kubectl of the environment.
 async function removeBackup(
   context: ProofContext,
-  api: ReturnType<typeof proofAdapter>,
+  teardown: ReturnType<typeof proofAdapter>,
   backup: { name: string; uid: string },
   signal: AbortSignal,
 ): Promise<boolean> {
@@ -666,7 +690,7 @@ async function removeBackup(
   // The request as the deletion of the extension writes it, through the module the proof loaded once.
   const main = await compiledDiagnostics();
 
-  await api.createDeleteBackupRequest(
+  await teardown.createDeleteBackupRequest(
     DEMO_NAMESPACE,
     main.deleteRequestText(main.deleteRequestOf(DEMO_NAMESPACE, backup)),
     signal,

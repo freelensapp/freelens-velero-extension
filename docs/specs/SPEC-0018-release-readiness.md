@@ -1385,9 +1385,12 @@ in the README. The evidence, by check:
   two hours, and its context holds the kubeconfig of the operator for the session
   and the kubeconfig of the environment for the kubectl of the proofs, which reads
   the metrics, the ConfigMaps and the namespace of a restore, makes the backups of
-  the proof of a deletion, changes a schedule as another hand, and deletes; the
-  proof adapter of a proof, which reads what the session created and removes a
-  backup through a `DeleteBackupRequest`, asks only what the role allows. The proof
+  the proof of a deletion, changes a schedule as another hand, and deletes. The
+  proof adapter of a proof reads what the session created with the kubeconfig of
+  the operator, which the role allows; its teardown, a backup removed through a
+  `DeleteBackupRequest` as the extension writes it and read until it is gone, runs
+  with the kubeconfig of the environment, so that it does not depend on the role the
+  run proves. The proof
   over HTTP asks the version of the server as a frame does, through the procedures
   and the gate, beside the request it makes with a generated name. The modes over
   TLS and the direct mode keep the kubeconfig of the environment. `pnpm e2e` on the
@@ -1403,7 +1406,9 @@ in the README. The evidence, by check:
   the schedule keeps its UID and its version, and the API server counts no write of
   any kind of Velero: {RUN-STATIC-VIEWS-1}. Each identity is removed with its run,
   its ClusterRole and its binding by the paths of the whole cluster
-  (`accountPath`).
+  (`accountPath`); the transport proof removes its identities first in its cleanup,
+  before it restores the store, and a removal that fails is said at once and fails
+  the run once the rest of the cleanup ran, unless a proof failed before it.
 - DOC-03: the case "shows in Permissions the two roles the identities of the test
   environment hold, text for text as the fixtures render them"
   (`test/documents.test.ts`) renders the Role and the ClusterRole of each identity
@@ -1478,11 +1483,13 @@ Decided while implementing, on 2026-11-09:
   environment are named by the run and bound in its namespaces. The rendering takes
   the rules from the identity, and the names and the namespace from the README.
 - The session of the extension is the procedures, the client of the host they use
-  and the tunnel; the proof adapter of a proof stays on the kubeconfig of the
-  operator, since what it asks, the reads of what the session created and the
-  `DeleteBackupRequest` of a removal, is in the role. The kubectl of the proofs goes
-  through the kubeconfig of the environment, which the context of a proof holds as
-  `environment`.
+  and the tunnel; the reads of a proof that check what the session created stay on
+  the kubeconfig of the operator, since they are in the role. The kubectl of the
+  proofs goes through the kubeconfig of the environment, which the context of a
+  proof holds as `environment`, and so, after the independent review, does the
+  teardown of the proofs of the actions: the `DeleteBackupRequest` of a backup they
+  made, sent as the extension writes it by an adapter of the environment, and the
+  reads that wait for the backup to go.
 - "The restricted suite of the views passes" with the reader is a second describe of
   `velero-e2e-restricted.tests.ts`, with an application started with the kubeconfig
   of the reader alone: the cases of the first describe prove what an identity that
@@ -1497,3 +1504,25 @@ Decided while implementing, on 2026-11-09:
 - SPEC-0004 writes no identity: the amendment of the identities is the one of
   TESTING.md, which this slice restates; the second cluster of REQ-287 amends
   SPEC-0004 with its own slice.
+
+An independent review of the head of the slice, on 2026-11-09, found no blocker, one
+major, three minors and seven nits. Taken in, as fixes of defects: the major, the
+route of a download through the cluster for a host of one label or two, which the
+section Permissions now says is looked for as a Service first, with `get` on
+services asked in the namespace its second label names or in the one of the
+installation, whatever the store is, and the way to reach a store outside the
+cluster named that way, as SPEC-0010 says of REQ-129; the identities removed first
+in the cleanup of the transport proof; the teardown of the proofs of the actions
+with the kubeconfig of the environment; and four nits of the README, of TESTING.md
+and of the restricted suite: the three forms that use the namespaces Freelens lists
+and what goes without them, the reads after an action said optional with what goes
+without them, what goes without the read of the snapshot locations, and the reader
+said refused at the read of the schedule, before any creation. Left as observations
+for the lead maintainer, as the rule of the lead maintainer of 2026-11-09 asks of a
+proposal of a new check or of a hardening: a case that reads the table of
+Permissions against the roles, which DOC-03 does not read; a rendering that refuses a
+rule with keys other than its groups, its resources and its verbs; the absence of
+the backup of the reader told by NotFound rather than by a status other than zero;
+and the mode over TLS with an inline authority run as the operator. The changes seen
+failing were made again on the head after the review, and the eight branches of one
+change are on that head.

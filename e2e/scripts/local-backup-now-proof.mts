@@ -20,7 +20,11 @@ const ENDED = ["Completed", "PartiallyFailed", "Failed", "FailedValidation"];
 // How long the server is given to end a backup of the proof, and to delete it.
 const ENDS_WITHIN = 5 * 60 * 1000;
 
-type ProofContext = Pick<DownloadProofContext, "owner" | "run" | "kubeconfig" | "shell" | "assertCurrent">;
+// The kubeconfig of the session of the extension, the one of the operator of the README, and the one of the environment,
+// with which the proof removes what the session created, so that its teardown does not depend on the role the run proves.
+type ProofContext = Pick<DownloadProofContext, "owner" | "run" | "kubeconfig" | "shell" | "assertCurrent"> & {
+  environment: string;
+};
 
 // A backup as the proof reads it.
 type Read = {
@@ -55,13 +59,21 @@ interface Session {
 // them, confirm a backup and create it, with the server of the release running; the backup ends Completed, with what
 // its proof checks, and is deleted through a DeleteBackupRequest, which the server processes. A backup the proof
 // created is waited for until it ended, since the release deletes no backup in progress, and then deleted; one it
-// could not remove is named in its failure.
+// could not remove is named in its failure. The session and the reads that check what it created run with the
+// kubeconfig of the session; the removal, its request and the reads that wait for the backup to go, with the one of the
+// environment.
 async function proveCreation<Checked>(
   context: ProofContext,
   creation: Creation<Checked>,
 ): Promise<Checked & { phase: string; removed: boolean }> {
   const main = await compiledDiagnostics();
   const host = await startProofHost(context.kubeconfig, DEMO_CONTEXT, context.shell);
+  const environmentHost = await startProofHost(context.environment, DEMO_CONTEXT, context.shell).catch(
+    async (error: unknown) => {
+      await host.close();
+      throw error;
+    },
+  );
   // The requests the proof makes with a generated name carry the labels of the environment, which knows them as its
   // own; its DeleteBackupRequest is the one of the deletion of the extension, with the labels of its backup alone.
   const api = proofAdapter(main, proofEntry(context.owner, context.kubeconfig), host, context.assertCurrent, {
@@ -69,43 +81,51 @@ async function proveCreation<Checked>(
     [OWNER_LABEL]: context.owner,
     [FIXTURE_LABEL]: context.run,
   });
+  // The adapter of the teardown, with the identity of the environment.
+  const teardown = proofAdapter(
+    main,
+    proofEntry(context.owner, context.environment),
+    environmentHost,
+    context.assertCurrent,
+  );
   const { cluster, call, enable, release } = proofProcedures(main, context, context.kubeconfig, host, {});
   const controller = new AbortController();
   const { name } = creation;
   let created: { name: string; uid: string } | undefined;
   let removed = false;
 
-  // The backup, or nothing once it is gone.
-  const readBackup = async (name: string): Promise<Read | undefined> => {
+  // The backup, or nothing once it is gone, read through an adapter of the proof.
+  const readBackup = async (adapter: typeof api, name: string): Promise<Read | undefined> => {
     try {
-      return (await api.read("Backup", DEMO_NAMESPACE, name, controller.signal)) as Read;
+      return (await adapter.read("Backup", DEMO_NAMESPACE, name, controller.signal)) as Read;
     } catch (error) {
       if ((error as { code?: string }).code === "not-found") return undefined;
       throw error;
     }
   };
   // Read every two seconds until it ended or is gone, for five minutes at most: what was read last.
-  const untilEnded = async (name: string): Promise<Read | undefined> => {
-    let read = await readBackup(name);
+  const untilEnded = async (adapter: typeof api, name: string): Promise<Read | undefined> => {
+    let read = await readBackup(adapter, name);
 
     for (
       const until = Date.now() + ENDS_WITHIN;
       read && !ENDED.includes(read.status?.phase ?? "") && Date.now() < until;
     ) {
       await delay(2000);
-      read = await readBackup(name);
+      read = await readBackup(adapter, name);
     }
     return read;
   };
   const remove = async (backup: { name: string; uid: string }) => {
-    // The request as the deletion of the extension writes it, which the server processes once the backup ended.
-    await api.createDeleteBackupRequest(
+    // The request as the deletion of the extension writes it, which the server processes once the backup ended, sent
+    // and followed with the identity of the environment.
+    await teardown.createDeleteBackupRequest(
       DEMO_NAMESPACE,
       main.deleteRequestText(main.deleteRequestOf(DEMO_NAMESPACE, backup)),
       controller.signal,
     );
     for (const until = Date.now() + ENDS_WITHIN; Date.now() < until; await delay(2000)) {
-      if ((await readBackup(backup.name)) === undefined) return true;
+      if ((await readBackup(teardown, backup.name)) === undefined) return true;
     }
     return false;
   };
@@ -122,7 +142,7 @@ async function proveCreation<Checked>(
 
     created = { name: answer.name, uid: answer.uid };
     requireCondition(answer.name === name && answer.uid, "The run answered another backup");
-    const backup = await untilEnded(name);
+    const backup = await untilEnded(api, name);
 
     requireCondition(backup, `The ${creation.what} ${name} the run created is not there`);
     const phase = backup.status?.phase;
@@ -139,15 +159,15 @@ async function proveCreation<Checked>(
   // run answered, or one of the name it asked, whose answer did not come back, when it is the one asked. What is
   // answered is the words of one it left.
   const removeLeft = async (): Promise<string | undefined> => {
-    const found = created ? undefined : await readBackup(name).catch(() => undefined);
+    const found = created ? undefined : await readBackup(teardown, name).catch(() => undefined);
     const ours = found && creation.owns(found) ? { name, uid: found.metadata.uid } : undefined;
     const left = created ?? ours;
 
     if (!left) return undefined;
-    const ended = await untilEnded(left.name).catch(() => undefined);
+    const ended = await untilEnded(teardown, left.name).catch(() => undefined);
     const gone =
       ended === undefined
-        ? (await readBackup(left.name).catch(() => ({}) as Read)) === undefined
+        ? (await readBackup(teardown, left.name).catch(() => ({}) as Read)) === undefined
         : await remove(left).catch(() => false);
 
     return gone
@@ -170,6 +190,7 @@ async function proveCreation<Checked>(
     controller.abort();
     release();
     await host.close();
+    await environmentHost.close();
   }
   // The failure of the proof is said first, and a backup it left beside it.
   if (failure !== undefined) {
