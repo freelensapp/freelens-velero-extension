@@ -488,7 +488,7 @@
     min-width: calc(16ch + 16px);
   }
 
-  /* The last submission of a schedule is a time as the start of an operation is. */
+  /* The last submission of a schedule is a time as the start of an operation is; it is shown from 1,201 pixels. */
   .list :global(.TableCell.started),
   .list :global(.TableCell.submitted) {
     min-width: calc(20.5ch + 16px);
@@ -673,10 +673,11 @@
   flex-grow: 1.2;
 }
 
-/* What a schedule submitted and the newest of its backups are both in the band of its view: in a narrow room
-   they give theirs to the next run and the adherence, which say what they said of a schedule at a glance, and
-   then the expression does. The name, paused, the next run, the adherence and the validation stay. */
-@container (max-width: 760px) {
+/* What a schedule submitted and the newest of its backups are both in the band of its view: in a room under
+   1,200 pixels they give theirs, with the installation, to the next run and the adherence, which say what they
+   said of a schedule at a glance, so that what the list shows in a window of 1440 by 900 is read whole; under
+   640 the expression does. The name, paused, the next run, the adherence and the validation stay. */
+@container (max-width: 1200px) {
   .list :global(.TableCell.submitted),
   .list :global(.TableCell.newest) {
     display: none;
