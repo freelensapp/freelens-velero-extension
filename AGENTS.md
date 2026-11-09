@@ -944,6 +944,9 @@ for the changes that reach them:
   in Freelens built from source at the commit of the validation target, on the
   disposable kind cluster with the CRDs of the release alone that
   `pnpm e2e:cluster:up:definitions` makes, taken down whatever happens.
+  Freelens is built through `.github/actions/build-freelens`, the composite
+  action it shares with `views-tests.yaml`; a change of that action runs every
+  part of the views.
 - `views-tests.yaml`: every suite of the views, the pre-review and FND-10, in five
   parts side by side, each a job with an environment of its own and one run of the
   runner of `pnpm e2e:views`, in Freelens built at the same commit: three on the

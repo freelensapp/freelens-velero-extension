@@ -18,6 +18,7 @@ describe("the parts of the views a run takes", () => {
       "e2e/views-parts.json",
       "src/main/diagnostic-transport.ts",
       ".github/workflows/views-tests.yaml",
+      ".github/actions/build-freelens/action.yaml",
       "package.json",
       "pnpm-lock.yaml",
       "vite.config.mjs",
@@ -29,6 +30,14 @@ describe("the parts of the views a run takes", () => {
     ]) {
       expect([file, partsToRun(definition, [file])]).toEqual([file, every]);
     }
+    // An action of this repository the job of the views runs, the build of Freelens, is a part of its workflow.
+    const workflow = readFileSync(new URL("../.github/workflows/views-tests.yaml", import.meta.url), "utf8");
+    const actions = [...workflow.matchAll(/uses: \.\/(\.github\/actions\/[^\s]+)/g)].map(
+      (match) => `${match[1]}/action.yaml`,
+    );
+
+    expect(actions).toEqual([".github/actions/build-freelens/action.yaml"]);
+    for (const file of actions) expect([file, partsToRun(definition, [file])]).toEqual([file, every]);
   });
 
   it("runs no part for documents, unit tests, other workflows and the configuration of the linters", () => {

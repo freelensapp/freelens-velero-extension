@@ -876,6 +876,265 @@ Decided while implementing, on 2026-11-09:
   line as a space. A folded block was refolded by the formatter of Trunk at 300
   characters, in the middle of a term.
 
+T6.1, the first half of REQ-286, on 2026-11-09: the steps that build Freelens at
+the commit of the validation target, which the workflows of the integration tests
+and of the views carried as two copies, are one composite action,
+`.github/actions/build-freelens/action.yaml`, which both call with the commit each
+names once; the job `package` of the release workflow calls it in the second half.
+The evidence, by check:
+
+- REG-02, the part of the target: the case of the target, "builds Freelens for the
+  views and for the integration at the validation target of SPEC-0015, named
+  once", reads the action as well. The two workflows are the only ones that call
+  it, and the case holds every workflow that calls it, so that a new one is held
+  by construction: each names the commit in one line, its one `freelens_ref`,
+  gives it to the action once, and checks out, builds and caches nothing of
+  Freelens itself; the job that calls the action runs on `ubuntu-24.04-arm`,
+  turns the telemetry of Turborepo off with `DO_NOT_TRACK: "1"`, and sets up mise
+  with `yq` before the call. The action names no commit and declares the one it
+  is given required, with no default; its first step refuses anything but a full
+  commit of 40 hexadecimal characters, an empty value among them, which a runner
+  gives an input that is missing, and the case runs that step with bash on eight
+  values; the value reaches the script through the environment, and no script of
+  the action holds an expression. The action checks out freelensapp/freelens at
+  that commit, restores the build under the key of that commit alone, with no
+  partial match, and saves it under the key it restored, only after a build that
+  did not fail; its caches are keyed for the runner of its callers and the build
+  is for arm64 (`test/environment.test.ts`).
+- The ids the action reads: every `steps.<id>` it names is the id of an earlier
+  step of the action, each id is of one step, and every id is read
+  (`test/environment.test.ts`). actionlint checks the steps of a job against the
+  ids of the earlier ones, and not the steps of a composite action.
+- The cases of the uploads of the two workflows read the steps of the action with
+  the workflow: one upload, of `e2e-artifacts/`; the three caches saved, the
+  binaries the build downloaded, the Electron it downloaded and the application,
+  in that order; nothing of the state of the environment; the runner and the
+  permission `contents: read` (`test/environment.test.ts`).
+- The plan of the views runs every part for a change of the action, as for a
+  change of the workflow of the views, and for each action of this repository
+  that workflow uses (`test/views-plan.test.ts`).
+- The two copies, compared before the move: the steps from "Checkout app" to "Let
+  the sandbox of the application start", "Setup node for plugin" among them, were
+  the same in both workflows but three lines of their comments, which named the
+  tests or the suites and the other workflow that shares the key. The rest of the
+  two jobs differs by what each runs, and in their common setup by one step: the
+  integration builds the extension with two retries, the views with none, which
+  this half leaves as it is. The move changed, beside the comments, the commit,
+  from `env.freelens_ref` to the input `ref` in the checkout and in the key of the
+  build; the path of the Turborepo cache, written from `github.workspace` instead
+  of the variable `TURBOREPO_CACHE`, the same path; `shell: bash` on each `run`
+  step, which a composite action requires; and the script of the sandbox,
+  without its final newline, as the formatter of the repository writes the last
+  block of a file. With the call of the action replaced by its steps, both jobs
+  are the jobs of main, step by step, but for these and for the first step of the
+  action, which checks the commit.
+- The path of a miss, on its own before the pull request: on 2026-11-09, a
+  throwaway branch of the first commit of this half, with one commit that changed
+  only the prefix of the key of the build to
+  `ubuntu-24.04-arm-electron-dist-probe-miss-`, and the integration workflow
+  dispatched on it alone,
+  [run 42627469903](https://github.com/freelensapp/freelens-velero-extension/actions/runs/42627469903),
+  green in 6.5 minutes. The build of the target, the Electron download (key
+  `ubuntu-24.04-arm-electron-44.10.0`), the Turborepo cache and the bundled
+  binaries all missed, and Freelens was built from nothing, Turborepo 0 cached of
+  6 tasks; the bundled binaries, the Electron download and the build were saved
+  by the steps of the action, and the Turborepo cache by the post of its nested
+  action; the Node.js of Freelens, 24.22.1, gave way again to the one of this
+  repository, 24.21.0, the sandbox step set `FREELENS_APP`, and the integration
+  test passed, 11 files. The branch and its four caches were removed after the
+  run. The first step, which checks the commit, came after that run, and runs on
+  every path.
+- The runs of its pull request, green before its merge: the unit tests, the
+  integration test and every part of the views, each with the check of the commit
+  passed and the build of the target restored from the cache of main.
+
+Each new case was seen failing on a change made on purpose, thirty-three in all.
+The action checking out main, and a commit it names; the input of the commit
+given a default; the build cached by the commit and the branch, by a version, and
+restored by a partial match; the build saved under the key of the download of
+Electron, and saved after a failed build as well; a cache of the action keyed for
+another runner; the views giving the action main, and the integration another
+commit; the integration checking Freelens out itself as well; another workflow
+calling the action, and a third caller listed without the line of the commit; a
+second `freelens_ref` in the env of the job of the views, and one in an env of the
+call; the views without mise, the integration with mise and no `yq`, without
+`DO_NOT_TRACK`, and on another runner; the action without its check of the commit,
+the check with an expression in its script, taking any length, taking capitals,
+and after the checkout; an expression in another script of the action; the slips
+`install-pnpm-ap` in a retry and `electron-build-cach` in a condition, a step that
+reads its own outcome, and an id no step reads; the action uploading the build,
+and saving one more cache; and the action left out of the rules of the parts,
+under the rule of `.github/`.
+
+Decided while implementing, on 2026-11-09:
+
+- The action takes the steps from the checkout of Freelens to the save of its
+  build, and the two after them that both workflows had: the Node.js of this
+  repository set up again, which the build replaces on a miss, and the sandbox of
+  the application with its path in `FREELENS_APP`, which the tests read. It
+  leaves the job on the Node.js of the repository, as it found it, with the
+  application ready to start.
+- The first step of the action refuses a value that is not a full commit: the
+  runner gives an input that is missing an empty value and does not enforce
+  `required`, and a branch, a tag or an empty value would build what moves under
+  a key that does not. For the two callers it changes nothing.
+- The OS dependencies of Playwright and their APT cache stay in the workflows:
+  they are what the tests need to start an Electron under xvfb, they run the
+  Playwright of the extension and are keyed by its lockfile, not by the commit of
+  Freelens, and they run before the environment comes up, which a move into the
+  action would put after it. The job `package` installs them beside the action.
+- The variable `TURBOREPO_CACHE` leaves the environment of the two jobs: it only
+  named the path of the Turborepo cache, as in the workflows of Freelens at the
+  target, and no build reads it; the action writes that path from
+  `github.workspace` and the folder of the checkout, the same string, so the
+  cache is the same.
+- Each `run` step of the action names `bash`, which a composite action requires:
+  the steps that named no shell ran with `bash -e {0}`, and `bash` adds
+  `--noprofile --norc -o pipefail`, which changes nothing in steps with no
+  pipeline, and none of them has one.
+- The action reads `yq` from the mise of the workflow that calls it, as the step
+  of the version of Electron did, so that its version keeps one source; the case
+  of the target holds every caller to it, with the runner and `DO_NOT_TRACK`.
+- actionlint does not check the steps of a composite action, so a unit case
+  checks the ids its conditions and keys read.
+- The rules of the parts of the views name the action among the files that run
+  every part, and keep it out of the rule of `.github/`, as they do for the
+  workflow of the views: under that rule a change of the build of Freelens would
+  run no part.
+
+On a hit the action checks the commit, checks out Freelens, restores the build,
+sets up the Node.js of the repository again and lets the sandbox start; every
+other step is of a miss, which the run above proved.
+
+T6.1, the case of FND-10 of REQ-289, on 2026-11-09: HTTPS in the main process of the
+host, in two commits, the second after the independent review of the first. The
+evidence, by check:
+
+- REG-05, in FND-10
+  ([`extensions.tests.ts`](../../integration/__tests__/extensions.tests.ts)), a case
+  of its own after the download over HTTP, which makes seven cases of FND-10. The
+  certificates are made by the case, outside the host, before the downloads, by the
+  helper of the unit tests, [`tls-fixture.ts`](../../test/tls-fixture.ts): an
+  authority made for the test, and the certificate it signed for two names and two
+  addresses, `storage.example.invalid` and 127.0.0.1 among them. In the main process
+  of the host, a store on 127.0.0.1 alone with that certificate, and three downloads
+  of a log at its signed URL by the bundled transport of the module the host loaded,
+  which the case of the main entry point proves. The authority given inline as a
+  storage location gives it, its PEM in base64, read by the adapter of the bundle as
+  the download of a log reads it: the file decoded whole. The same store with no
+  authority given, and the authority given for `wrong.example.invalid`, a name the
+  certificate is not for: each `tls-invalid`, with the verdict of a certificate
+  refused, `untrusted`, and nothing of the URL, its host, its path, its signature or
+  its scheme, in its message, its text, its fields, enumerable or not, its stack or
+  its cause. The certificate is valid for 127.0.0.1, the address every download
+  connects to, so the refusal of the other name shows the name of the URL checked,
+  and not the address. The store counts three connections, records the name each
+  ClientHello asks for, the name of the URL of each download in their order, and
+  counts one request, the one of the store that was verified, with the Host and the
+  server name of the URL: nothing was sent over a connection that was not verified,
+  and nothing was asked again without the verification. The store is closed however
+  the case ends, from the moment it listens. Each step has its own time, the
+  certificates 45 seconds, removed when they end if they end later, the downloads 60
+  and each of them 12, within the 150 of the case. The packaged run, in the
+  integration test of `integration-tests.yaml` and in the part `static-views-1` of
+  `views-tests.yaml`: on a second Linux machine, in Freelens 2.0.0 built at the
+  target, FND-10 passed on the head, 7 cases of 7, and `pnpm test:unit` passed,
+  134 files and 3,812 tests, and the three measures; on the hosted runner, the
+  checks of its pull request, the integration test and the two parts of the
+  views it reaches, green before its merge.
+- The function the case evaluates in the host, taken from the test file as written
+  and run in a process of Node 24.21.0 with a stand-in of the host, against the main
+  bundle of the head: every assertion of the case held, after each of the two
+  commits. It is a check of the slice outside Electron, and not the packaged run.
+- The helper of the certificates, which FND-10 and the unit tests of the transport
+  share, reads `openssl version` before it makes anything: with the LibreSSL of
+  macOS first on the PATH, and with no `openssl` on it, it stopped with what it
+  found and that an OpenSSL 3 is needed, and made nothing; with an OpenSSL 3 first,
+  it made the certificates. The unit tests that use it, of the transport and of the
+  adapter, pass with it.
+
+Eight changes made on purpose, each one commit on the head on a branch of its own,
+`mut-m6-https-1` to `mut-m6-https-8`, kept apart for the packaged runs, which the
+case must see failing. The log of a packaged run shows the first assertion that
+fails, so each change is named with the assertion the check outside Electron saw
+fail first, in the order of the case:
+
+- `mut-m6-https-1`, the authority of the location dropped from the connection: the
+  trusted download, not decoded.
+- `mut-m6-https-2`, the name of the certificate not verified: the refusal of the
+  other name, which decodes.
+- `mut-m6-https-3`, the verification of the certificate turned off: the refusal with
+  no authority, which decodes.
+- `mut-m6-https-4`, a download whose certificate was refused asked again without the
+  verification: the refusal with no authority, which decodes, before the count of
+  the connections, five, and of the requests, three, which the case does not reach.
+- `mut-m6-https-5`, the inline authority of a location taken without its base64
+  decoded: the authority, not read, `tls-invalid`.
+- `mut-m6-https-6`, the signed URL kept on the failure of a certificate refused: the
+  words of the refusal with no authority.
+- `mut-m6-https-7`, a refused download probed again without the verification, with
+  `tls.connect` and `rejectUnauthorized` false and no request, which still ends as
+  `tls-invalid`: the connections, five.
+- `mut-m6-https-8`, the verification moved after the request, the answer refused
+  when the socket says it was not authorized, which still ends as `tls-invalid`: the
+  requests the store saw, three.
+
+The packaged runs, on the second Linux machine in Freelens 2.0.0: each of the eight
+branches failed the new case alone, first at the assertion its line names, and the
+six other cases of FND-10 passed. Two more changes, for the check outside Electron
+alone and with no branch, were seen failing the two assertions the review asked for:
+the error of the socket kept on the failure as a cause that is not enumerable, which
+names the other name, fails the words of the refusal of the other name; and no
+server name sent in the ClientHello fails the names the store recorded.
+
+An independent review of the first commit, on 2026-11-09, found no blocker, no
+major, one minor and eight nits. The minor: no change made on purpose was caught
+first by the two assertions of no connection without verification, the count of the
+connections and the request; the seventh and the eighth branches are. The nits,
+which the second commit takes in: the certificate said with its two names and two
+addresses, 127.0.0.1 among them; the name of each ClientHello recorded by the store
+and asserted, where the case asserted three connections in all; the words read with
+`util.inspect` as well, which reads the fields that are not enumerable, the stack
+and the cause; the certificates said to be made by the case; the store closed from
+the moment it listens; a fixture made after its time removed when it ends; a failure
+of the authority with no code kept by its name and its message; and the helper of
+the certificates stopping, before it makes anything, when the first `openssl` of the
+PATH is not OpenSSL 3.
+
+Decided while implementing, on 2026-11-09:
+
+- The store is opened in the main process of the host, as the store of the case over
+  HTTP is, on 127.0.0.1 alone, and closed by the case; the certificates are made in
+  the process of the test, since the helper runs `openssl`, and given to the host as
+  text.
+- The authority is given as a storage location gives it inline,
+  `spec.objectStorage.caCert`, its PEM in base64, and read by `certificate` of
+  `DiagnosticKubernetes`, which the main bundle exports, as the download of a log
+  reads it before it gives it to the transport: no export is added to the main
+  bundle, and the build test is unchanged.
+- A certificate for another name is the certificate of the same store, asked for by
+  a URL whose host is a name the certificate is not for, with the authority given:
+  one store and one authority for the three downloads, as the unit cases of the
+  transport do it. The trusted download comes first, so that an authority kept from
+  one download for the next would make the second one decode.
+- The case reads the verdict beside the code: both refusals are a certificate
+  refused, `untrusted`, which chooses the words of the views.
+- No connection without verification is read as what the store can count: three TCP
+  connections, the name each ClientHello asks for, so that nothing was asked again,
+  and one request, so that nothing was sent over a connection that was not verified.
+  Whether the store ends the handshake of a refused download is not asserted: under
+  Node, the store ended none, and saw a failure of the client for each.
+- The words of a refusal are its message, its text, its enumerable fields as JSON,
+  and `util.inspect` with the hidden fields at a depth of four. The URL is looked
+  for by its host, its path, its signature and its scheme followed by `//`, so that
+  a module of Node named in a frame of the stack is not taken for a URL.
+- FND-10 now runs `openssl`, the first on the PATH of the machine that runs it, as
+  the unit tests of the transport do. The helper takes an OpenSSL whose major
+  version is 3 or more, and stops on LibreSSL, on any other and on none, before it
+  makes anything: on macOS `/usr/bin/openssl` is LibreSSL, which does not know
+  `-copy_extensions`, so REL-02 runs with an OpenSSL 3 first on the PATH. TESTING.md
+  says so.
+
 T6.3, the first of its pull requests, with REQ-306 of T6.4, on 2026-11-09: what a
 prerelease is installed and checked with, which D15 puts before 1.0.0-0 since npm
 shows the README of the version it publishes. The README in the layout of the
