@@ -316,8 +316,7 @@ views, the second every view, the tabs of an operation among them, in both theme
 at two sizes of the window and at twice the zoom, and the journeys with the
 keyboard, through the tabs as well. Their screenshots and their measures are in
 `e2e-artifacts/`, with what the pre-review leaves to human judgment in
-`pre-review-tabs.json`, and every violation its accessibility scan found, with where
-it comes from, in `pre-review-accessibility.json`.
+`pre-review-tabs.json`.
 
 ## 5. Take it down
 

@@ -11615,11 +11615,10 @@ describe("platform of the test environment", () => {
       "velero-e2e-schedules",
     ]);
     // A name of the list runs every file whose name it is a part of, as Vitest takes it: the one of the restricted
-    // suites runs the two of them. The suites are the files `*.tests.ts`: the exceptions of the scan of the pre-review
-    // are in a file beside them.
-    const suites = readdirSync(new URL("../e2e/__tests__", import.meta.url))
-      .filter((name) => name.endsWith(".tests.ts"))
-      .map((name) => name.replace(/\.tests\.ts$/, ""));
+    // suites runs the two of them.
+    const suites = readdirSync(new URL("../e2e/__tests__", import.meta.url)).map((name) =>
+      name.replace(/\.tests\.ts$/, ""),
+    );
 
     expect(suites.filter((suite) => !WITHOUT_A_CONTROLLER.some((name) => suite.includes(name))).sort()).toEqual([
       "pre-review",

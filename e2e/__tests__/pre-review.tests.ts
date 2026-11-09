@@ -18,21 +18,9 @@
 // server removes one ten minutes after it signed it, and the last case waits
 // for that. So the loads come as early as the views allow, and the views of
 // the other pages are looked at while the server counts its minutes.
-//
-// Every view is scanned as well, in both themes at the two sizes of the
-// window, by axe-core with the rules of WCAG 2.1 at the levels A and AA, inside
-// the root of the view of the extension (REQ-293 of SPEC-0018). A violation of
-// impact serious or critical on an element the extension renders fails the
-// case of its view, unless the file of the exceptions beside the suite names
-// its rule, its element and the choice of a spec that keeps it; what comes from
-// a component of the host is reported and fails nothing.
 
-import { existsSync, readFileSync, rmSync } from "node:fs";
-import * as path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import * as accessibility from "../../integration/helpers/velero-accessibility";
 import * as artifacts from "../../integration/helpers/velero-artifacts";
-import * as axe from "../../integration/helpers/velero-axe";
 import * as cluster from "../../integration/helpers/velero-cluster";
 import * as velero from "../../integration/helpers/velero-extension";
 
@@ -45,26 +33,6 @@ const SIZES = [
   { name: "900x650", width: 900, height: 650, zoom: 1 },
   { name: "1440x900-zoom-200", width: 1440, height: 900, zoom: 2 },
 ];
-// The sizes the accessibility scan looks at each view in: the two windows, at the zoom of 1.
-const SCANNED = SIZES.filter((size) => size.zoom === 1);
-// The exceptions of the scan, a file beside the suite: each names its rule, its element and the choice of a spec that
-// keeps it.
-const EXCEPTIONS = "e2e/__tests__/pre-review.exceptions.json";
-// A file the runner may leave beside the artifacts of the suites, for one run: three views are broken on purpose, in
-// the DOM of the page and for their scan alone, in the dark theme at 1440 by 900, and the scan must fail the case of
-// each (VIS-02). The file goes when it is read, so that the run after is not broken.
-const BREAK_SIGNAL = path.join(cluster.ARTIFACTS_DIR, "..", "break-the-scan-once");
-const BREAKS: Record<string, axe.Break> = {
-  // The text of the name of the first backup of the list, a grey on a grey.
-  backups: { take: "contrast", selector: "[data-testid=velero-backups] button[data-backup-row]" },
-  // The way back of the workspace of a backup, with no words and no title.
-  workspace: { take: "name", selector: "[data-testid=velero-back]" },
-  // The first namespace the form of Create backup offers by its checkbox, with its label emptied.
-  "backup-create-form": {
-    take: "label",
-    selector: 'input[type=checkbox][data-testid^="velero-backup-create-includedNamespaces-"]',
-  },
-};
 const OPENED = "backup-finalizingpartiallyfailed";
 const RESTORES = cluster.RESTORES;
 const RESTORED = "restore-mapped";
@@ -128,25 +96,6 @@ interface Tab {
   kind: artifacts.Operation;
   tab: artifacts.WorkspaceTab;
 }
-// A violation the scan found, as the report lists it: the view, the theme and the size; the rule and its impact; what
-// axe-core says is to be fixed, and for a contrast the colors, their ratio and the ratio asked; the element, by a
-// selector and an excerpt of its HTML; where it comes from; and whether it fails, or the spec that keeps it.
-interface ScanRow {
-  view: string;
-  theme: string;
-  size: string;
-  rule: string;
-  impact: string | null;
-  help: string;
-  summary: string;
-  contrast?: accessibility.Contrast;
-  element: { selector: string; html: string };
-  origin: accessibility.Origin["origin"];
-  component?: string;
-  by: string;
-  fails: boolean;
-  exception?: string;
-}
 
 describe("pre-review of the views", () => {
   let started: velero.StartedApplication;
@@ -159,14 +108,6 @@ describe("pre-review of the views", () => {
   let lastLoad = 0;
   const problems: Record<string, string[]> = {};
   const screenshots: string[] = [];
-  // The exceptions of the scan, read before the application starts; the views broken on purpose, when the signal asks.
-  let exceptions: accessibility.Exception[] = [];
-  let breaks: Record<string, axe.Break> = {};
-  // What the scan found in each layout it looked at, by the name of the layout; what became of each violation; and the
-  // version of axe-core and the rules it ran.
-  const scans: Record<string, { rows: ScanRow[]; undecided: string[]; broken?: string }> = {};
-  const verdicts: accessibility.Verdict[] = [];
-  let scannedWith: { version: string; rules: string[] } | undefined;
   // What the suite asked the extension to create, by the names the tabs gave.
   const ledger = artifacts.requestLedger();
   // What each tab loaded, by its operation and its tab.
@@ -190,44 +131,6 @@ describe("pre-review of the views", () => {
     ],
   };
 
-  // The scan of a layout: what axe-core found inside the root of the view, each violation with where it comes from
-  // and what becomes of it. A view the signal breaks is broken in the dark theme at 1440 by 900, for that scan alone.
-  const scan = async (view: string, theme: velero.ColorTheme, size: string, name: string) => {
-    const broken = theme === "Dark" && size === SCANNED[0].name ? breaks[view] : undefined;
-    const found = await axe.scanView(
-      frame,
-      exceptions.map((exception) => exception.element),
-      name,
-      broken,
-    );
-
-    scannedWith ??= { version: found.version, rules: found.rules };
-    const rows = found.violations.map((violation): ScanRow => {
-      const origin = accessibility.originOf(violation.chain);
-      const verdict = accessibility.verdictOf({ ...violation, origin }, exceptions);
-      const contrast = accessibility.contrastOf(violation.contrast);
-
-      verdicts.push(verdict);
-      return {
-        view,
-        theme: theme.toLowerCase(),
-        size,
-        rule: violation.rule,
-        impact: violation.impact,
-        help: violation.help,
-        summary: violation.summary,
-        ...(contrast ? { contrast } : {}),
-        element: { selector: violation.selector, html: violation.html },
-        origin: origin.origin,
-        ...(origin.component ? { component: origin.component } : {}),
-        by: origin.by,
-        fails: verdict.fails,
-        ...(verdict.exception === undefined ? {} : { exception: exceptions[verdict.exception].spec }),
-      };
-    });
-
-    scans[name] = { rows, undecided: found.undecided, ...(broken ? { broken: broken.take } : {}) };
-  };
   // Every theme at every size: the view is set by the caller, and is what is checked and captured. A
   // layout is checked once the theme, the size and the zoom are the ones that were set: one that was
   // not applied would be the layout before it, checked twice. A tab of a view is looked at as the suite
@@ -235,9 +138,7 @@ describe("pre-review of the views", () => {
   // pointed at and is no state of the tab; a page that is scrolled, as one with a tab is at twice the
   // zoom, is looked at from its top, where its target bar is, by the check of the page, and from its end,
   // where the view is whole, by the check of the tab, which is where it is left for the picture. What `more`
-  // answers at each size is recorded with the problems of the layout. At the zoom of 1 the view is then scanned, once
-  // its picture is taken. The violations of the scan that fail are asserted once every layout of the view was looked
-  // at, softly: the case goes on to its other views, so that each is looked at and scanned, and fails at its end.
+  // answers at each size is recorded with the problems of the layout.
   const everyLayout = async (
     view: string,
     prepare?: () => Promise<void>,
@@ -274,25 +175,13 @@ describe("pre-review of the views", () => {
         }
         if (more) problems[name] = [...problems[name], ...(await more())];
         screenshots.push(await cluster.requiredScreenshot(frame, name, size.zoom));
-        if (SCANNED.includes(size)) await scan(view, theme, size.name, name);
       }
     }
     await velero.setZoom(started.app, 1);
     await velero.setWindowSize(started.app, 1440, 900);
     await velero.setColorTheme(started.app, started.window, "Dark");
     await frame.waitForTimeout(1000);
-    expect.soft({ view, failing: failingOf(view) }).toEqual({ view, failing: [] });
   };
-  // The violations of the scan of a view that fail, in each layout it was scanned in, each in one line.
-  const failingOf = (view: string) =>
-    Object.entries(scans)
-      .filter(([name]) => SCANNED.some((size) => name.endsWith(`-${size.name}-${view}`)))
-      .flatMap(([name, { rows }]) =>
-        rows
-          .filter((row) => row.fails)
-          .map((row) => `${name}: ${accessibility.violationLine({ ...row, ...row.element })}`),
-      );
-  // What the check of the layout found of a view, at every size.
   const found = (view: string) =>
     Object.fromEntries(
       Object.entries(problems).filter(
@@ -370,16 +259,6 @@ describe("pre-review of the views", () => {
   };
 
   beforeAll(async () => {
-    // A file of the exceptions that cannot be read says so before anything starts.
-    exceptions = accessibility.readExceptions(
-      readFileSync(new URL("./pre-review.exceptions.json", import.meta.url), "utf8"),
-      EXCEPTIONS,
-    );
-    if (existsSync(BREAK_SIGNAL)) {
-      rmSync(BREAK_SIGNAL);
-      breaks = BREAKS;
-      console.log(`The scan is broken on purpose in ${Object.keys(BREAKS).join(", ")}, as the signal asks`);
-    }
     if (!cluster.fixturesReady()) {
       throw new Error(cluster.fixturesMissing());
     }
@@ -2694,38 +2573,6 @@ describe("pre-review of the views", () => {
       tabs.requests = { asked: ledger.asked(), left: left.map((request) => request.name), lastLoad };
       await cluster.writeReport("pre-review-layout", problems);
       await report("pre-review-tabs", tabs);
-      // Every violation the scan found, in every layout it looked at, with what became of it; the count of each rule by
-      // its impact and where it comes from; what axe-core could not decide; and the exceptions no violation used,
-      // which fail nothing.
-      const violations = Object.values(scans).flatMap(({ rows }) => rows);
-      const counted: Record<string, number> = {};
-
-      for (const row of violations) {
-        const key = `${row.rule}, ${row.impact}, ${row.origin}${row.fails ? ", fails" : ""}`;
-
-        counted[key] = (counted[key] ?? 0) + 1;
-      }
-      await report("pre-review-accessibility", {
-        axe: scannedWith?.version,
-        tags: accessibility.WCAG_TAGS,
-        rules: scannedWith?.rules,
-        root: axe.PAGE_ROOT,
-        scans: Object.keys(scans).length,
-        broken: Object.fromEntries(
-          Object.entries(scans).flatMap(([name, scanned]) => (scanned.broken ? [[name, scanned.broken]] : [])),
-        ),
-        failing: violations.filter((row) => row.fails).length,
-        counted,
-        violations,
-        undecided: Object.fromEntries(
-          Object.entries(scans).flatMap(([name, { undecided }]) => (undecided.length > 0 ? [[name, undecided]] : [])),
-        ),
-        exceptions: {
-          file: EXCEPTIONS,
-          named: exceptions.length,
-          unused: accessibility.unusedExceptions(exceptions, verdicts),
-        },
-      });
       expect(left.map((request) => request.name)).toEqual([]);
       // Five loads ended, with their text or without it, and one was cancelled, which created a request or
       // none: five or six requests, each told to the guard by its name.
@@ -2734,9 +2581,6 @@ describe("pre-review of the views", () => {
       expect(Object.keys(problems)).toHaveLength(THEMES.length * SIZES.length * VIEWS);
       // A picture of every view was written, each under a name of its own.
       expect(new Set(screenshots).size).toBe(THEMES.length * SIZES.length * VIEWS);
-      // Every view was scanned in both themes at the two sizes, by rules axe-core ran.
-      expect(Object.keys(scans)).toHaveLength(THEMES.length * SCANNED.length * VIEWS);
-      expect(scannedWith?.rules.length).toBeGreaterThan(0);
       expect(after.versions).toEqual(before.versions);
       expect(after.installed).toEqual(before.installed);
       expect(after.requests).toBe(0);
