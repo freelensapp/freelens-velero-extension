@@ -4,8 +4,19 @@ import { dirname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { IMAGES } from "../e2e/scripts/local-manifests.mts";
+import { CLUSTER_WORDS, type DownloadVerdict, downloadFailure } from "../src/common/diagnostic-text";
 import { pausePatch, resumePatch } from "../src/common/schedule-patch";
+import { LIST_WORDS } from "../src/common/volume-words";
+import { BACKUP_DELETE_WORDS } from "../src/main/backup-delete";
+import { BACKUP_NOW_WORDS } from "../src/main/backup-now";
+import { DiagnosticError } from "../src/main/diagnostic-transport";
+import { RESTORE_CREATE_WORDS } from "../src/main/restore-create";
+import { SCHEDULE_CREATE_WORDS } from "../src/main/schedule-create";
+import { SCHEDULE_PATCH_WORDS } from "../src/main/schedule-patch";
+import { serverStatusFailure } from "../src/main/server-status";
 import * as kinds from "../src/renderer/api/kinds";
+
+import type { FailureCode } from "../src/common/ipc";
 
 // The README, which npm and GitHub show as the page of the package. What in it can go stale without anyone seeing it
 // is read here against what makes it true: the manifest, the code, the pins of the test environment and the files of
@@ -164,6 +175,100 @@ const KINDS_READ = (Object.values(kinds) as unknown[]).filter(
     typeof value === "function" && "crd" in value,
 );
 
+/**
+ * The quotes of a text: each paragraph of its blockquotes, its lines joined, and each cell of the column "The words" of
+ * its tables, each with its white space as one space.
+ */
+function quotesOf(markdown: string): string[] {
+  const quotes: string[] = [];
+  let paragraph: string[] = [];
+  // The column of the words in the table that is read: none out of a table, -1 in a table without that column.
+  let column: number | undefined;
+  const close = () => {
+    if (paragraph.length > 0) quotes.push(squeezed(paragraph.join(" ")).trim());
+    paragraph = [];
+  };
+
+  for (const { text, fenced } of linesOf(markdown)) {
+    const quoted = fenced ? undefined : /^ {0,3}>[ \t]?(.*)$/.exec(text)?.[1];
+
+    if (quoted !== undefined && quoted.trim() !== "") {
+      paragraph.push(quoted);
+      continue;
+    }
+    close();
+    if (fenced || !/^\s*\|.*\|\s*$/.test(text)) {
+      column = undefined;
+      continue;
+    }
+    const cells = text
+      .trim()
+      .slice(1, -1)
+      .split("|")
+      .map((cell) => cell.trim());
+
+    if (column === undefined) column = cells.indexOf("The words");
+    else if (column >= 0 && !/^\s*\|[\s|:-]+\|\s*$/.test(text)) quotes.push(squeezed(cells[column] ?? ""));
+  }
+  close();
+
+  return quotes;
+}
+
+// The names Troubleshooting writes the quotes with, as code spans: the namespace of the installation, and the name of a
+// DownloadRequest.
+const NAMESPACE = "`<namespace>`";
+const REQUEST = "`<request>`";
+
+/** What the tab of the log of a backup says of a download that ended with a code at a step, for a verdict. */
+const downloadWords = (code: FailureCode, stage: string, verdict?: DownloadVerdict) =>
+  downloadFailure(code, stage, {
+    artifact: "BackupLog",
+    name: "backup",
+    namespace: NAMESPACE,
+    request: REQUEST,
+    ...(verdict ? { verdict } : {}),
+  }).text;
+
+// Each quote of Troubleshooting under the heading of its entry, as the function of its words writes it for the case
+// that makes it (DOC-06 of SPEC-0018 lists them beside the quotes): an entry quotes these words, and no other.
+const LIST_OR_ACTION = "A list or an action is refused";
+const PORT_FORWARD = "A port-forward is refused";
+const CERTIFICATE = "A certificate is refused";
+const NOT_CONNECTED = "The cluster is not connected";
+const STORE = "The store does not answer";
+const TROUBLESHOOTING: readonly { entry: string; words: string }[] = [
+  // A list the cluster answered with 401 or 403, never read before: the page of the list, in the place of its rows.
+  { entry: LIST_OR_ACTION, words: LIST_WORDS.notShown("backups", NAMESPACE) },
+  { entry: LIST_OR_ACTION, words: LIST_WORDS.denied("backups") },
+  // A 403 to the write of each action, in the main process: Back up now and Create backup create the backup alike.
+  { entry: LIST_OR_ACTION, words: BACKUP_NOW_WORDS.forbiddenCreate(NAMESPACE) },
+  { entry: LIST_OR_ACTION, words: RESTORE_CREATE_WORDS.forbiddenCreate(NAMESPACE) },
+  { entry: LIST_OR_ACTION, words: SCHEDULE_CREATE_WORDS.forbiddenCreate(NAMESPACE) },
+  { entry: LIST_OR_ACTION, words: SCHEDULE_PATCH_WORDS.forbidden(NAMESPACE) },
+  { entry: LIST_OR_ACTION, words: BACKUP_DELETE_WORDS.forbiddenCreate(NAMESPACE) },
+  // A 403 to the creation of the request of a tab, and of the band of the server.
+  { entry: LIST_OR_ACTION, words: downloadWords("forbidden", "creation") },
+  { entry: LIST_OR_ACTION, words: serverStatusFailure(new DiagnosticError("forbidden")).text },
+  // A 401 to the write of Back up now: a credential the cluster did not take.
+  { entry: LIST_OR_ACTION, words: BACKUP_NOW_WORDS.credential },
+  // The port-forward kubectl was refused, at the step of the forward.
+  { entry: PORT_FORWARD, words: downloadWords("forbidden", "forward") },
+  // The connection to the store, at the step of the download: a certificate refused, of a location that asks for no
+  // verification or of one that does not, and a handshake that failed with no certificate refused.
+  { entry: CERTIFICATE, words: downloadWords("tls-invalid", "download", "untrusted") },
+  { entry: CERTIFICATE, words: downloadWords("tls-invalid", "download", "insecure") },
+  { entry: CERTIFICATE, words: downloadWords("tls-invalid", "download") },
+  // The entry of the cluster in the catalog of Freelens, read before every request, not connected.
+  { entry: NOT_CONNECTED, words: CLUSTER_WORDS.disconnected },
+  // The store not reached, and silent, at the step of the download; a Service of the store with no Pod ready, at the
+  // step of its endpoint slices; and no URL signed in the wait for it.
+  { entry: STORE, words: downloadWords("transport-unreachable", "download") },
+  { entry: STORE, words: downloadWords("deadline", "download") },
+  { entry: STORE, words: downloadWords("destination-denied", "endpoints", "endpoint") },
+  { entry: STORE, words: downloadWords("deadline", "wait", "unsigned") },
+];
+
 describe("the documents of the package", () => {
   const readme = read("README.md");
 
@@ -264,6 +369,28 @@ describe("the documents of the package", () => {
     ]) {
       expect([rule, squeezed(safety).includes(rule)]).toEqual([rule, true]);
     }
+  });
+
+  it("quotes in each entry of Troubleshooting the words the extension shows, as the function of its words writes them for its case, and no other", () => {
+    const troubleshooting = sectionOf(readme, "Troubleshooting", 2);
+    const entries = [...new Set(TROUBLESHOOTING.map(({ entry }) => entry))];
+    // What comes before the first entry: the names the quotes are written with.
+    const preface = troubleshooting.split(/^### /m)[0] ?? "";
+
+    expect(
+      headingsOf(troubleshooting)
+        .filter(({ level }) => level === 3)
+        .map(({ text }) => text),
+    ).toEqual(entries);
+    for (const entry of entries) {
+      expect([entry, quotesOf(sectionOf(troubleshooting, entry, 3)).sort()]).toEqual([
+        entry,
+        TROUBLESHOOTING.filter((quote) => quote.entry === entry)
+          .map(({ words }) => words)
+          .sort(),
+      ]);
+    }
+    expect([preface.includes(NAMESPACE), preface.includes(REQUEST)]).toEqual([true, true]);
   });
 
   it("resolves every relative link, image and anchor of the README, and holds it to ASCII with no em dash and no emoji", () => {
