@@ -805,8 +805,9 @@ The evidence, by check:
   test passed, 11 files. The branch and its four caches were removed after the
   run. The first step, which checks the commit, came after that run, and runs on
   every path.
-- The runs of its pull request, the integration test and every part of the views:
-  {RUN-BUILD-ACTION-INTEGRATION}; {RUN-BUILD-ACTION-VIEWS}.
+- The runs of its pull request, green before its merge: the unit tests, the
+  integration test and every part of the views, each with the check of the commit
+  passed and the build of the target restored from the cache of main.
 
 Each new case was seen failing on a change made on purpose, thirty-three in all.
 The action checking out main, and a commit it names; the input of the commit
