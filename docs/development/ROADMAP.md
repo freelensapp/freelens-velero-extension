@@ -269,33 +269,29 @@ their tests green in CI on main.
 
 | Feature | Task | Spec | Status |
 | --- | --- | --- | --- |
-| Regression; the published tarball tested; isolation between two clusters; the roles of the README proven; HTTPS and the direct route in the host; two actions with the real controller; a ceiling on the bundles. The rest is deferred, D16 | T6.1 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | In PR |
+| Regression; the roles of the README proven; HTTPS and the direct route in the host; a ceiling on the bundles. The rest is deferred, D16 | T6.1 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | In PR |
 | Visual and accessibility pass on both themes and on narrow and large windows | T6.2 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Approved |
 | Installation, permissions, safety, compatibility and troubleshooting documentation, screenshots, demonstration video, release notes | T6.3 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | In PR |
-| Tarball, checksums and software bill of materials from the release workflow | T6.4 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Approved |
+| Tarball, checksums and software bill of materials from the release workflow of the template: on each GitHub release, the tarball and the bill of materials of the repository at the tag, each with its `.sha256`, and the provenance through the trusted publisher alone. Left: the token of the first publication and then the trusted publisher, and the proof of the assets on the first release | T6.4 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | In PR |
 | With Freelens 2.0.0: the pin of the SDK a range of versions, the integration at the tag v2.0.0, the host drift watch ended | | [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#d10-the-version-and-the-release) | Done |
-| Release through the organization's flow, on the lead maintainer's go | T6.5 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | In PR |
+| Release through the organization's flow, on the lead maintainer's go: the version, tag and release workflows of the template, the tag on main once the pull request of the version is merged. Left: the review of the milestone, 1.0.0 published and checked, and its listing in the marketplace | T6.5 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | In PR |
 
 [SPEC-0018](../specs/SPEC-0018-release-readiness.md), approved by the lead
 maintainer on 2026-11-09 with D1 to D19 as proposed, is the one spec of the
 milestone; its first slice comes after M5, closed with its review the same day.
 The order of the slices, its D15, with the line between what gates the prerelease
-1.0.0-0 and what gates 1.0.0. For 1.0.0-0: T6.4, with
-[#144](https://github.com/freelensapp/freelens-velero-extension/issues/144), the
-release workflow in two jobs with FND-10 on the tarball it publishes, the bill of
-materials of the packed file, the provenance of the publication and the list of
-what the package contains, and the tag on the merge commit of the pull request of
-the version; then the sections of the README a prerelease is installed with; then
-1.0.0-0 when the lead maintainer asks for it, the proof of its assets and its
-check by version in Freelens 2.0.0. For 1.0.0: the identities of the actions, then
+1.0.0-0 and what gates 1.0.0. For 1.0.0-0: T6.4 and the tag, which are the
+version, tag and release workflows of the template of the organization, as the
+lead maintainer decided on 2026-11-09 with the amendment of the spec; then the
+sections of the README a prerelease is installed with; then 1.0.0-0 when the
+lead maintainer asks for it, the proof of its assets and its check by version in
+Freelens 2.0.0. For 1.0.0: the identities of the actions, then
 [#145](https://github.com/freelensapp/freelens-velero-extension/issues/145), the
-second cluster, the case of FND-10 by the direct route, the actions with the real
-controller and the ceilings of the bundles, with T6.2, the accessibility scan of
-the pre-review, beside them; a prerelease through the trusted publisher of npm;
-then the screenshots, the video and the notes of 1.0.0, the review of the
-milestone, and 1.0.0 on `latest` on the lead maintainer's go. Its D16 says what
-T6.1 takes and what it defers: the row of T6.1 is narrowed to it, and what it
-defers is under Deferred after v1.0.0.
+case of FND-10 by the direct route and the ceilings of the bundles, with T6.2, the
+accessibility scan of the pre-review, beside them; then the screenshots, the video
+and the notes of 1.0.0, the review of the milestone, and 1.0.0 on `latest` on the
+lead maintainer's go. Its D16 says what T6.1 takes and what it defers: the row of
+T6.1 is narrowed to it, and what it defers is under Deferred after v1.0.0.
 Each slice is its own pull request; the row of a task is In PR from its first and
 Done with its last.
 
@@ -310,6 +306,14 @@ Work that is decided out of v1.0.0, each item with its decision:
   runners at each tag; and the other gaps of the inventory the spec lists, each
   with its reason and the check or the statement of the README that keeps its
   release signal.
+- **What the amendments of SPEC-0018 do not take of T6.1**, decided by the lead
+  maintainer on 2026-11-09 ([the amendments](../specs/SPEC-0018-release-readiness.md#amendments)):
+  the checks that go beyond the other extensions of the organization and were not
+  made, the isolation between two clusters in one packaged Freelens, and Back up
+  now and Delete backup with the real controller in the packaged application;
+  and, with the release workflow of the template, FND-10 on the tarball the
+  release publishes. The spec lists each in what T6.1 defers, with the check that
+  stays.
 - **Editing a Schedule**, to the next minor: the adapter is create-only, and a
   patch of the spec needs the review of a diff, a different review model from the
   one of a creation. Decided by the lead maintainer on 2026-10-23.

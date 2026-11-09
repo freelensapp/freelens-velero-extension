@@ -167,17 +167,13 @@ target.
 - An automated pull request whose title carries `[skip ci]` ran no check: run
   Trunk Check on it before merging.
 - Packages are published only by the release workflow, never from a
-  workstation. Tags are created only by the tag workflow, on the merge commit
-  of the pull request of the version, never on main as it is when the workflow
-  runs: at the merge of that pull request, or, once it is merged, on the
-  comment `/tag` of an author with write access to the repository who is an
-  owner, a member of the organization or a collaborator.
+  workstation. Tags are created only by the tag workflow.
 - The version changes through the pull request of the version workflow only,
   never by hand in another pull request. The tag workflow tags a release
-  version, `X.Y.Z`, and a prerelease of a line, `X.Y.Z-N`, and no other form
-  of a version. The release workflow publishes a version with a hyphen on the
-  npm tag `next` and marks its GitHub release as a prerelease, and any other on
-  `latest`.
+  version, `X.Y.Z`, and a prerelease, `X.Y.Z-` followed by letters, digits,
+  dots and hyphens, and no other form of a version. The release workflow
+  publishes a version with a hyphen on the npm tag `next` and marks its GitHub
+  release as a prerelease, and any other on `latest`.
 - External contributions follow the same spec-first loop; maintainers help
   contributors write the spec when needed.
 

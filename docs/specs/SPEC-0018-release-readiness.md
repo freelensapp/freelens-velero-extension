@@ -7,7 +7,7 @@
 - **Reviewed main:** not relevant: the subject of this spec is the release of the extension, its checks and its documents
 - **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0
 - **Dependencies:** every spec of v1.0.0, SPEC-0001 to SPEC-0017; [D10 of SPEC-0015](SPEC-0015-freelens-v2-host.md#d10-the-version-and-the-release), the version line and its prereleases; the fifth milestone, done and reviewed: its review gate passed with the lead maintainer on 2026-11-09
-- **Approval:** Approved by the lead maintainer on 2026-11-09, with D1 to D19 as proposed; D11b is carried out with an owner of the npm scope `@freelensapp` when the first prerelease is asked for
+- **Approval:** Approved by the lead maintainer on 2026-11-09, with D1 to D19 as proposed; D11b is carried out with an owner of the npm scope `@freelensapp` when the first prerelease is asked for. Amended the same day, decided by the lead maintainer on 2026-11-09: the version, tag and release workflows are the template's of the organization; what the requirements below asked beyond it is not taken; and the README follows the template too, with no `CHANGELOG.md` and no Verify a release ([the amendment](#2026-11-09-the-release-flow-of-the-template)). Amended the same day as well, decided by the lead maintainer on 2026-11-09: the checks that go beyond the other extensions and were not made are not taken; the ones made, the HTTPS and the direct route of FND-10, the ceilings of the bundles and the identities of the roles, stay ([the amendment](#2026-11-09-the-checks-beyond-the-other-extensions))
 
 Governed by [AGENTS.md](../../AGENTS.md). A completed draft is not approval to
 implement.
@@ -76,10 +76,12 @@ Excluded, with their owners:
 2. **P1, by name before 1.0.0:** Given only prereleases on the registry, when the
    operator types the name alone, then Freelens says that it found no version of
    the package, and the README says to install `@next` until 1.0.0.
-3. **P1, a download verified:** Given the assets of a GitHub release, when the
-   operator checks the tarball against its `.sha256` with the command of the
-   README for the system, then the check passes, and `npm audit signatures`, in a
-   project that installs the package, verifies its provenance.
+3. **P1, a download verified,** amended on 2026-11-09
+   ([the amendment](#2026-11-09-the-release-flow-of-the-template)): Given the
+   assets of a GitHub release, when the operator gives Freelens the URL of the
+   tarball, or its path with its `.sha256` beside it, as the README says, then
+   Freelens checks the tarball against the `.sha256` and installs it when they
+   match.
 4. **P1, a role of the README:** Given an identity bound to the read-only role of
    the README, when the operator opens the views and asks an action, then the
    lists load and the action ends as forbidden with the words of what the identity
@@ -88,15 +90,14 @@ Excluded, with their owners:
 5. **P1, the words of a failure:** Given an identity that may not forward a port,
    when the operator loads a log, then the tab says the words the section
    Troubleshooting of the README quotes, and that section names the verb to grant.
-6. **P2, two clusters:** Given two clusters, each with an installation in the
-   namespace `velero` and a backup `daily-1` with another UID, when both are open,
-   then each frame lists its own backup, told apart by UID, and each shows its own
-   installation again after a restart.
-7. **P2, a build that does not load:** Given a change whose packed build does not
-   activate in Freelens, when the job `package` of the release workflow runs, on
-   the pull request of a change of that workflow or at a tag, then FND-10 fails on
-   that tarball, and at a tag the job `publish` does not start: nothing is
-   published and no GitHub release is created.
+6. **P2, two clusters,** not taken on 2026-11-09
+   ([the amendment](#2026-11-09-the-checks-beyond-the-other-extensions)): there is
+   no second cluster in the environment, and the gate between frames stays proven
+   by the second entry of SPEC-0009, the same cluster through another kubeconfig.
+7. **P2, a build that does not load,** not taken on 2026-11-09
+   ([the amendment](#2026-11-09-the-release-flow-of-the-template)): the release
+   workflow has no job `package`, and FND-10 runs on the tarball the integration
+   workflow packs, on every pull request and every push to main, not at a tag.
 8. **P2, a control with no name:** Given a view whose button loses its accessible
    name, when the pre-review runs, then the scan fails the case with the rule and
    the element.
@@ -108,13 +109,13 @@ Excluded, with their owners:
 | ID | Contract | Acceptance check |
 | --- | --- | --- |
 | REQ-285 | The regression of 1.0.0 is every check of SPEC-0001 to SPEC-0017 and of this spec, each in its layer, run where [the table](#where-each-check-runs) says: on every pull request, on every push to main, every night on main and at a tag. No check of those specs is removed, skipped or loosened for the release. Before the pull request of a version is merged, the last runs on main of every workflow of the table that runs there, of a push and of the night, and the checks of that pull request are green; a run that passed only when run again is recorded with its first failure. The tag names the merge commit (REQ-315), whose runs start with the merge and end after the tag: they are read and recorded with their counts, and the required reviewer of `publishing` (D11b) approves the job `publish` only once they are green, which makes that reading the gate of the publication. A red run found after a publication is handled as [the way back](#the-way-back) says | REG-01 |
-| REQ-286 | The bytes that ship are the bytes a test installed (G1.1: no check installs the file the release publishes). The release workflow has two jobs. The job `package`, with the permission `contents: read` alone and no environment, checks at a tag that the tag is the version of `package.json`, builds, packs the tarball once and runs FND-10 on that file, in Freelens built at the commit of the validation target through the steps the integration workflow shares with it as one reusable workflow or one composite action, with no cluster: through a mode of the runner of the integration test that skips the checks of the target and of the namespaces, or through `xvfb-run pnpm test:integration integration/__tests__/extensions.tests.ts` with `FREELENS_APP` and `EXTENSION_PATH`. It then makes the bill of materials (REQ-307), the checksums of the tarball and of the bill of materials, the notes of the version (REQ-303) and the list of the contents (REQ-316), checks that the four files and the notes are there, and uploads them as an artifact of the run. The job `publish`, which needs `package`, runs in the environment `publishing` with `id-token: write` and `contents: write`, and runs nothing of the build: it downloads the artifact, verifies the sha256 of the tarball, publishes that very file with `pnpm publish <file>` (REQ-308), and creates the GitHub release with the four files and the notes. No step with a side effect runs before the publication, and when any step of `package` fails, nothing is published and no GitHub release is created. The job `package` runs as well, with no `publish`, on `workflow_dispatch` and on every pull request that changes `release.yaml`, `CHANGELOG.md` or the steps it shares, so that the workflow runs before its first tag | REG-02 |
-| REQ-287 | A second cluster in the environment of the suites (G4.1: the isolation between clusters is proven on one API server). The environment can hold a second disposable kind cluster with the CRDs of the release alone, under a second name and on a network of its own, owned by the same journal, which the identity checks accept as they accept the first and nothing else; the scripts and the runner name the cluster, its journal entry, its network and its subnets through one parameter; the cleanup removes both | REG-03 |
-| REQ-314 | Two clusters at once in one packaged Freelens (G4.1, with G4.4: the preferences of two frames are not read together). With both clusters in the catalog, and fixtures that place an installation in a namespace of the same name in each, with backups of the same names and other UIDs: each frame lists the objects of its own cluster, told apart by UID; and each selects its own installation, which the stored preferences keep under the identifier of its cluster, and shows it again after a restart. The gate of each frame and the count of the writes between frames stay proven by the suite of the second entry of SPEC-0009 (D4) | REG-08 |
+| REQ-286 | Amended on 2026-11-09, see [the amendment](#2026-11-09-the-release-flow-of-the-template): taken in its first half alone. The steps that build Freelens at the commit of the validation target are one composite action, `.github/actions/build-freelens`, which the workflows of the integration test and of the views call, each with the commit it names once. The rest is not taken: the release workflow is the template's, one job that checks the tag, builds, packs and publishes, with no job `package`, no FND-10 on the file it publishes and no run on a pull request or by hand, so G1.1, no check installs the file the release publishes, stays open | REG-02 |
+| REQ-287 | Not taken on 2026-11-09, see [the amendment](#2026-11-09-the-checks-beyond-the-other-extensions): a second disposable kind cluster in the environment of the suites, for the isolation between clusters (G4.1) | REG-03 |
+| REQ-314 | Not taken on 2026-11-09, see [the amendment](#2026-11-09-the-checks-beyond-the-other-extensions): two clusters at once in one packaged Freelens, their lists told apart by UID and their installations selected and kept apart (G4.1, G4.4). The gate of each frame and the count of the writes between frames stay proven by the suite of the second entry of SPEC-0009 (D4) | REG-08 |
 | REQ-288 | The roles of the README, proven both ways (G5.1: no identity holds the verbs of the write actions; G5.2: nothing proves that the reading role is enough). Two identities of the test environment hold exactly the two example roles of the README (REQ-297): the operator, for the views, the tabs, the version of the server and every action, and the reader, for the views alone. They replace the administrator of the kind cluster for the session of the extension alone: the proofs take one kubeconfig today for the session and for what they place and remove (the real schedule, the namespace of a restore), which the operator may not do, so their context holds both. With the kubeconfig of the operator, the end to end proofs of the actions, Back up now, Create backup, Create schedule, Restore, Pause and Resume and Delete backup, the proof of the download through the cluster and a request of the version of the server end as they end with the administrator. With the kubeconfig of the reader, the restricted suite of the views passes; a creation of a Backup and the patch of a Schedule, the two ways the adapter writes, each end as forbidden at the step whose verb the reader lacks, with the words of what the identity may not do, and nothing is written, which the API server counts | REG-04 |
 | REQ-289 | HTTPS in the main process of the host (G6.1: the bundled transport is not run over TLS in Electron). A case of FND-10 downloads an artifact over HTTPS inside the main process of the host, with the bundled transport, from a server on loopback whose certificate an authority made for the test signed, the authority given inline as a storage location gives it: the content is decoded. The same server with no authority given, and a certificate for another name, end as `tls-invalid`, with no URL in the words, and no connection is made without verification. The certificates are made outside the host by the helper the unit tests use, and no dependency is added | REG-05 |
 | REQ-290 | The direct route in the main process of the host (G6.2: the resolution of a route is not run in Electron). A case of FND-10 resolves, inside the main process of the host, with `resolveRoute`, which the main bundle exports and the build test lists among its exports, the route of a storage location whose URL names an address literal of a private range on which nothing listens, from the ranges the extension counts as private (RFC 1918, or 198.18.0.0/15): without the allowance of private addresses for the cluster, the route is refused with the words of what may be allowed; with it, the route is direct to that address. No listener is opened beyond loopback, and nothing is connected to | REG-06 |
-| REQ-291 | The actions with the real controller in the packaged application (G3.2: the packaged actions run on the CRDs alone, and the second part of G3.1). On the environment of the demo, with the server of the release, two cases of a suite of a part that exists ask, in the packaged application, Back up now in the view of the real schedule of the environment, then Delete backup of the backup it made, each through its workspace, with writes on and its review confirmed: the workspace and then the view of the backup show each phase Velero writes up to Completed, and the words that Velero has not read the backup are gone once a phase is read; the deletion is followed until the backup is gone, and the list of the Backups no longer shows it. The API server counts one creation of a Backup and one of a DeleteBackupRequest asked by the extension, and nothing of the run is left | REG-07 |
+| REQ-291 | Not taken on 2026-11-09, see [the amendment](#2026-11-09-the-checks-beyond-the-other-extensions): Back up now and Delete backup asked in the packaged application against the real controller (G3.2, and the second part of G3.1). Each action keeps its proof in `pnpm e2e` against the server of the release, through the compiled main process, and its cases in the suite of the actions on the CRDs of the release alone | REG-07 |
 | REQ-317 | A ceiling on the size of what ships (P7.2 of the inventory, for G7.2: nothing bounds the size of the bundles). The build test holds each of `dist/main.js`, `dist/renderer.js` and `dist/renderer.css` under a ceiling of bytes, set by its slice a quarter above the size of each at that commit, and a change that passes a ceiling fails until the ceiling is moved, with its reason, in the pull request that needs it | REG-09 |
 
 ### Visual And Accessibility Pass (T6.2)
@@ -154,26 +155,26 @@ of the review of the milestone (REQ-312).
 | REQ-300 | Troubleshooting has an entry for each failure an operator meets first: a list or an action refused to the identity, a port-forward refused, a certificate the transport refuses, a cluster that is not connected, and a store that does not answer. Each entry quotes the words the extension shows, which SPEC-0002, SPEC-0010, SPEC-0015 and SPEC-0017 record and the modules of the words write, says what causes them and what to do, and leads to Permissions or Safety where they answer | DOC-06 |
 | REQ-301 | The README shows the views in screenshots the pre-review of the release candidate took on the disposable kind cluster of the demo, with its synthetic objects alone: the Overview, the list of the Backups, the workspace of a backup with its log, the adherence of the schedules and the review of a restore, in the dark theme, and the Overview in the light theme as well. They are files under `docs/screenshots/`, outside the package, each with a text that says what it shows, and none shows anything of a real environment | DOC-07 |
 | REQ-302 | A video of less than 60 seconds, recorded from the packaged Freelens on the disposable kind cluster of the demo with its synthetic data alone, shows the Overview, a backup with its log, the adherence of a schedule and an action with its review; the README links to it, and it is not in the package (D9). No frame shows a name, an address, a credential or anything of a real environment | DOC-08 |
-| REQ-303 | The notes of each version are a section of `CHANGELOG.md` at the root of the repository, with the version and its date, written in a pull request before the one of the version: for 1.0.0, what the version covers by milestone, its requirements and compatibility, the safety rules in one paragraph, how to install and verify it, and its known limits; for a prerelease, what changed since the one before, and for 1.0.0-0 what it covers. A unit case fails the pull request of a version whose section is missing; the job `package` makes the notes from the section of the tag and fails when it is missing, before anything is published, and the GitHub release carries them as its body (D12) | DOC-09 |
+| REQ-303 | Amended on 2026-11-09, see [the amendment](#2026-11-09-the-release-flow-of-the-template): not taken as written. The notes of each version are written in the body of its GitHub release, as the other extensions of the organization write them, with no `CHANGELOG.md` and no case of them (D12) | DOC-09 |
 | REQ-304 | Every relative link and image of the README and of `CHANGELOG.md` names a file of the repository, and every anchor a heading of its document; every external link answers when the lead maintainer reviews them. Both are in English, ASCII, with no em dash, no emoji, no person named and no comparison with other software, as AGENTS.md asks of what is published | DOC-10 |
 
 ### Release Assets (T6.4)
 
 | ID | Contract | Acceptance check |
 | --- | --- | --- |
-| REQ-305 | A unit case pins the assets of the release in `release.yaml`, as #144 asks: the bill of materials in SPDX JSON named after the tarball, a `.sha256` of the tarball and of the bill of materials, the release with `fail_on_unmatched_files` and exactly the four patterns of the files, and their order. The case of #144 pins the order the workflow has when it lands, the bill of materials and the checksums made after the publication and before the release; with REQ-286 it pins the order of the two jobs instead, the bill of materials and the checksums made in `package`, before the publication, which amends that one phrase of #144. It is restated by each change of the workflow this spec brings (REQ-286, REQ-303, REQ-307, REQ-308, REQ-316) | ASSET-01 |
-| REQ-306 | The README says how to verify a release, as #144 asks: the tarball against its `.sha256`, with `sha256sum -c` on Linux, `shasum -a 256 -c` on macOS, and `Get-FileHash -Algorithm SHA256` compared with the file on Windows; that the npm package carries a provenance attestation, checked with `npm audit signatures` in a project that installs it; that the bill of materials, an SPDX JSON file, is attached to each GitHub release with its own `.sha256`; and what it lists (REQ-307). Every command is one the workflow makes true | ASSET-02 |
-| REQ-307 | The bill of materials is of what the package carries (D10): the extension and the libraries its bundles carry, react-window today, at the versions of the lockfile, and no devDependency and no peer: react and react-dom, the peers of react-window, are provided by the host and are not carried. The job `package` makes it from the packed file, installed in an empty directory with `npm install --omit=dev --omit=peer --ignore-scripts --no-package-lock <file>`, never from the registry, and the scan of that directory, with the same file name as today. The first slice records the list it gives | ASSET-03 |
-| REQ-308 | Every version is published with a provenance statement that names the release workflow, the tag and its commit (D11a): the job `publish` asks for the provenance on both of its ways, with a token and through the trusted publisher. The first version, 1.0.0-0, is published with the granular token of D11b, created for it by an owner of the scope, since npm configures a trusted publisher on a package that exists, as far as this draft read (the second open question); no credential of npm exists for this package today. Before the next version the token is revoked on npm and deleted from the environment, the trusted publisher is configured, and one prerelease is published through it before 1.0.0 | ASSET-04 |
-| REQ-309 | The proof on the first prerelease: its GitHub release is a prerelease with the four assets; the checksum of REQ-306 passes for the tarball and for the bill of materials; the tarball of the registry is the asset, byte for byte, and the one on which the log of `package` shows FND-10 green and whose sha256 `publish` verified; `npm audit signatures` verifies its attestation, which names `release.yaml`, the tag and its commit; the bill of materials lists the extension and react-window and nothing else; `next` names 1.0.0-0, and `latest` names nothing or 1.0.0-0, recorded (HOST-21 as restated) | ASSET-05 |
-| REQ-316 | What the package contains, and the notice of what it bundles. The job `package` lists the files of the tarball and fails on a file outside `files` and what the packer always adds, the manifest, the README and the license, which the first run records; on an absolute path of the machine that built it in any file; and on the form of a credential the private-data rules of AGENTS.md name, a kubeconfig, a private key, a token of npm or of GitHub. The license notice of each library a bundle carries, the MIT notice of react-window today, travels in the package, which the list finds, and DEPENDENCY-AUDIT.md says where | ASSET-06 |
+| REQ-305 | Not taken on 2026-11-09, see [the amendment](#2026-11-09-the-release-flow-of-the-template): the unit case of #144 that pinned the assets of the release in `release.yaml`; the file is the template's, byte for byte | ASSET-01 |
+| REQ-306 | Not taken on 2026-11-09, see [the amendment](#2026-11-09-the-release-flow-of-the-template): the README installs a release tarball as the one of the template does, by the URL of its asset or by its path, and Freelens checks the tarball against the `.sha256` beside it itself; there is no Verify a release | ASSET-02 |
+| REQ-307 | Amended on 2026-11-09, see [the amendment](#2026-11-09-the-release-flow-of-the-template): the bill of materials is the template's, of the repository at the tag: an SPDX JSON document that `anchore/sbom-action` makes of the folder of the repository after the publication, named after the tarball and attached to the GitHub release with its `.sha256`. The bill of materials of the packed file is not taken (D10) | ASSET-03 |
+| REQ-308 | Amended on 2026-11-09, see [the amendment](#2026-11-09-the-release-flow-of-the-template): the provenance is the template's. The release workflow asks for it only through the trusted publisher, when no secret `NPM_TOKEN` reaches its job, and publishes with the token without it (D11a): 1.0.0, published with the granular token of D11b, carries none. Once it is published, the token is revoked on npm and deleted from the environment, and the trusted publisher is configured, so that every version after it is published through the trusted publisher with a provenance statement that names the release workflow, the tag and its commit | ASSET-04 |
+| REQ-309 | Amended on 2026-11-09, see [the amendment](#2026-11-09-the-release-flow-of-the-template). The proof on the first prerelease: its GitHub release is a prerelease with the four assets; the `.sha256` of the tarball and of the bill of materials pass; the tarball of the registry is the asset, byte for byte; `npm audit signatures` verifies the signature of the registry, and the attestation where REQ-308 gives one, which names `release.yaml`, the tag and its commit; the bill of materials is the one of the repository at the tag (REQ-307); `next` names 1.0.0-0, and `latest` names nothing or 1.0.0-0, recorded (HOST-21 as restated) | ASSET-05 |
+| REQ-316 | Not taken on 2026-11-09, see [the amendment](#2026-11-09-the-release-flow-of-the-template): the list of the contents of the tarball in the release workflow, and the license notice of each library the bundles carry, in the package | ASSET-06 |
 
 ### Release (T6.5)
 
 | ID | Contract | Acceptance check |
 | --- | --- | --- |
 | REQ-310 | The first prerelease, 1.0.0-0, is made when the lead maintainer asks for it (D10 of SPEC-0015), once what gates it in D15 is Done: the drift watch read and recorded in RECON-T0.1; the notes of 1.0.0-0 in `CHANGELOG.md`; the version workflow with the version `1.0.0-0`, its pull request merged after its checks and the runs of main green (REQ-285); the tag workflow on the merge commit of that pull request (REQ-315); the job `package`, then the job `publish`, approved by the required reviewer (D11b), which publishes on `next` and marks the GitHub release as a prerelease (HOST-21 of SPEC-0015 as restated). A change of the code after it is released as 1.0.0-N the same way. Nothing is published from a workstation; what an owner of the scope does by hand is [the way back](#the-way-back) alone | REL-01 |
-| REQ-315 | The tag workflow tags the commit of the version. On the merge of the pull request of the version, it checks out, reads the version from and tags `github.event.pull_request.merge_commit_sha`, never `heads/main` as it is when the job runs. On the comment `/tag`, it acts only when the author of the comment is an owner, a member or a collaborator of the repository (`author_association` OWNER, MEMBER or COLLABORATOR) and the pull request of the version the comment is on was merged, and tags its merge commit the same way | REL-05 |
+| REQ-315 | Amended on 2026-11-09, see [the amendment](#2026-11-09-the-release-flow-of-the-template): the tag workflow is the template's. At the merge of a pull request whose title starts with `Automated npm version`, or on the comment `/tag` on a closed issue or pull request of that title, it checks out main, reads the version of its `package.json`, and tags main as it is when the job runs, `v` and that version, when the version is `X.Y.Z` or `X.Y.Z-` followed by letters, digits, dots and hyphens. The tag on the merge commit and the check of the author of `/tag` are not taken | REL-05 |
 | REQ-311 | Each prerelease is checked by its version in the release Freelens 2.0.0 on macOS. The `.dmg` of Freelens 2.0.0 for the architecture of the machine is checked against the `.sha256` its release publishes, and its application copied to a folder outside `/Applications`, which the runner of the integration test refuses. Given the name and the version in place of a tarball (D14), the runner runs FND-10, which installs the version from npm through the Extensions page in a new profile, the host checking the download against the integrity the registry gives. The extension is listed Enabled, both entries load and the transport works in the main process of the host. The files of the log of the host hold no line of an error of the extension | REL-02 |
 | REQ-312 | The review of the sixth milestone, as [PROCESS](../development/PROCESS.md#milestone-manual-review-gate) says, once the report of the pre-review of REQ-292 is in the lead maintainer's hands: the walk of [TRY-IT](../development/TRY-IT.md) on the environment of the demo, in the prerelease installed by its version; the gallery and the report of the scan; the README, its screenshots, the video and the notes of 1.0.0, with the checklist of the sections no case reads (DOC-01, DOC-06, DOC-07). Its findings are issues, the blocking ones fixed, each fix released as a new prerelease and checked as REQ-311 says; the outcome is recorded in this spec by role and date | REL-03 |
 | REQ-313 | 1.0.0 is published on `latest` on the lead maintainer's go, after the review of REQ-312, once what gates 1.0.0 in D15 is Done, M6 is done as D18 reads it, and every spec of v1.0.0 is Verified or waits only for a check of this milestone: the drift watch read again and recorded in RECON-T0.1 (D17), the version workflow with `1.0.0`, its pull request, the tag, the release workflow. Then `latest` names 1.0.0, its GitHub release is not a prerelease, its assets pass the checks of REQ-309, Freelens 2.0.0 installs it by name in a profile where the last prerelease is installed, Enabled with its preferences kept, and the README and the roadmap say that 1.0.0 is released | REL-04 |
@@ -185,14 +186,17 @@ of the review of the milestone (REQ-312).
   A defect a check of this spec finds is fixed through the normal loop, with an
   amendment of the spec of its view.
 - **Safety.** The checks write only to the disposable kind clusters of the
-  environment: the second cluster of REQ-287, the actions of the two identities of
-  REQ-288, the backup and its deletion of REQ-291, each removed by its run. No
-  check opens a listener beyond loopback. The registry of npm and the releases of
-  GitHub are written only by the job `publish` of the release workflow, at a tag
-  the tag workflow makes on the merge commit of the pull request of the version,
-  approved by the required reviewer of `publishing` (D11b); the job that builds and
-  starts Freelens holds no credential. The README says what the extension writes
-  (REQ-298), and its words are tied to the code by the checks of T6.3.
+  environment: the actions of the two identities of REQ-288, removed by their
+  run, with REQ-287 and REQ-291 not taken on 2026-11-09
+  ([the amendment](#2026-11-09-the-checks-beyond-the-other-extensions)). No check
+  opens a listener beyond loopback. The registry of npm and the releases of
+  GitHub are written only by the release workflow of the template, at a tag the
+  tag workflow makes on main at the merge of the pull request of the version or on
+  `/tag`, in its one job in the environment `publishing`, approved by the required
+  reviewer of `publishing` (D11b), as amended on 2026-11-09
+  ([the amendment](#2026-11-09-the-release-flow-of-the-template)). The README says
+  what the extension writes (REQ-298), and its words are tied to the code by the
+  checks of T6.3.
 
 ### Where Each Check Runs
 
@@ -205,41 +209,39 @@ of the review of the milestone (REQ-312).
 | The suites of the views, the pre-review and FND-10, in six parts | `views-tests.yaml` | The parts its files reach | Every part | Every part, 01:17 | No |
 | The fixtures, the transport proof and the proofs of the actions, with the server of the release | `e2e-tests.yaml` | When its files reach them | Every one | 01:47 | No |
 | OSV-Scanner | `osv-scanner.yaml` | Every one | Every one | Mondays, 20:38 | No |
-| The job `package`, FND-10 on the tarball it packs, and the assets; then the job `publish` | `release.yaml` | `package`, when its files change | No | No | Both jobs |
+| No check, as amended on 2026-11-09: the build, the pack and the publication of the tag, and the assets of its GitHub release | `release.yaml` | No | No | No | Its one job |
 
 The six parts of the views are the ones of `e2e/views-parts.json`: three on the
 environment of the demo, with the server of the release, and three on the CRDs
-alone. The job `package` runs as well when it is started by hand. The new checks
-of T6.1 run in these layers: REQ-286 in the job `package`; REQ-287 and REQ-314 in
-a part on the CRDs alone; REQ-288 in the end to end tests and in the part of the
-restricted suite; REQ-289 and REQ-290 wherever FND-10 runs, the job `package`
-included; REQ-291 in a part of the environment of the demo; REQ-317 in the unit
-tests.
+alone. The new checks of T6.1 run in these layers, as amended on 2026-11-09: the
+first half of REQ-286 in the unit tests and in the two workflows that build
+Freelens; REQ-288 in the end to end tests and in the part of the restricted
+suite; REQ-289 and REQ-290 wherever FND-10 runs; REQ-317 in the unit tests.
 
 ### The Release Flow
 
+The flow of the template of the organization, as amended on 2026-11-09
+([the amendment](#2026-11-09-the-release-flow-of-the-template)):
+
 1. The drift watch, read and recorded in RECON-T0.1 before 1.0.0-0 and before
    1.0.0 (REQ-310, REQ-313).
-2. The notes of the version in `CHANGELOG.md`, in a pull request (REQ-303).
-3. The version workflow, started by hand with the version, opens the pull
+2. The version workflow, started by hand with the version, opens the pull
    request of the version; it is merged once its checks and the last runs of
    main are green (REQ-285).
-4. The tag workflow tags the merge commit of that pull request, `vX.Y.Z` or
-   `vX.Y.Z-N` (REQ-315).
-5. The job `package` of the release workflow, which holds no credential, checks
-   that the tag is the version of `package.json`, builds, packs once, runs FND-10
-   on that tarball (REQ-286), makes the bill of materials of the packed file
-   (REQ-307), the checksums, the notes (REQ-303) and the list of the contents
-   (REQ-316), checks them, and uploads them.
-6. The job `publish`, in the environment `publishing`, waits for its required
-   reviewer, who approves it once the runs of the merge commit are green (D11b);
-   it verifies the sha256 of the tarball, publishes that file with provenance, on
-   `next` for a version with a hyphen and on `latest` otherwise (REQ-308), and
-   creates the GitHub release with the four assets and the notes as its body.
-7. The proof of the assets (REQ-309) and the check by version (REQ-311).
-
-On a pull request that changes the files of the job `package`, and when it is
-started by hand, that job runs alone, and nothing is published.
+3. The tag workflow tags main once that pull request is merged, `vX.Y.Z` or
+   `vX.Y.Z-` followed by letters, digits, dots and hyphens (REQ-315).
+4. The release workflow, in its one job in the environment `publishing`, waits
+   for its required reviewer, who approves it once the runs of the commit of the
+   tag are green (D11b). It checks that the tag is the version of
+   `package.json`, builds and packs; publishes on `next` a version with a hyphen
+   and on `latest` any other, with the token of D11b and no provenance while a
+   secret `NPM_TOKEN` reaches the job, and otherwise through the trusted
+   publisher with provenance (REQ-308); then makes the bill of materials of the
+   repository (REQ-307) and the checksums, and creates the GitHub release with
+   the four assets, marked as a prerelease for a version with a hyphen.
+5. The notes of the version, written in the body of its GitHub release
+   (REQ-303).
+6. The proof of the assets (REQ-309) and the check by version (REQ-311).
 
 Freelens 2.0.0 does not read the npm tag `latest` when it installs by name: it
 takes the newest version that is not a prerelease, deprecated or not, and says
@@ -271,45 +273,44 @@ this spec covers.
 
 | Spec or document | Now | Restated |
 | --- | --- | --- |
-| SPEC-0004, REQ-041 and REQ-044 (ENV-04, ENV-07), with REQ-287 | One kind cluster: a second node or a second network stops the command, and the removal deletes the cluster the journal owns | A second cluster of the CRDs alone, under its own name and network, owned by the same journal and checked as the first, named through one parameter of the harness; the removal deletes both |
-| SPEC-0009, the decision on the frame of a second entry, with REQ-314 | The second entry is the same cluster through another kubeconfig | Kept, and with it the proof of the gate between frames and of the count of their writes; the second cluster of REQ-287 beside it, for the lists and the selections |
+| SPEC-0004, REQ-041 and REQ-044 (ENV-04, ENV-07), with REQ-287 | One kind cluster: a second node or a second network stops the command, and the removal deletes the cluster the journal owns | Nothing: REQ-287 is not taken on 2026-11-09 ([the amendment](#2026-11-09-the-checks-beyond-the-other-extensions)), and the environment keeps its one kind cluster |
+| SPEC-0009, the decision on the frame of a second entry, with REQ-314 | The second entry is the same cluster through another kubeconfig | Kept, and with it the proof of the gate between frames and of the count of their writes, with no second cluster beside it: REQ-287 and REQ-314 are not taken on 2026-11-09 |
 | SPEC-0015, HOST-21, with REQ-310 | The first prerelease leaves `latest` untouched | `next` names 1.0.0-0, and `latest` names nothing or 1.0.0-0, as the registry does with the first version of a package, recorded at the first prerelease. Freelens finds no version by name either way; a command line that installs the name alone takes what `latest` names, so the README says to install `@next` or a version until 1.0.0 |
 | SPEC-0015, REQ-216, with D18 | 1.0.0 on `latest` only after M6 is done | M6 done read as T6.1 to T6.4 Done and the review of the milestone passed |
-| TESTING.md, the identities, the fixture matrix and the integration tests | Isolation is "unit plus authorized local integration"; the actions run as the administrator of the kind cluster; FND-10 runs in the integration and views workflows | The two clusters of REQ-287 and REQ-314, the two identities of REQ-288 for the session, the two cases of FND-10 of REQ-289 and REQ-290, FND-10 in the job `package`, the scan of REQ-293 |
-| ARCHITECTURE.md and AGENTS.md, the paragraphs of a release and of the workflows | The release workflow builds, packs, publishes, then makes the bill of materials and the checksums, in one job; the tag workflow tags main; AGENTS.md says the views run in five parts | The flow of [the release](#the-release-flow), in two jobs, and the tag of the merge commit; six parts |
-| PROCESS.md, the working agreements | Packages are published only by the release workflow, tags created only by the tag workflow | The same, the tag on the merge commit of the pull request of the version; and [the way back](#the-way-back), by an owner of the scope on the lead maintainer's go |
-| DEPENDENCY-AUDIT.md, with REQ-294 and REQ-316 | Testing Library and jsdom are for the tests alone; nothing says where the notice of react-window travels | axe-core joins Testing Library and jsdom among what only tests; the notice of react-window travels in the package |
+| TESTING.md, the identities, the fixture matrix and the integration tests | Isolation is "unit plus authorized local integration"; the actions run as the administrator of the kind cluster; FND-10 runs in the integration and views workflows | The two identities of REQ-288 for the session, the two cases of FND-10 of REQ-289 and REQ-290, the scan of REQ-293 |
+| ARCHITECTURE.md and AGENTS.md, the paragraphs of a release and of the workflows | The release workflow builds, packs, publishes, then makes the bill of materials and the checksums, in one job; the tag workflow tags main; AGENTS.md says the views run in five parts | Six parts; the release and the tag stay those of the template, as amended on 2026-11-09 |
+| PROCESS.md, the working agreements | Packages are published only by the release workflow, tags created only by the tag workflow | The same; and [the way back](#the-way-back), by an owner of the scope on the lead maintainer's go |
+| DEPENDENCY-AUDIT.md, with REQ-294 | Testing Library and jsdom are for the tests alone | axe-core joins Testing Library and jsdom among what only tests |
 | RECON-T0.1.md, with REQ-310 and REQ-313 | The last entry of the drift watch at the start of a milestone is of 2026-10-13 | An entry before 1.0.0-0 and one before 1.0.0 |
-| ROADMAP.md, with D16 | The row of T6.1 names the packaged integration and the performance | At the approval, the row narrowed to what D16 takes, and what it defers recorded under Deferred after v1.0.0 |
+| ROADMAP.md, with D16 | The row of T6.1 names the packaged integration and the performance | At the approval, the row narrowed to what D16 takes, and what it defers recorded under Deferred after v1.0.0; on 2026-11-09, narrowed again to what D16 takes as amended, and what the amendments do not take recorded there as well |
 
 The files the slices change beside the specs and the documents above:
 
 | File | Change | Requirements |
 | --- | --- | --- |
-| `.github/workflows/release.yaml` | The jobs `package` and `publish`; the triggers `workflow_dispatch` and the pull requests of its files; FND-10, the bill of materials, the checksums, the notes and the list of the contents in `package`; the check of the sha256 and `pnpm publish <file>`, with provenance on both ways, in `publish` | REQ-286, REQ-303, REQ-305, REQ-307, REQ-308, REQ-316 |
-| `.github/workflows/integration-tests.yaml`, with a new reusable workflow or composite action under `.github/` | The steps that make the Freelens of the target, shared with `package`, with the line of its commit | REQ-286 |
-| `e2e/scripts/local-demo.mts` | The mode of the runner without a cluster, if the slice takes it over `xvfb-run` of the file; the runner by version of D14 | REQ-286, REQ-311 |
-| `.github/workflows/tag.yaml` | The merge commit of the pull request of the version; the association of the author of `/tag` | REQ-315 |
-| `test/environment.test.ts`, or files of their own under `test/` | The cases of the workflows, REG-02, ASSET-01, ASSET-03, ASSET-04, ASSET-06 and REL-05, beside the case of the tags, with the case of the target extended to the workflow or action that builds Freelens; the cases of the environment of REQ-287; the cases that read the README and `CHANGELOG.md` | REQ-286, REQ-287, REQ-296 to REQ-299, REQ-303 to REQ-308, REQ-315, REQ-316 |
+| `.github/workflows/npm-version.yaml`, `tag.yaml` and `release.yaml` | The files of the template of the organization, byte for byte, as amended on 2026-11-09 | REQ-307, REQ-308, REQ-315 |
+| `.trunk/trunk.yaml` | The definition of actionlint of the template, the version 1.17.0 from the fork it downloads it from, which knows the runner of the three workflows, as amended on 2026-11-09 | REQ-307, REQ-308, REQ-315 |
+| `.github/workflows/integration-tests.yaml`, with a new reusable workflow or composite action under `.github/` | The steps that make the Freelens of the target, shared with the workflow of the views, with the line of its commit | REQ-286 |
+| `e2e/scripts/local-demo.mts` | The runner by version of D14 | REQ-311 |
+| `test/environment.test.ts`, or files of their own under `test/` | The case of the target extended to the action that builds Freelens (REG-02), beside the case of the tags (REL-05); the cases that read the README | REQ-286, REQ-296 to REQ-299, REQ-304, REQ-315 |
 | `src/main/index.ts`, `test/build.test.ts` | `resolveRoute` exported by the main bundle and listed among the exports the build test pins; the ceilings of the bundles | REQ-290, REQ-317 |
 | `integration/__tests__/extensions.tests.ts` | The cases of REQ-289 and REQ-290 | REQ-289, REQ-290 |
-| `e2e/scripts/`, the fixtures and a suite of a part of the demo | The second cluster, the two identities, the two cases of REQ-291 | REQ-287, REQ-288, REQ-291, REQ-314 |
+| `e2e/scripts/` and the fixtures | The two identities | REQ-288 |
 | `e2e/__tests__/pre-review.tests.ts` and a file of the exceptions; `package.json` and the lockfile | The scan, and axe-core at an exact version | REQ-293, REQ-294 |
-| `README.md`, `CHANGELOG.md` (new), `docs/screenshots/` (new) | The sections of T6.3 and of REQ-306, the notes, the screenshots | REQ-295 to REQ-304, REQ-306 |
-| The packed files, `dist/` or `files` of `package.json` | The notice of react-window | REQ-316 |
+| `README.md`, `docs/screenshots/` (new) | The sections of T6.3, the screenshots | REQ-295 to REQ-302, REQ-304 |
 
 ## Tests
 
 | Check | Layer | Requirements | Scenario and expected evidence |
 | --- | --- | --- | --- |
 | REG-01 | Workflow, manual | REQ-285 | Before the merge of the pull request of each version: the last runs on main of each workflow of [the table](#where-each-check-runs) that runs there, of a push and of the night, and the checks of that pull request, green, listed with their counts in the evidence; a run that passed when run again listed with its first failure. After the tag: the runs of the merge commit, listed with their counts and green before the required reviewer approves the job `publish`; the tag names that commit (REL-01) |
-| REG-02 | Unit, workflow, packaged integration | REQ-286 | A case reads `release.yaml` without its comments: two jobs; `package` with `contents: read` alone and no environment, one pack, FND-10 on its file, the bill of materials, the checksums, the notes and the list of the contents before the upload, and no publication and no release; `publish` that needs `package`, in `publishing`, with the download, the check of the sha256, `pnpm publish` of that file and then the release, and no build and no pack; the tag, `workflow_dispatch` and the pull requests of its files as triggers, with `publish` at a tag alone; and the Freelens of the target named by the line the case of the target checks. Seen failing when FND-10 is removed or moved into `publish`, when `publish` builds or packs, and when `package` is given the environment or a permission to write. The run of `package` on the pull request of the change, green, with FND-10 on its tarball; at the first prerelease, the log of `package` shows FND-10 green on the tarball whose sha256 `publish` verified and the asset carries (ASSET-05) |
-| REG-03 | Unit, end to end | REQ-287 | The unit cases of the environment accept the second cluster the journal owns and refuse any other, each refusal seen failing; in the part, both clusters up and checked, and both removed at the end, which the verification of the environment proves |
-| REG-08 | Packaged application | REQ-314 | In a part on the CRDs alone, both clusters open: the lists of each frame by UID; the selection of each frame, the stored file with the key of each cluster, and each frame with its own installation after a restart |
+| REG-02 | Unit | REQ-286 | Amended on 2026-11-09, see [the amendment](#2026-11-09-the-release-flow-of-the-template): the part of the target alone, with the first half of REQ-286. The case of the target reads the composite action and holds every workflow that calls it, each naming the commit of the target in one line and giving it to the action once, as the evidence of that half records; the case of `release.yaml`, its run on a pull request and the log of `package` are not taken |
+| REG-03 | Not taken | REQ-287 | Not taken on 2026-11-09, see [the amendment](#2026-11-09-the-checks-beyond-the-other-extensions) |
+| REG-08 | Not taken | REQ-314 | Not taken on 2026-11-09, see [the amendment](#2026-11-09-the-checks-beyond-the-other-extensions) |
 | REG-04 | End to end, packaged application | REQ-288 | With the kubeconfig of the operator for the session: the proofs of the actions, the proof of the download and a request of the version of the server, green. With the kubeconfig of the reader: the restricted suite, green; a creation of a Backup and the patch of a Schedule, each forbidden at its step with nothing counted |
 | REG-05 | Packaged integration | REQ-289 | In FND-10: a download over HTTPS with the authority inline, decoded; no authority, and a certificate for another name, each `tls-invalid` with no URL in the words |
 | REG-06 | Packaged integration, unit | REQ-290 | In FND-10: the route of a URL that names a private address literal nothing listens on, refused without the allowance with its words, then direct to that address with it, and no connection; the build test lists `resolveRoute` among the exports of the main bundle |
-| REG-07 | Packaged application, end to end | REQ-291 | On the environment of the demo, two cases of a suite of a part that exists: Back up now on the real schedule, the phases read up to Completed in the workspace and in the view of the backup, the words of a backup not read yet gone; Delete backup followed until the backup is gone; one creation of each kind counted; nothing of the run left, which the verification of the environment after the part proves |
+| REG-07 | Not taken | REQ-291 | Not taken on 2026-11-09, see [the amendment](#2026-11-09-the-checks-beyond-the-other-extensions) |
 | REG-09 | Unit | REQ-317 | The build test finds each bundle under its ceiling; seen failing with a ceiling set below the size of its bundle |
 | VIS-01 | Pre-review, manual | REQ-292 | The pre-review on the commit of the prerelease the review reads, every case green, its counts, report and gallery; the judgment of the lead maintainer at REL-03 |
 | VIS-02 | Pre-review | REQ-293 | The scan of every view in both themes at the two sizes, its report listing every violation, green with the exceptions of the file; seen failing when the case itself, in the DOM of the page it scans and never in the source of a view, removes the name of a button, removes the label of an input and lowers the contrast of a text below AA in one theme |
@@ -322,57 +323,57 @@ The files the slices change beside the specs and the documents above:
 | DOC-06 | Manual | REQ-300 | The checklist of REL-03 compares each quoted message with what the function of its words returns for its case, which the slice lists beside the quote |
 | DOC-07 | Manual | REQ-301 | The checklist of REL-03: each screenshot looked at by the lead maintainer, with its text; DOC-10 resolves its file under `docs/screenshots/`, and ASSET-06 finds none in the package |
 | DOC-08 | Manual | REQ-302 | The length of the file under 60 seconds, every frame looked at by the lead maintainer at REL-03, the link of the README opened |
-| DOC-09 | Unit, manual | REQ-303 | A case finds in `CHANGELOG.md` a section for the version of `package.json` when that version is of the release form, seen failing on a version with no section, so the pull request of a version fails without its notes; the case of REG-02 finds the notes made in `package` and given to the release; the notes of 1.0.0 read at REL-03 |
+| DOC-09 | Not taken | REQ-303 | Not taken on 2026-11-09, see [the amendment](#2026-11-09-the-release-flow-of-the-template): there is no `CHANGELOG.md` and no case of the notes |
 | DOC-10 | Unit, manual | REQ-304 | A case resolves each relative link, image and anchor of the two documents and finds no character outside ASCII and no em dash; the external links opened at REL-03 |
-| ASSET-01 | Unit | REQ-305 | The case of #144, seen failing on each of its four changes; restated with REQ-286 for the order of the two jobs, and with each change of REQ-303, REQ-307, REQ-308 and REQ-316, each seen failing on the step it pins |
-| ASSET-02 | Unit, manual | REQ-306 | A case finds in the section the three commands of the checksum, `npm audit signatures` and the four assets of `release.yaml`; each command run on the assets of 1.0.0-0 (ASSET-05) |
-| ASSET-03 | Unit, workflow, manual | REQ-307 | A case reads the step of the bill of materials: the packed file installed in an empty directory with the flags of REQ-307, and that directory scanned; the document of the run of `package` on its pull request, and the one of 1.0.0-0 (ASSET-05), list the extension and react-window and nothing else |
-| ASSET-04 | Unit, manual | REQ-308 | A case finds the provenance asked on both ways of `publish`; the attestation of 1.0.0-0 read from the registry; the token revoked and deleted, recorded by role and date; the attestation of the first prerelease published through the trusted publisher read the same way, before 1.0.0 |
+| ASSET-01 | Not taken | REQ-305 | Not taken on 2026-11-09, see [the amendment](#2026-11-09-the-release-flow-of-the-template) |
+| ASSET-02 | Not taken | REQ-306 | Not taken on 2026-11-09, see [the amendment](#2026-11-09-the-release-flow-of-the-template) |
+| ASSET-03 | Manual | REQ-307 | Amended on 2026-11-09, see [the amendment](#2026-11-09-the-release-flow-of-the-template): no case; the bill of materials attached to the GitHub release of the first version published, and its `.sha256`, read at ASSET-05, with the packages it lists recorded |
+| ASSET-04 | Manual | REQ-308 | Amended on 2026-11-09, see [the amendment](#2026-11-09-the-release-flow-of-the-template): no case; 1.0.0 read from the registry with no attestation; the token revoked and deleted, and the trusted publisher configured, recorded by role and date; the attestation of the first version published through the trusted publisher read from the registry |
 | ASSET-05 | Manual | REQ-309 | The steps of [the success criteria](#success-criteria) on 1.0.0-0, each result recorded in the evidence |
-| ASSET-06 | Workflow, unit | REQ-316 | The step of `package` lists the tarball: the files of `files`, the manifest, the README, the license and the notice of react-window, and nothing else, with no absolute path of the runner and no form of a credential; a case pins the step; seen failing on a file added outside `dist/` and on the notice removed |
+| ASSET-06 | Not taken | REQ-316 | Not taken on 2026-11-09, see [the amendment](#2026-11-09-the-release-flow-of-the-template) |
 | REL-01 | Workflow, manual | REQ-310 | The entry of the drift watch in RECON-T0.1; the runs of REG-01; the tag and its commit, equal to the merge commit of the pull request of the version; the runs of the two jobs; the tags of the registry; recorded |
-| REL-05 | Unit | REQ-315 | A case reads `tag.yaml` without its comments, next to the case of the tags: the checkout, the version and the tag of the merge commit of the pull request, no `heads/main`, and the three associations on the way of the comment; seen failing when `heads/main` is put back and when an association is dropped |
+| REL-05 | Unit, manual | REQ-315 | Amended on 2026-11-09, see [the amendment](#2026-11-09-the-release-flow-of-the-template): the case of the tags reads the expression `tag.yaml` matches the version with, as bash reads it, `X.Y.Z` and `X.Y.Z-N` tagged and `1.0.0-`, `1.0` and `v1.0.0` not; the file is the template's, compared with `cmp` in the evidence of the amendment; the tag and its commit read at REL-01. The case of the merge commit is removed |
 | REL-02 | Packaged integration | REQ-311 | On macOS, for each prerelease: the `.dmg` of Freelens 2.0.0 checked against its `.sha256`; FND-10 run by the version, every case green, the version listed Enabled; the files of the log of the host with no line of an error of the extension |
 | REL-03 | Manual | REQ-312 | The review recorded by role and date, with its checklist, its findings and their issues |
 | REL-04 | Manual | REQ-313 | The entry of the drift watch; the steps of the success criteria on 1.0.0, with the install by name over the prerelease |
 
-The homes: the cases that read the README, `CHANGELOG.md` and the workflows
-beside the cases of the workflows in `test/environment.test.ts`, or in a file of
-their own under `test/`; the two cases of FND-10 in
+The homes: the cases that read the README and the workflows beside the cases of
+the workflows in `test/environment.test.ts`, or in a file of their own under
+`test/`; the two cases of FND-10 in
 `integration/__tests__/extensions.tests.ts`, the main bundle exporting
 `resolveRoute` as it exports the transport, with the pin of its exports and the
-ceilings in `test/build.test.ts`; the second cluster in the scripts of
-`e2e/scripts/`; the two identities among the fixtures; the scan and its exceptions
-beside the pre-review and the parts of the views; the bill of materials and the
-list of the contents as steps of `package`.
+ceilings in `test/build.test.ts`; the two identities among the fixtures; the scan
+and its exceptions beside the pre-review and the parts of the views.
 
 ## Success Criteria
 
+As amended on 2026-11-09
+([the release flow of the template](#2026-11-09-the-release-flow-of-the-template)
+and [the checks beyond the other extensions](#2026-11-09-the-checks-beyond-the-other-extensions)):
+
 - Every check of the regression green before the merge of each version, the runs
-  of its merge commit green before its publication, listed (REG-01), and every new
-  check of T6.1 green where it runs.
-- The workflow run before its first tag: the job `package` green on the pull
-  request of its change, and nothing published by it.
-- One tarball: the one `package` packed, FND-10 installed and `publish` verified
-  is the asset of the GitHub release and the tarball of the registry, byte for
-  byte.
+  of the commit of its tag green before its publication, listed (REG-01), and
+  every new check of T6.1 that stays, the identities of the roles, the HTTPS and
+  the direct route of FND-10 and the ceilings of the bundles, green where it runs.
+- The version, tag and release workflows the ones of the template of the
+  organization, byte for byte.
+- One tarball: the asset of the GitHub release is the tarball of the registry,
+  byte for byte.
 - The scan of the views run with its report, and no violation of impact serious
   or critical on an element of the extension but the exceptions a spec made; the
   gallery judged at the review of the milestone.
 - Each statement of the README that the code can change without anyone seeing it
   is read by a unit case: the range of Freelens, the roles, the writes, the
-  versions, the notes and the links; the installation, the words of the failures
-  and the screenshots are read by the checklist of the review of the milestone.
-- 1.0.0-0 checked by FND-10 by its version, one prerelease published through the
-  trusted publisher, the review of the milestone recorded, and 1.0.0 on `latest`,
-  installed by name.
-- Failure: a version published other than by the job `publish`, or without the
-  approval of its required reviewer; a tarball published that FND-10 did not
-  install; a credential of npm left in `publishing` after 1.0.0-0; a README that
-  says a write, a verb, a version or a message the code does not; anything of a
-  real environment in a screenshot, the video, the notes or the package; a write
-  of a check outside the disposable clusters, or a listener opened beyond
-  loopback.
+  versions and the links; the installation, the words of the failures and the
+  screenshots are read by the checklist of the review of the milestone.
+- 1.0.0-0 checked by FND-10 by its version, the review of the milestone
+  recorded, and 1.0.0 on `latest`, installed by name.
+- Failure: a version published other than by the release workflow, or without
+  the approval of its required reviewer; a credential of npm left in
+  `publishing` after the version it was made for; a README that says a write, a
+  verb, a version or a message the code does not; anything of a real environment
+  in a screenshot, the video, the notes or the package; a write of a check
+  outside the disposable clusters, or a listener opened beyond loopback.
 
 The steps of ASSET-05, on 1.0.0-0, each in an empty directory, with the result
 recorded:
@@ -385,21 +386,24 @@ recorded:
    until it answers the version, for five minutes at most; `cmp` of that tarball
    with the asset: no difference.
 4. In a new project, `npm install @freelensapp/velero-extension@1.0.0-0`, then
-   `npm audit signatures`: the attestation of the package verified; the
-   attestation the registry serves names `release.yaml`, `refs/tags/v1.0.0-0` and
-   the commit of the tag.
-5. The packages the bill of materials lists: the extension and react-window, at
-   the versions of the lockfile, and nothing else.
+   `npm audit signatures`: the signature of the registry verified, and the
+   attestation as REQ-308 says: none for a version published with the token, and
+   for one published through the trusted publisher an attestation that names
+   `release.yaml`, `refs/tags/v1.0.0-0` and the commit of the tag.
+5. The bill of materials, of the repository at the tag (REQ-307): the packages it
+   lists recorded.
 6. `npm view @freelensapp/velero-extension dist-tags`: `next` is 1.0.0-0;
    `latest` recorded as it is, nothing or 1.0.0-0.
-7. The log of the run: FND-10 green in `package` on the tarball whose sha256 is
-   the one of the asset, and verified by `publish`.
+7. The log of the run of the release workflow at the tag: the tag checked against
+   the version, the publication on its npm tag, and the release with the four
+   assets.
 
 The steps of REL-04, on 1.0.0: the steps 1 to 5 and 7 with the version 1.0.0 and
-a release that is not a prerelease, the attestation of the trusted publisher;
-`latest` is 1.0.0; in a profile where the last prerelease is installed, the name
-typed alone on the Extensions page installs 1.0.0 over it, listed Enabled, with
-the installation selected before still selected.
+a release that is not a prerelease, with no attestation, since 1.0.0 is published
+with the token (REQ-308); `latest` is 1.0.0; in a profile where the last
+prerelease is installed, the name typed alone on the Extensions page installs
+1.0.0 over it, listed Enabled, with the installation selected before still
+selected.
 
 When D14 is not taken, the check of REL-02 is by hand: in the release Freelens
 2.0.0 copied out of its checked `.dmg`, with a new profile, the version typed on
@@ -432,36 +436,21 @@ date.
   both, runs again a commit its pull request and its push to main already ran,
   with nothing changed but the clock and the runner.
 - **D3, the release tests the tarball it ships, in a job that cannot publish.**
-  FND-10 needs no cluster, so the job `package` runs it on its own tarball, in
-  Freelens built at the commit of the target through the steps the integration
-  workflow shares with it, and uploads that file. That job installs packages with
-  `apt-get` and `sudo`, builds or restores a third-party application and starts
-  it, so it holds `contents: read` alone and no environment: no code it runs can
-  ask for the identity the trusted publisher accepts, read a credential of the
-  environment, or change what the publication later runs. The job `publish` runs
-  nothing of the build; it verifies the sha256 and publishes that very file, so
-  the bytes are the same by construction, and ASSET-05 only confirms it.
-  Everything without a side effect is made in `package`, so that a failure of the
-  bill of materials, the checksums or the notes stops the run before the
-  publication, and `package` runs on the pull request of a change of its files,
-  so the workflow runs before its first tag. FND-10 proves what two builds of one
-  commit could differ in: the activation, the two entries, the stylesheet and the
-  transport. Not taken: FND-10 in the job that publishes, which would give that job
-  the build and the start of Freelens to trust; every packaged suite in the
-  release, an environment and six parts for a commit main already ran them on; and
-  a comparison with the tarball of the integration job, which needs a build proven
-  to be reproducible.
-- **D4, a second cluster of the CRDs alone, for what two API servers add.** A
-  second cluster shows what only two API servers can: lists told apart by UID, and
-  the selection of each frame kept under the identifier of its cluster and after a
-  restart, which is G4.4. The gate of each frame and the count of the writes
-  between frames stay proven by the second entry SPEC-0009 decided, the same
-  cluster through another kubeconfig, whose suite passes. A cluster of the CRDs
-  alone is up in about a minute, and the harness is parameterized once by the name
-  of the cluster. The approval of this spec is the authorization TESTING.md asks
-  for a second local kind target. Not taken: the decision of SPEC-0009 alone; and
-  every assertion of the gate again on the second cluster, which proves twice what
-  the second entry proves.
+  Not taken on 2026-11-09
+  ([the amendment](#2026-11-09-the-release-flow-of-the-template)): the release
+  workflow is the template's, one job in the environment `publishing` that checks
+  the tag, builds, packs and publishes at the tag, as the other extensions of the
+  organization release theirs. FND-10 runs where [the table](#where-each-check-runs)
+  says, on the tarball the integration workflow packs, and not on the file the
+  release publishes, which G1.1 names.
+- **D4, a second cluster of the CRDs alone, for what two API servers add.** Not
+  taken on 2026-11-09
+  ([the amendment](#2026-11-09-the-checks-beyond-the-other-extensions)): the
+  decision of SPEC-0009 stands alone, the second entry, the same cluster through
+  another kubeconfig, whose suite proves the gate of each frame and the count of
+  the writes between frames. What only two API servers show, the lists told apart
+  by UID and the selection of each frame kept for its cluster, is deferred (G4.1,
+  G4.4), and no second local kind target is authorized for the tests.
 - **D5, the roles of the README are the identities of the tests, proven both ways.**
   The operator runs the proofs of the actions, of the download and of the version
   of the server, and the reader runs a packaged suite of the views, so a verb the
@@ -483,16 +472,12 @@ date.
   there is none; and a store with TLS reached directly in the environment of the
   demo, whose address, on macOS, is published on loopback, which the route never
   connects to outside a tunnel.
-- **D7, two actions with the real controller.** Back up now and Delete backup in
-  the packaged application, on the real schedule of the demo, are the two whose
-  result the workspace and the views follow across phases Velero writes later, and
-  they need no fixture the environment does not have. The restore keeps its end to
-  end proof through the compiled main process, which restores into a mapped
-  namespace of the environment and removes it, and its suites on the CRDs; the
-  pause and the resume keep theirs, which read the schedule once, with no phase to
-  wait for. The reason is the cost: each would be a case more in the slowest part,
-  for a result its proof already reads from the controller. Not taken: all five
-  actions, and none.
+- **D7, two actions with the real controller.** Not taken on 2026-11-09
+  ([the amendment](#2026-11-09-the-checks-beyond-the-other-extensions)): no
+  action is asked with the real controller in the packaged application. Each
+  action keeps its proof in `pnpm e2e` against the server of the release, through
+  the compiled main process, and its cases in the suite of the actions on the CRDs
+  of the release alone; G3.2 and the second part of G3.1 are deferred.
 - **D8, an accessibility scan in the pre-review.** axe-core as a devDependency,
   run on every view in both themes, with the rules of WCAG 2.1 A and AA and not its
   best practices, the markup of the host left out. For 1.0.0 it reports every
@@ -512,27 +497,19 @@ date.
   README as an attachment of the repository on GitHub, as the other extensions of
   the organization link theirs, so that neither the repository nor the package
   carries it. Not taken: the video in the repository.
-- **D10, the bill of materials of what ships.** Today the release scans the folder
-  of the repository after the installation, so the document lists the
-  devDependencies, which the tarball does not contain, and a scanner reads them as
-  part of the package. The job `package` installs the packed file in an empty
-  directory with `npm install --omit=dev --omit=peer --ignore-scripts --no-package-lock <file>`
-  and scans that directory: the extension and react-window, which
-  DEPENDENCY-AUDIT.md says the bundle carries. react and react-dom, the peers of
-  react-window, are provided by the host and are not carried, so they are neither
-  installed nor listed; no lockfile is written for a scanner to read them from.
-  The file of the job is installed, not the registry, which answers a new version
-  only after some minutes. The first slice runs it once and records the list. Not
-  taken: two documents, one of the repository and one of the package, which keeps
-  the devDependencies among the assets of the release; the document as it is with
-  a sentence, which leaves the readers of scanners with the devDependencies; and
-  the scan of the packed file with the libraries the build test lists added to it,
-  which needs code of the repository to write the document.
-- **D11a, provenance on both ways of the publication.** The job `publish` asks
-  for the provenance with a token as it does through the trusted publisher: today
-  the way of a token publishes with none, so asking it there gives 1.0.0-0 its
-  attestation. A change of `release.yaml` alone. Not taken: the first prerelease
-  without provenance, proven only on the next version.
+- **D10, the bill of materials of what ships.** Amended on 2026-11-09
+  ([the amendment](#2026-11-09-the-release-flow-of-the-template)): the bill of
+  materials is the template's, of the repository at the tag. The release scans the
+  folder of the repository after the installation, the build, the pack and the
+  publication, so the document lists the devDependencies as well, which the
+  tarball does not contain, as this decision read at the approval. The scan of
+  the packed file installed in an empty directory, and the record of its list,
+  are not taken.
+- **D11a, provenance on both ways of the publication.** Not taken on 2026-11-09
+  ([the amendment](#2026-11-09-the-release-flow-of-the-template)): the template
+  asks for the provenance only through the trusted publisher, and publishes with a
+  token without it, so 1.0.0, published with the token of D11b, carries none, and
+  the versions published through the trusted publisher after it carry it.
 - **D11b, for the lead maintainer and an owner of the npm scope, the credential of the first version.**
   The registry has no version of the package (it answered 404 on 2026-11-09), and
   npm configures a trusted publisher on a package that exists, as far as this
@@ -560,12 +537,11 @@ date.
   for every version, a credential that lives as long as the package; and 1.0.0 as
   the first publication through the trusted publisher, which would show a mistake
   of its setting at the last step.
-- **D12, the notes in `CHANGELOG.md`.** Notes reviewed in a pull request like the
-  code, a unit case that fails the pull request of a version without them, and a
-  release the workflow makes alone, with its notes as the body. Not taken: the body
-  written by hand on GitHub after the workflow, and a check of the notes only by
-  the release workflow, which finds them missing after the tag, when the number is
-  spent.
+- **D12, the notes in `CHANGELOG.md`.** Not taken on 2026-11-09
+  ([the amendment](#2026-11-09-the-release-flow-of-the-template)): the README and
+  the notes follow the template. There is no `CHANGELOG.md` and no case of the
+  notes, and the notes of each version are written in the body of its GitHub
+  release, as the other extensions of the organization write them.
 - **D13, the platforms the README says were tested.** The hosted checks, the
   packaged suites among them, run on Linux ARM64, `ubuntu-24.04-arm`; REL-02 runs
   on macOS; the contributors run the suites on macOS as well, which is evidence for
@@ -581,55 +557,63 @@ date.
   each prerelease, in the release Freelens 2.0.0 for macOS copied out of its
   checked image. Not taken: the steps by hand of the success criteria.
 - **D15, the order of the slices, and what gates 1.0.0-0 and what gates 1.0.0.**
-  The lead maintainer can ask for the prerelease early, once what gates it is
-  Done; the rest gates 1.0.0.
-  - Gates 1.0.0-0: the drift watch read (REQ-310); T6.4, REQ-305 with #144,
-    REQ-306, REQ-307, REQ-308 with D11a and the first two steps of D11b, and
-    REQ-316; the release workflow of REQ-286, with the case of FND-10 of REQ-289;
-    REQ-303 for its unit case, the step of the notes and the section of 1.0.0-0;
-    the rules of the tag, REQ-285 before the merge and REQ-315; and what a
-    prerelease is installed with, REQ-295 and the end of the section Status of
-    REQ-296, with the case of REQ-304 on them, since npm shows the README of the
-    version. Then 1.0.0-0 (REQ-310), its proof (REQ-309) and its check by version
-    (REQ-311).
-  - Gates 1.0.0: the rest of T6.1, REQ-287 with REQ-314, REQ-288, REQ-290,
-    REQ-291 and REQ-317; T6.2; the rest of T6.3, the Permissions of #145
-    (REQ-297) after the identities of REQ-288, so that the case of DOC-03 lands
-    with the roles; the notes of 1.0.0; the prerelease through the trusted
-    publisher (REQ-308); the review of the milestone (REQ-312); the drift watch
-    read again, and 1.0.0 (REQ-313).
+  Restated on 2026-11-09 with the amendments of that day
+  ([the release flow](#2026-11-09-the-release-flow-of-the-template),
+  [the checks](#2026-11-09-the-checks-beyond-the-other-extensions)). The lead
+  maintainer can ask for the prerelease early, once what gates it is Done; the
+  rest gates 1.0.0.
+  - Gates 1.0.0-0: the drift watch read (REQ-310); T6.4, the release workflow of
+    the template, with REQ-307, REQ-308 and the first two steps of D11b; the case
+    of FND-10 of REQ-289; the rules of the tag, REQ-285 before the merge and
+    REQ-315; and what a prerelease is installed with, REQ-295 and the end of the
+    section Status of REQ-296, with the case of REQ-304 on them, since npm shows
+    the README of the version. Then 1.0.0-0 (REQ-310), its proof (REQ-309) and its
+    check by version (REQ-311).
+  - Gates 1.0.0: the rest of T6.1, REQ-288, REQ-290 and REQ-317; T6.2; the rest
+    of T6.3, the Permissions of #145 (REQ-297) after the identities of REQ-288, so
+    that the case of DOC-03 lands with the roles; the notes of 1.0.0; the review
+    of the milestone (REQ-312); the drift watch read again, and 1.0.0 (REQ-313).
   - The order: T6.4 and the rules of the tag first, then the sections of the
     README of a prerelease, then 1.0.0-0 when the lead maintainer asks for it;
-    then the identities of REQ-288 and #145, the second cluster, the cases of
-    REQ-290 and REQ-291 and the ceilings of REQ-317, with T6.2 beside them, and a
-    prerelease when the lead maintainer asks for one; then the screenshots, the
-    video and the notes of 1.0.0, the review of the milestone and 1.0.0.
+    then the identities of REQ-288 and #145, the case of REQ-290 and the ceilings
+    of REQ-317, with T6.2 beside them, and a prerelease when the lead maintainer
+    asks for one; then the screenshots, the video and the notes of 1.0.0, the
+    review of the milestone and 1.0.0.
 
   Not taken: 1.0.0-0 as soon as M5 is done, which proves the workflow before its
   changes, so that the proof of REQ-309 is made again on a later prerelease; and
   1.0.0-0 at the end of T6.1 to T6.3, which leaves the workflow and the page of the
   package unproven until the end of the milestone.
-- **D16, what T6.1 takes and what it defers.** The row of T6.1 in the roadmap
-  names the regression, the packaged integration, the end to end tests with the
-  real controller, the isolation between clusters, the permissions, the transport
-  security and the performance. Of the 32 gaps of the inventory, this spec takes
-  G1.1 (REQ-286), the second part of G3.1 with G3.2 (REQ-291), G4.1 with G4.4
-  (REQ-287, REQ-314), G5.1 with G5.2 (REQ-288), G6.1 (REQ-289) and G6.2 (REQ-290),
-  and of the performance P7.2, a ceiling on the bytes of each bundle (REQ-317), a
-  few lines of the build test. It defers the others, each with its reason in
+- **D16, what T6.1 takes and what it defers.** Restated on 2026-11-09 with the
+  amendments of that day
+  ([the release flow](#2026-11-09-the-release-flow-of-the-template),
+  [the checks](#2026-11-09-the-checks-beyond-the-other-extensions)). The row of
+  T6.1 in the roadmap names the regression, the packaged integration, the end to
+  end tests with the real controller, the isolation between clusters, the
+  permissions, the transport security and the performance. Of the 32 gaps of the
+  inventory, this spec takes G5.1 with G5.2 (REQ-288), G6.1 (REQ-289) and G6.2
+  (REQ-290), and of the performance P7.2, a ceiling on the bytes of each bundle
+  (REQ-317), a few lines of the build test. At the approval it took as well G1.1
+  (REQ-286), the second part of G3.1 with G3.2 (REQ-291) and G4.1 with G4.4
+  (REQ-287, REQ-314), which the amendments do not take: they are deferred with
+  the others. It defers the others, each with its reason in
   [what T6.1 defers](#what-t61-defers), and among them two areas of the row: the
   performance but that ceiling, G7.1 to G7.6, whose budgets of TESTING.md hold with
   the margins the evidence records; and the platforms, G2.1, one platform and one
   architecture in CI, with macOS checked by REL-02 and both said in the README
   (D13). The reason: each deferred gap keeps its release signal through a check
   that exists or a statement of the README, and each would bring a harness of its
-  own into the milestone. Not taken: P2.1, FND-10 on hosted macOS and Windows
-  runners at each tag, each with the released Freelens of its platform, a job and
-  a download of Freelens for each platform; and the whole area of the performance,
-  guards relative to a baseline, ceilings of memory and of the start, and larger
-  datasets. With the approval, the row of T6.1 in the roadmap is narrowed to what
-  this decision takes, and what it defers is recorded under Deferred after v1.0.0,
-  as the roadmap asks of anything that moves out of v1.0.0.
+  own into the milestone. Since the amendments, two more areas of the row are
+  deferred, by their decision: the end to end tests with the real controller in
+  the packaged application, and the isolation between two clusters. Not taken:
+  P2.1, FND-10 on hosted macOS and Windows runners at each tag, each with the
+  released Freelens of its platform, a job and a download of Freelens for each
+  platform; and the whole area of the performance, guards relative to a baseline,
+  ceilings of memory and of the start, and larger datasets. With the approval, the
+  row of T6.1 in the roadmap is narrowed to what this decision takes, and what it
+  defers is recorded under Deferred after v1.0.0, as the roadmap asks of anything
+  that moves out of v1.0.0; with the amendments, the row is narrowed again and
+  what they do not take is recorded there as well.
 - **D17, a Velero 1.19.0 released during M6.** The drift watch of 2026-11-09
   found Velero v1.19.0-rc.1 and its AWS plugin v1.15.0-rc.1, with v1.18.4 and
   v1.14.4 still the latest stable releases, so a 1.19.0 before 1.0.0 is plausible.
@@ -657,6 +641,11 @@ date.
 
 Each gap below stays out of 1.0.0 (D16), with its reason:
 
+- G1.1, the file the release publishes installed by a check: not taken on
+  2026-11-09 with the release workflow of the template
+  ([the amendment](#2026-11-09-the-release-flow-of-the-template)); FND-10 installs
+  the tarball the integration workflow packs, on every pull request and every push
+  to main.
 - G1.2, the goldens of the release tied to its pin: they change only with a move
   of Velero, whose pull request the upstream drift watch reviews before its merge;
   a case that ties them to the pin is after 1.0.0.
@@ -673,6 +662,12 @@ Each gap below stays out of 1.0.0 (D16), with its reason:
   released version.
 - G2.4, no night run of the ten sessions: they run on every pull request and push
   to main, on the CRDs alone.
+- The second part of G3.1, and G3.2, the actions with the real controller in the
+  packaged application: not taken on 2026-11-09
+  ([the amendment](#2026-11-09-the-checks-beyond-the-other-extensions)); each
+  action keeps its proof in `pnpm e2e` against the server of the release, through
+  the compiled main process, and its cases in the suite of the actions on the CRDs
+  of the release alone.
 - G3.3, the counterparts of what the controller writes checked by hand: read again
   at the next move of Velero, as SPEC-0015 says, and right for the reviewed
   release this version ships for.
@@ -680,6 +675,10 @@ Each gap below stays out of 1.0.0 (D16), with its reason:
   README says what was proven on synthetic objects alone (REQ-299).
 - G3.5, a zone in a schedule against a real firing: the parser is checked against
   the tables of the library of the release (SPEC-0013).
+- G4.1 with G4.4, two clusters at once in one packaged Freelens: not taken on
+  2026-11-09 ([the amendment](#2026-11-09-the-checks-beyond-the-other-extensions));
+  the gate of each frame and the count of the writes between frames stay proven by
+  the second entry of SPEC-0009, the same cluster through another kubeconfig.
 - G4.2, two entries with one context name: the gate, the kept ends and the
   allowances are keyed by the identifier of a cluster in the code; a unit case with
   two entries of one context name is after 1.0.0.
@@ -707,7 +706,9 @@ Each gap below stays out of 1.0.0 (D16), with its reason:
 ## Open Questions
 
 Four questions of fact, each established by its slice; none needs an answer
-before the approval.
+before the approval. The amendment of 2026-11-09
+([the release flow](#2026-11-09-the-release-flow-of-the-template)) closes the
+last two.
 
 - **Whether the registry names `latest` at the first publication under `next`
   (REQ-309, REQ-310).** The first publication of this package is 1.0.0-0 under
@@ -721,13 +722,13 @@ before the approval.
   1.0.0-0 is the first publication through the trusted publisher; the owner of the
   scope establishes it before the first step of D11b.
 - **Whether `pnpm publish <file>` of pnpm 12 hands the file to the registry
-  unchanged (REQ-286).** If it does not, the job `publish` uses `npm publish <file>`
-  of the npm the workflow installs, and the slice records which; the third step of
-  ASSET-05 compares the bytes either way.
-- **What the scan of the installation of the packed file lists (REQ-307).** The
-  slice runs it once on the pull request of the change and records the list; if it
-  lists more than the extension and react-window, the slice says why and the
-  method is decided again before 1.0.0-0.
+  unchanged (REQ-286).** Closed by the amendment: the release workflow of the
+  template publishes with `pnpm publish -r` in the job that packs, and no file
+  passes from one job to another; the third step of ASSET-05 compares the tarball
+  of the registry with the asset.
+- **What the scan of the installation of the packed file lists (REQ-307).**
+  Closed by the amendment: the bill of materials is the template's, of the
+  repository at the tag, and the packed file is not scanned.
 
 ## Evidence And Deviations
 
@@ -874,6 +875,14 @@ Decided while implementing, on 2026-11-09:
   `claude.yaml` writes a condition of several lines: the expression reads a new
   line as a space. A folded block was refolded by the formatter of Trunk at 300
   characters, in the middle of a term.
+
+Undone on 2026-11-09, by [the amendment](#2026-11-09-the-release-flow-of-the-template)
+of that day: the lead maintainer decided that the release flow of this extension is
+the one of the template of the organization, like the one of every other extension,
+and that nothing beyond it is done now. `tag.yaml` is the template's again, which
+tags main as the job finds it, at the merge of the pull request of the version or on
+`/tag`, and the case of REL-05 is removed with it, as the evidence of the release
+flow of the template records below. The evidence above is the record of #151.
 
 T6.1, the first half of REQ-286, on 2026-11-09: the steps that build Freelens at
 the commit of the validation target, which the workflows of the integration tests
@@ -1713,3 +1722,183 @@ Decided while implementing, on 2026-11-09:
 - The text of the slice names no product but Freelens, Velero, Kubernetes, npm and
   GitHub: Limits leads to Compatibility for the platforms.
 - The row of T6.3 in the roadmap stays In PR.
+
+T6.4 and T6.5, the release flow of the template, with the checks the amendments do
+not take, on 2026-11-09: the version, tag and release workflows of the template of
+the organization, the cases and the documents that described the ones before them,
+and the restatement of this spec, of SPEC-0015 and of the roadmap, as the two
+amendments of that day decide
+([the release flow](#2026-11-09-the-release-flow-of-the-template),
+[the checks](#2026-11-09-the-checks-beyond-the-other-extensions)). The evidence, by
+check:
+
+- The three workflows: `npm-version.yaml`, `tag.yaml` and `release.yaml` are the
+  files of freelensapp/freelens-example-extension on its default branch, `main` at
+  `e599f13f239bed97a8ded3c755bc5a4c5fe2d459`, read through the API of GitHub on
+  2026-11-09, whose blobs are `f26a21bf`, `af6c46c0` and `c8533abf`: `cmp` of each
+  with its file in this repository finds no difference. Against main before this
+  change, `npm-version.yaml` and `release.yaml` moved their runner and the keys of
+  their cache from `ubuntu-24.04-arm` to `ubuntu-26.04-arm`, and nothing else;
+  `tag.yaml` is the one of the template again, which undoes the change of #151,
+  the tag on the merge commit, the check of the author of `/tag` and the
+  permissions of the token of the run, and moves its runner from `ubuntu-24.04` to
+  `ubuntu-26.04-arm`.
+- REL-05: the case "tags the merge commit of the pull request of the version, on
+  its merge and on /tag from an owner, a member or a collaborator with write
+  access", the 299 lines #151 added to `test/environment.test.ts`, is removed:
+  each of its assertions pinned what the template does not have.
+- The case of the tags, "tags X.Y.Z and its prereleases X.Y.Z-N, which the release
+  publishes on next as prereleases, and X.Y.Z on latest", is changed in one
+  assertion: of the versions it asks `tag.yaml` not to tag, `0.1.0-alpha.0`,
+  `1.0.0-rc.1` and `1.0.0-1-2`, which only the form of T0.7 refused, are taken out,
+  and `1.0.0-`, `1.0` and `v1.0.0`, which the expression of the template refuses as
+  well, stay. The versions it asks to be tagged, the npm tag of the three
+  publications and the prerelease of the GitHub release, which the template holds,
+  are unchanged. With the expression of `tag.yaml` changed on purpose to take an
+  empty prerelease, the case failed on `1.0.0-`; it passed once the file was put
+  back, equal to the template's again under `cmp`.
+- No other case reads the three workflows: under `test/` and `e2e/` they are named
+  in `test/environment.test.ts` alone, and the case of the target, which reads
+  every workflow, holds the ones that call the action that builds Freelens, which
+  these three do not. No case is added.
+- The documents: PROCESS.md, AGENTS.md and ARCHITECTURE.md say what the template
+  does, the texts #151 changed back to their words of the approval with the form
+  of a version the template tags; TESTING.md names none of the three workflows and
+  is unchanged. The rows of T6.4 and T6.5 of the roadmap say what the template
+  gives and what is left, T6.4 In PR with this change; the row of T6.1 is narrowed
+  to the checks that stay, and what the amendments do not take is under Deferred
+  after v1.0.0. SPEC-0015 records the form of the tag of the template in an
+  amendment of its own.
+- The gates of the change, on its head: `pnpm exec vitest run test/environment.test.ts test/build.test.ts test/documents.test.ts`,
+  the files that read what it changes, 3 files and 289 tests passed, 273 of them
+  in the first, one case fewer than before; `pnpm type:check`, `pnpm lint:check`
+  and `pnpm knip:check`, green. Trunk on the changed files, green, with the
+  definition of actionlint of the template taken in `.trunk/trunk.yaml`:
+  actionlint 1.7.12, the version it pinned, does not know the label
+  `ubuntu-26.04-arm` of the runner of the template and gave one issue of
+  `actionlint/runner-label` on each of the three workflows; the template runs
+  actionlint 1.17.0 from a maintained fork, whose Trunk Check on every file is
+  green on `e599f13f`, and with it actionlint finds no issue in the seventeen
+  workflows of this repository, while the label of the runner of `tag.yaml`,
+  changed on purpose to one that does not exist, gave one issue of
+  `actionlint/runner-label`. The unit run of the head, `pnpm test:unit`, on macOS
+  with Node 24.21.0: 135 files and 3,817 tests passed, and the three measures.
+  The checks of its pull request, green before its merge: the unit tests, the
+  check, Trunk, the integration test and OSV-Scanner. Its files reach no part of
+  the views and no end to end run.
+
+Decided while implementing, on 2026-11-09:
+
+- The rows of the requirements, the scenarios and the checks that are not taken
+  stay, each with the words that it is not taken and a link to its amendment, so
+  that their identifiers keep naming what they were; the text as approved is the
+  one of this spec at `801dfc3`, which the amendments link.
+- The definition of actionlint of the template is taken in `.trunk/trunk.yaml`,
+  the version 1.17.0 from the fork the template downloads it from, since the three
+  workflows of the template run on a runner the version pinned before does not
+  know and Trunk Check is required on main; the rest of `.trunk/trunk.yaml` is
+  unchanged.
+- The case of the tags keeps the versions the template still refuses and loses the
+  three only the form of T0.7 refused, rather than being removed whole, so that
+  what the template holds stays checked.
+- What follows from the amended requirements is rewritten in place where it states
+  what is not taken: the scenarios 3, 6 and 7, REQ-309, the Safety of the Design,
+  the layers of the new checks, the release flow, the rows of the amendments and
+  of the files, the homes of the tests, the success criteria with the steps of
+  ASSET-05 and of REL-04, D3, D4, D7, D10, D11a, D12, D15, D16, what T6.1 defers
+  and the open questions. The rest of this spec is read with the amendments, as
+  each of them says.
+- The paragraph of the roadmap under the table of M6 is restated where it names
+  what is not taken, the two jobs and what they made, the tag on the merge commit,
+  the prerelease through the trusted publisher, the second cluster and the actions
+  with the real controller, and keeps the rest, the prerelease 1.0.0-0 among it.
+
+## Amendments
+
+### 2026-11-09: The Release Flow Of The Template
+
+Decided by the lead maintainer on 2026-11-09: the version, tag and release
+workflows are the template's of the organization; what the requirements below
+asked beyond it is not taken. The release of this extension is the one of
+freelensapp/freelens-example-extension, like the one of every other extension of
+the organization, and nothing beyond it is done now. Decided by the lead
+maintainer the same day: the README follows the template too, with no
+`CHANGELOG.md` and no Verify a release.
+
+`npm-version.yaml`, `tag.yaml` and `release.yaml` are the files of the template on
+its default branch, byte for byte, and [the release flow](#the-release-flow) says
+what they do. The requirements, in the places above:
+
+- REQ-286 is taken in its first half alone, the composite action that builds
+  Freelens for the integration test and the views, on main since #152. The two
+  jobs of the release workflow, FND-10 on the file it publishes and its runs on a
+  pull request and by hand are not taken, and G1.1 is deferred; scenario 7 is not
+  taken, and REG-02 is the part of the target alone.
+- REQ-303 is not taken as written: the notes of each version are written in the
+  body of its GitHub release, as the other extensions of the organization write
+  them, with no `CHANGELOG.md` and no case of them; DOC-09 goes, and D12 with it.
+- REQ-305, the case of #144 that pinned the assets in `release.yaml`, is not
+  taken, with ASSET-01.
+- REQ-306 is not taken: the README installs a release tarball as the one of the
+  template does, and Freelens checks the tarball against the `.sha256` beside it
+  itself; ASSET-02 goes, and scenario 3 says so. With REQ-305, #144 is not taken.
+- REQ-307: the bill of materials is the template's, of the repository at the tag,
+  and the one of the packed file is not taken (D10); ASSET-03 is read on the
+  release.
+- REQ-308 with D11a: the template asks for the provenance only through the
+  trusted publisher, so 1.0.0, published with the token, carries none, and the
+  versions published through the trusted publisher after it carry it; ASSET-04
+  reads both on the registry.
+- REQ-315: the tag is the one of the template, on main as the tag workflow finds
+  it, of `X.Y.Z` or of `X.Y.Z-` followed by letters, digits, dots and hyphens. The
+  change of #151, the tag on the merge commit, the check of the author of `/tag`
+  and the permissions of the token of the run, is undone, with the case of REL-05
+  it added; REL-05 is the case of the tags and REL-01.
+- REQ-316, the list of the contents and the notice, is not taken, with ASSET-06.
+- REQ-309 and the steps of ASSET-05 and of REL-04 read the assets of the template.
+
+The rest of this spec is read with the amendment, and is not changed by it. Where
+it names the job `package`, the job `publish` or the two jobs, it reads the one
+job of the release workflow. Where it names the merge commit of the pull request
+of the version as the commit of the tag (REQ-285, REQ-310, REG-01, REL-01, D11b,
+the way back), it reads main as the tag workflow finds it at that merge. Where it
+names `CHANGELOG.md`, the notes of a version in it, Verify a release or a download
+checked as the README says (the Documentation of T6.3, REQ-295, REQ-304, DOC-10,
+REQ-310), it reads the body of the GitHub release and the check Freelens makes of
+a release tarball, and REQ-304 and DOC-10 read the README alone. The Scope
+Baseline reads #144 as not taken. The token of D11b is the one REQ-308 names for
+1.0.0, and its fifth step, a prerelease through the trusted publisher before
+1.0.0, is not taken. The decision of the same day that there is no prerelease and
+that 1.0.0 is the first publication, which the evidence of T6.3 records, is not
+restated by this amendment: the places that plan a prerelease before 1.0.0,
+among them REQ-295, REQ-296, REQ-309 to REQ-311, REQ-313, the steps of ASSET-05
+and the prereleases of D15, keep it. The text as approved is the one of this
+spec at
+[`801dfc3`](https://github.com/freelensapp/freelens-velero-extension/blob/801dfc3c62d6fc97557c56e45388efe325185c84/docs/specs/SPEC-0018-release-readiness.md).
+
+### 2026-11-09: The Checks Beyond The Other Extensions
+
+Decided by the lead maintainer on 2026-11-09: the checks that go beyond the other
+extensions and were not made are not taken; the ones made, the HTTPS and the
+direct route of FND-10, the ceilings of the bundles and the identities of the
+roles, stay. In the places above:
+
+- REQ-287 and REQ-314, the second cluster of the environment and two clusters at
+  once in one packaged Freelens, are not taken, with REG-03, REG-08, scenario 6
+  and D4: the gate of each frame and the count of the writes between frames stay
+  proven by the second entry of SPEC-0009, and SPEC-0004 keeps its one kind
+  cluster. G4.1 and G4.4 are deferred.
+- REQ-291, Back up now and Delete backup with the real controller in the packaged
+  application, is not taken, with REG-07 and D7: each action keeps its proof in
+  `pnpm e2e` against the server of the release and its cases on the CRDs alone.
+  G3.2 and the second part of G3.1 are deferred.
+- REQ-288, REQ-289, REQ-290 and REQ-317 stay.
+- Restated with them: the Safety of the Design, the layers of the new checks under
+  the table of where each check runs, the rows of the amendments of SPEC-0004,
+  SPEC-0009, TESTING.md and the roadmap, the files and the homes of the tests, the
+  success criteria, D15 with its order, D16 and what T6.1 defers. The row of T6.1
+  in the roadmap is narrowed to the checks that stay, and what this amendment does
+  not take is under Deferred after v1.0.0.
+
+The rest of this spec is read with the amendment: the Scope Baseline reads the
+second part of G3.1 as deferred.
