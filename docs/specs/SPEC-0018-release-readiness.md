@@ -1138,16 +1138,20 @@ evidence, by check:
   and `wcag21aa`, and not the best practices, on the root of the view of the
   extension, the page `velero-<id>-page`, with the menus, the dialogs, the drawers and
   the tooltips of the host left out. A violation of impact serious or critical on an
-  element the extension renders fails the case of its view, beside the problems of its
-  layouts, by its rule, its impact, its selector and its HTML, unless the file of the
-  exceptions, `e2e/__tests__/pre-review.exceptions.json`, empty, keeps it. Every
-  violation is in the report `pre-review-accessibility.json`: its view, its theme, its
-  size, its rule, its impact, its element by a selector and an excerpt of its HTML,
-  where it comes from and what decided it, and whether it fails or the spec that keeps
-  it; with the count of each rule by its impact and its origin, the rules axe-core
-  could not decide in each layout, and the exceptions no violation used.
+  element the extension renders fails the case of its view, unless the file of the
+  exceptions, `e2e/__tests__/pre-review.exceptions.json`, empty, keeps it: asserted
+  softly once every layout of the view was looked at, so that the case goes on to its
+  other views and fails at its end, each violation in one line by its rule, its impact
+  and its selector, with the colors and the ratios of a contrast or what axe-core says
+  is to be fixed. Every violation is in the report `pre-review-accessibility.json`:
+  its view, its theme, its size, its rule, its impact, the failure summary of axe-core,
+  for a contrast the color of the words, the color behind them, their ratio, the ratio
+  asked of their size and the font, its element by a selector and an excerpt of its
+  HTML, where it comes from and what decided it, and whether it fails or the spec that
+  keeps it; with the count of each rule by its impact and its origin, the rules
+  axe-core could not decide in each layout, and the exceptions no violation used.
 - VIS-02, the unit part ([`accessibility-scan.test.ts`](../../test/accessibility-scan.test.ts),
-  10 cases, of [`velero-accessibility.ts`](../../integration/helpers/velero-accessibility.ts)):
+  12 cases, of [`velero-accessibility.ts`](../../integration/helpers/velero-accessibility.ts)):
   where an element comes from, an element of the extension, the root of the view,
   every class of the host the helper names by its component, a child the extension
   gave a component of the host that holds what it is given, and a part the host drew;
@@ -1155,7 +1159,9 @@ evidence, by check:
   not a list, or holds an exception with a key more or less, a value empty or with
   spaces around it, a rule of no form of axe-core, a spec with no choice, or an
   exception named twice; a violation that fails, one that is reported, one an exception
-  keeps, and the exceptions no violation used.
+  keeps, and the exceptions no violation used; the colors, the ratios and the font of a
+  contrast read from the data of its check, and nothing when the data does not say
+  them; and a violation said in one line, with its contrast or its failure summary.
 - VIS-02 in a browser: a probe, not kept in the repository, ran the helper of the scan
   in a headless Chromium 151 under the Content-Security-Policy of the frame of the
   host, on synthetic markup shaped as the views draw theirs. `addScriptTag` was refused
@@ -1170,10 +1176,37 @@ evidence, by check:
   page was given back as it was after each scan; a selector the page cannot read, and a
   root that is not one element, were said with their words.
 - VIS-02 in the packaged application, the first run of the pre-review with the scan,
-  on the environment of the demo: {RUN-AXE-FIRST}. Its cases, its time beside the one
-  of a run before the scan, and the violations of its report by rule, impact and
-  origin, each then decided: an issue, or an exception of the file with the choice of
-  the spec that keeps it.
+  on the environment of the demo: the run 42650892637 of the views, of the pull request
+  #156 at `b682b3e`, rebased on main at `b0607af`, the part `pre-review` red.
+  axe-core 4.14.0 ran 62 rules, and no exception was named. It scanned 220 layouts of
+  the 260: a case that shows several views asserted the problems of each before it
+  showed the next, and its first view with a violation stopped it, so that ten views
+  were never looked at, the snapshot locations, the lists of the pod volume backups,
+  the pod volume restores, the data uploads and the data downloads, the band of the
+  backup in progress, the view of a pod volume backup and of a data download, and the
+  form and the review of a resume. It found 492 violations, 428 of them failing:
+  - of the extension, each failing: `color-contrast`, serious, 402, the links of
+    `.link`, 170 buttons and 3 anchors, and the way back of a workspace, `.back`, 58,
+    in the light theme; the words of a status, `.statusText`, 151, 90 in the light
+    theme and 61 in the dark one, the dark ones all the words of a failure; a `code`
+    element, 17, and the words of a warning, `.warning`, 2, in the light theme; and
+    the words of the row of a kind of resources, `.resourcesText`, 1, in the dark
+    theme. `scrollable-region-focusable`, serious, 18: the text of the review of an
+    action, `.reviewText`. `aria-required-children`, critical, 8: the list of the
+    lines of a log, `.linesList`;
+  - of the host, reported: `color-contrast`, serious, 36, the `primary` Button of the
+    host, white on #00a7a0 in both themes, in nine views; `aria-required-children`,
+    critical, 28, the list of `KubeObjectListLayout`, in seven.
+
+  Fixed in the views, each in a commit of its own and none by an exception: the scan
+  asserted softly at the end of each view, and the report with the colors, the ratios
+  and the failure summary; the colors of the words; the text of a review, a region the
+  keyboard reaches; and the lines of a log, a group around the list of their rows. The
+  violations of the host are listed by component, rule and view for the lead
+  maintainer, whose call an issue is.
+- VIS-02 in the packaged application, on the head with the fixes: {RUN-AXE-AFTER}. The
+  260 scans, the violations of the report by rule, impact and origin, and none of the
+  extension failing.
 - VIS-02 seen failing in the packaged application: {RUN-AXE-BROKEN}, the run with the
   file `e2e-artifacts/break-the-scan-once`, in which the cases of the list of the
   Backups, of the workspace of a backup and of Create backup fail by `color-contrast`,
@@ -1182,9 +1215,34 @@ evidence, by check:
   an exact version, and a dependency of no other kind; neither bundle has a module of
   it in its map, nor its name or the address of the help of its rules in its text.
   Knip finds it used, by the resolution of its file in the helper of the scan.
+- The fixes, each read by a unit or a component test:
+  - the colors of the words ([`views.module.test.ts`](../../src/renderer/components/views.module.test.ts),
+    3 cases): the words of a link, a success, a warning and a failure, which the pages
+    define once, at 4.5 to 1 or more in both themes on the background of the page, of a
+    list, of the target bar, of the rows of a kind of resources and of a field, from the
+    values of the two themes of the host at the target; no words written in a color of
+    the host that says something but through them; and a code element in the light
+    theme, and the rows of a kind of resources in both, at the same ratio;
+  - the text of a review: the component test of each of the six workspaces finds it by
+    its role, a region, and its name, What is sent, as it is sent, and as a stop of the
+    Tab key; the pre-review reads it as the first stop after the review of a deletion,
+    and the field of the name as the second;
+  - the lines of a log: the component tests of the lines and of the log read the group
+    that is the stop of the Tab key, with its name, and the part that scrolls as the
+    list of the rows, with nothing between them, out of the order of the Tab key.
+- The fixes in a browser: a second probe, not kept in the repository, wrote the built
+  stylesheet under the variables of each theme of the host, on the backgrounds the
+  views use, and axe-core found no word below AA in either; it measured the links of
+  the light theme at #0c7874, the successes at #337b36, the warnings at #976110 and
+  the failures at #c73832, the failures of the dark theme at #de7874, the code of the
+  light theme at #555555 and the rows of a kind of resources at #909ba6 in the dark
+  one. On the markup the lines had, a list around the part that scrolls, axe-core said
+  `Element has children which are not allowed: div[tabindex]`, the words of the
+  first run; on the group around the list it said nothing, nor of the text of a review
+  as a region with its name and its stop.
 - Seen failing, each change made on purpose and put back:
   - the helper of the origin, of the exceptions and of the verdict, 31 changes, every
-    one of the 10 cases at least once: a class of the extension beside one of the host
+    one of its first 10 cases at least once: a class of the extension beside one of the host
     making the element the extension's; the form of the classes of the extension; the
     element itself with a class of the host not taken as the host's; the cell of the
     host holding nothing; the content of a cell, the value of a drawer item and the
@@ -1208,12 +1266,30 @@ evidence, by check:
     reported as an unused devDependency; the resolution alone kept, axe-core used;
   - the case of the environment test that lists the suites of the views took the file
     of the exceptions beside them for a suite: it now reads the files `*.tests.ts`
-    alone.
+    alone;
+  - the two cases of the report, 7 changes, each case at least once: a contrast read
+    with no color of its words, with a ratio that is not a number, with no weight of
+    its font, and from data that is no object; and in the line of a violation, its
+    selector said in place of its failure summary, no impact said null, and the ratio
+    asked left out;
+  - the colors of the words, 7 changes, each of the 3 cases at least once: the links of
+    the light theme and the failures of the dark one mixed with too little of the
+    accent, the warnings of the light theme left as the host writes them, the color of
+    the successes no longer defined, a link written in the primary color of the host, a
+    code element of the light theme below AA, and the rows of a kind of resources in
+    the words of the page;
+  - the text of a review, 3 changes, its role, its stop of the Tab key and its name each
+    taken away, each failing the 6 workspaces;
+  - the lines of a log, 3 changes: the group a list again, the role of a list taken from
+    the part that scrolls, and the part that scrolls a stop of the Tab key.
 - The gates of the slice, on its head: `pnpm type:check`, `pnpm lint:check`,
   `pnpm knip:check` and `pnpm build`, green; the unit files that hold or read its
-  changes, `test/environment.test.ts`, `test/build.test.ts`,
-  `test/accessibility-scan.test.ts`, `test/views-plan.test.ts` and
-  `test/host-stub.test.ts`, 317 tests passed; Trunk on the changed files, green. The
+  changes, 24 files and 711 tests passed: `test/environment.test.ts`,
+  `test/build.test.ts`, `test/accessibility-scan.test.ts`, `test/views-plan.test.ts`
+  and `test/host-stub.test.ts`; the tests of the stylesheet, of the lines, of the log,
+  of the panel and of the viewers of a tab, and of the workspace; the tests of the tabs,
+  of the volumes and of the six workspaces of the actions. Trunk on the changed files,
+  green. The
   unit run of the head, `pnpm test:unit`: {RUN-AXE-UNIT}. The checks of its pull
   request: {RUN-AXE-CI}. Its files reach every part of the views, by `package.json`,
   `pnpm-lock.yaml` and the helpers of the suites, and the end to end run.
@@ -1272,3 +1348,36 @@ Decided while implementing, on 2026-11-09:
   writes its colours.
 - The report keeps an excerpt of 200 characters of the HTML of an element, and goes
   through the guard of the report of the tabs against a part of a signed URL.
+- After the first run: the violations of the scan are asserted softly at the end of each
+  view, and the problems of its layouts as before, so that a case looks at every view it
+  shows, and every view is scanned, before it fails. The report carries the failure
+  summary of axe-core for every violation, and for a contrast the data of its check, read
+  by `contrastOf`, which a reader needs to decide.
+- The colors of the words: each fix is in the stylesheet and the markup of the
+  extension, none by an exception. The pages define the words of a link, a success, a
+  warning and a failure once, `--veleroTextLink`, `--veleroTextOk`,
+  `--veleroTextWarning` and `--veleroTextError`, from the colors of the host they used.
+  A color of the host that does not reach 4.5 to 1 on every background the views write
+  words on, the page, a list, the target bar, the rows of a kind of resources and a
+  field, is mixed with the strongest words of its theme, `--textColorAccent`, by the
+  least share that reaches it with a margin of a tenth, which keeps its hue; the values
+  of the light theme are written under `body.theme-light`, the flag the host gives the
+  body for the styles of components (`apply-lens-theme.injectable.ts`, line 31, at the
+  target). In the dark theme the failures go from #ce3933 to #de7874, 32 parts of the
+  accent; in the light theme the links from #00a7a0 to #0c7874, 35 parts, the successes
+  from #399c3d to #337b36, 27, the warnings from #ff9800 to #976110, 47, and the failures
+  from #ce3933 to #c73832, 4; the others are the colors of the host. A code element of
+  the light theme is written in the words of the page, #555555, where the host writes
+  #b4b5b4 in both themes; the rows of a kind of resources take the third grey of the
+  host, #909ba6 in the dark theme, 4.88 to 1 on the stripe of a table. What is not a word
+  keeps the colors of the host: borders, outlines, the bar of a progress and the marks,
+  which the rules of the scan do not read. DESIGN.md says the rule.
+- The text of a review is a region the Tab key reaches whatever its length, named by its
+  title, one part of the six workspaces; a review whose text does not scroll has one stop
+  more. SPEC-0017 records it among its amendments.
+- The lines of a log are a group, the stop of the Tab key with the name and the keys, and
+  in it the list, which is the part that scrolls, with the role react-window writes on
+  it; the keyboard does not change. SPEC-0011 records it among its amendments.
+- The violations of the host fail nothing and have no exception: the report of the slice
+  lists them by component, rule and view, the `primary` Button of the host and the list
+  of `KubeObjectListLayout`, for the lead maintainer, whose call an issue is.
