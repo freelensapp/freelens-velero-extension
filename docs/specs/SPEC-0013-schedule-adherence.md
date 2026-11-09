@@ -1,6 +1,6 @@
 # SPEC-0013: The Adherence Of A Schedule
 
-- **Status:** Implemented
+- **Status:** Verified
 - **Date:** 2026-10-13
 - **Milestone / tasks:** M4 / T3.1, T3.2, T3.3
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`
