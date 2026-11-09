@@ -1,6 +1,6 @@
 # SPEC-0017: The Write Actions
 
-- **Status:** Implemented
+- **Status:** Verified
 - **Date:** 2026-11-07
 - **Milestone / tasks:** M5 / the ground rules of the write actions, T4.2, T4.3, T4.4, T4.5, T4.6
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`
@@ -496,7 +496,8 @@ scripts of `e2e/scripts/`, beside the transport proof.
   the Schedule shows it.
 - The words of each action and of each warning are read whole by the unit tests;
   the lead maintainer judges them at the review of the milestone, on the screenshots
-  of the pre-review.
+  of the pre-review. Judged on 2026-11-09, at the review of the fifth milestone, and
+  approved as they are.
 - The end to end tests, with the server of the release on the disposable kind
   cluster, show for each action what the controller does with the request the
   extension wrote: a backup from a schedule and a backup from the form Completed, a
@@ -645,7 +646,7 @@ What this draft could not verify, and what the implementation establishes first:
 - The namespaces the host lists for a cluster, as SPEC-0016 says for the form of
   the template, which the mapping of a restore offers as targets.
 - The words of each action, which the lead maintainer judges at the review of the
-  milestone.
+  milestone: judged on 2026-11-09, and approved as they are.
 
 T4.2, the first of its pull requests, on 2026-11-08: the backup asked from a
 schedule in the main process, with the contract of its write and the words of its
@@ -2282,7 +2283,9 @@ Decided while implementing, on 2026-11-08:
   which answers a name it does not hold, the empty one among them, as not found
   ([controller-runtime v0.21.0, `cache_reader.go` L57-L76](https://github.com/kubernetes-sigs/controller-runtime/blob/v0.21.0/pkg/cache/internal/cache_reader.go#L57-L76)).
   The command stays offered, as REQ-278 asks, and the refusal is said with the error of
-  Velero; whether to hold it back for such a backup is an open question. No run on a
+  Velero; whether to hold it back for such a backup was left open, and the lead
+  maintainer decided on 2026-11-09, at the review of the milestone, to keep it offered,
+  as it is. No run on a
   server shows it: the server starts every backup it reads, and a proof cannot hold one
   unstarted.
 - The workspace of a backup shows only the deletion of that backup, by its name and its
@@ -2308,7 +2311,8 @@ Decided while implementing, on 2026-11-08:
 
 The independent review of this pull request, read-only, found two blockers and four
 points of medium weight, with others; all were applied, the hold of the command for a
-backup that names no storage location left as an open question:
+backup that names no storage location left open, and decided at the review of the
+milestone: it stays offered:
 
 - The dialog that turns writes on did not name the deletion: it names a
   DeleteBackupRequest of one backup, asked from the view of that backup, as REQ-245

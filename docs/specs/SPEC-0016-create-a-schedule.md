@@ -1,6 +1,6 @@
 # SPEC-0016: Create A Schedule
 
-- **Status:** Implemented
+- **Status:** Verified
 - **Date:** 2026-10-23
 - **Milestone / tasks:** M5 / T4.7
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`
@@ -432,7 +432,8 @@ see D11.
 - The workspace never says that a schedule runs before Velero wrote Enabled.
 - The words of each choice and of each warning are read whole by the unit tests;
   the lead maintainer judges them at the review of the milestone, on the screenshots
-  of the pre-review.
+  of the pre-review. Judged on 2026-11-09, at the review of the fifth milestone, and
+  approved as they are.
 - Failure: a second request after an answer that is not known, an update of an
   existing schedule, a field written empty, a label or an annotation of the
   extension on the Schedule, or a write outside the disposable kind cluster.
