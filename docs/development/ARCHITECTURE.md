@@ -131,8 +131,10 @@ kind cluster of the scripts of this repository; the end-to-end tests, which brin
 the test environment up on the runner, run the fixtures and the transport proof
 and take it down; the tests of the views, which run the suites, the pre-review
 and FND-10 in a Freelens built from source at the same commit against the fixtures
-of that environment, the build cached by the commit and not by a version, as the
-integration tests cache it; OSV-Scanner; and, on a pull request that changes
+of that environment, the build cached by the commit and not by a version; the
+integration tests and the tests of the views build it through one composite
+action, `.github/actions/build-freelens`, which each gives the commit it names
+once, and share its caches; OSV-Scanner; and, on a pull request that changes
 `.nvmrc`, `mise.toml` or `mise.lock`, the check of `mise.lock`. They run on
 synthetic data only. Renovate and the daily maintenance workflows of the
 organization (npm audit, npm dedupe, Biome migrate, Trunk upgrade) open their pull

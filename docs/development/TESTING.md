@@ -90,8 +90,10 @@ isolated profile, as the [suites of the views](#suites-of-the-views) start it.
 `pnpm e2e:integration` builds and packs the extension and runs them against the
 disposable environment of this repository, checking its target before and after;
 the [workflow](../../.github/workflows/integration-tests.yaml) builds Freelens from
-source at the commit of the validation target, cached by that commit, brings the
-environment up with `pnpm e2e:cluster:up:definitions`, which installs the CRDs of
+source at the commit of the validation target, through the
+[action](../../.github/actions/build-freelens/action.yaml) it shares with the views,
+cached by that commit, brings the environment up with
+`pnpm e2e:cluster:up:definitions`, which installs the CRDs of
 the reviewed release alone, with no Velero server, node agent or store, and places
 no fixture, runs them, uploads the screenshots of a failure as `integration` and
 always takes the environment down. Each session places an object of its own that
@@ -258,9 +260,11 @@ main process of the application as well as its window: a bundle, a folder or an
 executable, and never one installed in `/Applications`. On a machine of a
 developer it is the release of the validation target, Freelens 2.0.0, built from
 `b9b53e16`, its download checked against the checksum the release
-publishes beside it; in CI it is Freelens built from source at that commit, as the
-[views workflow](../../.github/workflows/views-tests.yaml) builds it, cached by the
-commit. On a Linux without a display the runner starts them under `xvfb-run`.
+publishes beside it; in CI it is Freelens built from source at that commit by the
+[action](../../.github/actions/build-freelens/action.yaml) the
+[views workflow](../../.github/workflows/views-tests.yaml) and the integration
+workflow share, cached by the commit. On a Linux without a display the runner
+starts them under `xvfb-run`.
 
 | Command | What it does |
 | --- | --- |
@@ -589,8 +593,10 @@ the answers 50.4 ms at the 95th percentile, the longest frame of a gesture 21.3 
 50, 31 rows mounted, an idle frame of 16.7 ms at the median.
 
 Their [workflow](../../.github/workflows/views-tests.yaml) builds Freelens from
-source at the commit of the validation target, or takes the build the cache keeps
-for that commit, and runs the suites, the pre-review and FND-10 on the hosted
+source at the commit of the validation target, through the
+[action](../../.github/actions/build-freelens/action.yaml) it shares with the
+integration tests, or takes the build the cache keeps for that commit, and runs
+the suites, the pre-review and FND-10 on the hosted
 runner in six parts side by side: the suite of the
 artifacts; the pre-review; the suites of the volumes, of the server and of the
 repositories, the three parts on the environment with its fixtures and the server of the release, for what only a
@@ -604,8 +610,9 @@ decides which parts a run takes, by
 [`views-plan.mts`](../../e2e/scripts/views-plan.mts) and the rules of
 [`views-parts.json`](../../e2e/views-parts.json): every part on main, every night
 and on demand; on a pull request, the parts its changed files reach. A change to
-the runner, the environment, the main process, the toolchain or the rules runs
-every part, and so does a file no rule knows; a document, a unit test, another
+the runner, the environment, the build of Freelens, the main process, the
+toolchain or the rules runs every part, and so does a file no rule knows; a
+document, a unit test, another
 workflow or the configuration of a linter runs none; a view of the renderer or a
 module of common runs the two parts without a controller, with the part of the
 artifacts or of the volumes and the server when it is one of theirs or one of the
