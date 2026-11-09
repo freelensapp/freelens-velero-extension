@@ -11669,6 +11669,305 @@ describe("platform of the test environment", () => {
     expect(release).toMatch(/\n\s+prerelease: \$\{\{ contains\(github\.ref_name, '-'\) \}\}\n/);
   });
 
+  it("tags the merge commit of the pull request of the version, on its merge and on /tag from an owner, a member or a collaborator with write access", async () => {
+    const text = readFileSync(new URL("../.github/workflows/tag.yaml", import.meta.url), "utf8");
+    // What the workflow does, without what it says of itself in its comments, cut into its steps; and the same steps
+    // as they are written, whose scripts the case runs.
+    const workflow = text
+      .split("\n")
+      .filter((line) => !line.trimStart().startsWith("#"))
+      .join("\n");
+    const steps = workflow.split(/\n(?= {6}- name: )/).slice(1);
+    const written = text.split(/\n(?= {6}- name: )/).slice(1);
+    const field = (step: string, key: string) => new RegExp(`\\n {8}${key}: ([^\\n]+)`).exec(step)?.[1];
+    // The content of a block scalar of a step, `run: |` or `script: |`, dedented as YAML reads it.
+    const block = (step: string, key: string) => {
+      const found = new RegExp(`\\n( {8}| {10})${key}: \\|\\n((?:\\1 {2}[^\\n]*\\n|\\n)*)`).exec(step);
+
+      return found?.[2].replace(new RegExp(`^${found[1]} {2}`, "gm"), "").replace(/\n+$/, "\n");
+    };
+    // The condition of the job, whatever the style of its scalar, read as the expression reads it: its two ways, and
+    // the terms of each, which must all hold, the list of the associations read as a set.
+    const [, value = "", lines = ""] = /\n {4}if: ([^\n]*)\n((?: {6}[^\n]*\n)*)/.exec(workflow) ?? [];
+    const condition = (/^[|>][-+]?$/.test(value) ? lines : value).replace(/\s+/g, " ").trim();
+    const split = (expression: string, operator: string) => {
+      const parts = [""];
+      let depth = 0;
+      let quoted = false;
+
+      for (let at = 0; at < expression.length; at++) {
+        const character = expression[at];
+
+        if (character === "'") {
+          quoted = !quoted;
+        } else if (!quoted && character === "(") {
+          depth++;
+        } else if (!quoted && character === ")") {
+          depth--;
+        } else if (!quoted && depth === 0 && expression.startsWith(operator, at)) {
+          parts.push("");
+          at += operator.length - 1;
+          continue;
+        }
+        parts[parts.length - 1] += character;
+      }
+
+      return parts.map((part) => part.trim());
+    };
+    const terms = (way: string): string[] => {
+      const parts = split(way, "&&");
+
+      return parts.length === 1 && way.startsWith("(") && way.endsWith(")") ? terms(way.slice(1, -1).trim()) : parts;
+    };
+    const ways = split(condition, "||").map((way) =>
+      terms(way)
+        .map((term) => {
+          const list = /^contains\(fromJSON\('(\[[^\]]*\])'\), github\.event\.comment\.author_association\)$/.exec(
+            term,
+          )?.[1];
+
+          return list === undefined ? term : `author_association in ${JSON.stringify(JSON.parse(list).sort())}`;
+        })
+        .sort(),
+    );
+    const way = (event: string) => ways.find((list) => list.includes(`github.event_name == '${event}'`));
+
+    expect(ways).toHaveLength(2);
+    // The merge of the pull request of the version, from its branch of this repository.
+    expect(way("pull_request")).toEqual(
+      [
+        "github.event_name == 'pull_request'",
+        "startsWith(github.event.pull_request.title, 'Automated npm version')",
+        "github.event.pull_request.head.ref == 'automated/npm-version'",
+        "github.event.pull_request.head.repo.full_name == github.repository",
+        "github.event.pull_request.merged",
+      ].sort(),
+    );
+    // The comment /tag on that pull request once it is closed, from an owner, a member of the organization or a
+    // collaborator: a pre-filter of the write access the first step requires.
+    expect(way("issue_comment")).toEqual(
+      [
+        "github.event_name == 'issue_comment'",
+        "github.event.issue.pull_request",
+        "startsWith(github.event.issue.title, 'Automated npm version')",
+        "github.event.issue.state == 'closed'",
+        "github.event.comment.body == '/tag'",
+        'author_association in ["COLLABORATOR","MEMBER","OWNER"]',
+      ].sort(),
+    );
+    // The steps in their order: the write access of the author of /tag, the merge commit, its checkout, the version
+    // read from it, the check of its form, and the tag.
+    expect(steps.map((step) => field(step, "id") ?? field(step, "uses")?.replace(/@.*/, ""))).toEqual([
+      "write-access",
+      "merge-commit",
+      "actions/checkout",
+      "package-json",
+      "check-version",
+      "actions/github-script",
+    ]);
+    const [, , checkout, version, check, create] = steps;
+
+    expect(checkout).toMatch(/\n {10}ref: \$\{\{ steps\.merge-commit\.outputs\.sha \}\}\n/);
+    expect(checkout).toMatch(/\n {10}fetch-depth: 0\n/);
+    expect(checkout).toMatch(/\n {10}persist-credentials: false\n/);
+    expect(block(version, "run")).toBe('echo "version=$(yq -r .version package.json)" >> $GITHUB_OUTPUT\n');
+    // Bash reads the version from the environment, never from its own text.
+    expect(check).toMatch(/\n {8}env:\n {10}VERSION: \$\{\{ steps\.package-json\.outputs\.version \}\}\n/);
+    expect(steps.map((step) => block(step, "run") ?? "").join("")).not.toMatch(/\$\{\{/);
+    expect(field(create, "if")).toBe("steps.check-version.outputs.is_release == 'true'");
+    // The token of the run reads, and the token of the environment creates the tag and nothing else.
+    expect(/\npermissions:\n((?: {2}[^\n]*\n)+)/.exec(workflow)?.[1]).toBe("  contents: read\n  pull-requests: read\n");
+    expect(workflow.match(/permissions:/g)).toHaveLength(1);
+    expect(workflow.match(/secrets\./g)).toHaveLength(1);
+    expect(create).toMatch(/\n {10}github-token: \$\{\{ secrets\.GH_TOKEN \}\}\n/);
+    expect(workflow).toMatch(/\n {4}environment: automated\n/);
+
+    // The scripts of the job, run as actions/github-script runs them: the text of each, its expressions replaced, the
+    // body of a function of the API, the context, the core library and the environment of the process, here
+    // stand-ins, on both ways. Main as it is when the job runs, the commit of the run, is a third commit, which must
+    // never come out, and any request the stand-ins do not answer is answered with it.
+    const main = "3333333333333333333333333333333333333333";
+    const merged = "0123456789abcdef0123456789abcdef01234567";
+    const head = "fedcba9876543210fedcba9876543210fedcba98";
+    const repository = { owner: "freelensapp", repo: "freelens-velero-extension" };
+    const AsyncFunction = Object.getPrototypeOf(async () => undefined).constructor as new (
+      ...names: string[]
+    ) => (...values: unknown[]) => Promise<unknown>;
+    const job = async (event: string, payload: Record<string, unknown>, answers: Record<string, unknown>) => {
+      const calls: [string, unknown][] = [];
+      const outputs: Record<string, Record<string, string>> = { "package-json": { version: "1.0.0-0" } };
+      const github = {
+        rest: new Proxy(
+          {},
+          {
+            get: (_, area) =>
+              new Proxy(
+                {},
+                {
+                  get: (__, method) => async (request: unknown) => {
+                    calls.push([`${String(area)}.${String(method)}`, request]);
+
+                    return {
+                      data: answers[`${String(area)}.${String(method)}`] ?? {
+                        sha: main,
+                        commit: { sha: main },
+                        object: { sha: main },
+                      },
+                    };
+                  },
+                },
+              ),
+          },
+        ),
+      };
+      const context = {
+        eventName: event,
+        sha: main,
+        ref: "refs/heads/main",
+        payload,
+        repo: repository,
+        issue: { ...repository, number: 7 },
+      };
+      const expression = (name: string) => {
+        const path = name.trim().split(".");
+
+        if (path[0] === "steps" && path[2] === "outputs") {
+          return outputs[path[1]]?.[path[3]] ?? "";
+        }
+        if (path[0] === "github" && path[1] === "event") {
+          const found = path
+            .slice(2)
+            .reduce<unknown>((at, key) => (at as Record<string, unknown> | null | undefined)?.[key], payload);
+
+          return found === undefined || found === null ? "" : String(found);
+        }
+        const known: Record<string, string> = {
+          "github.sha": main,
+          "github.ref": "refs/heads/main",
+          "github.repository": `${repository.owner}/${repository.repo}`,
+        };
+
+        if (known[name.trim()] === undefined) {
+          throw new Error(`An expression the case does not read: ${name}`);
+        }
+
+        return known[name.trim()];
+      };
+      const substitute = (source: string) =>
+        source.replace(/\$\{\{([^}]*)\}\}/g, (_, name: string) => expression(name));
+
+      for (const [index, step] of steps.entries()) {
+        const script = block(written[index], "script");
+        // A step runs on the way its condition names, and the tag on a version of the release form, as 1.0.0-0 is.
+        const when = field(step, "if");
+        const named = /^github\.event_name == '(\w+)'$/.exec(when ?? "")?.[1];
+
+        if (when !== undefined && named === undefined && when !== "steps.check-version.outputs.is_release == 'true'") {
+          throw new Error(`A condition the case does not read: ${when}`);
+        }
+        if (script === undefined || (named !== undefined && named !== event)) {
+          continue;
+        }
+        const id = field(step, "id") ?? `step-${index}`;
+        const env = Object.fromEntries(
+          [...(/\n {8}env:\n((?: {10}[^\n]+\n)+)/.exec(step)?.[1] ?? "").matchAll(/^ {10}(\w+): (.*)$/gm)].map(
+            ([, name, setting]) => [name, substitute(setting)],
+          ),
+        );
+        const failures: unknown[] = [];
+        const core = {
+          setOutput: (name: string, output: unknown) => {
+            outputs[id] = { ...outputs[id], [name]: String(output) };
+          },
+          setFailed: (message: unknown) => failures.push(message),
+        };
+
+        try {
+          await new AsyncFunction("github", "context", "core", "process", "console", "fetch", substitute(script))(
+            github,
+            context,
+            core,
+            {
+              env: {
+                GITHUB_SHA: main,
+                GITHUB_REF: "refs/heads/main",
+                GITHUB_REPOSITORY: "freelensapp/freelens-velero-extension",
+                ...env,
+              },
+            },
+            { log: () => undefined },
+            () => {
+              throw new Error("No request outside the API");
+            },
+          );
+        } catch (error) {
+          failures.push(error);
+        }
+        if (failures.length > 0) {
+          return { failed: id, sha: outputs["merge-commit"]?.sha, calls };
+        }
+      }
+
+      return { failed: undefined, sha: outputs["merge-commit"]?.sha, calls };
+    };
+    const pull = {
+      number: 7,
+      merged: true,
+      merge_commit_sha: merged,
+      base: { ref: "main" },
+      head: { sha: head, ref: "automated/npm-version", repo: { full_name: "freelensapp/freelens-velero-extension" } },
+    };
+    const comment = (level: string, changes: Record<string, unknown> = {}) =>
+      job(
+        "issue_comment",
+        {
+          issue: { number: 7, pull_request: {}, user: { login: "the-version-workflow" } },
+          comment: { body: "/tag", user: { login: "a-maintainer" }, author_association: "MEMBER" },
+        },
+        { "repos.getCollaboratorPermissionLevel": { permission: level }, "pulls.get": { ...pull, ...changes } },
+      );
+    const permission = ["repos.getCollaboratorPermissionLevel", { ...repository, username: "a-maintainer" }];
+    const read = ["pulls.get", { ...repository, pull_number: 7 }];
+    const tag = ["git.createRef", { ...repository, ref: "refs/tags/v1.0.0-0", sha: merged }];
+
+    // The merge: the merge commit of the event, no request but the tag, and the tag on that commit; nothing without it.
+    expect(
+      await job("pull_request", { pull_request: { number: 7, merge_commit_sha: merged, head: { sha: head } } }, {}),
+    ).toEqual({ failed: undefined, sha: merged, calls: [tag] });
+    expect(
+      await job("pull_request", { pull_request: { number: 7, merge_commit_sha: null, head: { sha: head } } }, {}),
+    ).toEqual({ failed: "merge-commit", sha: undefined, calls: [] });
+    // The comment: the permission of its author, then its pull request read through the API, then the tag on its
+    // merge commit; an author without write access stops at the permission.
+    for (const level of ["admin", "write"]) {
+      expect([level, await comment(level)]).toEqual([
+        level,
+        { failed: undefined, sha: merged, calls: [permission, read, tag] },
+      ]);
+    }
+    for (const level of ["read", "none"]) {
+      expect([level, await comment(level)]).toEqual([
+        level,
+        { failed: "write-access", sha: undefined, calls: [permission] },
+      ]);
+    }
+    // A pull request closed without a merge, merged into another branch, with no merge commit, from another branch,
+    // or from another repository: nothing is tagged.
+    for (const changes of [
+      { merged: false },
+      { base: { ref: "release" } },
+      { merge_commit_sha: null },
+      { head: { ...pull.head, ref: "feature" } },
+      { head: { ...pull.head, repo: { full_name: "someone/freelens-velero-extension" } } },
+      { head: { ...pull.head, repo: null } },
+    ]) {
+      expect([changes, await comment("write", changes)]).toEqual([
+        changes,
+        { failed: "merge-commit", sha: undefined, calls: [permission, read] },
+      ]);
+    }
+  });
+
   it("builds Freelens for the views and for the integration at the validation target of SPEC-0015, named once", () => {
     const spec = readFileSync(new URL("../docs/specs/SPEC-0015-freelens-v2-host.md", import.meta.url), "utf8");
     const target = /^- \*\*Freelens validation target:\*\* freelensapp\/freelens `([0-9a-f]{40})`/m.exec(spec)?.[1];
