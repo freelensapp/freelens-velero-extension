@@ -418,8 +418,9 @@ writes nothing:
 <!-- markdownlint-enable MD013 -->
 
 What to do: give the identity what it lacks, the verb the words name for an
-action, in the namespace of the installation. Permissions lists the verbs of
-each feature, with a role that reads the views and a role for the actions.
+action, in the namespace of the installation. [Permissions](#permissions)
+lists the verbs of each feature, with a role that reads the views and a role
+for the actions.
 
 A list is said denied as well when the cluster did not take the credential of
 the context, as a token that expired. An action tells it apart:
@@ -447,7 +448,7 @@ A read before it that is refused is said the same way, with the verb it
 needs: `get` on `services`, `list` on `endpointslices` or `get` on `pods`.
 
 What to do: grant `create` on `pods/portforward` in the namespace of the Pod
-of the store, as Permissions says, then load the tab again.
+of the store, as [Permissions](#permissions) says, then load the tab again.
 kubectl 1.31 and later asks for `get` on `pods/portforward` first, and falls
 back to `create` when it is refused: grant `get` as well to keep that refusal
 out of the audit log of the cluster.
