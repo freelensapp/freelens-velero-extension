@@ -362,6 +362,8 @@ describe("the deletion of a backup, in its workspace", () => {
     expect(main.shown).toEqual([main.runs[0].args[5]]);
   });
 
+  // Seven workspaces in one case, each reviewed and run: under the full parallel run of a loaded machine it took up
+  // to 5.2 seconds, more than the default of 5, so it has a time of its own.
   it("says each end with the errors as Velero wrote them, the requests not read, an end found after a lost answer, and the way to the view of the backup", async () => {
     for (const deleted of [
       { end: "refused", request: "nightly-abcde", phase: "Completed", errors: ["backup deletion failed: synthetic"] },
@@ -401,7 +403,7 @@ describe("the deletion of a backup, in its workspace", () => {
       act(() => closeViews());
       confirmDialogs.length = 0;
     }
-  });
+  }, 20_000);
 
   it("keeps a failure in sight with the focus, and leads to the view of the backup from an end that is not known", async () => {
     const { main } = mount();
