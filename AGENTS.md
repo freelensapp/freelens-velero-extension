@@ -989,11 +989,14 @@ contains, and takes the sha256 of those files as its outputs, before anything of
 Freelens runs; then it runs FND-10 on that tarball in Freelens built at the
 validation target. It runs alone, and publishes nothing, on a pull request that
 changes `release.yaml`, the script of the list, the action that builds Freelens,
-`CHANGELOG.md` or what the package is built from, the pull request of a version
-among them, and when started by hand. Its job `publish`, at a pushed tag alone
-and in the environment `publishing`, builds nothing: it checks the files against
-the outputs of `package` and publishes the tarball with provenance, a version
-with a hyphen on the npm tag `next` and any other on `latest`. Its job
+`CHANGELOG.md`, `package.json`, `pnpm-lock.yaml`, `vite.config.mjs`, `build/`,
+`src/`, `README.md` or `LICENSE`, the pull request of a version among them, and
+when started by hand. Its job `publish`, at a pushed tag alone and in the
+environment `publishing`, builds nothing: it checks that the files are the five
+of the outputs of `package`, and nothing else, and publishes the tarball with
+provenance, a version with a hyphen on the npm tag `next` and any other on
+`latest`; a version the registry holds with the bytes of the tarball is not
+published again, so that a run is taken up by re-running its failed jobs. Its job
 `release`, with no credential of npm, checks them the same way and creates the
 GitHub release, a prerelease for a version with a hyphen. The daily maintenance workflows open their pull requests on
 branches named `automated/*`, and Renovate on `renovate/*`.

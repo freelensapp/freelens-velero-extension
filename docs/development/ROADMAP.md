@@ -34,6 +34,8 @@ The version line is 1.0.0, decided by the lead maintainer on 2026-10-16 (D10 of
   on GitHub as a prerelease. The first is made when the lead maintainer asks for
   it, after T0.8 at the earliest; until then main keeps its version. A prerelease
   is installed by its tag, `@freelensapp/velero-extension@next`, or by its version.
+  None is made before 1.0.0 (decided by the lead maintainer on 2026-11-09: no
+  prerelease; 1.0.0 is the first publication).
 - **1.0.0**: M1 to M6, the complete agreed scope, published on `latest` only
   after Freelens 2.0.0 is released and M6 is done: installing by name takes the
   newest version that is not a prerelease, whatever Freelens it is for. With

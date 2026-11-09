@@ -145,9 +145,9 @@ version `X.Y.Z` or a prerelease `X.Y.Z-N` on the merge commit of that pull
 request, never on main as it is when the job runs, at its merge or, once it is
 merged, on the comment `/tag` of an author with write access to the repository
 who is an owner, a member of the organization or a collaborator, and
-the release workflow, in three jobs, as the other extensions of the organization
-release, the merge of the pull request of the version by the lead maintainer being
-the go of the publication. Its job `package`, which holds no credential, builds
+the release workflow, in three jobs; the merge of the pull request of the version
+by the lead maintainer is the go of the publication, as in the other extensions of
+the organization. Its job `package`, which holds no credential, builds
 the tag and packs the tarball once; right after the pack, before anything of
 Freelens or of a cache of APT is restored or started, it makes the software bill
 of materials of the packed file, installed with no devDependency and no peer, the
@@ -159,14 +159,20 @@ FND-10 on that tarball in Freelens built at the validation target through the sa
 action, checks the files against those outputs, and uploads them. At a tag it
 restores no cache before the pack. It runs alone, and publishes nothing, on a pull
 request that changes the workflow, the script of the list, the action,
-`CHANGELOG.md` or what the package is built from, the pull request of a version
-among them, and when started by hand. Its job `publish`, at a pushed tag alone
-and in the environment `publishing`, builds nothing: it checks the files against
-the outputs of `package`, and publishes the tarball with provenance, on `next`
-for a version with a hyphen and on `latest` otherwise. Its job `release`, with no
-credential of npm, checks them the same way and creates the GitHub release with
-the tarball, the bill of materials, their checksums and the notes as its body,
-marked as a prerelease for a version with a hyphen.
+`CHANGELOG.md`, `package.json`, `pnpm-lock.yaml`, `vite.config.mjs`, `build/`,
+`src/`, `README.md` or `LICENSE`, the pull request of a version among them, and
+when started by hand. Its job `publish`, at a pushed tag alone and in the
+environment `publishing`, builds nothing: it checks that the files are the five
+of the outputs of `package`, and nothing else, each with the bytes whose sha256
+`package` took, and publishes the tarball with provenance, on `next` for a
+version with a hyphen and on `latest` otherwise. It asks the registry first: a
+version the registry holds with the bytes of the tarball, as after a publication
+whose answer was lost, is not published again and the job passes, so that a run
+is taken up by re-running its failed jobs; one it holds with other bytes fails the
+job. Its job `release`, with no credential of npm, checks the files the same way
+and creates the GitHub release with the tarball, the bill of materials, their
+checksums and the notes as its body, marked as a prerelease for a version with a
+hyphen.
 
 ### Dependencies
 

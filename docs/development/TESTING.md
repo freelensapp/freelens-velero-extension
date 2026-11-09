@@ -187,11 +187,12 @@ Freelens or of a cache of APT is restored or started, the job makes the bill of
 materials, the checksums, the notes and the list of the contents and takes the
 sha256 of the tarball and of those files as its outputs; FND-10 is its last step
 before the check of the files against those outputs and the upload, and the jobs
-`publish` and `release` check the files against them again. It runs at each tag,
-when started by hand, and on a pull request that changes the workflow, the script
-of the list of the contents, the action, `CHANGELOG.md`, `package.json`,
-`pnpm-lock.yaml`, `vite.config.mjs` or `build/`, the pull request of a version
-among them. The same command runs FND-10 on a machine with no cluster, after
+`publish` and `release` check the files against them again, and that nothing else
+came with them. It runs at each tag, when started by hand, and on a pull request
+that changes the workflow, the script of the list of the contents, the action,
+`CHANGELOG.md`, `package.json`, `pnpm-lock.yaml`, `vite.config.mjs`, `build/`,
+`src/`, `README.md` or `LICENSE`, the pull request of a version among them. The
+same command runs FND-10 on a machine with no cluster, after
 `pnpm build && pnpm clean:tgz && pnpm pack`, with `FREELENS_APP` naming the
 application and `EXTENSION_PATH` the absolute path of the tarball, under
 `xvfb-run -a --server-args="-screen 0 1920x1200x24"` on a Linux without a display,

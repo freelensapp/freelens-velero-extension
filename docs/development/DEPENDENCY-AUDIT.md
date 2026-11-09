@@ -53,7 +53,10 @@ bundles. The bill of materials attached to each GitHub release is made from that
 tarball, installed in an empty directory with no devDependency, no peer, no script
 and no lockfile, so that it is of what the package carries, the extension and
 react-window, and not of the development graph, each package at the version of the
-lockfile, which the release workflow checks (REQ-307 of SPEC-0018).
+lockfile, which the release workflow checks (REQ-307 of SPEC-0018): the extension
+at the version of `package.json`, a dependency of `package.json`, react-window, at
+the one pnpm resolved for it, its entry in the importer of the project in
+`pnpm-lock.yaml`, and any other library at a version the lockfile holds.
 
 ## Development Graph
 

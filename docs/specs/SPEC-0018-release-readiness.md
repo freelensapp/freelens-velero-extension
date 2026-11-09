@@ -7,7 +7,7 @@
 - **Reviewed main:** not relevant: the subject of this spec is the release of the extension, its checks and its documents
 - **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0
 - **Dependencies:** every spec of v1.0.0, SPEC-0001 to SPEC-0017; [D10 of SPEC-0015](SPEC-0015-freelens-v2-host.md#d10-the-version-and-the-release), the version line and its prereleases; the fifth milestone, done and reviewed: its review gate passed with the lead maintainer on 2026-11-09
-- **Approval:** Approved by the lead maintainer on 2026-11-09, with D1 to D19 as proposed; D11b is carried out with an owner of the npm scope `@freelensapp` before the first publication. Amended the same day: D11b and what rests on it, to the settings of the template of the organization, decided by the lead maintainer on 2026-11-09; every place that assumed a prerelease 1.0.0-0, decided by the lead maintainer on 2026-11-09: no prerelease; 1.0.0 is the first publication, made once everything D15 puts before 1.0.0 is done, with the token of D11b; and REQ-286, after the independent review of its slice, for least privilege, the GitHub release created by a third job with no credential of npm
+- **Approval:** Approved by the lead maintainer on 2026-11-09, with D1 to D19 as proposed; D11b is carried out with an owner of the npm scope `@freelensapp` before the first publication. Amended the same day: D11b and what rests on it, to the settings of the template of the organization, decided by the lead maintainer on 2026-11-09; every place that assumed a prerelease 1.0.0-0, decided by the lead maintainer on 2026-11-09: no prerelease; 1.0.0 is the first publication, made once everything D15 puts before 1.0.0 is done, with the token of D11b; and REQ-286, after the independent reviews of its slice: for least privilege, the GitHub release created by a third job with no credential of npm; then the files of the release checked to be the five `package` made and nothing else, a publication the registry took not published again, so that a re-run of the failed jobs reaches the release, and the pull requests that run `package` named by the paths of its trigger, `src/`, `README.md` and `LICENSE` among them
 
 Governed by [AGENTS.md](../../AGENTS.md). A completed draft is not approval to
 implement.
@@ -108,7 +108,7 @@ Excluded, with their owners:
 | ID | Contract | Acceptance check |
 | --- | --- | --- |
 | REQ-285 | The regression of 1.0.0 is every check of SPEC-0001 to SPEC-0017 and of this spec, each in its layer, run where [the table](#where-each-check-runs) says: on every pull request, on every push to main, every night on main and at a tag. No check of those specs is removed, skipped or loosened for the release. Before the pull request of a version is merged, the last runs on main of every workflow of the table that runs there, of a push and of the night, and the checks of that pull request are green; a run that passed only when run again is recorded with its first failure. The merge of that pull request by the lead maintainer, once they are read green, is the go of the publication (D11b as amended). The tag names the merge commit (REQ-315), whose runs start with the merge and end after the tag: they are read after the tag and recorded with their counts, and a red one is handled as [the way back](#the-way-back) says | REG-01 |
-| REQ-286 | The bytes that ship are the bytes a test installed (G1.1: no check installs the file the release publishes). The release workflow has three jobs. The job `package`, with the permission `contents: read` alone and no environment, checks at a tag that the tag is the version of `package.json`, builds and packs the tarball once, makes the bill of materials (REQ-307), the checksums of the tarball and of the bill of materials, the notes of the version (REQ-303) and the list of the contents (REQ-316), and takes the sha256 of the tarball and of those four files as its outputs, before anything of Freelens is restored or started. It then runs FND-10 on that file, in Freelens built at the commit of the validation target through the steps the integration workflow shares with it as one reusable workflow or one composite action, with no cluster: through a mode of the runner of the integration test that skips the checks of the target and of the namespaces, or through `xvfb-run pnpm test:integration integration/__tests__/extensions.tests.ts` with `FREELENS_APP` and `EXTENSION_PATH`; checks that the four files and the notes are there with the bytes of those sha256; and uploads them as an artifact of the run. The job `publish`, which needs `package`, runs in the environment `publishing` with `id-token: write` and `contents: read`, and runs nothing of the build: it downloads the artifact, verifies the files against the outputs of `package`, the tarball by its name and by the sha256 of the pack, and publishes that very file with `pnpm publish <file>` (REQ-308). The job `release`, which needs `publish`, with `contents: write` alone and no environment, verifies the files the same way and creates the GitHub release with the four files and the notes. No step with a side effect runs before the publication, and when any step of `package` fails, nothing is published and no GitHub release is created. The job `package` runs as well, with no `publish` and no `release`, on `workflow_dispatch` and on every pull request that changes `release.yaml`, `CHANGELOG.md`, the steps it shares or what the package is built from, `package.json` among them, so that the workflow runs before its first tag and the pull request of a version runs it on the tree its tag names | REG-02 |
+| REQ-286 | The bytes that ship are the bytes a test installed (G1.1: no check installs the file the release publishes). The release workflow has three jobs. The job `package`, with the permission `contents: read` alone and no environment, checks at a tag that the tag is the version of `package.json`, builds and packs the tarball once, makes the bill of materials (REQ-307), the checksums of the tarball and of the bill of materials, the notes of the version (REQ-303) and the list of the contents (REQ-316), and takes the sha256 of the tarball and of those four files as its outputs, before anything of Freelens is restored or started. It then runs FND-10 on that file, in Freelens built at the commit of the validation target through the steps the integration workflow shares with it as one reusable workflow or one composite action, with no cluster: through a mode of the runner of the integration test that skips the checks of the target and of the namespaces, or through `xvfb-run pnpm test:integration integration/__tests__/extensions.tests.ts` with `FREELENS_APP` and `EXTENSION_PATH`; checks that the four files and the notes are there with the bytes of those sha256; and uploads them as an artifact of the run. The job `publish`, which needs `package`, runs in the environment `publishing` with `id-token: write` and `contents: read`, and runs nothing of the build: it downloads the artifact, verifies that it holds the five files `package` made and nothing else, each against the outputs of `package`, the tarball by its name and by the sha256 of the pack, and publishes that very file with `pnpm publish <file>` (REQ-308), unless the registry holds the version: with the bytes of that file, as after a publication whose answer was lost, the job publishes nothing and passes, and with other bytes it fails. The job `release`, which needs `publish`, with `contents: write` alone and no environment, verifies the files the same way and creates the GitHub release with the four files and the notes. No step with a side effect runs before the publication, and when any step of `package` fails, nothing is published and no GitHub release is created. The job `package` runs as well, with no `publish` and no `release`, on `workflow_dispatch` and on every pull request that changes one of the paths of its trigger, `release.yaml`, the script of the list of the contents, the action that builds Freelens, `CHANGELOG.md`, `package.json`, `pnpm-lock.yaml`, `vite.config.mjs`, `build/`, `src/`, `README.md` or `LICENSE`, so that the workflow runs before its first tag and the pull request of a version runs it on the tree its tag names | REG-02 |
 | REQ-287 | A second cluster in the environment of the suites (G4.1: the isolation between clusters is proven on one API server). The environment can hold a second disposable kind cluster with the CRDs of the release alone, under a second name and on a network of its own, owned by the same journal, which the identity checks accept as they accept the first and nothing else; the scripts and the runner name the cluster, its journal entry, its network and its subnets through one parameter; the cleanup removes both | REG-03 |
 | REQ-314 | Two clusters at once in one packaged Freelens (G4.1, with G4.4: the preferences of two frames are not read together). With both clusters in the catalog, and fixtures that place an installation in a namespace of the same name in each, with backups of the same names and other UIDs: each frame lists the objects of its own cluster, told apart by UID; and each selects its own installation, which the stored preferences keep under the identifier of its cluster, and shows it again after a restart. The gate of each frame and the count of the writes between frames stay proven by the suite of the second entry of SPEC-0009 (D4) | REG-08 |
 | REQ-288 | The roles of the README, proven both ways (G5.1: no identity holds the verbs of the write actions; G5.2: nothing proves that the reading role is enough). Two identities of the test environment hold exactly the two example roles of the README (REQ-297): the operator, for the views, the tabs, the version of the server and every action, and the reader, for the views alone. They replace the administrator of the kind cluster for the session of the extension alone: the proofs take one kubeconfig today for the session and for what they place and remove (the real schedule, the namespace of a restore), which the operator may not do, so their context holds both. With the kubeconfig of the operator, the end to end proofs of the actions, Back up now, Create backup, Create schedule, Restore, Pause and Resume and Delete backup, the proof of the download through the cluster and a request of the version of the server end as they end with the administrator. With the kubeconfig of the reader, the restricted suite of the views passes; a creation of a Backup and the patch of a Schedule, the two ways the adapter writes, each end as forbidden at the step whose verb the reader lacks, with the words of what the identity may not do, and nothing is written, which the API server counts | REG-04 |
@@ -138,7 +138,7 @@ milestone (REQ-312).
 
 | ID | Contract | Acceptance check |
 | --- | --- | --- |
-| REQ-295 | Installation says how to install the extension from the Extensions page of Freelens: by name, `@freelensapp/velero-extension`, which Freelens resolves to the newest version that is not a prerelease, and which finds no version until 1.0.0 is published; by the tag `@freelensapp/velero-extension@next`, the newest prerelease, which can be older than the newest release; by a version; and from the tarball of a GitHub release, checked as Verify a release says, dragged into the window or given by its path. It names the package as `package.json` names it | DOC-01 |
+| REQ-295 | Installation says how to install the extension from the Extensions page of Freelens: by name, `@freelensapp/velero-extension`, which Freelens resolves to the newest version that is not a prerelease, and which finds no version until 1.0.0 is published; by the tag `@freelensapp/velero-extension@next` only once a prerelease of a later line is published, the newest prerelease, which can be older than the newest release, and not at 1.0.0, where `next` names nothing (decided by the lead maintainer on 2026-11-09: no prerelease; 1.0.0 is the first publication); by a version; and from the tarball of a GitHub release, checked as Verify a release says, dragged into the window or given by its path. It names the package as `package.json` names it | DOC-01 |
 | REQ-296 | Requirements says what the extension needs and nothing more: Freelens 2.0.0 or a later 2.x, as `engines.freelens` declares, with Freelens 1 listing the package as Incompatible; a cluster with Velero, read through `velero.io/v1` and, for the data movement, `velero.io/v2alpha1`; an identity with the permissions of the section Permissions; nothing installed in the cluster beyond Velero, and no credential of the object store; Node.js only to build from source. The section Status, which says that there is no release, gives way to the version the README is published with | DOC-02 |
 | REQ-297 | Permissions has a table, one row for each feature, the views, the tabs, a download through the cluster, the version of the server and each action, with the group, the resource, the verbs and the scope of each, every verb backed by a request the code makes, as #145 asks; and two example roles in YAML, one that reads the views and one for the views, the tabs, the version of the server and every action, a Role in the namespace of the installation for what is namespaced and a ClusterRole only for what is read in the whole cluster, with the verbs that are optional and what is lost without them. The two roles are the roles of the two identities of REQ-288, written in the form the case of DOC-03 renders them | DOC-03 |
 | REQ-298 | Safety says what the extension writes to a cluster, every kind and verb the adapter of the main process allows and nothing else: the creation of a DownloadRequest and of a ServerStatusRequest, which loading a tab and reading the version of the server are; the creation of a Backup, a Schedule, a Restore and a DeleteBackupRequest; the patch of `spec.paused` and `spec.skipImmediately` of a Schedule; that each is refused unless writes are on for that cluster and namespace and its review is confirmed; that a restore and a deletion ask for the name of the backup typed; that a backup is deleted only through a DeleteBackupRequest, one at a time; and the three rules it keeps today, signed URLs never logged, stored or shown, TLS verified by default, and missing data shown as unknown | DOC-04 |
@@ -229,10 +229,13 @@ tests.
    against the sha256 `package` took and publishes the tarball with provenance, on
    `next` for a version with a hyphen and on `latest` otherwise (REQ-308); the job
    `release`, with no credential of npm, verifies them the same way and creates
-   the GitHub release with the four assets and the notes as its body. A release
-   that fails after the publication is made by running the job `release` again,
-   alone. The runs of the merge commit are read after the tag, and a red one is
-   handled by [the way back](#the-way-back).
+   the GitHub release with the four assets and the notes as its body. A run that
+   fails after the pack is taken up by re-running its failed jobs, not all of
+   them: `publish` publishes nothing when the registry holds the version with the
+   bytes of the tarball, as after a publication whose answer was lost, and fails
+   when it holds other bytes, so the re-run reaches `release`, which creates the
+   release from the same files. The runs of the merge commit are read after the
+   tag, and a red one is handled by [the way back](#the-way-back).
 7. The proof of the assets (REQ-309) and the check by version (REQ-311).
 
 The first publication is 1.0.0, with no prerelease before it (decided by the lead maintainer on 2026-11-09: no prerelease; 1.0.0 is the first publication).
@@ -306,7 +309,7 @@ The files the slices change beside the specs and the documents above:
 | Check | Layer | Requirements | Scenario and expected evidence |
 | --- | --- | --- | --- |
 | REG-01 | Workflow, manual | REQ-285 | Before the merge of the pull request of each version: the last runs on main of each workflow of [the table](#where-each-check-runs) that runs there, of a push and of the night, and the checks of that pull request, green, listed with their counts in the evidence; a run that passed when run again listed with its first failure. After the tag: the runs of the merge commit, listed with their counts, a red one handled by [the way back](#the-way-back); the tag names that commit (REL-01) |
-| REG-02 | Unit, workflow, packaged integration | REQ-286 | A case reads `release.yaml` without its comments: three jobs; `package` with `contents: read` alone and no environment, one pack, the bill of materials, the checksums, the notes and the list of the contents with their sha256 as its outputs before anything of Freelens, then FND-10 on its file and the files checked against those outputs before the upload, and no publication and no release; `publish` that needs `package`, in `publishing`, with `contents: read` and `id-token: write`, with the download, the files checked against the outputs of `package` and `pnpm publish` of that file, and no build and no pack; `release` that needs `publish`, with `contents: write` alone and no environment, with the download, the same check and the release; the tag, `workflow_dispatch` and the pull requests of its files as triggers, with `publish` and `release` at a tag alone; and the Freelens of the target named by the line the case of the target checks. Seen failing when FND-10 is removed or moved into `publish`, when `publish` builds or packs, when `package` is given the environment or a permission to write, and when a gate is skipped or let fail. The run of `package` on the pull request of the change, green, with FND-10 on its tarball; at the first prerelease, the log of `package` shows FND-10 green on the tarball whose sha256 `publish` verified and the asset carries (ASSET-05) |
+| REG-02 | Unit, workflow, packaged integration | REQ-286 | A case reads `release.yaml` without its comments: three jobs; `package` with `contents: read` alone and no environment, one pack, the bill of materials, the checksums, the notes and the list of the contents with their sha256 as its outputs before anything of Freelens, then FND-10 on its file and the files checked against those outputs before the upload, and no publication and no release; `publish` that needs `package`, in `publishing`, with `contents: read` and `id-token: write`, with the download, the files checked against the outputs of `package` and `pnpm publish` of that file, and no build and no pack; `release` that needs `publish`, with `contents: write` alone and no environment, with the download, the same check and the release; the tag, `workflow_dispatch` and the pull requests of its files as triggers, with `publish` and `release` at a tag alone; and the Freelens of the target named by the line the case of the target checks. Seen failing when FND-10 is removed or moved into `publish`, when `publish` builds or packs, when `package` is given the environment or a permission to write, when a gate is skipped or let fail, and when a step without a name, a key in quotes or any line of `publish` or of `release` is added. The run of `package` on the pull request of the change, green, with FND-10 on its tarball; at 1.0.0, the log of `package` shows FND-10 green on the tarball whose sha256 `publish` verified and the asset carries (ASSET-05) |
 | REG-03 | Unit, end to end | REQ-287 | The unit cases of the environment accept the second cluster the journal owns and refuse any other, each refusal seen failing; in the part, both clusters up and checked, and both removed at the end, which the verification of the environment proves |
 | REG-08 | Packaged application | REQ-314 | In a part on the CRDs alone, both clusters open: the lists of each frame by UID; the selection of each frame, the stored file with the key of each cluster, and each frame with its own installation after a restart |
 | REG-04 | End to end, packaged application | REQ-288 | With the kubeconfig of the operator for the session: the proofs of the actions, the proof of the download and a request of the version of the server, green. With the kubeconfig of the reader: the restricted suite, green; a creation of a Backup and the patch of a Schedule, each forbidden at its step with nothing counted |
@@ -317,7 +320,7 @@ The files the slices change beside the specs and the documents above:
 | VIS-01 | Pre-review, manual | REQ-292 | The pre-review on the commit of the release candidate the review reads, every case green, its counts, report and gallery; the judgment of the lead maintainer at REL-03 |
 | VIS-02 | Pre-review | REQ-293 | The scan of every view in both themes at the two sizes, its report listing every violation, green with the exceptions of the file; seen failing when the case itself, in the DOM of the page it scans and never in the source of a view, removes the name of a button, removes the label of an input and lowers the contrast of a text below AA in one theme |
 | VIS-03 | Unit | REQ-294 | The build test finds no module of axe-core in either bundle and the manifest lists it among the devDependencies at an exact version; Knip finds it used |
-| DOC-01 | Manual | REQ-295 | The checklist of REL-03 reads the section: the name of `package.json`, the tag `next`, a version, the releases of the repository; each way tried at REL-02 and REL-04 |
+| DOC-01 | Manual | REQ-295 | The checklist of REL-03 reads the section: the name of `package.json`, a version, the releases of the repository; each way tried at REL-02 and REL-04. The tag `next` only as the tag of a prerelease of a later line, when there is one, and not among the ways tried on 1.0.0 (decided by the lead maintainer on 2026-11-09: no prerelease; 1.0.0 is the first publication) |
 | DOC-02 | Unit | REQ-296 | A case finds in the section the range of `engines.freelens` of `package.json` and the API versions of the kinds the extension reads, and no section that says there is no release |
 | DOC-03 | Unit, end to end | REQ-297 | A case compares the two YAML blocks of the section, text for text, with a rendering of the roles of the two identities of REQ-288, with no YAML parser; it lands with #145, after the identities; each row of the table checked with `kubectl auth can-i` in the pull request of #145 |
 | DOC-04 | Unit | REQ-298 | A case finds in the section each kind and verb the adapter allows (ACT-01 of SPEC-0017), no other kind of Velero said to be written, and the three rules, signed URLs, TLS and missing data, each by the words that say it |
@@ -382,8 +385,8 @@ The steps of ASSET-05, on 1.0.0, each in an empty directory, with the result
 recorded:
 
 1. `gh release view v1.0.0 --repo freelensapp/freelens-velero-extension --json isPrerelease,assets`:
-   a release that is not a prerelease, with the tarball, the bill of materials and
-   their two `.sha256`.
+   a release that is not a prerelease, with exactly the four assets: the tarball,
+   the bill of materials and their two `.sha256`, and no other.
 2. The four assets downloaded; `sha256sum -c` of each `.sha256`, or
    `shasum -a 256 -c` on macOS: both OK.
 3. `npm pack @freelensapp/velero-extension@1.0.0`, the registry asked again
@@ -860,7 +863,9 @@ gate 1.0.0-0 (D15). The evidence, by check:
   views and the way back, come with their own slices: this one restates the tag
   alone.
 - The workflow at work is read by REL-01 at the merge of the pull request of
-  1.0.0-0: the tag and its commit, equal to the merge commit of that pull request.
+  1.0.0 (decided by the lead maintainer on 2026-11-09: no prerelease; 1.0.0 is the
+  first publication): the tag and its commit, equal to the merge commit of that
+  pull request.
 
 Decided while implementing, on 2026-11-09:
 
@@ -1517,3 +1522,102 @@ Decided while implementing, after the review, on 2026-11-09:
   the commits a workflow names but the ones that pin an action.
 - The text of REQ-286 is restated as well for the order of the steps of `package`
   (M1) and for the pull requests that run it (m1).
+
+After the second independent review of this slice, on 2026-11-09, which found six
+minors and four nits, a third commit takes them, all but the scan through mise
+(R2-m2), which is left out as said below. The evidence, by finding:
+
+- R2-m1, the files the release attaches. `publish` and `release` check that the
+  files of the release are the five `package` made and nothing else: five entries,
+  dot files and directories counted, and each of the five names a file, before the
+  bytes are compared with the outputs of `package`. `publish` downloads them into a
+  directory of their own beside the checkout and checks them there, so that
+  nothing the artifact holds lands where pnpm reads its settings; `release`, which
+  checks nothing out, in its workspace. Step 1 of ASSET-05 reads exactly the four
+  assets. A unit case runs the step on synthetic files: it passes on the five, and
+  fails on a sixth file of a name the release attaches or of any other, a dot file
+  and a directory among them, on one of the five missing or under another name, on
+  one with other bytes, and on a tag of another version.
+- R2-m3, the steps and the keys the cases did not read. The case of the jobs fails
+  on a line of the jobs, outside the block scalars, that is neither a step starting
+  with its name nor a key written plain on one line: a step without a name, a key
+  in quotes, a key with a space before its colon, a value over two lines; on a key
+  of a job after its steps; on a key of a step of `package` other than the nine its
+  steps use, a shell other than bash, and a variable of the environment of a step
+  of `package` other than the seven they use. It pins whole the header of the
+  workflow, the header of `package` up to its steps and its step that sets Node.js
+  up, and the jobs `publish` and `release`, every line, and the step that sets mise
+  up and the inputs of the scan to their ends.
+- R2-m4, a publication the registry took while `publish` failed. Before it
+  publishes, `publish` asks the registry, with no credential, for the integrity of
+  the version, `npm view <name>@<version> dist.integrity --json`: equal to the
+  sha512 of the tarball, it publishes nothing and passes; another integrity, or an
+  answer that is neither an integrity nor `E404`, fails the job; `E404`, which npm
+  11 answers for a package or a version it does not find, publishes. The Release
+  Flow and the comment of `release` say to re-run the failed jobs. A unit case runs
+  the step with stand-ins for npm and pnpm on each answer, at a tag of a release
+  and of a prerelease, with the token and without.
+- R2-m5: REG-02 is read at 1.0.0; REQ-295 and DOC-01 give `@next` only for a
+  prerelease of a later line, not among the ways tried on 1.0.0; the last item of
+  the block of T6.5 is read at the merge of the pull request of 1.0.0; each by role
+  and date.
+- R2-m6: the pull requests that change `src/`, `README.md` or `LICENSE` run
+  `package` as well, and REQ-286, AGENTS.md, ARCHITECTURE.md, TESTING.md and the
+  comment of the workflow name the paths.
+- R2-n1 to R2-n4. ARCHITECTURE.md ties the comparison with the other extensions to
+  the go of the publication, as AGENTS.md does. The step that writes the packages
+  of the bill of materials compares a dependency of `package.json` with the version
+  pnpm resolved for it in the importer of the project, without the versions of its
+  peers, and any other library with the versions the lockfile holds, as
+  DEPENDENCY-AUDIT.md now says; its unit case fails on a version the lockfile holds
+  for another package. The cases that read a workflow or an action without its
+  comments read it through one reader, which keeps the lines of the block scalars.
+  ROADMAP.md records the decision of no prerelease by role and date.
+- R2-m2, the scan through mise, is not in this commit. Taking syft out of
+  `anchore/sbom-action` needs its version in `mise.toml` and its checksums in
+  `mise.lock` for the eight platforms the lock covers, made by `mise lock` as the
+  repository makes them; that lock was not made in this slice, and a lock written
+  by hand is not taken. The scan stays the action pinned by its commit, which
+  downloads the installer of syft from the branch `main` of its repository at each
+  run, between the pack and the sha256 of the files.
+
+Each new or changed case of the third commit was seen failing on a change made on
+purpose, forty-seven in all. The seventeen of the review: FND-10 let fail; an
+unnamed step at the top of `publish` and of `release`, an action by a tag there,
+and unnamed steps after the pack and after the checksums; a quoted key and a
+condition in the form of an expression on FND-10, and quoted keys on the list of
+the contents and on the check before the upload; `continue-on-error` and another
+registry on the job `publish`; the cache of pnpm on the step of `package` that sets
+Node.js up, and the cache of mise saved; a fifth pattern in the files of the
+release, and `release` needing `publish` alone; a default shell on the job
+`package`. Then a shell, a working directory and `BASH_ENV` on a step of `package`,
+a default shell after its steps and for the whole workflow, another registry in the
+environment of the workflow, a key with a space before its colon, a value over two
+lines, and another syft for the scan; each of the three new paths dropped; six
+changes of the verification, seven of the publication and two of the check of the
+lockfile; and three lines of block scalars that start with `#`, in `tag.yaml`, in
+the action and in the workflow of the integration, each run as well with the reader
+of the cases before this commit, under which the case that reads that file passed.
+
+Decided while implementing, after the second review, on 2026-11-09:
+
+- The five files are checked by their count, dot files and directories included,
+  and by the five names, which are the ones `package` took the sha256 of; the
+  sha256 are compared after.
+- `publish` reads the version from the tag, which its verification ties to the
+  name of the tarball, and computes the sha512 with Node.js. npm answers in JSON,
+  whose error carries its code, so the step reads no words of its log, and not its
+  exit status, since the answer says what it found.
+- The dependencies of `package.json` are read from the importer of the project by
+  a pattern of the text of the lockfile, in the document whose importer has
+  dependencies, so that the unit case runs the step without yq; a lockfile of
+  another form fails the step rather than letting a version by.
+- The reader of the cases keeps the lines of the block scalars that start with
+  `#`, in the scripts of `tag.yaml`, of the action and of the workflows of the
+  integration and of the views: such a line can carry an expression GitHub
+  evaluates, or a directive of the file a script writes.
+- The pins of the whole jobs are generated from the workflow, and changed with it.
+
+Left to the runs: the job `package` on the pull request of the third commit, green
+with FND-10 on its tarball, and `publish` and `release` skipped; the jobs `publish`
+and `release` at the tag of 1.0.0.

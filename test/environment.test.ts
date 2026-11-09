@@ -8,6 +8,7 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -10637,20 +10638,52 @@ function readdirNames(directory: string): string[] {
   return readdirSync(directory).sort();
 }
 
-// What a workflow of this repository runs, without what it says of itself in its comments: its text, then the text of
-// each action of this repository it uses, the steps it shares with other workflows, indented by two more spaces so
-// that the steps of the action stand where the steps of a job stand.
+// A YAML file of this repository, a workflow or an action, without what it says of itself in its comments: a line that
+// is a comment is dropped outside the block scalars, and the lines of a block scalar (`run: |` and the like) are kept
+// whole, so that a script is the one the runner runs. With `scalars` false the lines of the block scalars are dropped
+// as well, and what is left is the keys of the file with the values it gives on their lines. Every case that reads a
+// workflow or an action without its comments reads it through this function.
+function yamlText(path: string, scalars = true): string {
+  const kept: string[] = [];
+  // The indentation of the key whose block scalar the lines are of, or -1 outside one.
+  let block = -1;
+
+  for (const line of readFileSync(new URL(`../${path}`, import.meta.url), "utf8").split("\n")) {
+    const indent = line.length - line.trimStart().length;
+
+    if (block >= 0 && (line.trim() === "" || indent > block)) {
+      if (scalars) kept.push(line);
+      continue;
+    }
+    block = -1;
+    if (line.trimStart().startsWith("#")) continue;
+    kept.push(line);
+    const key = /^( *)(- )?[A-Za-z0-9_-]+: [|>][-+]?\s*(?:#.*)?$/.exec(line);
+
+    if (key) block = key[1].length + (key[2] ? 2 : 0);
+  }
+
+  return kept.join("\n");
+}
+
+// A workflow of this repository, as `yamlText` reads it.
+function workflowText(name: string, scalars = true): string {
+  return yamlText(`.github/workflows/${name}`, scalars);
+}
+
+// What a workflow of this repository runs, as `yamlText` reads it: its text, then the text of each action of this
+// repository it uses, the steps it shares with other workflows, indented by two more spaces so that the steps of the
+// action stand where the steps of a job stand.
 function workflowAsRun(name: string): string {
-  const read = (path: string) =>
-    readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
+  const workflow = workflowText(name);
+  const actions = [...workflow.matchAll(/uses: \.\/(\.github\/actions\/[^\s]+)/g)].map((match) =>
+    yamlText(`${match[1]}/action.yaml`)
       .split("\n")
-      .filter((line) => !line.trimStart().startsWith("#"));
-  const workflow = read(`.github/workflows/${name}`);
-  const actions = [...workflow.join("\n").matchAll(/uses: \.\/(\.github\/actions\/[^\s]+)/g)].map((match) =>
-    read(`${match[1]}/action.yaml`).map((line) => (line === "" ? line : `  ${line}`)),
+      .map((line) => (line === "" ? line : `  ${line}`))
+      .join("\n"),
   );
 
-  return [workflow, ...actions].map((lines) => lines.join("\n")).join("\n");
+  return [workflow, ...actions].join("\n");
 }
 
 // The scripts of the `run` steps of a workflow or of an action: the value of each key, or the lines of its block.
@@ -10668,31 +10701,6 @@ function runScripts(text: string): string[] {
 
     return [lines.slice(index + 1, end === -1 ? undefined : end).join("\n")];
   });
-}
-
-// A workflow of this repository without what it says of itself in its comments, outside its block scalars: the lines
-// of a `run: |` block are kept whole, so that a script is the one the runner runs.
-function workflowText(name: string): string {
-  const kept: string[] = [];
-  // The indentation of the key whose block scalar the lines are of, or -1 outside one.
-  let block = -1;
-
-  for (const line of readFileSync(new URL(`../.github/workflows/${name}`, import.meta.url), "utf8").split("\n")) {
-    const indent = line.length - line.trimStart().length;
-
-    if (block >= 0 && (line.trim() === "" || indent > block)) {
-      kept.push(line);
-      continue;
-    }
-    block = -1;
-    if (line.trimStart().startsWith("#")) continue;
-    kept.push(line);
-    const key = /^( *)(- )?[A-Za-z0-9_-]+: [|>][-+]?\s*(?:#.*)?$/.exec(line);
-
-    if (key) block = key[1].length + (key[2] ? 2 : 0);
-  }
-
-  return kept.join("\n");
 }
 
 // The jobs of a workflow by their keys, each the text of its block.
@@ -10740,123 +10748,245 @@ function releaseJobs() {
   return { workflow, jobs, steps, step };
 }
 
-// The steps of the jobs publish and release of the release workflow, whole, as the workflow holds them without its
-// comments: what they run, and nothing else.
-// biome-ignore-start lint/suspicious/noTemplateCurlyInString: the text of the steps, whose placeholders are of bash
-const PUBLISH_STEPS = [
-  [
-    "      - name: Checkout plugin",
-    "        uses: actions/checkout@v7",
-    "        with:",
-    "          persist-credentials: false",
-  ],
-  [
-    "      - name: Setup node",
-    "        uses: actions/setup-node@v7",
-    "        with:",
-    "          node-version-file: .nvmrc",
-    "          package-manager-cache: false",
-    "          registry-url: https://registry.npmjs.org",
-  ],
-  ["      - name: Setup pnpm", "        run: corepack enable"],
-  [
-    "      - name: Download the files of the release",
-    "        uses: actions/download-artifact@v8",
-    "        with:",
-    "          name: release",
-  ],
-  [
-    "      - name: Verify the files of the release",
-    "        run: |",
-    "          set -euo pipefail",
-    "          shopt -s nullglob",
-    "          tarballs=(*.tgz)",
-    '          named="freelensapp-velero-extension-${GITHUB_REF_NAME#v}.tgz"',
-    '          if [ "${#tarballs[@]}" -ne 1 ] || [ "${tarballs[0]}" != "${TARBALL}" ] || [ "${TARBALL}" != "${named}" ]; then',
-    '            echo "::error::One tarball is expected, ${TARBALL} as package packed it and ${named} as the tag names it; found ${#tarballs[@]}"',
-    "            exit 1",
-    "          fi",
-    '          if [ "$(sha256sum "${TARBALL}" | cut -d \' \' -f 1)" != "${SHA256}" ]; then',
-    '            echo "::error::${TARBALL} is not the file package packed and FND-10 installed"',
-    "            exit 1",
-    "          fi",
-    '          printf \'%s\\n\' "${SUMS}" >"${RUNNER_TEMP}/sums"',
-    '          sha256sum --strict -c "${RUNNER_TEMP}/sums"',
-    '          sha256sum --strict -c "${TARBALL%.tgz}-spdx.json.sha256"',
-    "        env:",
-    "          TARBALL: ${{ needs.package.outputs.tarball }}",
-    "          SHA256: ${{ needs.package.outputs.sha256 }}",
-    "          SUMS: ${{ needs.package.outputs.sums }}",
-  ],
-  [
-    "      - name: Publish npm package",
-    "        run: |",
-    "          set -euo pipefail",
-    '          case "${GITHUB_REF_NAME}" in',
-    "            *-*) dist_tag=next;;",
-    "            *) dist_tag=latest;;",
-    "          esac",
-    "          if [[ -n ${NPM_TOKEN:-} ]]; then",
-    '            NODE_AUTH_TOKEN="${NPM_TOKEN}" pnpm --color=always publish "./${TARBALL}" \\',
-    "              --no-git-checks \\",
-    "              --provenance \\",
-    '              --tag "${dist_tag}"',
-    "          else",
-    '            pnpm --color=always publish "./${TARBALL}" \\',
-    "              --no-git-checks \\",
-    "              --provenance \\",
-    '              --tag "${dist_tag}"',
-    "          fi",
-    "        env:",
-    "          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}",
-    "          TARBALL: ${{ needs.package.outputs.tarball }}",
-  ],
-].map((lines) => lines.join("\n"));
-const RELEASE_STEPS = [
-  [
-    "      - name: Download the files of the release",
-    "        uses: actions/download-artifact@v8",
-    "        with:",
-    "          name: release",
-  ],
-  [
-    "      - name: Verify the files of the release",
-    "        run: |",
-    "          set -euo pipefail",
-    "          shopt -s nullglob",
-    "          tarballs=(*.tgz)",
-    '          named="freelensapp-velero-extension-${GITHUB_REF_NAME#v}.tgz"',
-    '          if [ "${#tarballs[@]}" -ne 1 ] || [ "${tarballs[0]}" != "${TARBALL}" ] || [ "${TARBALL}" != "${named}" ]; then',
-    '            echo "::error::One tarball is expected, ${TARBALL} as package packed it and ${named} as the tag names it; found ${#tarballs[@]}"',
-    "            exit 1",
-    "          fi",
-    '          if [ "$(sha256sum "${TARBALL}" | cut -d \' \' -f 1)" != "${SHA256}" ]; then',
-    '            echo "::error::${TARBALL} is not the file package packed and FND-10 installed"',
-    "            exit 1",
-    "          fi",
-    '          printf \'%s\\n\' "${SUMS}" >"${RUNNER_TEMP}/sums"',
-    '          sha256sum --strict -c "${RUNNER_TEMP}/sums"',
-    '          sha256sum --strict -c "${TARBALL%.tgz}-spdx.json.sha256"',
-    "        env:",
-    "          TARBALL: ${{ needs.package.outputs.tarball }}",
-    "          SHA256: ${{ needs.package.outputs.sha256 }}",
-    "          SUMS: ${{ needs.package.outputs.sums }}",
-  ],
-  [
-    "      - name: Create release",
-    "        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4",
-    "        with:",
-    "          fail_on_unmatched_files: true",
-    "          prerelease: ${{ contains(github.ref_name, '-') }}",
-    "          body_path: release-notes.md",
-    "          files: |-",
-    "            *.tgz",
-    "            *.tgz.sha256",
-    "            *-spdx.json",
-    "            *-spdx.json.sha256",
-  ],
-].map((lines) => lines.join("\n"));
-// biome-ignore-end lint/suspicious/noTemplateCurlyInString: the text of the steps, whose placeholders are of bash
+// The release workflow where the cases pin it whole, as `workflowText` reads it: its header up to its jobs, with the
+// line of the validation target, which the case of the target checks; the header of the job package up to its steps,
+// and its step that sets Node.js up; and the jobs publish and release, every line of them. Generated from the
+// workflow, and changed with it.
+// biome-ignore-start lint/suspicious/noTemplateCurlyInString: the text of the workflow, whose placeholders are of bash and of GitHub
+const RELEASE_HEADER = [
+  "name: Release",
+  "",
+  "on:",
+  "  push:",
+  "    tags:",
+  "      - v*",
+  "  pull_request:",
+  "    branches:",
+  '      - "*"',
+  "    paths:",
+  "      - .github/workflows/release.yaml",
+  "      - .github/scripts/list-package-contents.sh",
+  "      - .github/actions/build-freelens/**",
+  "      - CHANGELOG.md",
+  "      - package.json",
+  "      - pnpm-lock.yaml",
+  "      - vite.config.mjs",
+  "      - build/**",
+  "      - src/**",
+  "      - README.md",
+  "      - LICENSE",
+  "  workflow_dispatch: {}",
+  "",
+  "permissions:",
+  "  contents: read",
+  "",
+  "env:",
+  "  freelens_ref: <the validation target>",
+  "",
+  "jobs:",
+];
+const PACKAGE_HEADER = [
+  "  package:",
+  "    name: package",
+  "",
+  "    runs-on: ubuntu-24.04-arm",
+  "    timeout-minutes: 60",
+  "",
+  "    permissions:",
+  "      contents: read",
+  "",
+  "    env:",
+  '      DO_NOT_TRACK: "1"',
+  "",
+  "    outputs:",
+  "      tarball: ${{ steps.pack.outputs.tarball }}",
+  "      sha256: ${{ steps.pack.outputs.sha256 }}",
+  "      sums: ${{ steps.sums.outputs.sums }}",
+  "",
+  "    steps:",
+];
+const PACKAGE_SETUP_NODE = [
+  "      - name: Setup node",
+  "        uses: actions/setup-node@v7",
+  "        with:",
+  "          node-version-file: .nvmrc",
+  "          package-manager-cache: false",
+];
+const PUBLISH_JOB = [
+  "  publish:",
+  "    name: publish",
+  "    needs: package",
+  "    if: github.event_name == 'push' && github.ref_type == 'tag'",
+  "",
+  "    runs-on: ubuntu-24.04-arm",
+  "    timeout-minutes: 15",
+  "",
+  "    environment: publishing",
+  "    permissions:",
+  "      contents: read",
+  "      id-token: write",
+  "",
+  "    steps:",
+  "      - name: Checkout plugin",
+  "        uses: actions/checkout@v7",
+  "        with:",
+  "          persist-credentials: false",
+  "",
+  "      - name: Setup node",
+  "        uses: actions/setup-node@v7",
+  "        with:",
+  "          node-version-file: .nvmrc",
+  "          package-manager-cache: false",
+  "          registry-url: https://registry.npmjs.org",
+  "",
+  "      - name: Setup pnpm",
+  "        run: corepack enable",
+  "",
+  "      - name: Download the files of the release",
+  "        uses: actions/download-artifact@v8",
+  "        with:",
+  "          name: release",
+  "          path: release",
+  "",
+  "      - name: Verify the files of the release",
+  "        working-directory: release",
+  "        run: |",
+  "          set -euo pipefail",
+  "          shopt -s nullglob dotglob",
+  '          named="freelensapp-velero-extension-${GITHUB_REF_NAME#v}.tgz"',
+  '          if [ "${TARBALL}" != "${named}" ]; then',
+  '            echo "::error::package packed ${TARBALL}, and the tag names ${named}"',
+  "            exit 1",
+  "          fi",
+  "          files=(*)",
+  "          present=0",
+  '          for name in "${TARBALL}" "${TARBALL}.sha256" "${TARBALL%.tgz}-spdx.json" "${TARBALL%.tgz}-spdx.json.sha256" release-notes.md; do',
+  '            if [ -f "${name}" ]; then',
+  "              present=$((present + 1))",
+  "            fi",
+  "          done",
+  '          if [ "${#files[@]}" -ne 5 ] || [ "${present}" -ne 5 ]; then',
+  '            echo "::error::The five files package made are expected, and nothing else; found ${#files[@]}: ${files[*]:-}"',
+  "            exit 1",
+  "          fi",
+  '          if [ "$(sha256sum "${TARBALL}" | cut -d \' \' -f 1)" != "${SHA256}" ]; then',
+  '            echo "::error::${TARBALL} is not the file package packed and FND-10 installed"',
+  "            exit 1",
+  "          fi",
+  '          printf \'%s\\n\' "${SUMS}" >"${RUNNER_TEMP}/sums"',
+  '          sha256sum --strict -c "${RUNNER_TEMP}/sums"',
+  '          sha256sum --strict -c "${TARBALL%.tgz}-spdx.json.sha256"',
+  "        env:",
+  "          TARBALL: ${{ needs.package.outputs.tarball }}",
+  "          SHA256: ${{ needs.package.outputs.sha256 }}",
+  "          SUMS: ${{ needs.package.outputs.sums }}",
+  "",
+  "      - name: Publish npm package",
+  "        run: |",
+  "          set -euo pipefail",
+  '          case "${GITHUB_REF_NAME}" in',
+  "            *-*) dist_tag=next;;",
+  "            *) dist_tag=latest;;",
+  "          esac",
+  '          spec="@freelensapp/velero-extension@${GITHUB_REF_NAME#v}"',
+  '          integrity=$(node -p \'"sha512-" + require("node:crypto").createHash("sha512").update(require("node:fs").readFileSync(process.argv[1])).digest("base64")\' "release/${TARBALL}")',
+  '          view=$(npm view "${spec}" dist.integrity --json --userconfig /dev/null --registry https://registry.npmjs.org/ 2>/dev/null) || true',
+  '          answer=$(node -p \'(() => { try { const answer = JSON.parse(process.argv[1]); return typeof answer === "string" ? answer : `error ${answer.error.code}`; } catch { return "error with no answer"; } })()\' "${view}")',
+  '          case "${answer}" in',
+  '            "${integrity}")',
+  '              echo "::notice::${spec} is on the registry with the bytes of ${TARBALL}: it is not published again"',
+  "              exit 0",
+  "              ;;",
+  '            "error E404")',
+  '              echo "${spec} is not on the registry"',
+  "              ;;",
+  "            error\\ *)",
+  '              echo "::error::The registry did not say whether ${spec} is on it: ${answer}"',
+  "              exit 1",
+  "              ;;",
+  "            *)",
+  '              echo "::error::${spec} is on the registry with ${answer}, other bytes than the ${integrity} of ${TARBALL}"',
+  "              exit 1",
+  "              ;;",
+  "          esac",
+  "          if [[ -n ${NPM_TOKEN:-} ]]; then",
+  '            NODE_AUTH_TOKEN="${NPM_TOKEN}" pnpm --color=always publish "./release/${TARBALL}" \\',
+  "              --no-git-checks \\",
+  "              --provenance \\",
+  '              --tag "${dist_tag}"',
+  "          else",
+  '            pnpm --color=always publish "./release/${TARBALL}" \\',
+  "              --no-git-checks \\",
+  "              --provenance \\",
+  '              --tag "${dist_tag}"',
+  "          fi",
+  "        env:",
+  "          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}",
+  "          TARBALL: ${{ needs.package.outputs.tarball }}",
+];
+const RELEASE_JOB = [
+  "  release:",
+  "    name: release",
+  "    needs: [package, publish]",
+  "    if: github.event_name == 'push' && github.ref_type == 'tag'",
+  "",
+  "    runs-on: ubuntu-24.04-arm",
+  "    timeout-minutes: 10",
+  "",
+  "    permissions:",
+  "      contents: write",
+  "",
+  "    steps:",
+  "      - name: Download the files of the release",
+  "        uses: actions/download-artifact@v8",
+  "        with:",
+  "          name: release",
+  "",
+  "      - name: Verify the files of the release",
+  "        run: |",
+  "          set -euo pipefail",
+  "          shopt -s nullglob dotglob",
+  '          named="freelensapp-velero-extension-${GITHUB_REF_NAME#v}.tgz"',
+  '          if [ "${TARBALL}" != "${named}" ]; then',
+  '            echo "::error::package packed ${TARBALL}, and the tag names ${named}"',
+  "            exit 1",
+  "          fi",
+  "          files=(*)",
+  "          present=0",
+  '          for name in "${TARBALL}" "${TARBALL}.sha256" "${TARBALL%.tgz}-spdx.json" "${TARBALL%.tgz}-spdx.json.sha256" release-notes.md; do',
+  '            if [ -f "${name}" ]; then',
+  "              present=$((present + 1))",
+  "            fi",
+  "          done",
+  '          if [ "${#files[@]}" -ne 5 ] || [ "${present}" -ne 5 ]; then',
+  '            echo "::error::The five files package made are expected, and nothing else; found ${#files[@]}: ${files[*]:-}"',
+  "            exit 1",
+  "          fi",
+  '          if [ "$(sha256sum "${TARBALL}" | cut -d \' \' -f 1)" != "${SHA256}" ]; then',
+  '            echo "::error::${TARBALL} is not the file package packed and FND-10 installed"',
+  "            exit 1",
+  "          fi",
+  '          printf \'%s\\n\' "${SUMS}" >"${RUNNER_TEMP}/sums"',
+  '          sha256sum --strict -c "${RUNNER_TEMP}/sums"',
+  '          sha256sum --strict -c "${TARBALL%.tgz}-spdx.json.sha256"',
+  "        env:",
+  "          TARBALL: ${{ needs.package.outputs.tarball }}",
+  "          SHA256: ${{ needs.package.outputs.sha256 }}",
+  "          SUMS: ${{ needs.package.outputs.sums }}",
+  "",
+  "      - name: Create release",
+  "        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4",
+  "        with:",
+  "          fail_on_unmatched_files: true",
+  "          prerelease: ${{ contains(github.ref_name, '-') }}",
+  "          body_path: release-notes.md",
+  "          files: |-",
+  "            *.tgz",
+  "            *.tgz.sha256",
+  "            *-spdx.json",
+  "            *-spdx.json.sha256",
+];
+// biome-ignore-end lint/suspicious/noTemplateCurlyInString: the text of the workflow, whose placeholders are of bash and of GitHub
 
 function fixture(shape: NetworkShape = "internal") {
   const published = shape === "loopback";
@@ -11863,10 +11993,7 @@ describe("platform of the test environment", () => {
     const text = readFileSync(new URL("../.github/workflows/tag.yaml", import.meta.url), "utf8");
     // What the workflow does, without what it says of itself in its comments, cut into its steps; and the same steps
     // as they are written, whose scripts the case runs.
-    const workflow = text
-      .split("\n")
-      .filter((line) => !line.trimStart().startsWith("#"))
-      .join("\n");
+    const workflow = workflowText("tag.yaml");
     const steps = workflow.split(/\n(?= {6}- name: )/).slice(1);
     const written = text.split(/\n(?= {6}- name: )/).slice(1);
     const field = (step: string, key: string) => new RegExp(`\\n {8}${key}: ([^\\n]+)`).exec(step)?.[1];
@@ -12168,21 +12295,66 @@ describe("platform of the test environment", () => {
         .filter((each) => each.text.includes(`\n        ${key}: `))
         .map((each) => [each.name, new RegExp(`\\n {8}${key}: ([^\\n]+)`).exec(each.text)?.[1]]);
 
-    // The tag, by hand, and the pull requests that change what the job package reads, the one of a version among
-    // them (REQ-286 of SPEC-0018).
-    expect(workflow).toMatch(
-      /^on:\n {2}push:\n {4}tags:\n {6}- v\*\n {2}pull_request:\n {4}branches:\n {6}- "\*"\n {4}paths:\n {6}- \.github\/workflows\/release\.yaml\n {6}- \.github\/scripts\/list-package-contents\.sh\n {6}- \.github\/actions\/build-freelens\/\*\*\n {6}- CHANGELOG\.md\n {6}- package\.json\n {6}- pnpm-lock\.yaml\n {6}- vite\.config\.mjs\n {6}- build\/\*\*\n {2}workflow_dispatch: \{\}\n/m,
+    // Every step of the jobs starts with its name, and every key outside the block scalars is written plain, on one
+    // line, with its value or with nothing after it: no step without a name, which would join the step before it, no
+    // quoted key and no key of another form, which the pins below would not read, and no value over several lines.
+    // `steps` is the last key of each job, so that the pins of the headers of the jobs hold all their other keys.
+    const plain = workflowText("release.yaml", false);
+
+    expect(
+      plain
+        .slice(plain.indexOf("\njobs:\n") + 1)
+        .split("\n")
+        .filter((line) => !/^(?:| {6}- name: \S.*| *[A-Za-z][A-Za-z0-9_-]*:(?: \S.*)?)$/.test(line)),
+    ).toEqual([]);
+    expect([...jobs].filter(([, text]) => /\n {4}steps:\n[\s\S]*\n {0,5}\S/.test(text)).map(([name]) => name)).toEqual(
+      [],
     );
-    expect(workflow).toMatch(/^permissions:\n {2}contents: read\n/m);
+    // The tag, by hand, and the pull requests that change one of the paths the job package reads, the one of a
+    // version among them (REQ-286 of SPEC-0018); the workflow reads the repository, and names the commit of Freelens
+    // in one line of its environment and nothing else there.
+    expect(
+      workflow
+        .slice(0, workflow.indexOf("\njobs:\n") + "\njobs:".length)
+        .replace(/^( {2}freelens_ref: )[0-9a-f]{40}$/m, "$1<the validation target>")
+        .split("\n"),
+    ).toEqual(RELEASE_HEADER);
     expect([...jobs.keys()]).toEqual(["package", "publish", "release"]);
-    // package reads the repository and nothing else: no environment, no secret, no other permission. Its outputs are
-    // the tarball of the pack, its sha256, and the sha256 of the five files of the release.
-    expect(pack).toMatch(/\n {4}permissions:\n {6}contents: read\n(?! {6})/);
+    // package reads the repository and nothing else: no environment, no secret, no other permission, no default for
+    // its steps. Its outputs are the tarball of the pack, its sha256, and the sha256 of the five files of the release.
+    expect(pack.slice(0, pack.indexOf("\n    steps:\n") + "\n    steps:".length).split("\n")).toEqual(PACKAGE_HEADER);
     expect(pack).not.toMatch(/environment:|secrets\.|id-token|: write|NODE_AUTH_TOKEN/);
-    expect(pack).toContain("    runs-on: ubuntu-24.04-arm\n");
-    expect(pack).toMatch(
-      /\n {4}outputs:\n {6}tarball: \$\{\{ steps\.pack\.outputs\.tarball \}\}\n {6}sha256: \$\{\{ steps\.pack\.outputs\.sha256 \}\}\n {6}sums: \$\{\{ steps\.sums\.outputs\.sums \}\}\n(?! {6})/,
-    );
+    // What a step of package says of itself: these keys alone, no shell but bash, and no variable of its environment
+    // but these, so that each script runs as it is written, where the job runs it.
+    expect(
+      steps("package")
+        .flatMap((each) => [...each.text.matchAll(/^ {8}([A-Za-z0-9_-]+):/gm)].map(([, key]) => key))
+        .filter(
+          (key) =>
+            !["id", "if", "uses", "with", "run", "env", "shell", "continue-on-error", "timeout-minutes"].includes(key),
+        ),
+    ).toEqual([]);
+    expect(workflow.match(/^ *shell: .*$/gm)).toEqual(["        shell: bash", "        shell: bash"]);
+    expect(
+      [
+        ...new Set(
+          steps("package").flatMap((each) =>
+            [...each.text.matchAll(/\n {8}env:\n((?: {10}[^\n]*\n?)+)/g)].flatMap(([, block]) =>
+              [...block.matchAll(/^ {10}([^\s:]+):/gm)].map(([, name]) => name),
+            ),
+          ),
+        ),
+      ].sort(),
+    ).toEqual([
+      "EXTENSION_PATH",
+      "PACKED",
+      "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD",
+      "SUMS",
+      "SYFT_DEFAULT_CATALOGERS",
+      "SYFT_SOURCE_NAME",
+      "TARBALL",
+    ]);
+    expect(step("package", "Setup node").trimEnd().split("\n")).toEqual(PACKAGE_SETUP_NODE);
     expect(names("package")).toEqual([
       "Checkout plugin",
       "Set up mise",
@@ -12226,10 +12398,10 @@ describe("platform of the test environment", () => {
       ["Build plugin", "true"],
       ["Build plugin (retry)", "true"],
     ]);
-    // At a tag nothing is restored before the pack: mise with no cache, by a commit, the store of pnpm not at a tag,
-    // and no other cache before the pack.
+    // At a tag nothing is restored before the pack: mise with no cache and nothing else, by a commit, the store of pnpm
+    // not at a tag, and no other cache before the pack.
     expect(step("package", "Set up mise")).toMatch(
-      /\n {8}uses: jdx\/mise-action@[0-9a-f]{40} # v\d+\.\d+\.\d+\n {8}with:\n {10}version: [^\n]+\n {10}install_args: yq\n {10}cache: false\n/,
+      /^ {6}- name: Set up mise\n {8}uses: jdx\/mise-action@[0-9a-f]{40} # v\d+\.\d+\.\d+\n {8}with:\n {10}version: [^\n]+\n {10}install_args: yq\n {10}cache: false\n\s*$/,
     );
     expect(step("package", "Use pnpm cache")).toMatch(/\n {8}if: github\.ref_type != 'tag'\n {8}uses: actions\/cache@/);
     expect(
@@ -12276,22 +12448,12 @@ describe("platform of the test environment", () => {
       /\n {8}uses: actions\/upload-artifact@v\d+\n {8}with:\n {10}name: release\n {10}path: \|\n {12}\*\.tgz\n {12}\*\.tgz\.sha256\n {12}\*-spdx\.json\n {12}\*-spdx\.json\.sha256\n {12}release-notes\.md\n {10}if-no-files-found: error\n/,
     );
     // publish needs package, runs at a pushed tag alone, in publishing, reads the repository and has the identity of
-    // the run; release needs both, writes the release alone, in no environment and with no identity for npm. The
-    // steps of both, whole: nothing installed, built, packed or tested, one publication, and the files checked
-    // against the outputs of package before either uses them.
-    expect(jobs.get("publish")).toMatch(
-      /^ {2}publish:\n {4}name: publish\n {4}needs: package\n {4}if: github\.event_name == 'push' && github\.ref_type == 'tag'\n/,
-    );
-    expect(jobs.get("publish")).toMatch(
-      /\n {4}environment: publishing\n {4}permissions:\n {6}contents: read\n {6}id-token: write\n(?! {6})/,
-    );
-    expect(steps("publish").map((each) => each.text.trimEnd())).toEqual(PUBLISH_STEPS);
-    expect(jobs.get("release")).toMatch(
-      /^ {2}release:\n {4}name: release\n {4}needs: \[package, publish\]\n {4}if: github\.event_name == 'push' && github\.ref_type == 'tag'\n/,
-    );
-    expect(jobs.get("release")).toMatch(/\n {4}permissions:\n {6}contents: write\n(?! {6})/);
+    // the run; release needs both, writes the release alone, in no environment and with no identity for npm. Both
+    // jobs whole, every key and every step: nothing installed, built, packed or tested, one publication, and the files
+    // checked against the outputs of package before either uses them.
+    expect(jobs.get("publish")?.trimEnd().split("\n")).toEqual(PUBLISH_JOB);
+    expect(jobs.get("release")?.trimEnd().split("\n")).toEqual(RELEASE_JOB);
     expect(jobs.get("release")).not.toMatch(/environment:|id-token|secrets\./);
-    expect(steps("release").map((each) => each.text.trimEnd())).toEqual(RELEASE_STEPS);
     // Every checkout of the workflow and of the action it calls keeps no credential.
     const action = readFileSync(new URL("../.github/actions/build-freelens/action.yaml", import.meta.url), "utf8");
 
@@ -12307,9 +12469,10 @@ describe("platform of the test environment", () => {
   it("attaches to the release the tarball, its bill of materials in SPDX JSON named after it and the checksums of both, made in package before the publication and attached by the job after it (#144)", () => {
     const { jobs, step } = releaseJobs();
 
-    // The bill of materials, its name after the tarball, and the checksums, in package.
+    // The bill of materials, its name after the tarball, and the checksums, in package; the scan given these inputs
+    // and no other.
     expect(step("package", "Create SBOM")).toMatch(
-      /\n {8}uses: anchore\/sbom-action@[0-9a-f]{40} # v0\.\d+\.\d+\n {8}with:\n {10}path: bill-of-materials\n {10}format: spdx-json\n {10}output-file: sbom\.spdx\.json\n {10}upload-artifact: false\n {10}upload-release-assets: false\n/,
+      /^ {6}- name: Create SBOM\n {8}uses: anchore\/sbom-action@[0-9a-f]{40} # v0\.\d+\.\d+\n {8}with:\n {10}path: bill-of-materials\n {10}format: spdx-json\n {10}output-file: sbom\.spdx\.json\n {10}upload-artifact: false\n {10}upload-release-assets: false\n {8}env:\n/,
     );
     expect(step("package", "Normalize SBOM filename")).toMatch(
       /\n {10}for f in \*\.tgz; do\n {12}mv sbom\.spdx\.json "\$\{f%\.tgz\}-spdx\.json"\n {10}done\n/,
@@ -12330,28 +12493,69 @@ describe("platform of the test environment", () => {
     const directory = mkdtempSync(join(tmpdir(), "velero-release-bill-"));
     const script = join(directory, "packages.sh");
     const tarball = "freelensapp-velero-extension-1.0.0-0.tgz";
-    const lockfile = [
-      "lockfileVersion: '9.0'",
-      "",
-      "packages:",
-      "",
-      "  '@freelensapp/extensions@2.0.0':",
-      "    resolution: {integrity: sha512-c3ludGhldGlj}",
-      "",
-      "  react-window@2.3.4:",
-      "    resolution: {integrity: sha512-c3ludGhldGlj}",
-      "",
-    ].join("\n");
+    // A lockfile of the form of pnpm 12: a document of pnpm's own packages, then the one of the project, whose
+    // importer holds the version pnpm resolved for each dependency, with the versions of its peers. The packages
+    // hold react-window at a second version, as a library of another package would.
+    const lockfile = (resolved = "2.3.4") =>
+      [
+        "---",
+        "lockfileVersion: '9.0'",
+        "",
+        "importers:",
+        "",
+        "  .:",
+        "    configDependencies: {}",
+        "    packageManagerDependencies:",
+        "      pnpm:",
+        "        specifier: 12.15.0",
+        "        version: 12.15.0",
+        "",
+        "packages:",
+        "",
+        "  pnpm@12.15.0:",
+        "    resolution: {integrity: sha512-c3ludGhldGlj}",
+        "",
+        "---",
+        "lockfileVersion: '9.0'",
+        "",
+        "importers:",
+        "",
+        "  .:",
+        "    dependencies:",
+        "      react-window:",
+        "        specifier: 2.3.4",
+        `        version: ${resolved}(react-dom@19.3.1(react@19.3.1))(react@19.3.1)`,
+        "    devDependencies:",
+        "      '@freelensapp/extensions':",
+        "        specifier: ^2.0.0",
+        "        version: 2.0.0(react@19.3.1)",
+        "",
+        "packages:",
+        "",
+        "  '@freelensapp/extensions@2.0.0':",
+        "    resolution: {integrity: sha512-c3ludGhldGlj}",
+        "",
+        "  react-window@2.3.4:",
+        "    resolution: {integrity: sha512-c3ludGhldGlj}",
+        "",
+        "  react-window@2.3.5:",
+        "    resolution: {integrity: sha512-c3ludGhldGlj}",
+        "",
+      ].join("\n");
     // The step that writes the packages of a document in the log, beside a manifest and a lockfile of its own: what
     // it ends with, and the errors it reports.
-    const run = (packages: { name: string; versionInfo?: string }[]) => {
+    const run = (packages: { name: string; versionInfo?: string }[], resolved?: string) => {
       const folder = mkdtempSync(join(directory, "run-"));
 
       writeFileSync(
         join(folder, "package.json"),
-        JSON.stringify({ name: "@freelensapp/velero-extension", version: "1.0.0-0" }),
+        JSON.stringify({
+          name: "@freelensapp/velero-extension",
+          version: "1.0.0-0",
+          dependencies: { "react-window": "2.3.4" },
+        }),
       );
-      writeFileSync(join(folder, "pnpm-lock.yaml"), lockfile);
+      writeFileSync(join(folder, "pnpm-lock.yaml"), lockfile(resolved));
       writeFileSync(join(folder, tarball.replace(/\.tgz$/, "-spdx.json")), JSON.stringify({ packages }));
       const result = spawnSync("bash", ["-e", script], {
         cwd: folder,
@@ -12380,8 +12584,10 @@ describe("platform of the test environment", () => {
     expect(step("package", "Create SBOM")).toMatch(
       /\n {10}path: bill-of-materials\n[\s\S]*\n {8}env:\n {10}SYFT_DEFAULT_CATALOGERS: javascript-package-cataloger\n {10}SYFT_SOURCE_NAME: \$\{\{ steps\.pack\.outputs\.tarball \}\}\n\s*$/,
     );
-    // Each package the document lists is at the version of the lockfile: the extension at the one of package.json,
-    // every library at one the lockfile resolved; the root of the document is the tarball.
+    // Each package the document lists is at the version of the lockfile: the extension at the one of package.json, a
+    // dependency of package.json at the one pnpm resolved for it in the importer of the project, never at another
+    // version the lockfile holds, and any other library at one the lockfile resolved; the root of the document is the
+    // tarball.
     try {
       writeFileSync(script, scriptOf(step("package", "Show the packages of the bill of materials")));
       expect(run(listed)).toEqual([0, []]);
@@ -12390,6 +12596,7 @@ describe("platform of the test environment", () => {
         1,
         ["::error::react-window 2.3.5 is not at the version of the lockfile"],
       ]);
+      expect(run(listed, "2.3.5")).toEqual([1, ["::error::react-window 2.3.4 is not at the version of the lockfile"]]);
       expect(run([{ name: "@freelensapp/velero-extension", versionInfo: "1.0.0-1" }, ...listed.slice(1)])).toEqual([
         1,
         ["::error::@freelensapp/velero-extension 1.0.0-1 is not at the version of the lockfile"],
@@ -12409,13 +12616,213 @@ describe("platform of the test environment", () => {
 
     // D11a of SPEC-0018: the same command on both ways, the token given to the first alone.
     expect(published).toMatch(
-      /\n {10}if \[\[ -n \$\{NPM_TOKEN:-\} \]\]; then\n {12}NODE_AUTH_TOKEN="\$\{NPM_TOKEN\}" pnpm --color=always publish "\.\/\$\{TARBALL\}" \\\n {14}--no-git-checks \\\n {14}--provenance \\\n {14}--tag "\$\{dist_tag\}"\n {10}else\n {12}pnpm --color=always publish "\.\/\$\{TARBALL\}" \\\n {14}--no-git-checks \\\n {14}--provenance \\\n {14}--tag "\$\{dist_tag\}"\n {10}fi\n {8}env:\n {10}NPM_TOKEN: \$\{\{ secrets\.NPM_TOKEN \}\}\n {10}TARBALL: \$\{\{ needs\.package\.outputs\.tarball \}\}\n\s*$/,
+      /\n {10}if \[\[ -n \$\{NPM_TOKEN:-\} \]\]; then\n {12}NODE_AUTH_TOKEN="\$\{NPM_TOKEN\}" pnpm --color=always publish "\.\/release\/\$\{TARBALL\}" \\\n {14}--no-git-checks \\\n {14}--provenance \\\n {14}--tag "\$\{dist_tag\}"\n {10}else\n {12}pnpm --color=always publish "\.\/release\/\$\{TARBALL\}" \\\n {14}--no-git-checks \\\n {14}--provenance \\\n {14}--tag "\$\{dist_tag\}"\n {10}fi\n {8}env:\n {10}NPM_TOKEN: \$\{\{ secrets\.NPM_TOKEN \}\}\n {10}TARBALL: \$\{\{ needs\.package\.outputs\.tarball \}\}\n\s*$/,
     );
     // No other publication, no retry, and nothing that turns the provenance off.
     expect(workflow.match(/\bpublish "/g)).toHaveLength(2);
     expect(workflow).not.toMatch(/no-provenance|provenance=false|PROVENANCE/);
     expect(published).not.toContain("continue-on-error");
   });
+
+  it("checks in publish and in release that the files of the release are the five package made, and nothing else, each with the bytes whose sha256 package took, the tarball named by the tag", () => {
+    const { step } = releaseJobs();
+    const verify = scriptOf(step("release", "Verify the files of the release"));
+    const directory = mkdtempSync(join(tmpdir(), "velero-release-verify-"));
+    const script = join(directory, "verify.sh");
+    const tarball = "freelensapp-velero-extension-1.0.0.tgz";
+    const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
+    const made = {
+      [tarball]: "synthetic tarball\n",
+      "freelensapp-velero-extension-1.0.0-spdx.json": '{"spdxVersion": "SPDX-2.3"}\n',
+      "release-notes.md": "Synthetic notes.\n",
+    };
+    // The five files as package makes them, each checksum file in the form of sha256sum, and the outputs of package.
+    const files: Record<string, string> = {
+      ...made,
+      [`${tarball}.sha256`]: `${sha256(made[tarball])}  ${tarball}\n`,
+      "freelensapp-velero-extension-1.0.0-spdx.json.sha256": `${sha256(made["freelensapp-velero-extension-1.0.0-spdx.json"])}  freelensapp-velero-extension-1.0.0-spdx.json\n`,
+    };
+    const sums = Object.entries(files)
+      .map(([name, text]) => `${sha256(text)}  ${name}`)
+      .join("\n");
+    // The step in a directory of those files changed by `change`, at the tag `ref`: what it ends with, and what it
+    // reports, an error up to its list of the files, or a file sha256sum found changed.
+    const run = (change: (folder: string) => void, ref = "v1.0.0") => {
+      const folder = mkdtempSync(join(directory, "run-"));
+      const temp = mkdtempSync(join(directory, "temp-"));
+
+      for (const [name, text] of Object.entries(files)) writeFileSync(join(folder, name), text);
+      change(folder);
+      const result = spawnSync("bash", ["-e", script], {
+        cwd: folder,
+        env: {
+          PATH: process.env.PATH ?? "",
+          GITHUB_REF_NAME: ref,
+          RUNNER_TEMP: temp,
+          TARBALL: tarball,
+          SHA256: sha256(made[tarball]),
+          SUMS: sums,
+        },
+        encoding: "utf8",
+        timeout: 10_000,
+      });
+
+      return [
+        result.status,
+        result.stdout
+          .split("\n")
+          .filter((line) => line.startsWith("::error::") || line.endsWith(": FAILED"))
+          .map((line) => line.split(": ")[0]),
+      ];
+    };
+    const five = "::error::The five files package made are expected, and nothing else; found";
+
+    // The same step in both jobs; publish runs it where it downloads the files, a directory of their own.
+    expect(scriptOf(step("publish", "Verify the files of the release"))).toBe(verify);
+    expect(step("publish", "Download the files of the release")).toMatch(/\n {10}name: release\n {10}path: release\n/);
+    expect(step("publish", "Verify the files of the release")).toMatch(
+      /^ {6}- name: Verify the files of the release\n {8}working-directory: release\n {8}run: \|\n/,
+    );
+    try {
+      writeFileSync(script, verify);
+      expect(run(() => undefined)).toEqual([0, []]);
+      // A file beside them, of a name the release attaches or of any other, a dot file among them, or a directory.
+      for (const name of [
+        "freelensapp-velero-extension-1.0.0-full-spdx.json",
+        "other.tgz.sha256",
+        "other.tgz",
+        ".npmrc",
+        "pnpm-workspace.yaml",
+      ])
+        expect([name, run((folder) => writeFileSync(join(folder, name), "synthetic\n"))]).toEqual([
+          name,
+          [1, [`${five} 6`]],
+        ]);
+      expect(run((folder) => mkdirSync(join(folder, "extra")))).toEqual([1, [`${five} 6`]]);
+      // One of them missing, or under another name.
+      expect(run((folder) => rmSync(join(folder, "release-notes.md")))).toEqual([1, [`${five} 4`]]);
+      expect(run((folder) => renameSync(join(folder, "release-notes.md"), join(folder, "notes.md")))).toEqual([
+        1,
+        [`${five} 5`],
+      ]);
+      // One of them with other bytes than the ones package took the sha256 of.
+      expect(run((folder) => writeFileSync(join(folder, "release-notes.md"), "Other notes.\n"))).toEqual([
+        1,
+        ["release-notes.md"],
+      ]);
+      expect(
+        run((folder) => writeFileSync(join(folder, "freelensapp-velero-extension-1.0.0-spdx.json"), "{}\n")),
+      ).toEqual([1, ["freelensapp-velero-extension-1.0.0-spdx.json"]]);
+      expect(run((folder) => writeFileSync(join(folder, tarball), "other tarball\n"))).toEqual([
+        1,
+        [`::error::${tarball} is not the file package packed and FND-10 installed`],
+      ]);
+      // A tag of another version.
+      expect(run(() => undefined, "v1.0.1")).toEqual([
+        1,
+        [`::error::package packed ${tarball}, and the tag names freelensapp-velero-extension-1.0.1.tgz`],
+      ]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("publishes the packed file unless the registry holds its version: not again with the bytes of the tarball, so that a re-run of the failed jobs reaches the release, never over other bytes, and not when the registry does not answer", () => {
+    const { step } = releaseJobs();
+    const directory = mkdtempSync(join(tmpdir(), "velero-release-publish-"));
+    const script = join(directory, "publish.sh");
+    const bin = join(directory, "bin");
+    const bytes = "synthetic tarball\n";
+    const integrity = `sha512-${createHash("sha512").update(bytes).digest("base64")}`;
+    // npm answers what the case gives it, as `npm view --json` answers, and pnpm publishes nothing; both write how
+    // they were called, pnpm with the token it was given.
+    const stand = (name: string, body: string) => writeFileSync(join(bin, name), `#!/bin/sh\n${body}`, { mode: 0o755 });
+    // The step at the tag `ref`, the registry answering `answer` with the exit status `status`, with the token or
+    // without: what it ends with, the kinds of the annotations it writes, and the calls of npm and of pnpm.
+    const run = (answer: string, status: number, { ref = "v1.0.0", token = "" } = {}) => {
+      const folder = mkdtempSync(join(directory, "run-"));
+      const calls = join(folder, "calls");
+      const read = (name: string) =>
+        existsSync(join(calls, name)) ? readFileSync(join(calls, name), "utf8").trimEnd().split("\n") : [];
+
+      mkdirSync(join(folder, "release"));
+      mkdirSync(calls);
+      writeFileSync(join(folder, "release", `freelensapp-velero-extension-${ref.slice(1)}.tgz`), bytes);
+      const result = spawnSync("bash", ["-e", script], {
+        cwd: folder,
+        env: {
+          PATH: `${bin}:${dirname(process.execPath)}:${process.env.PATH ?? ""}`,
+          GITHUB_REF_NAME: ref,
+          TARBALL: `freelensapp-velero-extension-${ref.slice(1)}.tgz`,
+          NPM_TOKEN: token,
+          ANSWER: answer,
+          STATUS: String(status),
+          CALLS: calls,
+        },
+        encoding: "utf8",
+        timeout: 10_000,
+      });
+
+      return {
+        status: result.status,
+        annotations: result.stdout
+          .split("\n")
+          .filter((line) => line.startsWith("::"))
+          .map((line) => line.split("::")[1]),
+        npm: read("npm"),
+        pnpm: read("pnpm"),
+      };
+    };
+    const asked = [
+      "view @freelensapp/velero-extension@1.0.0 dist.integrity --json --userconfig /dev/null --registry https://registry.npmjs.org/",
+    ];
+    const published = (token: string, tag = "latest", version = "1.0.0") => [
+      `${token} --color=always publish ./release/freelensapp-velero-extension-${version}.tgz --no-git-checks --provenance --tag ${tag}`,
+    ];
+    const missing = JSON.stringify({ error: { code: "E404", summary: "No match found for version 1.0.0" } });
+
+    try {
+      mkdirSync(bin);
+      stand("npm", 'printf \'%s\\n\' "$*" >>"$CALLS/npm"\nprintf \'%s\\n\' "$ANSWER"\nexit "$STATUS"\n');
+      stand("pnpm", 'printf \'%s %s\\n\' "$(printenv NODE_AUTH_TOKEN || echo none)" "$*" >>"$CALLS/pnpm"\n');
+      writeFileSync(script, scriptOf(step("publish", "Publish npm package")));
+      // The version is not on the registry, the package or the version not found: it is published, with the token
+      // when there is one, and on next for a version with a hyphen; the registry asked with no credential.
+      expect(run(missing, 1)).toEqual({ status: 0, annotations: [], npm: asked, pnpm: published("none") });
+      expect(run(missing, 1, { token: "synthetic-token" })).toEqual({
+        status: 0,
+        annotations: [],
+        npm: asked,
+        pnpm: published("synthetic-token"),
+      });
+      expect(run(missing, 1, { ref: "v1.1.0-0" })).toEqual({
+        status: 0,
+        annotations: [],
+        npm: [asked[0].replace("@1.0.0 ", "@1.1.0-0 ")],
+        pnpm: published("none", "next", "1.1.0-0"),
+      });
+      // The version is on the registry with the bytes of the tarball, as after a publication whose answer was lost:
+      // nothing is published, and the job passes.
+      expect(run(JSON.stringify(integrity), 0)).toEqual({ status: 0, annotations: ["notice"], npm: asked, pnpm: [] });
+      // With other bytes, or the registry not answering whether it holds the version: the job fails, and nothing is
+      // published.
+      for (const [answer, status] of [
+        [JSON.stringify(`sha512-${createHash("sha512").update("other").digest("base64")}`), 0],
+        [JSON.stringify({ error: { code: "ENOTFOUND" } }), 1],
+        [JSON.stringify({ error: { code: "E401" } }), 1],
+        [JSON.stringify({ error: {} }), 1],
+        ["npm error code E404", 1],
+        ["", 1],
+        ["", 0],
+      ] as const)
+        expect([answer, run(answer, status)]).toEqual([
+          answer,
+          { status: 1, annotations: ["error"], npm: asked, pnpm: [] },
+        ]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }, 60_000);
 
   it("makes the notes of the version in package from its section of CHANGELOG.md, stops at a tag and on the pull request of a version without them, and gives them to the release as its body", () => {
     const { steps, step } = releaseJobs();
@@ -12761,12 +13168,11 @@ describe("platform of the test environment", () => {
   it("reads in the action that builds Freelens only the outputs of its earlier steps, which actionlint does not check there", () => {
     // actionlint checks every `steps.<id>` of a job against the ids of its earlier steps, and not the steps of a
     // composite action: a slip in an id would leave a retry that never runs, or the steps of a miss running on a hit.
-    const action = readFileSync(new URL("../.github/actions/build-freelens/action.yaml", import.meta.url), "utf8");
     const earlier: string[] = [];
     const read: string[] = [];
     let current: string | undefined;
 
-    for (const line of action.split("\n").filter((text) => !text.trimStart().startsWith("#"))) {
+    for (const line of yamlText(".github/actions/build-freelens/action.yaml").split("\n")) {
       if (/^ {4}- /.test(line)) {
         if (current) earlier.push(current);
         current = undefined;

@@ -11,8 +11,8 @@ name: Release
 # the environment `publishing`, builds nothing: it checks the files against the
 # outputs of `package` and publishes the tarball. The job `release`, with no
 # credential of npm, checks them the same way and creates the GitHub release.
-# On a pull request that changes the files `package` reads, the pull request of
-# a version among them, and when started by hand, `package` runs alone and
+# On a pull request that changes one of the paths below, the pull request of a
+# version among them, and when started by hand, `package` runs alone and
 # nothing is published.
 on:
   push:
@@ -30,6 +30,9 @@ on:
       - pnpm-lock.yaml
       - vite.config.mjs
       - build/**
+      - src/**
+      - README.md
+      - LICENSE
   workflow_dispatch: {}
 
 permissions:
@@ -198,10 +201,13 @@ jobs:
           done
 
       # What the bill of materials lists, by name and version, in the log, each
-      # at the version of the lockfile: the extension at the one of package.json,
-      # and every library at one the lockfile resolved, since npm resolved them
-      # from the registry by the ranges of the manifest. The root of the
-      # document is the tarball.
+      # at the version of the lockfile, since npm resolved the libraries from
+      # the registry by the ranges of the manifests: the extension at the one of
+      # package.json; a dependency of package.json at the one pnpm resolved for
+      # it, `importers['.'].dependencies.<name>.version` of the document of the
+      # project in the lockfile, without the versions of its peers; and any
+      # other library at one the lockfile resolved. The root of the document is
+      # the tarball.
       - name: Show the packages of the bill of materials
         run: |
           node -e '
@@ -209,11 +215,23 @@ jobs:
             const [document, tarball] = process.argv.slice(1);
             const manifest = JSON.parse(readFileSync("package.json", "utf8"));
             const lockfile = readFileSync("pnpm-lock.yaml", "utf8");
+            const importer =
+              /\nimporters:\n\n  \.:\n(?:    [^\n]*\n)*?    dependencies:\n((?:      [^\n]*\n)+)/.exec(lockfile)?.[1] ?? "";
+            const direct = new Map(
+              [...importer.matchAll(/^      (\x27?)([^\x27\n]+)\1:\n        specifier: [^\n]*\n        version: ([^(\n]+)/gm)].map(
+                ([, , name, version]) => [name, version],
+              ),
+            );
             let failed = false;
 
             for (const { name, versionInfo = "" } of JSON.parse(readFileSync(document, "utf8")).packages) {
               const key = name.startsWith("@") ? `\x27${name}@${versionInfo}\x27` : `${name}@${versionInfo}`;
-              const resolved = name === manifest.name ? versionInfo === manifest.version : lockfile.includes(`\n  ${key}:\n`);
+              const resolved =
+                name === manifest.name
+                  ? versionInfo === manifest.version
+                  : Object.hasOwn(manifest.dependencies ?? {}, name)
+                    ? direct.get(name) === versionInfo
+                    : lockfile.includes(`\n  ${key}:\n`);
 
               console.log(`${name} ${versionInfo}`);
               if (name !== tarball && !resolved) {
@@ -445,23 +463,38 @@ jobs:
       - name: Setup pnpm
         run: corepack enable
 
+      # Into a directory of their own beside the checkout, so that nothing the
+      # artifact holds lands where pnpm reads its settings.
       - name: Download the files of the release
         uses: actions/download-artifact@v8
         with:
           name: release
+          path: release
 
-      # The tarball is the one `package` packed, which FND-10 installed, by its
-      # name, which the tag gives as well, and by the sha256 of the pack; every
-      # file has the bytes whose sha256 `package` took before anything of
-      # Freelens ran, and the bill of materials the bytes its checksum names.
+      # The five files `package` made, and nothing else: the tarball is the one
+      # `package` packed, which FND-10 installed, by its name, which the tag
+      # gives as well, and by the sha256 of the pack; every file has the bytes
+      # whose sha256 `package` took before anything of Freelens ran, and the
+      # bill of materials the bytes its checksum names.
       - name: Verify the files of the release
+        working-directory: release
         run: |
           set -euo pipefail
-          shopt -s nullglob
-          tarballs=(*.tgz)
+          shopt -s nullglob dotglob
           named="freelensapp-velero-extension-${GITHUB_REF_NAME#v}.tgz"
-          if [ "${#tarballs[@]}" -ne 1 ] || [ "${tarballs[0]}" != "${TARBALL}" ] || [ "${TARBALL}" != "${named}" ]; then
-            echo "::error::One tarball is expected, ${TARBALL} as package packed it and ${named} as the tag names it; found ${#tarballs[@]}"
+          if [ "${TARBALL}" != "${named}" ]; then
+            echo "::error::package packed ${TARBALL}, and the tag names ${named}"
+            exit 1
+          fi
+          files=(*)
+          present=0
+          for name in "${TARBALL}" "${TARBALL}.sha256" "${TARBALL%.tgz}-spdx.json" "${TARBALL%.tgz}-spdx.json.sha256" release-notes.md; do
+            if [ -f "${name}" ]; then
+              present=$((present + 1))
+            fi
+          done
+          if [ "${#files[@]}" -ne 5 ] || [ "${present}" -ne 5 ]; then
+            echo "::error::The five files package made are expected, and nothing else; found ${#files[@]}: ${files[*]:-}"
             exit 1
           fi
           if [ "$(sha256sum "${TARBALL}" | cut -d ' ' -f 1)" != "${SHA256}" ]; then
@@ -479,10 +512,13 @@ jobs:
       # The packed file itself: pnpm hands a tarball to the registry as it is,
       # with no repack and no script. The provenance is asked on both ways (D11a):
       # with the token of `publishing`, which publishes every version up to
-      # 1.0.0, and through the trusted publisher configured after it (D11b). One
-      # attempt: the registry takes a version once, so a second one after a
-      # publication that it accepted fails on the version, and a failure stops
-      # the run before the release is created.
+      # 1.0.0, and through the trusted publisher configured after it (D11b).
+      # The registry takes a version once, so the step first asks it, with no
+      # credential, for the integrity of the version. The sha512 of the
+      # tarball, as after a publication whose answer was lost: the version is
+      # not published again and the job passes, so that a re-run of the failed
+      # jobs reaches `release`. Another, or no answer: the job fails. None: the
+      # version is published, in one attempt.
       - name: Publish npm package
         run: |
           set -euo pipefail
@@ -490,13 +526,34 @@ jobs:
             *-*) dist_tag=next;;
             *) dist_tag=latest;;
           esac
+          spec="@freelensapp/velero-extension@${GITHUB_REF_NAME#v}"
+          integrity=$(node -p '"sha512-" + require("node:crypto").createHash("sha512").update(require("node:fs").readFileSync(process.argv[1])).digest("base64")' "release/${TARBALL}")
+          view=$(npm view "${spec}" dist.integrity --json --userconfig /dev/null --registry https://registry.npmjs.org/ 2>/dev/null) || true
+          answer=$(node -p '(() => { try { const answer = JSON.parse(process.argv[1]); return typeof answer === "string" ? answer : `error ${answer.error.code}`; } catch { return "error with no answer"; } })()' "${view}")
+          case "${answer}" in
+            "${integrity}")
+              echo "::notice::${spec} is on the registry with the bytes of ${TARBALL}: it is not published again"
+              exit 0
+              ;;
+            "error E404")
+              echo "${spec} is not on the registry"
+              ;;
+            error\ *)
+              echo "::error::The registry did not say whether ${spec} is on it: ${answer}"
+              exit 1
+              ;;
+            *)
+              echo "::error::${spec} is on the registry with ${answer}, other bytes than the ${integrity} of ${TARBALL}"
+              exit 1
+              ;;
+          esac
           if [[ -n ${NPM_TOKEN:-} ]]; then
-            NODE_AUTH_TOKEN="${NPM_TOKEN}" pnpm --color=always publish "./${TARBALL}" \
+            NODE_AUTH_TOKEN="${NPM_TOKEN}" pnpm --color=always publish "./release/${TARBALL}" \
               --no-git-checks \
               --provenance \
               --tag "${dist_tag}"
           else
-            pnpm --color=always publish "./${TARBALL}" \
+            pnpm --color=always publish "./release/${TARBALL}" \
               --no-git-checks \
               --provenance \
               --tag "${dist_tag}"
@@ -506,9 +563,11 @@ jobs:
           TARBALL: ${{ needs.package.outputs.tarball }}
 
   # The GitHub release, in a job of its own with no environment and no
-  # identity for npm: it writes the release and nothing else. Once the
-  # publication passed, a release that fails is made by running this job again,
-  # alone, from the same files.
+  # identity for npm: it writes the release and nothing else. A run that fails
+  # after the pack is taken up by re-running its failed jobs: `publish` does
+  # not publish again a version the registry holds with the bytes of the
+  # tarball, so the re-run reaches this job, which makes the release from the
+  # same files.
   release:
     name: release
     needs: [package, publish]
@@ -521,19 +580,33 @@ jobs:
       contents: write
 
     steps:
+      # Into the workspace, which holds nothing else: the job checks nothing
+      # out.
       - name: Download the files of the release
         uses: actions/download-artifact@v8
         with:
           name: release
 
+      # As in `publish`: the five files `package` made, and nothing else, which
+      # the release attaches.
       - name: Verify the files of the release
         run: |
           set -euo pipefail
-          shopt -s nullglob
-          tarballs=(*.tgz)
+          shopt -s nullglob dotglob
           named="freelensapp-velero-extension-${GITHUB_REF_NAME#v}.tgz"
-          if [ "${#tarballs[@]}" -ne 1 ] || [ "${tarballs[0]}" != "${TARBALL}" ] || [ "${TARBALL}" != "${named}" ]; then
-            echo "::error::One tarball is expected, ${TARBALL} as package packed it and ${named} as the tag names it; found ${#tarballs[@]}"
+          if [ "${TARBALL}" != "${named}" ]; then
+            echo "::error::package packed ${TARBALL}, and the tag names ${named}"
+            exit 1
+          fi
+          files=(*)
+          present=0
+          for name in "${TARBALL}" "${TARBALL}.sha256" "${TARBALL%.tgz}-spdx.json" "${TARBALL%.tgz}-spdx.json.sha256" release-notes.md; do
+            if [ -f "${name}" ]; then
+              present=$((present + 1))
+            fi
+          done
+          if [ "${#files[@]}" -ne 5 ] || [ "${present}" -ne 5 ]; then
+            echo "::error::The five files package made are expected, and nothing else; found ${#files[@]}: ${files[*]:-}"
             exit 1
           fi
           if [ "$(sha256sum "${TARBALL}" | cut -d ' ' -f 1)" != "${SHA256}" ]; then
