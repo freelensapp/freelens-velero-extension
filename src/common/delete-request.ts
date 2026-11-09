@@ -7,6 +7,17 @@
 import { bodyText } from "./backup-from-schedule";
 import { labelOf } from "./name-label";
 
+// The phases of a backup Velero refuses to delete: in progress, waiting for its plugins, or finalizing
+// (backup_deletion_controller.go L155-L208, backup_tracker.go L94-L103). One with no phase, New, Queued or ReadyToStart
+// it deletes before it starts. The command of the views and the main process read the same list (REQ-278).
+export const IN_PROGRESS = [
+  "InProgress",
+  "WaitingForPluginOperations",
+  "WaitingForPluginOperationsPartiallyFailed",
+  "Finalizing",
+  "FinalizingPartiallyFailed",
+] as const;
+
 // The labels of a request that name its backup, which the deletion controller and the views find it by.
 export const BACKUP_NAME_LABEL = "velero.io/backup-name";
 export const BACKUP_UID_LABEL = "velero.io/backup-uid";

@@ -9,7 +9,7 @@ const DELETION_WORDS: Record<DeletionEnd, string> = {
   completed: "the backup is not there any more: Velero deleted it, with the request.",
   replaced:
     "the request is not there any more, and the backup is: another request for the same backup, which Velero started after this one, replaced it.",
-  refused: "Velero refused the request, and deleted nothing.",
+  refused: "Velero refused the request, and deleted nothing of the backup.",
   failed: "a step of the deletion failed: the backup stays Deleting, and a new request tries again.",
   unread: "Velero had not started the deletion when it was last read.",
   "in-progress": "Velero was at the deletion when it was last read: the view of the backup says how it goes.",
@@ -31,12 +31,13 @@ export function keptEndWords(end: KeptEnd): string {
     if (!end.outcome.created) return `${what} ended while no view of it was open: ${end.outcome.text}`;
     const deletion = end.outcome.deletion ?? "unread";
     const unread = end.outcome.requestsUnread === true;
-    // After an answer that was lost, what was read is of a request of the backup made since a minute before the
-    // confirmation, this one or another, or of the backup alone when the requests could not be read (REQ-250).
+    // After an answer that was lost, what was read is of the requests of the backup made since a minute before the
+    // confirmation, this one or another, and of the backup, or of the backup alone when the requests could not be read
+    // (REQ-250).
     const found = end.outcome.found
       ? unread
         ? ", as the backup shows, read after the answer of its creation was lost"
-        : ", as a request of the backup made since a minute before the confirmation shows, this one or another, read after the answer of its creation was lost"
+        : ", as the requests of the backup made since a minute before the confirmation and the backup show, read after the answer of its creation was lost"
       : "";
     const words =
       unread && (deletion === "completed" || deletion === "in-progress" || deletion === "unread")

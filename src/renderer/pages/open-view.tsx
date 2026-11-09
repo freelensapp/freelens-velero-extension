@@ -1,4 +1,5 @@
 import { BackupCreateWorkspace } from "./backup-create-workspace";
+import { BackupDeleteWorkspace } from "./backup-delete-workspace";
 import { BackupNowWorkspace } from "./backup-now-workspace";
 import { BackupWorkspace } from "./backup-workspace";
 import { RepositoryWorkspace } from "./repository-workspace";
@@ -48,6 +49,8 @@ export function OpenView({ target, ...props }: OpenViewProps) {
     case "schedule-pause":
     case "schedule-resume":
       return <SchedulePatchWorkspace action={target.kind} name={target.name} {...props} />;
+    case "backup-delete":
+      return <BackupDeleteWorkspace name={target.name} {...props} />;
     default:
       return <BackupWorkspace name={target.name} {...props} />;
   }

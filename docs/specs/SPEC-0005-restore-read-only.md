@@ -343,3 +343,19 @@ five restores opened and closed; the response at 82 ms at the 95th percentile,
 against the budget of 250 ms, 30 ms at the median and 82 ms the slowest, and 322 ms
 at the 95th percentile from the key or the click. The deviations recorded above hold
 on v2 as they are; v2 brings no other.
+
+### 2026-11-08: The Restores Of A Deleted Backup (T4.6 Of SPEC-0017)
+
+As the table of the amendments of
+[SPEC-0017](SPEC-0017-write-actions.md#the-amendments-the-slices-bring) says, approved
+with it, the second pull request of T4.6 restates one requirement and its check, and the
+rest of this spec is read with it:
+
+| Requirement and check | Restated |
+| --- | --- |
+| REQ-057, REST-08 | No surface offers to edit, delete or select a restore by itself; Delete backup of SPEC-0017 deletes, through Velero, the restores of the backup it deletes, and its review says so |
+
+Nothing of the views of the restores changes: the review of the deletion of a backup
+says that Velero deletes every restore of the backup, with the files of each, even when
+a step after the one of the plugins failed, as
+[`backup-delete-words.test.ts`](../../src/common/backup-delete-words.test.ts) proves.

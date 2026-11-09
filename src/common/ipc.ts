@@ -233,6 +233,9 @@ export interface WriteConfirmAnswer {
   // The text the main process will send, written once, for a write whose body the review shows (SPEC-0017,
   // REQ-246): the run sends it byte for byte, and carries nothing of it.
   text?: string;
+  // For a deletion, how many other requests to delete the backup the main process read at the confirmation, which
+  // Velero deletes before it starts this one (REQ-283); nothing when they could not be read.
+  others?: number;
 }
 export interface WriteRunRequest {
   cluster: string;
@@ -1010,13 +1013,15 @@ export function textWithinBound(text: string): boolean {
 }
 
 export function readWriteConfirmAnswer(value: unknown): WriteConfirmAnswer | undefined {
-  if (!isRecord(value) || !hasKeys(value, ["token", "expires"], ["text"]) || !isUuid(value.token)) return;
+  if (!isRecord(value) || !hasKeys(value, ["token", "expires"], ["text", "others"]) || !isUuid(value.token)) return;
   if (typeof value.expires !== "number" || !Number.isFinite(value.expires)) return;
   if ("text" in value && (typeof value.text !== "string" || !value.text || !textWithinBound(value.text))) return;
+  if ("others" in value && (!Number.isSafeInteger(value.others) || (value.others as number) < 0)) return;
   return {
     token: value.token,
     expires: value.expires,
     ...(typeof value.text === "string" ? { text: value.text } : {}),
+    ...(typeof value.others === "number" ? { others: value.others } : {}),
   };
 }
 

@@ -10,6 +10,7 @@ import {
   type ArtifactTarget,
   type ArtifactValue,
   type BackupCreated,
+  type BackupDeleted,
   CHANNELS,
   failure,
   type GateState,
@@ -20,6 +21,7 @@ import {
   readArtifactSaved,
   readArtifactValue,
   readBackupCreated,
+  readBackupDeleted,
   readGateState,
   readKeptEnds,
   readRestoreCreated,
@@ -197,6 +199,21 @@ export interface SchedulePatchClient {
   ): Promise<Answer<ScheduleChanged>>;
 }
 
+// What the views ask of the main process for the deletion of one backup (SPEC-0017, REQ-278 to REQ-284): the
+// confirmation, by the backup alone, whose answer carries the text of the request and how many other requests the
+// backup has; and the run, with the name of the backup as it was typed.
+export interface BackupDeleteClient {
+  confirmBackupDelete(cluster: string, namespace: string, backup: WriteTarget): Promise<Answer<WriteConfirmAnswer>>;
+  runBackupDelete(
+    cluster: string,
+    namespace: string,
+    backup: WriteTarget,
+    typed: string,
+    token: string,
+    request: string,
+  ): Promise<Answer<BackupDeleted>>;
+}
+
 // What the views ask of what the operator allows the downloads to do: to keep it, and to take it back.
 export interface AllowanceClient {
   allow(cluster: string, allowed: AllowanceFor): Promise<Answer<null>>;
@@ -217,6 +234,7 @@ export class VeleroIpcRenderer
     ScheduleCreateClient,
     RestoreCreateClient,
     SchedulePatchClient,
+    BackupDeleteClient,
     KeptEndsClient
 {
   // `bounded` says that the reader of the value bounds it itself: it is so for the page of a text, which
@@ -497,6 +515,29 @@ export class VeleroIpcRenderer
         request,
       },
       readScheduleChanged,
+    );
+  }
+
+  confirmBackupDelete(cluster: string, namespace: string, backup: WriteTarget): Promise<Answer<WriteConfirmAnswer>> {
+    return this.ask(
+      CHANNELS.writeConfirm,
+      { cluster, namespace, kind: "delete-backup", target: backup },
+      readWriteConfirmAnswer,
+    );
+  }
+
+  runBackupDelete(
+    cluster: string,
+    namespace: string,
+    backup: WriteTarget,
+    typed: string,
+    token: string,
+    request: string,
+  ): Promise<Answer<BackupDeleted>> {
+    return this.ask(
+      CHANNELS.writeRun,
+      { cluster, namespace, kind: "delete-backup", target: backup, typed, token, request },
+      readBackupDeleted,
     );
   }
 

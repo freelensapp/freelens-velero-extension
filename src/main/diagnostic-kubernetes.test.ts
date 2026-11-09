@@ -879,7 +879,7 @@ describe("the create-only adapter, through the client of the host", () => {
     expect(host.requests).toHaveLength(1);
   });
 
-  it("lists the requests to delete a backup by the labels of its name, cut as Velero cuts it, and of its UID, and takes none that is not of them", async () => {
+  it("lists the requests to delete a backup by the labels of its name, cut as Velero cuts it, and of its UID, or of its name alone, and takes none that is not of them", async () => {
     const labels = (name: string, uid: string) => ({ "velero.io/backup-name": name, "velero.io/backup-uid": uid });
     const request = (name: string, namespace: string, labelled: Record<string, string>) => ({
       metadata: { name, namespace, uid: `${name}-uid`, labels: labelled },
@@ -905,6 +905,11 @@ describe("the create-only adapter, through the client of the host", () => {
         request("misnamed-abcde", "velero", labels("another", "misnamed-uid")),
       ],
       "velero.io/backup-name=shapeless,velero.io/backup-uid=shapeless-uid": "not-a-list",
+      "velero.io/backup-name=nightly": [
+        request("nightly-abcde", "velero", labels("nightly", "nightly-uid")),
+        request("nightly-older", "velero", labels("nightly", "nightly-before")),
+      ],
+      "velero.io/backup-name=misnamed": [request("misnamed-abcde", "velero", labels("another", "misnamed-uid"))],
     };
     const { api, host, signal } = fixture((asked) => {
       const selector = String(asked.query?.labelSelector);
@@ -928,6 +933,14 @@ describe("the create-only adapter, through the client of the host", () => {
       (await api.deleteRequestsOf("velero", { name: long, uid: "long-uid" }, signal)).map((item) => item.metadata.name),
     ).toEqual(["long-abcde"]);
     expect(await api.deleteRequestsOf("velero", of("empty"), signal)).toEqual([]);
+    // Without the UID, every request of a backup of the name, by the label of the name alone, as Velero deletes the
+    // others of a request; one of another name is not taken.
+    expect(
+      (await api.deleteRequestsOf("velero", { name: "nightly" }, signal)).map((item) => item.metadata.name),
+    ).toEqual(["nightly-abcde", "nightly-older"]);
+    await expect(api.deleteRequestsOf("velero", { name: "misnamed" }, signal)).rejects.toMatchObject({
+      code: "request-failed",
+    });
     for (const name of ["elsewhere", "mislabelled", "misnamed", "shapeless"])
       await expect(api.deleteRequestsOf("velero", of(name), signal)).rejects.toMatchObject({
         code: "request-failed",

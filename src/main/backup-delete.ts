@@ -6,7 +6,13 @@
 // together is an end (REQ-282). A creation whose answer is not known is never sent again: the requests of the backup are
 // read by its labels, with the backup (REQ-250). Nothing here deletes an object: the adapter has no DELETE (REQ-284).
 
-import { BACKUP_UID_LABEL, deleteRequestOf, deleteRequestText, readDeleteRequest } from "../common/delete-request";
+import {
+  BACKUP_UID_LABEL,
+  deleteRequestOf,
+  deleteRequestText,
+  IN_PROGRESS,
+  readDeleteRequest,
+} from "../common/delete-request";
 import {
   type Answer,
   type BackupDeleted,
@@ -23,17 +29,6 @@ import { DiagnosticError } from "./diagnostic-transport";
 
 import type { DiagnosticKubernetes, DiagnosticObject } from "./diagnostic-kubernetes";
 import type { Write } from "./write-gate";
-
-// The phases of a backup Velero refuses to delete: in progress, waiting for its plugins, or finalizing
-// (backup_deletion_controller.go L155-L208, backup_tracker.go L94-L103). One with no phase, New, Queued or ReadyToStart
-// it deletes before it starts.
-export const IN_PROGRESS = [
-  "InProgress",
-  "WaitingForPluginOperations",
-  "WaitingForPluginOperationsPartiallyFailed",
-  "Finalizing",
-  "FinalizingPartiallyFailed",
-] as const;
 
 // How long the look for the request after an answer that was lost may last at most, within the thirty seconds of the
 // reads after the creation.
@@ -186,6 +181,15 @@ export async function confirmBackupDelete(
   const read = await readBackup(opened.value, request.namespace, target, signal);
 
   if (!read.ok) return read;
+  // The other requests of a backup of its name, which Velero deletes before it starts this one, by the label of the
+  // name alone, said by the review (REQ-283): a read that fails or does not answer in time is said as not read.
+  let others: number | undefined;
+
+  try {
+    others = (await opened.value.deleteRequestsOf(request.namespace, { name: target.name }, signal)).length;
+  } catch {
+    others = undefined;
+  }
   // The text travels in the answer of the confirmation: the request of a backup, whose names the contract bounds, is
   // always within the bound of an answer.
   const text = deleteRequestText(deleteRequestOf(request.namespace, { name: target.name, uid: target.uid }));
@@ -199,7 +203,9 @@ export async function confirmBackupDelete(
     { name: target.name, text },
   );
 
-  return confirmed.ok ? { ok: true, value: { ...confirmed.value, text } } : confirmed;
+  return confirmed.ok
+    ? { ok: true, value: { ...confirmed.value, text, ...(others === undefined ? {} : { others }) } }
+    : confirmed;
 }
 
 // A request as the reads after its creation take it: its name and its UID, its phase and its errors.
