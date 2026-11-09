@@ -41,6 +41,30 @@ export function Fact({ name, note, children }: { name: string; note?: ReactNode;
   );
 }
 
+// The text a review shows of what it sends, under its title: a region the Tab key reaches whatever its length, named
+// by its title. A text longer than its room scrolls, and the keyboard scrolls it once it is reached (WCAG 2.1, 2.1.1,
+// which the rule of axe-core for a region that scrolls reads).
+export function ReviewText({ id, title, children }: { id: string; title: string; children: string }) {
+  return (
+    <div className={styles.reviewPart}>
+      <h4 className={styles.factName} id={`${id}-text-title`}>
+        {title}
+      </h4>
+      {/* biome-ignore lint/a11y/useSemanticElements: the text is preformatted, and a region is what it is to who does not see it */}
+      <pre
+        className={styles.reviewText}
+        data-testid={`${id}-text`}
+        role="region"
+        aria-labelledby={`${id}-text-title`}
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: a text that scrolls is reached by the keyboard, which scrolls it
+        tabIndex={0}
+      >
+        {children}
+      </pre>
+    </div>
+  );
+}
+
 // The way to the view of another object of the installation. It opens over the one that is shown, which
 // stays where the way back leads.
 export function ViewLink({ target, children }: { target: ViewTarget; children?: ReactNode }) {

@@ -2551,15 +2551,13 @@ describe("pre-review of the views", () => {
       await keyboard.press("Enter");
       await frame.waitForSelector(deleteOf("review"), { timeout: 30_000 });
       expect(await cluster.focusOn(frame, "velero-backup-delete-review")).toBe("velero-backup-delete-review");
-      // The field of the name is the first stop after the review, or the second when the text of the request scrolls,
-      // which Chromium gives the keyboard as a scroller with nothing to focus in it.
-      const scrolls = await frame
-        .locator(deleteOf("text"))
-        .evaluate((text) => text.scrollWidth > text.clientWidth || text.scrollHeight > text.clientHeight);
-      let presses = 0;
+      // The text of the request is the first stop after the review, a region the keyboard reaches whatever its length,
+      // and the field of the name the second.
+      expect(await cluster.tabTo(frame, (focus) => focus === "velero-backup-delete-text", 3)).toBe(1);
+      let presses = 1;
 
       for (; presses < 10 && !(await inTyped()); presses += 1) await keyboard.press("Tab");
-      expect([await inTyped(), presses]).toEqual([true, scrolls ? 2 : 1]);
+      expect([await inTyped(), presses]).toEqual([true, 2]);
       // The name of the backup typed in its field enables Delete backup; Escape there takes it back, and the review
       // stays.
       await keyboard.type(RESTORABLE, { delay: 20 });

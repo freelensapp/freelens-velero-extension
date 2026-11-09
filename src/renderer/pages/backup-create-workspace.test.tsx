@@ -372,6 +372,9 @@ describe("create backup, from the list of the Backups", () => {
     await main.confirm(text);
     await waitFor(() => expect(maybe("review")).toBeTruthy());
     expect(part("text").textContent).toBe(text);
+    // The text is a region the Tab key reaches, named by its title, whatever its length.
+    expect(screen.getByRole("region", { name: BACKUP_CREATE_VIEW_WORDS.text })).toBe(part("text"));
+    expect(part("text").tabIndex).toBe(0);
     const body = backupFromForm(A, "shop-by-hand", template);
 
     const snapshotLocations = [

@@ -338,6 +338,9 @@ describe("back up now, from the view of a schedule", () => {
     ]);
     expect(focused()).toBe("velero-backup-now-review");
     expect(part("text").textContent).toBe(TEXT);
+    // The text is a region the Tab key reaches, named by its title, whatever its length.
+    expect(screen.getByRole("region", { name: BACKUP_NOW_VIEW_WORDS.text })).toBe(part("text"));
+    expect(part("text").tabIndex).toBe(0);
     const meaning = [...part("meaning").querySelectorAll("li")].map((item) => item.getAttribute("data-part"));
 
     expect(meaning).toEqual([
