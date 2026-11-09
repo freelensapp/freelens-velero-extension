@@ -123,6 +123,8 @@ import {
   veleroInstallArguments,
 } from "./local-manifests.mts";
 import {
+  ASKED_AGAIN_AFTER,
+  askAgain,
   assertBinary,
   assertLogWithholds,
   BINARIES,
@@ -143,6 +145,7 @@ import {
   occupiedSubnets,
   platformManifest,
   withhold,
+  worthAskingAgain,
 } from "./local-platform.mts";
 import { runRestoreCreateProof } from "./local-restore-proof.mts";
 import { type RunJournal, type StoreReach, storeRequest, tabRecord } from "./local-runtime.mts";
@@ -477,10 +480,28 @@ async function installTools(): Promise<void> {
         unlinkSync(file);
       }
     }
-    const response = await fetch(binaryUrl(name, target), { redirect: "follow", signal: AbortSignal.timeout(300_000) });
+    // The release is asked again when it does not answer, or answers what a wait may change; its body is read in
+    // the same asking, so a body cut halfway is asked again too. What comes back is checked against its checksum.
+    const answer = await askAgain(
+      async () => {
+        const response = await fetch(binaryUrl(name, target), {
+          redirect: "follow",
+          signal: AbortSignal.timeout(300_000),
+        });
 
-    requireCondition(response.ok, `The official release of ${name} did not answer`);
-    const content = new Uint8Array(await response.arrayBuffer());
+        if (!response.ok) {
+          await response.body?.cancel();
+          return { status: response.status, content: undefined };
+        }
+        return { status: response.status, content: new Uint8Array(await response.arrayBuffer()) };
+      },
+      (got) => worthAskingAgain(got.status),
+      ASKED_AGAIN_AFTER,
+      (milliseconds) => delay(milliseconds),
+    );
+
+    requireCondition(answer.content, `The official release of ${name} did not answer: ${answer.status}`);
+    const content = answer.content;
 
     assertBinary(name, target, content);
     writeFileSync(`${file}.next`, content, { mode: 0o700 });
