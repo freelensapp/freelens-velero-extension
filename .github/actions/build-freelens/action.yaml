@@ -14,6 +14,20 @@ inputs:
 runs:
   using: composite
   steps:
+    # The commit names the build in the key of its cache, so the action takes
+    # nothing else: a branch, a tag or an empty value, which a runner gives a
+    # missing input, would check out what moves under a key that does not. The
+    # value reaches the script through the environment, never as an expression.
+    - name: Check the commit of Freelens
+      shell: bash
+      env:
+        REF: ${{ inputs.ref }}
+      run: |
+        [[ "${REF}" =~ ^[0-9a-f]{40}$ ]] || {
+          echo "::error::The input ref must be a full commit of freelensapp/freelens, 40 hexadecimal characters."
+          exit 1
+        }
+
     - name: Checkout app
       uses: actions/checkout@v7
       with:

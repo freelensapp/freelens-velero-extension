@@ -10653,6 +10653,23 @@ function workflowAsRun(name: string): string {
   return [workflow, ...actions].map((lines) => lines.join("\n")).join("\n");
 }
 
+// The scripts of the `run` steps of a workflow or of an action: the value of each key, or the lines of its block.
+function runScripts(text: string): string[] {
+  const lines = text.split("\n");
+
+  return lines.flatMap((line, index) => {
+    const run = /^( +)run: (.*)$/.exec(line);
+
+    if (!run) return [];
+    if (!/^[|>][-+]?$/.test(run[2])) return [run[2]];
+    const end = lines.findIndex(
+      (next, at) => at > index && next.trim() !== "" && next.length - next.trimStart().length <= run[1].length,
+    );
+
+    return [lines.slice(index + 1, end === -1 ? undefined : end).join("\n")];
+  });
+}
+
 function fixture(shape: NetworkShape = "internal") {
   const published = shape === "loopback";
   const identity: DemoIdentity = {
@@ -11659,20 +11676,20 @@ describe("platform of the test environment", () => {
     expect(target).toMatch(/^[0-9a-f]{40}$/);
     const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
     const action = read(".github/actions/build-freelens/action.yaml");
+    const callers = readdirNames(fileURLToPath(new URL("../.github/workflows", import.meta.url))).filter((name) =>
+      read(`.github/workflows/${name}`).includes("uses: ./.github/actions/build-freelens"),
+    );
 
-    // The workflows that build Freelens build it through the action, and no other workflow uses it without this case.
-    expect(
-      readdirNames(fileURLToPath(new URL("../.github/workflows", import.meta.url))).filter((name) =>
-        read(`.github/workflows/${name}`).includes("uses: ./.github/actions/build-freelens"),
-      ),
-    ).toEqual(["integration-tests.yaml", "views-tests.yaml"]);
-    for (const name of ["views-tests.yaml", "integration-tests.yaml"]) {
+    // The workflows that build Freelens build it through the action, and every workflow that calls the action is held
+    // below to what the action needs from it.
+    expect(callers).toEqual(["integration-tests.yaml", "views-tests.yaml"]);
+    for (const name of callers) {
       const workflow = read(`.github/workflows/${name}`);
 
-      // The commit is written in one line of each workflow, and the one step that needs it, the action, names that
-      // line.
+      // The commit is written in one line of each workflow, its one `freelens_ref`, and the action is given that line.
       expect([name, workflow.match(/\b[0-9a-f]{40}\b/g)]).toEqual([name, [target]]);
       expect([name, workflow.match(/^ {2}freelens_ref: ([0-9a-f]{40})$/m)?.[1]]).toEqual([name, target]);
+      expect([name, workflow.match(/freelens_ref:/g)]).toEqual([name, [expect.any(String)]]);
       const given = [
         ...workflow.matchAll(/uses: \.\/\.github\/actions\/build-freelens\n\s+with:\n\s+ref: ([^\n]*)\n/g),
       ];
@@ -11687,12 +11704,64 @@ describe("platform of the test environment", () => {
         name,
         workflow.match(/freelensapp\/freelens\b|electron-dist|electron-builder|freelens\/freelens\/dist/g),
       ]).toEqual([name, null]);
+      // The job that calls the action gives it what it takes from its caller: the runner its caches and its build are
+      // of, the telemetry of Turborepo turned off, and yq from mise, set up before the call.
+      const jobs = workflow
+        .split(/\n(?= {2}[a-z][a-z0-9-]*:\n)/)
+        .filter((job) => job.includes("uses: ./.github/actions/build-freelens"));
+
+      expect([name, jobs.length]).toEqual([name, 1]);
+      const job = jobs[0] ?? "";
+      const mise = /\n {8}uses: jdx\/mise-action@[^\n]+\n {8}with:\n(?: {10}[^\n]+\n)* {10}install_args: yq\n/.exec(
+        job,
+      );
+
+      expect([name, job]).toEqual([name, expect.stringContaining("\n    runs-on: ubuntu-24.04-arm\n")]);
+      expect([name, job]).toEqual([
+        name,
+        expect.stringMatching(/\n {4}env:\n(?: {6}[^\n]+\n)* {6}DO_NOT_TRACK: "1"\n/),
+      ]);
+      expect([name, (mise?.index ?? Number.POSITIVE_INFINITY) < job.indexOf("uses: ./.github/actions/")]).toEqual([
+        name,
+        true,
+      ]);
     }
-    // The action names no commit: it checks out freelensapp/freelens at the one it is given, which it requires, and
-    // caches the build by that commit, and by nothing else: not a version, not a branch and not a partial match. The
-    // build it saves is saved under the key it restored.
+    // The action names no commit and declares the one it is given required, with no default. Its first step refuses
+    // anything but a full commit, an empty value among them, which a runner gives an input that is missing; the value
+    // reaches the script through the environment, and no script of the action holds an expression.
     expect(action.match(/\b[0-9a-f]{40}\b/g)).toBeNull();
     expect(action).toMatch(/\ninputs:\n {2}ref:\n(?: {4}(?!default:)[^\n]*\n)* {4}required: true\n\n/);
+    const guard =
+      /\n {2}steps:\n(?: {4}#[^\n]*\n)* {4}- name: Check the commit of Freelens\n {6}shell: bash\n {6}env:\n {8}REF: \$\{\{ inputs\.ref \}\}\n {6}run: \|\n((?: {8}[^\n]*\n)+)\n/.exec(
+        action,
+      )?.[1] ?? "";
+
+    expect(guard).toContain("::error::");
+    for (const [ref, status] of [
+      [target, 0],
+      [target?.toUpperCase(), 1],
+      [target?.slice(0, 39), 1],
+      [`${target}0`, 1],
+      [`${target}\n`, 1],
+      ["main", 1],
+      ["v2.0.0", 1],
+      ["", 1],
+    ] as const) {
+      const run = spawnSync("/bin/bash", ["-c", guard.replace(/^ {8}/gm, "")], {
+        env: { REF: ref },
+        encoding: "utf8",
+        timeout: 10_000,
+      });
+
+      expect([ref, run.status, run.stdout.startsWith("::error::")]).toEqual([ref, status, status === 1]);
+    }
+    const scripts = runScripts(action);
+
+    expect(scripts).toHaveLength(action.match(/\n {6}shell: bash\n/g)?.length ?? 0);
+    expect(scripts.filter((script) => /\$\{\{/.test(script))).toEqual([]);
+    // It checks out freelensapp/freelens at that commit, and caches the build by that commit, and by nothing else: not
+    // a version, not a branch and not a partial match. The build is saved under the key it restored, and only after a
+    // build that did not fail.
     expect(action).toMatch(
       /\n {6}uses: actions\/checkout@[^\n]+\n {6}with:\n {8}repository: freelensapp\/freelens\n {8}ref: \$\{\{ inputs\.ref \}\}\n {8}path: freelens\n/,
     );
@@ -11704,10 +11773,9 @@ describe("platform of the test environment", () => {
       /\n {6}id: electron-build-cache\n {6}uses: actions\/cache\/restore@[^\n]+\n {6}with:\n {8}path: freelens\/freelens\/dist\n {8}key: ubuntu-24\.04-arm-electron-dist-\$\{\{ inputs\.ref \}\}\n\n/,
     );
     expect(action).toMatch(
-      /\n {8}path: freelens\/freelens\/dist\n {8}key: \$\{\{ steps\.electron-build-cache\.outputs\.cache-primary-key \}\}\n/,
+      /\n {4}- name: Save Electron build cache\n {6}if: steps\.electron-build-cache\.outputs\.cache-hit != 'true'\n {6}uses: actions\/cache\/save@[^\n]+\n {6}with:\n {8}path: freelens\/freelens\/dist\n {8}key: \$\{\{ steps\.electron-build-cache\.outputs\.cache-primary-key \}\}\n/,
     );
-    // The caches it keys and the build it makes are of the runner of the jobs that call it, which the cases of their
-    // uploads read.
+    // The caches it keys and the build it makes are of the runner of the jobs that call it, which the loop above reads.
     const named = [...action.matchAll(/\n\s+(?:key|restore-keys): \|?\n?\s*([^\n]+)/g)]
       .map((match) => match[1])
       .filter((key) => !/^\$\{\{ steps\.[a-z-]+\.outputs\.cache-primary-key \}\}$/.test(key));
@@ -11715,6 +11783,32 @@ describe("platform of the test environment", () => {
     expect(named.length).toBeGreaterThan(0);
     expect(named.filter((key) => !key.startsWith("ubuntu-24.04-arm-"))).toEqual([]);
     expect(action).toContain("--publish never --linux dir --arm64");
+  });
+
+  it("reads in the action that builds Freelens only the outputs of its earlier steps, which actionlint does not check there", () => {
+    // actionlint checks every `steps.<id>` of a job against the ids of its earlier steps, and not the steps of a
+    // composite action: a slip in an id would leave a retry that never runs, or the steps of a miss running on a hit.
+    const action = readFileSync(new URL("../.github/actions/build-freelens/action.yaml", import.meta.url), "utf8");
+    const earlier: string[] = [];
+    const read: string[] = [];
+    let current: string | undefined;
+
+    for (const line of action.split("\n").filter((text) => !text.trimStart().startsWith("#"))) {
+      if (/^ {4}- /.test(line)) {
+        if (current) earlier.push(current);
+        current = undefined;
+      }
+      for (const [, id] of line.matchAll(/\bsteps\.([A-Za-z0-9_-]+)\./g)) {
+        read.push(id);
+        expect([line.trim(), id, earlier.includes(id)]).toEqual([line.trim(), id, true]);
+      }
+      current = /^ {6}id: (\S+)$/.exec(line)?.[1] ?? current;
+    }
+    if (current) earlier.push(current);
+    // Each id is of one step, and every id is read: the ids are the ones the conditions and the keys need.
+    expect(read.length).toBeGreaterThan(0);
+    expect(new Set(earlier).size).toBe(earlier.length);
+    expect([...new Set(read)].sort()).toEqual([...earlier].sort());
   });
 
   it("keeps the internal network wherever the host reaches the address of the node", () => {
