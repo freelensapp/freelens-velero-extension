@@ -866,3 +866,133 @@ Decided while implementing, on 2026-11-09:
   `claude.yaml` writes a condition of several lines: the expression reads a new
   line as a space. A folded block was refolded by the formatter of Trunk at 300
   characters, in the middle of a term.
+
+T6.1, the first half of REQ-286, on 2026-11-09: the steps that build Freelens at
+the commit of the validation target, which the workflows of the integration tests
+and of the views carried as two copies, are one composite action,
+`.github/actions/build-freelens/action.yaml`, which both call with the commit each
+names once; the job `package` of the release workflow calls it in the second half.
+The evidence, by check:
+
+- REG-02, the part of the target: the case of the target, "builds Freelens for the
+  views and for the integration at the validation target of SPEC-0015, named
+  once", reads the action as well. The two workflows are the only ones that call
+  it, and the case holds every workflow that calls it, so that a new one is held
+  by construction: each names the commit in one line, its one `freelens_ref`,
+  gives it to the action once, and checks out, builds and caches nothing of
+  Freelens itself; the job that calls the action runs on `ubuntu-24.04-arm`,
+  turns the telemetry of Turborepo off with `DO_NOT_TRACK: "1"`, and sets up mise
+  with `yq` before the call. The action names no commit and declares the one it
+  is given required, with no default; its first step refuses anything but a full
+  commit of 40 hexadecimal characters, an empty value among them, which a runner
+  gives an input that is missing, and the case runs that step with bash on eight
+  values; the value reaches the script through the environment, and no script of
+  the action holds an expression. The action checks out freelensapp/freelens at
+  that commit, restores the build under the key of that commit alone, with no
+  partial match, and saves it under the key it restored, only after a build that
+  did not fail; its caches are keyed for the runner of its callers and the build
+  is for arm64 (`test/environment.test.ts`).
+- The ids the action reads: every `steps.<id>` it names is the id of an earlier
+  step of the action, each id is of one step, and every id is read
+  (`test/environment.test.ts`). actionlint checks the steps of a job against the
+  ids of the earlier ones, and not the steps of a composite action.
+- The cases of the uploads of the two workflows read the steps of the action with
+  the workflow: one upload, of `e2e-artifacts/`; the three caches saved, the
+  binaries the build downloaded, the Electron it downloaded and the application,
+  in that order; nothing of the state of the environment; the runner and the
+  permission `contents: read` (`test/environment.test.ts`).
+- The plan of the views runs every part for a change of the action, as for a
+  change of the workflow of the views, and for each action of this repository
+  that workflow uses (`test/views-plan.test.ts`).
+- The two copies, compared before the move: the steps from "Checkout app" to "Let
+  the sandbox of the application start", "Setup node for plugin" among them, were
+  the same in both workflows but three lines of their comments, which named the
+  tests or the suites and the other workflow that shares the key. The rest of the
+  two jobs differs by what each runs, and in their common setup by one step: the
+  integration builds the extension with two retries, the views with none, which
+  this half leaves as it is. The move changed, beside the comments, the commit,
+  from `env.freelens_ref` to the input `ref` in the checkout and in the key of the
+  build; the path of the Turborepo cache, written from `github.workspace` instead
+  of the variable `TURBOREPO_CACHE`, the same path; `shell: bash` on each `run`
+  step, which a composite action requires; and the script of the sandbox,
+  without its final newline, as the formatter of the repository writes the last
+  block of a file. With the call of the action replaced by its steps, both jobs
+  are the jobs of main, step by step, but for these and for the first step of the
+  action, which checks the commit.
+- The path of a miss, on its own before the pull request: on 2026-11-09, a
+  throwaway branch of the first commit of this half, with one commit that changed
+  only the prefix of the key of the build to
+  `ubuntu-24.04-arm-electron-dist-probe-miss-`, and the integration workflow
+  dispatched on it alone,
+  [run 42627469903](https://github.com/freelensapp/freelens-velero-extension/actions/runs/42627469903),
+  green in 6.5 minutes. The build of the target, the Electron download (key
+  `ubuntu-24.04-arm-electron-44.10.0`), the Turborepo cache and the bundled
+  binaries all missed, and Freelens was built from nothing, Turborepo 0 cached of
+  6 tasks; the bundled binaries, the Electron download and the build were saved
+  by the steps of the action, and the Turborepo cache by the post of its nested
+  action; the Node.js of Freelens, 24.22.1, gave way again to the one of this
+  repository, 24.21.0, the sandbox step set `FREELENS_APP`, and the integration
+  test passed, 11 files. The branch and its four caches were removed after the
+  run. The first step, which checks the commit, came after that run, and runs on
+  every path.
+- The runs of its pull request, green before its merge: the unit tests, the
+  integration test and every part of the views, each with the check of the commit
+  passed and the build of the target restored from the cache of main.
+
+Each new case was seen failing on a change made on purpose, thirty-three in all.
+The action checking out main, and a commit it names; the input of the commit
+given a default; the build cached by the commit and the branch, by a version, and
+restored by a partial match; the build saved under the key of the download of
+Electron, and saved after a failed build as well; a cache of the action keyed for
+another runner; the views giving the action main, and the integration another
+commit; the integration checking Freelens out itself as well; another workflow
+calling the action, and a third caller listed without the line of the commit; a
+second `freelens_ref` in the env of the job of the views, and one in an env of the
+call; the views without mise, the integration with mise and no `yq`, without
+`DO_NOT_TRACK`, and on another runner; the action without its check of the commit,
+the check with an expression in its script, taking any length, taking capitals,
+and after the checkout; an expression in another script of the action; the slips
+`install-pnpm-ap` in a retry and `electron-build-cach` in a condition, a step that
+reads its own outcome, and an id no step reads; the action uploading the build,
+and saving one more cache; and the action left out of the rules of the parts,
+under the rule of `.github/`.
+
+Decided while implementing, on 2026-11-09:
+
+- The action takes the steps from the checkout of Freelens to the save of its
+  build, and the two after them that both workflows had: the Node.js of this
+  repository set up again, which the build replaces on a miss, and the sandbox of
+  the application with its path in `FREELENS_APP`, which the tests read. It
+  leaves the job on the Node.js of the repository, as it found it, with the
+  application ready to start.
+- The first step of the action refuses a value that is not a full commit: the
+  runner gives an input that is missing an empty value and does not enforce
+  `required`, and a branch, a tag or an empty value would build what moves under
+  a key that does not. For the two callers it changes nothing.
+- The OS dependencies of Playwright and their APT cache stay in the workflows:
+  they are what the tests need to start an Electron under xvfb, they run the
+  Playwright of the extension and are keyed by its lockfile, not by the commit of
+  Freelens, and they run before the environment comes up, which a move into the
+  action would put after it. The job `package` installs them beside the action.
+- The variable `TURBOREPO_CACHE` leaves the environment of the two jobs: it only
+  named the path of the Turborepo cache, as in the workflows of Freelens at the
+  target, and no build reads it; the action writes that path from
+  `github.workspace` and the folder of the checkout, the same string, so the
+  cache is the same.
+- Each `run` step of the action names `bash`, which a composite action requires:
+  the steps that named no shell ran with `bash -e {0}`, and `bash` adds
+  `--noprofile --norc -o pipefail`, which changes nothing in steps with no
+  pipeline, and none of them has one.
+- The action reads `yq` from the mise of the workflow that calls it, as the step
+  of the version of Electron did, so that its version keeps one source; the case
+  of the target holds every caller to it, with the runner and `DO_NOT_TRACK`.
+- actionlint does not check the steps of a composite action, so a unit case
+  checks the ids its conditions and keys read.
+- The rules of the parts of the views name the action among the files that run
+  every part, and keep it out of the rule of `.github/`, as they do for the
+  workflow of the views: under that rule a change of the build of Freelens would
+  run no part.
+
+On a hit the action checks the commit, checks out Freelens, restores the build,
+sets up the Node.js of the repository again and lets the sandbox start; every
+other step is of a miss, which the run above proved.
