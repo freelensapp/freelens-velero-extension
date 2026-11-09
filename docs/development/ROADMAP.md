@@ -245,12 +245,29 @@ deletion of backups, no way around the confirmation.
 
 | Feature | Task | Spec | Status |
 | --- | --- | --- | --- |
-| Regression, packaged integration, end to end with the real controller, isolation between clusters, permissions, transport security, performance | T6.1 | | Planned |
-| Visual and accessibility pass on both themes and on narrow and large windows | T6.2 | | Planned |
-| Installation, permissions, safety, compatibility and troubleshooting documentation, screenshots, demonstration video, release notes | T6.3 | | Planned |
-| Tarball, checksums and software bill of materials from the release workflow | T6.4 | | Planned |
+| Regression, packaged integration, end to end with the real controller, isolation between clusters, permissions, transport security, performance | T6.1 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Draft |
+| Visual and accessibility pass on both themes and on narrow and large windows | T6.2 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Draft |
+| Installation, permissions, safety, compatibility and troubleshooting documentation, screenshots, demonstration video, release notes | T6.3 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Draft |
+| Tarball, checksums and software bill of materials from the release workflow | T6.4 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Draft |
 | With Freelens 2.0.0: the pin of the SDK a range of versions, the integration at the tag v2.0.0, the host drift watch ended | | [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#d10-the-version-and-the-release) | Done |
-| Release through the organization's flow, on the lead maintainer's go | T6.5 | | Planned |
+| Release through the organization's flow, on the lead maintainer's go | T6.5 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Draft |
+
+[SPEC-0018](../specs/SPEC-0018-release-readiness.md), drafted on 2026-11-09 for
+the lead maintainer to approve, is the one spec of the milestone; its first slice
+comes once T4.6 is Done. The order of the slices it proposes, its D15: first what
+the page of the package and its proof need, T6.4 with
+[#144](https://github.com/freelensapp/freelens-velero-extension/issues/144), then
+the bill of materials and the provenance of the publication, and T6.3 with
+[#145](https://github.com/freelensapp/freelens-velero-extension/issues/145), then
+the other sections of the README; then T6.1, first FND-10 in the release workflow
+on the tarball it publishes, then the identities of the actions, the two cases of
+FND-10 over HTTPS and by the direct route, the second cluster and the actions with
+the real controller, with T6.2, the accessibility scan of the pre-review, beside
+it; then T6.5: the prerelease 1.0.0-0 when the lead maintainer asks for it, the
+proof of its assets and its check by version in Freelens 2.0.0; then the
+screenshots, the video and the notes of 1.0.0, the review of the milestone, and
+1.0.0 on `latest` on the lead maintainer's go. Each slice is its own pull
+request; the row of a task is In PR from its first and Done with its last.
 
 ## Deferred after v1.0.0
 
