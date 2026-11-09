@@ -723,7 +723,7 @@ before the approval.
 
 ## Evidence And Deviations
 
-None yet: the draft has no implementation, tests or runtime evidence. The facts
+The draft had no implementation, tests or runtime evidence. The facts
 above were read at `b7dd522` of this repository, with the gaps of the inventory
 read again in the code; the installer of the host at `b9b53e16`; issues #144 and
 #145 read on 2026-11-09; the releases of Velero and of its AWS plugin, the
@@ -736,3 +736,83 @@ majors, fourteen minors and five nits; this text takes them in, with the release
 workflow in two jobs, the rules of the tag, the credential of the first version as
 a decision, the line between what gates 1.0.0-0 and what gates 1.0.0, and the
 narrowing of T6.1 as a decision.
+
+The evidence of the slices follows.
+
+T6.5, the first of its pull requests, on 2026-11-09: the tag on the merge commit
+of the pull request of the version (REQ-315), one of the rules of the tag that
+gate 1.0.0-0 (D15). The evidence, by check:
+
+- REL-05: the case "tags the merge commit of the pull request of the version, on
+  its merge and on /tag from an owner, a member or a collaborator", beside the
+  case of the tags in `test/environment.test.ts`, reads `tag.yaml` without its
+  comments. The condition of the job has two ways and no other: the merge of a
+  pull request whose title starts with `Automated npm version`; and the comment
+  `/tag` on a pull request, `github.event.issue.pull_request` set, of that title
+  and closed, whose author is an owner, a member or a collaborator of the
+  repository, the list of the associations read whole, with no other in it. One
+  step finds the commit on both ways: on the merge,
+  `github.event.pull_request.merge_commit_sha`; on the comment, the
+  `merge_commit_sha` of its pull request read through the API, once merged into
+  main. The only checkout is of that commit, with `fetch-depth: 0`, the version is
+  read after it, and the tag, `v` and the version, is created on that commit, for
+  a version of the release form alone, with the token of the environment
+  `automated`. No `heads/main`, no read of a ref, no checkout of main, and neither
+  the commit of the run nor the head of the pull request.
+- Seen failing, on `tag.yaml` changed on purpose and put back each time: 37
+  changes, each at the assertion it aims at, and every assertion of the case at
+  least once. The workflow of main as it was, which fails at its condition;
+  `heads/main` put back as the commit of the tag, and read beside the merge
+  commit; the checkout of main, of the ref of the event, and without
+  `fetch-depth: 0`; the merge read from the commit of the run or from the head of
+  the pull request; on the comment, the head of its pull request taken, a pull
+  request closed without a merge or merged into another branch tagged, and the
+  pull request not read through the API; the step run on the merge alone, under
+  another id, or giving the commit of the run; the way of the comment without its
+  pull request, its title, its state or its body; each of the three associations
+  dropped, CONTRIBUTOR added, and the associations dropped from the comment or
+  moved to the merge; the way of the merge without `merged` or without its title;
+  a third way; the tag with the token of the run, without its `v`, or for any form
+  of a version; the environment removed; a second checkout, of main; and the
+  checkout before the step, the version before the checkout, the tag before the
+  version.
+- The two scripts of the workflow, read from the file parsed as YAML and run once
+  in Node outside the repository as `actions/github-script` runs them, with
+  stand-ins for the API: on the merge, the commit of the event, and the API not
+  asked; on the comment, the merge commit of a merged pull request read through
+  the API; a merge with no merge commit, a pull request closed without a merge and
+  one merged into another branch, each failed with its words and nothing given to
+  the checkout; and the tag `v1.0.0-0` created on the merge commit.
+- The gates of the slice, on its head: the two cases of the tags,
+  `pnpm type:check`, `pnpm lint:check`, `pnpm knip:check`, and Trunk on the
+  changed files, green. The unit run of the head, `pnpm test:unit`:
+  {RUN-TAG-UNIT}. The checks of the pull request: {RUN-TAG-CI}. Its files reach
+  no part of the views and no end to end run.
+- The workflow at work is read by REL-01 at the merge of the pull request of
+  1.0.0-0: the tag and its commit, equal to the merge commit of that pull request.
+
+Decided while implementing, on 2026-11-09:
+
+- One step finds the commit for both ways, and the checkout and the tag take its
+  output: on the merge, the merge commit of the event, given to the step through
+  its environment; on `/tag`, the pull request read with the token of the run,
+  which the permission `pull-requests: read` of the workflow allows. The token of
+  the environment still creates the tag alone, so that the tag starts the release
+  workflow.
+- On `/tag`, the pull request must have been merged into main, since the way of
+  the merge reads only the pull requests into main: one closed without a merge, or
+  merged into another branch, fails the job with its words and tags nothing. The
+  condition of the job keeps the closed state of the issue, so that a `/tag` on an
+  open pull request starts no job.
+- The step fails, and nothing is tagged, when the commit it found is not 40
+  hexadecimal characters; the script of the tag names that output as it names the
+  version, the output of a step that checked it.
+- The associations are the list
+  `contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)`,
+  the form another workflow of this repository uses for the same check, and the
+  case parses that list.
+- The condition of the job is a literal block of YAML, one term to a line, as
+  another workflow of this repository writes a condition of several lines: the
+  expression reads a new line as a space, and the case joins the lines into one.
+  A folded block was refolded by the formatter of Trunk at 300 characters, in the
+  middle of a term.

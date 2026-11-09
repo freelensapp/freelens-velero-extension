@@ -11642,6 +11642,85 @@ describe("platform of the test environment", () => {
     expect(release).toMatch(/\n\s+prerelease: \$\{\{ contains\(github\.ref_name, '-'\) \}\}\n/);
   });
 
+  it("tags the merge commit of the pull request of the version, on its merge and on /tag from an owner, a member or a collaborator", () => {
+    // What the workflow does, without what it says of itself in its comments.
+    const workflow = readFileSync(new URL("../.github/workflows/tag.yaml", import.meta.url), "utf8")
+      .split("\n")
+      .filter((line) => !line.trimStart().startsWith("#"))
+      .join("\n");
+    // The condition of the job, a block of one term to a line joined into one line, as the expression reads a new line
+    // as a space, with its two ways, the merge and the comment, each a list of terms that must all hold.
+    const condition = (/\n {4}if: \|\n((?: {6}[^\n]+\n)+)/.exec(workflow)?.[1] ?? "")
+      .split("\n")
+      .map((line) => line.trim())
+      .join(" ")
+      .trim();
+    const ways =
+      /^\(github\.event_name == 'pull_request' && (.+)\) \|\| \(github\.event_name == 'issue_comment' && (.+)\)$/.exec(
+        condition,
+      );
+    const [merge, comment] = [ways?.[1], ways?.[2]].map((way) => way?.split(" && ") ?? []);
+    const steps = workflow.split(/\n(?= {6}- name: )/).slice(1);
+    const at = (pattern: RegExp) => steps.findIndex((step) => pattern.test(step));
+    const [find, checkout, version, create] = [
+      /\n {8}id: merge-commit\n/,
+      /\n {8}uses: actions\/checkout@/,
+      /yq -r \.version package\.json/,
+      /github\.rest\.git\.createRef\(/,
+    ].map(at);
+
+    expect(condition.split(" || ")).toHaveLength(2);
+    expect(merge).toEqual(
+      expect.arrayContaining([
+        "startsWith(github.event.pull_request.title, 'Automated npm version')",
+        "github.event.pull_request.merged",
+      ]),
+    );
+    // The comment is on a pull request, of the version, closed, and its author is an owner, a member or a
+    // collaborator of the repository, and no one else.
+    expect(comment).toEqual(
+      expect.arrayContaining([
+        "github.event.issue.pull_request",
+        "startsWith(github.event.issue.title, 'Automated npm version')",
+        "github.event.issue.state == 'closed'",
+        "github.event.comment.body == '/tag'",
+      ]),
+    );
+    const associations = comment.flatMap(
+      (term) =>
+        /^contains\(fromJSON\('(\[[^\]]*\])'\), github\.event\.comment\.author_association\)$/.exec(term)?.[1] ?? [],
+    );
+
+    expect(associations.map((list) => (JSON.parse(list) as string[]).sort())).toEqual([
+      ["COLLABORATOR", "MEMBER", "OWNER"],
+    ]);
+    // One step finds the commit on both ways: on the merge, the merge commit of the event; on the comment, the merge
+    // commit of its pull request, read through the API, once merged into main. Then the checkout of that commit, the
+    // version read from it, and the tag created on it.
+    expect(find).toBeGreaterThanOrEqual(0);
+    expect(checkout).toBeGreaterThan(find);
+    expect(version).toBeGreaterThan(checkout);
+    expect(create).toBeGreaterThan(version);
+    expect(steps.filter((step) => /uses: actions\/checkout@/.test(step))).toHaveLength(1);
+    expect(steps[find]).not.toMatch(/\n {8}if: /);
+    expect(steps[find]).toMatch(/\n {10}MERGE_COMMIT_SHA: \$\{\{ github\.event\.pull_request\.merge_commit_sha \}\}\n/);
+    expect(steps[find]).toContain("\n            let sha = process.env.MERGE_COMMIT_SHA;\n");
+    expect(steps[find]).toMatch(
+      /\n {12}if \(context\.eventName === 'issue_comment'\) \{\n {14}const \{ data: pull \} = await github\.rest\.pulls\.get\(\{\n[\s\S]*?\n {16}pull_number: context\.issue\.number,\n {14}\}\);\n {14}if \(!pull\.merged \|\| pull\.base\.ref !== 'main'\) \{\n[\s\S]*?\n {16}return;\n {14}\}\n {14}sha = pull\.merge_commit_sha;\n {12}\}\n/,
+    );
+    expect(steps[find]).toContain("\n            core.setOutput('sha', sha);\n");
+    expect(steps[checkout]).toMatch(
+      /\n {8}with:\n {10}fetch-depth: 0\n {10}ref: \$\{\{ steps\.merge-commit\.outputs\.sha \}\}\n/,
+    );
+    expect(steps[create]).toMatch(/\n {8}if: steps\.check-version\.outputs\.is_release == 'true'\n/);
+    expect(steps[create]).toMatch(/\n {14}sha: '\$\{\{ steps\.merge-commit\.outputs\.sha \}\}',\n/);
+    expect(steps[create]).toMatch(/\n {14}ref: 'refs\/tags\/v\$\{\{ steps\.package-json\.outputs\.version \}\}',\n/);
+    expect(steps[create]).toMatch(/\n {10}github-token: \$\{\{ secrets\.GH_TOKEN \}\}\n/);
+    // Never main as it is when the job runs.
+    expect(workflow).not.toMatch(/heads\/main|getRef|\bref: main\b|github\.sha|head\.sha/);
+    expect(workflow).toMatch(/\n {4}environment: automated\n/);
+  });
+
   it("builds Freelens for the views and for the integration at the validation target of SPEC-0015, named once", () => {
     const spec = readFileSync(new URL("../docs/specs/SPEC-0015-freelens-v2-host.md", import.meta.url), "utf8");
     const target = /^- \*\*Freelens validation target:\*\* freelensapp\/freelens `([0-9a-f]{40})`/m.exec(spec)?.[1];

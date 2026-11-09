@@ -23,13 +23,57 @@ jobs:
     environment: automated
     timeout-minutes: 10
 
-    if: (startsWith(github.event.issue.title, 'Automated npm version') && github.event.issue.state == 'closed' && github.event.comment.body == '/tag') || (startsWith(github.event.pull_request.title, 'Automated npm version') && github.event.pull_request.merged)
+    # The merge of the pull request of the version, or the comment `/tag` on that
+    # pull request once it is closed, from an owner, a member or a collaborator
+    # of the repository: a comment of anyone else, who may comment on any pull
+    # request, does not start the job.
+    if: |
+      (github.event_name == 'pull_request'
+      && startsWith(github.event.pull_request.title, 'Automated npm version')
+      && github.event.pull_request.merged)
+      || (github.event_name == 'issue_comment'
+      && github.event.issue.pull_request
+      && startsWith(github.event.issue.title, 'Automated npm version')
+      && github.event.issue.state == 'closed'
+      && github.event.comment.body == '/tag'
+      && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
     steps:
+      # The commit of the version is the merge commit of its pull request, never
+      # main as it is when the job runs, which can have moved since the merge
+      # (REQ-315 of SPEC-0018). On the merge, it is the one of the event; on
+      # `/tag`, the one of the pull request the comment is on, read through the
+      # API, which must have been merged into main.
+      - name: Get the merge commit of the pull request of the version
+        id: merge-commit
+        uses: actions/github-script@v9
+        env:
+          MERGE_COMMIT_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        with:
+          script: |
+            let sha = process.env.MERGE_COMMIT_SHA;
+            if (context.eventName === 'issue_comment') {
+              const { data: pull } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+              });
+              if (!pull.merged || pull.base.ref !== 'main') {
+                core.setFailed(`Pull request #${pull.number} was not merged into main: nothing is tagged`);
+                return;
+              }
+              sha = pull.merge_commit_sha;
+            }
+            if (!/^[0-9a-f]{40}$/.test(sha ?? '')) {
+              core.setFailed(`No merge commit to tag: ${sha}`);
+              return;
+            }
+            core.setOutput('sha', sha);
+
       - name: Checkout
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          ref: main
+          ref: ${{ steps.merge-commit.outputs.sha }}
 
       - name: Get version from package.json
         id: package-json
@@ -48,21 +92,16 @@ jobs:
             echo "is_release=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Create tag from the main branch
+      - name: Create tag on the merge commit of the pull request of the version
         if: steps.check-version.outputs.is_release == 'true'
         uses: actions/github-script@v9
         with:
           script: |
-            const mainRef = await github.rest.git.getRef({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: 'heads/main',
-            });
             const result = await github.rest.git.createRef({
               owner: context.repo.owner,
               repo: context.repo.repo,
               ref: 'refs/tags/v${{ steps.package-json.outputs.version }}',
-              sha: mainRef.data.object.sha,
+              sha: '${{ steps.merge-commit.outputs.sha }}',
             });
             console.log(result);
           github-token: ${{ secrets.GH_TOKEN }}
