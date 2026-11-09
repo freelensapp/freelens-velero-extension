@@ -383,8 +383,9 @@ The rules the extension keeps beside them, binding for every contributor in
   location.
 - **Denied, or a credential not taken.** A list says that access is denied
   both when the identity may not read it and when the cluster did not take the
-  credential of the context, as a token that expired. An action or a tab tells
-  the two apart, and says to sign in again for the second.
+  credential of the context, as a token that expired. An action, a tab and the
+  band of the server tell the two apart, and say to sign in again for the
+  second.
 
 ## Development
 
