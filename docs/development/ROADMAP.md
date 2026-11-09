@@ -27,19 +27,23 @@ were made green on Freelens 1 first; T0.8 makes them green on v2.
 ## Releases
 
 The version line is 1.0.0, decided by the lead maintainer on 2026-10-16 (D10 of
-[SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#d10-the-version-and-the-release)):
+[SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#d10-the-version-and-the-release)),
+and 1.0.0 is its first publication, with no prerelease before it, decided by the
+lead maintainer on 2026-11-09
+([the amendment of SPEC-0018](../specs/SPEC-0018-release-readiness.md#2026-11-09-no-prerelease-before-100)):
 
-- **1.0.0-N**: prereleases of the line, from main, each through the pull request
-  of the version workflow, tagged, published on the npm tag `next` and released
-  on GitHub as a prerelease. The first is made when the lead maintainer asks for
-  it, after T0.8 at the earliest; until then main keeps its version. A prerelease
-  is installed by its tag, `@freelensapp/velero-extension@next`, or by its version.
-- **1.0.0**: M1 to M6, the complete agreed scope, published on `latest` only
-  after Freelens 2.0.0 is released and M6 is done: installing by name takes the
-  newest version that is not a prerelease, whatever Freelens it is for. With
-  Freelens 2.0.0 the pin of the SDK becomes a range of versions and the
-  integration runs at the tag v2.0.0, as work of M6.
-- An earlier read-only release after M2 is the lead maintainer's call.
+- **1.0.0-N**: the prereleases of the line, on the npm tag `next`, are not made.
+  No 1.0.0-0 comes before 1.0.0; until 1.0.0 is published main keeps its version,
+  and the extension is installed from the source.
+- **1.0.0**: M1 to M6, the complete agreed scope, the first publication, through
+  the pull request of the version workflow, tagged, published on `latest` and
+  released on GitHub, only after Freelens 2.0.0 is released and M6 is done:
+  installing by name takes the newest version that is not a prerelease, whatever
+  Freelens it is for. The proof of its assets and its check by version in
+  Freelens 2.0.0 are made on it. With Freelens 2.0.0 the pin of the SDK becomes a
+  range of versions and the integration runs at the tag v2.0.0, as work of M6.
+- No earlier release: the read-only release after M2 that was the lead
+  maintainer's call is not made, since 1.0.0 is the first publication.
 
 Every milestone keeps the whole agreed scope: nothing moves out of v1.0.0
 without an explicit decision recorded here.
@@ -279,13 +283,15 @@ their tests green in CI on main.
 [SPEC-0018](../specs/SPEC-0018-release-readiness.md), approved by the lead
 maintainer on 2026-11-09 with D1 to D19 as proposed, is the one spec of the
 milestone; its first slice comes after M5, closed with its review the same day.
-The order of the slices, its D15, with the line between what gates the prerelease
-1.0.0-0 and what gates 1.0.0. For 1.0.0-0: T6.4 and the tag, which are the
-version, tag and release workflows of the template of the organization, as the
-lead maintainer decided on 2026-11-09 with the amendment of the spec; then the
-sections of the README a prerelease is installed with; then 1.0.0-0 when the
-lead maintainer asks for it, the proof of its assets and its check by version in
-Freelens 2.0.0. For 1.0.0: the identities of the actions, then
+The order of the slices, its D15, as amended on 2026-11-09: there is no
+prerelease, and 1.0.0 is the first publication, as the lead maintainer decided
+that day
+([the amendment](../specs/SPEC-0018-release-readiness.md#2026-11-09-no-prerelease-before-100)),
+with the proof of its assets and its check by version in Freelens 2.0.0. First
+T6.4 and the tag, which are the version, tag and release workflows of the
+template of the organization, as the lead maintainer decided on 2026-11-09 with
+the first amendment of the spec; then the sections of the README 1.0.0 is
+installed with; then the identities of the actions, then
 [#145](https://github.com/freelensapp/freelens-velero-extension/issues/145), the
 case of FND-10 by the direct route and the ceilings of the bundles, with T6.2, the
 visual pass of the pre-review, beside them; then the screenshots, the video
