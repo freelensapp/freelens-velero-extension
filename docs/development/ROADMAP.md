@@ -212,6 +212,18 @@ Done with the last, and so is the row of T5.2 with its two.
 Exit of M4: tests with a controlled clock and packaged UI scenarios establish
 the accuracy of the adherence signal, including its uncertainty states.
 
+Every row of the milestone is Done with the second pull request of T5.2. The
+review gate of the milestone, in
+[PROCESS.md](PROCESS.md#milestone-manual-review-gate), was held on 2026-11-08: the
+points it was to decide had been decided by the lead maintainer on 2026-10-26, as
+recommended, the amendment of REQ-166 and the precisions of REQ-170 and REQ-171
+confirmed, the last submission and the newest backup of the list of the Schedules
+giving their room under 1,200 pixels, and the reasons of D1 and D2 of SPEC-0015
+reworded. The fourth milestone is on main and its two specs are Verified: the lead
+maintainer approved the review of the milestone on 2026-11-08, on the screenshots of
+its views in both themes and at the sizes of the pre-review, and their tests run
+green in CI on main.
+
 ### M5 - Actions
 
 | Feature | Task | Spec | Status |
