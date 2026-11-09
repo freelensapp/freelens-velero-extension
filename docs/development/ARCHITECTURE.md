@@ -79,7 +79,9 @@ movement of `velero.io/v2alpha1`, the version that serves them. Every page and
 section is drawn inside an
 [error boundary](../../src/renderer/components/error-boundary.tsx) of the template,
 since the host has none around its drawer of the details. The main entry also
-exports its diagnostic modules, for the build test and the transport proof.
+exports its diagnostic modules, for the build test, the transport proof and FND-10,
+which downloads with them, resolves the route to a store and makes the words of its
+refusal inside the main process of the host.
 
 `pnpm build` is two runs of Vite 8, in library mode, as ESM: the renderer for the
 browser, with nothing external, where an import of a module of Node or of Electron
@@ -139,11 +141,9 @@ once, and share its caches; OSV-Scanner; and, on a pull request that changes
 synthetic data only. Renovate and the daily maintenance workflows of the
 organization (npm audit, npm dedupe, Biome migrate, Trunk upgrade) open their pull
 requests on branches named `automated/*`. A release is three workflows: the version
-workflow opens the pull request that sets the version, the tag workflow tags a
-version `X.Y.Z` or a prerelease `X.Y.Z-N` on the merge commit of that pull
-request, never on main as it is when the job runs, at its merge or, once it is
-merged, on the comment `/tag` of an author with write access to the repository
-who is an owner, a member of the organization or a collaborator, and
+workflow opens the pull request that sets the version, the tag workflow tags main
+when that pull request is merged, a version `X.Y.Z` or a prerelease `X.Y.Z-`
+followed by letters, digits, dots and hyphens, and
 the release workflow builds the bundle from the tag, publishes it to npm, on `next`
 for a version with a hyphen and on `latest` otherwise, and attaches the tarball,
 its checksums and its software bill of materials to the GitHub release, marked as
@@ -1246,7 +1246,10 @@ the route above says: the listener of one connection, the WebSocket of the clien
 and the relay between them went with the client of the extension in T0.7, and the
 rest of the decision stands. The main bundle, an ES module since T0.7, is
 exercised under Node with the stand-ins of the host of SPEC-0015, not inside
-Electron; FND-10 downloads an artifact with it inside the main process of the host.
+Electron; FND-10 downloads an artifact with it inside the main process of the host,
+over HTTP and over HTTPS, and resolves there the direct route to a store at a
+private address, refused without its allowance (REQ-289 and REQ-290 of
+[SPEC-0018](../specs/SPEC-0018-release-readiness.md)).
 Failure/expiry/404 and byte/deadline cases have contract-server
 coverage; not every negative is induced against the live controller/store.
 See [the evidence matrix](TESTING.md#t06-main-transport-proof). No feature gate or
