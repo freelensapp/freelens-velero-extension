@@ -818,8 +818,10 @@ gate 1.0.0-0 (D15). The evidence, by check:
 - The gates of the slice, on its head: the cases of the tags in
   `test/environment.test.ts`, `pnpm type:check`, `pnpm lint:check`,
   `pnpm knip:check`, and Trunk on the changed files, green. The unit run of the
-  head, `pnpm test:unit`: {RUN-TAG-UNIT}. The checks of the pull request:
-  {RUN-TAG-CI}. Its files reach no part of the views and no end to end run.
+  head, `pnpm test:unit`, on a second Linux machine: 134 files and 3,813 tests
+  passed, and the three measures. The checks of its pull request, green before
+  its merge: the unit tests, the check, Trunk, the integration test and
+  OSV-Scanner. Its files reach no part of the views and no end to end run.
 - The other amendments the table of the amendments lists for PROCESS.md,
   ARCHITECTURE.md and AGENTS.md, the release in two jobs, the six parts of the
   views and the way back, come with their own slices: this one restates the tag
