@@ -17,7 +17,11 @@ import type { BackupTemplate } from "../../src/common/backup-template.ts";
 import type { ScheduleChanged, ScheduleCreated, WriteConfirmAnswer } from "../../src/common/ipc.ts";
 import type { ScheduleWrapper } from "../../src/common/schedule-form.ts";
 
-type ProofContext = Pick<DownloadProofContext, "owner" | "run" | "kubeconfig" | "shell" | "assertCurrent">;
+// The kubeconfig of the session of the extension, the one of the operator of the README, and the one of the environment,
+// with which the proof reads, changes and removes what is not of the session.
+type ProofContext = Pick<DownloadProofContext, "owner" | "run" | "kubeconfig" | "shell" | "assertCurrent"> & {
+  environment: string;
+};
 
 // The phases a backup ends in, in the release.
 const ENDED = ["Completed", "PartiallyFailed", "Failed", "FailedValidation"];
@@ -45,10 +49,10 @@ interface Read {
   status?: { phase?: string; lastSkipped?: string; validationErrors?: string[] };
 }
 
-// The kubectl of the environment, for what the proof reads of the cluster beside the procedures, and for the removal
-// of the schedules it created, which the adapter of the extension cannot delete: the cluster of the environment
-// checked before each call, as every call of the environment checks it, and its cache in the private state, never in
-// the folder it runs in. A read of what is not there answers nothing.
+// The kubectl of the environment, with its kubeconfig, for what the proof reads of the cluster beside the procedures, for
+// the change another hand makes, and for the removal of the schedules it created, which the adapter of the extension
+// cannot delete: the cluster of the environment checked before each call, as every call of the environment checks it,
+// and its cache in the private state, never in the folder it runs in. A read of what is not there answers nothing.
 function kubectlOf(
   context: ProofContext,
   args: string[],
@@ -60,7 +64,7 @@ function kubectlOf(
   context.assertCurrent();
   const { status, stdout, stderr, error } = spawnSync(
     shell.kubectl,
-    ["--kubeconfig", context.kubeconfig, "--context", DEMO_CONTEXT, ...args],
+    ["--kubeconfig", context.environment, "--context", DEMO_CONTEXT, ...args],
     {
       encoding: "utf8",
       env: { ...shell.environment, KUBECACHEDIR: join(shell.cache, "kubectl") },
@@ -162,11 +166,24 @@ export async function runScheduleCreateProof(context: ProofContext): Promise<{
 }> {
   const main = await compiledDiagnostics();
   const host = await startProofHost(context.kubeconfig, DEMO_CONTEXT, context.shell);
+  const environmentHost = await startProofHost(context.environment, DEMO_CONTEXT, context.shell).catch(
+    async (error: unknown) => {
+      await host.close();
+      throw error;
+    },
+  );
   const api = proofAdapter(main, proofEntry(context.owner, context.kubeconfig), host, context.assertCurrent, {
     "app.kubernetes.io/managed-by": "freelens-velero-extension",
     [OWNER_LABEL]: context.owner,
     [FIXTURE_LABEL]: context.run,
   });
+  // The adapter of the teardown, with the identity of the environment: the backups of the schedules are removed so.
+  const teardown = proofAdapter(
+    main,
+    proofEntry(context.owner, context.environment),
+    environmentHost,
+    context.assertCurrent,
+  );
   const { cluster, call, enable, release } = proofProcedures(main, context, context.kubeconfig, host, {});
   const controller = new AbortController();
   const names = fixtureNames(context.run);
@@ -276,7 +293,7 @@ export async function runScheduleCreateProof(context: ProofContext): Promise<{
         JSON.stringify(spec.includedResources) === JSON.stringify(template.includedResources),
       `The backup ${backup.name} is not of the template of the schedule ${every}`,
     );
-    const removed = await removeBackup(context, api, backup, controller.signal);
+    const removed = await removeBackup(context, teardown, backup, controller.signal);
 
     requireCondition(removed, `The backup ${backup.name} of the schedule ${every} was not deleted by the server`);
     removedBackups.add(backup.uid);
@@ -326,7 +343,7 @@ export async function runScheduleCreateProof(context: ProofContext): Promise<{
           continue;
         }
         const target = { name: item.metadata.name, uid: item.metadata.uid };
-        const gone = await removeBackup(context, api, target, new AbortController().signal).catch(() => false);
+        const gone = await removeBackup(context, teardown, target, new AbortController().signal).catch(() => false);
 
         if (!gone) left.push(`The backup ${item.metadata.name} the proof made was not removed`);
       }
@@ -335,6 +352,7 @@ export async function runScheduleCreateProof(context: ProofContext): Promise<{
     controller.abort();
     release();
     await host.close();
+    await environmentHost.close();
   }
   if (failure !== undefined) {
     if (left.length) console.error(`${left.join(". ")}.`);
@@ -362,11 +380,19 @@ export async function runSchedulePatchProof(context: ProofContext): Promise<{
 }> {
   const main = await compiledDiagnostics();
   const host = await startProofHost(context.kubeconfig, DEMO_CONTEXT, context.shell);
-  const api = proofAdapter(main, proofEntry(context.owner, context.kubeconfig), host, context.assertCurrent, {
-    "app.kubernetes.io/managed-by": "freelens-velero-extension",
-    [OWNER_LABEL]: context.owner,
-    [FIXTURE_LABEL]: context.run,
-  });
+  const environmentHost = await startProofHost(context.environment, DEMO_CONTEXT, context.shell).catch(
+    async (error: unknown) => {
+      await host.close();
+      throw error;
+    },
+  );
+  // The adapter of the teardown, with the identity of the environment: the backups of the schedules are removed so.
+  const teardown = proofAdapter(
+    main,
+    proofEntry(context.owner, context.environment),
+    environmentHost,
+    context.assertCurrent,
+  );
   const { cluster, call, enable, release } = proofProcedures(main, context, context.kubeconfig, host, {});
   const names = fixtureNames(context.run);
   const template: BackupTemplate = {
@@ -547,7 +573,7 @@ export async function runSchedulePatchProof(context: ProofContext): Promise<{
     removeSchedule(context, skips, asked, began);
     // The backup of the resume ends, and is deleted by the server.
     const backup = { name: backups[0].metadata.name, uid: backups[0].metadata.uid };
-    const removed = await removeBackup(context, api, backup, new AbortController().signal);
+    const removed = await removeBackup(context, teardown, backup, new AbortController().signal);
 
     requireCondition(removed, `The backup ${backup.name} of the schedule ${submits} was not deleted by the server`);
     removedBackups.add(backup.uid);
@@ -589,7 +615,7 @@ export async function runSchedulePatchProof(context: ProofContext): Promise<{
           continue;
         }
         const target = { name: item.metadata.name, uid: item.metadata.uid };
-        const gone = await removeBackup(context, api, target, new AbortController().signal).catch(() => false);
+        const gone = await removeBackup(context, teardown, target, new AbortController().signal).catch(() => false);
 
         if (!gone) left.push(`The backup ${item.metadata.name} the proof made was not removed`);
       }
@@ -597,6 +623,7 @@ export async function runSchedulePatchProof(context: ProofContext): Promise<{
   } finally {
     release();
     await host.close();
+    await environmentHost.close();
   }
   if (failure !== undefined) {
     if (left.length) console.error(`${left.join(". ")}.`);
@@ -651,10 +678,11 @@ async function endOf(context: ProofContext, name: string): Promise<Read | undefi
 }
 
 // A backup of a schedule of the proof: waited for until it ended, since the release deletes no backup in progress,
-// and deleted through a DeleteBackupRequest the server processes.
+// and deleted through a DeleteBackupRequest the server processes, sent by the adapter of the teardown, with the identity
+// of the environment, and read until it is gone with the kubectl of the environment.
 async function removeBackup(
   context: ProofContext,
-  api: ReturnType<typeof proofAdapter>,
+  teardown: ReturnType<typeof proofAdapter>,
   backup: { name: string; uid: string },
   signal: AbortSignal,
 ): Promise<boolean> {
@@ -662,7 +690,7 @@ async function removeBackup(
   // The request as the deletion of the extension writes it, through the module the proof loaded once.
   const main = await compiledDiagnostics();
 
-  await api.createDeleteBackupRequest(
+  await teardown.createDeleteBackupRequest(
     DEMO_NAMESPACE,
     main.deleteRequestText(main.deleteRequestOf(DEMO_NAMESPACE, backup)),
     signal,

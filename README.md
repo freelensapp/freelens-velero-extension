@@ -63,6 +63,10 @@ the [roadmap](docs/development/ROADMAP.md).
 - **A Kubernetes cluster with Velero.** The extension reads the kinds of Velero
   through the API `velero.io/v1`, and the data uploads and the data downloads of
   the data movement through `velero.io/v2alpha1`.
+- **An identity with the permissions of [Permissions](#permissions).** The
+  extension works with the identity of the connection Freelens has to the
+  cluster: the role that reads the views is enough to look, and the role of the
+  actions to act.
 - **Nothing else in the cluster.** Nothing is installed in the cluster beyond
   Velero itself, and no credential of the object store is needed.
 - **Node.js**, only to build the extension from source: the package carries
@@ -113,6 +117,205 @@ have no page.
 | --- | --- |
 | `DataUpload` | Data Uploads |
 | `DataDownload` | Data Downloads |
+
+## Permissions
+
+The extension reaches the cluster with the identity of the connection Freelens
+has to it: it reads no kubeconfig and holds no credential of its own. What each
+feature asks of that identity is below, each verb one the extension sends. The
+discovery of the group `velero.io`, which Kubernetes allows every authenticated
+identity through the ClusterRole `system:discovery`, needs no rule of its own.
+
+<!-- markdownlint-disable MD013 -->
+
+| Feature | API group | Verbs on resources | Scope |
+| --- | --- | --- | --- |
+| The views | `velero.io` | `list` on `backups`, `restores`, `schedules`, `backupstoragelocations`, `volumesnapshotlocations`, `backuprepositories`, `podvolumebackups`, `podvolumerestores`, `datauploads` and `datadownloads` | The namespace of the installation |
+| Where the installations are, optional | `velero.io` | `list` on `backupstoragelocations` | The whole cluster |
+| The Log, Results, Resources and Volumes tabs | `velero.io` | `get` on `backups`, `restores` and `backupstoragelocations`; `create` and `get` on `downloadrequests` | The namespace of the installation |
+| A download through the cluster | core and `discovery.k8s.io` | `get` on `services` and `pods`, and `create` on `pods/portforward`, of the core group; `list` on `endpointslices` | The namespace of the Service of the store, or the one a host of one or two labels names, as below |
+| A certificate authority in a Secret, optional | core | `get` on `secrets`, for the Secret the storage location names | The namespace of the installation |
+| The version of the server | `velero.io` | `create` and `get` on `serverstatusrequests` | The namespace of the installation |
+| Back up now | `velero.io` | `get` on `schedules`; `create` on `backups`, and `get` on them, optional | The namespace of the installation |
+| Create backup | `velero.io` | `get` on `backupstoragelocations` and `volumesnapshotlocations`; `create` on `backups`, and `get` on them, optional | The namespace of the installation |
+| Create schedule | `velero.io` | `get` on `backupstoragelocations` and `volumesnapshotlocations`; `create` on `schedules`, and `get` on them, optional | The namespace of the installation |
+| Restore | `velero.io` | `get` on `backups`; `create` on `restores`, and `get` on them, optional | The namespace of the installation |
+| Pause and Resume | `velero.io` | `patch` on `schedules`, and `get` on them, optional | The namespace of the installation |
+| Delete backup | `velero.io` | `get` on `backups`; `create` on `deletebackuprequests`, and `get` and `list` on them, optional | The namespace of the installation |
+
+<!-- markdownlint-enable MD013 -->
+
+What is optional, and what goes without it:
+
+- `list` on `backupstoragelocations` in the whole cluster: without it the views
+  do not suggest where Velero is installed, and you name the namespace in the
+  target bar.
+- `get` and `list` on `deletebackuprequests`: without them the review of Delete
+  backup says that the other requests of the backup could not be read, and the
+  deletion is followed by the backup alone.
+- `get` on what an action creates or patches, for the reads after it:
+  `backups` after Back up now and Create backup, `schedules` after Create
+  schedule and after Pause and Resume, `restores` after Restore. Without it the
+  action is made all the same: its workspace does not follow the phase Velero
+  writes, a pause or a resume is shown as the answer of its patch, and a
+  creation or a patch whose answer was lost cannot be looked for.
+- `get` on `volumesnapshotlocations`: only for a template of Create backup or
+  Create schedule that names a volume snapshot location. Without it the write
+  of such a template ends at the read of the locations, and nothing is sent.
+- The rules of a download through the cluster: when the URL the server signs
+  names a Service of the cluster, in the namespace of that Service. A host of
+  one label or two, as `minio` or `minio.storage`, is looked for as a Service
+  first, whatever the store is: `get` on `services` is asked in the namespace
+  its second label names, or in the one of the installation when it has one
+  label, and a refusal ends the tab at the step of the Service. A store outside
+  the cluster named that way is reached with a longer name, or with `get` on
+  `services` where its second label points, through a ClusterRole when that
+  label is no namespace.
+- `get` on `pods/portforward`, which the roles below do not grant: kubectl 1.31
+  and later asks for a port-forward with `get` first, over a WebSocket, and
+  falls back to `create`. Grant `get` as well to keep the refused `get` out of
+  the audit log of the cluster.
+- `get` on `secrets`, which the roles below do not grant: only for a storage
+  location that names a Secret for its certificate authority, in
+  `spec.objectStorage.caCertRef`. Grant it for that Secret alone, by its name in
+  `resourceNames`. Without it the tabs of the operations of that location stop
+  at the step of the certificate, before anything is created.
+
+A family the identity may not list is shown as denied, never as empty, and the
+other families are shown all the same. A tab or an action the identity may not
+use ends at the step that is refused, with the words of what the identity may
+not do. Freelens itself asks for what its own views need beside this, among it
+the list of the namespaces, which three forms use: Create backup and Create
+schedule offer the namespaces to include or to exclude, and stop before its
+review a template that includes one labelled `velero.io/exclude-from-backup`,
+which Velero would fail; Restore offers the targets of its mapping and says
+whether a target is listed. Without that list the namespaces are typed, such a
+template is not stopped before Velero fails it, and the review of a restore says
+that whether a target is listed is not known.
+
+The two roles below are written for an installation in the namespace `velero`,
+the one `velero install` uses unless told otherwise: put the namespace of yours
+in its place. Each is a Role of that namespace, for what is namespaced, and a
+ClusterRole for the one list of the whole cluster. The test environment of this
+repository binds an identity to each and runs its checks with it.
+
+### The role that reads the views
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: freelens-velero-reader
+  namespace: velero
+rules:
+  - apiGroups: ["velero.io"]
+    resources:
+      - backups
+      - restores
+      - schedules
+      - backupstoragelocations
+      - volumesnapshotlocations
+      - backuprepositories
+      - podvolumebackups
+      - podvolumerestores
+      - datauploads
+      - datadownloads
+    verbs: ["list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: freelens-velero-reader
+rules:
+  - apiGroups: ["velero.io"]
+    resources:
+      - backupstoragelocations
+    verbs: ["list"]
+```
+
+### The role of the actions
+
+For the views, the tabs, a download through the cluster, the version of the
+server and every action:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: freelens-velero-operator
+  namespace: velero
+rules:
+  - apiGroups: ["velero.io"]
+    resources:
+      - backups
+      - restores
+    verbs: ["get", "list", "create"]
+  - apiGroups: ["velero.io"]
+    resources:
+      - schedules
+    verbs: ["get", "list", "create", "patch"]
+  - apiGroups: ["velero.io"]
+    resources:
+      - backupstoragelocations
+      - volumesnapshotlocations
+    verbs: ["get", "list"]
+  - apiGroups: ["velero.io"]
+    resources:
+      - backuprepositories
+      - podvolumebackups
+      - podvolumerestores
+      - datauploads
+      - datadownloads
+    verbs: ["list"]
+  - apiGroups: ["velero.io"]
+    resources:
+      - downloadrequests
+      - serverstatusrequests
+    verbs: ["create", "get"]
+  - apiGroups: ["velero.io"]
+    resources:
+      - deletebackuprequests
+    verbs: ["create", "get", "list"]
+  - apiGroups: [""]
+    resources:
+      - services
+      - pods
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources:
+      - pods/portforward
+    verbs: ["create"]
+  - apiGroups: ["discovery.k8s.io"]
+    resources:
+      - endpointslices
+    verbs: ["list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: freelens-velero-operator
+rules:
+  - apiGroups: ["velero.io"]
+    resources:
+      - backupstoragelocations
+    verbs: ["list"]
+```
+
+Bind each to the identity of the connection: its Role in the namespace of the
+installation, its ClusterRole in the whole cluster. For a user, with the role of
+the actions:
+
+<!-- markdownlint-disable MD013 -->
+
+```sh
+kubectl create rolebinding freelens-velero-operator --role=freelens-velero-operator --user=<user> --namespace=velero
+kubectl create clusterrolebinding freelens-velero-operator --clusterrole=freelens-velero-operator --user=<user>
+```
+
+<!-- markdownlint-enable MD013 -->
+
+`--group` and `--serviceaccount` bind a group or a service account the same
+way.
 
 ## Install
 

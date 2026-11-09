@@ -30,6 +30,7 @@ import { runBackupCreateProof, runBackupNowProof } from "./local-backup-now-proo
 import { runDeleteBackupProof } from "./local-delete-proof.mts";
 import { DIRECT_PROOF_ORIGIN, runDownloadProof, runIdentityProof, tlsProofResources } from "./local-download-proof.mts";
 import {
+  accountPath,
   assertFixtureNamespaceContents,
   assertFixtureOperationsRemoved,
   assertMaintenanceAhead,
@@ -59,6 +60,7 @@ import {
   REPOSITORY_LABELS,
   readerKubeconfig,
   readFixture,
+  readmeIdentity,
   recordSyncedBackups,
   removeFixtureBackup,
   removeRealSchedule,
@@ -2185,16 +2187,16 @@ function runDirectProof(input: {
   }
 }
 
-// Removes accounts of the namespace of the installation that were applied for a run, with their roles and their
-// bindings, by the identity the cluster gives of each, read as owned by that run: the binding first, then the
-// role and the account. One that is not in the journal, or not in the cluster any more, is passed over.
+// Removes accounts that were applied for a run, with their roles and their bindings, of a namespace or of the whole
+// cluster, by the identity the cluster gives of each, read as owned by that run: the bindings first, then the roles
+// and the account, as they are given in the other order. One that is not in the journal, or not in the cluster any
+// more, is passed over.
 function removeAccounts(accounts: KubeResource[]): void {
   for (const account of [...accounts].reverse()) {
+    const namespace = account.metadata.namespace;
     const entry = journal.resources.find(
       (resource) =>
-        resource.kind === account.kind &&
-        resource.name === account.metadata.name &&
-        resource.namespace === DEMO_NAMESPACE,
+        resource.kind === account.kind && resource.name === account.metadata.name && resource.namespace === namespace,
     );
 
     if (!entry) continue;
@@ -2209,15 +2211,7 @@ function removeAccounts(accounts: KubeResource[]): void {
         "An identity of a run belongs to a different fixture run",
       );
       kubectl(
-        [
-          "delete",
-          "--raw",
-          account.kind === "ServiceAccount"
-            ? `/api/v1/namespaces/${DEMO_NAMESPACE}/serviceaccounts/${entry.name}`
-            : `/apis/rbac.authorization.k8s.io/v1/namespaces/${DEMO_NAMESPACE}/${account.kind === "Role" ? "roles" : "rolebindings"}/${entry.name}`,
-          "-f",
-          "-",
-        ],
+        ["delete", "--raw", accountPath(account.kind, entry.name, namespace), "-f", "-"],
         JSON.stringify({ apiVersion: "v1", kind: "DeleteOptions", preconditions: { uid: found.metadata.uid } }),
         undefined,
         false,
@@ -2240,6 +2234,10 @@ async function runTransportProof(): Promise<void> {
   const originals: KubeResource[] = [];
   const secrets: KubeResource[] = [];
   const accounts: KubeResource[] = [];
+  // The kubeconfig of the operator of the README, in the private state while the proofs run.
+  let operatorFile: string | undefined;
+  // Why the identities of the proof were not all removed, when they were not: thrown once the rest of the cleanup ran.
+  let identitiesLeft: unknown;
   let certificates: Awaited<ReturnType<typeof createTlsFixture>> | undefined;
   let requestCleanupFailed = false;
   const report: Record<string, unknown> = { date: new Date().toISOString(), result: "running", cleanup: "pending" };
@@ -2277,10 +2275,25 @@ async function runTransportProof(): Promise<void> {
     ) as { items: KubeResource[] };
 
     requireCondition(pods.items.length === 1 && pods.items[0].metadata.uid, "Expected one owned storage pod");
+    // The operator of the README, which holds the role of the actions (REQ-288 of SPEC-0018). The session of the
+    // extension runs with its kubeconfig in the proof of the download through the cluster, with its request of the
+    // version of the server, and in the proofs of the actions; what those proofs place, read and remove beside the
+    // session, which that role does not allow, they do with the kubeconfig of the environment. Of this run, with a
+    // credential that lasts as long as the proofs may, and gone with the run.
+    const operator = readmeIdentity("operator", journal.owner, active.id, DEMO_NAMESPACE);
+    const operatorKubeconfig = join(STATE, `readme-operator-${active.id}.json`);
+
+    for (const resource of operator) {
+      accounts.push(resource);
+      applyOwned(resource);
+    }
+    operatorFile = operatorKubeconfig;
+    writeReaderKubeconfig(operatorKubeconfig, DEMO_NAMESPACE, "2h", operator[0].metadata.name);
     const proofContext = {
       owner: journal.owner,
       run: active.id,
-      kubeconfig: CONFIG,
+      kubeconfig: operatorKubeconfig,
+      environment: CONFIG,
       shell: proofShell(),
       pod: { name: pods.items[0].metadata.name, uid: pods.items[0].metadata.uid },
       assertCurrent: verifyTarget,
@@ -2419,8 +2432,11 @@ async function runTransportProof(): Promise<void> {
       readyPods.items.length === 1 && readyPods.items[0].metadata.uid,
       "TLS storage pod identity is ambiguous",
     );
+    // The modes over TLS run with the kubeconfig of the environment, as before the operator: the authority of the
+    // second is read from a Secret, of which the role of the actions grants no read.
     const tlsContext = {
       ...proofContext,
+      kubeconfig: CONFIG,
       pod: { name: readyPods.items[0].metadata.name, uid: readyPods.items[0].metadata.uid },
       origin: STORAGE_ENDPOINT.replace("http:", "https:").replace(":8333", ":8443"),
       port: 8443,
@@ -2458,12 +2474,14 @@ async function runTransportProof(): Promise<void> {
       referencedCa,
       direct,
       identities: { ...refusedIdentities, certificate },
+      // The identity of the session of the proof over HTTP and of the proofs of the actions.
+      session: "operator",
       directRuntime: DIRECT_PROOF_IMAGE,
       result: "artifacts-passed",
     });
     writeFileSync(join(STATE, "transport-proof.json"), JSON.stringify(report), { mode: 0o600 });
     console.log(
-      "PASS: compiled main found its route and downloaded 16 real artifacts through direct HTTPS, once the private address was allowed, and HTTP/HTTPS Kubernetes tunnels, with inline/referenced CA and negative signature/Host/CA checks; the store had no log for a backup and a restore that failed their validation, and no request was created for a restore without a backup; three identities were refused, at the creation, at the Service and the certificate, and at the port-forward, and the one with the documented permissions downloaded; Back up now asked a backup of the real schedule through the compiled main process, which the server Completed with the labels of its text and deleted through a DeleteBackupRequest, and so was a backup of the form, Completed with the fields of its text the server keeps as sent; a schedule of the form of every two minutes was Enabled at its creation with no backup, and had exactly one after its first instant, Completed with the template of the schedule, which the server deleted, one the controller refused was FailedValidation with the words the views say, and one paused was left unread by the controller, with no backup of the three left; a restore of the backup of the run, asked with the name of the backup typed, Completed into the namespace of its mapping with every ConfigMap of the run, what each holds and the labels of the restore, and was removed with that namespace; two schedules paused through an instant submitted no backup, and resumed, the one with skip immediately false submitted its backup at once and the other none, with the skip Velero writes, and a resume whose schedule changed since its review was refused with a 422 the metrics of the API server counted once, said as a conflict; a backup of the run was deleted through the DeleteBackupRequest of its review, with its name typed, and was gone with its request, and the request to delete a backup of a storage location that is not there was refused with the one error of a refusal, the backup FailedValidation as it was.",
+      "PASS: the operator of the README, with the role of the actions alone, ran the session of the extension in the proof over HTTP, with its request of the version of the server, and in every proof of an action; compiled main found its route and downloaded 16 real artifacts through direct HTTPS, once the private address was allowed, and HTTP/HTTPS Kubernetes tunnels, with inline/referenced CA and negative signature/Host/CA checks; the store had no log for a backup and a restore that failed their validation, and no request was created for a restore without a backup; three identities were refused, at the creation, at the Service and the certificate, and at the port-forward, and the one with the documented permissions downloaded; Back up now asked a backup of the real schedule through the compiled main process, which the server Completed with the labels of its text and deleted through a DeleteBackupRequest, and so was a backup of the form, Completed with the fields of its text the server keeps as sent; a schedule of the form of every two minutes was Enabled at its creation with no backup, and had exactly one after its first instant, Completed with the template of the schedule, which the server deleted, one the controller refused was FailedValidation with the words the views say, and one paused was left unread by the controller, with no backup of the three left; a restore of the backup of the run, asked with the name of the backup typed, Completed into the namespace of its mapping with every ConfigMap of the run, what each holds and the labels of the restore, and was removed with that namespace; two schedules paused through an instant submitted no backup, and resumed, the one with skip immediately false submitted its backup at once and the other none, with the skip Velero writes, and a resume whose schedule changed since its review was refused with a 422 the metrics of the API server counted once, said as a conflict; a backup of the run was deleted through the DeleteBackupRequest of its review, with its name typed, and was gone with its request, and the request to delete a backup of a storage location that is not there was refused with the one error of a refusal, the backup FailedValidation as it was.",
     );
   } catch (error) {
     // A failure of a proof is said before the cleanup below, whose own failure would otherwise be the one thrown.
@@ -2541,6 +2559,18 @@ async function runTransportProof(): Promise<void> {
     }
     throw error;
   } finally {
+    // The identities of the proof go first, since they depend on nothing of the store, whatever becomes of it after:
+    // each by the identity the cluster gives of it, read as owned by this run, the operator of the README among them,
+    // and its kubeconfig with them. A removal that fails is said at once, and stops nothing of the rest of the cleanup.
+    try {
+      if (operatorFile) rmSync(operatorFile, { force: true });
+      removeAccounts(accounts);
+    } catch (error) {
+      identitiesLeft = error;
+      console.error(
+        `The identities of the proof were not all removed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
     // The location goes back once the store serves again, as above.
     for (const resource of originals.filter((item) => item.kind !== "BackupStorageLocation")) applyOwned(resource);
     if (originals.length) {
@@ -2579,8 +2609,6 @@ async function runTransportProof(): Promise<void> {
       journal.resources = journal.resources.filter((resource) => resource !== entry);
       save();
     }
-    // The identities of the proof go by the identity the cluster gives of each, read as owned by this run.
-    removeAccounts(accounts);
     await certificates?.dispose();
 
     if (journal.fixtureRun) {
@@ -2658,6 +2686,8 @@ async function runTransportProof(): Promise<void> {
     }
     if (journal.fixtureRun) await cleanupFixtures();
   }
+  // Reached when every proof passed: an identity left in the cluster fails the run once the rest was cleaned.
+  if (identitiesLeft !== undefined) throw identitiesLeft;
   requireCondition(
     !requestCleanupFailed,
     "Diagnostic request cleanup was incomplete; private request identities retained",
@@ -3286,6 +3316,11 @@ async function runViews(): Promise<void> {
     runs: join(STATE, `views-exec-plugin-${run}.runs`),
   };
   const ofThePlugin = viewIdentityOfAnExecPlugin(journal.owner, run);
+  // The reader of the README, which holds the role that reads the views (REQ-288 of SPEC-0018), as an operator would
+  // bind it: an account of the installation of the views with the Role of that namespace, and the ClusterRole that
+  // lists the storage locations of the whole cluster, made for the run and gone with it.
+  const readmeReaderFile = join(STATE, `readme-reader-${run}.json`);
+  const readmeReader = readmeIdentity("reader", journal.owner, run, names.views);
   let status: number | null;
 
   // What is written is removed whatever happens after it, the second file when the first was written
@@ -3297,6 +3332,8 @@ async function runViews(): Promise<void> {
     writeReaderKubeconfig(forwardlessFile, DEMO_NAMESPACE, "2h", forwardless[0].metadata.name);
     for (const resource of ofThePlugin) applyOwned(resource);
     writeExecPluginKubeconfig(pluginFile, plugin, ofThePlugin[0].metadata.name, "2h");
+    for (const resource of readmeReader) applyOwned(resource);
+    writeReaderKubeconfig(readmeReaderFile, names.views, "2h", readmeReader[0].metadata.name);
     // The suites start the application with their environment: what they need of this environment is named
     // here, and the home is the one of the caller, where its toolchain is.
     const environment = childEnvironment(process.env, {
@@ -3311,6 +3348,7 @@ async function runViews(): Promise<void> {
       E2E_NO_PORT_FORWARD_KUBECONFIG: forwardlessFile,
       E2E_EXEC_PLUGIN_KUBECONFIG: pluginFile,
       E2E_EXEC_PLUGIN_RUNS: plugin.runs,
+      E2E_README_READER_KUBECONFIG: readmeReaderFile,
       E2E_KUBECTL: KUBECTL,
       E2E_CLUSTER_NAME: DEMO_CLUSTER,
       E2E_KUBE_CONTEXT: DEMO_CONTEXT,
@@ -3337,9 +3375,17 @@ async function runViews(): Promise<void> {
       server?.stop();
     }
   } finally {
-    for (const file of [readerFile, secondFile, forwardlessFile, pluginFile, plugin.token, plugin.runs])
+    for (const file of [
+      readerFile,
+      secondFile,
+      forwardlessFile,
+      pluginFile,
+      plugin.token,
+      plugin.runs,
+      readmeReaderFile,
+    ])
       rmSync(file, { force: true });
-    removeAccounts([...forwardless, ...ofThePlugin]);
+    removeAccounts([...forwardless, ...ofThePlugin, ...readmeReader]);
   }
   verifyTarget();
   requireCondition(status === 0, `The ${named} did not pass`);

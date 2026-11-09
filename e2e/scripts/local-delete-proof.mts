@@ -16,7 +16,11 @@ import { DEMO_CONTEXT, DEMO_NAMESPACE, OWNER_LABEL, requireCondition } from "./l
 
 import type { BackupDeleted, WriteConfirmAnswer } from "../../src/common/ipc.ts";
 
-type ProofContext = Pick<DownloadProofContext, "owner" | "run" | "kubeconfig" | "shell" | "assertCurrent">;
+// The kubeconfig of the session of the extension, the one of the operator of the README, and the one of the environment,
+// with which the proof makes its backups, reads and removes what is not of the session.
+type ProofContext = Pick<DownloadProofContext, "owner" | "run" | "kubeconfig" | "shell" | "assertCurrent"> & {
+  environment: string;
+};
 
 // The phases a backup ends in, in the release.
 const ENDED = ["Completed", "PartiallyFailed", "Failed", "FailedValidation"];
@@ -44,9 +48,9 @@ interface Read {
   status?: { phase?: string; errors?: string[]; validationErrors?: string[]; failureReason?: string };
 }
 
-// The kubectl of the environment, for what the proof reads of the cluster beside the procedures, for the backups it
-// makes, and for the removal of what Velero did not delete: the cluster of the environment checked before each call,
-// and its cache in the private state.
+// The kubectl of the environment, with its kubeconfig, for what the proof reads of the cluster beside the procedures,
+// for the backups it makes, and for the removal of what Velero did not delete: the cluster of the environment checked
+// before each call, and its cache in the private state.
 function kubectl(
   context: ProofContext,
   args: string[],
@@ -58,7 +62,7 @@ function kubectl(
   context.assertCurrent();
   const { status, stdout, stderr, error } = spawnSync(
     shell.kubectl,
-    ["--kubeconfig", context.kubeconfig, "--context", DEMO_CONTEXT, ...args],
+    ["--kubeconfig", context.environment, "--context", DEMO_CONTEXT, ...args],
     {
       encoding: "utf8",
       env: { ...shell.environment, KUBECACHEDIR: join(shell.cache, "kubectl") },
@@ -213,10 +217,23 @@ export async function runDeleteBackupProof(
 ): Promise<{ completed: string; refused: string; removed: boolean }> {
   const main = await compiledDiagnostics();
   const host = await startProofHost(context.kubeconfig, DEMO_CONTEXT, context.shell);
+  const environmentHost = await startProofHost(context.environment, DEMO_CONTEXT, context.shell).catch(
+    async (error: unknown) => {
+      await host.close();
+      throw error;
+    },
+  );
   const api = proofAdapter(main, proofEntry(context.owner, context.kubeconfig), host, context.assertCurrent, {
     [OWNER_LABEL]: context.owner,
     [FIXTURE_LABEL]: context.run,
   });
+  // The adapter of the teardown, with the identity of the environment: a backup the run did not delete is removed so.
+  const teardown = proofAdapter(
+    main,
+    proofEntry(context.owner, context.environment),
+    environmentHost,
+    context.assertCurrent,
+  );
   const { cluster, call, enable, release } = proofProcedures(main, context, context.kubeconfig, host, {});
   const controller = new AbortController();
   const deletedName = `proof-delete-${context.run}`;
@@ -334,13 +351,14 @@ export async function runDeleteBackupProof(
     return { deleted, took: answered - asked, goneBefore: goneAt === undefined ? undefined : answered - goneAt };
   };
   // A backup of the default location deleted through the request of the action, once it ended, since the release
-  // deletes no backup in progress, and is Deleting while it deletes one: whether the server deleted it in its time.
+  // deletes no backup in progress, and is Deleting while it deletes one: whether the server deleted it in its time. The
+  // request is sent by the adapter of the teardown, with the identity of the environment.
   const deleteThroughServer = async (backup: { name: string; uid: string }): Promise<boolean> => {
     const ended = await endedOf(context, backup.name);
 
     if (!ended || ended.metadata.uid !== backup.uid) return true;
     if (!ENDED.includes(ended.status?.phase ?? "") && ended.status?.phase !== "Deleting") return false;
-    await api.createDeleteBackupRequest(
+    await teardown.createDeleteBackupRequest(
       DEMO_NAMESPACE,
       main.deleteRequestText(main.deleteRequestOf(DEMO_NAMESPACE, backup)),
       controller.signal,
@@ -496,6 +514,7 @@ export async function runDeleteBackupProof(
     controller.abort();
     release();
     await host.close();
+    await environmentHost.close();
   }
   if (failure !== undefined) {
     if (left.length) console.error(`${left.join(". ")}.`);

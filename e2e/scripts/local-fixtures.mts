@@ -4207,6 +4207,208 @@ export function viewIdentityOfAnExecPlugin(owner: string, run: string): KubeReso
   ];
 }
 
+// The two roles of the README (REQ-297 of SPEC-0018), each held by an identity of the test environment (REQ-288): the
+// reader, for the views alone, and the operator, for the views, the tabs, a download through the cluster, the version of
+// the server and every action. Each is a Role in the namespace of the installation, for what is namespaced, and a
+// ClusterRole for the one read of the whole cluster, the storage locations, whose namespaces are where an installation
+// may be. No verb is one the code does not send: the views list, and read nothing by its name; the main process reads by
+// name, creates, patches the schedules, lists two kinds by a label, and opens a port-forward through the kubectl of the
+// host. The README writes the roles as `rolesAsWritten` renders them, and a unit case keeps the two equal (DOC-03).
+export const README_READER = "velero-reader";
+export const README_OPERATOR = "velero-operator";
+export type ReadmeRole = "reader" | "operator";
+
+export interface PolicyRule {
+  apiGroups: string[];
+  resources: string[];
+  verbs: string[];
+}
+
+// The families the views list in the namespace of an installation, one request each (`src/common/paths.ts`).
+const LISTED_FAMILIES = [
+  "backups",
+  "restores",
+  "schedules",
+  "backupstoragelocations",
+  "volumesnapshotlocations",
+  "backuprepositories",
+  "podvolumebackups",
+  "podvolumerestores",
+  "datauploads",
+  "datadownloads",
+];
+
+export const ROLE_RULES: Readonly<Record<ReadmeRole, readonly PolicyRule[]>> = {
+  reader: [{ apiGroups: ["velero.io"], resources: LISTED_FAMILIES, verbs: ["list"] }],
+  operator: [
+    // Listed by the views; read by name by the tabs, the actions and the reads after a creation; created by the actions.
+    { apiGroups: ["velero.io"], resources: ["backups", "restores"], verbs: ["get", "list", "create"] },
+    // The same, and patched by Pause and Resume.
+    { apiGroups: ["velero.io"], resources: ["schedules"], verbs: ["get", "list", "create", "patch"] },
+    // The location of a backup a tab reads, and the locations a template names.
+    {
+      apiGroups: ["velero.io"],
+      resources: ["backupstoragelocations", "volumesnapshotlocations"],
+      verbs: ["get", "list"],
+    },
+    {
+      apiGroups: ["velero.io"],
+      resources: ["backuprepositories", "podvolumebackups", "podvolumerestores", "datauploads", "datadownloads"],
+      verbs: ["list"],
+    },
+    // The requests of the tabs and of the version of the server, created and read until the server answers.
+    { apiGroups: ["velero.io"], resources: ["downloadrequests", "serverstatusrequests"], verbs: ["create", "get"] },
+    // Delete backup: the request created, read by its name, and the requests of the backup listed by its labels.
+    { apiGroups: ["velero.io"], resources: ["deletebackuprequests"], verbs: ["create", "get", "list"] },
+    // A download through the cluster: the Service of the store, its Pod, the port-forward of the kubectl of the host to
+    // that Pod, and the endpoint slices of the Service.
+    { apiGroups: [""], resources: ["services", "pods"], verbs: ["get"] },
+    { apiGroups: [""], resources: ["pods/portforward"], verbs: ["create"] },
+    { apiGroups: ["discovery.k8s.io"], resources: ["endpointslices"], verbs: ["list"] },
+  ],
+};
+
+// What both roles read in the whole cluster: the storage locations, whose namespaces the views suggest.
+export const CLUSTER_RULES: readonly PolicyRule[] = [
+  { apiGroups: ["velero.io"], resources: ["backupstoragelocations"], verbs: ["list"] },
+];
+
+// An identity of the test environment that holds a role of the README, bound as an operator would bind it: an account of
+// the namespace of the installation, the Role of that namespace and its binding, and the ClusterRole and its binding,
+// all of this run, so that the runner removes each by the identity the cluster gives it. The ClusterRole and its binding
+// are of the whole cluster, and their names carry the run.
+export function readmeIdentity(role: ReadmeRole, owner: string, run: string, namespace: string): KubeResource[] {
+  requireCondition(owner, "Fixture ownership is required");
+  fixtureNames(run);
+  requireCondition(role === "reader" || role === "operator", "A role of the README is the reader or the operator");
+  requireCondition(
+    typeof namespace === "string" && namespace.length <= 63 && /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(namespace),
+    "An identity of a role of the README is of the namespace of an installation",
+  );
+  const name = `${role === "reader" ? README_READER : README_OPERATOR}-${run}`;
+  const labels = { [OWNER_LABEL]: owner, [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" };
+  const rbac = "rbac.authorization.k8s.io";
+  const subject = { kind: "ServiceAccount", name, namespace };
+
+  return [
+    {
+      apiVersion: "v1",
+      kind: "ServiceAccount",
+      metadata: { name, namespace, labels: { ...labels } },
+      automountServiceAccountToken: false,
+    },
+    {
+      apiVersion: `${rbac}/v1`,
+      kind: "Role",
+      metadata: { name, namespace, labels: { ...labels } },
+      rules: structuredClone(ROLE_RULES[role]),
+    },
+    {
+      apiVersion: `${rbac}/v1`,
+      kind: "RoleBinding",
+      metadata: { name, namespace, labels: { ...labels } },
+      roleRef: { apiGroup: rbac, kind: "Role", name },
+      subjects: [{ ...subject }],
+    },
+    {
+      apiVersion: `${rbac}/v1`,
+      kind: "ClusterRole",
+      metadata: { name, labels: { ...labels } },
+      rules: structuredClone(CLUSTER_RULES),
+    },
+    {
+      apiVersion: `${rbac}/v1`,
+      kind: "ClusterRoleBinding",
+      metadata: { name, labels: { ...labels } },
+      roleRef: { apiGroup: rbac, kind: "ClusterRole", name },
+      subjects: [{ ...subject }],
+    },
+  ];
+}
+
+// The path an account, a role or a binding a run applied is removed by: a ServiceAccount, a Role and a RoleBinding of the
+// namespace they name, a ClusterRole and a ClusterRoleBinding of the whole cluster, and nothing else.
+export function accountPath(kind: string, name: string, namespace: string | undefined): string {
+  const rbac = "/apis/rbac.authorization.k8s.io/v1";
+  const word = /^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$/;
+
+  requireCondition(typeof name === "string" && word.test(name), `The ${kind} of a run has a name`);
+  if (kind === "ClusterRole" || kind === "ClusterRoleBinding") {
+    requireCondition(namespace === undefined, `The ${kind} ${name} is of the whole cluster, and of no namespace`);
+    return `${rbac}/${kind === "ClusterRole" ? "clusterroles" : "clusterrolebindings"}/${name}`;
+  }
+  requireCondition(
+    typeof namespace === "string" && word.test(namespace),
+    `The ${kind} ${name} of a run names its namespace`,
+  );
+  if (kind === "ServiceAccount") return `/api/v1/namespaces/${namespace}/serviceaccounts/${name}`;
+  requireCondition(
+    kind === "Role" || kind === "RoleBinding",
+    `The ${kind} ${name} is not an account, a role or a binding`,
+  );
+  return `${rbac}/namespaces/${namespace}/${kind === "Role" ? "roles" : "rolebindings"}/${name}`;
+}
+
+// A word of a role as YAML takes it unquoted: a group, a resource or a verb.
+const PLAIN = /^[a-z][a-z0-9./-]*$/;
+
+// The roles of an identity as the README writes them (DOC-03 of SPEC-0018): its Role, in the namespace the README names,
+// then `---` and its ClusterRole, each under the name the README gives the role, with the rules the identity holds, in
+// their order. The groups and the verbs of a rule are a list on one line, and its resources one to a line. Written here
+// and compared as text: no parser of YAML stands between the README and the identities.
+export function rolesAsWritten(identity: KubeResource[], name: string, namespace: string): string {
+  const one = (kind: "Role" | "ClusterRole") => {
+    const found = identity.filter((resource) => resource.kind === kind);
+
+    requireCondition(found.length === 1, `An identity of a role of the README holds one ${kind}`);
+    return found[0] as KubeResource & { rules?: PolicyRule[] };
+  };
+  const listed = (values: string[], groups = false) => {
+    requireCondition(
+      Array.isArray(values) &&
+        values.length > 0 &&
+        values.every((value) => (groups && value === "") || PLAIN.test(value)),
+      "A rule of a role of the README names its groups, its resources and its verbs by plain words",
+    );
+    return `[${values.map((value) => JSON.stringify(value)).join(", ")}]`;
+  };
+  const rules = (written: PolicyRule[] | undefined) => {
+    requireCondition(Array.isArray(written) && written.length > 0, "A role of the README has rules");
+    return written.flatMap((rule) => {
+      const groups = listed(rule.apiGroups, true);
+      const verbs = listed(rule.verbs);
+
+      listed(rule.resources);
+      return [
+        `  - apiGroups: ${groups}`,
+        "    resources:",
+        ...rule.resources.map((resource) => `      - ${resource}`),
+        `    verbs: ${verbs}`,
+      ];
+    });
+  };
+  const role = one("Role");
+  const cluster = one("ClusterRole");
+
+  requireCondition(PLAIN.test(name) && PLAIN.test(namespace), "The README names a role and a namespace by plain words");
+  return [
+    `apiVersion: ${role.apiVersion}`,
+    "kind: Role",
+    "metadata:",
+    `  name: ${name}`,
+    `  namespace: ${namespace}`,
+    "rules:",
+    ...rules(role.rules),
+    "---",
+    `apiVersion: ${cluster.apiVersion}`,
+    "kind: ClusterRole",
+    "metadata:",
+    `  name: ${name}`,
+    "rules:",
+    ...rules(cluster.rules),
+  ].join("\n");
+}
+
 // What the release writes when it refuses each of them, as the controller of each says it.
 export const REFUSALS = {
   backup: "encountered labelSelector as well as orLabelSelectors in backup spec, only one can be specified",

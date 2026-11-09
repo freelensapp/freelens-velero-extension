@@ -186,6 +186,14 @@ export function secondReaderKubeconfigPath(): string {
 }
 
 /**
+ * The kubeconfig of the reader of the README: the identity that holds the role of the README that reads the views, its
+ * Role in the installation of the views and its ClusterRole, which lists the storage locations of the whole cluster.
+ */
+export function readmeReaderKubeconfigPath(): string {
+  return required("E2E_README_READER_KUBECONFIG");
+}
+
+/**
  * The kubeconfig of the identity of the installation that reads what a download reads, creates its request
  * and reads the route to the store, and has neither verb of the port-forward.
  */
