@@ -484,12 +484,12 @@ export const LineList = React.forwardRef<LineListHandle, LineListProps>(function
           </span>
         </p>
       ) : null}
-      {/* biome-ignore lint/a11y/useSemanticElements: react-window draws the part that scrolls between this and its rows, with an element of its own */}
+      {/* biome-ignore lint/a11y/useSemanticElements: a group of the lines and of the keys that move among them, which is no field of a form */}
       <div
         ref={root}
-        role="list"
+        role="group"
         aria-label={name}
-        // biome-ignore lint/a11y/noNoninteractiveTabindex: the list is what the Tab key reaches, and the keys that move among its lines are its own
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: the group is what the Tab key reaches, and the keys that move among its lines are its own
         tabIndex={0}
         className={styles.linesList}
         data-testid={`${id}-text`}
@@ -501,13 +501,13 @@ export const LineList = React.forwardRef<LineListHandle, LineListProps>(function
         onFocus={onFocus}
       >
         <RowMarksContext.Provider value={marks}>
-          {/* The part that scrolls is no list of its own, and no stop of the Tab key: the list is the element
-              around it, which has the name and the keys, and the rows are its items. */}
-          {/* biome-ignore lint/a11y/useValidAriaRole: the role of a list that react-window writes on the part that scrolls is taken away, and no role is written in its place */}
+          {/* The part that scrolls is the list, with the role react-window writes on it, and the rows are its items,
+              with nothing between them; it is no stop of the Tab key, which the group around it is, with the name
+              and the keys. A part focusable with no role between a list and its items is a child a list may not
+              hold (WCAG 2.1, 1.3.1, as the rule of axe-core for the children of a role reads it). */}
           <List
             listRef={setApi}
             className={styles.linesRows}
-            role={undefined}
             tabIndex={-1}
             data-testid={`${id}-rows`}
             rowComponent={LineRow}

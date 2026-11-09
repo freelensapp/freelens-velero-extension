@@ -77,7 +77,7 @@ afterEach(() => {
 });
 
 describe("a text shown as its lines", () => {
-  it("shows the lines with their numbers under the note, as a list that has a name, and reads no level", () => {
+  it("shows the lines with their numbers under the note, in a group that has a name around the list of the lines, and reads no level", () => {
     render(
       <ArtifactLines
         id="lines"
@@ -97,7 +97,12 @@ describe("a text shown as its lines", () => {
       "fourth",
     ]);
     expect(rows().map((element) => element.querySelector("span")?.textContent)).toEqual(["1", "2", "3", "4"]);
-    expect([list().getAttribute("role"), list().getAttribute("aria-label")]).toEqual(["list", "The lines of the text"]);
+    // The group is the stop of the Tab key, with the name and the keys; the part that scrolls is the list, and the rows
+    // are its items, with nothing between them.
+    expect([list().getAttribute("role"), list().getAttribute("aria-label")]).toEqual([
+      "group",
+      "The lines of the text",
+    ]);
     expect(
       rows().map((element) => [
         element.getAttribute("role"),
@@ -494,13 +499,15 @@ describe("the choice to wrap the lines", () => {
     expect(list().dataset.columns).toBe("49");
   });
 
-  it("takes the part that scrolls out of the order of the Tab key and of the roles: the list is the stop, with its name and its keys", () => {
+  it("takes the part that scrolls out of the order of the Tab key: the group around it is the stop, with its name and its keys, and the part that scrolls is the list of the rows", () => {
     render(<ArtifactLines id="lines" text={text} />);
     // A part that scrolls and holds nothing the Tab key reaches would be a stop of its own, with no name.
     expect(scroller().getAttribute("tabindex")).toBe("-1");
     expect(list().tabIndex).toBe(0);
-    // It is no list of its own between the list and its items: react-window writes no role on it.
-    expect(scroller().getAttribute("role")).toBeNull();
+    // It is the list, with the role react-window writes on it, and the rows are its items with nothing between them: a
+    // part focusable with no role between a list and its items is a child a list may not hold.
+    expect([list().getAttribute("role"), scroller().getAttribute("role")]).toEqual(["group", "list"]);
+    expect(list().querySelectorAll("[role=list]")).toHaveLength(1);
     expect(scroller().parentElement).toBe(list());
     expect(rows().every((element) => element.parentElement === scroller())).toBe(true);
   });

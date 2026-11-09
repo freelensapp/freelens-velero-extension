@@ -102,7 +102,15 @@ describe("the log of an operation", () => {
     expect(numbers()).toEqual([1, 2, 3, 4, 5, 6]);
     expect([1, 2, 3, 4, 5, 6].map((number) => shown(number).textContent)).toEqual(TEXT.split("\n"));
     expect(rows().map((element) => element.querySelector("span")?.textContent)).toEqual(["1", "2", "3", "4", "5", "6"]);
-    expect([list().getAttribute("role"), list().getAttribute("aria-label")]).toEqual(["list", "The lines of the log"]);
+    // The group is the stop of the Tab key, with the name and the keys; the part that scrolls is the list, and the rows
+    // are its items, with nothing between them.
+    expect([list().getAttribute("role"), list().getAttribute("aria-label")]).toEqual(["group", "The lines of the log"]);
+    expect([
+      screen.getByTestId("log-rows").getAttribute("role"),
+      screen.getByTestId("log-rows").tabIndex,
+      list().querySelectorAll("[role=list]").length,
+    ]).toEqual(["list", -1, 1]);
+    expect(rows().every((row) => row.parentElement === screen.getByTestId("log-rows"))).toBe(true);
     // The level of a warning is written warning; a message that says level=error is of the level of its
     // entry; a line without a level is of none of the four.
     expect(levels()).toEqual({

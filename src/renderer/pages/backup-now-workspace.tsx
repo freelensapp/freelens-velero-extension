@@ -6,7 +6,7 @@ import { BACKUP_NOW_VIEW_WORDS } from "../../common/backup-now-words";
 import { escapeOfField } from "../components/artifact-viewer";
 import styles from "../components/views.module.css";
 import { focusFirst } from "../components/views-frame";
-import { Fact, NotShown, ViewLink, Workspace } from "../components/workspace";
+import { Fact, NotShown, ReviewText, ViewLink, Workspace } from "../components/workspace";
 import { replaceView } from "../navigation";
 
 import type { ScheduleResource } from "../../common/types";
@@ -391,14 +391,9 @@ function Review({ installation, schedule, name, text, replaced, cluster, context
             ))}
           </ul>
         </div>
-        <div className={styles.reviewPart}>
-          <h4 className={styles.factName}>{BACKUP_NOW_VIEW_WORDS.text}</h4>
-          {/* A text longer than its room scrolls, and Chromium gives the keyboard a scroller with nothing to focus in
-              it. */}
-          <pre className={styles.reviewText} data-testid={`${ID}-text`}>
-            {text}
-          </pre>
-        </div>
+        <ReviewText id={ID} title={BACKUP_NOW_VIEW_WORDS.text}>
+          {text}
+        </ReviewText>
       </div>
       <div className={styles.writeActions}>
         <Button primary data-testid={`${ID}-create`} onClick={onCreate}>
