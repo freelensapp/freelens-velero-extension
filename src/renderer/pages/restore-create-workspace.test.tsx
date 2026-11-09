@@ -394,6 +394,9 @@ describe("restore, from the view of a backup", () => {
     await writesOn();
     await reviewed(main);
     expect(part("text").textContent).toBe(textOf({ clusterResources: "none", existingResourcePolicy: "none" }));
+    // The text is a region the Tab key reaches, named by its title, whatever its length.
+    expect(screen.getByRole("region", { name: RESTORE_CREATE_VIEW_WORDS.text })).toBe(part("text"));
+    expect(part("text").tabIndex).toBe(0);
     expect(words(part("meaning").querySelector('[data-part="source"]') as Element)).toBe(
       "The restore takes the backup nightly, from the storage location default: Velero refuses the restore when the storage location of the backup is not Available.",
     );

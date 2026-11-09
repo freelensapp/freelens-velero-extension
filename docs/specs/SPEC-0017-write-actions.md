@@ -853,7 +853,8 @@ Decided while implementing, on 2026-11-08:
 - Escape in the field of the name gives back the name the form proposed: what was
   typed is the change of the proposal, and an empty name is not a way out.
 - The text of the review scrolls past 480 pixels; Chromium gives the keyboard a
-  scroller with nothing to focus in it, and the text is not made focusable.
+  scroller with nothing to focus in it, and the text is not made focusable. Amended
+  on 2026-11-09: it is, at every length ([the amendments](#amendments)).
 - The way to the backup created takes the place of the workspace in the address; the
   way to a backup that already had the name opens over the workspace, whose way back
   leads to the form with the name of the next second.
@@ -2411,12 +2412,14 @@ application, in the pre-review and end to end. The evidence, by check:
   from the top of the page; and a deletion asked with the keyboard alone, from the
   command on the line of the name of the backup, one press after Restore, which is one
   press after the way back, Enter to the review, which has the focus, the field of the
-  name the first stop after it, or the second when the text of the request scrolls, the
-  name typed and taken back by Escape, typed again, Delete backup the next stop,
-  enabled and not pressed, and Do not delete it the one after, whose Enter leaves the
-  review for the command that asks again, Escape on a new review back to that command,
-  Escape back to the view, whose way back has the focus, and Escape back to the row of
-  the backup, with no request in the installation of the views. 51 cases.
+  name the first stop after it, or the second when the text of the request scrolls
+  (amended on 2026-11-09: the text is the first stop at every length, and the field
+  the second, [the amendments](#amendments)), the name typed and taken back by
+  Escape, typed again, Delete backup the next stop, enabled and not pressed, and Do
+  not delete it the one after, whose Enter leaves the review for the command that asks
+  again, Escape on a new review back to that command, Escape back to the view, whose
+  way back has the focus, and Escape back to the row of the backup, with no request in
+  the installation of the views. 51 cases.
 - The parts of the views ([`views-plan.test.ts`](../../test/views-plan.test.ts)): the
   workspace of the deletion, its words and the request run the suite of the actions.
 
@@ -2514,8 +2517,10 @@ fourth:
   with ten of each where the review proposed twenty, for the reason above.
 - The walk did not pin the order of the commands or where the field is, and reached
   neither command of the review: Restore and then Delete backup are one press each, the
-  field is the first stop after the review, or the second when its text scrolls, Delete
-  backup and Do not delete it are reached, and Enter on the latter leaves the review.
+  field is the first stop after the review, or the second when its text scrolls
+  (amended on 2026-11-09: the second at every length, after the text,
+  [the amendments](#amendments)), Delete backup and Do not delete it are reached, and
+  Enter on the latter leaves the review.
 - The nits applied: the comment of the count of the views, the refusal in the decisions
   said as the server's, the line of the name of a backup said in ACT-10, the changes
   made on purpose of this round, the Success Criteria, the two flakes of the proof (the
@@ -2528,3 +2533,27 @@ fourth:
   locations ReadOnly or not there, which the component tests hold. The registration of
   a backup of the fixtures by the case of the reader, which only a request created
   since the suite began passes, is kept as its net.
+
+## Amendments
+
+### 2026-11-09: The Text Of A Review
+
+Made by the first pull request of T6.2 of [SPEC-0018](SPEC-0018-release-readiness.md),
+for what an accessibility scan of the pre-review found the one time it ran, on
+2026-11-09, before the lead maintainer decided that the pre-review stays the visual
+one of the other extensions and that the scan is not kept (D8 of that spec). Its first
+packaged run found the text of the review of each action, which scrolls past 480
+pixels, a region that scrolls and that the keyboard does not reach, by the rule of
+axe-core for a region that scrolls (WCAG 2.1, 2.1.1): Chromium gives the keyboard a
+scroller with nothing to focus in it, which the decision of T4.2 above left to it, but
+axe-core reads no such stop.
+
+The text of the review of every action is now a region the Tab key reaches whatever
+its length, named by its title, What is sent, as it is sent: one part,
+`ReviewText` of `src/renderer/components/workspace.tsx`, which the six workspaces
+draw. What a review shows and what it sends do not change. The keyboard of a review
+has one stop more where its text did not scroll: in the walk of a deletion, the text
+of the request is the first stop after the review and the field of the name the
+second, at every length, where the walks of T4.6 read the field as the first stop
+after the review, or the second when its text scrolls. The component test of each
+workspace finds the text by its role and its name, and as a stop of the Tab key.

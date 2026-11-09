@@ -270,7 +270,7 @@ their tests green in CI on main.
 | Feature | Task | Spec | Status |
 | --- | --- | --- | --- |
 | Regression; the roles of the README proven; HTTPS and the direct route in the host; a ceiling on the bundles. The rest is deferred, D16 | T6.1 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | In PR |
-| Visual and accessibility pass on both themes and on narrow and large windows | T6.2 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Approved |
+| Visual pass on both themes and on narrow and large windows | T6.2 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | In PR |
 | Installation, permissions, safety, compatibility and troubleshooting documentation, screenshots, demonstration video, release notes | T6.3 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | In PR |
 | Tarball, checksums and software bill of materials from the release workflow of the template: on each GitHub release, the tarball and the bill of materials of the repository at the tag, each with its `.sha256`, and the provenance through the trusted publisher alone. Left: the token of the first publication and then the trusted publisher, and the proof of the assets on the first release | T6.4 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | In PR |
 | With Freelens 2.0.0: the pin of the SDK a range of versions, the integration at the tag v2.0.0, the host drift watch ended | | [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#d10-the-version-and-the-release) | Done |
@@ -288,7 +288,7 @@ lead maintainer asks for it, the proof of its assets and its check by version in
 Freelens 2.0.0. For 1.0.0: the identities of the actions, then
 [#145](https://github.com/freelensapp/freelens-velero-extension/issues/145), the
 case of FND-10 by the direct route and the ceilings of the bundles, with T6.2, the
-accessibility scan of the pre-review, beside them; then the screenshots, the video
+visual pass of the pre-review, beside them; then the screenshots, the video
 and the notes of 1.0.0, the review of the milestone, and 1.0.0 on `latest` on the
 lead maintainer's go. Its D16 says what T6.1 takes and what it defers: the row of
 T6.1 is narrowed to it, and what it defers is under Deferred after v1.0.0.

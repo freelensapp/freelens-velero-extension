@@ -398,6 +398,9 @@ describe("create schedule, from the list of the Schedules", () => {
     await main.confirm(text);
     await waitFor(() => expect(maybe("review")).toBeTruthy());
     expect(part("text").textContent).toBe(text);
+    // The text is a region the Tab key reaches, named by its title, whatever its length.
+    expect(screen.getByRole("region", { name: SCHEDULE_CREATE_VIEW_WORDS.text })).toBe(part("text"));
+    expect(part("text").tabIndex).toBe(0);
     expect(words(part("meaning").querySelector('[data-part="runs"]') as Element)).toBe(
       "The next 5 runs, counted from now, the creation a moment later: 2026-11-09 03:00 Europe/Rome (UTC+01:00); 2026-11-10 03:00 Europe/Rome (UTC+01:00); 2026-11-11 03:00 Europe/Rome (UTC+01:00); 2026-11-12 03:00 Europe/Rome (UTC+01:00); 2026-11-13 03:00 Europe/Rome (UTC+01:00).",
     );

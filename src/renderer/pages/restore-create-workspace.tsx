@@ -24,7 +24,7 @@ import {
 } from "../components/backup-template-form";
 import styles from "../components/views.module.css";
 import { focusFirst } from "../components/views-frame";
-import { Fact, ViewLink, Workspace } from "../components/workspace";
+import { Fact, ReviewText, ViewLink, Workspace } from "../components/workspace";
 import { openViewAt, replaceView } from "../navigation";
 
 import type { BackupTemplate, TemplateField, TemplateProblems } from "../../common/backup-template";
@@ -893,12 +893,9 @@ const Review = observer(
               </button>
             </p>
           </div>
-          <div className={styles.reviewPart}>
-            <h4 className={styles.factName}>{RESTORE_CREATE_VIEW_WORDS.text}</h4>
-            <pre className={styles.reviewText} data-testid={`${ID}-text`}>
-              {text}
-            </pre>
-          </div>
+          <ReviewText id={ID} title={RESTORE_CREATE_VIEW_WORDS.text}>
+            {text}
+          </ReviewText>
         </div>
         <div className={styles.backupName}>
           <span id={`${ID}-typed-label`} className={styles.factName}>
