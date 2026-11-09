@@ -1232,14 +1232,17 @@ review of the first. The evidence, by check:
   request,
   [run 42666045242](https://github.com/freelensapp/freelens-velero-extension/actions/runs/42666045242),
   green, FND-10 eight cases of eight in Freelens 2.0.0 on Linux ARM64; on the head:
-  {RUN-ROUTE-FND10}.
+  on a second Linux machine, in Freelens 2.0.0 built at the target with no
+  cluster, eight cases of eight; on the hosted runner, the checks of its pull
+  request, green before its merge.
 - The gates of the slice, on its head: `pnpm type:check`, `pnpm lint:check`,
   `pnpm knip:check` and `pnpm build`, green; the unit files that hold or read its
   changes, `test/build.test.ts`, `test/environment.test.ts`,
   `src/entrypoints.test.ts`, `src/main/diagnostic-route.test.ts` and
   `src/main/ipc-download.test.ts`, 358 tests passed; Trunk on the changed files,
-  green. The unit run of the head, `pnpm test:unit`: {RUN-ROUTE-UNIT}. The checks of
-  its pull request: {RUN-ROUTE-CI}.
+  green. The unit run of the head, `pnpm test:unit`, on the second machine: 134 files
+  and 3,816 tests passed, and the three measures. The checks of its pull
+  request, every part of the views among them, green before its merge.
 
 Seven changes made on purpose, each one commit on the head on a branch of its own,
 `mut-m6-route-1` to `mut-m6-route-7`, kept apart for the packaged runs, which the case
@@ -1269,7 +1272,9 @@ case:
   fails, so that a server opened in the main process of the host is seen going
   through `net.Server.prototype.listen`.
 
-The packaged runs of the seven branches: {RUN-ROUTE-MUTATIONS}. On the first commit,
+The packaged runs of the seven branches, on the second machine in Freelens 2.0.0
+with no cluster: each failed the new case alone, first at the assertion its line
+names, and the seven other cases of FND-10 passed. On the first commit,
 as its pull request records, in the packaged application on a second Linux machine
 with no cluster, FND-10 passed on the head, eight cases of eight, and each of the
 first five branches failed the new case alone, first at the assertion its line names,
