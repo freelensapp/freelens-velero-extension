@@ -97,8 +97,9 @@ file the operator chooses in the dialog of the host.
   token that does not reach it there, the primary, the success and the warning of
   the light theme and the failure of both, is mixed with the strongest words of the
   theme, `--textColorAccent`, by the least share that reaches it, which keeps its
-  hue. The pages define the words of a link, a success, a warning and a failure
-  once, and a unit test reads them against the themes of the host
+  hue. The words of a link, a success, a warning and a failure are defined once, on
+  the body, which the pages, the sections of the details of the host and the error
+  page are all under, and a unit test reads them against the themes of the host
   ([SPEC-0018](../specs/SPEC-0018-release-readiness.md), T6.2).
 - BSL availability and access mode are separate fields. VSL status can be absent;
   show that limitation instead of assuming a healthy provider.

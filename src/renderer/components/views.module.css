@@ -1,3 +1,28 @@
+/* The words the views write in a color of the theme of the host that says something, a link, a success, a warning or a
+   failure, at the contrast of AA, 4.5 to 1 (WCAG 2.1, 1.4.3), on every background the views write them on: the one of
+   the page, of a list, of the target bar, of a field and of the rows of a kind of resources. A color of the host that
+   does not reach it there is mixed with the strongest words of the theme, `--textColorAccent`, by the least share that
+   reaches it, which keeps its hue: in the dark theme the failures, #ce3933 made #de7874; the others are the colors of
+   the host. They are defined on the body, which every surface of the extension is under: its pages, its sections in
+   the details of the host, which the host draws in its drawer outside any page, and its error page, which is drawn in
+   place of either. Where a color is not defined, the words would take the one around them. */
+:global(body) {
+  --veleroTextLink: var(--primary);
+  --veleroTextOk: var(--colorOk);
+  --veleroTextWarning: var(--colorWarning);
+  --veleroTextError: color-mix(in srgb, var(--colorError) 68%, var(--textColorAccent));
+}
+
+/* In the light theme, the flag the host gives the body of a page for the styles of components: the links, #00a7a0
+   made #0c7874; the successes, #399c3d made #337b36; the warnings, #ff9800 made #976110; and the failures, #ce3933
+   made #c73832. */
+:global(body.theme-light) {
+  --veleroTextLink: color-mix(in srgb, var(--primary) 65%, var(--textColorAccent));
+  --veleroTextOk: color-mix(in srgb, var(--colorOk) 73%, var(--textColorAccent));
+  --veleroTextWarning: color-mix(in srgb, var(--colorWarning) 53%, var(--textColorAccent));
+  --veleroTextError: color-mix(in srgb, var(--colorError) 96%, var(--textColorAccent));
+}
+
 .page {
   display: flex;
   flex-direction: column;
@@ -13,26 +38,6 @@
      again, at every frame. */
   scrollbar-gutter: stable;
   color: var(--textColorPrimary);
-  /* The words the views write in a color of the theme of the host that says something, a link, a success, a
-     warning or a failure, at the contrast of AA, 4.5 to 1 (WCAG 2.1, 1.4.3), on every background the views write
-     them on: the one of the page, of a list, of the target bar, of a field and of the rows of a kind of resources.
-     A color of the host that does not reach it there is mixed with the strongest words of the theme,
-     `--textColorAccent`, by the least share that reaches it, which keeps its hue: in the dark theme the failures,
-     #ce3933 made #de7874; the others are the colors of the host. */
-  --veleroTextLink: var(--primary);
-  --veleroTextOk: var(--colorOk);
-  --veleroTextWarning: var(--colorWarning);
-  --veleroTextError: color-mix(in srgb, var(--colorError) 68%, var(--textColorAccent));
-}
-
-/* In the light theme, the flag the host gives the body of a page for the styles of components: the links, #00a7a0
-   made #0c7874; the successes, #399c3d made #337b36; the warnings, #ff9800 made #976110; and the failures, #ce3933
-   made #c73832. */
-:global(body.theme-light) .page {
-  --veleroTextLink: color-mix(in srgb, var(--primary) 65%, var(--textColorAccent));
-  --veleroTextOk: color-mix(in srgb, var(--colorOk) 73%, var(--textColorAccent));
-  --veleroTextWarning: color-mix(in srgb, var(--colorWarning) 53%, var(--textColorAccent));
-  --veleroTextError: color-mix(in srgb, var(--colorError) 96%, var(--textColorAccent));
 }
 
 /* The host writes the text of a code element in one grey for both themes, #b4b5b4, which the light theme does not

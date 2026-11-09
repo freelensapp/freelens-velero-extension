@@ -237,7 +237,7 @@ describe("colors of the words", () => {
 
     return one.map((part, at) => Math.round(part * share + other[at] * (1 - share)));
   };
-  // The colors of the words a page defines, by their names, in a block of the stylesheet.
+  // The colors of the words the body defines, by their names, in a block of the stylesheet.
   const wordsIn = (selector: string) =>
     Object.fromEntries(
       [
@@ -247,9 +247,22 @@ describe("colors of the words", () => {
       ].map(([, name, value]) => [name, value]),
     );
 
+  it("defines the colors of the words on the body, which the pages, the sections of the details of the host and the error page are all under, and nowhere else", () => {
+    // Every block of the stylesheet that defines one of them, by its selector, the comments left out.
+    const defining = [
+      ...text()
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .matchAll(/([^{}]+)\{([^{}]*)\}/g),
+    ]
+      .filter(([, , body]) => /--veleroText\w+\s*:/.test(body))
+      .map(([, selector]) => selector.trim());
+
+    expect(defining).toEqual([":global(body)", ":global(body.theme-light)"]);
+  });
+
   it("writes the words of a link, a success, a warning and a failure at the contrast of AA in both themes, on every background of the views", () => {
-    const dark = wordsIn(".page");
-    const light = { ...dark, ...wordsIn(":global(body.theme-light) .page") };
+    const dark = wordsIn(":global(body)");
+    const light = { ...dark, ...wordsIn(":global(body.theme-light)") };
 
     expect(Object.keys(dark).sort()).toEqual([
       "veleroTextError",
@@ -271,7 +284,7 @@ describe("colors of the words", () => {
     }
   });
 
-  it("writes no words in a color of the host that says something but through the colors of the words of a page", () => {
+  it("writes no words in a color of the host that says something but through the colors of the words", () => {
     const direct = [...text().matchAll(/^\s*color: var\(--(primary|colorOk|colorWarning|colorError)\);/gm)].map(
       ([line]) => line.trim(),
     );
