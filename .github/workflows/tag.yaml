@@ -10,9 +10,10 @@ on:
     types:
       - closed
 
+# The token of the run checks out and reads; the tag is created with the token
+# of the environment, so that it starts the release workflow.
 permissions:
-  contents: write
-  id-token: write
+  contents: read
   pull-requests: read
 
 jobs:
@@ -23,13 +24,16 @@ jobs:
     environment: automated
     timeout-minutes: 10
 
-    # The merge of the pull request of the version, or the comment `/tag` on that
-    # pull request once it is closed, from an owner, a member or a collaborator
-    # of the repository: a comment of anyone else, who may comment on any pull
-    # request, does not start the job.
+    # The merge of the pull request of the version, from its branch of this
+    # repository, or the comment `/tag` on that pull request once it is closed.
+    # The associations of the author of the comment are only a cheap
+    # pre-filter, because MEMBER, a member of the organization, and
+    # COLLABORATOR do not imply write access: the first step requires it.
     if: |
       (github.event_name == 'pull_request'
       && startsWith(github.event.pull_request.title, 'Automated npm version')
+      && github.event.pull_request.head.ref == 'automated/npm-version'
+      && github.event.pull_request.head.repo.full_name == github.repository
       && github.event.pull_request.merged)
       || (github.event_name == 'issue_comment'
       && github.event.issue.pull_request
@@ -38,11 +42,30 @@ jobs:
       && github.event.comment.body == '/tag'
       && contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
     steps:
+      # The permission API reports maintain as write and triage as read. A
+      # failed lookup fails the job, so an unknown permission never passes.
+      - name: Require write access
+        id: write-access
+        if: github.event_name == 'issue_comment'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const author = context.payload.comment.user.login;
+            const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              username: author,
+            });
+            if (!['admin', 'write'].includes(data.permission)) {
+              core.setFailed(`${author} needs write access to the repository to tag a version`);
+            }
+
       # The commit of the version is the merge commit of its pull request, never
       # main as it is when the job runs, which can have moved since the merge
       # (REQ-315 of SPEC-0018). On the merge, it is the one of the event; on
       # `/tag`, the one of the pull request the comment is on, read through the
-      # API, which must have been merged into main.
+      # API, which must come from the branch of the version of this repository
+      # and have been merged into main.
       - name: Get the merge commit of the pull request of the version
         id: merge-commit
         uses: actions/github-script@v9
@@ -57,8 +80,14 @@ jobs:
                 repo: context.repo.repo,
                 pull_number: context.issue.number,
               });
-              if (!pull.merged || pull.base.ref !== 'main') {
-                core.setFailed(`Pull request #${pull.number} was not merged into main: nothing is tagged`);
+              const repository = `${context.repo.owner}/${context.repo.repo}`;
+              if (
+                !pull.merged ||
+                pull.base.ref !== 'main' ||
+                pull.head.ref !== 'automated/npm-version' ||
+                pull.head.repo?.full_name !== repository
+              ) {
+                core.setFailed(`Pull request #${pull.number} is not the pull request of a version merged into main: nothing is tagged`);
                 return;
               }
               sha = pull.merge_commit_sha;
@@ -73,6 +102,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          persist-credentials: false
           ref: ${{ steps.merge-commit.outputs.sha }}
 
       - name: Get version from package.json
@@ -82,15 +112,18 @@ jobs:
 
       # A version X.Y.Z, or a prerelease X.Y.Z-N of the line of SPEC-0015 (D10),
       # which the release workflow publishes on the npm tag `next` and marks as
-      # a prerelease on GitHub. No other form of a version is tagged.
+      # a prerelease on GitHub. No other form of a version is tagged. The
+      # version reaches bash through the environment, never in its text.
       - name: Check if version is release
         id: check-version
         run: |
-          if [[ "${{ steps.package-json.outputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?$ ]]; then
+          if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?$ ]]; then
             echo "is_release=true" >> $GITHUB_OUTPUT
           else
             echo "is_release=false" >> $GITHUB_OUTPUT
           fi
+        env:
+          VERSION: ${{ steps.package-json.outputs.version }}
 
       - name: Create tag on the merge commit of the pull request of the version
         if: steps.check-version.outputs.is_release == 'true'

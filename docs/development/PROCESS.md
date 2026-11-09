@@ -170,8 +170,8 @@ target.
   workstation. Tags are created only by the tag workflow, on the merge commit
   of the pull request of the version, never on main as it is when the workflow
   runs: at the merge of that pull request, or, once it is merged, on the
-  comment `/tag` of an owner, a member or a collaborator of the repository
-  alone.
+  comment `/tag` of an author with write access to the repository who is an
+  owner, a member of the organization or a collaborator.
 - The version changes through the pull request of the version workflow only,
   never by hand in another pull request. The tag workflow tags a release
   version, `X.Y.Z`, and a prerelease of a line, `X.Y.Z-N`, and no other form

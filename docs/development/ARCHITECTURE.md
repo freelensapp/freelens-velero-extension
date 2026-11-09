@@ -137,10 +137,11 @@ integration tests cache it; OSV-Scanner; and, on a pull request that changes
 synthetic data only. Renovate and the daily maintenance workflows of the
 organization (npm audit, npm dedupe, Biome migrate, Trunk upgrade) open their pull
 requests on branches named `automated/*`. A release is three workflows: the version
-workflow opens the pull request that sets the version, the tag workflow tags the
-merge commit of that pull request, never main as it is when the job runs, at its
-merge or, once it is merged, on the comment `/tag` of an owner, a member or a
-collaborator of the repository, a version `X.Y.Z` or a prerelease `X.Y.Z-N`, and
+workflow opens the pull request that sets the version, the tag workflow tags a
+version `X.Y.Z` or a prerelease `X.Y.Z-N` on the merge commit of that pull
+request, never on main as it is when the job runs, at its merge or, once it is
+merged, on the comment `/tag` of an author with write access to the repository
+who is an owner, a member of the organization or a collaborator, and
 the release workflow builds the bundle from the tag, publishes it to npm, on `next`
 for a version with a hyphen and on `latest` otherwise, and attaches the tarball,
 its checksums and its software bill of materials to the GitHub release, marked as

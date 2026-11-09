@@ -973,7 +973,8 @@ in both places when the target moves with a release of Freelens. A release is
 `npm-version.yaml`, which opens the pull request of the version, `tag.yaml`, which
 tags the version `X.Y.Z` or `X.Y.Z-N` on the merge commit of that pull request,
 never on main as it is when the job runs, at its merge or, once it is merged, on
-the comment `/tag` of an owner, a member or a collaborator of the repository, and
+the comment `/tag` of an author with write access to the repository who is an
+owner, a member of the organization or a collaborator, and
 `release.yaml`, which builds the tag and publishes a version with a hyphen on the
 npm tag `next`, released on GitHub as a prerelease, and any other on `latest`. The
 daily maintenance workflows open their pull requests on branches named
