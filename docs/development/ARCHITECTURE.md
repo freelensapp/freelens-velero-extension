@@ -145,22 +145,28 @@ version `X.Y.Z` or a prerelease `X.Y.Z-N` on the merge commit of that pull
 request, never on main as it is when the job runs, at its merge or, once it is
 merged, on the comment `/tag` of an author with write access to the repository
 who is an owner, a member of the organization or a collaborator, and
-the release workflow, in two jobs. Its job `package`, which holds no credential,
-builds the tag, packs the tarball once, and runs FND-10 on that file in Freelens
-built at the validation target through the same action; it makes the software bill
+the release workflow, in three jobs, as the other extensions of the organization
+release, the merge of the pull request of the version by the lead maintainer being
+the go of the publication. Its job `package`, which holds no credential, builds
+the tag and packs the tarball once; right after the pack, before anything of
+Freelens or of a cache of APT is restored or started, it makes the software bill
 of materials of the packed file, installed with no devDependency and no peer, the
 checksums of both, the notes of the version from its section of `CHANGELOG.md` and
 the list of what the package contains, which fails on a file outside `dist/` and
 the three the packer adds, on a path of the runner and on the form of a
-credential; it checks that the tarball has the bytes it had when it was packed,
-and uploads the files of the release. It runs alone, and publishes nothing, on a
-pull request that changes the workflow, `CHANGELOG.md` or the action, and when
-started by hand. Its job `publish`, at a pushed tag alone and in the environment
-`publishing`, builds nothing: it verifies the sha256 of that tarball, publishes
-it with provenance, on `next` for a version with a hyphen and on `latest`
-otherwise, and creates the GitHub release with the tarball, the bill of
-materials, their checksums and the notes as its body, marked as a prerelease for
-a version with a hyphen.
+credential, and takes the sha256 of the five files as its outputs; then it runs
+FND-10 on that tarball in Freelens built at the validation target through the same
+action, checks the files against those outputs, and uploads them. At a tag it
+restores no cache before the pack. It runs alone, and publishes nothing, on a pull
+request that changes the workflow, the script of the list, the action,
+`CHANGELOG.md` or what the package is built from, the pull request of a version
+among them, and when started by hand. Its job `publish`, at a pushed tag alone
+and in the environment `publishing`, builds nothing: it checks the files against
+the outputs of `package`, and publishes the tarball with provenance, on `next`
+for a version with a hyphen and on `latest` otherwise. Its job `release`, with no
+credential of npm, checks them the same way and creates the GitHub release with
+the tarball, the bill of materials, their checksums and the notes as its body,
+marked as a prerelease for a version with a hyphen.
 
 ### Dependencies
 

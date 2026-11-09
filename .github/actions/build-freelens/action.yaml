@@ -28,12 +28,15 @@ runs:
           exit 1
         }
 
+    # The checkout keeps no credential: nothing after it asks git for one, and
+    # the build and the application the job starts never find the token.
     - name: Checkout app
       uses: actions/checkout@v7
       with:
         repository: freelensapp/freelens
         ref: ${{ inputs.ref }}
         path: freelens
+        persist-credentials: false
 
     # The packaged application does not depend on the extension, which the
     # tests install at run time, so its build is the same for a given commit

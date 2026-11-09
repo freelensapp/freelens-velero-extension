@@ -175,10 +175,13 @@ target.
 - The version changes through the pull request of the version workflow only,
   never by hand in another pull request. The tag workflow tags a release
   version, `X.Y.Z`, and a prerelease of a line, `X.Y.Z-N`, and no other form
-  of a version. The release workflow publishes, from a job that builds nothing,
-  the tarball its job without credentials packed and tested: a version with a
-  hyphen on the npm tag `next`, its GitHub release marked as a prerelease, and
-  any other on `latest`.
+  of a version. The merge of the pull request of the version by the lead
+  maintainer, once its checks and the last runs of main are green, is the go
+  of the publication, as in the other extensions of the organization. The
+  release workflow publishes, from a job that builds nothing, the tarball its
+  job without credentials packed and tested: a version with a hyphen on the
+  npm tag `next`, its GitHub release marked as a prerelease, and any other on
+  `latest`; a job with no credential of npm creates the GitHub release.
 - A version on the registry is never published again, and no workflow
   unpublishes one. A version found bad is deprecated with `npm deprecate` and
   followed by the next number; `npm deprecate` and `npm dist-tag` are the only

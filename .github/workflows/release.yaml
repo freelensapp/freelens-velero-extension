@@ -1,14 +1,19 @@
 name: Release
 
-# A version in two jobs (REQ-286 of SPEC-0018). The job `package` holds no
-# credential: it builds the tag, packs the tarball once, runs FND-10 on that
-# very file in Freelens built at the commit of the validation target, makes the
-# bill of materials of the packed file, the checksums, the notes of the version
-# and the list of what the package contains, and uploads them. The job
-# `publish`, at a tag alone and in the environment `publishing`, builds
-# nothing: it verifies the sha256 of that tarball, publishes it, and creates
-# the GitHub release. On a pull request that changes the files of `package`,
-# and when started by hand, `package` runs alone and nothing is published.
+# A version in three jobs (REQ-286 of SPEC-0018). The job `package` holds no
+# credential: it builds the tag and packs the tarball once, makes the bill of
+# materials of the packed file, the checksums, the notes of the version and the
+# list of what the package contains, and takes the sha256 of the five files as
+# outputs, before anything of Freelens or of a cache of APT is restored or
+# started; then it runs FND-10 on that very tarball in Freelens built at the
+# commit of the validation target, and uploads the files once their bytes are
+# checked against those outputs. The job `publish`, at a pushed tag alone and in
+# the environment `publishing`, builds nothing: it checks the files against the
+# outputs of `package` and publishes the tarball. The job `release`, with no
+# credential of npm, checks them the same way and creates the GitHub release.
+# On a pull request that changes the files `package` reads, the pull request of
+# a version among them, and when started by hand, `package` runs alone and
+# nothing is published.
 on:
   push:
     tags:
@@ -18,8 +23,13 @@ on:
       - "*"
     paths:
       - .github/workflows/release.yaml
-      - CHANGELOG.md
+      - .github/scripts/list-package-contents.sh
       - .github/actions/build-freelens/**
+      - CHANGELOG.md
+      - package.json
+      - pnpm-lock.yaml
+      - vite.config.mjs
+      - build/**
   workflow_dispatch: {}
 
 permissions:
@@ -47,6 +57,14 @@ jobs:
     env:
       DO_NOT_TRACK: "1"
 
+    # The tarball and the sha256 of the five files of the release, taken
+    # before anything of Freelens or of a cache of APT is restored or started.
+    # The jobs after this one check the files against them.
+    outputs:
+      tarball: ${{ steps.pack.outputs.tarball }}
+      sha256: ${{ steps.pack.outputs.sha256 }}
+      sums: ${{ steps.sums.outputs.sums }}
+
     steps:
       - name: Checkout plugin
         uses: actions/checkout@v7
@@ -54,13 +72,15 @@ jobs:
           persist-credentials: false
 
       # yq comes from mise so that its version has a single source (mise.toml)
-      # and the download is verified against mise.lock. The action that builds
-      # Freelens reads it too.
+      # and the download is verified against mise.lock, every time: no cache
+      # is restored, so nothing a run on main wrote reaches the tag. The action
+      # that builds Freelens reads it too.
       - name: Set up mise
-        uses: jdx/mise-action@v5
+        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
           version: 2026.11.5 # datasource=github-releases depName=jdx/mise
           install_args: yq
+          cache: false
 
       - name: Check if package version matches
         if: github.ref_type == 'tag'
@@ -78,7 +98,11 @@ jobs:
       - name: Get pnpm cache directory
         run: echo "pnpm_cache_dir=$(pnpm store path)" >> ${GITHUB_ENV}
 
+      # The store of pnpm, which runs on main save under this key as well: at a
+      # tag no cache is restored before the pack, and the packages come from the
+      # registry, checked against the lockfile.
       - name: Use pnpm cache
+        if: github.ref_type != 'tag'
         uses: actions/cache@v6
         with:
           path: ${{ env.pnpm_cache_dir }}
@@ -114,12 +138,11 @@ jobs:
         if: steps.build-plugin-2.outcome == 'failure'
         run: pnpm build
 
-      # The one tarball of the run, packed once: FND-10 installs it, the bill
-      # of materials, the checksums and the list of the contents are of it, and
-      # the job `publish` publishes it. Its name and its sha256, taken before
-      # FND-10 starts the application the cache may have given, are outputs of
-      # this step, which no later step can change: the bytes are compared with
-      # that sha256 again before the upload.
+      # The one tarball of the run, packed once: the bill of materials, the
+      # checksums and the list of the contents are of it, FND-10 installs it,
+      # and the job `publish` publishes it. Its name and its sha256 are outputs
+      # of this step, which no later step can change, unlike the environment of
+      # the job.
       - name: Pack plugin
         id: pack
         run: |
@@ -136,6 +159,153 @@ jobs:
           echo "${sha256}  ${tarballs[0]}"
           echo "tarball=${tarballs[0]}" >> "${GITHUB_OUTPUT}"
           echo "sha256=${sha256}" >> "${GITHUB_OUTPUT}"
+
+      # The bill of materials is of what the package carries (REQ-307, D10 of
+      # SPEC-0018): the packed file installed, never from the registry, in a new
+      # empty directory, with no devDependency, no peer, no script and no
+      # lockfile, so the extension and the libraries its bundles carry.
+      # `--prefix` names the directory npm installs into: in a directory with no
+      # manifest npm would take the nearest one above it, the workspace. The
+      # scan reads the manifests of the packages the directory holds, which the
+      # scan of a directory leaves to the lockfiles unless it is asked to, and
+      # the manifest npm writes at its root, which names no package, is not one
+      # of them. The root of the document, which holds the packages, is named
+      # after the tarball.
+      - name: Install the tarball for the bill of materials
+        run: |
+          mkdir bill-of-materials
+          npm install --prefix bill-of-materials --omit=dev --omit=peer --ignore-scripts --no-package-lock "${GITHUB_WORKSPACE}/${TARBALL}"
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+
+      - name: Create SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: bill-of-materials
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+        env:
+          SYFT_DEFAULT_CATALOGERS: javascript-package-cataloger
+          SYFT_SOURCE_NAME: ${{ steps.pack.outputs.tarball }}
+
+      - name: Normalize SBOM filename
+        shell: bash
+        run: |
+          for f in *.tgz; do
+            mv sbom.spdx.json "${f%.tgz}-spdx.json"
+          done
+
+      # What the bill of materials lists, by name and version, in the log, each
+      # at the version of the lockfile: the extension at the one of package.json,
+      # and every library at one the lockfile resolved, since npm resolved them
+      # from the registry by the ranges of the manifest. The root of the
+      # document is the tarball.
+      - name: Show the packages of the bill of materials
+        run: |
+          node -e '
+            const { readFileSync } = require("node:fs");
+            const [document, tarball] = process.argv.slice(1);
+            const manifest = JSON.parse(readFileSync("package.json", "utf8"));
+            const lockfile = readFileSync("pnpm-lock.yaml", "utf8");
+            let failed = false;
+
+            for (const { name, versionInfo = "" } of JSON.parse(readFileSync(document, "utf8")).packages) {
+              const key = name.startsWith("@") ? `\x27${name}@${versionInfo}\x27` : `${name}@${versionInfo}`;
+              const resolved = name === manifest.name ? versionInfo === manifest.version : lockfile.includes(`\n  ${key}:\n`);
+
+              console.log(`${name} ${versionInfo}`);
+              if (name !== tarball && !resolved) {
+                console.log(`::error::${name} ${versionInfo} is not at the version of the lockfile`);
+                failed = true;
+              }
+            }
+            process.exitCode = failed ? 1 : 0;
+          ' "${TARBALL%.tgz}-spdx.json" "${TARBALL}"
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+
+      - name: Make checksums
+        shell: bash
+        run: |
+          for f in *.tgz *-spdx.json; do
+            sha256sum "$f" | tee "$f.sha256"
+          done
+
+      # The notes of the version (REQ-303, D12 of SPEC-0018): its section of
+      # CHANGELOG.md, headed `## v<version> - <YYYY-MM-DD>` and running to the
+      # next `## ` heading, without the heading, which the GitHub release names
+      # by the tag. At a tag, and on a pull request whose version has the form
+      # the tag workflow tags, the pull request of the version among them, a
+      # version with no section stops the run before anything is published. On
+      # another pull request or by hand, where the version is one that is never
+      # released, the newest section stands in for a missing one, or a line that
+      # says there is none, with a warning.
+      - name: Make the notes of the version
+        run: |
+          set -euo pipefail
+          version=$(node -p 'require("./package.json").version')
+          strict=false
+          if [ "${GITHUB_REF_TYPE}" = tag ] || [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9]+)?$ ]]; then
+            strict=true
+          fi
+          # The lines of the first section whose heading starts with $1, without
+          # the heading and the blank lines around them.
+          section() {
+            [ -f CHANGELOG.md ] || return 0
+            awk -v prefix="$1" '
+              found && /^## / { exit }
+              found { lines[++n] = $0; next }
+              index($0, prefix) == 1 && /^## v[^ ]+ - [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/ { found = 1 }
+              END {
+                for (first = 1; first <= n && lines[first] ~ /^[[:space:]]*$/; first++) {}
+                for (last = n; last >= first && lines[last] ~ /^[[:space:]]*$/; last--) {}
+                for (i = first; i <= last; i++) print lines[i]
+              }
+            ' CHANGELOG.md
+          }
+          notes=$(section "## v${version} - ")
+          if [ -z "${notes}" ]; then
+            if [ "${strict}" = true ]; then
+              echo "::error::CHANGELOG.md has no section ## v${version} - <YYYY-MM-DD>: the notes of a version are written in a pull request before the one of the version"
+              exit 1
+            fi
+            echo "::warning::CHANGELOG.md has no section for ${version}, which is not a version the tag workflow tags: the newest section stands in for it"
+            notes=$(section "## v")
+            notes=${notes:-No notes: CHANGELOG.md has no section of a version.}
+          fi
+          printf '%s\n' "${notes}" > release-notes.md
+          cat release-notes.md
+
+      # What the package contains (REQ-316 of SPEC-0018), by the script a unit
+      # case runs as well: what it fails on is said in the script.
+      - name: List the contents of the package
+        run: bash .github/scripts/list-package-contents.sh "${TARBALL}"
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+
+      # The sha256 of the five files of the release, taken before anything of
+      # Freelens or of APT is restored or started, as outputs of this step, which
+      # no later step can change: the check before the upload and the jobs
+      # `publish` and `release` compare the files with them. The tarball is
+      # still the one of the pack.
+      - name: Take the sha256 of the files of the release
+        id: sums
+        run: |
+          set -euo pipefail
+          if [ "$(sha256sum "${TARBALL}" | cut -d ' ' -f 1)" != "${PACKED}" ]; then
+            echo "::error::${TARBALL} changed after the pack"
+            exit 1
+          fi
+          {
+            echo "sums<<END_OF_SUMS"
+            sha256sum "${TARBALL}" "${TARBALL}.sha256" "${TARBALL%.tgz}-spdx.json" "${TARBALL%.tgz}-spdx.json.sha256" release-notes.md
+            echo "END_OF_SUMS"
+          } >> "${GITHUB_OUTPUT}"
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+          PACKED: ${{ steps.pack.outputs.sha256 }}
 
       # Cache the .deb archives and package lists that `playwright install-deps`
       # downloads through apt, so re-runs reuse them instead of re-downloading.
@@ -194,149 +364,10 @@ jobs:
         env:
           EXTENSION_PATH: ${{ github.workspace }}/${{ steps.pack.outputs.tarball }}
 
-      # The bill of materials is of what the package carries (REQ-307, D10 of
-      # SPEC-0018): the packed file installed, never from the registry, in a new
-      # empty directory, with no devDependency, no peer, no script and no
-      # lockfile, so the extension and the libraries its bundles carry, at the
-      # versions of the lockfile. `--prefix` names the directory npm installs
-      # into: in a directory with no manifest npm would take the nearest one
-      # above it, the workspace. The scan reads the manifests of the packages
-      # the directory holds, which the scan of a directory leaves to the
-      # lockfiles unless it is asked to, and the manifest npm writes at its
-      # root, which names no package, is not one of them. The root of the
-      # document, which holds the packages, is named after the tarball.
-      - name: Install the tarball for the bill of materials
-        run: |
-          mkdir bill-of-materials
-          npm install --prefix bill-of-materials --omit=dev --omit=peer --ignore-scripts --no-package-lock "${GITHUB_WORKSPACE}/${TARBALL}"
-        env:
-          TARBALL: ${{ steps.pack.outputs.tarball }}
-
-      - name: Create SBOM
-        uses: anchore/sbom-action@v0
-        with:
-          path: bill-of-materials
-          format: spdx-json
-          output-file: sbom.spdx.json
-          upload-artifact: false
-          upload-release-assets: false
-        env:
-          SYFT_DEFAULT_CATALOGERS: javascript-package-cataloger
-          SYFT_SOURCE_NAME: ${{ steps.pack.outputs.tarball }}
-
-      - name: Normalize SBOM filename
-        shell: bash
-        run: |
-          for f in *.tgz; do
-            mv sbom.spdx.json "${f%.tgz}-spdx.json"
-          done
-
-      # What the bill of materials lists, by name and version, in the log.
-      - name: Show the packages of the bill of materials
-        run: |
-          node -e '
-            const { packages } = JSON.parse(require("node:fs").readFileSync(process.argv[1], "utf8"));
-            for (const { name, versionInfo } of packages) console.log(`${name} ${versionInfo ?? ""}`);
-          ' "${TARBALL%.tgz}-spdx.json"
-        env:
-          TARBALL: ${{ steps.pack.outputs.tarball }}
-
-      - name: Make checksums
-        shell: bash
-        run: |
-          for f in *.tgz *-spdx.json; do
-            sha256sum "$f" | tee "$f.sha256"
-          done
-
-      # The notes of the version (REQ-303, D12 of SPEC-0018): its section of
-      # CHANGELOG.md, headed `## v<version> - <YYYY-MM-DD>` and running to the
-      # next `## ` heading, without the heading, which the GitHub release names
-      # by the tag. At a tag a version with no section stops the run before
-      # anything is published. On a pull request or by hand, where the version
-      # can be one that is never released, the newest section stands in for a
-      # missing one, or a line that says there is none, with a warning.
-      - name: Make the notes of the version
-        run: |
-          set -euo pipefail
-          version=$(node -p 'require("./package.json").version')
-          # The lines of the first section whose heading starts with $1, without
-          # the heading and the blank lines around them.
-          section() {
-            [ -f CHANGELOG.md ] || return 0
-            awk -v prefix="$1" '
-              found && /^## / { exit }
-              found { lines[++n] = $0; next }
-              index($0, prefix) == 1 && /^## v[^ ]+ - [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/ { found = 1 }
-              END {
-                for (first = 1; first <= n && lines[first] ~ /^[[:space:]]*$/; first++) {}
-                for (last = n; last >= first && lines[last] ~ /^[[:space:]]*$/; last--) {}
-                for (i = first; i <= last; i++) print lines[i]
-              }
-            ' CHANGELOG.md
-          }
-          notes=$(section "## v${version} - ")
-          if [ -z "${notes}" ]; then
-            if [ "${GITHUB_REF_TYPE}" = tag ]; then
-              echo "::error::CHANGELOG.md has no section ## v${version} - <YYYY-MM-DD>: the notes of a version are written in a pull request before the one of the version"
-              exit 1
-            fi
-            echo "::warning::CHANGELOG.md has no section for ${version}, which stops a tag: the newest section stands in for it"
-            notes=$(section "## v")
-            notes=${notes:-No notes: CHANGELOG.md has no section of a version.}
-          fi
-          printf '%s\n' "${notes}" > release-notes.md
-          cat release-notes.md
-
-      # What the package contains (REQ-316 of SPEC-0018). The list of the
-      # tarball fails on a file outside the files of package.json, dist/, and
-      # what the packer always adds, the manifest, the README and the license;
-      # on a file named as the Security section of AGENTS.md names a
-      # credential; on an absolute path of the machine that built it, the home
-      # of the runner or the workspace, in any file; and on the form of a
-      # credential the private-data rules of AGENTS.md name in any file: a
-      # private key, a kubeconfig, a token of npm or of GitHub. The license
-      # notice of react-window, the library the renderer bundle carries,
-      # travels beside that bundle, and the list finds it. The words of a
-      # failure name the files, never what matched in them.
-      - name: List the contents of the package
-        run: |
-          set -euo pipefail
-          list="${RUNNER_TEMP}/contents.txt"
-          unpacked="${RUNNER_TEMP}/contents"
-          tar -tzf "${TARBALL}" | grep -v '/$' | LC_ALL=C sort >"${list}"
-          cat "${list}"
-          failed=0
-          fail() {
-            echo "::error::$1"
-            failed=1
-          }
-          outside=$(grep -Ev '^package/(package\.json|README\.md|LICENSE|dist/.+)$' "${list}" || true)
-          [ -z "${outside}" ] || fail "Files outside dist/, the manifest, the README and the license: ${outside//$'\n'/ }"
-          named=$(grep -E '/(\.env(\..*)?|\.envrc|\.npmrc|[^/]*\.(jks|keystore|p12|pfx|pem|key|kubeconfig)|kubeconfig|credentials\.json|velero-credentials)$' "${list}" || true)
-          [ -z "${named}" ] || fail "Files named as a credential: ${named//$'\n'/ }"
-          notice=package/dist/renderer.js.LICENSE.txt
-          grep -qxF "${notice}" "${list}" || fail "The notice of the license of react-window is not in the package: ${notice}"
-          mkdir "${unpacked}"
-          tar -xzf "${TARBALL}" -C "${unpacked}"
-          if [ -f "${unpacked}/${notice}" ] && ! { grep -qE '^react-window [0-9]' "${unpacked}/${notice}" && grep -qF 'Permission is hereby granted, free of charge' "${unpacked}/${notice}"; }; then
-            fail "${notice} holds no MIT notice of react-window"
-          fi
-          paths=$(grep -rlaF -e "${HOME}" -e "${GITHUB_WORKSPACE}" "${unpacked}" || true)
-          [ -z "${paths}" ] || fail "An absolute path of the runner in: ${paths//$'\n'/ }"
-          credentials=$(grep -rlaE \
-            -e '-----BEGIN ([A-Z0-9]+ )*PRIVATE KEY' \
-            -e 'client-key-data|client-certificate-data|certificate-authority-data|current-context|^kind: Config|"kind": *"Config"' \
-            -e '_authToken|npm_[A-Za-z0-9]{36}' \
-            -e '(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{22,}' \
-            "${unpacked}" || true)
-          [ -z "${credentials}" ] || fail "The form of a credential in: ${credentials//$'\n'/ }"
-          exit "${failed}"
-        env:
-          TARBALL: ${{ steps.pack.outputs.tarball }}
-
       # Before the upload: one file of each kind the release attaches, the
-      # tarball the one of the pack with the bytes it had then, which its
-      # checksum names, and the notes.
+      # tarball the one of the pack with the bytes it had then, and every file
+      # with the bytes whose sha256 the outputs hold, the checksum files naming
+      # the tarball and the bill of materials as they are.
       - name: Check the files of the release
         run: |
           set -euo pipefail
@@ -350,26 +381,20 @@ jobs:
             echo "::error::One tarball, ${TARBALL}, one bill of materials and their checksums are expected; found ${found} of them"
             exit 1
           fi
-          for file in "${TARBALL}.sha256" "${TARBALL%.tgz}-spdx.json" "${TARBALL%.tgz}-spdx.json.sha256" release-notes.md; do
-            if [ ! -s "${file}" ]; then
-              echo "::error::${file} is missing or empty"
-              exit 1
-            fi
-          done
           if [ "$(sha256sum "${TARBALL}" | cut -d ' ' -f 1)" != "${PACKED}" ]; then
             echo "::error::${TARBALL} changed after the pack: its bytes are not the ones FND-10 was given"
             exit 1
           fi
-          if [ "$(cut -d ' ' -f 1 "${TARBALL}.sha256")" != "${PACKED}" ]; then
-            echo "::error::${TARBALL}.sha256 is not the checksum of the tarball as it was packed"
-            exit 1
-          fi
+          printf '%s\n' "${SUMS}" >"${RUNNER_TEMP}/sums"
+          sha256sum --strict -c "${RUNNER_TEMP}/sums"
+          sha256sum --strict -c "${TARBALL}.sha256" "${TARBALL%.tgz}-spdx.json.sha256"
         env:
           TARBALL: ${{ steps.pack.outputs.tarball }}
           PACKED: ${{ steps.pack.outputs.sha256 }}
+          SUMS: ${{ steps.sums.outputs.sums }}
 
-      # The files the job `publish` takes, as the release attaches them, and
-      # the notes it gives the release as its body.
+      # The files the jobs `publish` and `release` take, as the release
+      # attaches them, and the notes it gives the release as its body.
       - name: Upload the files of the release
         uses: actions/upload-artifact@v7
         with:
@@ -392,12 +417,13 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
 
-    # Its required reviewer approves the job once the runs of the merge commit
-    # are green (D11b of SPEC-0018). The identity of the run is what the trusted
-    # publisher of npm and the provenance take; the release needs the write.
+    # The go of a publication is the merge of the pull request of the version,
+    # which the tag workflow tags (D11b of SPEC-0018), as in the other
+    # extensions of the organization. The identity of the run is what the
+    # provenance takes; the job reads the repository and writes nothing of it.
     environment: publishing
     permissions:
-      contents: write
+      contents: read
       id-token: write
 
     steps:
@@ -424,17 +450,39 @@ jobs:
         with:
           name: release
 
-      # The bytes FND-10 installed in the job `package` are the bytes the
-      # registry and the release receive.
-      - name: Verify the checksums
-        run: sha256sum -c ./*.tgz.sha256 ./*-spdx.json.sha256
+      # The tarball is the one `package` packed, which FND-10 installed, by its
+      # name, which the tag gives as well, and by the sha256 of the pack; every
+      # file has the bytes whose sha256 `package` took before anything of
+      # Freelens ran, and the bill of materials the bytes its checksum names.
+      - name: Verify the files of the release
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          tarballs=(*.tgz)
+          named="freelensapp-velero-extension-${GITHUB_REF_NAME#v}.tgz"
+          if [ "${#tarballs[@]}" -ne 1 ] || [ "${tarballs[0]}" != "${TARBALL}" ] || [ "${TARBALL}" != "${named}" ]; then
+            echo "::error::One tarball is expected, ${TARBALL} as package packed it and ${named} as the tag names it; found ${#tarballs[@]}"
+            exit 1
+          fi
+          if [ "$(sha256sum "${TARBALL}" | cut -d ' ' -f 1)" != "${SHA256}" ]; then
+            echo "::error::${TARBALL} is not the file package packed and FND-10 installed"
+            exit 1
+          fi
+          printf '%s\n' "${SUMS}" >"${RUNNER_TEMP}/sums"
+          sha256sum --strict -c "${RUNNER_TEMP}/sums"
+          sha256sum --strict -c "${TARBALL%.tgz}-spdx.json.sha256"
+        env:
+          TARBALL: ${{ needs.package.outputs.tarball }}
+          SHA256: ${{ needs.package.outputs.sha256 }}
+          SUMS: ${{ needs.package.outputs.sums }}
 
       # The packed file itself: pnpm hands a tarball to the registry as it is,
-      # with no repack and no script. The provenance is asked on both ways, with
-      # the token of `publishing` and through the trusted publisher (D11a). One
+      # with no repack and no script. The provenance is asked on both ways (D11a):
+      # with the token of `publishing`, which publishes every version up to
+      # 1.0.0, and through the trusted publisher configured after it (D11b). One
       # attempt: the registry takes a version once, so a second one after a
       # publication that it accepted fails on the version, and a failure stops
-      # the job before the release is created.
+      # the run before the release is created.
       - name: Publish npm package
         run: |
           set -euo pipefail
@@ -442,23 +490,66 @@ jobs:
             *-*) dist_tag=next;;
             *) dist_tag=latest;;
           esac
-          tarballs=(./*.tgz)
           if [[ -n ${NPM_TOKEN:-} ]]; then
-            NODE_AUTH_TOKEN="${NPM_TOKEN}" pnpm --color=always publish "${tarballs[0]}" \
+            NODE_AUTH_TOKEN="${NPM_TOKEN}" pnpm --color=always publish "./${TARBALL}" \
               --no-git-checks \
               --provenance \
               --tag "${dist_tag}"
           else
-            pnpm --color=always publish "${tarballs[0]}" \
+            pnpm --color=always publish "./${TARBALL}" \
               --no-git-checks \
               --provenance \
               --tag "${dist_tag}"
           fi
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          TARBALL: ${{ needs.package.outputs.tarball }}
+
+  # The GitHub release, in a job of its own with no environment and no
+  # identity for npm: it writes the release and nothing else. Once the
+  # publication passed, a release that fails is made by running this job again,
+  # alone, from the same files.
+  release:
+    name: release
+    needs: [package, publish]
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 10
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download the files of the release
+        uses: actions/download-artifact@v8
+        with:
+          name: release
+
+      - name: Verify the files of the release
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          tarballs=(*.tgz)
+          named="freelensapp-velero-extension-${GITHUB_REF_NAME#v}.tgz"
+          if [ "${#tarballs[@]}" -ne 1 ] || [ "${tarballs[0]}" != "${TARBALL}" ] || [ "${TARBALL}" != "${named}" ]; then
+            echo "::error::One tarball is expected, ${TARBALL} as package packed it and ${named} as the tag names it; found ${#tarballs[@]}"
+            exit 1
+          fi
+          if [ "$(sha256sum "${TARBALL}" | cut -d ' ' -f 1)" != "${SHA256}" ]; then
+            echo "::error::${TARBALL} is not the file package packed and FND-10 installed"
+            exit 1
+          fi
+          printf '%s\n' "${SUMS}" >"${RUNNER_TEMP}/sums"
+          sha256sum --strict -c "${RUNNER_TEMP}/sums"
+          sha256sum --strict -c "${TARBALL%.tgz}-spdx.json.sha256"
+        env:
+          TARBALL: ${{ needs.package.outputs.tarball }}
+          SHA256: ${{ needs.package.outputs.sha256 }}
+          SUMS: ${{ needs.package.outputs.sums }}
 
       - name: Create release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           fail_on_unmatched_files: true
           prerelease: ${{ contains(github.ref_name, '-') }}

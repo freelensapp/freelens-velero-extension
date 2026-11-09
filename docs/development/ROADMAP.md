@@ -279,21 +279,23 @@ their tests green in CI on main.
 [SPEC-0018](../specs/SPEC-0018-release-readiness.md), approved by the lead
 maintainer on 2026-11-09 with D1 to D19 as proposed, is the one spec of the
 milestone; its first slice comes after M5, closed with its review the same day.
-The order of the slices, its D15, with the line between what gates the prerelease
-1.0.0-0 and what gates 1.0.0. For 1.0.0-0: T6.4, with
+The order of the slices, its D15, toward one gate, 1.0.0, the first publication of
+the package (decided by the lead maintainer on 2026-11-09: no prerelease; 1.0.0 is the first publication). First T6.4, with
 [#144](https://github.com/freelensapp/freelens-velero-extension/issues/144), the
-release workflow in two jobs with FND-10 on the tarball it publishes, the bill of
-materials of the packed file, the provenance of the publication and the list of
-what the package contains, and the tag on the merge commit of the pull request of
-the version; then the sections of the README a prerelease is installed with; then
-1.0.0-0 when the lead maintainer asks for it, the proof of its assets and its
-check by version in Freelens 2.0.0. For 1.0.0: the identities of the actions, then
+release workflow in three jobs with FND-10 on the tarball it publishes, the bill
+of materials of the packed file, the provenance of the publication and the list
+of what the package contains, and the tag on the merge commit of the pull request
+of the version; then the sections of the README 1.0.0 is installed with; then the
+identities of the actions, then
 [#145](https://github.com/freelensapp/freelens-velero-extension/issues/145), the
 second cluster, the case of FND-10 by the direct route, the actions with the real
 controller and the ceilings of the bundles, with T6.2, the accessibility scan of
-the pre-review, beside them; a prerelease through the trusted publisher of npm;
-then the screenshots, the video and the notes of 1.0.0, the review of the
-milestone, and 1.0.0 on `latest` on the lead maintainer's go. Its D16 says what
+the pre-review, beside them; then the screenshots, the video and the notes of
+1.0.0, the review of the milestone on the release candidate, and 1.0.0 on
+`latest` on the lead maintainer's go, with the proof of its assets and its check
+by version in Freelens 2.0.0, after which the token of npm leaves the environment of the
+publication and the trusted publisher of npm is configured (D11b of SPEC-0018, as
+amended on 2026-11-09). Its D16 says what
 T6.1 takes and what it defers: the row of T6.1 is narrowed to it, and what it
 defers is under Deferred after v1.0.0.
 Each slice is its own pull request; the row of a task is In PR from its first and

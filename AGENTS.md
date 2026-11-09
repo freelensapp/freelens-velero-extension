@@ -980,17 +980,22 @@ tags the version `X.Y.Z` or `X.Y.Z-N` on the merge commit of that pull request,
 never on main as it is when the job runs, at its merge or, once it is merged, on
 the comment `/tag` of an author with write access to the repository who is an
 owner, a member of the organization or a collaborator, and
-`release.yaml`, in two jobs. Its job `package`, which holds no credential, builds
-the tag, packs it once, runs FND-10 on that tarball in Freelens built at the
-validation target, and makes the bill of materials of the packed file, the
-checksums, the notes of the version from `CHANGELOG.md` and the list of what the
-package contains; it runs alone, and publishes nothing, on a pull request that
-changes `release.yaml`, `CHANGELOG.md` or the action that builds Freelens, and
-when started by hand. Its job `publish`, at a pushed tag alone and in the
-environment `publishing`, builds nothing: it verifies the sha256 of that tarball,
-publishes it with provenance, a version with a hyphen on the npm tag `next`,
-released on GitHub as a prerelease, and any other on `latest`, and creates the
-GitHub release. The daily maintenance workflows open their pull requests on
+`release.yaml`, in three jobs; the merge of the pull request of the version by the
+lead maintainer is the go of the publication, as in the other extensions of the
+organization. Its job `package`, which holds no credential, builds the tag and
+packs it once, makes the bill of materials of the packed file, the checksums, the
+notes of the version from `CHANGELOG.md` and the list of what the package
+contains, and takes the sha256 of those files as its outputs, before anything of
+Freelens runs; then it runs FND-10 on that tarball in Freelens built at the
+validation target. It runs alone, and publishes nothing, on a pull request that
+changes `release.yaml`, the script of the list, the action that builds Freelens,
+`CHANGELOG.md` or what the package is built from, the pull request of a version
+among them, and when started by hand. Its job `publish`, at a pushed tag alone
+and in the environment `publishing`, builds nothing: it checks the files against
+the outputs of `package` and publishes the tarball with provenance, a version
+with a hyphen on the npm tag `next` and any other on `latest`. Its job
+`release`, with no credential of npm, checks them the same way and creates the
+GitHub release, a prerelease for a version with a hyphen. The daily maintenance workflows open their pull requests on
 branches named `automated/*`, and Renovate on `renovate/*`.
 
 ## Code Style

@@ -180,15 +180,22 @@ packs once and the job `publish` publishes (REQ-286 of SPEC-0018): in Freelens
 built at the validation target through the same action, with no cluster, and
 without the runner, which checks the target of an environment before and after
 and the namespaces of the sessions, as
-`xvfb-run -a pnpm test:integration integration/__tests__/extensions.tests.ts` with
-`EXTENSION_PATH` naming that tarball; without it the helpers install the package
-from the registry by its name. The job takes the sha256 of the tarball right after
-the pack, before the application starts, and fails when the bytes it uploads are
-not those. It runs at each tag, when started by hand, and on a pull request that
-changes the workflow, `CHANGELOG.md` or the action. The same command runs FND-10 on
-a machine with no cluster, after `pnpm build && pnpm clean:tgz && pnpm pack`, with
-`FREELENS_APP` naming the application and `EXTENSION_PATH` the absolute path of the
-tarball, under `xvfb-run -a` on a Linux without a display.
+`xvfb-run -a --server-args="-screen 0 1920x1200x24" pnpm test:integration integration/__tests__/extensions.tests.ts`
+with `EXTENSION_PATH` naming that tarball; without it the helpers install the
+package from the registry by its name. Before FND-10, and before anything of
+Freelens or of a cache of APT is restored or started, the job makes the bill of
+materials, the checksums, the notes and the list of the contents and takes the
+sha256 of the tarball and of those files as its outputs; FND-10 is its last step
+before the check of the files against those outputs and the upload, and the jobs
+`publish` and `release` check the files against them again. It runs at each tag,
+when started by hand, and on a pull request that changes the workflow, the script
+of the list of the contents, the action, `CHANGELOG.md`, `package.json`,
+`pnpm-lock.yaml`, `vite.config.mjs` or `build/`, the pull request of a version
+among them. The same command runs FND-10 on a machine with no cluster, after
+`pnpm build && pnpm clean:tgz && pnpm pack`, with `FREELENS_APP` naming the
+application and `EXTENSION_PATH` the absolute path of the tarball, under
+`xvfb-run -a --server-args="-screen 0 1920x1200x24"` on a Linux without a display,
+so that the largest window has room.
 
 ## End-To-End Tests
 

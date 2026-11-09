@@ -52,7 +52,8 @@ The tarball is about 1 MB, more than two thirds of it the source maps of the two
 bundles. The bill of materials attached to each GitHub release is made from that
 tarball, installed in an empty directory with no devDependency, no peer, no script
 and no lockfile, so that it is of what the package carries, the extension and
-react-window, and not of the development graph (REQ-307 of SPEC-0018).
+react-window, and not of the development graph, each package at the version of the
+lockfile, which the release workflow checks (REQ-307 of SPEC-0018).
 
 ## Development Graph
 
