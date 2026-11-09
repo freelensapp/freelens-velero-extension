@@ -9,7 +9,7 @@ import {
 } from "../../common/schedule-patch-words";
 import styles from "../components/views.module.css";
 import { focusFirst } from "../components/views-frame";
-import { Fact, NotShown, Workspace } from "../components/workspace";
+import { Fact, NotShown, ReviewText, Workspace } from "../components/workspace";
 import { replaceView } from "../navigation";
 import { adherenceOf, backupsAnswered } from "../state/adherence";
 
@@ -355,14 +355,9 @@ function Review(props: ReviewProps) {
             ))}
           </ul>
         </div>
-        <div className={styles.reviewPart}>
-          <h4 className={styles.factName}>{SCHEDULE_PATCH_VIEW_WORDS.text}</h4>
-          {/* A text longer than its room scrolls, and Chromium gives the keyboard a scroller with nothing to focus in
-              it. */}
-          <pre className={styles.reviewText} data-testid={`${ID}-text`}>
-            {text}
-          </pre>
-        </div>
+        <ReviewText id={ID} title={SCHEDULE_PATCH_VIEW_WORDS.text}>
+          {text}
+        </ReviewText>
       </div>
       <div className={styles.writeActions}>
         <Button primary data-testid={`${ID}-run`} onClick={onRun}>

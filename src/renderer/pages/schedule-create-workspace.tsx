@@ -16,7 +16,7 @@ import { BackupTemplateForm } from "../components/backup-template-form";
 import { useTemplateChoices } from "../components/template-choices";
 import styles from "../components/views.module.css";
 import { focusFirst } from "../components/views-frame";
-import { Fact, ViewLink, Workspace } from "../components/workspace";
+import { Fact, ReviewText, ViewLink, Workspace } from "../components/workspace";
 import { replaceView } from "../navigation";
 import { adherenceOf } from "../state/adherence";
 
@@ -452,12 +452,9 @@ const Review = observer(
               ))}
             </ul>
           </div>
-          <div className={styles.reviewPart}>
-            <h4 className={styles.factName}>{SCHEDULE_CREATE_VIEW_WORDS.text}</h4>
-            <pre className={styles.reviewText} data-testid={`${ID}-text`}>
-              {text}
-            </pre>
-          </div>
+          <ReviewText id={ID} title={SCHEDULE_CREATE_VIEW_WORDS.text}>
+            {text}
+          </ReviewText>
         </div>
         <div className={styles.writeActions}>
           <Button primary data-testid={`${ID}-create`} onClick={onCreate}>

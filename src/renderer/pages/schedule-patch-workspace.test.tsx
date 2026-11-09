@@ -320,6 +320,9 @@ describe("pause and resume, from the view of a schedule", () => {
     ]);
     expect(focused()).toBe("velero-schedule-patch-review");
     expect(part("text").textContent).toBe(PAUSE);
+    // The text is a region the Tab key reaches, named by its title, whatever its length.
+    expect(screen.getByRole("region", { name: SCHEDULE_PATCH_VIEW_WORDS.text })).toBe(part("text"));
+    expect(part("text").tabIndex).toBe(0);
     expect([...part("meaning").querySelectorAll("[data-part]")].map((item) => item.getAttribute("data-part"))).toEqual([
       "reads",
       "running",

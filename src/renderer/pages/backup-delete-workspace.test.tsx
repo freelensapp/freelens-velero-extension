@@ -319,6 +319,9 @@ describe("the deletion of a backup, in its workspace", () => {
     await reviewed(main, 1);
     expect(main.confirms[0].args).toEqual(["cluster-a", A, TARGET]);
     expect(part("text").textContent).toBe(TEXT);
+    // The text is a region the Tab key reaches, named by its title, whatever its length.
+    expect(screen.getByRole("region", { name: BACKUP_DELETE_VIEW_WORDS.text })).toBe(part("text"));
+    expect(part("text").tabIndex).toBe(0);
     expect(
       [...part("meaning").querySelectorAll("li")].map((item) => [item.getAttribute("data-part"), words(item)]),
     ).toEqual(

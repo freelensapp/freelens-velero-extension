@@ -12,7 +12,7 @@ import {
 import { escapeOfField } from "../components/artifact-viewer";
 import styles from "../components/views.module.css";
 import { focusFirst } from "../components/views-frame";
-import { Fact, ViewLink, Workspace } from "../components/workspace";
+import { Fact, ReviewText, ViewLink, Workspace } from "../components/workspace";
 import { replaceView } from "../navigation";
 
 import type { BackupResource } from "../../common/types";
@@ -356,12 +356,9 @@ const Review = observer(
               ))}
             </ul>
           </div>
-          <div className={styles.reviewPart}>
-            <h4 className={styles.factName}>{BACKUP_DELETE_VIEW_WORDS.text}</h4>
-            <pre className={styles.reviewText} data-testid={`${ID}-text`}>
-              {text}
-            </pre>
-          </div>
+          <ReviewText id={ID} title={BACKUP_DELETE_VIEW_WORDS.text}>
+            {text}
+          </ReviewText>
         </div>
         <div className={styles.backupName}>
           <span id={`${ID}-typed-label`} className={styles.factName}>
