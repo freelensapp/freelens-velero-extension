@@ -16,7 +16,11 @@ import { DEMO_CONTEXT, DEMO_NAMESPACE, OWNER_LABEL, requireCondition } from "./l
 
 import type { BackupDeleted, WriteConfirmAnswer } from "../../src/common/ipc.ts";
 
-type ProofContext = Pick<DownloadProofContext, "owner" | "run" | "kubeconfig" | "shell" | "assertCurrent">;
+// The kubeconfig of the session of the extension, the one of the operator of the README, and the one of the environment,
+// with which the proof makes its backups, reads and removes what is not of the session.
+type ProofContext = Pick<DownloadProofContext, "owner" | "run" | "kubeconfig" | "shell" | "assertCurrent"> & {
+  environment: string;
+};
 
 // The phases a backup ends in, in the release.
 const ENDED = ["Completed", "PartiallyFailed", "Failed", "FailedValidation"];
@@ -44,9 +48,9 @@ interface Read {
   status?: { phase?: string; errors?: string[]; validationErrors?: string[]; failureReason?: string };
 }
 
-// The kubectl of the environment, for what the proof reads of the cluster beside the procedures, for the backups it
-// makes, and for the removal of what Velero did not delete: the cluster of the environment checked before each call,
-// and its cache in the private state.
+// The kubectl of the environment, with its kubeconfig, for what the proof reads of the cluster beside the procedures,
+// for the backups it makes, and for the removal of what Velero did not delete: the cluster of the environment checked
+// before each call, and its cache in the private state.
 function kubectl(
   context: ProofContext,
   args: string[],
@@ -58,7 +62,7 @@ function kubectl(
   context.assertCurrent();
   const { status, stdout, stderr, error } = spawnSync(
     shell.kubectl,
-    ["--kubeconfig", context.kubeconfig, "--context", DEMO_CONTEXT, ...args],
+    ["--kubeconfig", context.environment, "--context", DEMO_CONTEXT, ...args],
     {
       encoding: "utf8",
       env: { ...shell.environment, KUBECACHEDIR: join(shell.cache, "kubectl") },

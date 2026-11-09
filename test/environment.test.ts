@@ -35,6 +35,7 @@ import { mixedExpression } from "../e2e/scripts/local-expressions.mts";
 import {
   ADHERENCE_SCHEDULES,
   AHEAD_BY,
+  accountPath,
   adherenceFixtures,
   adherenceScaleFixtures,
   adherenceSplitFixtures,
@@ -50,6 +51,7 @@ import {
   awaitVolumeOperationsRemoved,
   BACKUP_PHASES,
   CLEAR_STATES,
+  CLUSTER_RULES,
   clearTabFixtures,
   createViewFixtures,
   EARLIER_BACKUP_UID,
@@ -96,14 +98,18 @@ import {
   placeRefusedFixtures,
   placeViewAndTabFixtures,
   proofIdentities,
+  README_OPERATOR,
+  README_READER,
   REAL_SCHEDULE_EXPRESSION,
   REFUSALS,
   REFUSALS_OF_THE_SERVER,
   REPOSITORY_LABELS,
   RESTORE_PHASES,
   type Recorded,
+  ROLE_RULES,
   type RunRepository,
   readerKubeconfig,
+  readmeIdentity,
   realTabArtifactPaths,
   recordSyncedBackups,
   refusedFixtures,
@@ -112,6 +118,7 @@ import {
   removeRunRepository,
   restoreSpec,
   restrictedFixtures,
+  rolesAsWritten,
   runArtifactPaths,
   runLiveVolume,
   runRepository,
@@ -242,6 +249,8 @@ import {
   storeLogLine,
   storeSettings,
 } from "../e2e/scripts/local-store.mts";
+import { RESOURCES } from "../src/common/discovery";
+import { PATHS } from "../src/common/paths";
 import { PINNED } from "./tab-pins";
 
 const HOUR = 3_600_000;
@@ -1552,6 +1561,319 @@ describe("foundation fixture boundaries", () => {
     expect(JSON.stringify(resources)).not.toMatch(/secrets|delete|update|patch|"\*"/);
     expect(() => viewIdentityOfAnExecPlugin("", run)).toThrow();
     expect(() => viewIdentityOfAnExecPlugin("synthetic-owner", "not-a-run")).toThrow();
+  });
+
+  it("makes the identities of the two roles of the README, each an account of the installation bound to its Role and to the ClusterRole that lists the storage locations of the whole cluster", () => {
+    const namespace = `velero-views-${run}`;
+    const labels = { [OWNER_LABEL]: "synthetic-owner", [FIXTURE_LABEL]: run, [FIXTURE_MODE]: "live" };
+    type Rule = { apiGroups: string[]; resources: string[]; verbs: string[] };
+    // Each grant of rules, as `<group>/<resource>/<verb>`.
+    const grants = (rules: readonly Rule[]) =>
+      new Set(
+        rules.flatMap((rule) =>
+          rule.apiGroups.flatMap((group) =>
+            rule.resources.flatMap((resource) => rule.verbs.map((verb) => `${group}/${resource}/${verb}`)),
+          ),
+        ),
+      );
+
+    for (const [role, prefix] of [
+      ["reader", README_READER],
+      ["operator", README_OPERATOR],
+    ] as const) {
+      const resources = readmeIdentity(role, "synthetic-owner", run, namespace);
+      const name = `${prefix}-${run}`;
+      const subjects = [{ kind: "ServiceAccount", name, namespace }];
+
+      // An account of the namespace of the installation, of this run, with no credential mounted anywhere; its Role
+      // there; and its ClusterRole, which is of no namespace; each bound to the account alone.
+      expect(resources.map((resource) => resource.kind)).toEqual([
+        "ServiceAccount",
+        "Role",
+        "RoleBinding",
+        "ClusterRole",
+        "ClusterRoleBinding",
+      ]);
+      expect(resources.map((resource) => resource.metadata)).toEqual([
+        { name, namespace, labels },
+        { name, namespace, labels },
+        { name, namespace, labels },
+        { name, labels },
+        { name, labels },
+      ]);
+      expect(resources[0]).toMatchObject({ automountServiceAccountToken: false });
+      expect(resources[1].rules).toEqual(ROLE_RULES[role]);
+      expect(resources[2]).toMatchObject({
+        roleRef: { apiGroup: "rbac.authorization.k8s.io", kind: "Role", name },
+        subjects,
+      });
+      expect(resources[3].rules).toEqual(CLUSTER_RULES);
+      expect(resources[4]).toMatchObject({
+        roleRef: { apiGroup: "rbac.authorization.k8s.io", kind: "ClusterRole", name },
+        subjects,
+      });
+      // What an identity is given is its own: a change of it changes nothing of the roles.
+      (resources[1].rules as Rule[])[0].verbs.push("delete");
+      (resources[3].rules as Rule[])[0].verbs.push("delete");
+      expect([...Object.values(ROLE_RULES).flat(), ...CLUSTER_RULES].flatMap((rule) => rule.verbs)).not.toContain(
+        "delete",
+      );
+    }
+    // The reader lists every family the views read, in the namespace of the installation, and nothing else. Both roles
+    // list the storage locations of the whole cluster, the one read the views make of the whole cluster, and nothing
+    // else of it.
+    expect(ROLE_RULES.reader).toEqual([
+      { apiGroups: ["velero.io"], resources: Object.values(RESOURCES), verbs: ["list"] },
+    ]);
+    expect(CLUSTER_RULES).toEqual([
+      { apiGroups: ["velero.io"], resources: ["backupstoragelocations"], verbs: ["list"] },
+    ]);
+    expect(PATHS.locations).toBe(`/apis/velero.io/v1/${CLUSTER_RULES[0].resources[0]}`);
+    // The operator: the views; the reads by name of the tabs, of the actions and after a creation; the creations of the
+    // actions and of the two requests; the patch of a schedule; the requests of a backup by its labels; and the route
+    // through the cluster, with the verb of the port-forward every kubectl uses.
+    expect(ROLE_RULES.operator).toEqual([
+      { apiGroups: ["velero.io"], resources: ["backups", "restores"], verbs: ["get", "list", "create"] },
+      { apiGroups: ["velero.io"], resources: ["schedules"], verbs: ["get", "list", "create", "patch"] },
+      {
+        apiGroups: ["velero.io"],
+        resources: ["backupstoragelocations", "volumesnapshotlocations"],
+        verbs: ["get", "list"],
+      },
+      {
+        apiGroups: ["velero.io"],
+        resources: ["backuprepositories", "podvolumebackups", "podvolumerestores", "datauploads", "datadownloads"],
+        verbs: ["list"],
+      },
+      { apiGroups: ["velero.io"], resources: ["downloadrequests", "serverstatusrequests"], verbs: ["create", "get"] },
+      { apiGroups: ["velero.io"], resources: ["deletebackuprequests"], verbs: ["create", "get", "list"] },
+      { apiGroups: [""], resources: ["services", "pods"], verbs: ["get"] },
+      { apiGroups: [""], resources: ["pods/portforward"], verbs: ["create"] },
+      { apiGroups: ["discovery.k8s.io"], resources: ["endpointslices"], verbs: ["list"] },
+    ]);
+    // Every write the adapter of the main process sends, the creation or the patch of a kind of Velero, read in its
+    // source as the case of Safety reads it: the operator may make each, and the reader none.
+    const adapter = readFileSync(new URL("../src/main/diagnostic-kubernetes.ts", import.meta.url), "utf8");
+    const plurals = Object.fromEntries(
+      [...(/const resources = \{([^}]*)\}/.exec(adapter)?.[1] ?? "").matchAll(/(\w+): "([a-z]+)"/g)].map((match) => [
+        match[1],
+        match[2],
+      ]),
+    );
+    const writes = [...adapter.matchAll(/this\.send\("(POST|PATCH)", this\.path\((?:"(\w+)"|kind\b)/g)].map((match) => {
+      const kind = match[2] ?? [...adapter.slice(0, match.index).matchAll(/\bkind: "(\w+)"/g)].at(-1)?.[1] ?? "";
+
+      return `velero.io/${plurals[kind]}/${match[1] === "POST" ? "create" : "patch"}`;
+    });
+    const operator = grants(ROLE_RULES.operator);
+    const reader = grants([...ROLE_RULES.reader, ...CLUSTER_RULES]);
+
+    expect(new Set(writes)).toEqual(
+      new Set([
+        "velero.io/downloadrequests/create",
+        "velero.io/backups/create",
+        "velero.io/schedules/create",
+        "velero.io/restores/create",
+        "velero.io/schedules/patch",
+        "velero.io/serverstatusrequests/create",
+        "velero.io/deletebackuprequests/create",
+      ]),
+    );
+    expect(writes.filter((write) => !operator.has(write))).toEqual([]);
+    expect(writes.filter((write) => reader.has(write))).toEqual([]);
+    // What the reader may do in the namespace the operator may as well; neither role has a verb the code does not
+    // send, a word that names every group, resource or verb, or a Secret.
+    expect([...grants(ROLE_RULES.reader)].filter((grant) => !operator.has(grant))).toEqual([]);
+    expect(new Set([...reader, ...operator].map((grant) => grant.split("/").at(-1)))).toEqual(
+      new Set(["list", "get", "create", "patch"]),
+    );
+    expect(JSON.stringify([ROLE_RULES, CLUSTER_RULES])).not.toMatch(/secrets|"\*"/);
+    // Each is of an owner, of a run, of the namespace of an installation, and of one of the two roles.
+    expect(() => readmeIdentity("reader", "", run, namespace)).toThrow();
+    expect(() => readmeIdentity("reader", "synthetic-owner", "not-a-run", namespace)).toThrow();
+    expect(() => readmeIdentity("operator", "synthetic-owner", run, "Velero Views")).toThrow();
+    expect(() => readmeIdentity("operator", "synthetic-owner", run, "a".repeat(64))).toThrow();
+    expect(() => readmeIdentity("writer" as never, "synthetic-owner", run, namespace)).toThrow();
+  });
+
+  it("writes the roles of an identity as the README writes them, the Role in the namespace it names and then the ClusterRole, and nothing it cannot write as plain words", () => {
+    type Rule = { apiGroups: string[]; resources: string[]; verbs: string[] };
+    const identity = readmeIdentity("operator", "synthetic-owner", run, DEMO_NAMESPACE);
+    const role = identity[1] as KubeResource & { rules: Rule[] };
+    const cluster = identity[3] as KubeResource & { rules: Rule[] };
+
+    role.rules = [
+      { apiGroups: ["velero.io", ""], resources: ["backups", "pods/portforward"], verbs: ["get", "list"] },
+      { apiGroups: ["discovery.k8s.io"], resources: ["endpointslices"], verbs: ["list"] },
+    ];
+    cluster.rules = [{ apiGroups: ["velero.io"], resources: ["backupstoragelocations"], verbs: ["list"] }];
+    // The names and the namespace are the ones the README gives, not the ones of the identity; the rules are the
+    // identity's, in their order.
+    expect(rolesAsWritten(identity, "example-role", "example")).toBe(
+      [
+        "apiVersion: rbac.authorization.k8s.io/v1",
+        "kind: Role",
+        "metadata:",
+        "  name: example-role",
+        "  namespace: example",
+        "rules:",
+        '  - apiGroups: ["velero.io", ""]',
+        "    resources:",
+        "      - backups",
+        "      - pods/portforward",
+        '    verbs: ["get", "list"]',
+        '  - apiGroups: ["discovery.k8s.io"]',
+        "    resources:",
+        "      - endpointslices",
+        '    verbs: ["list"]',
+        "---",
+        "apiVersion: rbac.authorization.k8s.io/v1",
+        "kind: ClusterRole",
+        "metadata:",
+        "  name: example-role",
+        "rules:",
+        '  - apiGroups: ["velero.io"]',
+        "    resources:",
+        "      - backupstoragelocations",
+        '    verbs: ["list"]',
+      ].join("\n"),
+    );
+    // The Role first, whatever the order of the identity.
+    expect(rolesAsWritten([...identity].reverse(), "example-role", "example")).toBe(
+      rolesAsWritten(identity, "example-role", "example"),
+    );
+    // An identity with no Role, with two, or with no ClusterRole is refused; and so are a role with no rule, a rule
+    // with no resource or no verb, and a word YAML would read as something else than a word, or that names them all.
+    const without = (kind: string) => identity.filter((resource) => resource.kind !== kind);
+
+    expect(() => rolesAsWritten(without("Role"), "example-role", "example")).toThrow("holds one Role");
+    expect(() => rolesAsWritten([...identity, role], "example-role", "example")).toThrow("holds one Role");
+    expect(() => rolesAsWritten(without("ClusterRole"), "example-role", "example")).toThrow("holds one ClusterRole");
+    for (const rules of [
+      [],
+      [{ apiGroups: ["velero.io"], resources: [], verbs: ["get"] }],
+      [{ apiGroups: ["velero.io"], resources: ["backups"], verbs: [] }],
+      [{ apiGroups: ["velero.io"], resources: ["backups: all"], verbs: ["get"] }],
+      [{ apiGroups: ["velero.io"], resources: [""], verbs: ["get"] }],
+      [{ apiGroups: ["*"], resources: ["backups"], verbs: ["get"] }],
+      [{ apiGroups: ["velero.io"], resources: ["backups"], verbs: ["*"] }],
+      [{ apiGroups: ["velero.io"], resources: ["#backups"], verbs: ["get"] }],
+    ]) {
+      let refused = false;
+
+      role.rules = rules;
+      try {
+        rolesAsWritten(identity, "example-role", "example");
+      } catch {
+        refused = true;
+      }
+      expect([JSON.stringify(rules), refused]).toEqual([JSON.stringify(rules), true]);
+    }
+    const reader = readmeIdentity("reader", "synthetic-owner", run, DEMO_NAMESPACE);
+
+    expect(() => rolesAsWritten(reader, "Example Role", "example")).toThrow("plain words");
+    expect(() => rolesAsWritten(reader, "example-role", "")).toThrow("plain words");
+  });
+
+  it("removes an account, a role or a binding of a run by the path of its kind, in its namespace or in the whole cluster, and nothing else", () => {
+    expect(accountPath("ServiceAccount", "velero-reader-a1b2c3d4", "velero-views-a1b2c3d4")).toBe(
+      "/api/v1/namespaces/velero-views-a1b2c3d4/serviceaccounts/velero-reader-a1b2c3d4",
+    );
+    expect(accountPath("Role", "proof-reader-a1b2c3d4", DEMO_NAMESPACE)).toBe(
+      `/apis/rbac.authorization.k8s.io/v1/namespaces/${DEMO_NAMESPACE}/roles/proof-reader-a1b2c3d4`,
+    );
+    expect(accountPath("RoleBinding", "proof-reader-a1b2c3d4", DEMO_NAMESPACE)).toBe(
+      `/apis/rbac.authorization.k8s.io/v1/namespaces/${DEMO_NAMESPACE}/rolebindings/proof-reader-a1b2c3d4`,
+    );
+    expect(accountPath("ClusterRole", "velero-operator-a1b2c3d4", undefined)).toBe(
+      "/apis/rbac.authorization.k8s.io/v1/clusterroles/velero-operator-a1b2c3d4",
+    );
+    expect(accountPath("ClusterRoleBinding", "velero-operator-a1b2c3d4", undefined)).toBe(
+      "/apis/rbac.authorization.k8s.io/v1/clusterrolebindings/velero-operator-a1b2c3d4",
+    );
+    // Each object of an identity of the README has the path of its kind.
+    expect(
+      readmeIdentity("operator", "synthetic-owner", run, DEMO_NAMESPACE).map((resource) =>
+        accountPath(resource.kind, resource.metadata.name, resource.metadata.namespace),
+      ),
+    ).toEqual([
+      `/api/v1/namespaces/${DEMO_NAMESPACE}/serviceaccounts/velero-operator-${run}`,
+      `/apis/rbac.authorization.k8s.io/v1/namespaces/${DEMO_NAMESPACE}/roles/velero-operator-${run}`,
+      `/apis/rbac.authorization.k8s.io/v1/namespaces/${DEMO_NAMESPACE}/rolebindings/velero-operator-${run}`,
+      `/apis/rbac.authorization.k8s.io/v1/clusterroles/velero-operator-${run}`,
+      `/apis/rbac.authorization.k8s.io/v1/clusterrolebindings/velero-operator-${run}`,
+    ]);
+    // Another kind, a namespaced one without its namespace, one of the cluster with a namespace, and a name or a
+    // namespace that is not one, are refused.
+    expect(() => accountPath("Secret", "velero-reader-a1b2c3d4", DEMO_NAMESPACE)).toThrow("not an account");
+    expect(() => accountPath("ConfigMap", "velero-reader-a1b2c3d4", DEMO_NAMESPACE)).toThrow("not an account");
+    expect(() => accountPath("Role", "velero-reader-a1b2c3d4", undefined)).toThrow("names its namespace");
+    expect(() => accountPath("ClusterRole", "velero-reader-a1b2c3d4", DEMO_NAMESPACE)).toThrow("whole cluster");
+    expect(() => accountPath("Role", "../secrets/x", DEMO_NAMESPACE)).toThrow("has a name");
+    expect(() => accountPath("Role", "velero-reader-a1b2c3d4", "velero-demo/../kube-system")).toThrow(
+      "names its namespace",
+    );
+  });
+
+  it("runs as the operator of the README the session of the extension in the proofs of the download over HTTP and of the actions, the kubeconfig of the environment beside it, and gives the suites the kubeconfig of the reader of the README", () => {
+    const source = (path: string) =>
+      readFileSync(new URL(`../${path}`, import.meta.url), "utf8")
+        .split("\n")
+        .filter((line) => !line.trimStart().startsWith("//"))
+        .join("\n");
+    const demo = source("e2e/scripts/local-demo.mts");
+
+    // The operator, of the run and of the namespace of the installation, applied before the proofs and removed with the
+    // identities of the proof; its kubeconfig the one of the session, the one of the environment beside it.
+    expect(demo).toContain('const operator = readmeIdentity("operator", journal.owner, active.id, DEMO_NAMESPACE);');
+    expect(demo).toMatch(
+      /\n {4}for \(const resource of operator\) \{\n {6}accounts\.push\(resource\);\n {6}applyOwned\(resource\);\n {4}\}\n/,
+    );
+    expect(demo).toContain(
+      'writeReaderKubeconfig(operatorKubeconfig, DEMO_NAMESPACE, "2h", operator[0].metadata.name);',
+    );
+    expect(demo).toMatch(
+      /\n {4}const proofContext = \{\n {6}owner: journal\.owner,\n {6}run: active\.id,\n {6}kubeconfig: operatorKubeconfig,\n {6}environment: CONFIG,\n/,
+    );
+    for (const proof of [
+      "runDownloadProof({ ...proofContext, refused })",
+      "runBackupNowProof(proofContext)",
+      "runBackupCreateProof(proofContext)",
+      "runScheduleCreateProof(proofContext)",
+      "runRestoreCreateProof(proofContext)",
+      "runSchedulePatchProof(proofContext)",
+      "runDeleteBackupProof(proofContext)",
+    ])
+      expect([proof, demo.includes(proof)]).toEqual([proof, true]);
+    // The modes over TLS keep the kubeconfig of the environment: the authority of the second is read from a Secret.
+    expect(demo).toMatch(/\n {4}const tlsContext = \{\n {6}\.\.\.proofContext,\n {6}kubeconfig: CONFIG,\n/);
+    expect(demo).toMatch(
+      /\n {4}if \(operatorFile\) rmSync\(operatorFile, \{ force: true \}\);\n {4}removeAccounts\(accounts\);\n/,
+    );
+    // The proof over HTTP asks the version of the server as a frame does, through the procedures and the gate.
+    expect(source("e2e/scripts/local-download-proof.mts")).toMatch(
+      /\n {4}const version = await call<ServerStatusValue>\("write\.run", \{\n {6}cluster,\n {6}namespace: DEMO_NAMESPACE,\n {6}kind: "ServerStatusRequest",\n {6}token: statusToken,\n/,
+    );
+    // What the proofs read, change and remove beside the session goes through the kubeconfig of the environment.
+    for (const proof of ["local-schedule-proof.mts", "local-restore-proof.mts", "local-delete-proof.mts"]) {
+      const text = source(`e2e/scripts/${proof}`);
+
+      expect([
+        proof,
+        text.includes('["--kubeconfig", context.environment, "--context", DEMO_CONTEXT, ...args]'),
+      ]).toEqual([proof, true]);
+      expect([proof, text.includes('"--kubeconfig", context.kubeconfig')]).toEqual([proof, false]);
+    }
+    // The reader, of the run and of the installation of the views, applied for the suites, its kubeconfig given to
+    // them and taken by the restricted suite, and removed with the other identities of the run.
+    expect(demo).toContain('const readmeReader = readmeIdentity("reader", journal.owner, run, names.views);');
+    expect(demo).toMatch(
+      /\n {4}for \(const resource of readmeReader\) applyOwned\(resource\);\n {4}writeReaderKubeconfig\(readmeReaderFile, names\.views, "2h", readmeReader\[0\]\.metadata\.name\);\n/,
+    );
+    expect(demo).toContain("E2E_README_READER_KUBECONFIG: readmeReaderFile,");
+    expect(demo).toContain("removeAccounts([...forwardless, ...ofThePlugin, ...readmeReader]);");
+    expect(demo).toContain("accountPath(account.kind, entry.name, namespace)");
+    expect(source("e2e/__tests__/velero-e2e-restricted.tests.ts")).toContain("[cluster.readmeReaderKubeconfigPath()],");
   });
 
   it("asks the controller to delete a backup of the fixtures, the real one, the refused one or one the store was given, and no other", () => {

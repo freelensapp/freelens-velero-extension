@@ -7,10 +7,22 @@
 // reads the backups, the schedules and the storage locations of one namespace,
 // and nothing of the rest of the cluster. What it cannot read is said, and is
 // neither an empty list nor a count of zero.
+//
+// Then the views for the reader of the README (REQ-288 of SPEC-0018), which
+// holds the role of the README that reads: `list` on every family of the
+// installation, in its namespace, and on the storage locations of the whole
+// cluster. The views find the installations and read every family of one,
+// none denied, so that a verb the views start to need fails here before it
+// reaches an operator; and the two ways the adapter writes, a creation and a
+// patch, end as forbidden at the step whose verb the role lacks, with the
+// words of what the identity may not do, and nothing written.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import * as cluster from "../../integration/helpers/velero-cluster";
 import * as velero from "../../integration/helpers/velero-extension";
+import { writesOf } from "../../integration/helpers/velero-guard";
+import { BACKUP_NOW_WORDS } from "../../src/main/backup-now";
+import { SCHEDULE_PATCH_WORDS } from "../../src/main/schedule-patch";
 
 import type { Frame } from "playwright";
 
@@ -426,6 +438,190 @@ describe("views with restricted access", () => {
       });
       expect(await cluster.layoutProblems(frame, cluster.SCHEDULES)).toEqual([]);
       await cluster.captureScreenshot(frame, "dark-restricted-adherence");
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "leaves the objects of Velero as they were",
+    async () => {
+      const after = cluster.clusterSnapshot();
+
+      expect(after.versions).toEqual(before.versions);
+      expect(after.installed).toEqual(before.installed);
+      expect(after.requests).toBe(0);
+    },
+    TIMEOUT,
+  );
+});
+
+// The schedule with a history of the installation of the views, which the reader of the README asks a backup of and a
+// pause of; how long what must not happen is waited for; and the parts of the workspaces of the two writes.
+const SCHEDULE = "views-history";
+const NOTHING = 1500;
+const backUpNow = (id: string) => `[data-testid=velero-backup-now-${id}]`;
+const patch = (id: string) => `[data-testid=velero-schedule-patch-${id}]`;
+// The field of the name of the backup: the host gives its own element the identifier, or the input in it.
+const NAME_FIELD = `${backUpNow("field")} input, input${backUpNow("field")}`;
+
+/** A schedule as the environment reads it, through the kubectl of the environment. */
+function scheduleOf(name: string, namespace: string): { metadata: { uid: string; resourceVersion: string } } {
+  const { status, stdout, stderr } = cluster.kubectlE2E(
+    "get",
+    "schedules.velero.io",
+    name,
+    "--namespace",
+    namespace,
+    "-o",
+    "json",
+  );
+
+  if (status !== 0) throw new Error(`kubectl get schedule ${name} failed: ${stderr}`);
+  return JSON.parse(stdout) as { metadata: { uid: string; resourceVersion: string } };
+}
+
+describe("views and two writes with the role of the README that reads", () => {
+  let started: velero.StartedApplication;
+  let frame: Frame;
+  let before: cluster.ClusterSnapshot;
+
+  beforeAll(async () => {
+    if (!cluster.fixturesReady()) {
+      throw new Error(cluster.fixturesMissing());
+    }
+    before = cluster.clusterSnapshot();
+    let kubeconfig = "";
+
+    // The store of the profile names the kubeconfig of the reader of the README as the only one the catalog syncs: the
+    // catalog holds the test cluster through it, and nothing else.
+    started = await velero.startWithExtension(
+      async () => {
+        kubeconfig = await cluster.publishKubeconfig(cluster.readmeReaderKubeconfigPath(), "velero-e2e-readme-reader");
+      },
+      "Dark",
+      2,
+      [cluster.readmeReaderKubeconfigPath()],
+    );
+    await velero.dismissNotifications(started.window);
+    await velero.navigateToCatalog(started.app);
+    expect(await velero.catalogClusterCount(started.window)).toBe(1);
+    frame = await cluster.openClusterFromCatalog(started.window, kubeconfig);
+  }, TIMEOUT);
+
+  afterAll(async () => {
+    await started?.cleanup();
+  }, TIMEOUT);
+
+  it(
+    "finds where the installations are and reads every family of the installation of the views, none denied",
+    async () => {
+      await cluster.openBackups(frame);
+      // The ClusterRole lists the storage locations of the whole cluster: each namespace that holds one is suggested,
+      // as it is to the administrator of the environment. A role that did not let the views list them would ask for a
+      // namespace instead.
+      await frame.waitForSelector("[data-testid=velero-state-choose], [data-testid=velero-state-configure]", {
+        timeout: 60_000,
+      });
+      expect(await frame.locator("[data-testid=velero-state-configure]").count()).toBe(0);
+      expect(await frame.locator("[data-testid^=velero-choice-]").count()).toBe(cluster.SUGGESTED_NAMESPACES.length);
+      await frame.click(`[data-testid="velero-choice-${cluster.E2E_VIEWS_NAMESPACE}"]`);
+      await cluster.waitForBackups(frame);
+      expect((await cluster.target(frame)).namespace).toBe(cluster.E2E_VIEWS_NAMESPACE);
+      // The Role lists the ten families of the installation: each list has its rows, and nothing is denied over it.
+      for (const of of [
+        cluster.BACKUPS,
+        cluster.RESTORES,
+        cluster.SCHEDULES,
+        cluster.STORAGE_LOCATIONS,
+        cluster.SNAPSHOT_LOCATIONS,
+        cluster.REPOSITORIES,
+        cluster.POD_VOLUME_BACKUPS,
+        cluster.POD_VOLUME_RESTORES,
+        cluster.DATA_UPLOADS,
+        cluster.DATA_DOWNLOADS,
+      ]) {
+        await cluster.openPage(frame, of);
+        // A family the role did not let the views list would say so in place of its rows.
+        await frame.waitForSelector(
+          `[data-testid=velero-${of.id}] .TableRow:not(.TableHead), [data-testid=velero-${of.id}-unavailable]`,
+          { timeout: 60_000 },
+        );
+        expect([of.id, await frame.locator(`[data-testid=velero-${of.id}-unavailable]`).count()]).toEqual([of.id, 0]);
+        await cluster.waitForList(frame, of);
+        expect([of.id, await cluster.notices(frame, [])]).toEqual([of.id, {}]);
+      }
+      // The Overview reads its six families, each of them read, and says nothing that it did not look at.
+      await cluster.openPage(frame, cluster.OVERVIEW);
+      const shown = await cluster.overview(frame);
+
+      expect(Object.keys(shown.read)).toHaveLength(6);
+      expect(Object.entries(shown.read).filter(([, read]) => read.state !== "read")).toEqual([]);
+      expect(shown.unchecked).toEqual([]);
+      expect(await cluster.layoutProblems(frame, cluster.OVERVIEW)).toEqual([]);
+      await cluster.captureScreenshot(frame, "dark-readme-reader-overview");
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "refuses a backup at the read of its schedule and the patch of the schedule, with the words of what the identity may not do, writes left on and nothing written",
+    async () => {
+      const namespace = cluster.E2E_VIEWS_NAMESPACE;
+      const name = `${SCHEDULE}-of-the-readme-reader`;
+      const history = scheduleOf(SCHEDULE, namespace);
+      const earlier = cluster.apiRequests();
+
+      await cluster.openPage(frame, cluster.SCHEDULES);
+      await cluster.waitForList(frame, cluster.SCHEDULES);
+      await cluster.openWorkspace(frame, SCHEDULE, cluster.SCHEDULES);
+      await frame.click("[data-testid=velero-schedule-back-up-now]");
+      await frame.waitForSelector(backUpNow("workspace"), { timeout: 30_000 });
+      await frame.waitForSelector("[data-testid=velero-writes-on]", { timeout: 60_000 });
+      await cluster.turnWritesOn(frame);
+      await frame.locator(NAME_FIELD).first().fill(name);
+      // The confirmation reads the schedule by its name, which the role does not allow: no review is shown, and the
+      // words say the read the identity may not make. A role that let the read through would show the review.
+      await frame.click(backUpNow("ask"));
+      await frame.waitForSelector(`${backUpNow("failure")}, ${backUpNow("review")}`, { timeout: 60_000 });
+      expect(await frame.locator(backUpNow("review")).count()).toBe(0);
+      expect([
+        await frame.locator(backUpNow("failure")).getAttribute("data-code"),
+        await frame.locator(backUpNow("failure")).getAttribute("data-stage"),
+        await cluster.wordsOf(frame, backUpNow("failure-text")),
+      ]).toEqual(["forbidden", "read", BACKUP_NOW_WORDS.forbiddenRead(namespace)]);
+      // The refusal is of the cluster, not of the gate: writes stay on, and no backup of the name is there.
+      await frame.waitForTimeout(NOTHING);
+      expect(await cluster.writesState(frame)).toBe("on");
+      expect(cluster.kubectlE2E("get", "backups.velero.io", name, "--namespace", namespace).status).not.toBe(0);
+      // The pause of the schedule: its review reads nothing, and its run sends the patch, which the role does not allow.
+      await cluster.showList(frame);
+      await cluster.openPage(frame, cluster.SCHEDULES);
+      await cluster.waitForList(frame, cluster.SCHEDULES);
+      await cluster.openWorkspace(frame, SCHEDULE, cluster.SCHEDULES);
+      await frame.click("[data-testid=velero-schedule-pause]");
+      await frame.waitForSelector(patch("ask"), { timeout: 30_000 });
+      await frame.click(patch("ask"));
+      await frame.waitForSelector(patch("review"), { timeout: 30_000 });
+      await frame.click(patch("run"));
+      // A role that let the patch through would show its result.
+      await frame.waitForSelector(`${patch("failure")}, ${patch("result")}`, { timeout: 60_000 });
+      expect(await frame.locator(patch("result")).count()).toBe(0);
+      expect([
+        await frame.locator(patch("failure")).getAttribute("data-code"),
+        await frame.locator(patch("failure")).getAttribute("data-stage"),
+        await cluster.wordsOf(frame, patch("failure-text")),
+      ]).toEqual(["forbidden", "patch", SCHEDULE_PATCH_WORDS.forbidden(namespace)]);
+      await frame.waitForTimeout(NOTHING);
+      expect(await cluster.writesState(frame)).toBe("on");
+      expect(scheduleOf(SCHEDULE, namespace).metadata).toMatchObject({
+        uid: history.metadata.uid,
+        resourceVersion: history.metadata.resourceVersion,
+      });
+      // No write of any kind of Velero since the first command, every PATCH of a schedule counted: no controller runs
+      // here, and the runner that stands in for the server patches its storage location alone.
+      expect(writesOf(cluster.counted(earlier, cluster.apiRequests()), false, 0)).toEqual({});
+      expect(await cluster.layoutProblems(frame, cluster.SCHEDULES)).toEqual([]);
+      await cluster.captureScreenshot(frame, "dark-readme-reader-patch-refused");
     },
     TIMEOUT,
   );

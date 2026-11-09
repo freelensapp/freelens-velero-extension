@@ -17,7 +17,11 @@ import type { BackupTemplate } from "../../src/common/backup-template.ts";
 import type { ScheduleChanged, ScheduleCreated, WriteConfirmAnswer } from "../../src/common/ipc.ts";
 import type { ScheduleWrapper } from "../../src/common/schedule-form.ts";
 
-type ProofContext = Pick<DownloadProofContext, "owner" | "run" | "kubeconfig" | "shell" | "assertCurrent">;
+// The kubeconfig of the session of the extension, the one of the operator of the README, and the one of the environment,
+// with which the proof reads, changes and removes what is not of the session.
+type ProofContext = Pick<DownloadProofContext, "owner" | "run" | "kubeconfig" | "shell" | "assertCurrent"> & {
+  environment: string;
+};
 
 // The phases a backup ends in, in the release.
 const ENDED = ["Completed", "PartiallyFailed", "Failed", "FailedValidation"];
@@ -45,10 +49,10 @@ interface Read {
   status?: { phase?: string; lastSkipped?: string; validationErrors?: string[] };
 }
 
-// The kubectl of the environment, for what the proof reads of the cluster beside the procedures, and for the removal
-// of the schedules it created, which the adapter of the extension cannot delete: the cluster of the environment
-// checked before each call, as every call of the environment checks it, and its cache in the private state, never in
-// the folder it runs in. A read of what is not there answers nothing.
+// The kubectl of the environment, with its kubeconfig, for what the proof reads of the cluster beside the procedures, for
+// the change another hand makes, and for the removal of the schedules it created, which the adapter of the extension
+// cannot delete: the cluster of the environment checked before each call, as every call of the environment checks it,
+// and its cache in the private state, never in the folder it runs in. A read of what is not there answers nothing.
 function kubectlOf(
   context: ProofContext,
   args: string[],
@@ -60,7 +64,7 @@ function kubectlOf(
   context.assertCurrent();
   const { status, stdout, stderr, error } = spawnSync(
     shell.kubectl,
-    ["--kubeconfig", context.kubeconfig, "--context", DEMO_CONTEXT, ...args],
+    ["--kubeconfig", context.environment, "--context", DEMO_CONTEXT, ...args],
     {
       encoding: "utf8",
       env: { ...shell.environment, KUBECACHEDIR: join(shell.cache, "kubectl") },
