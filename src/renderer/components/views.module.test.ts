@@ -184,6 +184,7 @@ describe("colors of the words", () => {
       contentColor: "#ffffff",
       layoutTabsBackground: "#f8f8f8",
       tableBgcStripe: "#f8f8f8",
+      tableBgcSelected: "#f4f5f5",
       inputControlBackground: "#f6f6f7",
     },
     dark: {
@@ -198,18 +199,21 @@ describe("colors of the words", () => {
       contentColor: "#262b2f",
       layoutTabsBackground: "#252729",
       tableBgcStripe: "#2a2d33",
+      tableBgcSelected: "#383c42",
       inputControlBackground: "#1e2125",
     },
   };
   type Theme = keyof typeof HOST;
-  // The backgrounds the views write words on: the page, a list, the target bar, the rows of a kind of resources and a
-  // field.
+  // The backgrounds the views write words on: the page, a list, the target bar, the rows of a kind of resources, a
+  // field, and the row of a list the pointer is on or that is selected, which the host draws for its lists
+  // (`table/table.scss`, lines 30 to 35, at the validation target).
   const BACKGROUNDS = [
     "mainBackground",
     "contentColor",
     "layoutTabsBackground",
     "tableBgcStripe",
     "inputControlBackground",
+    "tableBgcSelected",
   ] as const;
   const text = () => readFileSync(join(process.cwd(), "src", "renderer", "components", "views.module.css"), "utf8");
   const rgb = (hex: string) => [1, 3, 5].map((at) => Number.parseInt(hex.slice(at, at + 2), 16));
