@@ -1350,3 +1350,243 @@ REQ-306. The amendments of the requirements these decisions bring, REQ-303,
 REQ-306 and the others of the release flow, among them REQ-295 of the tag `next`,
 the end of Status of REQ-296, D15 and REQ-309 to REQ-311 and REQ-313, are made by
 another pull request.
+
+T6.3, the second of its pull requests, on 2026-11-09: the rest of the README of
+1.0.0 in the layout of the other extensions of the organization, Features and Limits
+after Getting started, and Troubleshooting (REQ-300), with a unit case that holds
+its quotes to the code (DOC-06). The branch starts from the one of the first pull
+request of T6.3, which was not merged when this slice started. Permissions, with
+[#145](https://github.com/freelensapp/freelens-velero-extension/issues/145), is a
+slice of its own: two entries of Troubleshooting lead to it by the anchor
+`#permissions`, in a commit of their own. The evidence, by check:
+
+- The sections, in this order: Getting started, Features, Limits, Safety,
+  Troubleshooting, then Development.
+- Features, each statement read in the spec that asks for it and in the code at the
+  base of the branch:
+  - the installations: the cluster that is opened and no other (REQ-013 of
+    SPEC-0002); one installation read, several asked for with none chosen, one named
+    when it cannot be found by looking (`selection` and `entry` of
+    `src/common/discovery.ts`, REQ-015, REQ-016); the choice kept for each cluster
+    across a restart (REQ-022 of SPEC-0002, REQ-314);
+  - the Overview: REQ-093 to REQ-105 of SPEC-0008, its six families
+    (`src/common/overview.ts`), its three windows (`src/common/window.ts`), and the
+    band of the server of SPEC-0012;
+  - the views of the ten kinds: the pages, the views over the lists and the ways
+    between them of SPEC-0003, SPEC-0005, SPEC-0006, SPEC-0007 and SPEC-0014, the
+    sections in the details of the host, a name that leads nowhere said with its
+    reason, the phase and the failure as two facts, what is not reported
+    (`NOT_REPORTED` of `src/common/operation-text.ts`), and the band of the volume
+    operations of a backup and of a restore (`src/common/volume-band.ts`);
+  - the workspace: REQ-138 to REQ-149 of SPEC-0011, a text saved for ten minutes at
+    most (`savableUntil` of `src/common/artifact-text.ts`), a file the store does
+    not have said by the phase (`missingFile`), the allowances of REQ-126, REQ-128,
+    REQ-130 and REQ-132 of SPEC-0010, and the request Velero removes about ten
+    minutes after its URL (REQ-135, `wouldCreate`);
+  - the server: REQ-152 to REQ-155 of SPEC-0012, and the wait of ten seconds
+    (`serverStatusFailure` of `src/main/server-status.ts`);
+  - the adherence: REQ-160 to REQ-171 of SPEC-0013;
+  - the actions: REQ-244 to REQ-284 of SPEC-0017 and REQ-221 to REQ-239 of
+    SPEC-0016, each command where REQ-252 puts it;
+  - the writes: REQ-108 to REQ-111 and REQ-118 of SPEC-0009, REQ-201 of SPEC-0015,
+    and the words of the dialog (`writesDialogWords` of
+    `src/renderer/components/target-bar.tsx`).
+- Limits, each with what records it: the synthetic objects and the platforms,
+  Compatibility (REQ-299, D13); the drop of a tarball, the deviation of the first
+  pull request of T6.3; what is not in 1.0.0, the roadmap under Deferred after
+  v1.0.0, the exclusions of SPEC-0017, and the words of the fields the forms do not
+  offer (`NOT_OFFERED` and `NOT_OFFERED_OF_A_SCHEDULE` of
+  `src/common/backup-create-words.ts`, `NOT_OFFERED_OF_A_RESTORE` of
+  `src/common/restore-create-words.ts`); the contents of a backup, REQ-120 of
+  SPEC-0010; the bounds of a file and the two loads at a time, REQ-133 with the
+  words of `payload-too-large` and of the step `queue`; TLS, REQ-131; the zone of
+  the server, REQ-162, REQ-165 and REQ-231; the plugin, REQ-126 with Compatibility.
+- DOC-06, for the checklist of REL-03: each quote of Troubleshooting, with
+  `<namespace>` and `<request>` in the place of the names, and the function and the
+  case that make it, with the unit tests that pin the case.
+  - A list refused, "The backups of `<namespace>` are not shown" and "Access to the
+    backups of this namespace is denied. How many there are is not known.":
+    `LIST_WORDS.notShown` and `LIST_WORDS.denied` of `src/common/volume-words.ts`,
+    shown by `FamilyList` of `src/renderer/components/family-page.tsx` for a family
+    never read whose read the API answered with 401 or 403 (`failedStatus` of
+    `src/common/read-state.ts`); `src/common/volume-words.test.ts` and
+    `src/renderer/pages/backups-page.test.tsx`.
+  - Back up now and Create backup, "The identity of this cluster may not create a
+    backup in `<namespace>`: nothing was created.": `BACKUP_NOW_WORDS.forbiddenCreate`
+    of `src/main/backup-now.ts`, a 403 to the creation of the Backup, code
+    `forbidden` at the stage `creation`, which `createBackupKept` gives both;
+    `src/main/ipc-backup-now.test.ts`.
+  - Restore, "The identity of this cluster may not create restores in
+    `<namespace>`: nothing was created.": `RESTORE_CREATE_WORDS.forbiddenCreate` of
+    `src/main/restore-create.ts`, the same 403; `src/main/ipc-restore-create.test.ts`.
+  - Create schedule, "The identity of this cluster may not create schedules in
+    `<namespace>`: nothing was created.": `SCHEDULE_CREATE_WORDS.forbiddenCreate` of
+    `src/main/schedule-create.ts`, the same 403; `src/main/ipc-schedule-create.test.ts`.
+  - Pause and Resume, "The identity of this cluster may not patch schedules in
+    `<namespace>`: nothing was patched. The velero command line replaces the whole
+    schedule, with the verb update; this extension patches it, and needs the verb
+    patch.": `SCHEDULE_PATCH_WORDS.forbidden` of `src/main/schedule-patch.ts`, a 403
+    to the patch; `src/main/ipc-schedule-patch.test.ts`.
+  - Delete backup, "The identity of this cluster may not create a
+    DeleteBackupRequest in `<namespace>`: nothing was created.":
+    `BACKUP_DELETE_WORDS.forbiddenCreate` of `src/main/backup-delete.ts`, a 403 to
+    the creation of the request; `src/main/ipc-backup-delete.test.ts`.
+  - A tab, "The cluster refused the creation of a DownloadRequest: the identity
+    needs the verb create on downloadrequests of the namespace.": `downloadFailure`
+    of `src/common/diagnostic-text.ts`, code `forbidden` at the stage `creation`;
+    `src/common/diagnostic-text.test.ts`, "says which read or creation the cluster
+    refused, and what the identity needs for the ones it can be given".
+  - The band of the server, "The cluster refused the creation of a
+    ServerStatusRequest: the identity needs the verb create on serverstatusrequests
+    of the namespace.": `serverStatusFailure` of `src/main/server-status.ts`, code
+    `forbidden` before a request was created; `src/main/request-object.test.ts`,
+    "says that the cluster refused the creation, with the kind and the verb it
+    needs, and leaves writes on".
+  - A credential, "The cluster did not take the credential of the context: it may
+    have expired. Sign in again, then ask again. Nothing was created.":
+    `BACKUP_NOW_WORDS.credential`, a 401 to the creation, code `forbidden` with the
+    verdict `credential`; `src/main/ipc-backup-now.test.ts`.
+  - A port-forward refused, "The cluster refused the port-forward to the Pod of the
+    store: the route through the cluster needs the verb create on pods/portforward.
+    The DownloadRequest `<request>` stays in `<namespace>` until Velero removes
+    it.": `downloadFailure`, code `forbidden` at the stage `forward`, which
+    `src/main/diagnostic-tunnel.ts` gives when kubectl says the port-forward was
+    refused; `src/common/diagnostic-text.test.ts`, "says which read of the route
+    the cluster refused, and what the route through the cluster needs".
+  - A certificate refused, "The certificate of the store is not trusted. The
+    storage location can name the certificate of its authority; the verification
+    is never turned off. The DownloadRequest `<request>` stays in `<namespace>`
+    until Velero removes it.": `downloadFailure`, code `tls-invalid` at the stage
+    `download` with the verdict `untrusted`, which `src/main/diagnostic-transport.ts`
+    gives when the socket says the certificate was not authorized;
+    `src/common/diagnostic-text.test.ts`, "says that the certificate is verified
+    whatever the storage location asks".
+  - The same for a location that asks for no verification, "The certificate of
+    the store is not trusted. The storage location asks, with
+    insecureSkipTLSVerify, that the certificate is not verified: the extension
+    verifies it all the same. The storage location can name the certificate of its
+    authority. The DownloadRequest `<request>` stays in `<namespace>` until Velero
+    removes it.": the verdict `insecure`, which `src/main/diagnostic-service.ts`
+    gives an `untrusted` refusal of a location whose `config.insecureSkipTLSVerify`
+    reads as true; the same case.
+  - A handshake that failed, "The handshake of TLS with the store failed, and no
+    certificate was refused: the store may not speak TLS at the port of its URL,
+    or a version of it the extension does not, or the connection was closed while
+    it was made. The DownloadRequest `<request>` stays in `<namespace>` until
+    Velero removes it.": `downloadFailure`, code `tls-invalid` at the stage
+    `download` with no verdict; `src/common/diagnostic-text.test.ts`, "tells a
+    handshake of TLS that failed from a certificate that was refused, and says of
+    neither what it does not know".
+  - A cluster not connected, "The cluster is not connected in Freelens: the
+    extension asks nothing of a cluster that is not connected, and does not
+    connect it.": `CLUSTER_WORDS.disconnected` of `src/common/diagnostic-text.ts`,
+    code `target-changed` at the stage `catalog`, which every procedure of
+    `src/main/ipc.ts` gives for a cluster the catalog gives in another state than
+    connected (`refusalOf` of `src/main/catalog.ts`), and the gate for writes
+    turned on (`src/main/write-gate.ts`); `src/main/ipc.test.ts`, "refuses, on
+    every procedure, a cluster the catalog does not give, and one it gives in a
+    state that is not connected, and does nothing for either", and
+    `src/main/write-gate.test.ts`, "refuses to turn writes on for a cluster that is
+    not connected, in each state, with its words, and makes no adapter".
+  - A store not reached, "The store could not be reached. The DownloadRequest
+    `<request>` stays in `<namespace>` until Velero removes it.":
+    `downloadFailure`, code `transport-unreachable` at the stage `download`;
+    `src/common/diagnostic-text.test.ts`, "tells a file the store does not have
+    from a store that was not reached and from a URL that was not signed".
+  - A store silent, "The store did not answer in time. The DownloadRequest
+    `<request>` stays in `<namespace>` until Velero removes it.":
+    `downloadFailure`, code `deadline` at the stage `download` with no verdict; no
+    unit test pinned these words before the case of DOC-06 below.
+  - A Service of the store with no Pod ready, "The Service of the store has no Pod
+    that is ready, among the ones it selects, to send the request to. The
+    DownloadRequest `<request>` stays in `<namespace>` until Velero removes it.":
+    `downloadFailure`, code `destination-denied` with the verdict `endpoint`, which
+    `src/main/diagnostic-route.ts` gives at the stage `service`, `endpoints` or
+    `pod`, the same words at each; `src/common/diagnostic-text.test.ts`, "says the
+    rule that denies a destination, each in words of its own".
+  - No URL signed, "Velero did not sign a URL in thirty seconds: its server may be
+    stopped or busy, or it could not open the storage location. The
+    DownloadRequest `<request>` stays in `<namespace>` until Velero removes it.":
+    `downloadFailure`, code `deadline` at the stage `wait` with the verdict
+    `unsigned`, which `src/main/diagnostic-service.ts` gives at the end of the wait
+    for a URL; the same case as a store not reached.
+- The case of DOC-06, "quotes in each entry of Troubleshooting the words the
+  extension shows, as the function of its words writes them for its case, and no
+  other" (`test/documents.test.ts`). It calls each function above for its case,
+  with the two names of the section, as code spans, in the place of the namespace
+  and of the request, and compares, entry by entry, the quotes of the section,
+  each paragraph of its blockquotes and each cell of the column The words of its
+  tables, with what the functions return, as lists in any order, white space read
+  as one space; the five entries are the headings of the section, in their order,
+  and its preface names both placeholders. It reads the words, which the unit tests
+  above tie to their cases.
+- DOC-10: green on the first commit of the branch. The commit of the two links
+  fails it on the anchor `permissions` alone, twice, while the section of #145 is
+  not on the base. A merge of the head of that commit with the branch of #145 at
+  `560f5de`, in a worktree removed after, was made by Git with no conflict, and the
+  file of the documents passed on it, 8 cases of 8, the three anchors
+  `permissions` resolved. Both slices add their evidence at the end of this spec:
+  the same merge of the head conflicts there alone, and with both blocks kept the
+  file of the documents passed, 8 cases of 8, Trunk on the README, the file of the
+  documents and this spec found no issue, and `pnpm type:check` and
+  `pnpm lint:check` were green.
+- The plan of the views runs no part for the files of the slice (`partsToRun` of
+  `e2e/scripts/views-plan.mts`), and they reach no end to end run.
+- The gates of the slice, on its head: `pnpm type:check`, `pnpm lint:check`, with
+  one information in a file the slice does not touch, and `pnpm knip:check`,
+  green; `pnpm exec vitest run test/documents.test.ts`, 6 cases of 7, DOC-10
+  failing on the two anchors as said, and 7 of 7 on the first commit; Trunk on the
+  changed files, green on the first commit, and on the head the rule MD051 of
+  markdownlint on the same two anchors, as DOC-10. For the coordinator, once the
+  section Permissions is on the base: the unit run of the head, `pnpm test:unit`,
+  {RUN-UNIT}; the checks of the pull request, {RUN-CHECKS}.
+
+Seen failing, on changes made on purpose and put back each time, 29 in all, each
+failing the case of DOC-06 alone, the six other cases passing. In the README: a
+word changed in a quote of the table, a quote removed, a quote the code does not
+make added, the heading of an entry renamed, a placeholder changed in a quote, the
+column of the words renamed, two quotes joined in one paragraph, the preface
+without the placeholder of the request, and a quote moved to another entry. In the
+code, the words of each quote changed in the function that makes them: the verb of
+the port-forward, a list denied and its title, the creation of a backup, of a
+restore, of a schedule, of a `DeleteBackupRequest`, of a `DownloadRequest` and of
+a `ServerStatusRequest` refused, the verb of a pause, a cluster not connected, a
+handshake that failed, the request that stays, a store not reached and a store
+silent, a URL not signed, a Service with no Pod ready, a certificate refused, with
+and without `insecureSkipTLSVerify`, and a credential the cluster did not take.
+Beside them, what the case must let pass passed: a quote wrapped at other places,
+and the cells of the table aligned with spaces.
+
+Decided while implementing, on 2026-11-09:
+
+- Features and Limits come after Getting started, as the READMEs of the latest
+  extensions of the organization have them, and Safety after them;
+  Troubleshooting comes after Safety, which it leads to, and before Development.
+- A quote is the text the function returns, with `<namespace>` and `<request>`,
+  as code spans, in the place of the names: the section says so before its
+  entries, and the case gives the functions the same code spans, so that the text
+  of the README and the text of the function are one string.
+- Each entry quotes the words an operator meets first for its failure: for a list,
+  the words of the list of the Backups, which the other lists say with their own
+  plural; for an action, a table with one row for each words, the tab and the
+  band of the server among them. The refusals of the reads before a port-forward
+  are named by their verbs, and not quoted. The states before a view, written in
+  the component `src/renderer/components/entry-state.tsx` and in no module of the
+  words, are not quoted.
+- The words of a credential the cluster did not take are quoted as Back up now
+  says them; the other actions end them with what they did not send or patch.
+- A cluster that is not connected is quoted as the procedures say it, before
+  anything leaves: a tab and the band of the server may follow the words with what
+  became of their request, which the entry says.
+- The certificate of an authority is named first by `spec.objectStorage.caCertRef`,
+  a Secret of the namespace of the location: the inline `caCert` is deprecated in
+  the reviewed release, and the entry names it as the older form.
+- The text of the slice names no product but Freelens, Velero, Kubernetes, npm and
+  GitHub: Limits leads to Compatibility for the platforms, and names kubectl, the
+  command line of Kubernetes, where the words of the extension name it.
+- The links of Troubleshooting to Permissions are a commit of their own, at the
+  coordinator's request: the anchor resolves once the section of #145 is on main,
+  which the coordinator checks at the merge.
+- The known limits of the notes of 1.0.0 in `CHANGELOG.md`, two of the ones of
+  Limits, are left to the pull request of the notes of 1.0.0 (D15). The row of T6.3
+  in the roadmap stays In PR.
