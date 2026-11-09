@@ -224,6 +224,8 @@ export interface ListOf {
 export const MARK_WIDTH = 28;
 export const LONG_LOCATION_NAME = "location-with-a-name-as-long-as-the-name-of-an-object-can-be-63";
 export const LONG_RESTORE_NAME = "restore-with-a-name-as-long-as-the-name-of-a-restore-can-be-one";
+/** The backup of the fixtures of the views with a name as long as the value of a label may be, InProgress. */
+export const LONG_BACKUP_NAME = "backup-with-a-name-as-long-as-the-value-of-a-label-is-allowed-1";
 
 /** The Overview is a page and not a list: it has no rows, and no view of its kind. */
 export const OVERVIEW: ListOf = { id: "overview", kind: "overview", menu: "velero-overview" };
@@ -3494,14 +3496,81 @@ export function removeCreatedRestore(namespace: string, name: string, uid: strin
   removeCreated("restores", namespace, name, uid, since);
 }
 
-function removeCreated(
-  resource: "backups" | "schedules" | "restores",
+/** A DeleteBackupRequest as a suite compares it with the text of its review: it carries no URL, and is read whole. */
+export interface DeleteRequestRead {
+  metadata: { name: string; uid: string; generateName?: string; labels?: Record<string, string> };
+  spec?: unknown;
+  status?: { phase?: string; errors?: string[] };
+}
+
+/**
+ * The DeleteBackupRequests of a namespace of the fixtures that carry the label of the UID of a backup, or every one of
+ * the namespace when no UID is given: a request whose label is wrong is found there.
+ */
+export function deleteRequestsOf(namespace: string, backupUid?: string): DeleteRequestRead[] {
+  const { status, stdout, stderr } = kubectlE2E(
+    "get",
+    "deletebackuprequests.velero.io",
+    "--namespace",
+    namespace,
+    ...(backupUid === undefined ? [] : ["--selector", `velero.io/backup-uid=${backupUid}`]),
+    "-o",
+    "json",
+  );
+
+  if (status !== 0) throw new Error(`kubectl get deletebackuprequests failed: ${stderr}`);
+  return (JSON.parse(stdout) as { items: DeleteRequestRead[] }).items;
+}
+
+/**
+ * Removes a DeleteBackupRequest a suite of the actions created and read, on the environment of the CRDs alone, where
+ * no controller processes it, the same way as a backup: by its name and the UID the suite read of it, or by its name
+ * when it was created since the suite began.
+ */
+export function removeCreatedDeleteRequest(
   namespace: string,
   name: string,
   uid: string | undefined,
   since: number,
 ): void {
-  const noun = resource === "backups" ? "backup" : resource === "restores" ? "restore" : "schedule";
+  removeCreated("deletebackuprequests", namespace, name, uid, since);
+}
+
+/**
+ * Removes the DeleteBackupRequests of a backup whose deletion a suite of the actions asked and that the suite did not
+ * read: each one that carries the label of the UID of the backup, by its name, when it was created since the suite
+ * began, the same way as a backup whose UID the suite could not read. One created before is not the suite's: it is
+ * left as it is, the others are removed all the same, and each one left is said at the end.
+ */
+export function removeCreatedDeleteRequests(namespace: string, backupUid: string, since: number): void {
+  const left: string[] = [];
+
+  for (const request of deleteRequestsOf(namespace, backupUid)) {
+    try {
+      removeCreated("deletebackuprequests", namespace, request.metadata.name, undefined, since);
+    } catch (error) {
+      left.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  if (left.length > 0) throw new Error(left.join("; "));
+}
+
+// What each kind a suite of the actions creates is called in what it says.
+const CREATED_NOUNS = {
+  backups: "backup",
+  schedules: "schedule",
+  restores: "restore",
+  deletebackuprequests: "request to delete a backup",
+} as const;
+
+function removeCreated(
+  resource: keyof typeof CREATED_NOUNS,
+  namespace: string,
+  name: string,
+  uid: string | undefined,
+  since: number,
+): void {
+  const noun = CREATED_NOUNS[resource];
 
   if (namespace === "" || !SYNTHETIC_NAMESPACES.includes(namespace)) {
     throw new Error(`The suites remove the ${resource} of a namespace of the fixtures, and "${namespace}" is not one`);

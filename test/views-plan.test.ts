@@ -131,6 +131,9 @@ describe("the parts of the views a run takes", () => {
       "src/common/schedule-patch.ts",
       "src/common/schedule-patch-words.ts",
       "src/common/schedule-signal.ts",
+      "src/renderer/pages/backup-delete-workspace.tsx",
+      "src/common/backup-delete-words.ts",
+      "src/common/delete-request.ts",
       "e2e/__tests__/velero-e2e-actions.tests.ts",
     ]) {
       expect([file, partsToRun(definition, [file])]).toEqual([file, [...statics, "actions"]]);

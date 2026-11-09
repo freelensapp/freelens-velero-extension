@@ -1,6 +1,6 @@
 # SPEC-0017: The Write Actions
 
-- **Status:** Approved
+- **Status:** Verified
 - **Date:** 2026-11-07
 - **Milestone / tasks:** M5 / the ground rules of the write actions, T4.2, T4.3, T4.4, T4.5, T4.6
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`
@@ -496,13 +496,14 @@ scripts of `e2e/scripts/`, beside the transport proof.
   the Schedule shows it.
 - The words of each action and of each warning are read whole by the unit tests;
   the lead maintainer judges them at the review of the milestone, on the screenshots
-  of the pre-review.
+  of the pre-review. Judged on 2026-11-09, at the review of the fifth milestone, and
+  approved as they are.
 - The end to end tests, with the server of the release on the disposable kind
   cluster, show for each action what the controller does with the request the
   extension wrote: a backup from a schedule and a backup from the form Completed, a
   restore Completed into its mapped namespace, a schedule paused with no submission
-  and resumed with and without `skipImmediately`, and a DeleteBackupRequest Processed
-  with its backup gone.
+  and resumed with and without `skipImmediately`, and a DeleteBackupRequest gone with
+  its backup.
 - Failure: a second request after an answer that is not known, a write of a field
   or of an object the review did not show, a label or an annotation of the
   extension, an action on more than one object, or a write outside the disposable
@@ -645,7 +646,7 @@ What this draft could not verify, and what the implementation establishes first:
 - The namespaces the host lists for a cluster, as SPEC-0016 says for the form of
   the template, which the mapping of a restore offers as targets.
 - The words of each action, which the lead maintainer judges at the review of the
-  milestone.
+  milestone: judged on 2026-11-09, and approved as they are.
 
 T4.2, the first of its pull requests, on 2026-11-08: the backup asked from a
 schedule in the main process, with the contract of its write and the words of its
@@ -2282,7 +2283,9 @@ Decided while implementing, on 2026-11-08:
   which answers a name it does not hold, the empty one among them, as not found
   ([controller-runtime v0.21.0, `cache_reader.go` L57-L76](https://github.com/kubernetes-sigs/controller-runtime/blob/v0.21.0/pkg/cache/internal/cache_reader.go#L57-L76)).
   The command stays offered, as REQ-278 asks, and the refusal is said with the error of
-  Velero; whether to hold it back for such a backup is an open question. No run on a
+  Velero; whether to hold it back for such a backup was left open, and the lead
+  maintainer decided on 2026-11-09, at the review of the milestone, to keep it offered,
+  as it is. No run on a
   server shows it: the server starts every backup it reads, and a proof cannot hold one
   unstarted.
 - The workspace of a backup shows only the deletion of that backup, by its name and its
@@ -2308,7 +2311,8 @@ Decided while implementing, on 2026-11-08:
 
 The independent review of this pull request, read-only, found two blockers and four
 points of medium weight, with others; all were applied, the hold of the command for a
-backup that names no storage location left as an open question:
+backup that names no storage location left open, and decided at the review of the
+milestone: it stays offered:
 
 - The dialog that turns writes on did not name the deletion: it names a
   DeleteBackupRequest of one backup, asked from the view of that backup, as REQ-245
@@ -2343,3 +2347,184 @@ backup that names no storage location left as an open question:
   offered beside a Delete backup enabled, which is held back now.
 - The line of the name of a backup with both commands and their notes, which wrap, is
   looked at in the pictures of the pre-review of the third pull request.
+
+T4.6, the third and last of its pull requests, on 2026-11-08: the proof in the packaged
+application, in the pre-review and end to end. The evidence, by check:
+
+- DELETE-05 and DELETE-07, the packaged part
+  ([`velero-e2e-actions.tests.ts`](../../e2e/__tests__/velero-e2e-actions.tests.ts)), on
+  the CRDs of the release alone, where no controller runs: no row of the list of the
+  Backups offers a deletion; Delete backup in the view of the backup of the form, which
+  no controller started, with the words of its phase, offered with writes off as well,
+  and disabled for the backup in progress with the words why; the workspace over the
+  view, named in the address, which with writes off writes nothing and leads to the
+  writes of the target bar; the review, whose text is the request of the backup, with
+  what it means and its parts by their names, Delete backup enabled only once the name
+  of the backup is typed as it is written, and not for one character less, one more,
+  the name in capitals or after a space, Enter on each sending nothing, left by Escape
+  and by its command, a new review asking for the name again, nothing written; the
+  deletion, exactly one POST of a DeleteBackupRequest answered 201, the text of its
+  review, no write of the backup and no other write of any kind of Velero, no DELETE,
+  the request and the backup read by their names at least ten times each after the
+  creation, the request alone in the namespace and the one the label of the UID of the
+  backup finds, read with every field of the text, a name generated from its prefix and
+  no phase, the text with a generated name, the namespace, the two labels of the backup
+  and no other, and the name of the backup in its spec, as the case writes them, the
+  backup with its version as it was, the words that Velero had not started it, the way
+  to the view of the backup, which takes the place of the workspace, and a new review
+  that says the request that is there; the reader of a part refused at the creation of
+  the request, its review saying that the other requests could not be read, nothing
+  left that may have been created, the deletion offered again, writes left on, no
+  request of the backup and the backup as it was. The suite removes the request it read
+  by its UID, and any other request of a backup whose deletion it asked, by the label
+  of the UID of the backup, when it was created since the suite began. 28 cases.
+- DELETE-05 and REQ-282, end to end
+  ([`local-delete-proof.mts`](../../e2e/scripts/local-delete-proof.mts), called by the
+  transport proof of `pnpm e2e`), the procedures of the compiled main process called as
+  a frame calls them, with the server of the release running: a backup of the ConfigMaps
+  of the run, Completed, deleted with its name typed once its location is Available,
+  the review the request the release makes for that backup, as the builder writes it and
+  as the proof writes it, with no other request of it; the run ended completed once its
+  reads showed the backup gone, or in progress, or not read, only when it used its
+  thirty seconds and the main process read the backup there until less than ten seconds
+  before the run answered; then the backup and its request read until both are gone,
+  the request among the requests of the namespace whole, by the name of the backup in
+  it; a backup of a storage location that is not there, FailedValidation, deleted the
+  same way, refused with the one error of a refusal, `backup deletion failed: backup
+  storage location <location> not found`, the request the server refused the one the
+  run created, alone, and the backup keeping its phase. Whatever ended the proof, it
+  removes the backup it refused and its request first, then the other: each backup it
+  made, by the UID its creation answered, or, when that answer was lost, by its name
+  seen absent before the creation when it carries the label of the run and was created
+  since the proof began, the refused one by its object, the other through the request
+  of the action once it ended; and every request of them, one at a time, each with its
+  UID as the precondition. A removal that fails is said, the others are tried all the
+  same, and the proof ends with its own failure.
+- ACT-10 ([`pre-review.tests.ts`](../../e2e/__tests__/pre-review.tests.ts)): Delete
+  backup, its workspace and its review with the name typed, and the workspace of the
+  backup of 63 characters of the views, InProgress, opened by the address, which holds
+  Delete backup back with its words, in both themes, at 1440 by 900, at 900 by 650 and
+  at twice the zoom, with nothing over something else, wider than its room or cut, 65
+  views in all, the beginning of each workspace and of the review brought into sight
+  for the picture; the line of the name of a backup with both commands and their notes,
+  in the view of the backup FinalizingPartiallyFailed, where both are disabled, taken
+  from the top of the page; and a deletion asked with the keyboard alone, from the
+  command on the line of the name of the backup, one press after Restore, which is one
+  press after the way back, Enter to the review, which has the focus, the field of the
+  name the first stop after it, or the second when the text of the request scrolls, the
+  name typed and taken back by Escape, typed again, Delete backup the next stop,
+  enabled and not pressed, and Do not delete it the one after, whose Enter leaves the
+  review for the command that asks again, Escape on a new review back to that command,
+  Escape back to the view, whose way back has the focus, and Escape back to the row of
+  the backup, with no request in the installation of the views. 51 cases.
+- The parts of the views ([`views-plan.test.ts`](../../test/views-plan.test.ts)): the
+  workspace of the deletion, its words and the request run the suite of the actions.
+
+Four changes made on purpose to the code of the first two pull requests, for the
+assertions of this round that the packaged runs make, each kept apart for those runs:
+the reads after the creation stopped at once, which the case of the deletion counts
+now; the name typed compared by its beginning, so that one character more enables
+Delete backup, which its review tries now; a deletion command on each row of the list
+of the Backups, which its first case looks for now; and Delete backup before Restore on
+the line of the name, which the walk of the pre-review pins now. The unit run sees the
+first three fail: nine cases of `ipc-backup-delete.test.ts`; one of
+`backup-delete.test.ts` and one of `backup-delete-workspace.test.tsx`; and one of
+`backup-delete-workspace.test.tsx`. No test of the renderer sees the fourth. A label
+added to the request by the builder, which the case of the deletion now looks for as
+well, fails six of the seven cases of `delete-request.test.ts`.
+
+Decided while implementing, on 2026-11-08:
+
+- The packaged suite deletes the backup of the form it created, which no controller
+  started there, so that no fixture is asked for; on the CRDs alone the request stays
+  without a phase, and the suite removes it by its name, with the UID it read of it as
+  the precondition, and any other request of a backup whose deletion it asked, found
+  by the label of the UID of the backup, when it was created since the suite began.
+- The proof of `pnpm e2e` asks for a request to delete a backup of a storage location
+  that is not there, which the server validates FailedValidation and refuses to delete
+  before it changes anything, and removes that backup by a DELETE of its object, with
+  its UID as the precondition: it holds nothing in the store. The DELETE is the
+  harness's, which REQ-284 forbids to the extension, not to the proof. The proof makes
+  its two backups with kubectl, where the other proofs ask the extension for theirs:
+  what it proves is the deletion.
+- The line the transport proof prints when it passes says the pause and the resume,
+  which it left out, and the deletion.
+
+Decided while implementing, on 2026-11-09:
+
+- A deviation of ACT-10: the review of a deletion is taken on a name of 15 characters,
+  `views-history-1`. The backup of 63 characters of the fixtures of the views is
+  InProgress, which holds Delete backup back, and no Completed backup of that length is
+  among them: adding one would change the counts of every suite of the views that reads
+  them. The workspace of that backup, held back with its words, its name in the title
+  and in what the deletion is, is taken at every size; the review with a name of 63
+  characters waits for a Completed backup of that length in the fixtures of the views.
+- The case of the deletion asks for ten reads of the request and ten of the backup after
+  the creation, where the thirty seconds make about twenty-nine of each: ten hold while
+  a read of both takes up to two seconds, and reads that stop at once make none of the
+  request.
+- The proof takes a run that ended in progress, or not read, only when the run used its
+  thirty seconds and the main process read the backup there until less than ten seconds
+  before the run answered: the run reads every second, and says completed at its first
+  read of the backup gone.
+- The store of the test environment holds 24 volumes, and no longer 8. In five hosted
+  runs of the end to end tests the store refused every write of the run once the proof
+  of the deletion made its backup, and the cleanup after it failed the same way; the
+  second machine never met it. The store grows the volumes of a collection seven at a
+  time, and on the runner its filer wrote first: its own collection took seven of the
+  eight, the bucket of the locations had one, and the deleted bytes of the run filled
+  it past 128 MB, with no room to grow another ("Not enough data nodes found"). With 24
+  both collections take seven and the bucket can grow; the count stays fixed, as
+  LOCAL-STORAGE.md asks. When the transport proof fails, it now says its failure before
+  its cleanup, then how many times the store restarted, its volumes and what it said of
+  them.
+
+The independent review of this pull request, read-only, found no blocker, one major and
+seven minors, with eleven nits; all were applied but three of the nits and a part of a
+fourth:
+
+- The pictures of the deletion were taken on a name of 15 characters where ACT-10 asks
+  for 63, and the block did not say so: the workspace of the backup of 63 characters is
+  taken, held back, and the review on 15 characters is the deviation above.
+- The cleanup of the proof could hide the failure it came from, could not remove a
+  backup whose creation lost its answer, removed with kubectl by a selector and by a
+  name, and could ask the deletion of a backup still in progress, which the server
+  refuses and which then stops the check before the suites: each removal is tried alone
+  and said, the proof ends with its own failure, the refused backup and its request go
+  first, a backup of a name seen absent that carries the label of the run and was
+  created since the proof began is removed, each removal is of one object with its UID
+  as the precondition, and a backup is waited for until it ended before its request.
+- No request left was one read right after the backup went, where the server deletes
+  the request after the backup: both are read until they are gone.
+- The proof took in progress for an end, so that a run that never says completed
+  passed, and found the requests by the label under test: the run must say completed
+  once the main process reads the backup gone, the requests are found among the requests
+  of the namespace whole by the name of the backup in them, the refused request is read,
+  the one the run created, alone, and the review is compared with the request the proof
+  writes as well.
+- The suite found the requests it created by a label and a clock: it removes the one it
+  read by its UID, the namespace holds that one alone, and the removal by the label goes
+  on past a request that is not the suite's and says each one at the end.
+- The case of the deletion took the shape of the request from the builder it tests: its
+  keys, its labels, its generated name and its spec are written in the case, and the
+  parts of the meaning by their names.
+- The cases did not count the reads after the creation, try one character more, offer
+  the command with writes off, follow the way to the writes of the target bar, look at
+  the rows of the list, or check that a refusal left nothing: each does now, the reads
+  with ten of each where the review proposed twenty, for the reason above.
+- The walk did not pin the order of the commands or where the field is, and reached
+  neither command of the review: Restore and then Delete backup are one press each, the
+  field is the first stop after the review, or the second when its text scrolls, Delete
+  backup and Do not delete it are reached, and Enter on the latter leaves the review.
+- The nits applied: the comment of the count of the views, the refusal in the decisions
+  said as the server's, the line of the name of a backup said in ACT-10, the changes
+  made on purpose of this round, the Success Criteria, the two flakes of the proof (the
+  other requests not read, the location not yet Available) and the end of a backup in
+  its messages, a new review with a request there, and the backups the proof makes with
+  kubectl. Left: the commits of the pull request, whose bodies the squash merge
+  replaces; the time of a failing run of the proof, which stays within its job; the part
+  of the pre-review, which runs for the css and the shared components, as for the four
+  earlier actions; and, of the gaps of the cases, the other phases in progress and the
+  locations ReadOnly or not there, which the component tests hold. The registration of
+  a backup of the fixtures by the case of the reader, which only a request created
+  since the suite began passes, is kept as its net.

@@ -228,13 +228,13 @@ green in CI on main.
 
 | Feature | Task | Spec | Status |
 | --- | --- | --- | --- |
-| Ground rules of the write actions | | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | Approved |
+| Ground rules of the write actions | | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | Done |
 | Backup now from a schedule | T4.2 | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | Done |
 | Create backup form, followed by a review of the exact request | T4.3 | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | Done |
 | Create schedule form, followed by a review of the exact request | T4.7 | [SPEC-0016](../specs/SPEC-0016-create-a-schedule.md) | Done |
 | Restore from backup or schedule, with namespace mappings and existing-resource policy | T4.4 | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | Done |
 | Pause and resume of a schedule, with explicit `skipImmediately` behavior | T4.5 | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | Done |
-| Delete one backup through `DeleteBackupRequest`, with double confirmation | T4.6 | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | In PR |
+| Delete one backup through `DeleteBackupRequest`, with double confirmation | T4.6 | [SPEC-0017](../specs/SPEC-0017-write-actions.md) | Done |
 
 Creating a Schedule is in v1.0.0, decided by the lead maintainer on 2026-10-23:
 T4.7, whose spec is [SPEC-0016](../specs/SPEC-0016-create-a-schedule.md), approved
@@ -252,6 +252,18 @@ of a creation. Pause and resume, T4.5, are the only patches of v1.0.0.
 Exit of M5: each action tested separately on the disposable kind cluster, with
 the resulting objects and state checked. No write on a real cluster, no bulk
 deletion of backups, no way around the confirmation.
+
+Every row of the milestone is Done with the third pull request of T4.6. Each action
+has its review of the exact request, its cases in the suite of the actions on the
+CRDs of the release alone, its views and its walk with the keyboard in the
+pre-review, and its proof in `pnpm e2e` against the server of the release on the
+disposable kind cluster. The review gate of the milestone, in
+[PROCESS.md](PROCESS.md#milestone-manual-review-gate), was held on 2026-11-09: the
+lead maintainer approved the review of the milestone on the screenshots of the
+views of its actions in both themes and at the sizes of the pre-review, with Delete
+backup kept offered for a backup Velero has not started that names no storage
+location. The fifth milestone is on main and SPEC-0016 and SPEC-0017 are Verified,
+their tests green in CI on main.
 
 ### M6 - Release readiness
 

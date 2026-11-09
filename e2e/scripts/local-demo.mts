@@ -27,6 +27,7 @@ import { gunzipSync } from "node:zlib";
 import { createTlsFixture } from "../../test/tls-fixture.ts";
 import { tabArtifacts, tabExpectations } from "./local-artifacts.mts";
 import { runBackupCreateProof, runBackupNowProof } from "./local-backup-now-proof.mts";
+import { runDeleteBackupProof } from "./local-delete-proof.mts";
 import { DIRECT_PROOF_ORIGIN, runDownloadProof, runIdentityProof, tlsProofResources } from "./local-download-proof.mts";
 import {
   assertFixtureNamespaceContents,
@@ -2324,6 +2325,10 @@ async function runTransportProof(): Promise<void> {
     // Velero writes; a resume whose schedule changed since its review is refused by the API server with 422, which its
     // metrics count, as a conflict. Each is removed with the backup of the first.
     report.schedulePatch = await runSchedulePatchProof(proofContext);
+    // The deletion of a backup, end to end (SPEC-0017, DELETE-05): a backup of the run deleted through the procedures of
+    // the compiled main process, with its name typed, gone with its request; and a backup of a storage location that is
+    // not there, whose request the server refuses with the one error of a refusal, the backup in its phase.
+    report.deleteBackup = await runDeleteBackupProof(proofContext);
 
     requireCondition(
       http.missingArtifacts === 2 && http.refusedBeforeCreation,
@@ -2458,8 +2463,83 @@ async function runTransportProof(): Promise<void> {
     });
     writeFileSync(join(STATE, "transport-proof.json"), JSON.stringify(report), { mode: 0o600 });
     console.log(
-      "PASS: compiled main found its route and downloaded 16 real artifacts through direct HTTPS, once the private address was allowed, and HTTP/HTTPS Kubernetes tunnels, with inline/referenced CA and negative signature/Host/CA checks; the store had no log for a backup and a restore that failed their validation, and no request was created for a restore without a backup; three identities were refused, at the creation, at the Service and the certificate, and at the port-forward, and the one with the documented permissions downloaded; Back up now asked a backup of the real schedule through the compiled main process, which the server Completed with the labels of its text and deleted through a DeleteBackupRequest, and so was a backup of the form, Completed with the fields of its text the server keeps as sent; a schedule of the form of every two minutes was Enabled at its creation with no backup, and had exactly one after its first instant, Completed with the template of the schedule, which the server deleted, one the controller refused was FailedValidation with the words the views say, and one paused was left unread by the controller, with no backup of the three left; a restore of the backup of the run, asked with the name of the backup typed, Completed into the namespace of its mapping with every ConfigMap of the run, what each holds and the labels of the restore, and was removed with that namespace.",
+      "PASS: compiled main found its route and downloaded 16 real artifacts through direct HTTPS, once the private address was allowed, and HTTP/HTTPS Kubernetes tunnels, with inline/referenced CA and negative signature/Host/CA checks; the store had no log for a backup and a restore that failed their validation, and no request was created for a restore without a backup; three identities were refused, at the creation, at the Service and the certificate, and at the port-forward, and the one with the documented permissions downloaded; Back up now asked a backup of the real schedule through the compiled main process, which the server Completed with the labels of its text and deleted through a DeleteBackupRequest, and so was a backup of the form, Completed with the fields of its text the server keeps as sent; a schedule of the form of every two minutes was Enabled at its creation with no backup, and had exactly one after its first instant, Completed with the template of the schedule, which the server deleted, one the controller refused was FailedValidation with the words the views say, and one paused was left unread by the controller, with no backup of the three left; a restore of the backup of the run, asked with the name of the backup typed, Completed into the namespace of its mapping with every ConfigMap of the run, what each holds and the labels of the restore, and was removed with that namespace; two schedules paused through an instant submitted no backup, and resumed, the one with skip immediately false submitted its backup at once and the other none, with the skip Velero writes, and a resume whose schedule changed since its review was refused with a 422 the metrics of the API server counted once, said as a conflict; a backup of the run was deleted through the DeleteBackupRequest of its review, with its name typed, and was gone with its request, and the request to delete a backup of a storage location that is not there was refused with the one error of a refusal, the backup FailedValidation as it was.",
     );
+  } catch (error) {
+    // A failure of a proof is said before the cleanup below, whose own failure would otherwise be the one thrown.
+    console.error(
+      `The transport proof failed, before its cleanup: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    // How the store stood: a store that restarted, and whose master chose its leader again, answers writes with 500.
+    try {
+      const pods = (
+        JSON.parse(kubectl(["get", "pods", "--namespace", DEMO_NAMESPACE, "-o", "json"], undefined, 30_000, false)) as {
+          items: {
+            metadata: { name: string };
+            status?: {
+              containerStatuses?: {
+                restartCount?: number;
+                lastState?: { terminated?: { reason?: string; finishedAt?: string } };
+              }[];
+            };
+          }[];
+        }
+      ).items.filter((pod) => pod.metadata.name.startsWith("seaweedfs"));
+
+      for (const pod of pods)
+        for (const container of pod.status?.containerStatuses ?? [])
+          console.error(
+            `The store ${pod.metadata.name}: ${container.restartCount ?? 0} restarts` +
+              (container.lastState?.terminated
+                ? `, the last ended ${container.lastState.terminated.reason ?? "with no reason"} at ${container.lastState.terminated.finishedAt ?? "a time not known"}`
+                : ""),
+          );
+      // Its volumes, without their contents: how many are writable, and how much of each was deleted.
+      const volumes = kubectl(
+        [
+          "exec",
+          "--namespace",
+          DEMO_NAMESPACE,
+          "deploy/seaweedfs",
+          "--",
+          "sh",
+          "-c",
+          "echo volume.list | weed shell -master=localhost:9333",
+        ],
+        undefined,
+        60_000,
+        false,
+      );
+
+      for (const line of volumes.split("\n").filter((line) => /Topology|volume Id:/.test(line)))
+        console.error(
+          `The store: ${line
+            .trim()
+            .replace(/, (Version|Ttl|ReplicaPlacement|ModifiedAtSecond):[^,]*/g, "")
+            .slice(0, 200)}`,
+        );
+      // What the store said of its volumes, the lines of space, of compaction and of writes it could not place.
+      const said = kubectl(
+        ["logs", "--namespace", DEMO_NAMESPACE, "deploy/seaweedfs", "--tail=5000"],
+        undefined,
+        60_000,
+        false,
+      )
+        .split("\n")
+        .filter((line) => /vacuum|compact|read.?only|no free|no writable|disk|space|leader|grow/i.test(line))
+        .map((line) =>
+          line
+            .replace(/(X-Amz-[A-Za-z-]+=)[^&\s"]+/g, "$1REDACTED")
+            .replace(/((?:access|secret)[_ -]?key|credential|token|password)(\W{1,3})\S+/gi, "$1$2REDACTED")
+            .slice(0, 240),
+        )
+        .slice(-30);
+
+      for (const line of said) console.error(`The store said: ${line}`);
+    } catch {
+      console.error("The state of the store could not be read.");
+    }
+    throw error;
   } finally {
     // The location goes back once the store serves again, as above.
     for (const resource of originals.filter((item) => item.kind !== "BackupStorageLocation")) applyOwned(resource);
