@@ -360,7 +360,10 @@ export function storageManifests(owner: string, admin: Credentials, velero: Cred
                   "-s3.config=/etc/seaweedfs/s3.json",
                   "-master.telemetry=false",
                   "-master.volumeSizeLimitMB=128",
-                  "-volume.max=8",
+                  // The store grows the volumes of a collection seven at a time: its filer's own and the bucket of the
+                  // locations take seven each, in whichever order their first writes come. With eight, a slow run gave
+                  // the bucket one volume, which the deleted bytes of the run filled, and every write was refused.
+                  "-volume.max=24",
                   "-s3.iam=false",
                   "-s3.port.iceberg=0",
                   "-s3.port.lance=0",

@@ -2463,16 +2463,17 @@ Decided while implementing, on 2026-11-09:
   thirty seconds and the main process read the backup there until less than ten seconds
   before the run answered: the run reads every second, and says completed at its first
   read of the backup gone.
-- A backup of the proof the store did not keep is made once more, under another name,
-  once the location is Available, and the proof says so. In three hosted runs of the end
-  to end tests the store failed the writes of the run after the proof of the pause and of
-  the resume: the third said it of that backup, a write answered with 500 three times,
-  and the first two only through the cleanup that followed, whose own write failed too;
-  the second machine never met it. Its log there shows the master of the store without a
-  leader for about twenty seconds after the store restarts, a window in which the store
-  cannot place a write. The proof is of the deletion, not of the store. When the
-  transport proof fails, it says its failure before its cleanup, and how many times the
-  store restarted and why.
+- The store of the test environment holds 24 volumes, and no longer 8. In five hosted
+  runs of the end to end tests the store refused every write of the run once the proof
+  of the deletion made its backup, and the cleanup after it failed the same way; the
+  second machine never met it. The store grows the volumes of a collection seven at a
+  time, and on the runner its filer wrote first: its own collection took seven of the
+  eight, the bucket of the locations had one, and the deleted bytes of the run filled
+  it past 128 MB, with no room to grow another ("Not enough data nodes found"). With 24
+  both collections take seven and the bucket can grow; the count stays fixed, as
+  LOCAL-STORAGE.md asks. When the transport proof fails, it now says its failure before
+  its cleanup, then how many times the store restarted, its volumes and what it said of
+  them.
 
 The independent review of this pull request, read-only, found no blocker, one major and
 seven minors, with eleven nits; all were applied but three of the nits and a part of a
