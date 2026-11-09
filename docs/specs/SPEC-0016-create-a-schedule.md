@@ -1,6 +1,6 @@
 # SPEC-0016: Create A Schedule
 
-- **Status:** Approved
+- **Status:** Implemented
 - **Date:** 2026-10-23
 - **Milestone / tasks:** M5 / T4.7
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`

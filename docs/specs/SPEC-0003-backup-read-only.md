@@ -387,4 +387,7 @@ layer, with writes off and on, in
 [`backup-delete-workspace.test.tsx`](../../src/renderer/pages/backup-delete-workspace.test.tsx),
 and for every phase of the release, with a location named and without one, in
 [`backup-delete-words.test.ts`](../../src/common/backup-delete-words.test.ts); the
-packaged suites of the action come with the third pull request of T4.6.
+packaged suites of the action came with the third pull request of T4.6: the suite of
+the actions,
+[`velero-e2e-actions.tests.ts`](../../e2e/__tests__/velero-e2e-actions.tests.ts), and
+the views of the workspace and of its review in the pre-review.

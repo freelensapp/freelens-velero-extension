@@ -37,11 +37,11 @@ const OPENED = "backup-finalizingpartiallyfailed";
 const RESTORES = cluster.RESTORES;
 const RESTORED = "restore-mapped";
 const LONG_RESTORE = cluster.LONG_RESTORE_NAME;
-// The views that are checked, each in both themes at every size: eight of the tabs, then the fifty-four of the pages,
+// The views that are checked, each in both themes at every size: eight of the tabs, then the fifty-seven of the pages,
 // four of them of the adherence of the schedules, ten of the backup repositories, of the pod volume operations and of
-// the data movement, two of Back up now, two of Create backup, two of Create schedule, two of Restore, and four of
-// Pause and Resume.
-const VIEWS = 62;
+// the data movement, two of Back up now, two of Create backup, two of Create schedule, two of Restore, four of Pause
+// and Resume, and three of Delete backup.
+const VIEWS = 65;
 const OVERVIEW = cluster.OVERVIEW;
 const SCHEDULES = cluster.SCHEDULES;
 const SCHEDULED = "views-history";
@@ -86,6 +86,11 @@ const restoreOf = (id: string) => `[data-testid=velero-restore-create-${id}]`;
 const RESTORE_FIELD = `${restoreOf("field")} input, input${restoreOf("field")}`;
 const RESTORABLE = "views-history-1";
 const RESTORE_SOURCES = 'input[type=checkbox][data-testid^="velero-restore-create-includedNamespaces-"]';
+// The parts of the workspace of a deletion, and its field of the name of the backup.
+const deleteOf = (id: string) => `[data-testid=velero-backup-delete-${id}]`;
+const DELETE_TYPED = `${deleteOf("typed")} input, input${deleteOf("typed")}`;
+// The backup of the views with a name of 63 characters, InProgress: Delete backup is held back for it.
+const LONG_BACKUP = cluster.LONG_BACKUP_NAME;
 // A tab of the view that is shown: the operation the view is of, and the tab.
 interface Tab {
   kind: artifacts.Operation;
@@ -2394,6 +2399,167 @@ describe("pre-review of the views", () => {
         expect(found(`schedule-${action}-form`)).toEqual({});
         expect(found(`schedule-${action}-review`)).toEqual({});
       }
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "asks a deletion with the keyboard alone: the command of the view after Restore, the review, its field after the text, the name typed and taken back by Escape, Delete backup and Do not delete it reached, Do not delete it and Escape back to the command, and the way back to the view, with nothing sent",
+    async () => {
+      const keyboard = started.window.keyboard;
+      // Whether the focus is in the field of the name: the host gives its own element the identifier, or the input.
+      const inTyped = () =>
+        frame.evaluate(() => document.activeElement?.closest("[data-testid=velero-backup-delete-typed]") != null);
+
+      await cluster.showList(frame);
+      await cluster.openPage(frame, cluster.BACKUPS);
+      await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+      await cluster.waitForList(frame, cluster.BACKUPS);
+      if ((await cluster.writesState(frame)) !== "on") await cluster.turnWritesOn(frame);
+      await cluster.openWorkspace(frame, RESTORABLE, cluster.BACKUPS);
+      await frame.locator("[data-testid=velero-back]").focus();
+      // On the line of the name, Restore and then Delete backup, each one press away (SPEC-0017, the decisions of the
+      // second pull request of T4.6).
+      expect(await cluster.tabTo(frame, (focus) => focus === "velero-backup-restore", 20)).toBe(1);
+      expect(await cluster.tabTo(frame, (focus) => focus === "velero-backup-delete", 20)).toBe(1);
+      await keyboard.press("Enter");
+      await frame.waitForSelector("[data-testid=velero-backup-delete-workspace]", { timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      // The command that asks for the review, which has the focus once shown.
+      await cluster.tabTo(frame, (focus) => focus === "velero-backup-delete-ask", 10);
+      await keyboard.press("Enter");
+      await frame.waitForSelector(deleteOf("review"), { timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-backup-delete-review")).toBe("velero-backup-delete-review");
+      // The field of the name is the first stop after the review, or the second when the text of the request scrolls,
+      // which Chromium gives the keyboard as a scroller with nothing to focus in it.
+      const scrolls = await frame
+        .locator(deleteOf("text"))
+        .evaluate((text) => text.scrollWidth > text.clientWidth || text.scrollHeight > text.clientHeight);
+      let presses = 0;
+
+      for (; presses < 10 && !(await inTyped()); presses += 1) await keyboard.press("Tab");
+      expect([await inTyped(), presses]).toEqual([true, scrolls ? 2 : 1]);
+      // The name of the backup typed in its field enables Delete backup; Escape there takes it back, and the review
+      // stays.
+      await keyboard.type(RESTORABLE, { delay: 20 });
+      expect(await frame.locator(deleteOf("run")).isDisabled()).toBe(false);
+      await keyboard.press("Escape");
+      expect([
+        await frame.locator(DELETE_TYPED).first().inputValue(),
+        await frame.locator(deleteOf("run")).isDisabled(),
+        await frame.locator(deleteOf("review")).count(),
+      ]).toEqual(["", true, 1]);
+      // Typed again: Delete backup is the next stop, enabled and not pressed, and Do not delete it the one after it,
+      // which Enter takes: the review is left, and the focus is on the command that asks again.
+      await keyboard.type(RESTORABLE, { delay: 20 });
+      expect(await cluster.tabTo(frame, (focus) => focus === "velero-backup-delete-run", 3)).toBe(1);
+      expect(await frame.locator(deleteOf("run")).isDisabled()).toBe(false);
+      expect(await cluster.tabTo(frame, (focus) => focus === "velero-backup-delete-back", 3)).toBe(1);
+      await keyboard.press("Enter");
+      await frame.waitForSelector(deleteOf("review"), { state: "detached", timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-backup-delete-ask")).toBe("velero-backup-delete-ask");
+      // Escape on the review leaves it as well, and the focus is on the command that asks again.
+      await keyboard.press("Enter");
+      await frame.waitForSelector(deleteOf("review"), { timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-backup-delete-review")).toBe("velero-backup-delete-review");
+      await keyboard.press("Escape");
+      await frame.waitForSelector(deleteOf("review"), { state: "detached", timeout: 30_000 });
+      expect(await cluster.focusOn(frame, "velero-backup-delete-ask")).toBe("velero-backup-delete-ask");
+      // Escape outside a field leaves the workspace for the view, whose way back has the focus, and then the view for
+      // its row.
+      await keyboard.press("Escape");
+      await frame.waitForSelector("[data-testid=velero-backup-delete-workspace]", {
+        state: "detached",
+        timeout: 30_000,
+      });
+      await frame.waitForSelector(`[data-testid=velero-backup-name] >> text="${RESTORABLE}"`, { timeout: 60_000 });
+      expect(await cluster.focusOn(frame, "velero-back")).toBe("velero-back");
+      await keyboard.press("Escape");
+      await frame.waitForSelector("[data-testid=velero-backup-workspace]", { state: "detached", timeout: 60_000 });
+      expect(await cluster.focusOn(frame, RESTORABLE)).toBe(RESTORABLE);
+      // Nothing was sent: no request to delete a backup is in the installation of the views.
+      expect(cluster.deleteRequestsOf(cluster.E2E_VIEWS_NAMESPACE)).toEqual([]);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "shows Delete backup, its workspace and its review with the name typed, and the workspace of the backup of 63 characters in progress, held back with its words, in both themes, at every size",
+    async () => {
+      // The page is looked at from its top, then the beginning of the workspace, or of the review, is brought into
+      // sight and left there for the picture, as for the other actions.
+      const top = () =>
+        frame.evaluate(() => {
+          const page = document.querySelector<HTMLElement>("[data-testid=velero-backups-page]");
+
+          if (page) page.scrollTop = 0;
+        });
+      const inSight = (selector: string) => async () =>
+        frame
+          .locator(selector)
+          .first()
+          .evaluate((part) => {
+            part.scrollIntoView({ block: "start" });
+            let room = { top: 0, bottom: window.innerHeight };
+
+            for (let holder = part.parentElement; holder; holder = holder.parentElement) {
+              if (!["auto", "scroll"].includes(getComputedStyle(holder).overflowY)) continue;
+              const box = holder.getBoundingClientRect();
+
+              room = { top: Math.max(room.top, box.top), bottom: Math.min(room.bottom, box.bottom) };
+            }
+            const box = part.getBoundingClientRect();
+
+            return box.top >= room.top - 1 && box.top + 40 <= room.bottom
+              ? []
+              : [
+                  `${part.getAttribute("data-testid") ?? part.tagName.toLowerCase()} is not begun in sight: ` +
+                    `${Math.round(box.top)} to ${Math.round(box.bottom)} in a room of ${Math.round(room.top)} to ${Math.round(room.bottom)}`,
+                ];
+          });
+
+      await cluster.showList(frame);
+      await cluster.openPage(frame, cluster.BACKUPS);
+      await cluster.selectInstallation(frame, cluster.E2E_VIEWS_NAMESPACE);
+      await cluster.waitForList(frame, cluster.BACKUPS);
+      if ((await cluster.writesState(frame)) !== "on") await cluster.turnWritesOn(frame);
+      await cluster.openWorkspace(frame, RESTORABLE, cluster.BACKUPS);
+      await frame.click("[data-testid=velero-backup-delete]");
+      await frame.waitForSelector("[data-testid=velero-backup-delete-workspace]", { timeout: 30_000 });
+      await everyLayout("backup-delete-form", top, cluster.BACKUPS, undefined, inSight(deleteOf("what")));
+      await frame.click(deleteOf("ask"));
+      await frame.waitForSelector(deleteOf("review"), { timeout: 30_000 });
+      await frame.locator(DELETE_TYPED).first().fill(RESTORABLE);
+      await everyLayout("backup-delete-review", top, cluster.BACKUPS, undefined, inSight(deleteOf("review")));
+      // Nothing is sent: the review is left, then the workspace and the view.
+      await frame.click(deleteOf("back"));
+      await frame.waitForSelector(deleteOf("review"), { state: "detached", timeout: 30_000 });
+      await cluster.closeWorkspace(frame);
+      await frame.waitForSelector("[data-testid=velero-backup-workspace]", { timeout: 30_000 });
+      await cluster.closeWorkspace(frame);
+      // The backup of the views with a name of 63 characters is InProgress: Delete backup is held back for it, and the
+      // workspace of its deletion, opened by the address as a link opens it, says why with its name in the title and in
+      // what the deletion is, and asks nothing. Its review waits for a Completed backup of that length.
+      await cluster.openWorkspace(frame, LONG_BACKUP, cluster.BACKUPS);
+      expect(await frame.locator("[data-testid=velero-backup-delete]").isDisabled()).toBe(true);
+      await frame.evaluate((name) => {
+        const search = new URLSearchParams(window.location.search);
+
+        search.append("view", `backup-delete/${name}`);
+        window.history.pushState({}, "", `${window.location.pathname}?${search}`);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      }, LONG_BACKUP);
+      await frame.waitForSelector("[data-testid=velero-backup-delete-workspace]", { timeout: 30_000 });
+      expect(await cluster.addressViews(frame)).toEqual([`backup/${LONG_BACKUP}`, `backup-delete/${LONG_BACKUP}`]);
+      await frame.waitForSelector(deleteOf("held"), { timeout: 30_000 });
+      expect(await frame.locator(deleteOf("ask")).isDisabled()).toBe(true);
+      await everyLayout("backup-delete-held", top, cluster.BACKUPS, undefined, inSight(deleteOf("what")));
+      await cluster.closeWorkspace(frame);
+      await frame.waitForSelector("[data-testid=velero-backup-workspace]", { timeout: 30_000 });
+      await cluster.closeWorkspace(frame);
+      expect(found("backup-delete-form")).toEqual({});
+      expect(found("backup-delete-review")).toEqual({});
+      expect(found("backup-delete-held")).toEqual({});
     },
     TIMEOUT,
   );
