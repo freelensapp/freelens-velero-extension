@@ -2206,6 +2206,51 @@ and the mode over TLS with an inline authority run as the operator. The changes 
 failing were made again on the head after the review, and the eight branches of one
 change are on that head.
 
+T6.3, the third of its pull requests, on 2026-11-09: the screenshots and the video
+of the README (REQ-301, REQ-302), made again after the fixes of T6.2 with the
+storyboard the lead maintainer approved that day, and the Status of 1.0.0
+(REQ-296, as amended). The evidence, by check:
+
+- The video: 57.47 seconds, H.264, 1920 by 1200, 30 frames a second, recorded from
+  the packaged Freelens 2.0.0 for Linux on the disposable kind cluster of the demo,
+  with the real server of Velero v1.18.4 and its AWS plugin v1.14.4, the extension
+  built from `fdc1400`, whose tree is the one of main after T6.2. Its scenes: the
+  title; the Overview with writes off, then the dialog that turns them on; the
+  version of the server and its plugins through a reviewed ServerStatusRequest; a
+  backup with its log loaded through a reviewed DownloadRequest and searched, then
+  its resources; a restore into another namespace confirmed by the name of the
+  backup; the adherence of a schedule with its history; Back up now with its
+  review; the lists of the storage locations, the backup repositories and the data
+  uploads; the end card. The README links to it, uploaded to GitHub:
+  VIDEO-URL-TO-FILL. It is not in the package, whose files are `dist/**/*`.
+- The screenshots: six PNG files of 2880 by 1800 under `docs/screenshots/`, taken
+  in the same session in a new profile: the Overview, the list of the Backups, the
+  workspace of a backup with its log, the adherence of a schedule and the review of
+  a restore, in the dark theme, and the Overview in the light theme, each with the
+  text of what it shows. DOC-10 resolves each file; none is in the package.
+- What the frames show of the environment: the cluster under the plain name
+  `prod-eu-1`, the installation `velero`, namespaces of applications with
+  realistic names, and the address of the store of the demo inside the cluster; no
+  name of a person, no host of a real environment and no credential. The history
+  of the schedules and the data uploads are objects of the test with realistic
+  names; the backups of the day, the backup of the volumes with its repositories,
+  the restore and the backup of Back up now were made by the real server.
+- DOC-07 and DOC-08: each screenshot and every frame looked at by the lead
+  maintainer at REL-03, on REVIEW-DATE-TO-FILL, on a private page with the video
+  and the six files; the length under 60 seconds.
+
+Decided while implementing, on 2026-11-09:
+
+- The screenshots are taken by the recorder of the video, in the same session and
+  on the same cluster, as for the other extensions of the organization, not by the
+  pre-review, which keeps its gallery for the review of the milestone: REQ-301 is
+  read with it.
+- The storyboard of the second take, approved by the lead maintainer on
+  2026-11-09, shows beside what REQ-302 asks the writes turned on through their
+  dialog, the server, the resources of a backup and the lists of three more kinds.
+- Status gives way to the Status of 1.0.0 in this pull request, right before the
+  one of the version, as REQ-296 says.
+
 ## Amendments
 
 ### 2026-11-09: The Release Flow Of The Template
