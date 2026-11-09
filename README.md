@@ -1,10 +1,17 @@
 # @freelensapp/velero-extension
 
+<!-- markdownlint-disable MD013 -->
+
 [![Home](https://img.shields.io/badge/%F0%9F%8F%A0-freelens.app-02a7a0)](https://freelens.app)
 [![GitHub](https://img.shields.io/github/stars/freelensapp/freelens-velero-extension?style=flat&label=GitHub%20%E2%AD%90)](https://github.com/freelensapp/freelens-velero-extension)
+[![DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/freelensapp/freelens-velero-extension)
+[![Release](https://img.shields.io/github/v/release/freelensapp/freelens-velero-extension?display_name=tag&sort=semver)](https://github.com/freelensapp/freelens-velero-extension/releases)
 [![Unit tests](https://github.com/freelensapp/freelens-velero-extension/actions/workflows/unit-tests.yaml/badge.svg?branch=main)](https://github.com/freelensapp/freelens-velero-extension/actions/workflows/unit-tests.yaml)
 [![Integration tests](https://github.com/freelensapp/freelens-velero-extension/actions/workflows/integration-tests.yaml/badge.svg?branch=main)](https://github.com/freelensapp/freelens-velero-extension/actions/workflows/integration-tests.yaml)
 [![E2E tests](https://github.com/freelensapp/freelens-velero-extension/actions/workflows/e2e-tests.yaml/badge.svg?branch=main)](https://github.com/freelensapp/freelens-velero-extension/actions/workflows/e2e-tests.yaml)
+[![npm](https://img.shields.io/npm/v/@freelensapp/velero-extension.svg)](https://www.npmjs.com/package/@freelensapp/velero-extension)
+
+<!-- markdownlint-enable MD013 -->
 
 ## Overview
 
@@ -13,29 +20,26 @@ the backup and recovery tool for Kubernetes: backups, restores, schedules and
 storage locations, with their logs and results, inside the Freelens desktop
 application and across every cluster it connects to.
 
+The extension lives in the cluster sidebar under **Velero**: **Overview**,
+**Backups**, **Restores**, **Schedules**, **Backup Storage Locations**,
+**Volume Snapshot Locations**, **Backup Repositories**, **Pod Volume
+Backups**, **Pod Volume Restores**, **Data Uploads** and **Data Downloads**.
+It reaches the cluster through the connection Freelens already has, and it
+writes nothing until writes are turned on for one installation of Velero,
+after which each write is confirmed before it is sent.
+
 The extension needs nothing installed in the cluster beyond Velero itself. It
 is a from-scratch MIT implementation and it is not a Velero product.
 
 ### Status
 
-> **In development: there is no release to install yet.** The foundation is in
-> place, that is the toolchain, the test environment and the code of the main
-> process that fetches logs and results, and so are the first views: the
-> discovery of the Velero installations of a cluster, the Overview of an
-> installation, the Backups, the Restores, the Schedules, the storage and
-> snapshot locations, the backup repositories, the pod volume backups, the pod
-> volume restores, the data uploads and the data downloads, read only. The write
-> mode is in place too, off until it is turned on, with its first writes: the
-> version of the server and its plugins, in the Overview, and the log, the
-> results, the resource list and the volume information of a backup and of a
-> restore, each loaded when it is asked for, in the tabs of its workspace,
-> proven by their unit and component tests, by a suite in a packaged Freelens on
-> the real backup and the real restore of the test environment and on backups
-> synced from its store, and by the pre-review with the tabs open. The
-> repository is developed spec-first: one spec per feature under
-> [docs/specs](docs/specs/). See the [roadmap](docs/development/ROADMAP.md).
+1.0.0, the first release of the extension, is being prepared. Until it is
+published, install the extension from the source, as
+[Build from the source](#build-from-the-source) says. What each version brings is
+in the [releases](https://github.com/freelensapp/freelens-velero-extension/releases)
+of the repository on GitHub. What 1.0.0 covers, by milestone:
 
-## What v1.0.0 covers
+<!-- markdownlint-disable MD013 -->
 
 | Milestone | Content |
 | --- | --- |
@@ -43,41 +47,159 @@ is a from-scratch MIT implementation and it is not a Velero product.
 | M2 | Restores, Schedules, Backup Storage Locations, Volume Snapshot Locations, Overview |
 | M3 | Logs, results, resource lists and volume information of backups and restores; server version and plugins |
 | M4 | Adherence of the schedules to their cron expression; repositories, pod volume and data movement kinds |
-| M5 | Actions: backup now, create backup, restore, pause and resume a schedule, delete a backup |
+| M5 | Actions: backup now, create backup, create schedule, restore, pause and resume a schedule, delete a backup |
 | M6 | Release readiness |
+
+<!-- markdownlint-enable MD013 -->
 
 M1, M2 and M4 only read. The scope of each milestone and its progress are in
 the [roadmap](docs/development/ROADMAP.md).
 
 ## Requirements
 
-- **Freelens v2.** The manifest declares `engines.freelens` as `^2.0.0`. The
-  extension is built and tested against Freelens 2.0.0, the validation target of
-  [SPEC-0015](docs/specs/SPEC-0015-freelens-v2-host.md), built from
-  freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, its tag v2.0.0.
-  Freelens 1 lists the package as Incompatible and runs none of its code.
-- **A Kubernetes cluster with Velero.** The reviewed versions are Velero
-  v1.18.4 and its AWS plugin v1.14.4; the API is `velero.io/v1`, with
-  `velero.io/v2alpha1` for the data movement kinds.
-- **Node.js** is required only when building the extension from source. The
-  package is a self-contained bundle in `dist/`: the one library it carries,
-  react-window, is compiled into it, and what Freelens provides is taken from
-  Freelens.
+- **Freelens 2.0.0 or a later 2.x release.** The manifest declares
+  `engines.freelens` as `^2.0.0`. Freelens 1 lists the package as Incompatible
+  and runs none of its code.
+- **A Kubernetes cluster with Velero.** The extension reads the kinds of Velero
+  through the API `velero.io/v1`, and the data uploads and the data downloads of
+  the data movement through `velero.io/v2alpha1`.
+- **Nothing else in the cluster.** Nothing is installed in the cluster beyond
+  Velero itself, and no credential of the object store is needed.
+- **Node.js**, only to build the extension from source: the package carries
+  what it runs.
+
+### Compatibility
+
+<!-- markdownlint-disable MD013 -->
+
+| Component | Versions |
+| --- | --- |
+| Freelens | 2.0.x, tested at 2.0.0, the release built from freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5` |
+| Velero | 1.18.x with its AWS plugin 1.14.x, tested at Velero v1.18.4 and the AWS plugin v1.14.4 |
+| Kubernetes | Tested at 1.34.11, the node of the test clusters |
+| Platforms | Tested on Linux ARM64, where the hosted checks run, and on macOS; any other platform, Windows among them, is untested |
+| Proven on synthetic objects only | The data movement, and the phases of a failure other than FailedValidation |
+
+<!-- markdownlint-enable MD013 -->
+
+A version outside this table, Velero 1.19 among them, is untested: the
+extension is not said to work with it, nor to fail with it.
+
+## Supported APIs
+
+The kinds of Velero the extension reads, each namespaced, with its page in the
+sidebar, a view of each object, and a section in the details Freelens shows of
+it. What the extension writes, once writes are on, is in [Safety](#safety): it
+reads back the requests it creates there, a `DownloadRequest`, a
+`ServerStatusRequest` and a `DeleteBackupRequest`, which have no page.
+
+### velero.io/v1
+
+| Kind | Page |
+| --- | --- |
+| `Backup` | Backups |
+| `Restore` | Restores |
+| `Schedule` | Schedules |
+| `BackupStorageLocation` | Backup Storage Locations |
+| `VolumeSnapshotLocation` | Volume Snapshot Locations |
+| `BackupRepository` | Backup Repositories |
+| `PodVolumeBackup` | Pod Volume Backups |
+| `PodVolumeRestore` | Pod Volume Restores |
+
+### velero.io/v2alpha1
+
+| Kind | Page |
+| --- | --- |
+| `DataUpload` | Data Uploads |
+| `DataDownload` | Data Downloads |
+
+## Install
+
+Open Freelens and go to Extensions (`ctrl`+`shift`+`E` or
+`cmd`+`shift`+`E`). The field at the top takes a package name, the URL of a
+tarball, or the path to a tarball or a directory.
+
+### From the registry
+
+Enter `@freelensapp/velero-extension` and press Install. Freelens installs the
+newest version that is not a prerelease, whatever an npm tag names. To install
+another version, enter it after the name, for instance
+`@freelensapp/velero-extension@1.0.0`.
+
+Freelens reads the package from the registry its preferences name, the npm
+registry unless they name another, checks the download against the integrity
+the registry gives for that version, then installs the extension, enables it
+and lists it as verified.
+
+Alternatively, open the following URL in the browser to install directly, once
+Freelens has asked you to confirm the version:
+
+[freelens://app/extensions/install/%40freelensapp%2Fvelero-extension](freelens://app/extensions/install/%40freelensapp%2Fvelero-extension)
+
+### From a release tarball
+
+Each [release](https://github.com/freelensapp/freelens-velero-extension/releases)
+has the extension as `freelensapp-velero-extension-<version>.tgz`, with its
+checksum in `freelensapp-velero-extension-<version>.tgz.sha256`. Every release
+is for Freelens 2.x.
+
+- Enter the URL of the `.tgz` asset and press Install. Freelens downloads the
+  `.tgz.sha256` next to it and checks the tarball against it.
+- Or download both files into one directory and enter the path to the `.tgz`,
+  or choose it with Browse, the folder icon of the field. Freelens checks it
+  against the `.tgz.sha256` next to it.
+
+### From a directory
+
+Build the extension (see [Build from the source](#build-from-the-source)),
+then enter the path to your checkout, the directory with `package.json`, and
+press Install. Once you confirm, Freelens runs the extension from that
+directory, from the files in `dist/`, and lists it as development: nothing of
+it is verified. This is how you work on the extension: see
+[Development loop](#development-loop).
+
+## Getting started
+
+1. Connect to a cluster where Velero is installed. The **Velero** entry appears
+   in the cluster sidebar, with its **Overview** first.
+2. When the cluster holds more than one installation of Velero, choose yours in
+   the target bar at the top of the page: the views read that installation
+   alone.
+3. Writes are off. The views read until you turn writes on, in the target bar,
+   for that installation, and each write is then confirmed before it is sent.
+4. No cluster with Velero at hand? `pnpm demo:up` brings up a disposable kind
+   cluster with Velero and synthetic backups on your machine: see
+   [TRY-IT.md](docs/development/TRY-IT.md).
 
 ## Safety
 
-The rules the extension is built on, binding for every contributor in
-[AGENTS.md](AGENTS.md):
+The extension reads first. What it writes to a cluster is this, through the
+main process, and nothing else:
 
-- Reading comes first. Every write needs the write mode, which starts
-  disabled, belongs to one cluster and one Velero namespace, and is enforced
-  in the main process, and a confirmation that names the context and the
-  namespace.
-- Fetching a log or the server version creates a `DownloadRequest` or a
-  `ServerStatusRequest` in the cluster: it is a write and it is treated as
-  one.
-- A backup is deleted through a `DeleteBackupRequest` only, one at a time,
-  with a double confirmation.
+<!-- markdownlint-disable MD013 -->
+
+| Write | Kind | Asked from |
+| --- | --- | --- |
+| Create | `DownloadRequest` | The Log, Results, Resources and Volumes tabs of a backup or of a restore |
+| Create | `ServerStatusRequest` | The version of the server and its plugins, in the Overview |
+| Create | `Backup` | Back up now, in the view of a schedule, and Create backup, from the list of the Backups |
+| Create | `Schedule` | Create schedule, from the list of the Schedules |
+| Create | `Restore` | Restore, in the view of a backup or of the schedule that made it |
+| Create | `DeleteBackupRequest` | Delete backup, in the view of a backup |
+| Patch of `spec.paused` and `spec.skipImmediately` | `Schedule` | Pause and Resume, in the view of a schedule |
+
+<!-- markdownlint-enable MD013 -->
+
+The rules every write follows, and the ones the extension keeps, binding for
+every contributor in [AGENTS.md](AGENTS.md):
+
+- Each write is refused unless writes are on for that cluster and that Velero
+  namespace, which they are not until they are turned on in the target bar, and
+  its review is confirmed: the review shows the exact request before it is
+  sent. The main process enforces both.
+- A restore and a deletion ask for the name of the backup, typed.
+- A backup is deleted only through a `DeleteBackupRequest`, one at a time, and
+  never by a deletion of the `Backup` itself.
 - Signed URLs stay in the main process and are never logged, stored or shown.
   The content of a backup is never downloaded.
 - TLS is verified by default, with the certificate authority the storage
@@ -108,15 +230,7 @@ The repository is developed spec-first, with the specs in the repository:
 ### Local gates
 
 Node.js 24.21.0 (`.nvmrc` / `mise.toml`) and `corepack pnpm`, pnpm 12. Run the
-local gates after every change:
-
-```sh
-pnpm type:check
-pnpm lint:check     # biome (lint:fix to auto-format)
-pnpm test:unit      # builds first, then the tests, then the measures alone
-pnpm knip:check
-pnpm trunk:check
-```
+gates of [Check the code](#check-the-code) after every change.
 
 The build is one form, the one that gets packed: `pnpm build` writes
 `dist/main.js`, `dist/renderer.js`, their source maps and `dist/renderer.css`,
@@ -149,6 +263,8 @@ The views are driven in a packaged Freelens against the same environment, with
 its fixtures left in place, and the integration test against the CRDs of the
 release alone:
 
+<!-- markdownlint-disable MD013 -->
+
 ```sh
 pnpm demo:up            # the environment with the fixtures left in place
 pnpm e2e:views          # the suites of the views, in the Freelens FREELENS_APP names
@@ -158,8 +274,10 @@ pnpm e2e:cluster:up:definitions   # the cluster with the CRDs of the release alo
 pnpm e2e:integration    # the integration test, a session for each of the ten kinds
 ```
 
+<!-- markdownlint-enable MD013 -->
+
 They start the Freelens that `FREELENS_APP` names: on a machine of a
-developer, the nightly of the validation target, its download checked against
+developer, the package of the validation target, its download checked against
 the checksum the release publishes; in CI, Freelens built from source at that
 commit. See [TESTING.md](docs/development/TESTING.md#suites-of-the-views).
 
@@ -167,8 +285,6 @@ No cloud account and no personal credential is needed. Every write of
 development and tests goes to that disposable cluster, never to another one.
 
 ## Build from the source
-
-You can build the extension from this repository.
 
 ### Prerequisites
 
@@ -204,45 +320,77 @@ winget install pnpm.pnpm
 ```sh
 pnpm install
 pnpm build
+```
+
+The extension is built into `dist/`. To pack it into a tarball:
+
+```sh
 pnpm pack
 ```
 
-One script to build and pack the extension for testing:
+One script to bump a throwaway prerelease version, build and pack the
+extension for testing:
 
 ```sh
 pnpm pack:dev
 ```
 
-This bumps a throwaway prerelease version, builds, and writes a
-`freelensapp-velero-extension-*.tgz` into the repo root. The version bump
-makes Freelens treat each rebuild as an upgrade, so re-installing actually
-reloads your changes.
+The tarball, `freelensapp-velero-extension-<version>.tgz`, is placed in the
+root of the repository. The version bump makes Freelens treat each rebuild as
+an upgrade, so installing it again loads your changes. Install it as described
+in [From a release tarball](#from-a-release-tarball), then put the version back
+with `git checkout package.json`, so that the bump reaches no commit.
 
-### Install built extension
+### Development loop
 
-The tarball will be placed in the current directory. In Freelens, navigate
-to the Extensions page (`ctrl`+`shift`+`E` or `cmd`+`shift`+`E`) and provide
-the path to the tarball, or drag and drop the `.tgz` file into the Freelens
-window. Enable it if prompted.
-
-### Check code statically
+Install the extension from your checkout once, as described in
+[From a directory](#from-a-directory), then run:
 
 ```sh
-pnpm lint:check
+pnpm dev
 ```
 
-or
+It runs the build of the renderer and the build of the main process in watch
+mode, and Freelens reloads the extension after each rebuild, without a restart
+and without packing. Stop it with `ctrl`+`C`.
+
+Neither `pnpm build` nor `pnpm dev` type-checks; run `pnpm type:check` for
+that. A change to `main` or `renderer` in `package.json` needs Freelens
+restarted once.
+
+### Check the code
 
 ```sh
-pnpm trunk:check
-```
-
-and
-
-```sh
-pnpm build
+pnpm type:check
+pnpm lint:check     # biome (lint:fix to auto-format)
+pnpm test:unit      # builds first, then the tests, then the measures alone
 pnpm knip:check
+pnpm trunk:check    # the formats Biome does not cover, on the changed files
 ```
+
+### Integration tests
+
+The integration test runs in the packaged Freelens that `FREELENS_APP` names,
+a bundle, a folder or an executable, never one installed in `/Applications`: on
+a machine of a developer, the package of the validation target, its download
+checked against the checksum its release publishes. Its first case installs the
+packed extension from the Extensions page and checks that it is listed as
+enabled, that both of its parts load and that its downloads work in the main
+process of Freelens; then a session for each of the ten kinds checks its page,
+its section in the details and its menu, against a disposable kind cluster with
+the CRDs of the reviewed release of Velero alone. With Docker, in the extension
+repository:
+
+```sh
+pnpm e2e:cluster:up:definitions
+pnpm e2e:integration
+pnpm e2e:cluster:down
+```
+
+`pnpm e2e:integration` builds and packs the extension first. The suites of the
+views run the same way against the environment of `pnpm demo:up`: see
+[Test environment](#test-environment) and
+[TESTING.md](docs/development/TESTING.md#integration-tests).
 
 ### Testing the extension with unpublished Freelens
 
