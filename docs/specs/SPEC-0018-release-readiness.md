@@ -2293,7 +2293,9 @@ of the demo. The checklist, by check:
 - DOC-07: each screenshot looked at, with its text; DOC-10 resolves each file
   under `docs/screenshots/`.
 - DOC-08: the video, 57.47 seconds, every frame looked at; the link of the README
-  LINK-CHECK-TO-FILL.
+  opened with no login on 2026-11-10, which answers the video, the file uploaded
+  byte for byte, since the body of this pull request names it; before, it
+  answered 404 to a client with no login.
 - DOC-10: the external links of the README opened on 2026-11-10, each answering,
   but DeepWiki, which answers 429 to a client that is not a browser, and the page
   of the package on npm, which answers 403 to one, and has no version to show
