@@ -1,6 +1,6 @@
 # SPEC-0018: Release Readiness
 
-- **Status:** Approved
+- **Status:** Implemented
 - **Date:** 2026-11-09
 - **Milestone / tasks:** M6 / T6.1, T6.2, T6.3, T6.4, T6.5
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, with the AWS plugin v1.14.4, the reviewed pair of [RECON-T0.1](../development/RECON-T0.1.md): this spec reads no behavior of Velero beyond what the specs it depends on record. The [upstream drift watch](../development/PROCESS.md#upstream-drift-watch) was read on 2026-11-09: Velero v1.19.0-rc.1, published on 2026-11-06, and the AWS plugin v1.15.0-rc.1, published on 2026-11-07, are release candidates, and v1.18.4 and v1.14.4 are still the latest stable releases, so the reviewed pair does not move (D17)
@@ -2312,6 +2312,101 @@ provenance of REQ-308 and the token of the first step of D11b. Its row stays In 
 until the proof, which REQ-313 counts among the checks of this milestone that
 1.0.0 may wait for; read otherwise, 1.0.0 would wait for itself, which D18 does
 not take.
+
+T6.5, 1.0.0, on 2026-11-10: the first publication (REQ-310, REQ-313), on the go the
+lead maintainer gave that day for the version workflow, the merge of its pull request
+once its checks and the last runs of main were green, the tag and the release
+workflow, and the notes in the body of the GitHub release. The evidence, by check:
+
+- REG-01, before the merge of the pull request of the version,
+  [#164](https://github.com/freelensapp/freelens-velero-extension/pull/164). The last
+  runs on main of the night, on `854910e`: the views, every part, 340 cases in 19
+  files ([run 42782772227](https://github.com/freelensapp/freelens-velero-extension/actions/runs/42782772227)),
+  and the end to end tests
+  ([run 42785881549](https://github.com/freelensapp/freelens-velero-extension/actions/runs/42785881549)).
+  The last runs on main of a push, on `af90489`, the merge of #163: the unit tests,
+  3,829 cases in 135 files, then the measures, 3 in 3 files
+  ([run 42787843366](https://github.com/freelensapp/freelens-velero-extension/actions/runs/42787843366));
+  the integration test, 38 cases in 11 files
+  ([run 42787843759](https://github.com/freelensapp/freelens-velero-extension/actions/runs/42787843759));
+  the views, every part, 340 cases in 19 files
+  ([run 42787843512](https://github.com/freelensapp/freelens-velero-extension/actions/runs/42787843512));
+  the end to end tests
+  ([run 42787843412](https://github.com/freelensapp/freelens-velero-extension/actions/runs/42787843412));
+  the check, Trunk and OSV-Scanner. The fifteen checks of #164, the six parts of the
+  views and the end to end tests among them, every one green. No run was run again.
+- REL-01 and REL-05: the version workflow, started by hand with `1.0.0`
+  ([run 42787886963](https://github.com/freelensapp/freelens-velero-extension/actions/runs/42787886963)),
+  opened #164, which changes the version of `package.json` alone; #164 was merged at
+  09:31 UTC as `fd6826210756c9cba34f24876dd7844342e6347a`; the tag workflow
+  ([run 42791436784](https://github.com/freelensapp/freelens-velero-extension/actions/runs/42791436784))
+  tagged main as it was, that commit, `v1.0.0`; the release workflow, its one job at
+  the tag ([run 42791472133](https://github.com/freelensapp/freelens-velero-extension/actions/runs/42791472133)),
+  checked the tag against the version of `package.json`, built and packed, published
+  `@freelensapp/velero-extension@1.0.0` on `latest` with the token of D11b and no
+  provenance, made the bill of materials and the checksums, and created the GitHub
+  release with the four assets. The notes of 1.0.0 were written in its body once it
+  was created (REQ-303).
+- REG-01 after the tag, the runs of `fd68262` once they ended, after the
+  publication, as amended
+  ([the amendment](#2026-11-09-the-environment-of-the-template)): the unit tests,
+  3,829 cases in 135 files, then the measures, 3 in 3 files
+  ([run 42791434607](https://github.com/freelensapp/freelens-velero-extension/actions/runs/42791434607));
+  the integration test, 38 cases in 11 files
+  ([run 42791434604](https://github.com/freelensapp/freelens-velero-extension/actions/runs/42791434604));
+  the views, every part, 340 cases in 19 files, ended at 09:54 UTC
+  ([run 42791434777](https://github.com/freelensapp/freelens-velero-extension/actions/runs/42791434777));
+  the end to end tests
+  ([run 42791435085](https://github.com/freelensapp/freelens-velero-extension/actions/runs/42791435085));
+  the check, Trunk and OSV-Scanner: every one green.
+- ASSET-05, its steps on 1.0.0, each in an empty directory:
+  1. The GitHub release v1.0.0 is not a prerelease, with
+     `freelensapp-velero-extension-1.0.0.tgz` (991,901 bytes), the bill of materials
+     `freelensapp-velero-extension-1.0.0-spdx.json` (220,318 bytes) and their two
+     `.sha256`.
+  2. Both checksums pass: the tarball is
+     `4c23d228a8e280c952c1e0f38e2019ebf14b07225ee58e3f2df5fb6f263c0453`.
+  3. `npm pack @freelensapp/velero-extension@1.0.0` gives the asset, byte for byte,
+     once the registry answered the version, about five minutes after the
+     publication.
+  4. In a new project, `npm audit signatures` verifies the signature of the registry
+     of the five packages the install brings, and the attestation of three of them,
+     React, React DOM and Scheduler; 1.0.0, published with the token, carries none,
+     as REQ-308 says (ASSET-04).
+  5. The bill of materials of the repository at the tag (REQ-307, ASSET-03) lists 52
+     packages: the actions of the workflows, the executables of pnpm 12.15.0 for each
+     platform, and the modules of Go of the native compiler of TypeScript.
+  6. The registry names 1.0.0 under `latest`, and has no tag `next`.
+  7. The run of the release workflow at the tag passed, as REL-01 reads it.
+- REL-02, on macOS: the release Freelens 2.0.0 for x64,
+  `Freelens-2.0.0-macos-amd64.dmg`, checked against its `.sha256`, its application
+  copied out of the image to a folder outside `/Applications`, its signature
+  verified with `codesign`. FND-10 run by the version: in a new profile,
+  `@freelensapp/velero-extension@1.0.0` typed on the Extensions page; the host
+  downloaded 1.0.0 from the registry and listed it Enabled, as the build
+  `1.0.0-4c23d228`, named by the start of the checksum of the asset; 8 cases of 8
+  green, the transport over HTTP and HTTPS and the route in the main process of the
+  host among them, and no line of an error of the extension in the files of its log.
+  Decided while implementing, on 2026-11-10: the runner by version of D14 is not
+  written. The helper of the suites takes the name and the version in place of the
+  path of a tarball (`EXTENSION_PATH`), and FND-10 reads the build from the profile,
+  so the check runs with `pnpm test:integration` and the file of FND-10 as they are.
+- REL-04: the same in another new profile with the name alone typed,
+  `@freelensapp/velero-extension`: the host installed 1.0.0, the same build
+  `1.0.0-4c23d228`, listed Enabled, 8 cases of 8 green. The README says in its
+  Status that 1.0.0 is released, since the pull request before the version, and the
+  roadmap says it with this pull request.
+- ASSET-04: 1.0.0 read from the registry with no attestation. The token revoked on
+  npm and deleted from the environment, and the trusted publisher configured, by an
+  owner of the scope, are recorded when they are made: the row of T6.4 waits for
+  them.
+
+The release workflow of the template creates the GitHub release with the token of
+its run, and a release made so starts no workflow: the version workflow, which runs
+when a release is published, opened no pull request of a prerelease after 1.0.0.
+
+The spec is Implemented. It is Verified once ASSET-04 is, and T6.5 waits for the
+listing in the marketplace alone (D19).
 
 ## Amendments
 
