@@ -276,7 +276,7 @@ their tests green in CI on main.
 | Regression; the roles of the README proven; HTTPS and the direct route in the host; a ceiling on the bundles. The rest is deferred, D16 | T6.1 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Done |
 | Visual pass on both themes and on narrow and large windows | T6.2 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Done |
 | The README in the sections of the other extensions: installation, permissions, write actions, compatibility, features and limits; screenshots, demonstration video, release notes | T6.3 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Done |
-| Tarball, checksums and software bill of materials from the release workflow of the template: on each GitHub release, the tarball and the bill of materials of the repository at the tag, each with its `.sha256`, and the provenance through the trusted publisher alone. The proof of the assets made on 1.0.0. Left: the trusted publisher in place of the token of the first publication, which published 1.0.0 | T6.4 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | In PR |
+| Tarball, checksums and software bill of materials from the release workflow of the template: on each GitHub release, the tarball and the bill of materials of the repository at the tag, each with its `.sha256`, and the provenance through the trusted publisher alone. The proof of the assets made on 1.0.0, and the trusted publisher in place of the token of the first publication since 2026-11-10 | T6.4 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Done |
 | With Freelens 2.0.0: the pin of the SDK a range of versions, the integration at the tag v2.0.0, the host drift watch ended | | [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#d10-the-version-and-the-release) | Done |
 | Release through the organization's flow, on the lead maintainer's go: the version, tag and release workflows of the template, the tag on main once the pull request of the version is merged. 1.0.0 published and checked on 2026-11-10. Left: its listing in the marketplace | T6.5 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | In PR |
 
@@ -305,8 +305,8 @@ lead maintainer approved it on the gallery of the pre-review of the release
 candidate, the video, the screenshots, the notes of 1.0.0 and the README, with the
 walk of TRY-IT by hand not made, as SPEC-0018 records. 1.0.0 was published on
 2026-11-10, with the proof of its assets and its check by version and by name in
-Freelens 2.0.0; T6.4 waits for the trusted publisher in place of the token, and
-T6.5 for the listing in the marketplace.
+Freelens 2.0.0; the trusted publisher took the place of the token the same day,
+which makes T6.4 Done, and T6.5 waits for the listing in the marketplace.
 
 ## Deferred after v1.0.0
 
