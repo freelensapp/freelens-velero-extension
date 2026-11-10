@@ -1,6 +1,6 @@
 # SPEC-0015: The Freelens v2 Host
 
-- **Status:** Implemented
+- **Status:** Verified
 - **Date:** 2026-10-16
 - **Milestone / tasks:** Foundation / T0.7, T0.8
 - **Reviewed Velero:** v1.18.4, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, unchanged
@@ -1864,3 +1864,11 @@ what the amendment above says of a prerelease, which the tag workflow tags and t
 release workflow publishes on `next`: none is made before 1.0.0. Where the
 evidence above names the first prerelease, as the time HOST-21 is proven and this
 spec is Verified, it reads 1.0.0.
+
+**HOST-21 on 1.0.0, on 2026-11-10** (REQ-216). 1.0.0, the first publication, was
+published on 2026-11-10 through the flow of the template, as the evidence of T6.5 in
+[SPEC-0018](SPEC-0018-release-readiness.md) records: its tag `v1.0.0` names
+`fd6826210756c9cba34f24876dd7844342e6347a`, the merge commit of the pull request of
+the version; the registry of npm names 1.0.0 under `latest` and has no tag `next`;
+and its GitHub release is not marked as a prerelease. HOST-21 was the last check of
+the table to be proven, as the evidence of T0.8 says, and the spec is Verified.
