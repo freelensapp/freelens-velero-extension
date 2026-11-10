@@ -2409,9 +2409,9 @@ The spec is Implemented. It is Verified once ASSET-04 is, and T6.5 waits for the
 listing in the marketplace alone (D19).
 
 ASSET-04, on 2026-11-10, after the publication of 1.0.0: the lead maintainer, an
-owner of the scope `@freelensapp`, removed the token of D11b from the environment
-`publishing`, which the API of the repository then read with no secret, and
-configured the trusted publisher of the package, with this repository,
+owner of the scope `@freelensapp`, revoked the token of D11b on npm and removed it
+from the environment `publishing`, which the API of the repository then read with no
+secret, and configured the trusted publisher of the package, with this repository,
 `release.yaml` and the environment `publishing`. The row of T6.4 is Done. The
 last part of ASSET-04, the attestation of the first version published through the
 trusted publisher, is read at that version, and the spec is Verified then.
