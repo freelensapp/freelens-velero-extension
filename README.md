@@ -28,7 +28,7 @@ It reaches the cluster through the connection Freelens already has, and it
 writes nothing until writes are turned on for one installation of Velero,
 after which each write is confirmed before it is sent.
 
-[Video Demo](https://github.com/user-attachments/assets/VIDEO-UUID-TO-FILL)
+[Video Demo](https://github.com/user-attachments/assets/8a051d10-b46b-4ae6-ad96-2460de4464b5)
 
 ![The Overview of a Velero installation: what needs attention, the newest completed backup and the recent operations on a line of time, dark theme](docs/screenshots/overview-dark.png)
 

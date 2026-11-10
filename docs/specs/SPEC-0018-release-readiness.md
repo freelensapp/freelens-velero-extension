@@ -2232,8 +2232,11 @@ storyboard the lead maintainer approved that day, and the Status of 1.0.0
   its resources; a restore into another namespace confirmed by the name of the
   backup; the adherence of a schedule with its history; Back up now with its
   review; the lists of the storage locations, the backup repositories and the data
-  uploads; the end card. The README links to it, uploaded to GitHub:
-  VIDEO-URL-TO-FILL. It is not in the package, whose files are `dist/**/*`.
+  uploads; the end card. The README links to it, uploaded to GitHub as
+  [its asset](https://github.com/user-attachments/assets/8a051d10-b46b-4ae6-ad96-2460de4464b5),
+  whose media data are the ones of the file recorded, byte for byte: the upload
+  adds a box of metadata of 5,893 bytes before them. It is not in the package,
+  whose files are `dist/**/*`.
 - The screenshots: six PNG files of 2880 by 1800 under `docs/screenshots/`, taken
   in the same session in a new profile: the Overview, the list of the Backups, the
   workspace of a backup with its log, the adherence of a schedule and the review of
@@ -2247,8 +2250,8 @@ storyboard the lead maintainer approved that day, and the Status of 1.0.0
   names; the backups of the day, the backup of the volumes with its repositories,
   the restore and the backup of Back up now were made by the real server.
 - DOC-07 and DOC-08: each screenshot and every frame looked at by the lead
-  maintainer at REL-03, on REVIEW-DATE-TO-FILL, on a private page with the video
-  and the six files; the length under 60 seconds.
+  maintainer at REL-03, on 2026-11-10, on a private page with the video and the
+  six files; the length under 60 seconds.
 
 Decided while implementing, on 2026-11-09:
 
@@ -2270,6 +2273,43 @@ amendments of two decisions of 2026-11-09 that the spec did not say yet,
 and [the sections of the other extensions](#2026-11-09-the-sections-of-the-other-extensions),
 the second left to another pull request by the evidence of the second pull
 request of T6.3.
+
+The review of the sixth milestone (REQ-312, REL-03), on 2026-11-10: the lead
+maintainer approved it, on the gallery of the pre-review of the release candidate,
+the commit `854910e` of main, from the views of its push
+([run 42699473749](https://github.com/freelensapp/freelens-velero-extension/actions/runs/42699473749)):
+65 views in both themes, at 1440 by 900, at 900 by 650 and at twice the zoom,
+390 screenshots, and no finding of the check of the layout; and on a private page
+with the video, the six screenshots, the notes of 1.0.0 and the README of this
+pull request as GitHub renders it. Decided by the lead maintainer on 2026-11-10:
+the walk of TRY-IT by hand is not made, since the gallery is that walk, made by
+the pre-review, which installs the extension packed from the release candidate
+from its tarball, through the Extensions page as TRY-IT does, on the environment
+of the demo. The checklist, by check:
+
+- DOC-01: Install names `@freelensapp/velero-extension`, as `package.json` does,
+  a version after the name, the tarball of a release by its URL or its path, and
+  a directory, and no tag `next`; each way to 1.0.0 is tried at REL-02 and REL-04.
+- DOC-07: each screenshot looked at, with its text; DOC-10 resolves each file
+  under `docs/screenshots/`.
+- DOC-08: the video, 57.47 seconds, every frame looked at; the link of the README
+  LINK-CHECK-TO-FILL.
+- DOC-10: the external links of the README opened on 2026-11-10, each answering,
+  but DeepWiki, which answers 429 to a client that is not a browser, and the page
+  of the package on npm, which answers 403 to one, and has no version to show
+  before 1.0.0.
+- DOC-06 is not taken, with REQ-300
+  ([the amendment](#2026-11-09-the-sections-of-the-other-extensions)).
+
+No finding, and no issue. The rows of T6.1, T6.2 and T6.3 of the roadmap are Done
+with this pull request, the last of each. Decided while implementing, on
+2026-11-10: with no prerelease, the proof of the assets of T6.4 (REQ-309) is made
+on 1.0.0 itself, so D18 reads T6.4 as what gates 1.0.0 in D15, all in place on
+main: the release workflow of the template, the bill of materials of REQ-307, the
+provenance of REQ-308 and the token of the first step of D11b. Its row stays In PR
+until the proof, which REQ-313 counts among the checks of this milestone that
+1.0.0 may wait for; read otherwise, 1.0.0 would wait for itself, which D18 does
+not take.
 
 ## Amendments
 
