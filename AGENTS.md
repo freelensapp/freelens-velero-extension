@@ -13,8 +13,9 @@ kinds of `velero.io`) inside Freelens, with their logs and results, the
 adherence of the schedules and guarded recovery actions. It was scaffolded from
 freelens-example-extension and is developed spec by spec.
 
-The foundation, the first milestone and the second milestone are in place and
-reviewed. Scope and progress toward v1.0.0 are in `docs/development/ROADMAP.md`.
+1.0.0, the agreed scope of the six milestones, was released on 2026-11-10, after
+the review of each milestone. Scope and progress are in
+`docs/development/ROADMAP.md`.
 
 - **Language**: TypeScript 7.0.2
 - **Runtime**: Freelens >= 2.0.0, the extension API v2 (`engines.freelens` `^2.0.0`)
@@ -947,17 +948,17 @@ for the changes that reach them:
   Freelens is built through `.github/actions/build-freelens`, the composite
   action it shares with `views-tests.yaml`; a change of that action runs every
   part of the views.
-- `views-tests.yaml`: every suite of the views, the pre-review and FND-10, in five
+- `views-tests.yaml`: every suite of the views, the pre-review and FND-10, in six
   parts side by side, each a job with an environment of its own and one run of the
   runner of `pnpm e2e:views`, in Freelens built at the same commit: three on the
   environment and the fixtures of `pnpm demo:up`, for the suites that read what
   only a server makes (the artifacts, the pre-review, the volumes, the server and
   the repositories),
   each then with the cleanup of the fixtures and the verification of the
-  environment; and two on the CRDs of the release alone with the static fixtures
+  environment; and three on the CRDs of the release alone with the static fixtures
   and the counterparts of what the controllers leave in the installation, for the
-  eleven other suites and FND-10. A first job decides the parts by the rules of
-  `e2e/views-parts.json`: every part on main, every night and on demand; on a pull
+  twelve other suites, the one of the actions among them, and FND-10. A first job
+  decides the parts by the rules of `e2e/views-parts.json`: every part on main, every night and on demand; on a pull
   request, the parts its changed files reach, every part for a file no rule knows
   and none for documents and unit tests alone. The job `views in Freelens v2`
   passes when the parts it chose passed, or when it chose none, and unit tests
