@@ -654,6 +654,33 @@ main branch of the host, which no release has, beside Node 24.22.1, which `v2.0.
 already names; it waits for the release that brings the first two. The validation
 target stays the commit of the tag `v2.0.0`, as SPEC-0015 says.
 
+### Before 1.0.0, 2026-11-10
+
+The watch read again before 1.0.0, the first publication, as REQ-313 of
+[SPEC-0018](../specs/SPEC-0018-release-readiness.md) asks. Read from the releases of
+each repository on GitHub and the commit of each tag. Public upstream sources only;
+nothing was run.
+
+| Component | Latest release | Newer, a release candidate | Compared with |
+| --- | --- | --- | --- |
+| Velero | `v1.18.4`, `4ee1e79a7aed367fd9b767b8219ec65bd0c96892`, released 2026-09-28 | `v1.19.0-rc.1`, `9338d275bbeac8226023e6fc269b9608ec160928`, published 2026-11-06 | `v1.18.4`, the reviewed one |
+| AWS object-store plugin | `v1.14.4`, `7373ae03525ce743a4f95f13a8fa9f56c7b8f551`, released 2026-09-28 | `v1.15.0-rc.1`, `bbb9bcdf6709aec46c78bb8d56b948a218690bae`, published 2026-11-07 | `v1.14.4`, the reviewed one |
+| Freelens | `v2.0.0`, `b9b53e16056578c5407312eba5823a089972f6d5`, released 2026-10-28 | None | `v2.0.0`, the validation target of [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md) |
+
+Nothing moved since [the watch before the first release](#before-the-first-release-2026-11-09):
+the same latest stable releases and the same two release candidates, and no
+release of Velero 1.19.0. The reviewed pair stays `v1.18.4` and `v1.14.4`, as D17
+of SPEC-0018 decided, and what the notes of `v1.19.0-rc.1` announce is as that
+entry reads it; the README still says in its Compatibility that Velero 1.19 is
+untested (REQ-299).
+
+The host drift watch: no release of Freelens after `v2.0.0`; the registry of npm
+names `@freelensapp/extensions` 2.0.0 under `latest`, with the same two older
+versions under `nightly` and `next`; and the pull request of Renovate of the group
+`Freelens dependencies` brings the same Electron 44.10.1, Biome 2.6.4 and Node
+24.22.1 as on 2026-11-09. The validation target stays the commit of the tag
+`v2.0.0`.
+
 ## Verification And Remaining Work
 
 Completed checks:

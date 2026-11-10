@@ -273,12 +273,12 @@ their tests green in CI on main.
 
 | Feature | Task | Spec | Status |
 | --- | --- | --- | --- |
-| Regression; the roles of the README proven; HTTPS and the direct route in the host; a ceiling on the bundles. The rest is deferred, D16 | T6.1 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | In PR |
-| Visual pass on both themes and on narrow and large windows | T6.2 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | In PR |
-| Installation, permissions, safety, compatibility and troubleshooting documentation, screenshots, demonstration video, release notes | T6.3 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | In PR |
-| Tarball, checksums and software bill of materials from the release workflow of the template: on each GitHub release, the tarball and the bill of materials of the repository at the tag, each with its `.sha256`, and the provenance through the trusted publisher alone. Left: the token of the first publication and then the trusted publisher, and the proof of the assets on the first release | T6.4 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | In PR |
+| Regression; the roles of the README proven; HTTPS and the direct route in the host; a ceiling on the bundles. The rest is deferred, D16 | T6.1 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Done |
+| Visual pass on both themes and on narrow and large windows | T6.2 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Done |
+| The README in the sections of the other extensions: installation, permissions, write actions, compatibility, features and limits; screenshots, demonstration video, release notes | T6.3 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | Done |
+| Tarball, checksums and software bill of materials from the release workflow of the template: on each GitHub release, the tarball and the bill of materials of the repository at the tag, each with its `.sha256`, and the provenance through the trusted publisher alone. Left: the proof of the assets on 1.0.0, the first publication, made with the token of the first publication, and then the trusted publisher | T6.4 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | In PR |
 | With Freelens 2.0.0: the pin of the SDK a range of versions, the integration at the tag v2.0.0, the host drift watch ended | | [SPEC-0015](../specs/SPEC-0015-freelens-v2-host.md#d10-the-version-and-the-release) | Done |
-| Release through the organization's flow, on the lead maintainer's go: the version, tag and release workflows of the template, the tag on main once the pull request of the version is merged. Left: the review of the milestone, 1.0.0 published and checked, and its listing in the marketplace | T6.5 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | In PR |
+| Release through the organization's flow, on the lead maintainer's go: the version, tag and release workflows of the template, the tag on main once the pull request of the version is merged. Left: 1.0.0 published and checked, and its listing in the marketplace | T6.5 | [SPEC-0018](../specs/SPEC-0018-release-readiness.md) | In PR |
 
 [SPEC-0018](../specs/SPEC-0018-release-readiness.md), approved by the lead
 maintainer on 2026-11-09 with D1 to D19 as proposed, is the one spec of the
@@ -299,7 +299,12 @@ and the notes of 1.0.0, the review of the milestone, and 1.0.0 on `latest` on th
 lead maintainer's go. Its D16 says what T6.1 takes and what it defers: the row of
 T6.1 is narrowed to it, and what it defers is under Deferred after v1.0.0.
 Each slice is its own pull request; the row of a task is In PR from its first and
-Done with its last.
+Done with its last. The review gate of the milestone, in
+[PROCESS.md](PROCESS.md#milestone-manual-review-gate), was held on 2026-11-10: the
+lead maintainer approved it on the gallery of the pre-review of the release
+candidate, the video, the screenshots, the notes of 1.0.0 and the README, with the
+walk of TRY-IT by hand not made, as SPEC-0018 records. T6.4 waits for the proof of
+its assets on 1.0.0.
 
 ## Deferred after v1.0.0
 

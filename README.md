@@ -28,16 +28,29 @@ It reaches the cluster through the connection Freelens already has, and it
 writes nothing until writes are turned on for one installation of Velero,
 after which each write is confirmed before it is sent.
 
+[Video Demo](https://github.com/user-attachments/assets/8a051d10-b46b-4ae6-ad96-2460de4464b5)
+
+![The Overview of a Velero installation: what needs attention, the newest completed backup and the recent operations on a line of time, dark theme](docs/screenshots/overview-dark.png)
+
+![The list of the Backups, newest first, with the phase, the failure, the item progress, the start and the duration of each, dark theme](docs/screenshots/backups-dark.png)
+
+![The log of a backup in its workspace, loaded through a reviewed DownloadRequest and searched, dark theme](docs/screenshots/backup-log-dark.png)
+
+![A schedule and its adherence to its cron expression: awaited, its next run and how it was computed, its last observed run, dark theme](docs/screenshots/adherence-dark.png)
+
+![The review of a restore into another namespace: the Restore it will create, what it means and what is sent, dark theme](docs/screenshots/restore-review-dark.png)
+
+![The Overview of a Velero installation, light theme](docs/screenshots/overview-light.png)
+
 The extension needs nothing installed in the cluster beyond Velero itself. It
 is a from-scratch MIT implementation and it is not a Velero product.
 
 ### Status
 
-1.0.0, the first release of the extension, is being prepared. Until it is
-published, install the extension from the source, as
-[Build from the source](#build-from-the-source) says. What each version brings is
-in the [releases](https://github.com/freelensapp/freelens-velero-extension/releases)
-of the repository on GitHub. What 1.0.0 covers, by milestone:
+1.0.0 is the first release of the extension, published on npm and on the
+[releases](https://github.com/freelensapp/freelens-velero-extension/releases) of
+the repository on GitHub: install it as [Install](#install) says. What 1.0.0
+covers, by milestone:
 
 <!-- markdownlint-disable MD013 -->
 

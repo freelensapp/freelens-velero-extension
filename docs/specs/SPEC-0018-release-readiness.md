@@ -7,7 +7,7 @@
 - **Reviewed main:** not relevant: the subject of this spec is the release of the extension, its checks and its documents
 - **Freelens validation target:** Freelens v2, the validation target of [SPEC-0015](SPEC-0015-freelens-v2-host.md), freelensapp/freelens `b9b53e16056578c5407312eba5823a089972f6d5`, the commit of the tag v2.0.0 of the release Freelens 2.0.0
 - **Dependencies:** every spec of v1.0.0, SPEC-0001 to SPEC-0017; [D10 of SPEC-0015](SPEC-0015-freelens-v2-host.md#d10-the-version-and-the-release), the version line, with no prerelease before 1.0.0 since [the amendment](#2026-11-09-no-prerelease-before-100) of 2026-11-09; the fifth milestone, done and reviewed: its review gate passed with the lead maintainer on 2026-11-09
-- **Approval:** Approved by the lead maintainer on 2026-11-09, with D1 to D19 as proposed; D11b is carried out with an owner of the npm scope `@freelensapp` when the first prerelease is asked for. Amended the same day, decided by the lead maintainer on 2026-11-09: the version, tag and release workflows are the template's of the organization; what the requirements below asked beyond it is not taken; and the README follows the template too, with no `CHANGELOG.md` and no Verify a release ([the amendment](#2026-11-09-the-release-flow-of-the-template)). Amended the same day as well, decided by the lead maintainer on 2026-11-09: the checks that go beyond the other extensions and were not made are not taken; the ones made, the HTTPS and the direct route of FND-10, the ceilings of the bundles and the identities of the roles, stay ([the amendment](#2026-11-09-the-checks-beyond-the-other-extensions)). Amended the same day once more, decided by the lead maintainer on 2026-11-09: there is no prerelease, and 1.0.0 is the first publication; what a prerelease was for, the proof of the assets, the check by version and the drift watch before it, is made for 1.0.0, and D11b is carried out when 1.0.0 is asked for ([the amendment](#2026-11-09-no-prerelease-before-100)). D8 is not taken, decided by the lead maintainer on 2026-11-09: the pre-review stays the visual one of the other extensions; the scan is not kept
+- **Approval:** Approved by the lead maintainer on 2026-11-09, with D1 to D19 as proposed; D11b is carried out with an owner of the npm scope `@freelensapp` when the first prerelease is asked for. Amended the same day, decided by the lead maintainer on 2026-11-09: the version, tag and release workflows are the template's of the organization; what the requirements below asked beyond it is not taken; and the README follows the template too, with no `CHANGELOG.md` and no Verify a release ([the amendment](#2026-11-09-the-release-flow-of-the-template)). Amended the same day as well, decided by the lead maintainer on 2026-11-09: the checks that go beyond the other extensions and were not made are not taken; the ones made, the HTTPS and the direct route of FND-10, the ceilings of the bundles and the identities of the roles, stay ([the amendment](#2026-11-09-the-checks-beyond-the-other-extensions)). Amended the same day once more, decided by the lead maintainer on 2026-11-09: there is no prerelease, and 1.0.0 is the first publication; what a prerelease was for, the proof of the assets, the check by version and the drift watch before it, is made for 1.0.0, and D11b is carried out when 1.0.0 is asked for ([the amendment](#2026-11-09-no-prerelease-before-100)). Amended the same day a fourth time, decided by the lead maintainer on 2026-11-09 and recorded on 2026-11-10: the environment `publishing` stays the template's, with no required reviewer, and the second step of D11b is not taken ([the amendment](#2026-11-09-the-environment-of-the-template)). Amended the same day a fifth time, decided by the lead maintainer on 2026-11-09 and recorded on 2026-11-10: the README has the sections of the other extensions, with no Troubleshooting ([the amendment](#2026-11-09-the-sections-of-the-other-extensions)). D8 is not taken, decided by the lead maintainer on 2026-11-09: the pre-review stays the visual one of the other extensions; the scan is not kept
 
 Governed by [AGENTS.md](../../AGENTS.md). A completed draft is not approval to
 implement.
@@ -97,8 +97,10 @@ Excluded, with their owners:
    may not do; bound to the role of the actions, the same action is confirmed and
    Velero acts on it.
 5. **P1, the words of a failure:** Given an identity that may not forward a port,
-   when the operator loads a log, then the tab says the words the section
-   Troubleshooting of the README quotes, and that section names the verb to grant.
+   when the operator loads a log, then the tab says the words of the failure, and
+   the section Permissions of the README names the verb to grant, as amended on
+   2026-11-09 ([the amendment](#2026-11-09-the-sections-of-the-other-extensions)):
+   the README has no Troubleshooting.
 6. **P2, two clusters,** not taken on 2026-11-09
    ([the amendment](#2026-11-09-the-checks-beyond-the-other-extensions)): there is
    no second cluster in the environment, and the gate between frames stays proven
@@ -117,7 +119,7 @@ Excluded, with their owners:
 
 | ID | Contract | Acceptance check |
 | --- | --- | --- |
-| REQ-285 | The regression of 1.0.0 is every check of SPEC-0001 to SPEC-0017 and of this spec, each in its layer, run where [the table](#where-each-check-runs) says: on every pull request, on every push to main, every night on main and at a tag. No check of those specs is removed, skipped or loosened for the release. Before the pull request of a version is merged, the last runs on main of every workflow of the table that runs there, of a push and of the night, and the checks of that pull request are green; a run that passed only when run again is recorded with its first failure. The tag names the merge commit (REQ-315), whose runs start with the merge and end after the tag: they are read and recorded with their counts, and the required reviewer of `publishing` (D11b) approves the job `publish` only once they are green, which makes that reading the gate of the publication. A red run found after a publication is handled as [the way back](#the-way-back) says | REG-01 |
+| REQ-285 | Amended on 2026-11-09, see [the amendment](#2026-11-09-the-environment-of-the-template): the gate of the publication is the merge of the pull request of the version, and the runs of the merge commit are read after the publication. The regression of 1.0.0 is every check of SPEC-0001 to SPEC-0017 and of this spec, each in its layer, run where [the table](#where-each-check-runs) says: on every pull request, on every push to main, every night on main and at a tag. No check of those specs is removed, skipped or loosened for the release. Before the pull request of a version is merged, the last runs on main of every workflow of the table that runs there, of a push and of the night, and the checks of that pull request are green; a run that passed only when run again is recorded with its first failure. The tag names the merge commit (REQ-315), whose runs start with the merge and end after the publication, which the tag starts with no approval to wait for: they are read and recorded with their counts once they end. A red run found after a publication is handled as [the way back](#the-way-back) says | REG-01 |
 | REQ-286 | Amended on 2026-11-09, see [the amendment](#2026-11-09-the-release-flow-of-the-template): taken in its first half alone. The steps that build Freelens at the commit of the validation target are one composite action, `.github/actions/build-freelens`, which the workflows of the integration test and of the views call, each with the commit it names once. The rest is not taken: the release workflow is the template's, one job that checks the tag, builds, packs and publishes, with no job `package`, no FND-10 on the file it publishes and no run on a pull request or by hand, so G1.1, no check installs the file the release publishes, stays open | REG-02 |
 | REQ-287 | Not taken on 2026-11-09, see [the amendment](#2026-11-09-the-checks-beyond-the-other-extensions): a second disposable kind cluster in the environment of the suites, for the isolation between clusters (G4.1) | REG-03 |
 | REQ-314 | Not taken on 2026-11-09, see [the amendment](#2026-11-09-the-checks-beyond-the-other-extensions): two clusters at once in one packaged Freelens, their lists told apart by UID and their installations selected and kept apart (G4.1, G4.4). The gate of each frame and the count of the writes between frames stay proven by the suite of the second entry of SPEC-0009 (D4) | REG-08 |
@@ -139,29 +141,30 @@ Excluded, with their owners:
 
 The README of 1.0.0 is the page of the package on npm and on GitHub, in the
 layout of the other extensions of the organization (amended on 2026-11-09 at the
-request of the lead maintainer). Its sections come in this order: the title and
-the badges; Overview, with the entries of the extension in the sidebar, the write
-mode, the video and the screenshots, and under it Status, the state of the
-release the README is published with, and what the version covers by milestone;
-Requirements, with Compatibility as its subsection; Supported APIs, the kinds the
-extension reads by their API version; Permissions; Install, from the registry,
-from a release tarball and from a directory, with Verify a release as its last
-subsection; Getting started; Safety; then Development, Build from the source,
-with the subsections of the other extensions, and License. Features, Limits and
-Troubleshooting take their places with the slices that write them. Installation,
-in the requirements below, is the section Install. A unit case reads what can go
-stale without anyone seeing it, the range of Freelens, the roles, the writes, the
-versions, the notes and the links; the other sections are read by the checklist
-of the review of the milestone (REQ-312).
+request of the lead maintainer, and again the same day, see
+[the amendment](#2026-11-09-the-sections-of-the-other-extensions)). Its sections
+come in this order: the title and the badges; Overview, with the entries of the
+extension in the sidebar, the write mode, the video and the screenshots, and
+under it Status, the state of the release the README is published with, and what
+the version covers by milestone; Requirements, with Compatibility as its
+subsection; Supported APIs, the kinds the extension reads by their API version;
+Permissions; Install, from the registry, from a release tarball and from a
+directory; Getting started; Features, with Write actions as its last subsection;
+Limits; then Development, Build from the source, with the subsections of the
+other extensions, and License. Installation, in the requirements below, is the
+section Install, and Safety is the subsection Write actions of Features. A unit
+case reads what can go stale without anyone seeing it, the range of Freelens, the
+roles, the writes, the versions and the links; the other sections are read by the
+checklist of the review of the milestone (REQ-312).
 
 | ID | Contract | Acceptance check |
 | --- | --- | --- |
 | REQ-295 | Amended on 2026-11-09, see [the amendment](#2026-11-09-no-prerelease-before-100): with no tag `next`. Installation says how to install the extension from the Extensions page of Freelens: by name, `@freelensapp/velero-extension`, which Freelens resolves to the newest version that is not a prerelease, and which finds no version until 1.0.0, the first publication, is published; by a version; and from the tarball of a GitHub release, checked as Verify a release says, dragged into the window or given by its path. It names the package as `package.json` names it, and no npm tag: 1.0.0 is published on `latest`, with no prerelease on `next` before it | DOC-01 |
 | REQ-296 | Amended on 2026-11-09, see [the amendment](#2026-11-09-no-prerelease-before-100): the end of Status. Requirements says what the extension needs and nothing more: Freelens 2.0.0 or a later 2.x, as `engines.freelens` declares, with Freelens 1 listing the package as Incompatible; a cluster with Velero, read through `velero.io/v1` and, for the data movement, `velero.io/v2alpha1`; an identity with the permissions of the section Permissions; nothing installed in the cluster beyond Velero, and no credential of the object store; Node.js only to build from source. The section Status says that 1.0.0, the first release, is being prepared, and that until it is published the extension is installed from the source; right before the pull request of the version of 1.0.0, it gives way to the version the README is published with | DOC-02 |
 | REQ-297 | Permissions has a table, one row for each feature, the views, the tabs, a download through the cluster, the version of the server and each action, with the group, the resource, the verbs and the scope of each, every verb backed by a request the code makes, as #145 asks; and two example roles in YAML, one that reads the views and one for the views, the tabs, the version of the server and every action, a Role in the namespace of the installation for what is namespaced and a ClusterRole only for what is read in the whole cluster, with the verbs that are optional and what is lost without them. The two roles are the roles of the two identities of REQ-288, written in the form the case of DOC-03 renders them | DOC-03 |
-| REQ-298 | Safety says what the extension writes to a cluster, every kind and verb the adapter of the main process allows and nothing else: the creation of a DownloadRequest and of a ServerStatusRequest, which loading a tab and reading the version of the server are; the creation of a Backup, a Schedule, a Restore and a DeleteBackupRequest; the patch of `spec.paused` and `spec.skipImmediately` of a Schedule; that each is refused unless writes are on for that cluster and namespace and its review is confirmed; that a restore and a deletion ask for the name of the backup typed; that a backup is deleted only through a DeleteBackupRequest, one at a time; and the three rules it keeps today, signed URLs never logged, stored or shown, TLS verified by default, and missing data shown as unknown | DOC-04 |
+| REQ-298 | Amended on 2026-11-09, see [the amendment](#2026-11-09-the-sections-of-the-other-extensions): in Features. The subsection Write actions of Features says what the extension writes to a cluster, every kind and verb the adapter of the main process allows and nothing else: the creation of a DownloadRequest and of a ServerStatusRequest, which loading a tab and reading the version of the server are; the creation of a Backup, a Schedule, a Restore and a DeleteBackupRequest; the patch of `spec.paused` and `spec.skipImmediately` of a Schedule; that each is refused unless writes are on for that cluster and namespace and its review is confirmed; that a restore and a deletion ask for the name of the backup typed; that a backup is deleted only through a DeleteBackupRequest, one at a time; and the three rules it keeps today, signed URLs never logged, stored or shown, TLS verified by default, and missing data shown as unknown | DOC-04 |
 | REQ-299 | Compatibility is a table: Freelens 2.0.x, tested at 2.0.0, the commit of the validation target; Velero 1.18.x with its AWS plugin 1.14.x, tested at v1.18.4 and v1.14.4; Kubernetes, tested at 1.34.11, the node of the test clusters; the platforms the checks ran on (D13); and what was proven on synthetic objects only, the data movement and the phases of a failure other than FailedValidation. A version outside the table, Velero 1.19 among them (D17), is said to be untested, never to work or to fail | DOC-05 |
-| REQ-300 | Troubleshooting has an entry for each failure an operator meets first: a list or an action refused to the identity, a port-forward refused, a certificate the transport refuses, a cluster that is not connected, and a store that does not answer. Each entry quotes the words the extension shows, which SPEC-0002, SPEC-0010, SPEC-0015 and SPEC-0017 record and the modules of the words write, says what causes them and what to do, and leads to Permissions or Safety where they answer | DOC-06 |
+| REQ-300 | Not taken on 2026-11-09, see [the amendment](#2026-11-09-the-sections-of-the-other-extensions): the README has the sections of the other extensions and no Troubleshooting, and what one of its entries would say that an operator needs and no other section says is in Features or in Limits. As approved: Troubleshooting has an entry for each failure an operator meets first: a list or an action refused to the identity, a port-forward refused, a certificate the transport refuses, a cluster that is not connected, and a store that does not answer. Each entry quotes the words the extension shows, which SPEC-0002, SPEC-0010, SPEC-0015 and SPEC-0017 record and the modules of the words write, says what causes them and what to do, and leads to Permissions or Safety where they answer | DOC-06 |
 | REQ-301 | The README shows the views in screenshots the pre-review of the release candidate took on the disposable kind cluster of the demo, with its synthetic objects alone: the Overview, the list of the Backups, the workspace of a backup with its log, the adherence of the schedules and the review of a restore, in the dark theme, and the Overview in the light theme as well. They are files under `docs/screenshots/`, outside the package, each with a text that says what it shows, and none shows anything of a real environment | DOC-07 |
 | REQ-302 | A video of less than 60 seconds, recorded from the packaged Freelens on the disposable kind cluster of the demo with its synthetic data alone, shows the Overview, a backup with its log, the adherence of a schedule and an action with its review; the README links to it, and it is not in the package (D9). No frame shows a name, an address, a credential or anything of a real environment | DOC-08 |
 | REQ-303 | Amended on 2026-11-09, see [the amendment](#2026-11-09-the-release-flow-of-the-template): not taken as written. The notes of each version are written in the body of its GitHub release, as the other extensions of the organization write them, with no `CHANGELOG.md` and no case of them (D12) | DOC-09 |
@@ -182,10 +185,10 @@ of the review of the milestone (REQ-312).
 
 | ID | Contract | Acceptance check |
 | --- | --- | --- |
-| REQ-310 | Amended on 2026-11-09, see [the amendment](#2026-11-09-no-prerelease-before-100): there is no prerelease, and the first publication is 1.0.0, made on the lead maintainer's go as REQ-313 says, once what gates it in D15 is Done. What this requirement asked of the first publication is asked of 1.0.0: the drift watch read and recorded in RECON-T0.1 before the first release, and read again before 1.0.0 (REQ-313); the notes of 1.0.0 in the body of its GitHub release (REQ-303); the version workflow with the version `1.0.0`, its pull request merged after its checks and the runs of main green (REQ-285); the tag workflow at that merge (REQ-315); the one job of the release workflow, approved by the required reviewer (D11b), which publishes on `latest` and creates a GitHub release that is not a prerelease (HOST-21 of SPEC-0015 as restated). Not taken: 1.0.0-0 on `next`, and a change of the code released as 1.0.0-N; a change after 1.0.0 is released as a later version the same way. Nothing is published from a workstation; what an owner of the scope does by hand is [the way back](#the-way-back) alone | REL-01 |
+| REQ-310 | Amended on 2026-11-09, see [the amendment](#2026-11-09-no-prerelease-before-100): there is no prerelease, and the first publication is 1.0.0, made on the lead maintainer's go as REQ-313 says, once what gates it in D15 is Done. What this requirement asked of the first publication is asked of 1.0.0: the drift watch read and recorded in RECON-T0.1 before the first release, and read again before 1.0.0 (REQ-313); the notes of 1.0.0 in the body of its GitHub release (REQ-303); the version workflow with the version `1.0.0`, its pull request merged after its checks and the runs of main green (REQ-285); the tag workflow at that merge (REQ-315); the one job of the release workflow, at the tag with no approval to wait for ([the environment of the template](#2026-11-09-the-environment-of-the-template)), which publishes on `latest` and creates a GitHub release that is not a prerelease (HOST-21 of SPEC-0015 as restated). Not taken: 1.0.0-0 on `next`, and a change of the code released as 1.0.0-N; a change after 1.0.0 is released as a later version the same way. Nothing is published from a workstation; what an owner of the scope does by hand is [the way back](#the-way-back) alone | REL-01 |
 | REQ-315 | Amended on 2026-11-09, see [the amendment](#2026-11-09-the-release-flow-of-the-template): the tag workflow is the template's. At the merge of a pull request whose title starts with `Automated npm version`, or on the comment `/tag` on a closed issue or pull request of that title, it checks out main, reads the version of its `package.json`, and tags main as it is when the job runs, `v` and that version, when the version is `X.Y.Z` or `X.Y.Z-` followed by letters, digits, dots and hyphens. The tag on the merge commit and the check of the author of `/tag` are not taken | REL-05 |
 | REQ-311 | Amended on 2026-11-09, see [the amendment](#2026-11-09-no-prerelease-before-100): on 1.0.0, with no prerelease before it. 1.0.0, once published, is checked by its version in the release Freelens 2.0.0 on macOS. The `.dmg` of Freelens 2.0.0 for the architecture of the machine is checked against the `.sha256` its release publishes, and its application copied to a folder outside `/Applications`, which the runner of the integration test refuses. Given the name and the version in place of a tarball (D14), the runner runs FND-10, which installs the version from npm through the Extensions page in a new profile, the host checking the download against the integrity the registry gives. The extension is listed Enabled, both entries load and the transport works in the main process of the host. The files of the log of the host hold no line of an error of the extension | REL-02 |
-| REQ-312 | Amended on 2026-11-09, see [the amendment](#2026-11-09-no-prerelease-before-100): on the release candidate, with no prerelease. The review of the sixth milestone, as [PROCESS](../development/PROCESS.md#milestone-manual-review-gate) says, once the report of the pre-review of REQ-292 is in the lead maintainer's hands: the walk of [TRY-IT](../development/TRY-IT.md) on the environment of the demo, in the extension packed from the commit of main the pre-review ran on and installed from its tarball, as TRY-IT installs it; the gallery and the report of the scan; the README, its screenshots, the video and the notes of 1.0.0, with the checklist of the sections no case reads (DOC-01, DOC-06, DOC-07). Its findings are issues, the blocking ones fixed on main before 1.0.0, which is checked as REQ-311 says; the outcome is recorded in this spec by role and date | REL-03 |
+| REQ-312 | Amended on 2026-11-09, see [the amendment](#2026-11-09-no-prerelease-before-100): on the release candidate, with no prerelease. The review of the sixth milestone, as [PROCESS](../development/PROCESS.md#milestone-manual-review-gate) says, once the report of the pre-review of REQ-292 is in the lead maintainer's hands: the walk of [TRY-IT](../development/TRY-IT.md) on the environment of the demo, in the extension packed from the commit of main the pre-review ran on and installed from its tarball, as TRY-IT installs it; the gallery, with no scan (D8 is not taken); the README, its screenshots, the video and the notes of 1.0.0, with the checklist of the sections no case reads (DOC-01 and DOC-07; DOC-06 is not taken, see [the amendment](#2026-11-09-the-sections-of-the-other-extensions)). Its findings are issues, the blocking ones fixed on main before 1.0.0, which is checked as REQ-311 says; the outcome is recorded in this spec by role and date | REL-03 |
 | REQ-313 | Amended on 2026-11-09, see [the amendment](#2026-11-09-no-prerelease-before-100): 1.0.0 is the first publication, installed by name in a new profile. 1.0.0 is published on `latest` on the lead maintainer's go, after the review of REQ-312, once what gates 1.0.0 in D15 is Done, M6 is done as D18 reads it, and every spec of v1.0.0 is Verified or waits only for a check of this milestone: the drift watch read again and recorded in RECON-T0.1 (D17), the version workflow with `1.0.0`, its pull request, the tag, the release workflow. Then `latest` names 1.0.0 and `next` names nothing, its GitHub release is not a prerelease, its assets pass the checks of REQ-309, Freelens 2.0.0 installs it by name in a new profile, Enabled, and the README and the roadmap say that 1.0.0 is released. The install over the last prerelease, with its preferences kept, is not taken: no version is published before 1.0.0 (G2.3) | REL-04 |
 
 ## Design
@@ -201,9 +204,10 @@ of the review of the milestone (REQ-312).
   opens a listener beyond loopback. The registry of npm and the releases of
   GitHub are written only by the release workflow of the template, at a tag the
   tag workflow makes on main at the merge of the pull request of the version or on
-  `/tag`, in its one job in the environment `publishing`, approved by the required
-  reviewer of `publishing` (D11b), as amended on 2026-11-09
-  ([the amendment](#2026-11-09-the-release-flow-of-the-template)). The README says
+  `/tag`, in its one job in the environment `publishing`, which has no required
+  reviewer, as amended on 2026-11-09
+  ([the release flow](#2026-11-09-the-release-flow-of-the-template),
+  [the environment](#2026-11-09-the-environment-of-the-template)). The README says
   what the extension writes (REQ-298), and its words are tied to the code by the
   checks of T6.3.
 
@@ -240,9 +244,11 @@ The flow of the template of the organization, as amended on 2026-11-09
    main are green (REQ-285).
 3. The tag workflow tags main once that pull request is merged, `vX.Y.Z` or
    `vX.Y.Z-` followed by letters, digits, dots and hyphens (REQ-315).
-4. The release workflow, in its one job in the environment `publishing`, waits
-   for its required reviewer, who approves it once the runs of the commit of the
-   tag are green (D11b). It checks that the tag is the version of
+4. The release workflow runs its one job in the environment `publishing` at the
+   tag, with no approval to wait for
+   ([the environment of the template](#2026-11-09-the-environment-of-the-template));
+   the runs of the commit of the tag are read once they end (REQ-285). It checks
+   that the tag is the version of
    `package.json`, builds and packs; publishes on `next` a version with a hyphen
    and on `latest` any other, with the token of D11b and no provenance while a
    secret `NPM_TOKEN` reaches the job, and otherwise through the trusted
@@ -316,7 +322,7 @@ The files the slices change beside the specs and the documents above:
 
 | Check | Layer | Requirements | Scenario and expected evidence |
 | --- | --- | --- | --- |
-| REG-01 | Workflow, manual | REQ-285 | Before the merge of the pull request of each version: the last runs on main of each workflow of [the table](#where-each-check-runs) that runs there, of a push and of the night, and the checks of that pull request, green, listed with their counts in the evidence; a run that passed when run again listed with its first failure. After the tag: the runs of the merge commit, listed with their counts and green before the required reviewer approves the job `publish`; the tag names that commit (REL-01) |
+| REG-01 | Workflow, manual | REQ-285 | Before the merge of the pull request of each version: the last runs on main of each workflow of [the table](#where-each-check-runs) that runs there, of a push and of the night, and the checks of that pull request, green, listed with their counts in the evidence; a run that passed when run again listed with its first failure. After the tag: the runs of the merge commit, listed with their counts once they end, after the publication, as amended on 2026-11-09 ([the amendment](#2026-11-09-the-environment-of-the-template)); the tag names that commit (REL-01) |
 | REG-02 | Unit | REQ-286 | Amended on 2026-11-09, see [the amendment](#2026-11-09-the-release-flow-of-the-template): the part of the target alone, with the first half of REQ-286. The case of the target reads the composite action and holds every workflow that calls it, each naming the commit of the target in one line and giving it to the action once, as the evidence of that half records; the case of `release.yaml`, its run on a pull request and the log of `package` are not taken |
 | REG-03 | Not taken | REQ-287 | Not taken on 2026-11-09, see [the amendment](#2026-11-09-the-checks-beyond-the-other-extensions) |
 | REG-08 | Not taken | REQ-314 | Not taken on 2026-11-09, see [the amendment](#2026-11-09-the-checks-beyond-the-other-extensions) |
@@ -331,9 +337,9 @@ The files the slices change beside the specs and the documents above:
 | DOC-01 | Manual | REQ-295 | Amended on 2026-11-09, see [the amendment](#2026-11-09-no-prerelease-before-100): the checklist of REL-03 reads the section: the name of `package.json`, a version, the releases of the repository, and no tag `next`; each way tried on 1.0.0, at REL-02 and REL-04 |
 | DOC-02 | Unit | REQ-296 | A case finds in the section the range of `engines.freelens` of `package.json` and the API versions of the kinds the extension reads, and no section that says there is no release |
 | DOC-03 | Unit, end to end | REQ-297 | A case compares the two YAML blocks of the section, text for text, with a rendering of the roles of the two identities of REQ-288, with no YAML parser; it lands with #145, after the identities; each row of the table checked with `kubectl auth can-i` in the pull request of #145 |
-| DOC-04 | Unit | REQ-298 | A case finds in the section each kind and verb the adapter allows (ACT-01 of SPEC-0017), no other kind of Velero said to be written, and the three rules, signed URLs, TLS and missing data, each by the words that say it |
+| DOC-04 | Unit | REQ-298 | Amended on 2026-11-09, see [the amendment](#2026-11-09-the-sections-of-the-other-extensions): the section is Write actions, under Features. A case finds in the section each kind and verb the adapter allows (ACT-01 of SPEC-0017), no other kind of Velero said to be written, and the three rules, signed URLs, TLS and missing data, each by the words that say it |
 | DOC-05 | Unit | REQ-299 | A case reads the table and finds the version and the commit of the target in the header of SPEC-0015 and the versions of the images in `e2e/scripts/local-manifests.mts`, so a move of a pin that leaves the README fails |
-| DOC-06 | Manual | REQ-300 | The checklist of REL-03 compares each quoted message with what the function of its words returns for its case, which the slice lists beside the quote |
+| DOC-06 | Not taken | REQ-300 | Not taken on 2026-11-09, see [the amendment](#2026-11-09-the-sections-of-the-other-extensions). As approved: the checklist of REL-03 compares each quoted message with what the function of its words returns for its case, which the slice lists beside the quote |
 | DOC-07 | Manual | REQ-301 | The checklist of REL-03: each screenshot looked at by the lead maintainer, with its text; DOC-10 resolves its file under `docs/screenshots/`, and ASSET-06 finds none in the package |
 | DOC-08 | Manual | REQ-302 | The length of the file under 60 seconds, every frame looked at by the lead maintainer at REL-03, the link of the README opened |
 | DOC-09 | Not taken | REQ-303 | Not taken on 2026-11-09, see [the amendment](#2026-11-09-the-release-flow-of-the-template): there is no `CHANGELOG.md` and no case of the notes |
@@ -363,11 +369,13 @@ taken (D8).
 
 As amended on 2026-11-09
 ([the release flow of the template](#2026-11-09-the-release-flow-of-the-template),
-[the checks beyond the other extensions](#2026-11-09-the-checks-beyond-the-other-extensions)
-and [no prerelease before 1.0.0](#2026-11-09-no-prerelease-before-100)):
+[the checks beyond the other extensions](#2026-11-09-the-checks-beyond-the-other-extensions),
+[no prerelease before 1.0.0](#2026-11-09-no-prerelease-before-100)
+and [the environment of the template](#2026-11-09-the-environment-of-the-template)):
 
 - Every check of the regression green before the merge of each version, the runs
-  of the commit of its tag green before its publication, listed (REG-01), and
+  of the commit of its tag read once they end, after its publication, listed
+  (REG-01), and
   every new check of T6.1 that stays, the identities of the roles, the HTTPS and
   the direct route of FND-10 and the ceilings of the bundles, green where it runs.
 - The version, tag and release workflows the ones of the template of the
@@ -379,12 +387,13 @@ and [no prerelease before 1.0.0](#2026-11-09-no-prerelease-before-100)):
   element of the extension but the exceptions a spec made, is not taken (D8).
 - Each statement of the README that the code can change without anyone seeing it
   is read by a unit case: the range of Freelens, the roles, the writes, the
-  versions and the links; the installation, the words of the failures and the
-  screenshots are read by the checklist of the review of the milestone.
+  versions and the links; the installation and the screenshots are read by the
+  checklist of the review of the milestone.
 - The review of the milestone recorded, and 1.0.0 on `latest`, the first
   publication, checked by FND-10 by its version and installed by name.
-- Failure: a version published other than by the release workflow, or without
-  the approval of its required reviewer; a credential of npm left in
+- Failure: a version published other than by the release workflow, or from a
+  pull request of a version merged without the lead maintainer's go; a
+  credential of npm left in
   `publishing` after the version it was made for; a README that says a write, a
   verb, a version or a message the code does not; anything of a real environment
   in a screenshot, the video, the notes or the package; a write of a check
@@ -543,12 +552,14 @@ date.
   1. An owner of the scope `@freelensapp` creates a granular access token that may
      publish in the scope, with the shortest expiry npm allows, and puts it in
      `publishing` for 1.0.0 alone.
-  2. The lead maintainer is the required reviewer of `publishing` from before
-     1.0.0 and for every publication after it: the job `publish` waits for that
-     approval, given once the runs of the merge commit are green (REQ-285), which
-     is the go of REQ-310 and REQ-313 in a form the workflow enforces. The branches
-     `publish/v*` leave the deployment policies, so that only a tag reaches the
-     environment.
+  2. Not taken on 2026-11-09
+     ([the environment of the template](#2026-11-09-the-environment-of-the-template)):
+     the lead maintainer as the required reviewer of `publishing` from before
+     1.0.0 and for every publication after it, the job `publish` waiting for that
+     approval, given once the runs of the merge commit are green (REQ-285), and the
+     branches `publish/v*` out of its deployment policies. The environment stays
+     the template's, and the go of REQ-310 and REQ-313 comes before the merge of
+     the pull request of the version, which is the gate of the publication.
   3. Once 1.0.0 is published, the token is revoked on npm and deleted from the
      environment, each recorded by role and date.
   4. The owner configures the trusted publisher of the package with this
@@ -2206,6 +2217,102 @@ and the mode over TLS with an inline authority run as the operator. The changes 
 failing were made again on the head after the review, and the eight branches of one
 change are on that head.
 
+T6.3, the third of its pull requests, on 2026-11-09: the screenshots and the video
+of the README (REQ-301, REQ-302), made again after the fixes of T6.2 with the
+storyboard the lead maintainer approved that day, and the Status of 1.0.0
+(REQ-296, as amended). The evidence, by check:
+
+- The video: 57.47 seconds, H.264, 1920 by 1200, 30 frames a second, recorded from
+  the packaged Freelens 2.0.0 for Linux on the disposable kind cluster of the demo,
+  with the real server of Velero v1.18.4 and its AWS plugin v1.14.4, the extension
+  built from `fdc1400`, whose tree is the one of main after T6.2. Its scenes: the
+  title; the Overview with writes off, then the dialog that turns them on; the
+  version of the server and its plugins through a reviewed ServerStatusRequest; a
+  backup with its log loaded through a reviewed DownloadRequest and searched, then
+  its resources; a restore into another namespace confirmed by the name of the
+  backup; the adherence of a schedule with its history; Back up now with its
+  review; the lists of the storage locations, the backup repositories and the data
+  uploads; the end card. The README links to it, uploaded to GitHub as
+  [its asset](https://github.com/user-attachments/assets/8a051d10-b46b-4ae6-ad96-2460de4464b5),
+  whose media data are the ones of the file recorded, byte for byte: the upload
+  adds a box of metadata of 5,893 bytes before them. It is not in the package,
+  whose files are `dist/**/*`.
+- The screenshots: six PNG files of 2880 by 1800 under `docs/screenshots/`, taken
+  in the same session in a new profile: the Overview, the list of the Backups, the
+  workspace of a backup with its log, the adherence of a schedule and the review of
+  a restore, in the dark theme, and the Overview in the light theme, each with the
+  text of what it shows. DOC-10 resolves each file; none is in the package.
+- What the frames show of the environment: the cluster under the plain name
+  `prod-eu-1`, the installation `velero`, namespaces of applications with
+  realistic names, and the address of the store of the demo inside the cluster; no
+  name of a person, no host of a real environment and no credential. The history
+  of the schedules and the data uploads are objects of the test with realistic
+  names; the backups of the day, the backup of the volumes with its repositories,
+  the restore and the backup of Back up now were made by the real server.
+- DOC-07 and DOC-08: each screenshot and every frame looked at by the lead
+  maintainer at REL-03, on 2026-11-10, on a private page with the video and the
+  six files; the length under 60 seconds.
+
+Decided while implementing, on 2026-11-09:
+
+- The screenshots are taken by the recorder of the video, in the same session and
+  on the same cluster, as for the other extensions of the organization, not by the
+  pre-review, which keeps its gallery for the review of the milestone: REQ-301 is
+  read with it.
+- The storyboard of the second take, approved by the lead maintainer on
+  2026-11-09, shows beside what REQ-302 asks the writes turned on through their
+  dialog, the server, the resources of a backup and the lists of three more kinds.
+- Status gives way to the Status of 1.0.0 in this pull request, right before the
+  one of the version, as REQ-296 says.
+
+With this pull request as well, on 2026-11-10: the drift watch read again before
+1.0.0, with nothing moved
+([RECON-T0.1](../development/RECON-T0.1.md#before-100-2026-11-10)); and the
+amendments of two decisions of 2026-11-09 that the spec did not say yet,
+[the environment of the template](#2026-11-09-the-environment-of-the-template)
+and [the sections of the other extensions](#2026-11-09-the-sections-of-the-other-extensions),
+the second left to another pull request by the evidence of the second pull
+request of T6.3.
+
+The review of the sixth milestone (REQ-312, REL-03), on 2026-11-10: the lead
+maintainer approved it, on the gallery of the pre-review of the release candidate,
+the commit `854910e` of main, from the views of its push
+([run 42699473749](https://github.com/freelensapp/freelens-velero-extension/actions/runs/42699473749)):
+65 views in both themes, at 1440 by 900, at 900 by 650 and at twice the zoom,
+390 screenshots, and no finding of the check of the layout; and on a private page
+with the video, the six screenshots, the notes of 1.0.0 and the README of this
+pull request as GitHub renders it. Decided by the lead maintainer on 2026-11-10:
+the walk of TRY-IT by hand is not made, since the gallery is that walk, made by
+the pre-review, which installs the extension packed from the release candidate
+from its tarball, through the Extensions page as TRY-IT does, on the environment
+of the demo. The checklist, by check:
+
+- DOC-01: Install names `@freelensapp/velero-extension`, as `package.json` does,
+  a version after the name, the tarball of a release by its URL or its path, and
+  a directory, and no tag `next`; each way to 1.0.0 is tried at REL-02 and REL-04.
+- DOC-07: each screenshot looked at, with its text; DOC-10 resolves each file
+  under `docs/screenshots/`.
+- DOC-08: the video, 57.47 seconds, every frame looked at; the link of the README
+  opened with no login on 2026-11-10, which answers the video, the file uploaded
+  byte for byte, since the body of this pull request names it; before, it
+  answered 404 to a client with no login.
+- DOC-10: the external links of the README opened on 2026-11-10, each answering,
+  but DeepWiki, which answers 429 to a client that is not a browser, and the page
+  of the package on npm, which answers 403 to one, and has no version to show
+  before 1.0.0.
+- DOC-06 is not taken, with REQ-300
+  ([the amendment](#2026-11-09-the-sections-of-the-other-extensions)).
+
+No finding, and no issue. The rows of T6.1, T6.2 and T6.3 of the roadmap are Done
+with this pull request, the last of each. Decided while implementing, on
+2026-11-10: with no prerelease, the proof of the assets of T6.4 (REQ-309) is made
+on 1.0.0 itself, so D18 reads T6.4 as what gates 1.0.0 in D15, all in place on
+main: the release workflow of the template, the bill of materials of REQ-307, the
+provenance of REQ-308 and the token of the first step of D11b. Its row stays In PR
+until the proof, which REQ-313 counts among the checks of this milestone that
+1.0.0 may wait for; read otherwise, 1.0.0 would wait for itself, which D18 does
+not take.
+
 ## Amendments
 
 ### 2026-11-09: The Release Flow Of The Template
@@ -2353,3 +2460,59 @@ were written. The text as approved is the one of this spec at
 [`801dfc3`](https://github.com/freelensapp/freelens-velero-extension/blob/801dfc3c62d6fc97557c56e45388efe325185c84/docs/specs/SPEC-0018-release-readiness.md),
 and the text this amendment changes, with the two amendments before it, the one
 at [`fe34704`](https://github.com/freelensapp/freelens-velero-extension/blob/fe347048c8e19dd5aba3a2a6552f41f5ff144f30/docs/specs/SPEC-0018-release-readiness.md).
+
+### 2026-11-09: The Environment Of The Template
+
+Decided by the lead maintainer on 2026-11-09, and recorded on 2026-11-10: the
+settings of the repository are the ones of the template of the organization,
+and the environment `publishing` with them, as it was read on both days: its
+deployment policies are the tags `v*` and the branches `publish/v*`, and it has
+no required reviewer and no wait timer. The secret `NPM_TOKEN` of the first step
+of D11b is in it until 1.0.0 is published. In the places above:
+
+- D11b: its second step, the lead maintainer as the required reviewer of
+  `publishing` and the branches `publish/v*` out of its deployment policies, is
+  not taken. The first, the third and the fourth stay.
+- REQ-285 and REG-01: the gate of the publication is the merge of the pull
+  request of the version, made on the lead maintainer's go once the last runs of
+  main, of a push and of the night, and the checks of that pull request are
+  green. The tag starts the publication with no approval to wait for, so the
+  runs of the merge commit end after it: they are read and recorded with their
+  counts once they end, and a red one is handled as [the way back](#the-way-back)
+  says.
+- REQ-310, the Safety of the Design, the fourth step of
+  [the release flow](#the-release-flow) and the success criteria: the one job of
+  the release workflow runs at the tag with no approval to wait for, and a
+  version published from a pull request of a version merged without the lead
+  maintainer's go is a failure.
+
+The rest of this spec is read with the amendment. The text this amendment
+changes is the one at
+[`854910e`](https://github.com/freelensapp/freelens-velero-extension/blob/854910ec7ceb8c8662aa3f05729c4c28398a2293/docs/specs/SPEC-0018-release-readiness.md).
+
+### 2026-11-09: The Sections Of The Other Extensions
+
+Decided by the lead maintainer on 2026-11-09, and recorded on 2026-11-10: the
+README has the sections of the other extensions of the organization, Overview,
+Requirements, Supported APIs, Permissions, Install, Getting started, Features,
+Limits, Development, Build from the source and License, and no other, as the
+evidence of the second pull request of T6.3 records. The amendments the decision
+brings, which that evidence left to another pull request, are these, in the
+places above:
+
+- The paragraph of the Documentation gives the sections in that order, with
+  Write actions as the last subsection of Features, and no Safety, Verify a
+  release or Troubleshooting of their own.
+- REQ-298 is written in Features, as its subsection Write actions, which DOC-04
+  reads.
+- REQ-300, the section Troubleshooting, and its check DOC-06 are not taken: what
+  one of its entries would say that an operator needs and no other section says
+  is in Features or in Limits, and the verbs to grant are in Permissions.
+- Scenario 5, the checklist of REL-03 in REQ-312, and the success criteria read
+  the README without Troubleshooting: no quoted message is compared with the
+  function of its words.
+- The row of T6.3 in the roadmap names the sections the README has.
+
+The rest of this spec is read with the amendment. The text this amendment
+changes is the one at
+[`854910e`](https://github.com/freelensapp/freelens-velero-extension/blob/854910ec7ceb8c8662aa3f05729c4c28398a2293/docs/specs/SPEC-0018-release-readiness.md).
